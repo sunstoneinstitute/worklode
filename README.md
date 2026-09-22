@@ -584,8 +584,9 @@ them); `lode task skills <id>` shows what is pinned, and pinned skills are
 always inlined in `lode task brief`.
 
 Recommendations and `lode search` share one retrieval path over the corpus
-index (040). Its dense arm needs `LODE_EMBEDDING_URL` and
-`LODE_EMBEDDING_MODEL` on the server, and, if the endpoint requires auth,
+index (040). Its dense arm needs `LODE_EMBEDDING_URL`, `LODE_EMBEDDING_MODEL`
+and `LODE_EMBEDDING_CONTEXT_TOKENS` (the model's context window, which sizes
+the chunks) on the server, and, if the endpoint requires auth,
 `LODE_EMBEDDING_API_KEY`; the default deployment points the URL at a CPU
 embeddings service in the same namespace rather than a third-party API. An
 asymmetric model wants a different instruction on a query than on a stored

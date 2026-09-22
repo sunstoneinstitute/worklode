@@ -23,8 +23,9 @@ const (
 	// of the caller's limit: fusion can only reorder what the arms offered it.
 	searchCandidates = 50
 	// searchExcerptRunes caps the returned excerpt. A chunk runs to
-	// corpusindex.ChunkRunes (3600), which is an embedding unit, not something
-	// a result list should carry twenty of.
+	// corpusindex.Budget.Runes (the chunk budget, derived from
+	// LODE_EMBEDDING_CONTEXT_TOKENS), which is an embedding unit, not
+	// something a result list should carry twenty of.
 	searchExcerptRunes = 400
 )
 

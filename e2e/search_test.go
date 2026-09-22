@@ -300,8 +300,9 @@ func TestSearchJourney(t *testing.T) {
 		Metrics:        reg,
 		// The default deployment's shape (§2.3): an OpenAI-compatible
 		// endpoint, no provider code of its own.
-		EmbeddingURL:   embedSrv.URL + "/v1/embeddings",
-		EmbeddingModel: "e2e-stub",
+		EmbeddingURL:           embedSrv.URL + "/v1/embeddings",
+		EmbeddingModel:         "e2e-stub",
+		EmbeddingContextTokens: "2048",
 		// Skill sync is the only public surface that creates a skill. The
 		// fetch is stubbed the way the embeddings endpoint is: the upstream
 		// repo is environment, everything downstream of it is the real path.

@@ -357,9 +357,8 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 			return fmt.Errorf("stamp last_revised_in on doc %d: %w", in.ID, err)
 		}
 	}
-	if _, err := tx.Exec(
-		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, in.ID); err != nil {
-		return fmt.Errorf("publish sections of doc %d: %w", in.ID, err)
+	if err := publishDocSections(tx, in.ID); err != nil {
+		return err
 	}
 	if err := rebuildEdges(tx, now, in.ID, d.kind, d.project, next.doc.Frontmatter); err != nil {
 		return err

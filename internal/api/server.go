@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
+	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
@@ -144,6 +145,11 @@ type Config struct {
 	EmbeddingURL string `env:"LODE_EMBEDDING_URL"`
 	// EmbeddingModel names the model sent to EmbeddingURL.
 	EmbeddingModel string `env:"LODE_EMBEDDING_MODEL"`
+	// EmbeddingContextTokens is the model's context window in tokens, required
+	// whenever EmbeddingModel is set (07 §14.4). The chunk budget derives from
+	// it. A string because setEnvTaggedFields fills strings only; parsed in
+	// embeddingBudget.
+	EmbeddingContextTokens string `env:"LODE_EMBEDDING_CONTEXT_TOKENS"`
 	// EmbeddingAPIKey authenticates against EmbeddingURL.
 	EmbeddingAPIKey string `env:"LODE_EMBEDDING_API_KEY"`
 	// EmbeddingQueryPrefix and EmbeddingDocumentPrefix are the model's
@@ -326,8 +332,11 @@ type server struct {
 	// against the same source set. skillSyncPending records a trigger that
 	// arrived while a sync was already running, so runSkillSync re-runs
 	// once more instead of silently dropping it (see runSkillSync).
-	embedder         embed.Provider
-	queryEmbedder    embed.Provider
+	embedder      embed.Provider
+	queryEmbedder embed.Provider
+	// chunkBudget is the chunk sizing derived from EmbeddingContextTokens
+	// (07 §14.4), passed to the indexer.
+	chunkBudget      corpusindex.Budget
 	skillSyncer      *skillsync.Syncer
 	skillSources     []skillsync.Source
 	skillSyncMu      sync.Mutex
@@ -841,6 +850,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/tasks/{id}/checklist", s.setChecklistItem)
 	r.api("POST /api/v1/tasks/{id}/edges", s.addEdge)
 	r.api("DELETE /api/v1/tasks/{id}/edges", s.removeEdge)
+	r.api("POST /api/v1/tasks/{id}/governed-by", s.govern)
+	r.api("DELETE /api/v1/tasks/{id}/governed-by", s.ungovern)
 	r.api("POST /api/v1/tasks/{id}/decompose", s.decomposeTask)
 	r.api("POST /api/v1/tasks/claim-next", s.claimNext)
 	r.api("POST /api/v1/tasks/{id}/claim", s.claimTask)
@@ -882,6 +893,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/docs/{id}/versions", s.listDocVersions)
 	r.api("GET /api/v1/docs/{id}/referrers", s.listDocReferrers)
 	r.api("GET /api/v1/docs/{id}/versions/{n}", s.getDocVersion)
+	r.api("GET /api/v1/clauses/{id}", s.getClause)
 	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
 	r.api("POST /api/v1/docs/{id}/patch", s.patchDoc)
 	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)
@@ -1006,6 +1018,26 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	return mux, nil
 }
 
+// embeddingBudget validates the embedding configuration and derives the chunk
+// budget from it (07 §14.4): a model needs its context window declared, and
+// no provider means the lexical-only default.
+func embeddingBudget(cfg Config) (corpusindex.Budget, error) {
+	if cfg.EmbeddingModel == "" {
+		if cfg.EmbeddingContextTokens != "" {
+			return corpusindex.Budget{}, errors.New("LODE_EMBEDDING_CONTEXT_TOKENS requires LODE_EMBEDDING_MODEL")
+		}
+		return corpusindex.DefaultBudget, nil
+	}
+	if cfg.EmbeddingContextTokens == "" {
+		return corpusindex.Budget{}, errors.New("LODE_EMBEDDING_CONTEXT_TOKENS is required when LODE_EMBEDDING_MODEL is set")
+	}
+	n, err := strconv.Atoi(cfg.EmbeddingContextTokens)
+	if err != nil || n <= 0 {
+		return corpusindex.Budget{}, fmt.Errorf("LODE_EMBEDDING_CONTEXT_TOKENS: want a positive integer, got %q", cfg.EmbeddingContextTokens)
+	}
+	return corpusindex.BudgetFor(n), nil
+}
+
 // NewServer builds the worklode HTTP handlers. It returns two handlers: the
 // public app handler (web UI, API, webhooks) and a separate admin handler
 // (/healthz, /metrics). The admin handler is served on its own listener so
@@ -1101,6 +1133,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	if appAuth != nil {
 		s.repoReader = &storederive.GitHubReader{Auth: appAuth}
 	}
+
+	budget, err := embeddingBudget(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.chunkBudget = budget
 
 	if cfg.QueryEmbeddingURL != "" && cfg.EmbeddingURL == "" {
 		return nil, nil, fmt.Errorf("LODE_QUERY_EMBEDDING_URL requires LODE_EMBEDDING_URL")
@@ -1269,6 +1307,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		// writing the chunk text the lexical arm needs (§11).
 		go (&indexer.Indexer{
 			Store: st, Embed: s.embedder, Metrics: indexer.NewMetrics(reg), Log: s.log,
+			Budget: s.chunkBudget,
 		}).Loop(cfg.BackgroundCtx, cfg.IndexInterval)
 
 		// The branch-rules refresh loop (WL-SPEC-66 §6.3). Also needs the

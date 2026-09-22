@@ -137,7 +137,7 @@ func TestRecommendWithProvider(t *testing.T) {
 	}))
 	defer fakeSrv.Close()
 
-	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 	createProject(t, st, "proj")
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 
@@ -216,7 +216,7 @@ func TestRecommendWithProvider(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer errSrv.Close()
-		_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: errSrv.URL, EmbeddingModel: "m"})
+		_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: errSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 		assertDegradedRecommend(t, h, token)
 	})
 
@@ -226,7 +226,7 @@ func TestRecommendWithProvider(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer slowSrv.Close()
-		_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: slowSrv.URL, EmbeddingModel: "m"})
+		_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: slowSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 		assertDegradedRecommend(t, h, token)
 	})
 }

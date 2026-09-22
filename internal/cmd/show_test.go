@@ -32,6 +32,7 @@ func TestClassify(t *testing.T) {
 		{"WL-PLAN-7", targetDoc, ""},
 		{"WL-MILE-2", targetMilestone, ""},
 		{"WL-DEL-3", targetDeliverable, ""},
+		{"WL-CL-12", targetClause, ""},
 		{"XX-FOO-3", targetUnknownType, "FOO"},
 		{"WL-SPEC-0", targetDoc, ""},
 		// Doc-ref shapes: slugs, number forms, paths — resolveDocRef owns
@@ -768,7 +769,7 @@ func TestShowUnknownTypeErrors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("lode show XX-FOO-3 succeeded\noutput: %s", out)
 	}
-	want := `unknown entity type "FOO" in XX-FOO-3; known types: SPEC, ADR, PLAN, MILE, DEL (a task id has no type segment: WL-12)`
+	want := `unknown entity type "FOO" in XX-FOO-3; known types: SPEC, ADR, PLAN, MILE, DEL, CL (a task id has no type segment: WL-12)`
 	if err.Error() != want {
 		t.Fatalf("err = %q; want %q", err.Error(), want)
 	}
