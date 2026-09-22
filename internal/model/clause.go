@@ -22,8 +22,13 @@ type Clause struct {
 	ArrangedIn []ClauseArrangement `json:"arranged_in"`
 	// GovernedTasks are the tasks this clause governs (S2), newest link first.
 	GovernedTasks []ClauseTask `json:"governed_tasks"`
-	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
+	// Edges are every typed edge in or out of this clause (S12, S26).
+	Edges []ClauseEdge `json:"edges"`
+	// Owner is an actor id, empty when unowned; Tags are free labels (S15).
+	Owner     string    `json:"owner"`
+	Tags      []string  `json:"tags"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // ClauseArrangement is one document's placement of a clause.
@@ -59,4 +64,12 @@ type ClauseTask struct {
 type EditClauseInput struct {
 	Heading string `json:"heading"`
 	Body    string `json:"body"`
+}
+
+// ClauseMetaInput is the body of PATCH /api/v1/clauses/{id} (S15). A nil
+// field leaves the column alone; a present field replaces it, so an empty
+// Owner clears the owner and an empty Tags clears the tags.
+type ClauseMetaInput struct {
+	Owner *string   `json:"owner,omitempty"`
+	Tags  *[]string `json:"tags,omitempty"`
 }

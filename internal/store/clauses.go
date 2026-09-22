@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -95,6 +97,17 @@ func syncClauses(tx *sql.Tx, docID int64, doc *designdoc.Document) error {
 	if _, err := tx.Exec(`DELETE FROM doc_clauses WHERE doc_id = $1`, docID); err != nil {
 		return fmt.Errorf("clear arrangement of doc %d: %w", docID, err)
 	}
+	// changed collects the clauses this write inserted or revised, so their
+	// references can be derived once every doc_clauses row below has been
+	// written. Deriving inline in this loop would miss a ref into the same
+	// document: the section it names has no arrangement row yet (forward) or
+	// its own derivation already ran (backward), so it would resolve through
+	// an empty or stale doc_clauses and drop the edge every time (S26).
+	type changedClause struct {
+		id   int64
+		text string
+	}
+	var changed []changedClause
 	position := 0
 	for i, sec := range doc.Sections {
 		if sec.Anchor == "" {
@@ -114,6 +127,9 @@ func syncClauses(tx *sql.Tx, docID int64, doc *designdoc.Document) error {
 		if err != nil {
 			return err
 		}
+		if m == nil || m.heading != sec.Title || m.body != sec.Body {
+			changed = append(changed, changedClause{id, sec.Title + "\n" + sec.Body})
+		}
 		if _, err := tx.Exec(
 			`INSERT INTO doc_clauses (doc_id, position, clause_id, clause_version, depth, anchor)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -121,6 +137,11 @@ func syncClauses(tx *sql.Tx, docID int64, doc *designdoc.Document) error {
 			return fmt.Errorf("arrange clause %d in doc %d: %w", id, docID, err)
 		}
 		position++
+	}
+	for _, c := range changed {
+		if err := deriveReferences(tx, project, c.id, c.text); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -242,21 +263,29 @@ func acceptDocClauses(tx *sql.Tx, docID int64) error {
 // version's text and every document whose arrangement holds it.
 func (s *Store) GetClause(ctx context.Context, projectKey string, number int64) (*model.Clause, error) {
 	c := &model.Clause{}
+	var owner sql.NullString
+	var tagsRaw string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT c.id, c.project_id, p.key, c.number, c.status, c.version,
-		        cv.heading, cv.body, c.created_at, c.updated_at
+		        cv.heading, cv.body, c.owner, c.tags, c.created_at, c.updated_at
 		   FROM clauses c
 		   JOIN projects p ON p.id = c.project_id
 		   JOIN clause_versions cv ON cv.clause_id = c.id AND cv.version = c.version
 		  WHERE p.key = $1 AND c.number = $2`, projectKey, number,
 	).Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Status, &c.Version,
-		&c.Heading, &c.Body, &c.CreatedAt, &c.UpdatedAt)
+		&c.Heading, &c.Body, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read clause %s-CL-%d: %w", projectKey, number, err)
 	}
+	c.Owner = owner.String
+	tags, err := scanTextArray(tagsRaw)
+	if err != nil {
+		return nil, fmt.Errorf("scan tags of clause %d: %w", c.ID, err)
+	}
+	c.Tags = nonNil(tags)
 	c.Ref = fmt.Sprintf("%s-CL-%d", c.ProjectKey, c.Number)
 
 	rows, err := s.db.QueryContext(ctx,
@@ -302,7 +331,18 @@ func (s *Store) GetClause(ctx context.Context, projectKey string, number int64) 
 		}
 		c.GovernedTasks = append(c.GovernedTasks, gt)
 	}
-	return c, trows.Err()
+	if err := trows.Err(); err != nil {
+		return nil, err
+	}
+	erows, err := s.db.QueryContext(ctx, clauseEdgesSQL, c.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read edges of clause %d: %w", c.ID, err)
+	}
+	defer erows.Close()
+	if c.Edges, err = scanClauseEdges(erows); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // ListClauseVersions is a clause's version history, newest first.
@@ -337,7 +377,9 @@ func (s *Store) ListClauseVersions(ctx context.Context, projectKey string, numbe
 
 // GetClauseVersion reads a clause as it stood at one version: the detail
 // with Version, Heading and Body taken from that version's row. ArrangedIn
-// and GovernedTasks are the current ones.
+// and GovernedTasks are the current ones. Edges are unversioned too and
+// always reflect the neighbours' current headings (S26), so an old version's
+// edges are not what stood when that version was written.
 func (s *Store) GetClauseVersion(ctx context.Context, projectKey string, number int64, version int) (*model.Clause, error) {
 	c, err := s.GetClause(ctx, projectKey, number)
 	if err != nil {
@@ -451,6 +493,58 @@ func sectionBody(body string, last bool) string {
 		body += "\n"
 	}
 	return body
+}
+
+// textArrayMap decodes a text[] column's raw Postgres array literal (e.g.
+// "{storage,search}") into a []string. pgx's stdlib database/sql driver
+// hands back that literal as a plain string rather than converting it, so
+// reading a native array column needs this one explicit decode step; no
+// existing helper in the package does it, because every other []string
+// column here (project focus, actor groups) is stored as jsonb instead.
+var textArrayMap = pgtype.NewMap()
+
+// scanTextArray decodes raw as read from a text[] column. An empty literal
+// yields nil; clauses.tags is NOT NULL so "" cannot occur.
+func scanTextArray(raw string) ([]string, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var out []string
+	if err := textArrayMap.Scan(pgtype.TextArrayOID, pgtype.TextFormatCode, []byte(raw), &out); err != nil {
+		return nil, fmt.Errorf("decode text[] literal %q: %w", raw, err)
+	}
+	return out, nil
+}
+
+// deref returns the pointer's value, or T's zero value for nil. SetClauseMeta
+// pairs it with a boolean flag per field, so the zero value it returns for a
+// nil field is never actually written: nullif on the empty string, or a
+// false CASE branch, discards it.
+func deref[T any](p *T) T {
+	var zero T
+	if p == nil {
+		return zero
+	}
+	return *p
+}
+
+// SetClauseMeta sets a clause's owner and tags (S15). A nil field is left
+// alone. Dates never live on a clause; they reach it through its tasks.
+func SetClauseMeta(tx *sql.Tx, clauseID int64, in model.ClauseMetaInput) error {
+	if in.Owner == nil && in.Tags == nil {
+		return fmt.Errorf("nothing to set: %w", ErrInvalidInput)
+	}
+	res, err := tx.Exec(
+		`UPDATE clauses
+		    SET owner = CASE WHEN $2::boolean THEN nullif($3, '') ELSE owner END,
+		        tags  = CASE WHEN $4::boolean THEN $5::text[] ELSE tags END,
+		        updated_at = now()
+		  WHERE id = $1`,
+		clauseID, in.Owner != nil, deref(in.Owner), in.Tags != nil, deref(in.Tags))
+	if err != nil {
+		return fmt.Errorf("set meta of clause %d: %w", clauseID, err)
+	}
+	return requireOneAffected(res, fmt.Sprintf("clause %d", clauseID), ErrNotFound)
 }
 
 // ClauseIDByRef resolves a clause's project key and number to its row id

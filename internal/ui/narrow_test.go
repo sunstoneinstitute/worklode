@@ -186,6 +186,13 @@ func pages(t *testing.T) map[string]string {
 					{ID: "WL-234", Title: longTitle, State: "in_progress", Source: "plan", ClauseVersion: 3},
 					{ID: "WL-141", Title: tokenTitle, State: "blocked", Source: "manual", ClauseVersion: 2},
 				},
+				Edges: []model.ClauseEdge{
+					{Type: "constrains", From: "WL-CL-10", FromHeading: "Accessibility and responsive behavior", To: "WL-CL-27", ToHeading: longTitle, Source: "manual", CreatedAt: now},
+					{Type: "refines", From: "WL-CL-4", FromHeading: tokenTitle, To: "WL-CL-10", ToHeading: "Accessibility and responsive behavior", Source: "derived", CreatedAt: now},
+					{Type: "references", From: "WL-CL-10", FromHeading: "Accessibility and responsive behavior", To: "WL-CL-31", ToHeading: "Data platform ingestion boundary", Source: "derived", CreatedAt: now},
+				},
+				Owner: "stig@sunstoneinstitute.ai",
+				Tags:  []string{"accessibility", "cockpit-ui", "narrow-viewport"},
 			},
 			BodyHTML: template.HTML(`<p>Measured against ` + token + `.</p><pre><code>./scripts/narrow-check.sh</code></pre>`),
 			Arranged: []ClauseArrangementRow{

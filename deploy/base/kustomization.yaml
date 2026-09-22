@@ -178,3 +178,5 @@ configMapGenerator:
       - migrations/0081_task_activity.down.sql
       - migrations/0082_clauses.up.sql
       - migrations/0082_clauses.down.sql
+      - migrations/0083_clause_graph.up.sql
+      - migrations/0083_clause_graph.down.sql

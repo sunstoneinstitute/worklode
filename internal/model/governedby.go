@@ -10,11 +10,15 @@ type TaskGovernance struct {
 	Current       int    `json:"current"`        // the clause's current version
 	Heading       string `json:"heading"`
 	Status        string `json:"status"`
-	Source        string `json:"source"` // plan | manual
+	Source        string `json:"source"`           // plan | manual
+	Pinned        int    `json:"pinned,omitempty"` // the version the link is pinned to, 0 when it follows the newest
+	URL           string `json:"url"`              // canonical clause page, with /<ver> when pinned (S10, S20)
 }
 
 // GovernInput names a clause to add to, or remove from, a task's governing
-// set: the body of POST and DELETE /api/v1/tasks/{id}/governed-by.
+// set: the body of POST and DELETE /api/v1/tasks/{id}/governed-by. Pin is
+// read only by POST; DELETE ignores it.
 type GovernInput struct {
-	Clause string `json:"clause"` // "WL-CL-12"
+	Clause string `json:"clause"`        // "WL-CL-12"
+	Pin    bool   `json:"pin,omitempty"` // pin the link to the version current when it is made (S10)
 }

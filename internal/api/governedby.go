@@ -30,7 +30,7 @@ func (s *server) govern(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			return store.Govern(tx, id, clauseID, "manual")
+			return store.Govern(tx, id, clauseID, "manual", req.Pin)
 		})
 	if err != nil {
 		s.mapStoreErr(w, err)

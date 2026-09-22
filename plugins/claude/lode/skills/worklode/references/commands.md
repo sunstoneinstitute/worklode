@@ -26,10 +26,17 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode channel serve` — Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications
   Flags: --interval
 
-## `lode clause` — Design clauses: edit one, list its versions
+## `lode clause` — Design clauses: edit one, list its versions, link or unlink it to another
 
 - `lode clause edit` — Replace a clause's body (and heading) from a file; the document is regenerated around it
   Flags: --file, --heading
+- `lode clause link` — Relate a clause to another: --refines, --constrains, --conflicts-with or --references <ref>
+  Flags: --conflicts-with, --constrains, --references, --refines
+- `lode clause set` — Set a clause's owner or tags
+- `lode clause set owner` — Set a clause's owner; "" clears it
+- `lode clause set tags` — Replace a clause's tags; naming none clears them
+- `lode clause unlink` — Remove a relation written with clause link
+  Flags: --conflicts-with, --constrains, --references, --refines
 - `lode clause versions` — List a clause's versions, newest first
 
 ## `lode decision` — Decisions: the questions a task poses and the answers they wait on
@@ -246,7 +253,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task gap` — Log that the plan or spec does not cover this case, without escalating it
   Flags: --reason
 - `lode task govern` — Record a design clause that governs a task
-  Flags: --by
+  Flags: --by, --pin
 - `lode task instruct` — Queue a steering instruction for whichever actor next holds the task's lease
 - `lode task list` — List tasks (delivered and abandoned are hidden unless requested with --status)
   Flags: --about, --assignee, --deleted, --kind, --parent, --plan, --priority, --project, --repo, --status

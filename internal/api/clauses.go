@@ -76,6 +76,39 @@ func (s *server) editClause(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
+// patchClause handles PATCH /api/v1/clauses/{id}: owner and tags (S15). The
+// text is PUT; this is the metadata write, the way docs split body from owner.
+func (s *server) patchClause(w http.ResponseWriter, r *http.Request) {
+	ref, ok := clauseRef(w, r)
+	if !ok {
+		return
+	}
+	var req model.ClauseMetaInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	payload := map[string]any{"clause": r.PathValue("id"), "owner": req.Owner, "tags": req.Tags}
+	err := s.recordEvent(r.Context(), "cli", "clause.updated", payload,
+		func(tx *sql.Tx, _ int64) error {
+			id, err := store.ClauseIDByRef(tx, ref.Key, ref.Number)
+			if err != nil {
+				return err
+			}
+			return store.SetClauseMeta(tx, id, req)
+		})
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	c, err := s.st.GetClause(r.Context(), ref.Key, ref.Number)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
 // listClauseVersions handles GET /api/v1/clauses/{id}/versions.
 func (s *server) listClauseVersions(w http.ResponseWriter, r *http.Request) {
 	ref, ok := clauseRef(w, r)
