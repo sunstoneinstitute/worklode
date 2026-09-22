@@ -197,6 +197,14 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 		fmt.Sprintf("get project %s", id), id)
 }
 
+// ProjectByKey looks up a project by its immutable key (the S20 uppercase
+// form typed by habit into a canonical URL). Returns ErrNotFound if it does
+// not exist.
+func (s *Store) ProjectByKey(ctx context.Context, key string) (*Project, error) {
+	return s.projectRow(ctx, `SELECT `+projectColumns+` FROM projects WHERE key = $1`,
+		fmt.Sprintf("get project by key %s", key), key)
+}
+
 // ListProjects returns all projects, ordered by key.
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+projectColumns+` FROM projects ORDER BY key`)
