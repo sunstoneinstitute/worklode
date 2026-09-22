@@ -58,6 +58,11 @@ import (
 // redirect (internal/api's docRefRedirect).
 const docRefPrefix = "/docs/ref/"
 
+// clauseRefPrefix is where a linked clause ref points: the cockpit's
+// resolving redirect (internal/api's clauseRefRedirect), the counterpart of
+// docRefPrefix (S20).
+const clauseRefPrefix = "/clauses/"
+
 // HomeParam is the query parameter a number-form reference carries: the key
 // of the project whose corpus sequence the number belongs to. See For.
 const HomeParam = "p"
@@ -72,6 +77,9 @@ const taskRefPrefix = "/tasks/"
 var (
 	// WL-SPEC-42, WL-ADR-7, optionally #sec-10 / #sec-3.1a.
 	shorthandRef = regexp.MustCompile(`\b[A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+(?:#sec-[0-9A-Za-z._-]+)?`)
+	// WL-CL-12 — the CL arm of the shorthand grammar (S20). It links to the
+	// resolving redirect /clauses/<ref>, the counterpart of docRefPrefix.
+	clauseRefRe = regexp.MustCompile(`\b[A-Z][A-Z0-9]{1,9}-CL-\d+\b`)
 	// spec 042 §10, ADR 048 §2, Spec 25 — keyword, number, optional §.
 	keywordRef = regexp.MustCompile(`\b(?:[Ss]pec|ADR|[Aa]dr)\s(\d{1,4})(?:\s?§\s?([0-9][0-9A-Za-z.]*))?`)
 	// 025 §14.3 — a bare number only when the § makes it unmistakably a ref.
@@ -268,6 +276,12 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 	for _, loc := range shorthandRef.FindAllIndex(value, -1) {
 		end := trimDot(value, loc[1])
 		out = append(out, refMatch{loc[0], end, docRefPrefix + string(value[loc[0]:end])})
+	}
+	for _, loc := range clauseRefRe.FindAllIndex(value, -1) {
+		if taken(loc[0], loc[1]) {
+			continue
+		}
+		out = append(out, refMatch{loc[0], loc[1], clauseRefPrefix + string(value[loc[0]:loc[1]])})
 	}
 	section := func(loc []int, numStart, numEnd, secStart, secEnd int) refMatch {
 		end := loc[1]

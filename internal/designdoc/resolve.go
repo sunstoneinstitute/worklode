@@ -139,6 +139,30 @@ func kindArticle(kind string) string {
 	return "a " + kind
 }
 
+// clauseRefPattern is the CL arm of 025 §14.3's <KEY>-<TYPE>-<n> grammar
+// (12-spec-refactoring-design-tree.md S20): a design clause's citable ref.
+var clauseRefPattern = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-CL-(\d+)$`)
+
+// ClauseRef is a parsed clause ref, e.g. "WL-CL-12".
+type ClauseRef struct {
+	Key    string
+	Number int64
+}
+
+// ParseClauseRef parses base as a clause ref. It reports false for every
+// other ref form, including document shorthand and a ref carrying a fragment.
+func ParseClauseRef(base string) (ClauseRef, bool) {
+	m := clauseRefPattern.FindStringSubmatch(base)
+	if m == nil {
+		return ClauseRef{}, false
+	}
+	n, err := strconv.ParseInt(m[2], 10, 64)
+	if err != nil {
+		return ClauseRef{}, false
+	}
+	return ClauseRef{Key: m[1], Number: n}, true
+}
+
 // ErrNoSpec is returned for the NO-SPEC sentinel ref, or its equivalent
 // <KEY>-SPEC-0 (026 §4.3): the ref explicitly means "no governing spec",
 // never a document, so the tier table of §4.2 never runs.

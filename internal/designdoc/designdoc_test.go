@@ -302,3 +302,46 @@ func TestClausesReassembleSpecs2(t *testing.T) {
 		}
 	}
 }
+
+func TestParseClauseRef(t *testing.T) {
+	cases := []struct {
+		in  string
+		key string
+		n   int64
+		ok  bool
+	}{
+		{"WL-CL-12", "WL", 12, true},
+		{"P1-CL-3", "P1", 3, true},
+		{"WL-SPEC-12", "", 0, false},
+		{"wl-cl-12", "", 0, false},
+		{"WL-CL-", "", 0, false},
+		{"WL-CL-12#sec-1", "", 0, false},
+	}
+	for _, c := range cases {
+		got, ok := ParseClauseRef(c.in)
+		if ok != c.ok || got.Key != c.key || got.Number != c.n {
+			t.Errorf("ParseClauseRef(%q) = %+v, %v; want {%s %d}, %v", c.in, got, ok, c.key, c.n, c.ok)
+		}
+	}
+}
+
+func TestSectionByAnchorEditRerendersHeading(t *testing.T) {
+	src := []byte("---\nstatus: draft\n---\n\n# T\n\nIntro.\n\n## 1. One {#sec-1}\n\nA.\n\n### 1.1 Sub {#sec-1.1}\n\nB.\n\n## 2. Two {#sec-2}\n\nC.\n")
+	d, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.SectionByAnchor("sec-9") != nil {
+		t.Error("unknown anchor should return nil")
+	}
+	sec := d.SectionByAnchor("sec-1.1")
+	if sec == nil || sec.Title != "Sub" {
+		t.Fatalf("sec-1.1 = %+v", sec)
+	}
+	sec.Title = "Subsection"
+	sec.Body = "\nB changed.\n\n"
+	want := "---\nstatus: draft\n---\n\n# T\n\nIntro.\n\n## 1. One {#sec-1}\n\nA.\n\n### 1.1 Subsection {#sec-1.1}\n\nB changed.\n\n## 2. Two {#sec-2}\n\nC.\n"
+	if got := string(d.Bytes()); got != want {
+		t.Errorf("Bytes after edit:\n%s\nwant:\n%s", got, want)
+	}
+}

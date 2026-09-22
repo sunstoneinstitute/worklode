@@ -159,6 +159,22 @@ func (d *Document) Bytes() []byte {
 	return b.Bytes()
 }
 
+// SectionByAnchor returns the section carrying anchor, or nil. Sections is
+// []*Section, so the result aliases Document.Sections directly: assigning
+// its Title or Body and calling Bytes re-renders the document with that one
+// section changed.
+func (d *Document) SectionByAnchor(anchor string) *Section {
+	if anchor == "" {
+		return nil
+	}
+	for i := range d.Sections {
+		if d.Sections[i].Anchor == anchor {
+			return d.Sections[i]
+		}
+	}
+	return nil
+}
+
 // Subtree returns the source text of the section anchored anchor, together
 // with every section nested under it, and reports whether that anchor exists.
 // It is the cut `lode show --section` prints (026 §3: a section is always its

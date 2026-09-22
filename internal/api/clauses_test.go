@@ -1,7 +1,9 @@
 package api_test
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -35,5 +37,80 @@ func TestGetClause(t *testing.T) {
 	}
 	if rr := doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-999", token, nil); rr.Code != http.StatusNotFound {
 		t.Errorf("missing clause: status = %d", rr.Code)
+	}
+}
+
+// TestClauseEditAndVersionsAPI edits a clause through the API on a draft
+// document, again after acceptance (landing through the revision path), then
+// reads its version history back (S14, S35).
+func TestClauseEditAndVersionsAPI(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	doc := createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "t", Body: clauseDocV1})
+
+	rr := doReq(t, h, http.MethodPut, "/api/v1/clauses/WL-CL-2", token, model.EditClauseInput{Heading: "Subsection", Body: "\nB changed.\n\n"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT = %d %s", rr.Code, rr.Body)
+	}
+	var c model.Clause
+	decodeInto(t, rr, &c)
+	if c.Heading != "Subsection" || c.Version != 1 || c.Body != "\nB changed.\n\n" {
+		t.Errorf("edited clause = %+v", c)
+	}
+	rr = doReq(t, h, http.MethodGet, fmt.Sprintf("/api/v1/docs/%d", doc.ID), token, nil)
+	var d model.DocDetail
+	decodeInto(t, rr, &d)
+	if !strings.Contains(d.Body, "### 1.1 Subsection {#sec-1.1}\n\nB changed.\n") {
+		t.Errorf("doc body not regenerated:\n%s", d.Body)
+	}
+
+	acceptDocViaAPI(t, h, token, doc.ID)
+	rr = doReq(t, h, http.MethodPut, "/api/v1/clauses/WL-CL-2", token, model.EditClauseInput{Heading: "Subsection", Body: "\nB again.\n\n"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT on accepted = %d %s", rr.Code, rr.Body)
+	}
+	decodeInto(t, rr, &c)
+	if c.Body != "\nB changed.\n\n" || c.Status != "accepted" {
+		t.Errorf("accepted clause moved before the revision landed: %+v", c)
+	}
+	rr = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/v1/docs/%d/revision/accept", doc.ID), token, nil)
+	if rr.Code/100 != 2 {
+		t.Fatalf("accept revision = %d %s", rr.Code, rr.Body)
+	}
+
+	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-2/versions", token, nil)
+	var vs []model.ClauseVersion
+	decodeInto(t, rr, &vs)
+	if rr.Code != http.StatusOK || len(vs) != 2 || vs[0].Version != 2 {
+		t.Errorf("versions = %d %+v", rr.Code, vs)
+	}
+	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-2/versions/1", token, nil)
+	decodeInto(t, rr, &c)
+	if rr.Code != http.StatusOK || c.Version != 1 || c.Body != "\nB changed.\n\n" {
+		t.Errorf("v1 = %d %+v", rr.Code, c)
+	}
+	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-2/versions/2", token, nil)
+	decodeInto(t, rr, &c)
+	if rr.Code != http.StatusOK || c.Version != 2 || c.Body != "\nB again.\n\n" {
+		t.Errorf("v2 = %d %+v", rr.Code, c)
+	}
+
+	for _, tc := range []struct {
+		method, path string
+		body         any
+		want         int
+	}{
+		{http.MethodPut, "/api/v1/clauses/WL-CL-99", model.EditClauseInput{Heading: "x", Body: "y"}, http.StatusNotFound},
+		{http.MethodPut, "/api/v1/clauses/nope", model.EditClauseInput{Heading: "x", Body: "y"}, http.StatusBadRequest},
+		{http.MethodPut, "/api/v1/clauses/WL-CL-2", model.EditClauseInput{Heading: "", Body: "y"}, http.StatusUnprocessableEntity},
+		{http.MethodGet, "/api/v1/clauses/WL-CL-2/versions/9", nil, http.StatusNotFound},
+		{http.MethodGet, "/api/v1/clauses/WL-CL-2/versions/x", nil, http.StatusBadRequest},
+		{http.MethodGet, "/api/v1/clauses/WL-CL-99/versions", nil, http.StatusNotFound},
+	} {
+		rr := doReq(t, h, tc.method, tc.path, token, tc.body)
+		if rr.Code != tc.want {
+			t.Errorf("%s %s = %d, want %d: %s", tc.method, tc.path, rr.Code, tc.want, rr.Body)
+		}
 	}
 }

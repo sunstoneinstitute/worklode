@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -280,7 +281,176 @@ func (s *Store) GetClause(ctx context.Context, projectKey string, number int64) 
 		a.DocRef = fmt.Sprintf("%s-%s-%d", key, strings.ToUpper(kind), docNumber.Int64)
 		c.ArrangedIn = append(c.ArrangedIn, a)
 	}
-	return c, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	c.GovernedTasks = []model.ClauseTask{}
+	trows, err := s.db.QueryContext(ctx,
+		`SELECT t.id, t.title, t.state, g.source, g.clause_version
+		   FROM task_governed_by g JOIN tasks t ON t.id = g.task_id
+		  WHERE g.clause_id = $1
+		  ORDER BY g.created_at DESC, t.id`, c.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read governed tasks of clause %d: %w", c.ID, err)
+	}
+	defer trows.Close()
+	for trows.Next() {
+		var gt model.ClauseTask
+		if err := trows.Scan(&gt.ID, &gt.Title, &gt.State, &gt.Source, &gt.ClauseVersion); err != nil {
+			return nil, fmt.Errorf("scan governed task of clause %d: %w", c.ID, err)
+		}
+		c.GovernedTasks = append(c.GovernedTasks, gt)
+	}
+	return c, trows.Err()
+}
+
+// ListClauseVersions is a clause's version history, newest first.
+func (s *Store) ListClauseVersions(ctx context.Context, projectKey string, number int64) ([]model.ClauseVersion, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT cv.version, cv.heading, cv.created_at
+		   FROM clause_versions cv
+		   JOIN clauses c ON c.id = cv.clause_id
+		   JOIN projects p ON p.id = c.project_id
+		  WHERE p.key = $1 AND c.number = $2
+		  ORDER BY cv.version DESC`, projectKey, number)
+	if err != nil {
+		return nil, fmt.Errorf("list versions of clause %s-CL-%d: %w", projectKey, number, err)
+	}
+	defer rows.Close()
+	out := []model.ClauseVersion{}
+	for rows.Next() {
+		var v model.ClauseVersion
+		if err := rows.Scan(&v.Version, &v.Heading, &v.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan version of clause %s-CL-%d: %w", projectKey, number, err)
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("clause %s-CL-%d: %w", projectKey, number, ErrNotFound)
+	}
+	return out, nil
+}
+
+// GetClauseVersion reads a clause as it stood at one version: the detail
+// with Version, Heading and Body taken from that version's row. ArrangedIn
+// and GovernedTasks are the current ones.
+func (s *Store) GetClauseVersion(ctx context.Context, projectKey string, number int64, version int) (*model.Clause, error) {
+	c, err := s.GetClause(ctx, projectKey, number)
+	if err != nil {
+		return nil, err
+	}
+	err = s.db.QueryRowContext(ctx,
+		`SELECT heading, body FROM clause_versions WHERE clause_id = $1 AND version = $2`,
+		c.ID, version).Scan(&c.Heading, &c.Body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("clause %s v%d: %w", c.Ref, version, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read clause %s v%d: %w", c.Ref, version, err)
+	}
+	c.Version = version
+	return c, nil
+}
+
+// EditClause writes a clause's new heading and body by regenerating the
+// arranging document's body around it (12-spec-refactoring-design-tree.md
+// S13, S14, S35). A draft document is written through UpdateDocBody, so
+// syncClauses rewrites the clause's draft version in place. An accepted
+// document is written through its candidate revision, opened here when none
+// is open; the clause's next version appears when the revision lands. A
+// clause arranged in no document, or in more than one, is refused: editing
+// is document-first in this stage, and a shared clause arrives with plans as
+// arrangements. Returns the arranging document's id.
+func EditClause(tx *sql.Tx, now time.Time, projectKey string, number int64, in model.EditClauseInput, actorID string, eventID int64) (int64, error) {
+	if strings.TrimSpace(in.Heading) == "" {
+		return 0, fmt.Errorf("clause heading is required: %w", ErrInvalidInput)
+	}
+	clauseID, err := ClauseIDByRef(tx, projectKey, number)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := tx.Query(`SELECT doc_id, anchor FROM doc_clauses WHERE clause_id = $1 ORDER BY doc_id`, clauseID)
+	if err != nil {
+		return 0, fmt.Errorf("read arrangements of clause %d: %w", clauseID, err)
+	}
+	var docIDs []int64
+	var anchors []string
+	for rows.Next() {
+		var id int64
+		var anchor string
+		if err := rows.Scan(&id, &anchor); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan arrangement of clause %d: %w", clauseID, err)
+		}
+		docIDs, anchors = append(docIDs, id), append(anchors, anchor)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("read arrangements of clause %d: %w", clauseID, err)
+	}
+	switch len(docIDs) {
+	case 0:
+		return 0, fmt.Errorf("clause %s-CL-%d is arranged in no document; edit the document instead: %w", projectKey, number, ErrInvalidInput)
+	case 1:
+	default:
+		return 0, fmt.Errorf("clause %s-CL-%d is arranged in %d documents; editing a shared clause is not supported yet: %w", projectKey, number, len(docIDs), ErrInvalidInput)
+	}
+	docID, anchor := docIDs[0], anchors[0]
+
+	var kind, status, body string
+	if err := tx.QueryRow(`SELECT kind, status, body FROM docs WHERE id = $1 FOR UPDATE`, docID).Scan(&kind, &status, &body); err != nil {
+		return 0, fmt.Errorf("load doc %d: %w", docID, err)
+	}
+	editable := body
+	revising := kind != "plan" && status != "draft"
+	if revising {
+		var candidate sql.NullString
+		if err := tx.QueryRow(`SELECT body FROM doc_revisions WHERE doc_id = $1`, docID).Scan(&candidate); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("load revision of doc %d: %w", docID, err)
+		}
+		if candidate.Valid {
+			editable = candidate.String
+		} else if err := ReviseDoc(tx, now, docID, actorID, eventID); err != nil {
+			return 0, err
+		}
+	}
+	parsed, err := designdoc.Parse([]byte(editable))
+	if err != nil {
+		return 0, fmt.Errorf("parse doc %d: %w", docID, err)
+	}
+	sec := parsed.SectionByAnchor(anchor)
+	if sec == nil {
+		return 0, fmt.Errorf("clause %s-CL-%d: its section %s is not in the editable body of doc %d: %w", projectKey, number, anchor, docID, ErrInvalidInput)
+	}
+	sec.Title = in.Heading
+	sec.Body = sectionBody(in.Body, sec.Index == len(parsed.Sections)-1)
+	next := string(parsed.Bytes())
+	if revising {
+		return docID, UpdateRevision(tx, now, docID, next, eventID)
+	}
+	_, err = UpdateDocBody(tx, now, docID, next, 0, eventID)
+	return docID, err
+}
+
+// sectionBody normalises a submitted clause body to the shape designdoc.Parse
+// would have produced for it, so re-parsing the regenerated document yields
+// the sections and anchors it had before. Document.Bytes writes the heading
+// line and the body with nothing between them, so a body that does not start
+// on a fresh line after the heading, or does not end in one, swallows the
+// next heading and orphans that clause. A parsed body carries a blank line
+// before the next heading; the last section's runs to EOF and ends in a
+// single newline, so a trailing blank line is added only when a heading
+// follows.
+func sectionBody(body string, last bool) string {
+	body = "\n" + strings.Trim(body, "\r\n") + "\n"
+	if !last {
+		body += "\n"
+	}
+	return body
 }
 
 // ClauseIDByRef resolves a clause's project key and number to its row id

@@ -25,3 +25,24 @@ func TestClauseRender(t *testing.T) {
 		}
 	}
 }
+
+func TestClauseRenderGovernedTasks(t *testing.T) {
+	var b strings.Builder
+	ClauseRender(&b, model.Clause{Ref: "WL-CL-2", Heading: "Sub", Status: "accepted", Version: 2,
+		GovernedTasks: []model.ClauseTask{{ID: "WL-7", Title: "Do it", State: "ready", Source: "plan", ClauseVersion: 1}}})
+	if !strings.Contains(b.String(), "  governs:  WL-7 Do it (ready, plan, v1)\n") {
+		t.Errorf("render:\n%s", b.String())
+	}
+}
+
+func TestClauseVersionsTable(t *testing.T) {
+	var b strings.Builder
+	ClauseVersionsTable(&b, []model.ClauseVersion{
+		{Version: 2, Heading: "Sub", CreatedAt: time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC)},
+		{Version: 1, Heading: "Sub", CreatedAt: time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC)},
+	})
+	out := b.String()
+	if !strings.HasPrefix(out, "VERSION") || !strings.Contains(out, "2") || !strings.Contains(out, "Sub") {
+		t.Errorf("table:\n%s", out)
+	}
+}

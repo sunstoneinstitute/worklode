@@ -1,0 +1,90 @@
+package ui
+
+// clause.templ renders a design clause's cockpit page
+// (docs/specs2/12-spec-refactoring-design-tree.md S8-S11, S20): the clause's
+// current or a named version, the documents that arrange it, the tasks it
+// governs, and its version history. Read-only, like the document corpus it
+// is drawn from — a clause is edited through its arranging document, never
+// on this page (S14, S35).
+templ Clause(v ClauseView) {
+	@Page(v.Page) {
+		@globalShell() {
+			<section class="card pad">
+				<h1>{ v.Clause.Ref }: { v.Clause.Heading }</h1>
+				<p>
+					<span class={ "chip " + docStatusChip(v.Clause.Status) }>{ v.Clause.Status }</span>
+					<span class="chip plain">version { v.Clause.Version }</span>
+				</p>
+			</section>
+			if !v.Current {
+				<section class="card pad">
+					<p><strong>Viewing version { v.Clause.Version }</strong> &mdash; <a href={ v.CanonicalURL }>back to current</a></p>
+				</section>
+			}
+			<section class="card">
+				<div class="hd"><h3>Body</h3></div>
+				<div class="bd prose">
+					// BodyHTML is emitted unescaped for the reason Doc's Body
+					// section gives: internal/mdrender has already reduced it
+					// to an allowlist.
+					@templ.Raw(string(v.BodyHTML))
+				</div>
+			</section>
+			<section class="card">
+				<div class="hd"><h3>Arranged in</h3></div>
+				<div class="bd">
+					if len(v.Arranged) == 0 {
+						<p class="muted">Not arranged in any document.</p>
+					} else {
+						<ul>
+							for _, a := range v.Arranged {
+								<li>
+									<a href={ templ.SafeURL(a.Href) }>{ a.DocRef }#{ a.Anchor }</a>
+									<span class="muted small">{ " " }depth { a.Depth }</span>
+								</li>
+							}
+						</ul>
+					}
+				</div>
+			</section>
+			<section class="card">
+				<div class="hd"><h3>Governs</h3></div>
+				<div class="bd">
+					if len(v.Clause.GovernedTasks) == 0 {
+						<p class="muted">No tasks.</p>
+					} else {
+						<ul>
+							for _, t := range v.Clause.GovernedTasks {
+								<li>
+									<a href={ templ.SafeURL("/tasks/" + t.ID) }>{ t.ID }</a>
+									{ " " }{ t.Title }{ " " }
+									<span class={ "chip " + stateChip(t.State) }>{ stateLabel(t.State) }</span>
+									<span class="muted small">{ " " }{ t.Source } · v{ t.ClauseVersion }</span>
+								</li>
+							}
+						</ul>
+					}
+				</div>
+			</section>
+			if len(v.Versions) > 0 {
+				<section class="card">
+					<div class="hd"><h3>Versions</h3></div>
+					<div class="bd">
+						@tableWrap("Versions") {
+							<table>
+								<tr><th>Version</th><th>Heading</th><th>Created</th></tr>
+								for _, ver := range v.Versions {
+									<tr>
+										<td class="mono"><a href={ clauseVersionURL(v.CanonicalURL, ver.Version) }>{ ver.Version }</a></td>
+										<td><a href={ clauseVersionURL(v.CanonicalURL, ver.Version) }>{ ver.Heading }</a></td>
+										<td class="mono">{ fmtTime(ver.CreatedAt) }</td>
+									</tr>
+								}
+							</table>
+						}
+					</div>
+				</section>
+			}
+		}
+	}
+}

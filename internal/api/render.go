@@ -7,6 +7,7 @@
 package api
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -940,4 +941,29 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 		}
 	}
 	return view
+}
+
+// clauseView maps one clause into its cockpit page (S20). projectID is the
+// clause's owning project's id, off which CanonicalURL is built.
+func clauseView(md *mdrender.Cache, keys mdrender.ProjectKeys, c *model.Clause, versions []model.ClauseVersion, projectID string) ui.ClauseView {
+	v := ui.ClauseView{
+		Page:         ui.PageProps{Title: "worklode: " + c.Ref, ActiveGlobal: "knowledge"},
+		Clause:       *c,
+		BodyHTML:     md.Body(keys, c.Body),
+		Versions:     versions,
+		CanonicalURL: fmt.Sprintf("/projects/%s/clause/%d", projectID, c.Number),
+		// versions is newest first, so its head is the clause's live
+		// version; an empty history is a read that failed, and the page
+		// then makes no claim about which version this is.
+		Current: len(versions) == 0 || c.Version == versions[0].Version,
+	}
+	for _, a := range c.ArrangedIn {
+		v.Arranged = append(v.Arranged, ui.ClauseArrangementRow{
+			DocRef: a.DocRef,
+			Anchor: a.Anchor,
+			Depth:  a.Depth,
+			Href:   "/docs/ref/" + a.DocRef + "#" + a.Anchor,
+		})
+	}
+	return v
 }
