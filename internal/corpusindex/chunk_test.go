@@ -20,8 +20,8 @@ func bigText(n int) string {
 
 // TestChunkDocSplitsOversizedSectionInheritingAnchor is corpusindex's first
 // test (WL-628): a 9000-rune section must split into overlapping sub-chunks
-// that all carry the section's anchor, each capped at ChunkRunes including
-// its header, overlapping the next by ChunkOverlap runes of raw text.
+// that all carry the section's anchor, each capped at DefaultBudget.Runes including
+// its header, overlapping the next by DefaultBudget.Overlap runes of raw text.
 func TestChunkDocSplitsOversizedSectionInheritingAnchor(t *testing.T) {
 	body := "# Test Spec\n\n" +
 		"## 1 Big {#sec-1}\n\n" + bigText(9000) + "\n\n" +
@@ -32,7 +32,7 @@ func TestChunkDocSplitsOversizedSectionInheritingAnchor(t *testing.T) {
 		{Anchor: "sec-2", Number: "2", Heading: "Small", Depth: 2, Position: 1},
 	}
 
-	chunks := ChunkDoc(doc, sections)
+	chunks := ChunkDoc(DefaultBudget, doc, sections)
 
 	var big []Chunk
 	for _, c := range chunks {
@@ -47,20 +47,20 @@ func TestChunkDocSplitsOversizedSectionInheritingAnchor(t *testing.T) {
 		if c.Index != i {
 			t.Errorf("sub-chunk %d: Index = %d, want %d", i, c.Index, i)
 		}
-		if got := len([]rune(c.Header + c.Text)); got > ChunkRunes {
-			t.Errorf("sub-chunk %d: header+text = %d runes, want <= %d", i, got, ChunkRunes)
+		if got := len([]rune(c.Header + c.Text)); got > DefaultBudget.Runes {
+			t.Errorf("sub-chunk %d: header+text = %d runes, want <= %d", i, got, DefaultBudget.Runes)
 		}
 	}
 	for i := 1; i < len(big); i++ {
 		prev := []rune(big[i-1].Text)
 		cur := []rune(big[i].Text)
-		if len(prev) < ChunkOverlap || len(cur) < ChunkOverlap {
+		if len(prev) < DefaultBudget.Overlap || len(cur) < DefaultBudget.Overlap {
 			continue // a short final sub-chunk carries less than a full overlap
 		}
-		tail := string(prev[len(prev)-ChunkOverlap:])
-		head := string(cur[:ChunkOverlap])
+		tail := string(prev[len(prev)-DefaultBudget.Overlap:])
+		head := string(cur[:DefaultBudget.Overlap])
 		if tail != head {
-			t.Errorf("sub-chunk %d: overlap with previous does not match (want %d shared runes)", i, ChunkOverlap)
+			t.Errorf("sub-chunk %d: overlap with previous does not match (want %d shared runes)", i, DefaultBudget.Overlap)
 		}
 	}
 }
@@ -78,7 +78,7 @@ func TestChunkDocShortSectionsNotMerged(t *testing.T) {
 		{Anchor: "sec-2", Number: "2", Heading: "Second", Position: 1},
 	}
 
-	chunks := ChunkDoc(doc, sections)
+	chunks := ChunkDoc(DefaultBudget, doc, sections)
 	if len(chunks) != 2 {
 		t.Fatalf("want 2 chunks (one per short section), got %d: %+v", len(chunks), chunks)
 	}
@@ -103,7 +103,7 @@ func TestChunkDocSectionOrderFollowsPosition(t *testing.T) {
 		{Anchor: "sec-1", Number: "1", Heading: "First", Position: 0},
 	}
 
-	chunks := ChunkDoc(doc, sections)
+	chunks := ChunkDoc(DefaultBudget, doc, sections)
 	if len(chunks) != 2 || chunks[0].Anchor != "sec-1" || chunks[1].Anchor != "sec-2" {
 		t.Fatalf("want [sec-1, sec-2] in position order, got %+v", chunks)
 	}
@@ -118,7 +118,7 @@ func TestChunkDocPlanHeadings(t *testing.T) {
 		"### Task 1 — Do the thing\n\ntask one body\n"
 	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: body}
 
-	chunks := ChunkDoc(doc, nil)
+	chunks := ChunkDoc(DefaultBudget, doc, nil)
 
 	for _, c := range chunks {
 		if c.Anchor != "" {
@@ -152,7 +152,7 @@ func TestChunkDocPlanUnstructuredFallsBackToWindows(t *testing.T) {
 	body := "# A Plan\n\n" + bigText(500) + "\n"
 	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: body}
 
-	chunks := ChunkDoc(doc, nil)
+	chunks := ChunkDoc(DefaultBudget, doc, nil)
 	if len(chunks) != 1 {
 		t.Fatalf("want 1 chunk for an unstructured body under budget, got %d", len(chunks))
 	}
@@ -175,7 +175,7 @@ func TestChunkDocPlanIndexUniquePerAnchor(t *testing.T) {
 		"## Third\n\nthree\n"
 	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: body}
 
-	chunks := ChunkDoc(doc, nil)
+	chunks := ChunkDoc(DefaultBudget, doc, nil)
 
 	seen := map[[2]any]bool{}
 	for _, c := range chunks {
@@ -202,7 +202,7 @@ func TestChunkDocPlanIndexUniquePerAnchor(t *testing.T) {
 func TestChunkTaskEmptyBodyIndexesTitle(t *testing.T) {
 	task := model.Task{ID: "WL-142", Kind: "feature", State: "in_progress", Title: "Fix the thing"}
 
-	chunks := ChunkTask(task)
+	chunks := ChunkTask(DefaultBudget, task)
 	if len(chunks) != 1 {
 		t.Fatalf("want 1 chunk, got %d", len(chunks))
 	}
@@ -214,12 +214,12 @@ func TestChunkTaskEmptyBodyIndexesTitle(t *testing.T) {
 	}
 }
 
-// TestChunkTaskOverBudgetSplits asserts a task body past ChunkRunes splits
+// TestChunkTaskOverBudgetSplits asserts a task body past DefaultBudget.Runes splits
 // into multiple chunks, all headed the same way.
 func TestChunkTaskOverBudgetSplits(t *testing.T) {
 	task := model.Task{ID: "WL-1", Kind: "feature", State: "ready", Title: "Big task", Body: bigText(9000)}
 
-	chunks := ChunkTask(task)
+	chunks := ChunkTask(DefaultBudget, task)
 	if len(chunks) < 2 {
 		t.Fatalf("want a split body, got %d chunk(s)", len(chunks))
 	}
@@ -230,8 +230,8 @@ func TestChunkTaskOverBudgetSplits(t *testing.T) {
 		if c.Header != TaskHeader(task) {
 			t.Errorf("chunk %d: header = %q, want %q", i, c.Header, TaskHeader(task))
 		}
-		if got := len([]rune(c.Header + c.Text)); got > ChunkRunes {
-			t.Errorf("chunk %d: header+text = %d runes, want <= %d", i, got, ChunkRunes)
+		if got := len([]rune(c.Header + c.Text)); got > DefaultBudget.Runes {
+			t.Errorf("chunk %d: header+text = %d runes, want <= %d", i, got, DefaultBudget.Runes)
 		}
 	}
 }
@@ -240,7 +240,7 @@ func TestChunkTaskOverBudgetSplits(t *testing.T) {
 // ChunkSkill windows description+SKILL.md the way skillsync does today.
 func TestChunkSkillWindowsDescriptionAndBody(t *testing.T) {
 	skill := model.Skill{Name: "test-driven-development", Description: "Write the test first"}
-	chunks := ChunkSkill(skill, "# TDD\n\nRed, green, refactor.")
+	chunks := ChunkSkill(DefaultBudget, skill, "# TDD\n\nRed, green, refactor.")
 	if len(chunks) != 1 {
 		t.Fatalf("want 1 chunk for a small skill, got %d", len(chunks))
 	}
@@ -269,7 +269,7 @@ func TestChunkDocSectionsIndexUniquePerAnchor(t *testing.T) {
 		{Anchor: "", Heading: "Unanchored two", Position: 2},
 	}
 
-	chunks := ChunkDoc(doc, sections)
+	chunks := ChunkDoc(DefaultBudget, doc, sections)
 	seen := map[[2]any]bool{}
 	for _, c := range chunks {
 		key := [2]any{c.Anchor, c.Index}
@@ -277,5 +277,15 @@ func TestChunkDocSectionsIndexUniquePerAnchor(t *testing.T) {
 			t.Fatalf("duplicate (Anchor, Index) pair %v among chunks %+v", key, chunks)
 		}
 		seen[key] = true
+	}
+}
+
+func TestBudgetFor(t *testing.T) {
+	got := BudgetFor(2048)
+	if got.Runes != 3584 || got.Overlap != 597 {
+		t.Errorf("BudgetFor(2048) = %+v, want {3584 597}", got)
+	}
+	if DefaultBudget != BudgetFor(2048) {
+		t.Errorf("DefaultBudget = %+v, want BudgetFor(2048)", DefaultBudget)
 	}
 }

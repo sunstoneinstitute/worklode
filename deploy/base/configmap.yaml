@@ -34,6 +34,9 @@ data:
   # found ... should be provided either empty or with model=/model instead" on
   # every call.
   LODE_EMBEDDING_MODEL: "/model"
+  # The model's context window in tokens (07 §14.4). EmbeddingGemma is 2048;
+  # the chunk budget derives from this number.
+  LODE_EMBEDDING_CONTEXT_TOKENS: "2048"
   # EmbeddingGemma is asymmetric: a query and a document must be embedded with
   # different instruction prefixes (040 §3), and getting it wrong costs
   # retrieval quality without ever raising an error. The trailing spaces are

@@ -269,3 +269,36 @@ func TestSubtreeIsByteIdenticalToSource(t *testing.T) {
 		t.Errorf("preamble + subtrees = %q, want %q", got, src)
 	}
 }
+
+// TestClausesReassembleSpecs2 is 12-spec-refactoring-design-tree.md S21's
+// acceptance test. Every section is one clause, and Preamble plus each
+// section's HeadingAndBody in order rebuilds the source byte for byte, so an
+// arrangement of clauses loses nothing a document had.
+func TestClausesReassembleSpecs2(t *testing.T) {
+	files, err := filepath.Glob("../../docs/specs2/*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no files matched docs/specs2/*.md")
+	}
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := Parse(src)
+		if err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		var b bytes.Buffer
+		b.WriteString(d.Frontmatter.source())
+		b.WriteString(d.Preamble)
+		for _, sec := range d.Sections {
+			b.WriteString(sec.HeadingAndBody())
+		}
+		if !bytes.Equal(b.Bytes(), src) {
+			t.Errorf("%s: %d sections do not reassemble to the source", f, len(d.Sections))
+		}
+	}
+}

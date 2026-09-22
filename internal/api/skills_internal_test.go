@@ -218,7 +218,7 @@ func TestNewServerSkillsConfig(t *testing.T) {
 		{"empty config boots with skills off", Config{}, false},
 
 		{"embedding url without model", Config{EmbeddingURL: "https://example.com/embed"}, true},
-		{"embedding url with model", Config{EmbeddingURL: "https://example.com/embed", EmbeddingModel: "m"}, false},
+		{"embedding url with model", Config{EmbeddingURL: "https://example.com/embed", EmbeddingModel: "m", EmbeddingContextTokens: "2048"}, false},
 		{"query embedding url without embedding url", Config{QueryEmbeddingURL: "https://example.com/embed"}, true},
 
 		{"skill sources malformed", Config{SkillSources: "not-a-source"}, true},
@@ -257,7 +257,7 @@ func TestNewServerInvalidatesEmbeddingsWithoutSkillSources(t *testing.T) {
 		t.Fatalf("set provider id: %v", err)
 	}
 
-	cfg := Config{EmbeddingURL: "https://example.com/v1/embeddings", EmbeddingModel: "new-model"}
+	cfg := Config{EmbeddingURL: "https://example.com/v1/embeddings", EmbeddingModel: "new-model", EmbeddingContextTokens: "2048"}
 	if _, _, err := NewServer(st, cfg); err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestNewServerInvalidatesEmbeddingsOnPrefixChange(t *testing.T) {
 		t.Fatalf("replace embeddings: %v", err)
 	}
 	cfg := Config{
-		EmbeddingURL: "https://example.com/v1/embeddings", EmbeddingModel: "m",
+		EmbeddingURL: "https://example.com/v1/embeddings", EmbeddingModel: "m", EmbeddingContextTokens: "2048",
 		EmbeddingDocumentPrefix: "title: none | text: ",
 	}
 	old := (&embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, DocumentPrefix: "passage: "}).ID()
@@ -403,7 +403,7 @@ func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
 	}))
 	t.Cleanup(fakeSrv.Close)
 
-	cfg := Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"}
+	cfg := Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"}
 	h, _, err := NewServer(st, cfg)
 	if err != nil {
 		t.Fatalf("new server: %v", err)

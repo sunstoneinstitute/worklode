@@ -201,7 +201,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 
 - `lode task abandon` — Abandon a task from any non-terminal state
 - `lode task add` — Create a task
-  Flags: --body, --body-file, --concern, --draft, --follow-up-to, --kind, --no-upload, --parent, --priority, --project, --repo, --secrets, --skill, --title
+  Flags: --body, --body-file, --concern, --draft, --follow-up-to, --governed-by, --kind, --no-upload, --parent, --priority, --project, --repo, --secrets, --skill, --title
 - `lode task assign` — Assign a task to an actor (default: yourself)
   Flags: --to
 - `lode task attach` — Upload files and attach them to a task
@@ -239,6 +239,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --project, --repo
 - `lode task gap` — Log that the plan or spec does not cover this case, without escalating it
   Flags: --reason
+- `lode task govern` — Record a design clause that governs a task
+  Flags: --by
 - `lode task instruct` — Queue a steering instruction for whichever actor next holds the task's lease
 - `lode task list` — List tasks (delivered and abandoned are hidden unless requested with --status)
   Flags: --about, --assignee, --deleted, --kind, --parent, --plan, --priority, --project, --repo, --status
@@ -268,6 +270,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task undelete` — Restore a deleted task, clearing its tombstone
 - `lode task unduplicate` — Drop a task's duplicate edge to its canonical task
 - `lode task unfollow-up` — Drop a task's follow-up edge to its origin
+- `lode task ungovern` — Remove a governing clause from a task
+  Flags: --by
 - `lode task unparent` — Detach a task from its parent
 
 ## `lode token` — Manage bearer tokens

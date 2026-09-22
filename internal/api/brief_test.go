@@ -308,7 +308,7 @@ func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
 	}))
 	defer fakeSrv.Close()
 
-	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 	createProject(t, st, "proj")
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 
@@ -358,7 +358,7 @@ func TestTaskBriefSkillsFalseSkipsTheWork(t *testing.T) {
 	}))
 	defer fakeSrv.Close()
 
-	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 	createProject(t, st, "proj")
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 	task := createTaskViaAPI(t, h, token, map[string]any{
@@ -407,7 +407,7 @@ func TestTaskBriefMatchQueryFailureDegrades(t *testing.T) {
 	}))
 	defer fakeSrv.Close()
 
-	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 	createProject(t, st, "proj")
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 	seedSkill(t, st, "debugging", "Systematic debugging")
@@ -451,7 +451,7 @@ func TestTaskBriefProviderFailureDegrades(t *testing.T) {
 	}))
 	defer errSrv.Close()
 
-	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: errSrv.URL, EmbeddingModel: "m"})
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: errSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 	createProject(t, st, "proj")
 	task := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "T", "priority": "high", "kind": "feature",

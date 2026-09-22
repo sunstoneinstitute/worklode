@@ -71,6 +71,8 @@ type TaskDetail struct {
 	// Decisions are the questions posed on the task, in authored order
 	// (025 §10.1). Any kind may carry them.
 	Decisions []Decision `json:"decisions,omitempty"`
+	// GovernedBy is the task's governing clauses (S2), omitted when none.
+	GovernedBy []TaskGovernance `json:"governed_by,omitempty"`
 }
 
 // TaskListDetail is one row of GET /api/v1/tasks?detail=true: the base task
