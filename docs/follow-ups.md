@@ -1018,3 +1018,21 @@ Recorded by WL-566 (the document reviewer gate, 029 §7.3):
   queue while acceptance walks past it. The asymmetry predates this task —
   the gate has always been doc-kind-scoped — and the fix is a decision about
   whether plans are meant to be gated at all, not a code change.
+
+Recorded by the clause increment 1b review (12-spec-refactoring-design-tree.md
+S14, S20):
+
+- `[P1]` **No compare-and-swap on a clause edit.** `store.EditClause` calls
+  `UpdateDocBody(..., ifVersion: 0, ...)` and `PUT /api/v1/clauses/{id}` has no
+  `--if-version` counterpart, while `lode doc edit` grew exactly that guard.
+  Two agents editing the same clause: the second overwrites the first with no
+  warning. The `FOR UPDATE` lock on the arranging document prevents the two
+  writes interleaving, not the later one discarding the earlier. The fix is an
+  `if_version` field on `model.EditClauseInput`, threaded to `UpdateDocBody`,
+  and an `--if-version` flag on `lode clause edit`.
+
+- `[P4]` **`/WL-CL-2` does not resolve.** `refShortcut` in
+  `internal/api/docref.go` resolves a bare task id or document ref at the site
+  root but not a clause ref, so `/clauses/WL-CL-2` redirects to the clause page
+  and `/WL-CL-2` returns 404. One more arm in that classifier, targeting the
+  redirect `/clauses/{ref}` already provides.

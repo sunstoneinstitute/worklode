@@ -11,6 +11,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // typedID matches 025 §14.3's <KEY>-<TYPE>-<n> grammar (generalized by 029
@@ -113,6 +114,7 @@ var showOrdinalShape = map[string]*regexp.Regexp{
 func newShowCmd() *cobra.Command {
 	var kind, taskFlag, specFlag, adrFlag, planFlag, milestoneFlag, projectFlag, deliverableFlag, section string
 	var pager, inline, usage bool
+	var version int
 	cmd := &cobra.Command{
 		Use:               "show [id]",
 		ValidArgsFunction: showRefs,
@@ -148,6 +150,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 				"milestone": milestoneFlag, "project": projectFlag, "deliverable": deliverableFlag,
 			}
 			sectionSet := cmd.Flags().Changed("section")
+			versionSet := cmd.Flags().Changed("version")
 
 			var changedKind, changedValue string
 			nChanged := 0
@@ -163,6 +166,14 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 			}
 			if nChanged > 1 {
 				return errors.New("pass only one kind flag")
+			}
+
+			// No --kind or --<kind> flag ever names a clause (there is no
+			// `lode clause show`; a clause is reached only by its WL-CL-<n>
+			// ref), so --version on either flag-routed path is always
+			// refused, before the kind is even looked at.
+			if versionSet && (kindSet || changedKind != "") {
+				return errors.New("--version applies only to clauses")
 			}
 
 			switch {
@@ -183,7 +194,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 				if len(args) != 1 {
 					return errors.New("show requires exactly one argument: a task id, a document id, or a kind flag (--task, --spec, --adr, --plan, --milestone, --project, --deliverable, --kind)")
 				}
-				return dispatchShowPositional(cmd, args[0], section, sectionSet, inline, usage)
+				return dispatchShowPositional(cmd, args[0], section, sectionSet, inline, usage, version, versionSet)
 			}
 		},
 	}
@@ -201,6 +212,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or ADR: fold every effective amendment and supersession into the section it acts on (026 §3.2); ignored for tasks and projects")
 	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
+	cmd.Flags().IntVar(&version, "version", 0, "show one version of a clause (WL-CL-<n>)")
 	// --project is the only way to reach a project through show: a positional
 	// slug classifies as a document (classify, above), so the project
 	// candidates belong on the flag rather than in the positional's union.
@@ -357,13 +369,23 @@ func runDeliverableShow(cmd *cobra.Command, id string) error {
 	return nil
 }
 
-// runClauseShow renders one design clause by its ref (WL-CL-12).
-func runClauseShow(cmd *cobra.Command, ref string) error {
+// runClauseShow renders one design clause by its ref (WL-CL-12). When
+// versionSet, it renders that past version (GET .../versions/{n}) instead of
+// the clause's current one.
+func runClauseShow(cmd *cobra.Command, ref string, version int, versionSet bool) error {
 	c, err := newAPIClient()
 	if err != nil {
 		return err
 	}
-	clause, raw, err := c.GetClause(cmd.Context(), ref)
+	var (
+		clause model.Clause
+		raw    []byte
+	)
+	if versionSet {
+		clause, raw, err = c.GetClauseVersion(cmd.Context(), ref, version)
+	} else {
+		clause, raw, err = c.GetClause(cmd.Context(), ref)
+	}
 	if err != nil {
 		return err
 	}
@@ -395,13 +417,16 @@ func runDeliverableShowByOrdinal(cmd *cobra.Command, value string) error {
 // show <id>` (no kind flags): unchanged from the original show.go behavior,
 // plus the --section-applies-only-to-docs check the flag-routed path also
 // enforces.
-func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet, inline, usage bool) error {
+func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet, inline, usage bool, version int, versionSet bool) error {
 	t := classify(arg)
 	if sectionSet && t.Kind != targetDoc {
 		return errors.New("--section applies only to documents")
 	}
 	if usage && t.Kind != targetTask {
 		return errors.New("--usage applies only to tasks")
+	}
+	if versionSet && t.Kind != targetClause {
+		return errors.New("--version applies only to clauses")
 	}
 	switch t.Kind {
 	case targetTask:
@@ -413,7 +438,7 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 	case targetDeliverable:
 		return runDeliverableShow(cmd, arg)
 	case targetClause:
-		return runClauseShow(cmd, arg)
+		return runClauseShow(cmd, arg, version, versionSet)
 	case targetUnknownType:
 		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL, CL (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:

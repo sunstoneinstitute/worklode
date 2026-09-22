@@ -1,36 +1,107 @@
 package api
 
 import (
+	"database/sql"
+	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
+
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// clauseRef is the CL arm of 025 §14.3's <KEY>-<TYPE>-<n> grammar.
-var clauseRef = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-CL-(\d+)$`)
-
-// parseClauseRef splits "WL-CL-12" into its project key and number.
-func parseClauseRef(ref string) (key string, number int64, ok bool) {
-	m := clauseRef.FindStringSubmatch(ref)
-	if m == nil {
-		return "", 0, false
+// clauseRef reads the {id} path value as a clause ref such as WL-CL-12.
+func clauseRef(w http.ResponseWriter, r *http.Request) (designdoc.ClauseRef, bool) {
+	ref, ok := designdoc.ParseClauseRef(r.PathValue("id"))
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "clause id must look like WL-CL-12")
+		return designdoc.ClauseRef{}, false
 	}
-	n, err := strconv.ParseInt(m[2], 10, 64)
-	if err != nil {
-		return "", 0, false
-	}
-	return m[1], n, true
+	return ref, true
 }
 
 // getClause handles GET /api/v1/clauses/{id}, where {id} is a clause ref
 // such as WL-CL-12.
 func (s *server) getClause(w http.ResponseWriter, r *http.Request) {
-	key, number, ok := parseClauseRef(r.PathValue("id"))
+	ref, ok := clauseRef(w, r)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause id must look like WL-CL-12")
 		return
 	}
-	c, err := s.st.GetClause(r.Context(), key, number)
+	c, err := s.st.GetClause(r.Context(), ref.Key, ref.Number)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+// editClause handles PUT /api/v1/clauses/{id}: a clause-first write of the
+// heading and body (S14, S35). The store regenerates the arranging
+// document's body and writes it through the document path, so the event is
+// recorded against that document.
+func (s *server) editClause(w http.ResponseWriter, r *http.Request) {
+	ref, ok := clauseRef(w, r)
+	if !ok {
+		return
+	}
+	var req model.EditClauseInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	current, err := s.st.GetClause(r.Context(), ref.Key, ref.Number)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if len(current.ArrangedIn) != 1 {
+		writeErr(w, http.StatusUnprocessableEntity, fmt.Sprintf("clause %s is arranged in %d documents; edit the document instead", current.Ref, len(current.ArrangedIn)))
+		return
+	}
+	now := s.st.Now()
+	err = s.recordDocEvent(w, r, "clause_edit", "doc.clause_edited", current.ArrangedIn[0].Doc, req,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.EditClause(tx, now, ref.Key, ref.Number, req, actorIDFrom(r), eventID)
+			return err
+		})
+	if err != nil {
+		return
+	}
+	c, err := s.st.GetClause(r.Context(), ref.Key, ref.Number)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+// listClauseVersions handles GET /api/v1/clauses/{id}/versions.
+func (s *server) listClauseVersions(w http.ResponseWriter, r *http.Request) {
+	ref, ok := clauseRef(w, r)
+	if !ok {
+		return
+	}
+	vs, err := s.st.ListClauseVersions(r.Context(), ref.Key, ref.Number)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, vs)
+}
+
+// getClauseVersion handles GET /api/v1/clauses/{id}/versions/{n}.
+func (s *server) getClauseVersion(w http.ResponseWriter, r *http.Request) {
+	ref, ok := clauseRef(w, r)
+	if !ok {
+		return
+	}
+	n, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || n <= 0 {
+		writeErr(w, http.StatusBadRequest, "version must be a positive integer")
+		return
+	}
+	c, err := s.st.GetClauseVersion(r.Context(), ref.Key, ref.Number, n)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

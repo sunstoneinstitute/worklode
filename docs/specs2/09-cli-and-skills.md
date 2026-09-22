@@ -8,7 +8,7 @@ Every command is explicable by exactly one of these rules. The law governs spell
 
 | Rule | Statement |
 |---|---|
-| L1 | Entity commands are `lode <entity> <verb>`. Entity nouns are singular and are exactly what the backbone models: `actor`, `approval`, `blob`, `channel`, `decision`, `deliverable`, `doc`, `event`, `graph`, `inbox`, `milestone`, `project`, `secret`, `skill`, `task`, `token`. No bare top-level command acts on an entity. |
+| L1 | Entity commands are `lode <entity> <verb>`. Entity nouns are singular and are exactly what the backbone models: `actor`, `approval`, `blob`, `channel`, `clause`, `decision`, `deliverable`, `doc`, `event`, `graph`, `inbox`, `milestone`, `project`, `secret`, `skill`, `task`, `token`. No bare top-level command acts on an entity. |
 | L2 | Bare top-level commands act on this machine or this checkout. The set is closed: `doctor`, `install`, `uninstall`, `login`, `logout`. |
 | L3 | One verb per operation. `add` creates, `show` reads one, `list` reads many, `edit` replaces a body, `set <field>` writes one named field or state, `remove` drops a member from a collection, `delete` tombstones an entity. Any other verb names a domain action none of these expresses. The allowlist: `claim`, `release`, `renew`, `submit`, `abandon`, `reopen`, `rework`, `start`, `stop`, `publish`, `promote`, `revoke`, `sync`, `exec`, `purge`, `import`, `install`, `recommend`, `resolve`, `decompose`, `instruct`, `reconcile`, `transfer`, `accept`, `revise`, `lint`, `derive`, `seek`, `tail`, `gc`, `link`, `dismiss`, `serve`, `listen`, `next`, `resume`, `attach`, `detach`, `assign`, `block`, `govern`, `parent`, `duplicate`, `request`, `pack`, `note`, `escalate`, `gap`, `fix`, `withdraw`, `report`, `fetch`. |
 | L4 | Verbs are imperative verbs. No adjectives, no hyphenated verbs except the §4 allowlist. `set` is a verb; the field it writes is an argument. |
@@ -36,6 +36,7 @@ Twenty-four top-level commands and four shortcuts. The first table is every comm
 | `approval` | L1 | `add`, `list`, `request` |
 | `blob` | L1 | `gc` |
 | `channel` | L1 | `serve` |
+| `clause` | L1 | `edit`; view `versions`. Reading one is `lode show WL-CL-<n> [--version <v>]` |
 | `decision` | L1 | `add`, `edit`, `list`, `resolve`, `show` (addressed as `<task>/<key>`) |
 | `deliverable` | L1 | `add`, `list`, `report <deliverable> <state>` (ids `<KEY>-DEL-<n>`) |
 | `doc` | L1 | `add`, `show`, `list`, `edit`, `revise`, `submit`, `accept`, `withdraw`, `note`, `lint`, `import`, `transfer`, `delete`/`undelete`, `set reviewers`; views `progress`, `referrers`, `reviewers`, `sections`, `todo`, `versions` |
@@ -97,6 +98,7 @@ Checks 2 and 3 need to know which subcommand names are not verbs. This table is 
 
 | Parent | Noun subcommands |
 |---|---|
+| `lode clause` | `versions` |
 | `lode doc` | `progress`, `referrers`, `reviewers`, `sections`, `todo`, `versions` |
 | `lode event` | `subscribers` |
 | `lode graph` | `drift`, `gaps`, `quarantines`, `triples` |

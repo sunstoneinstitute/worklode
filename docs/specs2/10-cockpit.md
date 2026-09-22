@@ -70,6 +70,8 @@ lookup for the project's id, name and key. The selected object has one
 canonical URL. Browser back and forward and copying that URL work across
 full-page and narrow layouts.
 
+**Clause page.** `/projects/<proj>/clause/<n>` shows one design clause: ref and heading, status and version chips, the rendered body, the documents arranging it with a link to each section, the tasks it governs, and its version list, each version at `/<n>/<ver>`. Every `WL-CL-<n>` in rendered prose links there through `/clauses/<ref>`. The page is read-only; the clause editor that saves through `PUT /api/v1/clauses/<ref>` is later work.
+
 ### 2.3 Inbox indicator
 
 An inbox icon sits on every page immediately left of the theme toggle and links

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobref"
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
@@ -120,12 +121,12 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	governing := make([]clauseKey, 0, len(req.GovernedBy))
 	for _, ref := range req.GovernedBy {
-		key, number, ok := parseClauseRef(ref)
+		cr, ok := designdoc.ParseClauseRef(ref)
 		if !ok {
 			writeErr(w, http.StatusBadRequest, "governed_by entries must look like WL-CL-12, got "+ref)
 			return
 		}
-		governing = append(governing, clauseKey{key, number})
+		governing = append(governing, clauseKey{cr.Key, cr.Number})
 	}
 
 	actorID := actorIDFrom(r)

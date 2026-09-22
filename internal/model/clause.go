@@ -20,8 +20,10 @@ type Clause struct {
 	// ArrangedIn lists the documents whose current arrangement holds this
 	// clause, and at which version, position and depth.
 	ArrangedIn []ClauseArrangement `json:"arranged_in"`
-	CreatedAt  time.Time           `json:"created_at"`
-	UpdatedAt  time.Time           `json:"updated_at"`
+	// GovernedTasks are the tasks this clause governs (S2), newest link first.
+	GovernedTasks []ClauseTask `json:"governed_tasks"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
 }
 
 // ClauseArrangement is one document's placement of a clause.
@@ -32,4 +34,29 @@ type ClauseArrangement struct {
 	Position      int    `json:"position"`
 	Depth         int    `json:"depth"`
 	ClauseVersion int    `json:"clause_version"`
+}
+
+// ClauseVersion is one entry of a clause's version history.
+type ClauseVersion struct {
+	Version   int       `json:"version"`
+	Heading   string    `json:"heading"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ClauseTask is one task a clause governs, as the clause detail lists it.
+type ClauseTask struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	State         string `json:"state"`
+	Source        string `json:"source"`         // plan | manual
+	ClauseVersion int    `json:"clause_version"` // version current when the link was made
+}
+
+// EditClauseInput is the body of PUT /api/v1/clauses/{id}: the clause's new
+// heading and body. Both replace what is stored (S35: a draft version is
+// rewritten in place, an accepted version becomes the next version when the
+// arranging document's revision lands).
+type EditClauseInput struct {
+	Heading string `json:"heading"`
+	Body    string `json:"body"`
 }

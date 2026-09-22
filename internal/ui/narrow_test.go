@@ -177,6 +177,27 @@ func pages(t *testing.T) map[string]string {
 				Age: "2d ago", ReturnURL: "/docs/WL-SPEC-32",
 			}},
 		}),
+		"clause": Clause(ClauseView{
+			Page: PageProps{Title: "worklode: WL-CL-10"},
+			Clause: model.Clause{
+				Ref: "WL-CL-10", Number: 10, Status: "accepted", Version: 3,
+				Heading: "Accessibility and responsive behavior",
+				GovernedTasks: []model.ClauseTask{
+					{ID: "WL-234", Title: longTitle, State: "in_progress", Source: "plan", ClauseVersion: 3},
+					{ID: "WL-141", Title: tokenTitle, State: "blocked", Source: "manual", ClauseVersion: 2},
+				},
+			},
+			BodyHTML: template.HTML(`<p>Measured against ` + token + `.</p><pre><code>./scripts/narrow-check.sh</code></pre>`),
+			Arranged: []ClauseArrangementRow{
+				{DocRef: "WL-SPEC-32", Anchor: "sec-10", Depth: 2, Href: "/docs/ref/WL-SPEC-32#sec-10"},
+				{DocRef: "WL-PLAN-41", Anchor: "sec-2", Depth: 3, Href: "/docs/ref/WL-PLAN-41#sec-2"},
+			},
+			Versions: []model.ClauseVersion{
+				{Version: 3, Heading: "Accessibility and responsive behavior", CreatedAt: now},
+				{Version: 2, Heading: tokenTitle, CreatedAt: now},
+			},
+			CanonicalURL: "/projects/worklode/clause/10",
+		}),
 		"projects": Projects(ProjectsView{
 			Page: PageProps{Title: "Projects", ActiveGlobal: "projects"},
 			Projects: []model.Project{

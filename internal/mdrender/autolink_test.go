@@ -23,6 +23,16 @@ func TestDocRefAutolink(t *testing.T) {
 	}
 }
 
+// TestClauseRefAutolink covers S20: a clause ref links to the resolving
+// redirect /clauses/<ref>, the counterpart of the document shorthand's
+// /docs/ref/.
+func TestClauseRefAutolink(t *testing.T) {
+	got := string(Body(ProjectKeys{}, "see WL-CL-12."))
+	if !strings.Contains(got, `<a href="/clauses/WL-CL-12" rel="nofollow">WL-CL-12</a>`) {
+		t.Errorf("missing clause ref link in:\n%s", got)
+	}
+}
+
 // TestDocRefAutolinkLeavesCodeAndLinks pins the skip contexts.
 func TestDocRefAutolinkLeavesCodeAndLinks(t *testing.T) {
 	got := string(Body(ProjectKeys{}, "Keep `WL-SPEC-9` and [text](/docs/3) with spec 5 §1 inside: [spec 7 §2](/x).\n\n```\nspec 042 §10\n```"))
