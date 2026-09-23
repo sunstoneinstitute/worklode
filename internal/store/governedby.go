@@ -45,10 +45,12 @@ func Ungovern(tx *sql.Tx, taskID string, clauseID int64) error {
 }
 
 // GovernedBy lists a task's governing clauses with the version each link was
-// made against and the clause's current version (S10).
+// made against and the clause's current version (S10). A withdrawn governing
+// clause also carries ResolvesTo, the live clauses it resolves to through
+// supersededBy edges (R8).
 func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGovernance, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT p.key, c.number, g.clause_version, c.version, cv.heading, c.status, g.source,
+		`SELECT p.key, c.number, c.id, g.clause_version, c.version, cv.heading, c.status, g.source,
 		        g.pinned_version, c.project_id
 		   FROM task_governed_by g
 		   JOIN clauses c ON c.id = g.clause_id
@@ -59,15 +61,19 @@ func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGove
 	if err != nil {
 		return nil, fmt.Errorf("read governing clauses of %s: %w", taskID, err)
 	}
-	defer rows.Close()
-	out := []model.TaskGovernance{}
+	type withID struct {
+		g  model.TaskGovernance
+		id int64
+	}
+	var raw []withID
 	for rows.Next() {
 		var g model.TaskGovernance
 		var key, projectID string
-		var number int64
+		var number, id int64
 		var pinned sql.NullInt64
-		if err := rows.Scan(&key, &number, &g.ClauseVersion, &g.Current, &g.Heading, &g.Status, &g.Source,
+		if err := rows.Scan(&key, &number, &id, &g.ClauseVersion, &g.Current, &g.Heading, &g.Status, &g.Source,
 			&pinned, &projectID); err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("scan governing clause of %s: %w", taskID, err)
 		}
 		g.Clause = fmt.Sprintf("%s-CL-%d", key, number)
@@ -76,7 +82,62 @@ func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGove
 		if pinned.Valid {
 			g.URL += fmt.Sprintf("/%d", pinned.Int64)
 		}
+		raw = append(raw, withID{g, id})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	out := make([]model.TaskGovernance, 0, len(raw))
+	for _, r := range raw {
+		g := r.g
+		if g.Status == "withdrawn" {
+			resolved, err := resolveGoverningClause(ctx, s.db, r.id)
+			if err != nil {
+				return nil, err
+			}
+			g.ResolvesTo = resolved
+		}
 		out = append(out, g)
+	}
+	return out, nil
+}
+
+// resolveGoverningClause is the live clauses reached from a withdrawn clause
+// by following supersededBy edges transitively (S22, R8): a recursive CTE
+// with UNION (not UNION ALL) over clause_edges, which dedupes visited
+// clauses so a cycle in the edges terminates instead of recursing forever.
+// Withdrawn clauses reached along the way are skipped; only live ends are
+// returned, ordered by project key then clause number, since a successor
+// can live in a different project from the withdrawn clause and clause
+// numbers are only unique within a project.
+func resolveGoverningClause(ctx context.Context, db *meteredDB, clauseID int64) ([]string, error) {
+	rows, err := db.QueryContext(ctx,
+		`WITH RECURSIVE chain(id) AS (
+		    SELECT to_clause FROM clause_edges WHERE from_clause = $1 AND type = 'supersededBy'
+		    UNION
+		    SELECT ce.to_clause FROM clause_edges ce JOIN chain ch ON ce.from_clause = ch.id
+		     WHERE ce.type = 'supersededBy'
+		 )
+		 SELECT p.key, c.number FROM chain ch
+		   JOIN clauses c ON c.id = ch.id
+		   JOIN projects p ON p.id = c.project_id
+		  WHERE c.status <> 'withdrawn'
+		  ORDER BY p.key, c.number`, clauseID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve successors of clause %d: %w", clauseID, err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var key string
+		var number int64
+		if err := rows.Scan(&key, &number); err != nil {
+			return nil, fmt.Errorf("scan successor of clause %d: %w", clauseID, err)
+		}
+		out = append(out, fmt.Sprintf("%s-CL-%d", key, number))
 	}
 	return out, rows.Err()
 }

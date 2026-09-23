@@ -59,6 +59,7 @@ var l3DomainActions = map[string]bool{
 	"parent": true, "duplicate": true, "request": true, "pack": true,
 	"note": true, "escalate": true, "gap": true, "fix": true,
 	"withdraw": true, "report": true,
+	"supersede": true, // lode clause supersede: the refactor primitive (S24)
 }
 
 // nounViews is the noun-subcommand table of 061 §5, transcribed by full

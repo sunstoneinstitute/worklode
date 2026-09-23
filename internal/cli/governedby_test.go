@@ -28,3 +28,24 @@ func TestTaskDetailRenderGovernedBy(t *testing.T) {
 		t.Errorf("missing pinned link line:\n%s", out)
 	}
 }
+
+// TestTaskDetailRenderGovernedByResolvesTo: a withdrawn governing clause
+// prints its live successors on the next line (R8); a live clause prints no
+// such line.
+func TestTaskDetailRenderGovernedByResolvesTo(t *testing.T) {
+	d := model.TaskDetail{Task: model.Task{ID: "WL-12", Title: "T", Project: "worklode", Priority: "medium", Kind: "bug", State: "ready"}}
+	d.GovernedBy = []model.TaskGovernance{
+		{Clause: "WL-CL-3", Heading: "Two", ClauseVersion: 1, Current: 1, Source: "manual", Status: "withdrawn",
+			ResolvesTo: []string{"WL-CL-40", "WL-CL-41"}},
+		{Clause: "WL-CL-7", Heading: "Seven", ClauseVersion: 1, Current: 1, Source: "manual", Status: "accepted"},
+	}
+	var b bytes.Buffer
+	TaskDetailRender(&b, d, "")
+	out := b.String()
+	if !strings.Contains(out, "governed by: WL-CL-3  Two (v1)\n    -> WL-CL-40, WL-CL-41\n") {
+		t.Errorf("missing resolves-to line:\n%s", out)
+	}
+	if strings.Contains(out, "governed by: WL-CL-7  Seven (v1)\n    ->") {
+		t.Errorf("live clause should print no resolves-to line:\n%s", out)
+	}
+}
