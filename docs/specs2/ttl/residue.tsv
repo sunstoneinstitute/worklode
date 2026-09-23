@@ -22,3 +22,5 @@ WL-SPEC-38	sec-8	01-system-and-deployment.md	open-questions	merged into Open que
 WL-SPEC-40	sec-12	07-knowledge-graph-and-search.md	open-questions	merged into Open questions
 WL-SPEC-56	sec-0	10-cockpit.md	preamble	merged into preamble
 WL-SPEC-70	sec-8	06-design-queries-intents-decks.md	open-questions	moved into Open questions
+WL-SPEC-38	sec-4.4	02-identity-actors-and-secrets.md	10	pointer row: 5.5 is the pointer in 01; the content is 02 sec-10, Task-declared secrets
+WL-SPEC-64	sec-11	07-knowledge-graph-and-search.md	12	pointer row: 7.7 is the pointer in 06; the content is 07 sec-12, Projection: backbone to graph
