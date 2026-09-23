@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -46,10 +47,14 @@ func toProjectJSON(p *store.Project, repos []model.RepoMapping) model.Project {
 	if labels == nil {
 		labels = map[string]string{}
 	}
+	settings := p.Settings
+	if settings == nil {
+		settings = map[string]json.RawMessage{}
+	}
 	return model.Project{
 		ID: p.ID, Name: p.Name, Key: p.Key, Repos: rs, Focus: focus,
 		ApprovalFlowName: p.ApprovalFlowName, ApprovalFlowRev: p.ApprovalFlowRev,
-		Labels: labels, Horizon: p.Horizon,
+		Labels: labels, Horizon: p.Horizon, Settings: settings,
 	}
 }
 

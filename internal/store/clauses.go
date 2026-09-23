@@ -248,12 +248,17 @@ func publishDocSections(tx *sql.Tx, docID int64) error {
 // acceptDocClauses accepts every draft clause a document's current
 // arrangement holds (S11). Called both when a document is accepted and when
 // ensureClauses backfills the arrangement of a document that was already
-// accepted before the clause tables existed.
+// accepted before the clause tables existed. Guarded by d.kind <> 'plan':
+// a plan's doc_clauses rows are another document's clauses (increment 3
+// R1), so accepting a plan must never flip them to accepted regardless of
+// which caller reaches here or in what order.
 func acceptDocClauses(tx *sql.Tx, docID int64) error {
 	if _, err := tx.Exec(
 		`UPDATE clauses SET status = 'accepted', updated_at = now()
 		  WHERE status = 'draft'
-		    AND id IN (SELECT clause_id FROM doc_clauses WHERE doc_id = $1)`, docID); err != nil {
+		    AND id IN (
+		      SELECT dc.clause_id FROM doc_clauses dc JOIN docs d ON d.id = dc.doc_id
+		       WHERE dc.doc_id = $1 AND d.kind <> 'plan')`, docID); err != nil {
 		return fmt.Errorf("accept clauses of doc %d: %w", docID, err)
 	}
 	return nil
@@ -404,9 +409,11 @@ func (s *Store) GetClauseVersion(ctx context.Context, projectKey string, number 
 // syncClauses rewrites the clause's draft version in place. An accepted
 // document is written through its candidate revision, opened here when none
 // is open; the clause's next version appears when the revision lands. A
-// clause arranged in no document, or in more than one, is refused: editing
-// is document-first in this stage, and a shared clause arrives with plans as
-// arrangements. Returns the arranging document's id.
+// plan arrangement only references a clause (increment 3 R2), so its
+// doc_clauses rows are excluded here: the clause writes through the spec or
+// ADR that arranges it, never through a covering plan. A clause arranged in
+// no spec or ADR, or in more than one, is refused: editing is document-first
+// in this stage. Returns the arranging document's id.
 func EditClause(tx *sql.Tx, now time.Time, projectKey string, number int64, in model.EditClauseInput, actorID string, eventID int64) (int64, error) {
 	if strings.TrimSpace(in.Heading) == "" {
 		return 0, fmt.Errorf("clause heading is required: %w", ErrInvalidInput)
@@ -415,7 +422,10 @@ func EditClause(tx *sql.Tx, now time.Time, projectKey string, number int64, in m
 	if err != nil {
 		return 0, err
 	}
-	rows, err := tx.Query(`SELECT doc_id, anchor FROM doc_clauses WHERE clause_id = $1 ORDER BY doc_id`, clauseID)
+	rows, err := tx.Query(
+		`SELECT dc.doc_id, dc.anchor FROM doc_clauses dc JOIN docs d ON d.id = dc.doc_id
+		  WHERE dc.clause_id = $1 AND d.kind <> 'plan' AND d.deleted_at IS NULL
+		  ORDER BY dc.doc_id`, clauseID)
 	if err != nil {
 		return 0, fmt.Errorf("read arrangements of clause %d: %w", clauseID, err)
 	}
@@ -436,10 +446,10 @@ func EditClause(tx *sql.Tx, now time.Time, projectKey string, number int64, in m
 	}
 	switch len(docIDs) {
 	case 0:
-		return 0, fmt.Errorf("clause %s-CL-%d is arranged in no document; edit the document instead: %w", projectKey, number, ErrInvalidInput)
+		return 0, fmt.Errorf("clause %s-CL-%d is arranged in no spec or ADR; edit the document instead: %w", projectKey, number, ErrInvalidInput)
 	case 1:
 	default:
-		return 0, fmt.Errorf("clause %s-CL-%d is arranged in %d documents; editing a shared clause is not supported yet: %w", projectKey, number, len(docIDs), ErrInvalidInput)
+		return 0, fmt.Errorf("clause %s-CL-%d is arranged in %d specs or ADRs; editing a clause shared between them is not supported: %w", projectKey, number, len(docIDs), ErrInvalidInput)
 	}
 	docID, anchor := docIDs[0], anchors[0]
 
@@ -561,4 +571,60 @@ func ClauseIDByRef(tx *sql.Tx, projectKey string, number int64) (int64, error) {
 		return 0, fmt.Errorf("resolve clause %s-CL-%d: %w", projectKey, number, err)
 	}
 	return id, nil
+}
+
+// clauseStatuses mirrors the clauses.status CHECK in migration 0082.
+var clauseStatuses = map[string]bool{"draft": true, "accepted": true, "superseded": true, "withdrawn": true}
+
+// SetClauseStatus is the one writer of a clause's status outside document
+// acceptance (increment 3 R7). Withdrawing a clause marks every accepted plan
+// arranging it stale (S23): the plan's frozen arrangement names text that no
+// longer holds. Increment 4's split and merge lineage is the caller that
+// withdraws.
+func SetClauseStatus(tx *sql.Tx, now time.Time, clauseID int64, status string, eventID int64) error {
+	if !clauseStatuses[status] {
+		return fmt.Errorf("clause status %q: %w", status, ErrInvalidInput)
+	}
+	var old, key string
+	var number int64
+	err := tx.QueryRow(
+		`SELECT c.status, p.key, c.number FROM clauses c JOIN projects p ON p.id = c.project_id
+		  WHERE c.id = $1 FOR UPDATE`, clauseID).Scan(&old, &key, &number)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("clause %d: %w", clauseID, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("read clause %d: %w", clauseID, err)
+	}
+	if old == status {
+		return nil
+	}
+	if _, err := tx.Exec(`UPDATE clauses SET status = $2, updated_at = $3 WHERE id = $1`, clauseID, status, now.UTC()); err != nil {
+		return fmt.Errorf("set clause %d status: %w", clauseID, err)
+	}
+	if status != "withdrawn" {
+		return nil
+	}
+	rows, err := tx.Query(
+		`SELECT DISTINCT d.id FROM doc_clauses dc JOIN docs d ON d.id = dc.doc_id
+		  WHERE dc.clause_id = $1 AND d.kind = 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL`, clauseID)
+	if err != nil {
+		return fmt.Errorf("plans arranging clause %d: %w", clauseID, err)
+	}
+	var plans []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		plans = append(plans, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	ref := fmt.Sprintf("%s-CL-%d", key, number)
+	_, err = MarkPlansStale(tx, now, plans, "clause_withdrawn", ref, nil, eventID)
+	return err
 }

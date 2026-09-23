@@ -115,6 +115,12 @@ func DeleteTask(tx *sql.Tx, now time.Time, id, actorID, justification string, ev
 			return err
 		}
 	}
+	// The in_progress rollback above settles the plan through transitionKnown;
+	// a ready or draft task reaches no transition, so settle it here too. A
+	// second call after the rollback is a no-op.
+	if err := settlePlan(tx, now, id, eventID); err != nil {
+		return err
+	}
 	// The child just left its parent's roll-up (childStates reads live children
 	// only), and only Transition otherwise re-runs the resolver — so deleting
 	// the last unfinished child would leave the parent where that child put it

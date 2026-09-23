@@ -130,7 +130,11 @@ func deriveReferences(tx *sql.Tx, project string, clauseID int64, text string) e
 			continue
 		}
 		var id int64
-		err = tx.QueryRow(`SELECT clause_id FROM doc_clauses WHERE doc_id = $1 AND anchor = $2`, docID, r.Anchor).Scan(&id)
+		// A plan's doc_clauses rows borrow the spec's clauses, so a ref to a
+		// plan anchor names no clause of its own.
+		err = tx.QueryRow(
+			`SELECT dc.clause_id FROM doc_clauses dc JOIN docs d ON d.id = dc.doc_id
+			  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan'`, docID, r.Anchor).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}

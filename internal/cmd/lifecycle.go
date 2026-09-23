@@ -272,13 +272,15 @@ func newNextCmd() *cobra.Command {
 	var scope scopeFlags
 	var kinds []string
 	var strictFocus bool
+	var replan bool
 	cmd := &cobra.Command{
 		Use:   "next [id]",
 		Short: "Claim a task (or the top-ranked ready one), set up its worktree, and print its brief",
 		Long: "The one way to enter Worklode mode: claims a task, creates its worktree " +
 			"and its task branch, binds the lease to that worktree, and prints " +
 			"the task's brief. With an id, claims that task; without one, claims the top-ranked " +
-			"ready task (like `lode task claim --next`).",
+			"ready task (like `lode task claim --next`). With --replan, id (if given) names a plan " +
+			"instead of a task.",
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -286,7 +288,7 @@ func newNextCmd() *cobra.Command {
 			if len(args) > 0 {
 				id = args[0]
 			}
-			return runNext(cmd, id, &scope, kinds, strictFocus)
+			return runNext(cmd, id, &scope, kinds, strictFocus, replan)
 		},
 	}
 	addScopeFlags(cmd, &scope, "restrict the pick to a project (only without an id)")
@@ -294,10 +296,14 @@ func newNextCmd() *cobra.Command {
 		"restrict the pick to these kinds: "+claimKindEnum+" (comma-separated; only without an id)")
 	completeFlagValues(cmd, "kind", claimableTaskKinds)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict the pick to the project's focus concerns only (only without an id)")
+	cmd.Flags().BoolVar(&replan, "replan", false,
+		"hand out a stale plan to re-plan: mints (or reuses) a design task about it and claims it; with an id argument, that plan")
+	cmd.MarkFlagsMutuallyExclusive("replan", "kind")
+	cmd.MarkFlagsMutuallyExclusive("replan", "strict-focus")
 	return cmd
 }
 
-func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kinds []string, strictFocus bool) error {
+func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kinds []string, strictFocus, replan bool) error {
 	warnDeprecatedTaskKinds(cmd, kinds)
 	kind := strings.Join(kinds, ",")
 	c, cfg, err := newAPIClientWithConfig()
@@ -311,7 +317,9 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kinds []string, s
 		return err
 	}
 
-	if id != "" {
+	// --replan's id (if given) names a plan, not a task: resolveTaskID would
+	// mis-scope it, so this is the one case that skips it.
+	if id != "" && !replan {
 		id, err = resolveTaskID(ctx, id, c, cfg)
 		if err != nil {
 			return err
@@ -338,6 +346,20 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kinds []string, s
 	// server does not agree with.
 	var taskID, branch string
 	switch {
+	case replan:
+		sc, err := resolveScope(ctx, cmd, c, cfg, scope)
+		if err != nil {
+			return err
+		}
+		resp, _, err := c.Replan(ctx, model.ReplanInput{Project: sc.Project, Plan: id, Worktree: pending})
+		if err != nil {
+			return err
+		}
+		if !resp.Claimed || resp.Task == nil {
+			return printNotClaimed(cmd, resp)
+		}
+		taskID = resp.Task.ID
+		branch = resp.Task.Branch
 	case id != "":
 		resp, _, err := c.ClaimTask(ctx, id, pending, 0)
 		if err != nil {
@@ -436,6 +458,17 @@ func printNoReadyTask(cmd *cobra.Command) error {
 		return nil
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "no ready task")
+	return nil
+}
+
+// printNotClaimed reports a not-claimed claim-next-shaped response that
+// carries its own reason — --replan's "no stale plan", distinct from the
+// ordinary claim path's fixed "no-ready-task" (printNoReadyTask).
+func printNotClaimed(cmd *cobra.Command, resp model.ClaimNextResponse) error {
+	if jsonOut(cmd) {
+		return printJSON(cmd, resp)
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), resp.Reason)
 	return nil
 }
 

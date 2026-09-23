@@ -41,11 +41,13 @@ wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLab
     skos:definition "Replaced (whole or in part) by a later doc via dct:replaces." .
 wlc:withdrawn a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "withdrawn" ;
     skos:definition "An accepted document closed without a successor." .
+wlc:spent a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "spent" ;
+    skos:definition "A plan whose every minted task has closed (12 S5)." .
 
 # The order is data, so "is X before Y" is queryable. RDF still does not enforce
 # legal transitions; those rules live with the authoring skill (spec 008).
 wlc:DesignDocStatusOrder a skos:OrderedCollection ;
-    skos:memberList ( wlc:draft wlc:accepted wlc:stale wlc:superseded wlc:withdrawn ) .
+    skos:memberList ( wlc:draft wlc:accepted wlc:stale wlc:superseded wlc:withdrawn wlc:spent ) .
 
 
 # How completely one plan covers one spec section (026 §5). Only wlc:full — or a

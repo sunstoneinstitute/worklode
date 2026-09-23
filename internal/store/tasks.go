@@ -320,7 +320,10 @@ func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string
 		map[string]string{"field": "state", "old": from, "new": to}); err != nil {
 		return err
 	}
-	return resolveParent(tx, now, taskID, eventID)
+	if err := resolveParent(tx, now, taskID, eventID); err != nil {
+		return err
+	}
+	return settlePlan(tx, now, taskID, eventID)
 }
 
 // TaskState returns the current state of a task inside the given transaction
@@ -1478,8 +1481,17 @@ func blockedByEdgeOrPlan(ctx context.Context, q queryer, taskID string) (bool, e
 // tombstoned task suppresses nothing (044 §4): the lifecycle should mint the
 // replacement the operator deleted the old one to make room for.
 func (s *Store) OpenTaskForDoc(ctx context.Context, docID int64, kind string) (string, error) {
+	return openTaskForDoc(ctx, s.db, docID, kind)
+}
+
+// openTaskForDoc is OpenTaskForDoc's query against any queryer — s.db for
+// the ordinary ctx-scoped read, or a caller's own *sql.Tx when the check
+// must run inside a transaction that also locks the document (replan.go's
+// mintReplanTask does exactly that, to serialize the check against its own
+// mint rather than racing a concurrent one).
+func openTaskForDoc(ctx context.Context, q queryer, docID int64, kind string) (string, error) {
 	var id string
-	err := s.db.QueryRowContext(ctx,
+	err := q.QueryRowContext(ctx,
 		`SELECT id FROM tasks
 		  WHERE about_doc = $1 AND kind = $2 AND deleted_at IS NULL
 		    AND NOT `+taskClosed("tasks")+`

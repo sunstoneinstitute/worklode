@@ -116,6 +116,13 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	// The plan token budget (S6, S19): a plan body over the hard ceiling is
+	// refused before the write; over the soft budget only warns.
+	warnings, err := s.checkPlanBudget(r.Context(), req.Kind, req.Project, req.Body)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
 
 	actorID := actorIDFrom(r)
 	now := s.st.Now()
@@ -128,7 +135,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	// it, the Progress stream included, has nothing to resolve
 	// (WL-SPEC-66 §5.1).
 	var created *model.Doc
-	err := s.recordDocEvent(w, r, "create", "doc.created", 0, req,
+	err = s.recordDocEvent(w, r, "create", "doc.created", 0, req,
 		func(tx *sql.Tx, eventID int64) error {
 			d, err := store.CreateDoc(tx, now, store.DocInput{
 				Project:   req.Project,
@@ -153,7 +160,9 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	writeJSON(w, http.StatusCreated, s.withProjectKey(r.Context(), *created))
+	doc := s.withProjectKey(r.Context(), *created)
+	doc.Warnings = warnings
+	writeJSON(w, http.StatusCreated, doc)
 }
 
 // listDocs handles GET /api/v1/docs?project=&kind=&status=&owner=&deleted=
@@ -358,14 +367,23 @@ func withoutDocBodies(docs []model.Doc) []model.Doc {
 // task list treats a state nobody uses. The cockpit's /docs page calls it
 // directly; the JSON API goes through docSelectorFrom, which adds 026 §2's
 // derived selectors on top.
+//
+// status=all is not a status: it means "every status, terminal plans
+// included", which is what an absent status already means here. It exists so
+// `lode doc list --status all` and the cockpit's /docs?status=all can opt out
+// of the terminal-plan hiding their own default asks for (12 S5).
 func docFilterFrom(r *http.Request) store.DocFilter {
 	q := r.URL.Query()
-	return store.DocFilter{
+	f := store.DocFilter{
 		Project: q.Get("project"),
 		Kind:    q.Get("kind"),
 		Status:  q.Get("status"),
 		Owner:   q.Get("owner"),
 	}
+	if f.Status == "all" {
+		f.Status = ""
+	}
+	return f
 }
 
 // addDocNote handles POST /api/v1/docs/{id}/notes: one anchored, non-blocking
@@ -492,6 +510,12 @@ func docSelectorFrom(r *http.Request) (docListSelector, error) {
 	// A plain filter, but boolean, so it is read here beside deleted rather
 	// than in docFilterFrom's string loop.
 	if sel.filter.HasNotes, err = queryBool(q, "has_notes"); err != nil {
+		return docListSelector{}, err
+	}
+	// Opt-in, so every caller that needs the whole corpus (the importer's
+	// slug lookup, completion, search) gets it without asking. Only `lode doc
+	// list` with no --status sends it (12 S5).
+	if sel.filter.HideTerminal, err = queryBool(q, "hide_terminal"); err != nil {
 		return docListSelector{}, err
 	}
 
@@ -678,9 +702,22 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
+	// The plan token budget (S6, S19) needs the document's own kind and
+	// project, which this write doesn't otherwise read.
+	existing, err := s.st.GetDoc(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	warnings, err := s.checkPlanBudget(r.Context(), existing.Kind, existing.Project, req.Body)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+
 	now := s.st.Now()
 	var updated *model.Doc
-	err := s.recordDocEvent(w, r, "update", "doc.updated", id, req,
+	err = s.recordDocEvent(w, r, "update", "doc.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
 			d, err := store.UpdateDocBody(tx, now, id, req.Body, req.IfVersion, eventID)
 			if err != nil {
@@ -692,7 +729,9 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, s.withProjectKey(r.Context(), *updated))
+	doc := s.withProjectKey(r.Context(), *updated)
+	doc.Warnings = warnings
+	writeJSON(w, http.StatusOK, doc)
 }
 
 // patchDoc handles POST /api/v1/docs/{id}/patch: 025 §8.4's in-place
@@ -737,7 +776,7 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 			// causes commit together or not at all. The re-planning task is
 			// minted by the doc-lifecycle subscriber off the doc.stale
 			// events this records, not here.
-			stale, err = store.MarkPlansStale(tx, now, p.UnexecutedCoveringPlans, d.Slug, p.ChangedAnchors, eventID)
+			stale, err = store.MarkPlansStale(tx, now, p.UnexecutedCoveringPlans, "amended", d.Slug, p.ChangedAnchors, eventID)
 			if err != nil {
 				return err
 			}

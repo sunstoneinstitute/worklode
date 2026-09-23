@@ -523,3 +523,44 @@ Now also declaring a dependency on spec 002.
 		}
 	})
 }
+
+// TestDocImportRerunSeesWithdrawnPlan: the re-run's slug lookup must see a
+// withdrawn plan, or it re-creates it and aborts on the existing slug. The
+// same corpus shows what `lode doc list` hides by default and what
+// --status all brings back (final review C1, increment 3).
+func TestDocImportRerunSeesWithdrawnPlan(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	if out, err := runLode(t, "doc", "import", "--project", "proj", "--docs", importCorpus()); err != nil {
+		t.Fatalf("first doc import: %v\noutput: %s", err, out)
+	}
+	plan := importedDoc(t, c, "2026-01-01-mintable-plan")
+	if _, _, err := c.WithdrawDoc(context.Background(), plan.ID, "dropped"); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+
+	out, err := runLode(t, "doc", "import", "--project", "proj", "--docs", importCorpus())
+	if err != nil {
+		t.Fatalf("second doc import: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "0 created") || !strings.Contains(out, "7 already present") {
+		t.Errorf("summary = %q, want 0 created, 7 already present", out)
+	}
+
+	for _, tc := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"doc", "list", "--project", "proj", "--kind", "plan", "--json"}, false},
+		{[]string{"doc", "list", "--project", "proj", "--kind", "plan", "--status", "all", "--json"}, true},
+		{[]string{"doc", "list", "--project", "proj", "--kind", "plan", "--status", "withdrawn", "--json"}, true},
+	} {
+		out, err := runLode(t, tc.args...)
+		if err != nil {
+			t.Fatalf("%v: %v\noutput: %s", tc.args, err, out)
+		}
+		if got := strings.Contains(out, "2026-01-01-mintable-plan"); got != tc.want {
+			t.Errorf("%v lists the withdrawn plan = %v, want %v\noutput: %s", tc.args, got, tc.want, out)
+		}
+	}
+}

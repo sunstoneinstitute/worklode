@@ -256,6 +256,7 @@ var routeGuards = map[string]routeGuard{
 	"DELETE /api/v1/tasks/{id}":                 guarded(permTaskWrite),
 	"POST /api/v1/tasks/{id}/undelete":          guarded(permTaskWrite),
 	"POST /api/v1/tasks/claim-next":             guarded(permTaskClaim),
+	"POST /api/v1/work/replan":                  guarded(permTaskClaim),
 	"POST /api/v1/tasks/{id}/claim":             guardedBound(permTaskClaim),
 	"POST /api/v1/tasks/{id}/renew":             guardedBound(permTaskClaim),
 	"POST /api/v1/tasks/{id}/release":           guardedBound(permTaskClaim),
@@ -423,7 +424,11 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/projects/{id}/session-usage": guarded(permProjectReport),
 	"POST /api/v1/projects":                    guarded(permProjectAdmin),
 	"PATCH /api/v1/projects/{id}":              guarded(permProjectAdmin),
-	"POST /api/v1/projects/{id}/repos":         guarded(permProjectAdmin),
+	// Settings writes get the same guard as focus (the PATCH above): a
+	// project setting like plan_tokens_hard changes what every caller's
+	// plan writes are refused against, not just the one making the change.
+	"PATCH /api/v1/projects/{id}/settings": guarded(permProjectAdmin),
+	"POST /api/v1/projects/{id}/repos":     guarded(permProjectAdmin),
 	// Stamping governance on a project sits with the permission that creates
 	// projects; the flow vocabulary is instance configuration, so applying one
 	// is an administrative act on the project, not a review act.

@@ -38,18 +38,21 @@ func StaleExternalID(planSlug string, version int) string {
 // section the amendment moved, and nobody has claimed work from them, so
 // §8.2 let the amendment through and this is what it owes them.
 //
-// specSlug and anchors say what happened to them, in the payload's
-// {"cause":"amended","spec":...,"anchors":[...]}; eventID is the patch event
-// this is a consequence of.
+// cause, specSlug and anchors say what happened, in the payload's
+// {"cause":...,"spec":...,"anchors":[...]}: cause is "amended" for 025 §8.6
+// (specSlug and anchors name the spec and the sections that moved) and
+// "clause_withdrawn" for increment 3's S23 (specSlug carries the withdrawn
+// clause's ref, WL-CL-<n>, and anchors is empty). eventID is the write this
+// is a consequence of.
 //
 // Nothing is minted here. The doc.stale event flows to the doc-lifecycle
 // subscriber, whose §8.7 rule mints the one "Re-plan: <title>" task behind
-// its own open-design-task guard — one mint path for both causes.
+// its own open-design-task guard — one mint path for every cause.
 //
 // The count returned is the plans actually flipped: a plan already stale by
-// either path collides on the event key and is skipped, so it is not counted
+// any cause collides on the event key and is skipped, so it is not counted
 // twice on the metric.
-func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, specSlug string, anchors []string, eventID int64) (int, error) {
+func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, cause, specSlug string, anchors []string, eventID int64) (int, error) {
 	if len(anchors) == 0 {
 		anchors = []string{}
 	}
@@ -67,7 +70,7 @@ func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, specSlug string,
 		}
 		payload, err := EventPayload(map[string]any{
 			"doc":                id,
-			"cause":              "amended",
+			"cause":              cause,
 			"spec":               specSlug,
 			"anchors":            anchors,
 			"prov:wasInformedBy": "wlid:event/" + strconv.FormatInt(eventID, 10),
@@ -140,8 +143,8 @@ func (s *Store) StalePlanSlug(ctx context.Context, planDoc int64) (string, error
 // (025 §8.7), as a SQL boolean over a `docs` row aliased `d`. A plan counts as
 // executed when any task minted from it ever held a lease — active or expired,
 // since the fact that matters is that execution happened at all, not whether
-// it is still in progress. A spec counts as executed when an accepted plan
-// covers one of its sections; a plan's `covers` edges point at a spec's
+// it is still in progress. A spec counts as executed when an accepted or spent
+// plan covers one of its sections; a plan's `covers` edges point at a spec's
 // section (to_anchor set), but the EXISTS only needs the edge and the covering
 // plan's status, not the anchor.
 //
@@ -158,7 +161,7 @@ const docHasExecution = `CASE d.kind
 	            SELECT 1 FROM doc_edges de
 	              JOIN docs p ON p.id = de.from_doc
 	             WHERE de.type = 'covers' AND de.to_doc = d.id
-	               AND p.status = 'accepted')
+	               AND p.status IN ('accepted', 'spent'))
 	        END`
 
 // StaleCandidate is one accepted spec or plan with the §8.7 clock facts.
@@ -265,6 +268,14 @@ func WithdrawDoc(tx *sql.Tx, now time.Time, id, eventID int64) (*model.Doc, erro
 		return nil, fmt.Errorf(
 			"doc %d is %s; only an accepted or stale document can be withdrawn (025 §8.7): %w",
 			id, d.status, ErrBadTransition)
+	}
+	// A withdrawn plan closes without executing the rest of its arrangement,
+	// so every task it minted gets at least one governing link before the
+	// plan is gone to hold it to (S5).
+	if d.kind == "plan" {
+		if err := governPlanTasks(tx, id); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := tx.Exec(
 		`UPDATE docs SET status = 'withdrawn', updated_at = $2 WHERE id = $1`,

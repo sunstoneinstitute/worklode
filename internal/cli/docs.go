@@ -50,6 +50,10 @@ type DocListFilter struct {
 	// (025 §8.5). The server answers it with one EXISTS; nothing here filters
 	// a listing client-side.
 	HasNotes bool
+	// HideTerminal hides withdrawn and spent plans (12 S5). Only `lode doc
+	// list` with no --status sets it; every other caller needs the whole
+	// corpus.
+	HideTerminal bool
 }
 
 // ListDocs calls GET /api/v1/docs.
@@ -87,6 +91,9 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	}
 	if f.HasNotes {
 		q.Set("has_notes", "true")
+	}
+	if f.HideTerminal {
+		q.Set("hide_terminal", "true")
 	}
 	return doJSON[model.DocListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/docs", q), nil, "doc list")
 }
@@ -573,6 +580,8 @@ func docStatusBanner(d model.Doc) string {
 		return fmt.Sprintf("STALE since %s — re-planning owed (025 §8.6)", LocalTime(d.UpdatedAt))
 	case "withdrawn":
 		return fmt.Sprintf("WITHDRAWN since %s — closed without execution (025 §8.7)", LocalTime(d.UpdatedAt))
+	case "spent":
+		return fmt.Sprintf("SPENT since %s — every minted task has closed (12 S5)", LocalTime(d.UpdatedAt))
 	}
 	return ""
 }

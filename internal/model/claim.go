@@ -92,6 +92,16 @@ type ClaimNextInput struct {
 	TTLSeconds  int    `json:"ttl_seconds"`
 }
 
+// ReplanInput is the request body for Replan (POST /api/v1/work/replan):
+// hand a stale plan out as a claimed design task (025 §8.6, S28). Plan is
+// optional; empty picks the oldest stale plan in Project.
+type ReplanInput struct {
+	Project    string `json:"project"`
+	Plan       string `json:"plan,omitempty"`
+	Worktree   string `json:"worktree,omitempty"`
+	TTLSeconds int    `json:"ttl_seconds,omitempty"`
+}
+
 // RenewInput is the request body for RenewLease (POST
 // /api/v1/tasks/{id}/renew). TTLSeconds <= 0 means the server default.
 type RenewInput struct {
