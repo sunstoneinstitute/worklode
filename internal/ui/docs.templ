@@ -20,10 +20,15 @@ package ui
 // which of the two is on screen. What is deliberately absent is comment
 // threads and rounds: that is WL-SPEC-59, and a note is not a thread.
 
-// Docs carries the link to /drift because Knowledge is where the graph-backed
-// expert views live (layout.templ's primaryNav doc comment): the drift board
-// takes no nav destination of its own, so without this card it is reachable
-// only by typing the URL.
+// Docs renders both the global corpus index and one project's Documents
+// destination — the same rows and the same table, in the global or the
+// project-local shell, which v.Project says which of.
+//
+// The global index carries the link to /drift because Knowledge is where the
+// graph-backed expert views live (layout.templ's primaryNav doc comment): the
+// drift board takes no nav destination of its own, so without this card it is
+// reachable only by typing the URL. It is a global view over every project,
+// so the project flavour does not carry it.
 //
 // That card is admin-only. The drift board reads as a finished feature to
 // anyone who finds it, and it is not one yet, so it stays out of the way of
@@ -32,41 +37,67 @@ package ui
 // script already does breaks.
 templ Docs(v DocsView) {
 	@Page(v.Page) {
-		@globalShell() {
-			if isAdmin(ctx) {
-				<section class="card">
-					<div class="hd"><h3>Drift &amp; overview</h3></div>
-					<div class="bd">
-						<p><a href="/drift">Drift board</a></p>
-						<p class="muted small">Architectural violations, stale intent and coverage gaps from the knowledge graph, alongside the ready frontier and the critical path from the backbone.</p>
-					</div>
-				</section>
-			}
-			<section class="card">
-				<div class="hd"><h3>Documents</h3></div>
-				<div class="bd">
-					if len(v.Docs) == 0 {
-						<p class="muted">No documents yet. Specs, ADRs and plans land here as they are authored.</p>
-					} else {
-						@tableWrap("Documents") {
-							<table>
-								<tr><th>Reference</th><th>Title</th><th>Project</th><th>Status</th><th>Version</th></tr>
-								for _, d := range v.Docs {
-									<tr>
-										<td><a href={ d.URL }>{ d.Ref }</a></td>
-										<td><a href={ d.URL }>{ d.Doc.Title }</a></td>
-										<td><a href={ "/projects/" + d.Doc.Project }>{ d.Doc.Project }</a></td>
-										<td><span class={ "chip " + docStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
-										<td class="mono">{ d.Doc.Version }</td>
-									</tr>
-								}
-							</table>
-						}
-					}
+		if v.Project != nil {
+			<link rel="canonical" href={ v.CanonicalURL }/>
+			@projectShell(*v.Project, "documents") {
+				<div class="canvas">
+					@docsTable(v)
 				</div>
-			</section>
+			}
+		} else {
+			@globalShell() {
+				if isAdmin(ctx) {
+					<section class="card">
+						<div class="hd"><h3>Drift &amp; overview</h3></div>
+						<div class="bd">
+							<p><a href="/drift">Drift board</a></p>
+							<p class="muted small">Architectural violations, stale intent and coverage gaps from the knowledge graph, alongside the ready frontier and the critical path from the backbone.</p>
+						</div>
+					</section>
+				}
+				@docsTable(v)
+			}
 		}
 	}
+}
+
+// docsTable is the corpus listing both flavours of the index share. The
+// project flavour drops the Project column: every row carries the same
+// project as the page.
+templ docsTable(v DocsView) {
+	<section class="card">
+		<div class="hd"><h3>Documents</h3></div>
+		<div class="bd">
+			if len(v.Docs) == 0 {
+				<p class="muted">No documents yet. Specs, ADRs and plans land here as they are authored.</p>
+			} else {
+				@tableWrap("Documents") {
+					<table>
+						<tr>
+							<th>Reference</th>
+							<th>Title</th>
+							if v.Project == nil {
+								<th>Project</th>
+							}
+							<th>Status</th>
+							<th>Version</th>
+						</tr>
+						for _, d := range v.Docs {
+							<tr>
+								<td><a href={ d.URL }>{ d.Ref }</a></td>
+								<td><a href={ d.URL }>{ d.Doc.Title }</a></td>
+								if v.Project == nil {
+									<td><a href={ "/projects/" + d.Doc.Project }>{ d.Doc.Project }</a></td>
+								}
+								<td><span class={ "chip " + docStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
+								<td class="mono">{ d.Doc.Version }</td>
+							</tr>
+						}
+					</table>
+				}
+			}
+		</div>
+	</section>
 }
 
 templ Doc(v DocView) {
