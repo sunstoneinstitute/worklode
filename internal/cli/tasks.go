@@ -530,9 +530,12 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 		}
 		if g.Current != g.ClauseVersion {
 			fmt.Fprintf(w, "  governed by: %s  %s (v%d, clause now v%d%s)\n", g.Clause, g.Heading, g.ClauseVersion, g.Current, pin)
-			continue
+		} else {
+			fmt.Fprintf(w, "  governed by: %s  %s (v%d%s)\n", g.Clause, g.Heading, g.ClauseVersion, pin)
 		}
-		fmt.Fprintf(w, "  governed by: %s  %s (v%d%s)\n", g.Clause, g.Heading, g.ClauseVersion, pin)
+		if len(g.ResolvesTo) > 0 {
+			fmt.Fprintf(w, "    -> %s\n", strings.Join(g.ResolvesTo, ", "))
+		}
 	}
 	if t.NeedsDecomposition {
 		fmt.Fprintf(w, "  needs decomposition: yes\n")

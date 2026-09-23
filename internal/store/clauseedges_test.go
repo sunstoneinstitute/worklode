@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -64,6 +65,54 @@ func TestLinkClauses(t *testing.T) {
 	}
 	if err := s.Tx(ctx, func(tx *sql.Tx) error { return UnlinkClauses(tx, a, b, "refines") }); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unlink absent: got %v, want ErrNotFound", err)
+	}
+}
+
+// TestLinkClausesLineage: LinkClauses accepts wasDerivedFrom as an ordinary
+// manual edge, listed on the clause detail like any other, and refuses
+// supersededBy, naming lode clause supersede as its one writer (S22, R4).
+func TestLinkClausesLineage(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	a, b := clauseID(t, s, "P1", 1), clauseID(t, s, "P1", 3)
+	ctx := context.Background()
+	link := func(from, to int64, typ string) error {
+		return s.Tx(ctx, func(tx *sql.Tx) error { return LinkClauses(tx, from, to, typ) })
+	}
+	if err := link(b, a, "wasDerivedFrom"); err != nil {
+		t.Fatal(err)
+	}
+	from, err := s.GetClause(ctx, "P1", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(from.Edges) != 1 || from.Edges[0].Type != "wasDerivedFrom" || from.Edges[0].To != "P1-CL-1" || from.Edges[0].Source != "manual" {
+		t.Errorf("wasDerivedFrom edge: %+v", from.Edges)
+	}
+	err = link(a, b, "supersededBy")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("supersededBy via link: got %v, want ErrInvalidInput", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "lode clause supersede") {
+		t.Errorf("supersededBy via link: error %v does not name lode clause supersede", err)
+	}
+}
+
+// TestUnlinkClausesRefactor: UnlinkClauses refuses to remove a refactor edge,
+// beside the existing refusal for a derived one (S22, R4).
+func TestUnlinkClausesRefactor(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	a, b := clauseID(t, s, "P1", 1), clauseID(t, s, "P1", 3)
+	ctx := context.Background()
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO clause_edges (from_clause, to_clause, type, source) VALUES ($1, $2, 'supersededBy', 'refactor')`, a, b)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return UnlinkClauses(tx, a, b, "supersededBy") }); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("unlink refactor: got %v, want ErrInvalidInput", err)
 	}
 }
 

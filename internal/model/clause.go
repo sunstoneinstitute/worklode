@@ -73,3 +73,38 @@ type ClauseMetaInput struct {
 	Owner *string   `json:"owner,omitempty"`
 	Tags  *[]string `json:"tags,omitempty"`
 }
+
+// SupersedeEntry is one line of a refactor map (S24, R7): an old clause and
+// the clauses that continue it. Each ref is "WL-CL-12" or a section ref,
+// "WL-SPEC-4#sec-2". An empty New withdraws the old clause with no successor.
+type SupersedeEntry struct {
+	Old string   `json:"old"`
+	New []string `json:"new"`
+}
+
+// SupersedeInput is the body of the refactor request: the map, applied in one
+// transaction, or resolved and rolled back when DryRun is set (R6).
+type SupersedeInput struct {
+	Entries []SupersedeEntry `json:"entries"`
+	DryRun  bool             `json:"dry_run,omitempty"`
+}
+
+// SupersedeResolved is one map line with every ref resolved to its clause
+// ref ("WL-CL-12").
+type SupersedeResolved struct {
+	Old string   `json:"old"`
+	New []string `json:"new"`
+}
+
+// SupersedeResult says what a refactor changed, or would change on a dry
+// run: clauses withdrawn, supersededBy edges written, tasks told through a
+// task.governance_superseded event, and plans marked stale. A re-run of a
+// map that already applied reports zero for each.
+type SupersedeResult struct {
+	Entries    []SupersedeResolved `json:"entries"`
+	Withdrawn  int                 `json:"withdrawn"`
+	Edges      int                 `json:"edges"`
+	Tasks      int                 `json:"tasks"`
+	StalePlans int                 `json:"stale_plans"`
+	DryRun     bool                `json:"dry_run,omitempty"`
+}

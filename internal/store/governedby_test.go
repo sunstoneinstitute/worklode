@@ -245,3 +245,118 @@ func TestGovernPin(t *testing.T) {
 		t.Errorf("unpinned: %+v", g)
 	}
 }
+
+// govern links task to clause number in project p1, bypassing RecordEvent
+// like TestGovernPin does.
+func govern(t *testing.T, s *Store, taskID string, number int64) {
+	t.Helper()
+	id := clauseID(t, s, "P1", number)
+	if err := s.Tx(context.Background(), func(tx *sql.Tx) error {
+		return Govern(tx, taskID, id, "manual", false)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestGovernedByResolvesTo: a task governed by B, withdrawn and superseded by
+// A1 and A2, and also governed by a live clause C. A1 is itself withdrawn and
+// superseded by D. GovernedBy reports B's ResolvesTo as [A2, D] in
+// clause-number order, the withdrawn intermediate A1 skipped, and C's
+// ResolvesTo empty (S22, R8).
+func TestGovernedByResolvesTo(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: supersedeDocU, CreatedBy: "stig"})
+	// clauseDocV1 mints clauses 1, 2, 3; supersedeDocU mints 4, 5.
+	// B = 1, A1 = 2, A2 = 3, D = 4, C = 5.
+	task := createTask(t, s, time.Now(), TaskInput{ProjectID: "p1", Title: "a task", Body: "b", Priority: "medium", Kind: "bug", CreatedBy: "stig"})
+	govern(t, s, task.ID, 1)
+	govern(t, s, task.ID, 5)
+
+	mustSupersede(t, s, entry("P1-CL-1", "P1-CL-2", "P1-CL-3")) // B -> A1, A2
+	mustSupersede(t, s, entry("P1-CL-2", "P1-CL-4"))            // A1 -> D
+
+	list, err := s.GovernedBy(context.Background(), task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("GovernedBy = %+v, want 2 entries", list)
+	}
+	b, c := list[0], list[1]
+	if b.Clause != "P1-CL-1" || b.Status != "withdrawn" || !equalStrings(b.ResolvesTo, []string{"P1-CL-3", "P1-CL-4"}) {
+		t.Errorf("B = %+v, want withdrawn with ResolvesTo [P1-CL-3 P1-CL-4]", b)
+	}
+	if c.Clause != "P1-CL-5" || len(c.ResolvesTo) != 0 {
+		t.Errorf("C = %+v, want live with empty ResolvesTo", c)
+	}
+}
+
+// TestGovernedByResolvesToCycleTerminates: a cycle in the supersededBy edges
+// (never written by SupersedeClauses, which refuses one; inserted by hand
+// here to exercise the CTE's UNION dedup) does not hang GovernedBy.
+func TestGovernedByResolvesToCycleTerminates(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	task := createTask(t, s, time.Now(), TaskInput{ProjectID: "p1", Title: "a task", Body: "b", Priority: "medium", Kind: "bug", CreatedBy: "stig"})
+	govern(t, s, task.ID, 1)
+
+	id1, id2 := clauseID(t, s, "P1", 1), clauseID(t, s, "P1", 2)
+	ctx := context.Background()
+	if _, err := s.db.ExecContext(ctx, `UPDATE clauses SET status = 'withdrawn' WHERE id IN ($1, $2)`, id1, id2); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range [][2]int64{{id1, id2}, {id2, id1}} {
+		if _, err := s.db.ExecContext(ctx,
+			`INSERT INTO clause_edges (from_clause, to_clause, type, source) VALUES ($1, $2, 'supersededBy', 'refactor')`,
+			e[0], e[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	list, err := s.GovernedBy(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Status != "withdrawn" || len(list[0].ResolvesTo) != 0 {
+		t.Errorf("GovernedBy = %+v, want one withdrawn entry with no live successors", list)
+	}
+}
+
+// TestGovernedByResolvesToOrdersAcrossProjects: a withdrawn clause's
+// successors span two projects, P1-CL-3 (number 3) and P2-CL-1 (number 1).
+// ResolvesTo orders by project key first, so P1-CL-3 sorts before P2-CL-1
+// even though its clause number is larger (M7).
+func TestGovernedByResolvesToOrdersAcrossProjects(t *testing.T) {
+	s := openDocStore(t)
+	if _, err := s.db.ExecContext(context.Background(),
+		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
+		t.Fatal(err)
+	}
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p2", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	task := createTask(t, s, time.Now(), TaskInput{ProjectID: "p1", Title: "a task", Body: "b", Priority: "medium", Kind: "bug", CreatedBy: "stig"})
+	govern(t, s, task.ID, 1)
+
+	mustSupersede(t, s, entry("P1-CL-1", "P1-CL-3", "P2-CL-1"))
+
+	list, err := s.GovernedBy(context.Background(), task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || !equalStrings(list[0].ResolvesTo, []string{"P1-CL-3", "P2-CL-1"}) {
+		t.Errorf("GovernedBy = %+v, want ResolvesTo [P1-CL-3 P2-CL-1]", list)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

@@ -1036,3 +1036,14 @@ S14, S20):
   root but not a clause ref, so `/clauses/WL-CL-2` redirects to the clause page
   and `/WL-CL-2` returns 404. One more arm in that classifier, targeting the
   redirect `/clauses/{ref}` already provides.
+
+Recorded by the clause increment 4b final review:
+
+- `[P4]` **`internal/cmd/CLAUDE.md`'s L3 domain-action allowlist is missing
+  `fetch`.** `docs/specs2/09-cli-and-skills.md` §1 lists `fetch` in its L3
+  allowlist (it backs the not-yet-implemented `lode doc fetch`, §8.5), but the
+  table in `internal/cmd/CLAUDE.md`'s "Naming" section does not carry it.
+  Neither does `internal/cmd/namerule_test.go`'s `l3DomainActions`, correctly,
+  since no `fetch` command exists in `internal/cmd` today. The drift predates
+  increment 4b. The fix is adding `fetch` to `internal/cmd/CLAUDE.md`'s table
+  (and to `l3DomainActions`) when `lode doc fetch` ships.

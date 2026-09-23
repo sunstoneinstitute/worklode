@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,7 +19,7 @@ func newClauseCmd() *cobra.Command {
 		Use:   "clause",
 		Short: "Design clauses: edit one, list its versions, link or unlink it to another",
 	}
-	cmd.AddCommand(newClauseEditCmd(), newClauseVersionsCmd(), newClauseLinkCmd(), newClauseUnlinkCmd(), newClauseSetCmd())
+	cmd.AddCommand(newClauseEditCmd(), newClauseVersionsCmd(), newClauseLinkCmd(), newClauseUnlinkCmd(), newClauseSetCmd(), newClauseSupersedeCmd())
 	return cmd
 }
 
@@ -85,9 +86,10 @@ var edgeTypeFlagTypes = []struct{ flag, typ string }{
 	{"constrains", "constrains"},
 	{"conflicts-with", "conflictsWith"},
 	{"references", "references"},
+	{"derived-from", "wasDerivedFrom"},
 }
 
-// edgeTypeFlags binds the four edge-type flags and returns a resolver that
+// edgeTypeFlags binds the five edge-type flags and returns a resolver that
 // yields the wl: type and target of whichever one the caller set.
 // MarkFlagsOneRequired and MarkFlagsMutuallyExclusive guarantee exactly one
 // is set before RunE runs, so the resolver itself cannot fail. It checks
@@ -99,8 +101,8 @@ func edgeTypeFlags(cmd *cobra.Command) func() (typ, target string) {
 		v := cmd.Flags().String(e.flag, "", edgeFlagUsage[e.flag])
 		vals[e.flag] = v
 	}
-	cmd.MarkFlagsOneRequired("refines", "constrains", "conflicts-with", "references")
-	cmd.MarkFlagsMutuallyExclusive("refines", "constrains", "conflicts-with", "references")
+	cmd.MarkFlagsOneRequired("refines", "constrains", "conflicts-with", "references", "derived-from")
+	cmd.MarkFlagsMutuallyExclusive("refines", "constrains", "conflicts-with", "references", "derived-from")
 	return func() (string, string) {
 		for _, e := range edgeTypeFlagTypes {
 			if cmd.Flags().Changed(e.flag) {
@@ -118,12 +120,13 @@ var edgeFlagUsage = map[string]string{
 	"constrains":     "clause this one must hold alongside",
 	"conflicts-with": "clause this one is in recorded tension with",
 	"references":     "clause this one points at (a derived edge is written for you when the text names it)",
+	"derived-from":   "clause this one was derived from, e.g. by a split (supersededBy is written by lode clause supersede, not this flag)",
 }
 
 func newClauseLinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "link <ref>",
-		Short: "Relate a clause to another: --refines, --constrains, --conflicts-with or --references <ref>",
+		Short: "Relate a clause to another: --refines, --constrains, --conflicts-with, --references or --derived-from <ref>",
 		Args:  cobra.ExactArgs(1),
 	}
 	typ := edgeTypeFlags(cmd)
@@ -267,4 +270,88 @@ func newClauseVersionsCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// newClauseSupersedeCmd is `lode clause supersede --map <file>` (S24): the
+// refactor primitive. The map decides what applying it changes; this command
+// only reads and parses it and hands the entries to the store through the
+// API, the way every other write in this package defers the decision to the
+// server.
+func newClauseSupersedeCmd() *cobra.Command {
+	var mapFile string
+	var dryRun bool
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "supersede",
+		Short: "Apply a refactor map: withdraw old clauses and link each to its successors (S24)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if mapFile == "" {
+				return errors.New(`no map: pass --map <file>, or "-" to read it from stdin`)
+			}
+			content, err := resolveBody("", mapFile, cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			entries, err := parseSupersedeMap(content)
+			if err != nil {
+				return err
+			}
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			if sc.Project == "" {
+				return errNoProject
+			}
+			res, raw, err := c.SupersedeClauses(cmd.Context(), sc.Project, model.SupersedeInput{Entries: entries, DryRun: dryRun})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.SupersedeRender(cmd.OutOrStdout(), res)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&mapFile, "map", "", `file holding the refactor map, one entry per line ("-" for stdin) (required)`)
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "resolve and report what would change, without writing")
+	addScopeFlags(cmd, &scope, "project id")
+	return cmd
+}
+
+// parseSupersedeMap parses a refactor map: one entry per line, "<old> ->
+// <new> [<new> ...]", or "<old> ->" to withdraw with no successor. A line
+// whose first non-blank character is "#" is a comment (a ref may itself
+// carry a "#" fragment, so only a leading "#" is treated as one); blank
+// lines are ignored. A line with no "->" is an error naming its 1-based line
+// number.
+func parseSupersedeMap(content string) ([]model.SupersedeEntry, error) {
+	var entries []model.SupersedeEntry
+	for i, raw := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		old, rest, ok := strings.Cut(line, "->")
+		if !ok {
+			return nil, fmt.Errorf("line %d: no \"->\": %q", i+1, raw)
+		}
+		old = strings.TrimSpace(old)
+		if old == "" {
+			return nil, fmt.Errorf("line %d: nothing before \"->\": %q", i+1, raw)
+		}
+		news := strings.Fields(rest)
+		if len(news) == 0 {
+			news = nil
+		}
+		entries = append(entries, model.SupersedeEntry{Old: old, New: news})
+	}
+	return entries, nil
 }

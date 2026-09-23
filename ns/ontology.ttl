@@ -732,7 +732,8 @@ wl:layer a owl:AnnotationProperty ;
 #
 #   dct:requires / dct:isRequiredBy    dependency
 #   dct:hasPart / dct:isPartOf         decomposition; child_of mirror
-#   dct:replaces / dct:isReplacedBy    supersession, whole document or section
+#   dct:replaces / dct:isReplacedBy    supersession, whole document or section;
+#                                      clause edges store this as supersededBy (12 S22)
 #   dct:title / description            labels; Deliverable acceptance criteria
 #   dct:relation                       Deliverable → declared Artifact/Environment target
 #   dct:created / modified / issued / date / valid / identifier
@@ -742,6 +743,8 @@ wl:layer a owl:AnnotationProperty ;
 #                                      DesignDoc, AcceptedDeviation)
 #   prov:wasAssociatedWith             author of an Activity (Task) — see wl:Task
 #   prov:wasGeneratedBy / wasDerivedFrom / wasRevisionOf
+#                                      clause edges store the derivation edge as
+#                                      wasDerivedFrom (12 S22)
 #   prov:used                          Deployment → Artifact or Commit
 #   prov:startedAtTime / endedAtTime / generatedAtTime
 #   doap:Project                       repository grouping (with dct:hasPart)
