@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -15,12 +17,14 @@ import (
 // version, so the link keeps reading that text as the clause moves on;
 // without it the link follows the newest version. Re-governing an already
 // governed clause updates the pin either way and changes nothing else, so
-// re-accepting a plan is safe.
+// re-accepting a plan is safe — except source "gate", which only adds a link
+// and leaves an existing one (pin, source, version) untouched (S51).
 func Govern(tx *sql.Tx, taskID string, clauseID int64, source string, pin bool) error {
 	_, err := tx.Exec(
 		`INSERT INTO task_governed_by (task_id, clause_id, clause_version, source, pinned_version)
 		 SELECT $1, c.id, c.version, $3, CASE WHEN $4 THEN c.version END FROM clauses c WHERE c.id = $2
-		 ON CONFLICT (task_id, clause_id) DO UPDATE SET pinned_version = EXCLUDED.pinned_version`,
+		 ON CONFLICT (task_id, clause_id) DO UPDATE SET pinned_version = EXCLUDED.pinned_version
+		 WHERE EXCLUDED.source <> 'gate'`,
 		taskID, clauseID, source, pin)
 	if pgViolation(err, "23503", "task_governed_by_task_id_fkey") {
 		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
@@ -155,4 +159,55 @@ func planClauses(tx *sql.Tx, planID int64) ([]int64, error) {
 		out = append(out, r.id)
 	}
 	return out, nil
+}
+
+// HasPlanGovernance reports whether a plan governs the task: any link with
+// source = 'plan'. The gate writes only when this is false (S51).
+func HasPlanGovernance(tx *sql.Tx, taskID string) (bool, error) {
+	var one int
+	err := tx.QueryRow(
+		`SELECT 1 FROM task_governed_by WHERE task_id = $1 AND source = 'plan' LIMIT 1`, taskID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("plan governance of task %s: %w", taskID, err)
+	}
+	return true, nil
+}
+
+// ClauseAtSection resolves a section ref (WL-SPEC-4 plus sec-5) to the
+// clause arranged at that anchor, splitting the document first when it
+// predates the clause tables. ErrNotFound when the project, the document or
+// the anchor is unknown.
+func ClauseAtSection(tx *sql.Tx, ref designdoc.SectionRef) (int64, error) {
+	var projectID string
+	err := tx.QueryRow(`SELECT id FROM projects WHERE key = $1`, ref.Shorthand.Key).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("project %s: %w", ref.Shorthand.Key, ErrNotFound)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("project %s: %w", ref.Shorthand.Key, err)
+	}
+	base := fmt.Sprintf("%s-%s-%d", ref.Shorthand.Key, ref.Shorthand.Type, ref.Shorthand.Number)
+	docID, ok, err := resolveDocRef(tx, projectID, base)
+	if err != nil {
+		return 0, err
+	}
+	if !ok {
+		return 0, fmt.Errorf("document %s: %w", base, ErrNotFound)
+	}
+	if err := ensureClauses(tx, docID); err != nil {
+		return 0, err
+	}
+	entries, err := arrangedClauses(tx, docID)
+	if err != nil {
+		return 0, err
+	}
+	for _, c := range entries {
+		if c.anchor == ref.Anchor {
+			return c.id, nil
+		}
+	}
+	return 0, fmt.Errorf("%s has no clause at %s: %w", base, ref.Anchor, ErrNotFound)
 }
