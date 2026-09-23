@@ -81,3 +81,17 @@ func TestClauseVersionsTable(t *testing.T) {
 		t.Errorf("table:\n%s", out)
 	}
 }
+
+func TestClausesTable(t *testing.T) {
+	var b bytes.Buffer
+	ClausesTable(&b, []model.Clause{{
+		Ref: "WL-CL-12", Status: "draft", Version: 2, Heading: "How to read this set",
+		ArrangedIn: []model.ClauseArrangement{{DocRef: "WL-SPEC-73", Anchor: "sec-1"}},
+	}})
+	out := b.String()
+	for _, want := range []string{"REF", "WL-CL-12", "draft", "2", "WL-SPEC-73#sec-1", "How to read this set"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("table lacks %q:\n%s", want, out)
+		}
+	}
+}
