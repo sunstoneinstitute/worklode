@@ -12,19 +12,76 @@ import (
 )
 
 // newClauseCmd is the design-clause entity group (12-spec-refactoring-design-tree.md
-// S14, S35). Reading one clause is `lode show WL-CL-<n>`; there is no `lode
-// clause show`.
+// S14, S35). `lode clause show` and `lode show WL-CL-<n>` read one clause.
 func newClauseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clause",
-		Short: "Design clauses: edit one, list its versions, link or unlink it to another",
+		Short: "Design clauses: show or list them, edit one, list its versions, link or unlink it to another",
 	}
-	cmd.AddCommand(newClauseEditCmd(), newClauseVersionsCmd(), newClauseLinkCmd(), newClauseUnlinkCmd(), newClauseSetCmd(), newClauseSupersedeCmd())
+	cmd.AddCommand(newClauseShowCmd(), newClauseListCmd(), newClauseEditCmd(), newClauseVersionsCmd(), newClauseLinkCmd(), newClauseUnlinkCmd(), newClauseSetCmd(), newClauseSupersedeCmd())
 	return cmd
 }
 
 func init() {
 	rootCmd.AddCommand(newClauseCmd())
+}
+
+func newClauseShowCmd() *cobra.Command {
+	var version int
+	cmd := &cobra.Command{
+		Use:               "show <ref>",
+		ValidArgsFunction: clauseRefAt(0),
+		Short:             "Show a clause: its status, version, placements and text",
+		Args:              cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runClauseShow(cmd, args[0], version, cmd.Flags().Changed("version"))
+		},
+	}
+	cmd.Flags().IntVar(&version, "version", 0, "show one version of the clause")
+	return cmd
+}
+
+func newClauseListCmd() *cobra.Command {
+	var scope scopeFlags
+	var doc, status string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List clauses, or one document's clauses in arrangement order",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			// --doc already names its project, so the default scope would
+			// only hide a document from another project.
+			var project string
+			if doc == "" || cmd.Flags().Changed("project") || cmd.Flags().Changed("repo") {
+				sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+				if err != nil {
+					return err
+				}
+				project = sc.Project
+			}
+			clauses, raw, err := c.ListClauses(cmd.Context(), cli.ClauseListFilter{
+				Project: project, Doc: doc, Status: status,
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.ClausesTable(cmd.OutOrStdout(), clauses)
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "filter by project id")
+	cmd.Flags().StringVar(&doc, "doc", "", "only the clauses a document arranges, in order, e.g. WL-SPEC-73")
+	cmd.Flags().StringVar(&status, "status", "", "filter by status: draft, accepted, superseded, withdrawn")
+	cmd.RegisterFlagCompletionFunc("doc", docRefAt(0))
+	completeFlagValues(cmd, "status", []string{"draft", "accepted", "superseded", "withdrawn"})
+	return cmd
 }
 
 func newClauseEditCmd() *cobra.Command {

@@ -514,3 +514,51 @@ func TestSetClauseMeta(t *testing.T) {
 		t.Errorf("unknown clause: %v", err)
 	}
 }
+
+// TestListClauses: a document filter returns its arrangement in order, a
+// status filter narrows, an unknown status is refused, and the unfiltered
+// list runs by number with bodies left empty.
+func TestListClauses(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	d1 := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: clauseDocV1, CreatedBy: "stig", Owner: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "b", Body: "---\nstatus: draft\n---\n# B\n\n## 1. Other {#sec-1}\n\nD.\n", CreatedBy: "stig"})
+
+	all, err := s.ListClauses(ctx, ClauseFilter{Project: "p1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	for _, c := range all {
+		refs = append(refs, c.Ref)
+		if c.Body != "" {
+			t.Errorf("%s: body %q, want empty on a list", c.Ref, c.Body)
+		}
+	}
+	if got := strings.Join(refs, " "); got != "P1-CL-1 P1-CL-2 P1-CL-3 P1-CL-4" {
+		t.Errorf("all = %s", got)
+	}
+
+	inDoc, err := s.ListClauses(ctx, ClauseFilter{Doc: d1.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inDoc) != 3 || inDoc[1].Heading != "Sub" || inDoc[1].ArrangedIn[0].Anchor != "sec-1.1" {
+		t.Errorf("doc filter = %+v", inDoc)
+	}
+
+	if _, _, err := acceptDoc(t, s, d1.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	drafts, err := s.ListClauses(ctx, ClauseFilter{Project: "p1", Status: "draft"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(drafts) != 1 || drafts[0].Heading != "Other" {
+		t.Errorf("draft filter = %+v", drafts)
+	}
+
+	if _, err := s.ListClauses(ctx, ClauseFilter{Status: "bogus"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("bogus status: err = %v, want ErrInvalidInput", err)
+	}
+}

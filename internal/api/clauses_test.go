@@ -146,3 +146,30 @@ func TestClauseMetaAPI(t *testing.T) {
 		t.Errorf("unknown clause: status = %d", rr.Code)
 	}
 }
+
+// TestListClauses lists a document's arrangement by its WL-SPEC ref, in
+// order, and answers 404 for an unknown document and 422 for a bad status.
+func TestListClauses(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: projID, Kind: "spec", Slug: "t", Body: clauseDocV1,
+	})
+
+	rr := doReq(t, h, http.MethodGet, "/api/v1/clauses?doc=WL-SPEC-1", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var cs []model.Clause
+	decodeInto(t, rr, &cs)
+	if len(cs) != 3 || cs[0].Ref != "WL-CL-1" || cs[1].Heading != "Sub" || cs[2].Heading != "Two" {
+		t.Errorf("clauses = %+v", cs)
+	}
+	if rr := doReq(t, h, http.MethodGet, "/api/v1/clauses?doc=WL-SPEC-99", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown doc: status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := doReq(t, h, http.MethodGet, "/api/v1/clauses?status=bogus", token, nil); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("bad status: status = %d", rr.Code)
+	}
+}
