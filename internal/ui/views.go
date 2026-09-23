@@ -880,9 +880,15 @@ func tombstone(t *model.Tombstone) model.Tombstone {
 // DocsView is the document corpus index (GET /docs): every spec, ADR and plan
 // the backbone holds (025 §5). Read-only — a document's body is an artifact
 // authored in a file and submitted through the API, not typed into a page.
+//
+// Project is nil for the global index and set for one project's Documents
+// destination (GET /projects/{id}/documents), which lists the same rows
+// narrowed to that project inside the project-local shell.
 type DocsView struct {
-	Page PageProps
-	Docs []DocRow
+	Page         PageProps
+	Docs         []DocRow
+	Project      *CockpitProject
+	CanonicalURL string
 }
 
 // DocRow is one document in the index: the stored row, its page URL, and the
