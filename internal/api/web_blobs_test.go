@@ -14,8 +14,7 @@ import (
 // WebOpen) and fails unless it renders.
 func getPage(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	rec := getCanonical(t, h, path)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET %s = %d, body %s", path, rec.Code, rec.Body)
 	}

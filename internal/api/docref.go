@@ -33,12 +33,7 @@ func (s *server) docRefRedirect(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, err.Error())
 		return
 	}
-	p, err := s.st.GetProject(r.Context(), d.Project)
-	if err != nil {
-		writeErr(w, http.StatusNotFound, err.Error())
-		return
-	}
-	http.Redirect(w, r, docCanonicalURL(d, p.Key), http.StatusFound)
+	http.Redirect(w, r, docCanonicalURL(d), http.StatusFound)
 }
 
 // resolveDocRefWeb resolves ref against every live document, using the same
@@ -137,8 +132,14 @@ func (s *server) refShortcut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "empty reference")
 		return
 	}
-	if _, err := s.st.GetTask(r.Context(), ref); err == nil {
-		http.Redirect(w, r, "/tasks/"+url.PathEscape(ref), http.StatusFound)
+	if t, err := s.st.GetTask(r.Context(), ref); err == nil {
+		target := "/tasks/" + url.PathEscape(ref)
+		if p, err := s.st.GetProject(r.Context(), t.Project); err == nil {
+			if u := taskCanonicalURL(t, p.Key); u != "" {
+				target = u
+			}
+		}
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 	s.docRefRedirect(w, r)

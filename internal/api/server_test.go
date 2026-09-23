@@ -133,6 +133,17 @@ func doReq(t *testing.T, h http.Handler, method, path, token string, body any) *
 	return rr
 }
 
+// getCanonical GETs path anonymously and follows one redirect to an S20
+// canonical URL, the hop the root routes /tasks/{id} and /docs/{ref} take.
+func getCanonical(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	rr := doReq(t, h, http.MethodGet, path, "", nil)
+	if loc := rr.Header().Get("Location"); rr.Code == http.StatusFound && strings.HasPrefix(loc, "/projects/") {
+		return doReq(t, h, http.MethodGet, loc, "", nil)
+	}
+	return rr
+}
+
 func decodeMap(t *testing.T, rr *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var m map[string]any

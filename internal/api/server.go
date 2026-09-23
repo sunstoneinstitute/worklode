@@ -779,27 +779,31 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /knowledge", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/docs", http.StatusFound)
 	})
+	// /tasks/{id}, /docs/{id} and /docs/versions/{id}/{n} redirect to the S20
+	// canonical URL below and serve a page only for an entity that has none,
+	// so they are not navWrapped.
 	r.web("GET /tasks/{id}", s.taskPage)
 	r.web("GET /tasks/{id}/activity/events", s.taskActivityEvents)
 	// The document corpus (spec 025 §5) is read-only in the cockpit: writing
 	// a document is an authoring act performed through the API and the CLI,
 	// where the body — the artifact itself — comes from a file.
 	r.web("GET /docs", s.navWrap("knowledge", s.docsPage))
-	r.web("GET /docs/{id}", s.navWrap("knowledge", s.docPage))
+	r.web("GET /docs/{id}", s.docPage)
 	// /docs/versions/{id}/{n}, not /docs/{id}/versions/{n}: see routeGuards'
 	// comment on this route in router.go.
-	r.web("GET /docs/versions/{id}/{n}", s.navWrap("knowledge", s.docVersionPage))
+	r.web("GET /docs/versions/{id}/{n}", s.docVersionPage)
 	// The reference redirect (WL-301): not navWrapped — it answers a 302,
 	// never a page.
 	r.web("GET /docs/ref/{ref...}", s.docRefRedirect)
-	// The clause page and the S20 canonical URL scheme (task 5): the page
-	// itself, its version sibling, the document-kind redirect, and the
-	// resolving redirect the autolinker targets. Not navWrapped where they
-	// only ever 302 (projectKindRedirect, clauseRefRedirect), like
-	// docRefRedirect above.
+	// The S20 canonical URL scheme: the clause page and its version sibling,
+	// the task and document pages under /projects/{proj}/{kind}/{n}, and the
+	// resolving redirect the autolinker targets. projectEntityPage records
+	// the navigation metric for documents itself, since tasks share its
+	// route. clauseRefRedirect only ever 302s, like docRefRedirect above.
 	r.web("GET /projects/{proj}/clause/{n}", s.navWrap("knowledge", s.clausePage))
 	r.web("GET /projects/{proj}/clause/{n}/{ver}", s.navWrap("knowledge", s.clausePage))
-	r.web("GET /projects/{proj}/{kind}/{n}", s.projectKindRedirect)
+	r.web("GET /projects/{proj}/{kind}/{n}", s.projectEntityPage)
+	r.web("GET /projects/{proj}/{kind}/{n}/{ver}", s.projectEntityPage)
 	r.web("GET /clauses/{ref}", s.clauseRefRedirect)
 	r.web("GET /{ref}", s.refShortcut)
 	// The drift board (spec 007) is the graph-backed half of Knowledge, so it

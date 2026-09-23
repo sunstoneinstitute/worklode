@@ -619,16 +619,33 @@ func (s *server) projectKeys(ctx context.Context, home string) mdrender.ProjectK
 	return mdrender.NewProjectKeys(keys).For(homeKey)
 }
 
-// taskPage handles GET /tasks/{id}: title, state, priority/kind, project,
+// taskPage handles GET /tasks/{id}: a redirect to the task's canonical URL
+// (S20), or the page itself for an id that has none (see taskCanonicalURL).
+func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	t, err := s.st.GetTask(r.Context(), id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	if p, err := s.st.GetProject(r.Context(), t.Project); err == nil {
+		if u := taskCanonicalURL(t, p.Key); u != "" {
+			http.Redirect(w, r, withQuery(u, r), http.StatusFound)
+			return
+		}
+	}
+	s.renderTaskPage(w, r, id)
+}
+
+// renderTaskPage renders the task page: title, state, priority/kind, project,
 // body (rendered as sanitised markdown — see taskView), attachments, lease
 // holder (if any), edges, and the full timeline — built from the same
 // assembleTimeline used by GET /api/v1/tasks/{id}/timeline. It renders
 // through the project shell (spec 056 §2), so an unknown owning project
 // 404s the same way projectHeader's other callers do — though that should
 // never happen for a task whose project id came from the store itself.
-func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
+func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-	id := r.PathValue("id")
 
 	t, entries, err := s.assembleTimeline(ctx, id)
 	if err != nil {
@@ -751,8 +768,10 @@ func (s *server) projectDocsPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "project documents page", ui.Docs(view))
 }
 
-// docPage handles GET /docs/{ref}: numbered documents use their shorthand;
-// plans retain their database id because the corpus defines no plan shorthand.
+// docPage handles GET /docs/{ref}. A numbered document's shorthand redirects
+// to its canonical URL (S20), with ?v=<n> going to the version path. A
+// numeric database id serves the page for a document with no number: a
+// tombstone, or a row predating 029 §4's backfill.
 func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(r.PathValue("id"))
 	if ref == "" {
@@ -761,7 +780,6 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 	}
 	var d model.Doc
 	var detail *model.DocDetail
-	var err error
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
 		detail, err = s.docDetail(r, id)
 		if err != nil || detail.Number != 0 && detail.Tombstone == nil {
@@ -780,11 +798,29 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 			webErr(w, http.StatusNotFound, "not found")
 			return
 		}
+		if resolved.Number != 0 {
+			u := docCanonicalURL(resolved)
+			q := r.URL.Query()
+			if v := q.Get("v"); v != "" {
+				u += "/" + v
+				q.Del("v")
+			}
+			if len(q) > 0 {
+				u += "?" + q.Encode()
+			}
+			http.Redirect(w, r, u, http.StatusFound)
+			return
+		}
 		d = resolved
 	}
-	// ?v=<n> serves one version of that same document (025 §4.5), so a
-	// superseded version is reachable under the canonical /docs/<KEY-KIND-n>
-	// URL and not only by numeric id.
+	s.renderDocPage(w, r, d, detail)
+}
+
+// renderDocPage renders the document page for d. detail is d's detail when
+// the caller already read it, else nil. ?v=<n> serves one version of d
+// (025 §4.5) on the numeric-id page, which has no version path.
+func (s *server) renderDocPage(w http.ResponseWriter, r *http.Request, d model.Doc, detail *model.DocDetail) {
+	var err error
 	if q := strings.TrimSpace(r.URL.Query().Get("v")); q != "" {
 		version, err := strconv.Atoi(q)
 		if err != nil || version <= 0 || version > math.MaxInt32 {
@@ -892,8 +928,8 @@ func (s *server) docPageApprovals(r *http.Request, docID int64) []ui.ApprovalRow
 
 // docVersionPage handles GET /docs/versions/{id}/{n}: one version of a
 // document, current or superseded (025 §4.5), addressed by the document's
-// numeric id like its JSON API sibling. /docs/<ref>?v=<n> reaches the same
-// page through every ref form docPage takes.
+// numeric id like its JSON API sibling. A numbered document redirects to its
+// canonical version path (S20); a document with no number is served here.
 func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
@@ -910,6 +946,10 @@ func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
+	if d.Number != 0 && d.Tombstone == nil {
+		http.Redirect(w, r, fmt.Sprintf("%s/%d", docCanonicalURL(*d), version), http.StatusFound)
+		return
+	}
 	s.renderDocVersion(w, r, *d, version)
 }
 
@@ -921,14 +961,13 @@ func (s *server) renderDocVersion(w http.ResponseWriter, r *http.Request, d mode
 		s.webStoreErr(w, err)
 		return
 	}
-	// One ListProjects serves both needs (WL-347): the project key for the
-	// canonical URL and the key set the body's task autolinks match on.
+	// The key set the body's task autolinks match on.
 	keyByID := s.projectKeyByID(r.Context())
 	keys := make([]string, 0, len(keyByID))
 	for _, k := range keyByID {
 		keys = append(keys, k)
 	}
-	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys).For(keyByID[d.Project]), d, v, keyByID[d.Project])
+	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys).For(keyByID[d.Project]), d, v)
 	s.renderWeb(w, r, http.StatusOK, "doc version page", ui.DocVersion(view))
 }
 

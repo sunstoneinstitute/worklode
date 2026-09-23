@@ -472,7 +472,7 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		{"/projects/proj/deliverables", project, true},
 		{"/projects/proj/deliverables/new", project, true},
 		{"/projects/proj/tasks/new", project, false},
-		{"/tasks/WL-1", project, false},
+		{"/projects/proj/chore/1", project, false},
 	}
 	for _, page := range pages {
 		t.Run(page.path, func(t *testing.T) {
@@ -1466,7 +1466,7 @@ func TestTaskPage(t *testing.T) {
 		return err
 	})
 
-	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1514,7 +1514,7 @@ func TestTaskPage(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("start WL-2 status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	rr = doReq(t, h, "GET", "/tasks/WL-2", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-2")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1537,13 +1537,13 @@ func TestTaskPage(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("reassign WL-2 status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	rr = doReq(t, h, "GET", "/tasks/WL-2", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-2")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	bodyContains(t, rr.Body.String(), "assignee: erin -&gt; frank")
 
-	rr = doReq(t, h, "GET", "/tasks/WL-99", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-99")
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown task page status = %d, want 404; body %s", rr.Code, rr.Body.String())
 	}
@@ -1564,7 +1564,7 @@ func TestTaskPageTimelineTypeIsAnAccessibleIcon(t *testing.T) {
 		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
 	})
 
-	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr := getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1606,7 +1606,7 @@ func TestTaskPageRendersSourceLink(t *testing.T) {
 		return err
 	})
 
-	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr := getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1640,7 +1640,7 @@ func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
 		return err
 	})
 
-	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr := getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1665,7 +1665,7 @@ func TestTaskPageShowsProgress(t *testing.T) {
 		childIDs = append(childIDs, child["id"].(string))
 	}
 
-	rr := doReq(t, h, "GET", "/tasks/"+container, "", nil)
+	rr := getCanonical(t, h, "/tasks/"+container)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1687,13 +1687,13 @@ func TestTaskPageShowsFollowUps(t *testing.T) {
 		"follow_up_to": "WL-1",
 	})
 
-	rr := doReq(t, h, "GET", "/tasks/WL-2", "", nil)
+	rr := getCanonical(t, h, "/tasks/WL-2")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("follow-up page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	bodyContains(t, rr.Body.String(), "Follow-up to", `/tasks/WL-1`)
 
-	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("origin page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1719,13 +1719,13 @@ func TestTaskPageShowsDuplicates(t *testing.T) {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "GET", "/tasks/WL-2", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-2")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("duplicate page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	bodyContains(t, rr.Body.String(), "Duplicate of", `/tasks/WL-1`)
 
-	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("canonical page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1753,7 +1753,7 @@ func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1768,7 +1768,7 @@ func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
 		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1912,7 +1912,7 @@ func TestTaskPageShowsAgentSessions(t *testing.T) {
 		t.Fatalf("agent-session status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1932,7 +1932,7 @@ func TestTaskPageOmitsAgentSessionsWhenUnheld(t *testing.T) {
 		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
 	})
 
-	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr := getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1987,7 +1987,7 @@ func TestTaskPageTruncatesLongTimelineSummary(t *testing.T) {
 		t.Fatalf("patch body status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	rr = getCanonical(t, h, "/tasks/WL-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}

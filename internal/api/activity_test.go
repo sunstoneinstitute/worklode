@@ -366,7 +366,7 @@ func TestTaskPageShowsActivityCard(t *testing.T) {
 		t.Fatalf("ingest status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr := doReq(t, h, "GET", "/tasks/"+id, "", nil)
+	rr := getCanonical(t, h, "/tasks/"+id)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -397,7 +397,7 @@ func TestTaskPageOmitsActivityCardWhenThereIsNothing(t *testing.T) {
 	st, h, token := newTestServer(t)
 	id := seedActivityTask(t, st, h, token, "proj")
 
-	rr := doReq(t, h, "GET", "/tasks/"+id, "", nil)
+	rr := getCanonical(t, h, "/tasks/"+id)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}

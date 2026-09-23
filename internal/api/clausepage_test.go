@@ -1,9 +1,8 @@
 package api_test
 
 // clausepage_test.go covers the cockpit clause page and the S20 canonical
-// URLs and redirects (task 5): GET /projects/{proj}/clause/{n}, its version
-// sibling, the project-key and document-kind redirects, and the /clauses/{ref}
-// resolving redirect.
+// URLs and redirects: GET /projects/{proj}/clause/{n}, its version sibling,
+// the project-key redirect, and the /clauses/{ref} resolving redirect.
 
 import (
 	"context"
@@ -15,8 +14,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// TestClausePageAndRedirects covers S20's clause page and both redirect
-// forms: an uppercase project key, and a document-kind path.
+// TestClausePageAndRedirects covers S20's clause page and its redirects:
+// an uppercase project key, and the /clauses/{ref} resolving redirect.
 func TestClausePageAndRedirects(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -35,9 +34,8 @@ func TestClausePageAndRedirects(t *testing.T) {
 		t.Errorf("clause version page = %d", rr.Code)
 	}
 	for path, want := range map[string]string{
-		"/clauses/WL-CL-2":                "/projects/" + projID + "/clause/2",
-		"/projects/WL/clause/2":           "/projects/" + projID + "/clause/2",
-		"/projects/" + projID + "/spec/1": "/docs/WL-SPEC-1",
+		"/clauses/WL-CL-2":      "/projects/" + projID + "/clause/2",
+		"/projects/WL/clause/2": "/projects/" + projID + "/clause/2",
 	} {
 		rr := doReq(t, h, http.MethodGet, path, "", nil)
 		if rr.Code != http.StatusFound || rr.Header().Get("Location") != want {
