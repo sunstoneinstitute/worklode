@@ -479,6 +479,11 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			}
 		}
 	}
+	if kind == "plan" {
+		if err := arrangePlan(tx, docID); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -38,6 +38,9 @@ large enough to need a numbered series, and `superpowers:writing-plans` for
 each plan document. A plan's `covers:` frontmatter must name the spec sections
 it undertakes, anchor by anchor: a whole-document edge discharges nothing, so
 `lode doc list --needs-planning` would keep reporting the spec as unplanned.
+A plan is also bounded by a server-enforced token budget (12 S19); `lode doc
+add` warns past the soft budget and refuses past the hard ceiling, which is
+the signal to split further.
 
 Draft each plan in a scratch file, lint it, then create the document — the
 backbone is where the plan lives, the scratch file is just the editor buffer:

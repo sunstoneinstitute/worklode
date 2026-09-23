@@ -50,6 +50,13 @@ type Project struct {
 	// fields above they never need a nullable scan type.
 	Labels  map[string]string
 	Horizon string
+
+	// Settings is the small per-project override set behind the server-side
+	// key allowlist (increment 3 R9, migration 0084), e.g. plan_tokens_soft
+	// and plan_tokens_hard. NOT NULL with a '{}' schema default, like Labels.
+	// json.RawMessage per value: an opaque value passing through, not a
+	// shape this package states.
+	Settings map[string]json.RawMessage
 }
 
 // projectExtras holds the nullable cockpit columns (migration 0013) and the
@@ -98,13 +105,13 @@ func nullIfZeroTime(t time.Time) any {
 
 // projectColumns is the SELECT list shared by GetProject and ListProjects:
 // the base columns plus the migration-0013 cockpit columns, 0063's
-// approval-flow columns, and 0074's labels/horizon, in the order
-// projectExtras.dest expects the middle group.
+// approval-flow columns, 0074's labels/horizon, and 0084's settings, in the
+// order projectExtras.dest expects the middle group.
 const projectColumns = `id, name, key, focus,
 	focus_note, focus_pinned_by, focus_pinned_at,
 	decision_title, decision_accountable, decision_readiness,
 	approval_flow_name, approval_flow_rev,
-	labels, horizon`
+	labels, horizon, settings`
 
 // scanProjectFocus unmarshals a jsonb focus column (read as raw bytes) into
 // a []string. An empty or null column yields a nil slice.
@@ -134,6 +141,21 @@ func scanProjectLabels(raw []byte) (map[string]string, error) {
 	return labels, nil
 }
 
+// scanProjectSettings unmarshals the settings jsonb column (read as raw
+// bytes) into a map[string]json.RawMessage, one entry per key with its value
+// left as raw JSON. NOT NULL with a '{}' schema default (migration 0084),
+// like labels; an empty map is returned defensively.
+func scanProjectSettings(raw []byte) (map[string]json.RawMessage, error) {
+	settings := map[string]json.RawMessage{}
+	if len(raw) == 0 {
+		return settings, nil
+	}
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		return nil, fmt.Errorf("unmarshal settings: %w", err)
+	}
+	return settings, nil
+}
+
 // CreateProject registers a new project with the given immutable key.
 func (s *Store) CreateProject(ctx context.Context, id, name, key string) error {
 	_, err := s.db.ExecContext(ctx,
@@ -157,10 +179,10 @@ var projectColumnsP = qualifyColumns(projectColumns, "p")
 // scanProject reads one row selected with projectColumns.
 func scanProject(row rowScanner) (*Project, error) {
 	var p Project
-	var focus, labels []byte
+	var focus, labels, settings []byte
 	var ext projectExtras
 	dest := append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)
-	dest = append(dest, &labels, &p.Horizon)
+	dest = append(dest, &labels, &p.Horizon, &settings)
 	if err := row.Scan(dest...); err != nil {
 		return nil, err
 	}
@@ -174,6 +196,11 @@ func scanProject(row rowScanner) (*Project, error) {
 		return nil, fmt.Errorf("project %s labels: %w", p.ID, err)
 	}
 	p.Labels = l
+	st, err := scanProjectSettings(settings)
+	if err != nil {
+		return nil, fmt.Errorf("project %s settings: %w", p.ID, err)
+	}
+	p.Settings = st
 	ext.apply(&p)
 	return &p, nil
 }

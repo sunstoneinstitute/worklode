@@ -28,6 +28,11 @@ func TestDocSelectorFromValid(t *testing.T) {
 		"bare_superseded with kind=adr":            "bare_superseded=true&kind=adr",
 		"bare_superseded restates status":          "bare_superseded=true&status=superseded",
 		"no selector at all":                       "kind=plan&status=draft",
+		// status=all names no status (increment 3 S5's terminal-plan
+		// widener), so it is not a contradiction of a derived selector's
+		// implied status — the CLI's checkDocSelectors treats it the same
+		// way (internal/cmd/doc_test.go's TestCheckDocSelectorsAllowsStatusAll).
+		"needs_planning with status=all": "needs_planning=true&status=all",
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "/api/v1/docs?"+query, nil)

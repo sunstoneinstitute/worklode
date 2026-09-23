@@ -46,7 +46,7 @@ Documents are Postgres rows wrapped in the same event-logged transactions as tas
 | `doc_sections` | anchor, heading, depth, `last_revised_in`. Specs only |
 | `clauses` | one design clause per anchored section of a spec or ADR: project, `number` (the `WL-CL-<n>` ref, from `project_entity_seq` kind `CL`), status, current version, `owner`, `tags` |
 | `clause_versions` | `(clause_id, version)` primary key, `heading`, `body`. A draft version is rewritten in place; an accepted version's text never changes |
-| `doc_clauses` | the document's current arrangement: `(doc_id, position)`, `clause_id`, `clause_version`, `depth`, `anchor`. Rewritten with `doc_sections` on every body write |
+| `doc_clauses` | the document's current arrangement. A spec or ADR arranges its own clauses; a plan arranges the clauses its `covers` entries reach, rewritten on every plan body write and again at accept (S16): `(doc_id, position)`, `clause_id`, `clause_version`, `depth`, `anchor`. Rewritten with `doc_sections` on every body write |
 | `clause_edges` | `(from_clause, to_clause, type)` primary key, `source` (`manual` or `derived`): the typed edges between clauses, `refines`, `constrains`, `conflictsWith` and `references` (12-spec-refactoring-design-tree.md S12, S26) |
 | `task_governed_by` | `(task_id, clause_id)`, `clause_version`, `source` (`plan` or `manual`): the clauses governing a task (03-tasks-and-execution.md §4), `pinned_version` when the link is pinned (12-spec-refactoring-design-tree.md S10) |
 | `doc_edges` | `covers`, `defers`, `implements`, `amends`, `replaces`, `requires`, `blocks`, section-scoped where an end is a section. `declared_by` records which document typed the key. Unresolvable targets stored verbatim in `to_external` |
@@ -87,6 +87,8 @@ What one class buys:
 No `wl:fullyImplements` or `wl:partiallyImplements` exists. Declared coverage goes stale. Derived coverage cannot.
 
 **Every anchored section is a design clause** (12-spec-refactoring-design-tree.md S8 to S11, S20). The store mints a clause the first time a section appears, numbered from the project's `CL` counter as `WL-CL-<n>`, and records the section's heading and body as version 1. On each later write, the store matches sections to the clauses the document already arranged in three passes over the whole document, each clause claimed once: first anchor and heading both match, then heading alone, then anchor alone. Changed text rewrites the clause's newest version while that version is a draft, and becomes the next version, itself a draft, once the newest version is accepted; a section matching nothing becomes a new clause (12-spec-refactoring-design-tree.md S35). The anchor-only pass keeps a renamed section on its clause, and it also keeps a section that was deleted and replaced at the same anchor in one write on the old clause as a new version; withdrawing a clause explicitly is later work (12-spec-refactoring-design-tree.md S33). Accepting a document accepts every draft clause it arranges and writes nothing else. `lode show WL-CL-<n>` and `GET /api/v1/clauses/WL-CL-<n>` read a clause with its current text and the documents arranging it. Tasks link to clauses through `governedBy` (03-tasks-and-execution.md §4). A clause can also be edited directly: `PUT /api/v1/clauses/WL-CL-<n>` and `lode clause edit WL-CL-<n> --file <body> [--heading <text>]` take the new heading and body, regenerate the arranging document's body with that one section changed, and write it through the document's own path, so the body stays an exact reassembly of its clauses; the submitted body is normalised to what the parser would have produced for it, starting on the line after the heading and ending in a newline, with a blank line before the next heading when one follows. On a draft document the clause's draft version is rewritten in place. On an accepted document the write goes to the candidate revision, opened if none is open, and the clause's next version appears when the revision lands with `lode doc revise --accept`. A clause arranged in no document, or in more than one, refuses the edit in this stage. `GET /api/v1/clauses/WL-CL-<n>/versions`, `/versions/<v>`, `lode clause versions` and `lode show WL-CL-<n> --version <v>` read the history. Shared clauses across documents and the migration of the old specs are later work. A clause relates to other clauses through typed edges written by an architect (`refines`, `constrains`, `conflictsWith`, `references`; 07-knowledge-graph-and-search.md §2) over `POST`/`DELETE /api/v1/clauses/{id}/edges` and through `references` edges the store derives from the clause text on every version: each `WL-CL-<n>` ref and each `<PROJECTKEY>-<TYPE>-<n>#sec-<a>` ref (`SPEC`, `ADR` or `PLAN`) that resolves to a clause becomes an edge, the derived set replaces the previous one, and a ref to the clause itself, to a whole document or to nothing contributes no edge. A clause carries an owner (an actor id) and tags, set over `PATCH /api/v1/clauses/{id}`; dates stay on tasks and milestones (12-spec-refactoring-design-tree.md S15).
+
+**A plan arranges the clauses it covers** (12 S16, S42). Its `covers` entries are resolved to clauses with the walk 03 §4 states and written as its arrangement; the plan's own prose stays prose and mints no clause. Which plans cover a clause is therefore a membership fact read from the arrangement (S25), and the clause detail lists them. The `coverage:` levels and `fullCoverageWith` keep working as they are in this stage; retiring them is later work (S44).
 
 ## 5. Versioning
 
@@ -178,6 +180,7 @@ draft --(lode doc accept, owner only)--> accepted --> superseded
 | `superseded` | document, section | replaced. Stays readable and linkable |
 | `stale` | plan | unexecuted plan covering a section amended in place. Stored, set by the edit path, cleared by re-acceptance |
 | `withdrawn` | document | closed without a successor |
+| `spent` | plan | every minted task has closed. Set by the store, terminal, hidden from the default listing (12 S5) |
 | `patched` | section | approved text modified in place since approval |
 
 `proposed` and `implemented` do not exist. "Under review" is a draft with an open `review` task. Submission is an event with no status column.
@@ -201,6 +204,8 @@ Within a revision sections may be added, reworded or marked superseded. An ancho
 **Edit.** `lode doc edit` changes an accepted document in place. For a plan this is the normal path at any status and bumps the version. For a spec it is allowed only under section 10's rules. A body edit is a compare-and-swap against the version the caller read; a concurrent edit makes it fail rather than overwrite. A plan that has minted tasks refuses an edit that leaves its `## Tasks` section unreadable (section 11).
 
 **Grooming.** An accepted document nothing acts on pollutes every reader's context. The lease sweeper supplies the clock: when an accepted document crosses the staleness threshold (30 days by default, configurable per instance and per project) with no execution against it, it emits `doc.stale` once. The subscriber mints a `design` grooming task: re-evaluate, adjust, or close. Any revision re-arms the clock. A stale accepted document is excluded from `lode task brief` assembly, flagged in `lode doc show`, and flagged where another document `requires` it. The target is 100% resolution: every accepted document shipped or explicitly closed. The number to watch is `lode doc list --unresolved --older-than 30d`.
+
+**Plan lifecycle.** A plan becomes `spent` when its last minted task closes (S5); `withdrawn` and `spent` plans are hidden from `lode doc list` and the cockpit list unless `--status all` or a status is named (S45). A plan whose arranged clause is withdrawn becomes `stale` (S23, S46). Re-planning a stale plan is claimed with `lode work next --replan` (S28, S47).
 
 ## 10. In-place amendment and the escalation ladder
 
@@ -233,6 +238,8 @@ A `patched` section leaves the document `accepted`. `lode doc show` and `lode ta
 **Tier routing.** `lode work next --kind <list>` filters the claim by kind. Mechanical loops run `feature,bug,chore`. High-tier loops run `design,spike,review`. Without it an escalated task is claimed by the loop that could not resolve it.
 
 ## 11. Plans
+
+**Token budget.** A plan body is measured against a token budget (S19): the server's soft and hard values come from `LODE_PLAN_TOKENS_SOFT` and `LODE_PLAN_TOKENS_HARD`, a project may override either under `plan_tokens_soft` and `plan_tokens_hard` in its settings, a write over the soft budget carries a warning and a write over the hard ceiling is refused (S48, S49).
 
 ### 11.1 The `## Tasks` section
 

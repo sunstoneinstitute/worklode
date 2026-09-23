@@ -1,5 +1,7 @@
 package model
 
+import "encoding/json"
+
 // RepoMapping is a repo mapped to a project, with the terminal delivery state
 // that counts as fully delivered for it (merged, deployed_prod, or released).
 type RepoMapping struct {
@@ -27,7 +29,23 @@ type Project struct {
 	// (migration 0074).
 	Labels  map[string]string `json:"labels"`
 	Horizon string            `json:"horizon"`
+
+	// Settings is the small per-project override set behind the server-side
+	// key allowlist (increment 3 R9, migration 0084) — e.g. plan_tokens_soft
+	// and plan_tokens_hard (S6, S19). Never nil on the wire; an empty object
+	// means no overrides. json.RawMessage per value, not any (ADR 036 §8: an
+	// opaque stored payload passing through, not a shape this package states).
+	Settings map[string]json.RawMessage `json:"settings"`
 }
+
+// ProjectSettingsInput is the request body for PATCH
+// /api/v1/projects/{id}/settings (increment 3 R9): a partial update merged
+// into projects.settings. Each key must be one the server's allowlist
+// accepts (internal/store/projectsettings.go); a null value removes the key.
+// json.RawMessage per value, not any, so a JSON null literal survives
+// decoding distinguishable from an absent key, which the store's
+// null-removes rule depends on.
+type ProjectSettingsInput map[string]json.RawMessage
 
 // ProjectListResponse is the response body of GET /api/v1/projects.
 type ProjectListResponse struct {

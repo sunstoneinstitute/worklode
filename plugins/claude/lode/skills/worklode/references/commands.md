@@ -173,7 +173,7 @@ Flags: --server
 - `lode project repo remove` — Unmap a repo from its project
 - `lode project resolve` — Show which project this directory scopes to, and why
   Flags: --refresh
-- `lode project set` — Set one field on a project: decision, flow, focus, or focus-note
+- `lode project set` — Set one field on a project: decision, flow, focus, focus-note, or settings
 - `lode project set decision` — Set or clear a project's next-decision card (cockpit card)
   Flags: --accountable, --clear, --rests-on, --title
 - `lode project set flow` — Apply an approval flow to a project, backfilling what it demands
@@ -182,6 +182,7 @@ Flags: --server
   Flags: --clear
 - `lode project set focus-note` — Set or clear a project's pinned-focus note (cockpit card)
   Flags: --by, --clear, --note
+- `lode project set settings` — Set or clear project settings (e.g. plan_tokens_soft, plan_tokens_hard)
 - `lode project show` — Show a project's repos, focus, and token cost
   Flags: --days, --project
 
@@ -304,7 +305,7 @@ Flags: --agent, --no-agent, --no-statusline, --no-vcs, --scope, --skills, --stat
 - `lode work listen` — Wait until there is work this worker could claim, then report it
   Flags: --interval, --kind, --once, --project, --repo, --strict-focus
 - `lode work next` — Claim a task (or the top-ranked ready one), set up its worktree, and print its brief
-  Flags: --kind, --project, --repo, --strict-focus
+  Flags: --kind, --project, --replan, --repo, --strict-focus
 - `lode work resume` — Re-acquire the lease on the current (or given) worktree's task
 - `lode work status` — Show the current worktree's task, lease, and session-marker state (read-only)
 - `lode work submit` — Submit the current worktree's task for review and release its lease

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -82,107 +81,17 @@ func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGove
 	return out, rows.Err()
 }
 
-// planClauses is every clause a plan's covers edges reach (S1, S2): a
-// section-scoped edge reaches the clause arranged under that anchor and every
-// clause arranged beneath it (a section is its whole subtree, 026 §3), a
-// document-scoped edge reaches every clause the document arranges. A covered
-// document that has no arrangement yet is split first.
+// planClauses is the plan's arranged clause ids in arrangement order. The
+// arrangement is written by arrangePlan on every plan body write and again
+// at accept (increment 3 R1).
 func planClauses(tx *sql.Tx, planID int64) ([]int64, error) {
-	rows, err := tx.Query(
-		`SELECT to_doc, coalesce(to_anchor, '') FROM doc_edges
-		  WHERE from_doc = $1 AND type = 'covers' AND to_doc IS NOT NULL
-		  ORDER BY to_doc, coalesce(to_anchor, '')`, planID)
+	rows, err := arrangedClauses(tx, planID)
 	if err != nil {
-		return nil, fmt.Errorf("read covers edges of plan %d: %w", planID, err)
-	}
-	type edge struct {
-		doc    int64
-		anchor string
-	}
-	var edges []edge
-	for rows.Next() {
-		var e edge
-		if err := rows.Scan(&e.doc, &e.anchor); err != nil {
-			rows.Close()
-			return nil, fmt.Errorf("scan covers edge of plan %d: %w", planID, err)
-		}
-		edges = append(edges, e)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
-	arrangements := map[int64][]clauseRow{}
-	seen := map[int64]bool{}
-	var out []int64
-	add := func(id int64) {
-		if !seen[id] {
-			seen[id] = true
-			out = append(out, id)
-		}
-	}
-	for _, e := range edges {
-		entries, ok := arrangements[e.doc]
-		if !ok {
-			if err := ensureClauses(tx, e.doc); err != nil {
-				return nil, err
-			}
-			entries, err = arrangedClauses(tx, e.doc)
-			if err != nil {
-				return nil, err
-			}
-			arrangements[e.doc] = entries
-		}
-		if e.anchor == "" {
-			for _, c := range entries {
-				add(c.id)
-			}
-			continue
-		}
-		for i, c := range entries {
-			if c.anchor != e.anchor {
-				continue
-			}
-			add(c.id)
-			for j := i + 1; j < len(entries) && entries[j].depth > c.depth; j++ {
-				add(entries[j].id)
-			}
-			break
-		}
+	out := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.id)
 	}
 	return out, nil
-}
-
-// ensureClauses splits a spec or ADR that predates the clause tables, so a
-// plan covering it can be governed by its clauses. A document written after
-// the tables exist is split on every write and is left alone here. When the
-// document is already accepted, its backfilled clauses are accepted too
-// (S11) — they must not stay draft just because they arrived late.
-func ensureClauses(tx *sql.Tx, docID int64) error {
-	var n int
-	if err := tx.QueryRow(`SELECT count(*) FROM doc_clauses WHERE doc_id = $1`, docID).Scan(&n); err != nil {
-		return fmt.Errorf("count arrangement of doc %d: %w", docID, err)
-	}
-	if n > 0 {
-		return nil
-	}
-	var kind, status, body string
-	if err := tx.QueryRow(`SELECT kind, status, body FROM docs WHERE id = $1`, docID).Scan(&kind, &status, &body); err != nil {
-		return fmt.Errorf("read doc %d: %w", docID, err)
-	}
-	if kind == "plan" {
-		return nil
-	}
-	parsed, err := designdoc.Parse([]byte(body))
-	if err != nil {
-		return fmt.Errorf("parse doc %d: %w", docID, err)
-	}
-	if err := syncClauses(tx, docID, parsed); err != nil {
-		return err
-	}
-	if status == "accepted" {
-		return acceptDocClauses(tx, docID)
-	}
-	return nil
 }
