@@ -580,7 +580,8 @@ var clauseStatuses = map[string]bool{"draft": true, "accepted": true, "supersede
 // acceptance (increment 3 R7). Withdrawing a clause marks every accepted plan
 // arranging it stale (S23): the plan's frozen arrangement names text that no
 // longer holds. Increment 4's split and merge lineage is the caller that
-// withdraws.
+// withdraws. The clause row lock is NO KEY UPDATE so it does not wait on a
+// concurrent Govern's FK KEY SHARE (see resolveSupersede).
 func SetClauseStatus(tx *sql.Tx, now time.Time, clauseID int64, status string, eventID int64) error {
 	if !clauseStatuses[status] {
 		return fmt.Errorf("clause status %q: %w", status, ErrInvalidInput)
@@ -589,7 +590,7 @@ func SetClauseStatus(tx *sql.Tx, now time.Time, clauseID int64, status string, e
 	var number int64
 	err := tx.QueryRow(
 		`SELECT c.status, p.key, c.number FROM clauses c JOIN projects p ON p.id = c.project_id
-		  WHERE c.id = $1 FOR UPDATE`, clauseID).Scan(&old, &key, &number)
+		  WHERE c.id = $1 FOR NO KEY UPDATE OF c`, clauseID).Scan(&old, &key, &number)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("clause %d: %w", clauseID, ErrNotFound)
 	}

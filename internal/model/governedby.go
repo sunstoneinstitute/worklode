@@ -13,6 +13,11 @@ type TaskGovernance struct {
 	Source        string `json:"source"`           // plan | manual
 	Pinned        int    `json:"pinned,omitempty"` // the version the link is pinned to, 0 when it follows the newest
 	URL           string `json:"url"`              // canonical clause page, with /<ver> when pinned (S10, S20)
+
+	// ResolvesTo is the live clauses reached from a withdrawn governing
+	// clause by following supersededBy edges transitively (S22, R8): empty
+	// when the governing clause is live.
+	ResolvesTo []string `json:"resolves_to,omitempty"`
 }
 
 // GovernInput names a clause to add to, or remove from, a task's governing

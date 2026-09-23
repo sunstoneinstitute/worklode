@@ -61,6 +61,7 @@ type storeMetrics struct {
 	escalations           *prometheus.CounterVec
 	gaps                  *prometheus.CounterVec
 	fixes                 *prometheus.CounterVec
+	clauseSupersedes      *prometheus.CounterVec
 	queries               *prometheus.CounterVec
 	querySeconds          *prometheus.CounterVec
 }
@@ -161,6 +162,10 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_task_fixes_total",
 			Help: "fix.started/fix.finished calls by phase (started|finished) and outcome (recorded|replayed|error) — 025 §15.5's funnel.",
 		}, []string{"phase", "outcome"}),
+		clauseSupersedes: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_clause_supersede_total",
+			Help: "Refactor maps (lode clause supersede, S24) by outcome (applied|dry_run|invalid|not_found|error).",
+		}, []string{"outcome"}),
 		// Query counters rather than a histogram: the question these answer
 		// is which store function the database time is going to, and
 		// rate(seconds_total) by func ranks that directly. Distribution
@@ -175,7 +180,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help: "Seconds spent in database queries, by the same pkg and func labels as worklode_store_queries_total. rate() of this ranks store functions by the database time they consume.",
 		}, []string{"pkg", "func"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.queries, m.querySeconds)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.clauseSupersedes, m.queries, m.querySeconds)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// 040 §10 is about the first of those becoming the second.
@@ -240,6 +245,15 @@ func (m *storeMetrics) fix(phase, outcome string) {
 		return
 	}
 	m.fixes.WithLabelValues(phase, outcome).Inc()
+}
+
+// clauseSupersede records one SupersedeClauses call by outcome, the five
+// labels supersedeOutcome returns.
+func (m *storeMetrics) clauseSupersede(outcome string) {
+	if m == nil {
+		return
+	}
+	m.clauseSupersedes.WithLabelValues(outcome).Inc()
 }
 
 func (m *storeMetrics) expire(n int) {

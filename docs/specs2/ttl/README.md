@@ -82,35 +82,62 @@ Clauses: 325 (plus 61 open-question clauses).
 
 ## Supersession residue
 
-23 section-map rows with disposition moved, merged or pointer did not resolve to a clause:
-`new_section` is `-` (no target section named) or `Open questions` (the target is a bullet list, not
-one clause). They need a hand decision.
+23 section-map rows with disposition moved, merged or pointer did not resolve to a clause on their
+own: `new_section` is `-` (no target section named), `Open questions` (the whole Open Questions
+section is one clause, so section-map.tsv could not point at a subsection inside it), or, for one row
+(WL-SPEC-29 sec-6.2), a section number the target document does not have. `docs/specs2/ttl/residue.tsv`
+holds the ruling for each: a preamble row resolves to the new document's first arranged clause, its
+first numbered section (a document's preamble text is never a section and never gets a clause of its
+own); an Open-questions row resolves to the clause the `{#sec-open-questions}` anchor creates, added
+by hand before import (see the runbook below); and the one remaining row resolves to a real numbered
+section.
 
-| old_ref | old_anchor | new_file | new_section | disposition |
-|---|---|---|---|---|
-| WL-SPEC-1 | sec-13 | 02-identity-actors-and-secrets.md | Open questions | merged |
-| WL-SPEC-4 | sec-0 | 03-tasks-and-execution.md | - | merged |
-| WL-SPEC-4 | sec-12 | 03-tasks-and-execution.md | - | merged |
-| WL-SPEC-5 | sec-0 | 03-tasks-and-execution.md | - | merged |
-| WL-SPEC-5 | sec-8 | 03-tasks-and-execution.md | - | merged |
-| WL-SPEC-6 | sec-15 | 07-knowledge-graph-and-search.md | Open questions | merged |
-| WL-SPEC-8 | sec-1 | 09-cli-and-skills.md | - | pointer |
-| WL-SPEC-8 | sec-1 | 01-system-and-deployment.md | - | pointer |
-| WL-SPEC-8 | sec-20 | 08-agent-harness-and-sessions.md | Open questions | moved |
-| WL-SPEC-13 | sec-5 | 08-agent-harness-and-sessions.md | Open questions | moved |
-| WL-SPEC-16 | sec-8 | 09-cli-and-skills.md | Open questions | merged |
-| WL-SPEC-17 | sec-9 | 02-identity-actors-and-secrets.md | Open questions | moved |
-| WL-SPEC-21 | sec-14 | 06-design-queries-intents-decks.md | Open questions | moved |
-| WL-SPEC-21 | sec-15.1 | 06-design-queries-intents-decks.md | Open questions | merged |
-| WL-SPEC-25 | sec-23 | 05-documents.md | - | merged |
-| WL-SPEC-29 | sec-6.2 | 02-identity-actors-and-secrets.md | 13 | pointer |
-| WL-SPEC-29 | sec-9 | 03-tasks-and-execution.md | - | merged |
-| WL-SPEC-32 | sec-0 | 10-cockpit.md | - | merged |
-| WL-SPEC-37 | sec-12 | 09-cli-and-skills.md | Open questions | merged |
-| WL-SPEC-38 | sec-8 | 01-system-and-deployment.md | Open questions | merged |
-| WL-SPEC-40 | sec-12 | 07-knowledge-graph-and-search.md | Open questions | merged |
-| WL-SPEC-56 | sec-0 | 10-cockpit.md | - | merged |
-| WL-SPEC-70 | sec-8 | 06-design-queries-intents-decks.md | Open questions | moved |
+## Migrate the old specs
+
+This turns `docs/specs2/section-map.tsv` and `residue.tsv` into a map for `lode clause supersede`,
+which records every old backbone section as withdrawn and links it to its successor clauses in the
+11 new documents. `scripts/supersession_map.py` generates the map; it does not run it.
+
+The 11 new documents are not in the backbone yet. This section is the runbook for the architect who
+imports them and runs the migration. **Nobody has done this yet.** Everything below is the plan for
+that run, written ahead of it.
+
+1. Before import, add `{#sec-open-questions}` by hand to the `## Open questions` heading of each
+   `docs/specs2/` file that has one. The store only makes a clause from an anchored section
+   (`internal/store/clauses.go` `syncClauses` skips a section with no anchor) and the renumber tooling
+   anchors only numbered headings (`internal/designdoc/renumber.go`), so `## Open questions` would
+   otherwise get no anchor and no clause. `sec-open-questions` fits the anchor grammar
+   (`^sec-[a-z0-9][a-z0-9.-]*$`, `internal/designdoc/lint.go` `ValidAnchor`); check it with `lode doc
+   lint <file>` before import. Then import the 11 documents with `lode doc add`, one per file in
+   `docs/specs2/`, and assign section anchors with the repo's renumber tooling so each document's
+   numbered sections carry `{#sec-N}` anchors that match the numbers `section-map.tsv` already uses.
+2. Write `refs.json`: for each imported document, its file stem (`02-identity-actors-and-secrets`)
+   mapped to the backbone ref `lode doc list --kind spec --json` gives it (`WL-SPEC-80`).
+3. Write `anchors.json`: for each document, its file stem mapped to `{"preamble": "sec-N",
+   "open-questions": "sec-open-questions"}`, read from `lode doc show <ref> --json`. A document's
+   preamble, the text before its first `##` heading, is never a section and never gets a clause of its
+   own, so `preamble` is always the anchor of the document's first arranged clause, its first numbered
+   section. `open-questions` is the anchor added by hand in step 1.
+4. Generate the map:
+   ```
+   scripts/supersession_map.py --section-map docs/specs2/section-map.tsv \
+       --residue docs/specs2/ttl/residue.tsv --refs refs.json --anchors anchors.json > map.txt
+   ```
+   `lode clause supersede --map` applies the whole map in one transaction and refuses it on any
+   unresolvable old ref. One row's old_anchor is a note, not a real section anchor (`§2 (line 106)`,
+   WL-SPEC-62), so the generator turns it into a `# skipped` comment instead of a map entry, and
+   prints a one-line count to stderr. That row needs a hand decision separately; it is not part of
+   this map.
+5. `lode clause supersede --map map.txt --dry-run` and check the counts before writing anything:
+   - 657 old sections, one line each, plus the one skipped comment line.
+   - 113 of those lines withdraw with no successor (the dropped-history, dropped-other and
+     dropped-stale rows, minus the one skipped row).
+   - 553 successor edges across the remaining 544 lines: 524 from the section map's own numbered
+     targets, 23 from the residue rulings, and 6 more because a handful of rows name more than one
+     target section (a comma list or a same-major range like `8.1-8.4`) and each target becomes its
+     own successor.
+6. Run it again without `--dry-run`. The run holds the project's clause counter until it commits, so
+   run it in a window when nobody else is editing documents in that project.
 
 ## Known ugliness
 
