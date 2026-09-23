@@ -99,9 +99,11 @@ Behaviours the implementation increments fixed that the rounds above did not nam
 - S47 (S28 applied): `lode work next --replan [ref]` claims the open design task about the stale plan, or mints one when none is open. The doc-lifecycle rule of 025 §8.7 still mints one re-planning task when a plan goes stale, so S28's "never minted automatically" is not yet true; removing that rule is later work.
 - S48 (S19 applied): the token estimate is the rune count times four sevenths, the inverse of the chunk budget's ratio, so the two budgets agree on what a token is.
 - S49 (S6 applied): per-project settings are one JSONB column behind a server-side key allowlist; the plan budget keys, `plan_tokens_soft` and `plan_tokens_hard`, are the first two. The server refuses a settings write that leaves `plan_tokens_soft` above `plan_tokens_hard`. Other increments add keys, never columns.
-
-S50 to S54 are recorded on the sibling increment 4a's own branch.
-
+- S50 (S30 applied): `lode gate check` validates the trailer's form and the closed `none` list offline against the repo config and the diff. Resolving the cited clause is the reconciler's job on the server. A well-formed trailer naming a clause that does not exist passes CI and is counted as `unknown_target` on the server.
+- S51 (S4 applied): the gate is the third writer of governing links, `source = 'gate'`. It writes only when the task carries no `source = 'plan'` link, it is idempotent, and nothing removes a gate link automatically.
+- S52 (S30 transition): section refs `WL-SPEC-4 sec-5` are accepted everywhere until the per-project settings of the plan lifecycle increment land; the switch is then the key `gate_trailer_sections`.
+- S53 (S29 applied): the `[gate]` table is decoded by the `internal/gate` package with the TOML library the module already carries. The key=value parser in `internal/cli` skips TOML tables so every other `lode` command works in a gated repository.
+- S54 (S29 applied): CI runs `lode gate check` on `pull_request` events only, and the job exits 0 when the repository has no `[gate]` table. Worklode's own configuration enables the gate separately, once the trailer habit exists.
 - S55 (S22, S27 applied): every clause on a refactor map's left side becomes `withdrawn`, whether or not it names a successor. A2 and S27 already call for `withdrawn`, and S22's merge makes the absorbed clause `supersededBy` its survivor with no live continuation of its own. The `superseded` clause status stays unused by this increment. The S23 stale trigger fires on `withdrawn` only, so a plan arranging a refactored clause goes stale with no new code needed.
 - S56 (S22 applied): the refactor primitive does not edit clause text. A split is an ordinary document edit that narrows A and mints the new clause B, followed by `lode clause link WL-CL-B --derived-from WL-CL-A`. A merge is a document edit of A that absorbs B's text plus `lode clause supersede WL-CL-B -> WL-CL-A`. There is no `split` or `merge` verb.
 - S57 (S22 applied): `supersededBy` has one writer. `LinkClauses` refuses a `supersededBy` edge, naming `lode clause supersede`, and `UnlinkClauses` refuses to remove a `refactor`-sourced edge; a refactor is undone only by a later refactor. `wasDerivedFrom` is an ordinary manual edge with no such restriction.
@@ -351,5 +353,5 @@ The clause model solves spec sprawl and will meet its own sprawl. Each risk is p
 
 ## Frontier
 
-Empty after round 6. Every branch of the tree is settled (S1 to S30, with S31 to S62 recorded from implementation; S50 to S54 are the sibling increment 4a's, recorded on its own branch), with three actions recorded (A1 to A3) and one flagged assumption: S8, the clause unit is the lowest heading unit, which drew no objection. Nothing is acted on until you confirm this is a shared understanding; a Finish Review with no comments is that confirmation.
+Empty after round 6. Every branch of the tree is settled (S1 to S30, with S31 to S62 recorded from implementation), with three actions recorded (A1 to A3) and one flagged assumption: S8, the clause unit is the lowest heading unit, which drew no objection. Nothing is acted on until you confirm this is a shared understanding; a Finish Review with no comments is that confirmation.
 

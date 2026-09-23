@@ -32,8 +32,9 @@ import (
 //
 // It is loaded from ~/.config/worklode/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
-// assignment per line, blank lines and lines starting with '#' ignored. The
-// recognized keys are "server", "current_project", "project_key",
+// assignment per line, blank lines and lines starting with '#' ignored.
+// Tables such as `[gate]` are skipped here and read by their own package.
+// The recognized keys are "server", "current_project", "project_key",
 // "worktree_dir", and "ref_links", e.g.:
 //
 //	server = "https://wl.example.com"
@@ -377,9 +378,19 @@ func loadConfigFrom(startDir string) (Config, error) {
 // parseConfig parses the config.toml format described on Config.
 func parseConfig(data string) (Config, error) {
 	var cfg Config
+	inTable := false
 	for i, line := range strings.Split(data, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			// A TOML table. The keys this parser knows are all top-level;
+			// tables belong to other readers (internal/gate reads [gate]).
+			inTable = true
+			continue
+		}
+		if inTable {
 			continue
 		}
 		key, val, ok := strings.Cut(line, "=")

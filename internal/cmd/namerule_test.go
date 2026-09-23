@@ -13,7 +13,8 @@ import (
 var (
 	l1Entities = map[string]bool{ // L1: exactly what the backbone models, singular
 		"actor": true, "approval": true, "blob": true, "channel": true,
-		"clause": true, "decision": true, "deliverable": true, "doc": true, "event": true, "graph": true,
+		"clause": true, "decision": true, "deliverable": true, "doc": true, "event": true,
+		"gate": true, "graph": true,
 		"inbox": true, "milestone": true, "project": true, "secret": true,
 		"skill": true, "task": true, "token": true,
 	}
@@ -58,7 +59,7 @@ var l3DomainActions = map[string]bool{
 	"attach": true, "detach": true, "assign": true, "block": true, "govern": true,
 	"parent": true, "duplicate": true, "request": true, "pack": true,
 	"note": true, "escalate": true, "gap": true, "fix": true,
-	"withdraw": true, "report": true,
+	"withdraw": true, "report": true, "check": true,
 	"supersede": true, // lode clause supersede: the refactor primitive (S24)
 }
 

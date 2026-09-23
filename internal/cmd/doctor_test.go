@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -75,6 +77,43 @@ func TestDoctorHealthySetup(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("doctor output missing %q check:\n%s", want, out)
 		}
+	}
+}
+
+// gateCheckIn runs runDoctorChecks from dir and returns the gate entry, or
+// fails the test if none is present.
+func gateCheckIn(t *testing.T, dir string) doctorCheck {
+	t.Helper()
+	for _, c := range runDoctorChecks(context.Background(), dir) {
+		if c.Name == "gate" {
+			return c
+		}
+	}
+	t.Fatal("no gate check in report")
+	return doctorCheck{}
+}
+
+// TestDoctorGateCheck runs the gate check on its own, out of runDoctorChecks
+// directly, since it needs only a [gate] table and none of the other checks'
+// server state. It runs from a subdirectory of the repo, not the repo root
+// itself, because gate.Load takes a repo root rather than walking up to find
+// one the way cli.LoadConfig (checks 1-4) does. A bug here would read as a
+// false "not enabled" from anywhere but the root.
+func TestDoctorGateCheck(t *testing.T) {
+	repo := setupRepoConfig(t, "demo")
+	repo = initGitRepoInDir(t, repo)
+	content := "current_project = \"demo\"\n\n[gate]\npaths = [\"internal/cmd/**\"]\n"
+	if err := os.WriteFile(filepath.Join(repo, ".worklode", "config.toml"), []byte(content), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	sub := filepath.Join(repo, "internal", "cmd")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir subdir: %v", err)
+	}
+
+	c := gateCheckIn(t, sub)
+	if !c.OK || c.Skipped {
+		t.Fatalf("gate check from a subdirectory should be OK and not skipped: %+v", c)
 	}
 }
 

@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
 
 // governingNumbers reads the CL numbers governing a task, in order.
@@ -359,4 +362,128 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestGovernGateLeavesExistingLinkUntouched: a gate write on a clause an
+// architect already governed manually with a pin must not touch that link
+// (12-spec-refactoring-design-tree.md S51 — the gate only adds links).
+func TestGovernGateLeavesExistingLinkUntouched(t *testing.T) {
+	s := openDocStore(t)
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, d.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	now := s.Now()
+	task := createTask(t, s, now, TaskInput{ProjectID: "p1", Title: "t", Kind: "feature", Priority: "medium", CreatedBy: "stig"})
+	ctx := context.Background()
+	id := clauseID(t, s, "P1", 3)
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return Govern(tx, task.ID, id, "manual", true) }); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return Govern(tx, task.ID, id, "gate", false) }); err != nil {
+		t.Fatal(err)
+	}
+	g, err := s.GovernedBy(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g) != 1 || g[0].Pinned != 1 || g[0].Source != "manual" {
+		t.Errorf("gate write must leave existing link untouched: %+v", g)
+	}
+}
+
+// TestClauseAtSection: a section ref resolves to the clause arranged at that
+// anchor, and an unknown anchor is ErrNotFound (S51's unknown_target case).
+func TestClauseAtSection(t *testing.T) {
+	s := openDocStore(t)
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	sh, ok := designdoc.ParseShorthand(fmt.Sprintf("P1-SPEC-%d", d.Number))
+	if !ok {
+		t.Fatalf("shorthand did not parse for doc number %d", d.Number)
+	}
+	var got int64
+	err := s.Tx(context.Background(), func(tx *sql.Tx) error {
+		var err error
+		got, err = ClauseAtSection(tx, designdoc.SectionRef{Shorthand: sh, Anchor: "sec-1.1"})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	arr := arrangementOf(t, s, d.ID)
+	if arr[1].Anchor != "sec-1.1" {
+		t.Fatalf("fixture drift: %+v", arr)
+	}
+	var want int64
+	if err := s.db.QueryRowContext(context.Background(),
+		`SELECT id FROM clauses WHERE number = $1`, arr[1].Number).Scan(&want); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("ClauseAtSection = %d, want clause %d at sec-1.1", got, want)
+	}
+
+	err = s.Tx(context.Background(), func(tx *sql.Tx) error {
+		_, err := ClauseAtSection(tx, designdoc.SectionRef{Shorthand: sh, Anchor: "sec-9"})
+		return err
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown anchor: err = %v, want ErrNotFound", err)
+	}
+
+	err = s.Tx(context.Background(), func(tx *sql.Tx) error {
+		_, err := ClauseAtSection(tx, designdoc.SectionRef{Shorthand: designdoc.Shorthand{Key: "P1", Type: "SPEC", Number: 999}, Anchor: "sec-1"})
+		return err
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown document: err = %v, want ErrNotFound", err)
+	}
+
+	err = s.Tx(context.Background(), func(tx *sql.Tx) error {
+		_, err := ClauseAtSection(tx, designdoc.SectionRef{Shorthand: designdoc.Shorthand{Key: "NOPE", Type: "SPEC", Number: 1}, Anchor: "sec-1"})
+		return err
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown project: err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestHasPlanGovernance: only a link with source = 'plan' counts, which is
+// what tells the gate whether a task already has plan governance (S51).
+func TestHasPlanGovernance(t *testing.T) {
+	s := openDocStore(t)
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	now := s.Now()
+	task := createTask(t, s, now, TaskInput{ProjectID: "p1", Title: "planless", Body: "b", Priority: "medium", Kind: "feature", CreatedBy: "stig"})
+	var clauseID int64
+	if err := s.db.QueryRowContext(context.Background(),
+		`SELECT clause_id FROM doc_clauses WHERE doc_id = $1 AND position = 0`, d.ID).Scan(&clauseID); err != nil {
+		t.Fatal(err)
+	}
+	check := func(want bool, after string) {
+		t.Helper()
+		var got bool
+		if err := s.Tx(context.Background(), func(tx *sql.Tx) error {
+			var err error
+			got, err = HasPlanGovernance(tx, task.ID)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("HasPlanGovernance after %s = %v, want %v", after, got, want)
+		}
+	}
+	check(false, "creation")
+	if err := s.Tx(context.Background(), func(tx *sql.Tx) error { return Govern(tx, task.ID, clauseID, "gate", false) }); err != nil {
+		t.Fatal(err)
+	}
+	check(false, "a gate link")
+	if err := s.Tx(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE task_governed_by SET source = 'plan' WHERE task_id = $1`, task.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	check(true, "a plan link")
 }
