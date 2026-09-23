@@ -24,7 +24,7 @@ func TestTaskPageLinksBareTaskIDs(t *testing.T) {
 		"body": "Follows WL-1, encoded UTF-8, and ZZQ-3 is nobody's project.",
 	})
 
-	page := doReq(t, h, "GET", "/tasks/WL-2", "", nil).Body.String()
+	page := getCanonical(t, h, "/tasks/WL-2").Body.String()
 	if !strings.Contains(page, `href="/tasks/WL-1"`) {
 		t.Errorf("bare task id not autolinked:\n%s", page)
 	}

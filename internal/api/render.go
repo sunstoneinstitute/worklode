@@ -535,7 +535,7 @@ func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 		if d.Number != 0 {
 			ref = docWebRef(d, projectKeys[d.Project])
 		}
-		url := docCanonicalURL(d, projectKeys[d.Project])
+		url := docCanonicalURL(d)
 		v.Docs = append(v.Docs, ui.DocRow{Doc: d, URL: url, Ref: ref})
 	}
 	return v
@@ -607,8 +607,8 @@ func docReviewerRows(d model.Doc) []ui.DocReviewerRow {
 // needed only to build DocURL's shorthand form when doc carries a number.
 // ver is the version rendered, current when its number matches doc's live
 // version.
-func docVersionView(md *mdrender.Cache, keys mdrender.ProjectKeys, doc model.Doc, ver model.DocVersion, projectKey string) ui.DocVersionView {
-	docURL := docCanonicalURL(doc, projectKey)
+func docVersionView(md *mdrender.Cache, keys mdrender.ProjectKeys, doc model.Doc, ver model.DocVersion) ui.DocVersionView {
+	docURL := docCanonicalURL(doc)
 	return ui.DocVersionView{
 		Page:     ui.PageProps{Title: "worklode: " + doc.Slug + " v" + strconv.Itoa(ver.Version), ActiveGlobal: "knowledge"},
 		Doc:      doc,
@@ -685,14 +685,14 @@ func docRef(d model.Doc) string {
 	return d.Kind + " " + strconv.Itoa(d.Number)
 }
 
-// docCanonicalURL is the one spelling of a document's cockpit URL: the
-// cross-corpus shorthand ("/docs/WL-SPEC-25") when the document carries a
+// docCanonicalURL is the one spelling of a document's cockpit URL: the S20
+// canonical URL ("/projects/worklode/spec/25") when the document carries a
 // number, else the numeric page URL. The docs index, the version page, and
 // the /docs/ref/ redirect all link through it — they must agree or links
 // 404, so the rule lives here alone (WL-347).
-func docCanonicalURL(d model.Doc, projectKey string) string {
+func docCanonicalURL(d model.Doc) string {
 	if d.Number != 0 {
-		return "/docs/" + docWebRef(d, projectKey)
+		return "/projects/" + d.Project + "/" + d.Kind + "/" + strconv.Itoa(d.Number)
 	}
 	return docPageURL(d.ID)
 }

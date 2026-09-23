@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -37,7 +38,7 @@ func TestListDocsTerminalPlans(t *testing.T) {
 	}
 	// The cockpit's /docs page is the other user-facing listing: it hides
 	// terminal plans unless a status is chosen.
-	link := `href="/docs/` + plan.FormatRef() + `"`
+	link := fmt.Sprintf(`href="/projects/proj/plan/%d"`, plan.Number)
 	for path, want := range map[string]bool{"/docs": false, "/docs?status=all": true, "/docs?status=withdrawn": true} {
 		rr := doReq(t, h, "GET", path, "", nil)
 		if rr.Code != http.StatusOK {
