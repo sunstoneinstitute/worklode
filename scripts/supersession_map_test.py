@@ -142,15 +142,16 @@ class BuildMapTest(unittest.TestCase):
 
 
 class RealSectionMapTest(unittest.TestCase):
-    """The 23 residue rows R11 decided, as they actually sit in the real files."""
+    """The 23 residue rows R11 decided plus the two pointer rows the A2 run
+    found, as they actually sit in the real files."""
 
-    def test_finds_exactly_the_23_residue_rows(self):
+    def test_finds_exactly_the_25_residue_rows(self):
         section_rows = sm.read_tsv(SECTION_MAP)
         residue_rows = sm.read_tsv(RESIDUE)
         matches = sm.matched_residue_keys(section_rows, sm.residue_index(residue_rows))
-        self.assertEqual(len(matches), 23)
+        self.assertEqual(len(matches), 25)
         distinct_old_sections = {(m[0], m[1]) for m in matches}
-        self.assertEqual(len(distinct_old_sections), 22)
+        self.assertEqual(len(distinct_old_sections), 24)
         self.assertEqual(sum(1 for m in matches if m[:2] == ("WL-SPEC-8", "sec-1")), 2)
 
 
