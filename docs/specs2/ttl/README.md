@@ -99,8 +99,11 @@ which records every old backbone section as withdrawn and links it to its succes
 11 new documents. `scripts/supersession_map.py` generates the map; it does not run it.
 
 The 11 new documents are not in the backbone yet. This section is the runbook for the architect who
-imports them and runs the migration. **Nobody has done this yet.** Everything below is the plan for
-that run, written ahead of it.
+imports them and runs the migration. It ran on 2026-09-23: the 11 documents are WL-SPEC-72 (11) and
+WL-SPEC-73 to WL-SPEC-82 (01 to 10), and the map withdrew 657 old sections with 553 successor edges.
+Two pointer rows (WL-SPEC-38 sec-4.4, WL-SPEC-64 sec-11) named a section number from the document
+holding the pointer sentence, not the one holding the content; residue.tsv now routes them to the
+content section.
 
 1. Before import, add `{#sec-open-questions}` by hand to the `## Open questions` heading of each
    `docs/specs2/` file that has one. The store only makes a clause from an anchored section
