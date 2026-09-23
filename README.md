@@ -376,6 +376,15 @@ not persist anywhere, so a later session started without it will not
 recognise worktrees created with it set. Set `worktree_dir` in the repo config
 instead for anything durable.
 
+## Plan token budget
+
+A plan document's body is bounded by a token budget the server enforces
+(12 S19): past `LODE_PLAN_TOKENS_SOFT` (default `32000`) `lode doc add` and
+`lode doc edit` print a warning; past `LODE_PLAN_TOKENS_HARD` (default
+`64000`) the write is refused. A project may override either bound with
+`lode project set settings <id> plan_tokens_soft=<n> plan_tokens_hard=<n>`.
+Only plan bodies are measured; specs and ADRs are unaffected.
+
 ## Task secrets
 
 Tasks can declare the credentials their executor needs, by symbolic name,

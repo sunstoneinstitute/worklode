@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -373,11 +374,71 @@ func newProjectRallyCmd() *cobra.Command {
 func newProjectSetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set",
-		Short: "Set one field on a project: decision, flow, focus, or focus-note",
+		Short: "Set one field on a project: decision, flow, focus, focus-note, or settings",
 	}
 	cmd.AddCommand(newProjectSetFocusCmd(), newProjectSetFocusNoteCmd(),
-		newProjectSetDecisionCmd(), newProjectSetFlowCmd())
+		newProjectSetDecisionCmd(), newProjectSetFlowCmd(), newProjectSetSettingsCmd())
 	return cmd
+}
+
+// newProjectSetSettingsCmd is `lode project set settings <id> <key=value>…`:
+// merge a partial update into a project's settings (increment 3 R9), e.g.
+// plan_tokens_soft and plan_tokens_hard (S6, S19). The server's allowlist
+// (internal/store/projectsettings.go) refuses an unknown key or a
+// wrong-shaped value; key= (an empty value) removes that key.
+func newProjectSetSettingsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "settings <id> <key=value>...",
+		ValidArgsFunction: projectKeyAt(0),
+		Short:             "Set or clear project settings (e.g. plan_tokens_soft, plan_tokens_hard)",
+		Args:              cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			patch, err := parseSettingsArgs(args[1:])
+			if err != nil {
+				return err
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			p, raw, err := c.SetProjectSettings(cmd.Context(), args[0], patch)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.ProjectTable(cmd.OutOrStdout(), []model.Project{p})
+			return nil
+		},
+	}
+	return cmd
+}
+
+// parseSettingsArgs turns key=value pairs (lode project set settings) into a
+// settings patch. A value that itself parses as JSON (32000, true, "x") is
+// sent as that JSON value; anything else is sent as a plain string. key=
+// (an empty value) sends null, which the server reads as "remove this key".
+func parseSettingsArgs(pairs []string) (map[string]any, error) {
+	patch := make(map[string]any, len(pairs))
+	for _, p := range pairs {
+		key, value, ok := strings.Cut(p, "=")
+		if !ok || key == "" {
+			return nil, fmt.Errorf("settings must be key=value, got %q", p)
+		}
+		if value == "" {
+			patch[key] = nil
+			continue
+		}
+		var v any
+		if err := json.Unmarshal([]byte(value), &v); err == nil {
+			patch[key] = v
+		} else {
+			patch[key] = value
+		}
+	}
+	return patch, nil
 }
 
 // newProjectSetFlowCmd is `lode project set flow <id> --name <flow>`: stamp

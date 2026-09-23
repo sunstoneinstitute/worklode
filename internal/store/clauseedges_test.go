@@ -172,3 +172,23 @@ func TestDerivedReferencesSameDocument(t *testing.T) {
 		t.Errorf("sec-2 edges: %+v", two.Edges)
 	}
 }
+
+// TestDerivedReferencesSkipPlanArrangement: a section ref naming a plan's
+// anchor derives no edge. The plan's doc_clauses rows borrow the spec's
+// clauses, and resolving through them would point the reference at a clause
+// the text never named (final review M5, increment 3).
+func TestDerivedReferencesSkipPlanArrangement(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	// P1-PLAN-1 arranges P1-CL-1 at sec-1, borrowed from the spec.
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
+	body := "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nSee P1-PLAN-1#sec-1.\n"
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: body, CreatedBy: "stig"})
+	got, err := s.GetClause(context.Background(), "P1", 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Edges) != 0 {
+		t.Errorf("edges through a plan's borrowed arrangement: %+v", got.Edges)
+	}
+}

@@ -535,7 +535,7 @@ func TestFlagValueCompletion(t *testing.T) {
 		want []string
 	}{
 		{"doc add --kind", []string{"doc", "add", "--kind", ""}, docKinds},
-		{"doc list --status", []string{"doc", "list", "--status", ""}, ns.DesignDocStatuses},
+		{"doc list --status", []string{"doc", "list", "--status", ""}, docStatusValues},
 		{"task add --priority", []string{"task", "add", "--priority", ""}, model.TaskPriorities},
 		{"task list --status", []string{"task", "list", "--status", "deployed_"}, []string{"deployed_dev", "deployed_prod"}},
 		{"actor add --kind", []string{"actor", "add", "--kind", ""}, model.ActorKinds},

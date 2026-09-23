@@ -342,6 +342,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(deliverableReportOutcomes, ", ") +
 			"). These are claims, not observations: read them against worklode_probe_reports_total, which counts the states emitters and the prober report. Labels are bounded: the deliverable, the state and the reporter are deliberately not among them.",
 	}, []string{"source", "outcome"})
+	s.planBudgetChecks = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_plan_budget_checks_total",
+		Help: "createDoc/updateDocBody's plan token budget check (S6, S19), by outcome (" +
+			strings.Join(planBudgetCheckOutcomes, ", ") +
+			"). Only plan bodies are checked; a spec or ADR write never contributes a data point. A rising 'refused' share means projects need to split plans sooner, or need a per-project plan_tokens_hard override.",
+	}, []string{"outcome"})
 
 	// The task-body render cache owns its own instruments (WL-222), so it is
 	// built here rather than in NewServer: this is where the registerer is.
@@ -362,7 +368,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.kindAliasUses, s.deletes,
 		s.overviewReads, s.deriveRuns,
 		s.morningBriefRenders, s.briefReviews,
-		s.githubCalls, s.probeReports, s.deliverableReports)
+		s.githubCalls, s.probeReports, s.deliverableReports, s.planBudgetChecks)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -572,6 +578,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		for _, outcome := range deliverableReportOutcomes {
 			s.deliverableReports.WithLabelValues(source, outcome)
 		}
+	}
+	// All three outcomes, so an instance where nobody has written a plan yet
+	// reads as a flat zero rather than as no-data.
+	for _, outcome := range planBudgetCheckOutcomes {
+		s.planBudgetChecks.WithLabelValues(outcome)
 	}
 }
 
@@ -1244,6 +1255,29 @@ func (s *server) observeDeliverableReport(source, outcome string) {
 		return
 	}
 	s.deliverableReports.WithLabelValues(source, outcome).Inc()
+}
+
+// planBudgetCheckOutcomes bounds worklode_plan_budget_checks_total's one
+// label (S6, S19): "ok" is a plan body under the soft budget (or any
+// non-plan write, which checkPlanBudget never measures and so never
+// observes), "warn" is over the soft budget but at or under the hard
+// ceiling, "refused" is over the hard ceiling.
+const (
+	planBudgetCheckOK      = "ok"
+	planBudgetCheckWarn    = "warn"
+	planBudgetCheckRefused = "refused"
+)
+
+var planBudgetCheckOutcomes = []string{planBudgetCheckOK, planBudgetCheckWarn, planBudgetCheckRefused}
+
+// observePlanBudgetCheck records one checkPlanBudget call that actually
+// measured a body (kind == "plan"), by outcome.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observePlanBudgetCheck(outcome string) {
+	if s.planBudgetChecks == nil {
+		return
+	}
+	s.planBudgetChecks.WithLabelValues(outcome).Inc()
 }
 
 // observeEventSubscriberSeek records one successful admin seek of a

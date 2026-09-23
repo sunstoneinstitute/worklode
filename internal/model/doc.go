@@ -61,6 +61,10 @@ type Doc struct {
 	// "who still owes a review on this document" as a query. Same
 	// GetDoc-only population as Reviewers.
 	ReviewersAwaiting []string `json:"reviewers_awaiting,omitempty"`
+	// Warnings are advisories about this write, never stored — e.g. a plan
+	// body over the soft token budget (S6, S19). Set only by the handler
+	// that produced this response; a later read carries none.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // FormatRef builds a document's citable id: <KEY>-<KIND>-<N>, the 025 §14.3

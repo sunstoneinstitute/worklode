@@ -632,6 +632,87 @@ func TestNextNoReadyTask(t *testing.T) {
 	}
 }
 
+// TestNextReplanClaimsStalePlan: `lode work next --replan` claims the design
+// task minted for a stale plan, through the same worktree-setup path an
+// ordinary claim takes.
+func TestNextReplanClaimsStalePlan(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	plan, _, err := c.CreateDoc(ctx, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "stale-plan",
+		Body: "---\nstatus: draft\n---\n# A Plan\n\n## Tasks\n\n### Task 1 — First\n\n" +
+			"```yaml\nkind: chore\n```\n\nDo it.\n",
+	})
+	if err != nil {
+		t.Fatalf("create plan: %v", err)
+	}
+	if _, _, err := c.AcceptDoc(ctx, plan.ID); err != nil {
+		t.Fatalf("accept plan: %v", err)
+	}
+	if _, err := st.DBForTests().ExecContext(ctx,
+		`UPDATE docs SET status = 'stale' WHERE id = $1`, plan.ID); err != nil {
+		t.Fatalf("mark plan stale: %v", err)
+	}
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	out, err := runLode(t, "work", "next", "--replan", "--project", "proj", "--json")
+	if err != nil {
+		t.Fatalf("lode work next --replan: %v\noutput: %s", err, out)
+	}
+	var result struct {
+		Claimed bool   `json:"claimed"`
+		Branch  string `json:"branch"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if !result.Claimed {
+		t.Fatalf("claimed = false, want true")
+	}
+	if !strings.Contains(result.Branch, "re-plan") {
+		t.Fatalf("branch = %q, want it to reflect the minted \"Re-plan ...\" task", result.Branch)
+	}
+}
+
+// TestNextReplanNoStalePlan covers --replan's own not-claimed reason,
+// distinct from the ordinary claim path's "no ready task".
+func TestNextReplanNoStalePlan(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	out, err := runLode(t, "work", "next", "--replan", "--project", "proj")
+	if err != nil {
+		t.Fatalf("lode work next --replan: %v\noutput: %s", err, out)
+	}
+	if strings.TrimSpace(out) != "no stale plan" {
+		t.Fatalf("output = %q, want \"no stale plan\"", out)
+	}
+}
+
+// TestNextReplanRejectsKind pins the --replan/--kind mutual exclusion
+// (requirement: --replan never combines with the ranking filters).
+func TestNextReplanRejectsKind(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	_, err := runLode(t, "work", "next", "--replan", "--kind", "feature")
+	if err == nil {
+		t.Fatal("lode work next --replan --kind: want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "replan") || !strings.Contains(err.Error(), "kind") {
+		t.Fatalf("error = %q, want it to name both flags", err)
+	}
+}
+
 func TestNextRefusesInsideExistingWorktree(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

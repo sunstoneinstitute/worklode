@@ -638,6 +638,18 @@ func TestCheckDocSelectorsAllowsBareSuperseded(t *testing.T) {
 	}
 }
 
+// TestCheckDocSelectorsAllowsStatusAll: --status all names no status, so it
+// is not a contradiction of a derived selector's implied status — the same
+// way the server's docSelectorFrom treats it
+// (internal/api/docs_internal_test.go's "needs_planning with status=all"
+// case). Fix review I3: the two sides must agree on this combination rather
+// than the CLI refusing a request the server accepts.
+func TestCheckDocSelectorsAllowsStatusAll(t *testing.T) {
+	if err := checkDocSelectors("", "all", true, false, false, false); err != nil {
+		t.Fatalf("checkDocSelectors(status=all, needsPlanning=true) = %v, want nil", err)
+	}
+}
+
 // docSpecTwoSections is a spec with two anchored sections, so a plan covering
 // one leaves exactly one planning gap.
 const docSpecTwoSections = `---

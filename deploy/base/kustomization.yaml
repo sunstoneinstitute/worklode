@@ -180,3 +180,5 @@ configMapGenerator:
       - migrations/0082_clauses.down.sql
       - migrations/0083_clause_graph.up.sql
       - migrations/0083_clause_graph.down.sql
+      - migrations/0084_plan_lifecycle.up.sql
+      - migrations/0084_plan_lifecycle.down.sql

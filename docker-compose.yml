@@ -62,6 +62,10 @@ services:
       # data, so a delete does not have to carry a justification.
       LODE_INSTANCE_ENV: ${LODE_INSTANCE_ENV:-dev}
       LODE_BRANCH_TEMPLATE: ${LODE_BRANCH_TEMPLATE:-}
+      # Plan token budget, soft and hard (12 S19). Unset means the server
+      # defaults (32000, 64000).
+      LODE_PLAN_TOKENS_SOFT: ${LODE_PLAN_TOKENS_SOFT:-}
+      LODE_PLAN_TOKENS_HARD: ${LODE_PLAN_TOKENS_HARD:-}
       LODE_SKILL_SOURCES: ${LODE_SKILL_SOURCES:-}
       LODE_EMBEDDING_URL: ${LODE_EMBEDDING_URL:-}
       LODE_EMBEDDING_MODEL: ${LODE_EMBEDDING_MODEL:-}

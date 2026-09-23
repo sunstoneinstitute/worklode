@@ -76,9 +76,9 @@ Actions from round 3:
 - S29 (Q33, scope): the gate is opt-in per project. `.worklode/config.toml` names the guarded paths (`paths` globstar or `regex`) and the required trailer line; `lode doctor` warns when a gated project does not require pull requests. Written into 11 §3. The trailer's target form (clause ref or section ref) is still Q33.
 - S30 (Q33, target): the trailer names a clause, `Spec: WL-CL-456` or `Spec: WL-CL-456 amended`. Spec and section refs are accepted during a transition, switched by a server-side per-project setting (project-bound, so never `.worklode/config.toml`). Written into 11 §4.
 
-## Recorded from increments 1 and 2
+## Recorded from implementation
 
-Behaviours the first implementation fixed that the rounds above did not name. Each is a decision now, kept here so a reader of the code finds its reason.
+Behaviours the implementation increments fixed that the rounds above did not name. Each is a decision now, kept here so a reader of the code finds its reason.
 
 - S31 (S2, S3 applied to a re-accept): a plan's `covers` edges govern only the tasks that accept mints. Re-accepting a plan whose `covers` widened governs the tasks the re-accept mints and leaves every earlier task as it was. Under S3 the architect adds the new clauses to existing tasks by hand, and each addition is an event on the task.
 - S32 (S20 applied to `governedBy`): a clause ref carries its project key and resolves across projects, so a task may be governed by a clause of another project. This is allowed. Platform clauses govern work in the repositories that build on them, and one project key per ref is what makes the link unambiguous.
@@ -91,6 +91,14 @@ Behaviours the first implementation fixed that the rounds above did not name. Ea
 - S39 (S10 applied): a link is pinned at the version current when it is made or not at all; governing the same clause again sets or clears the pin. A pinned link reports the versioned page URL. Re-governing with a pin records the version current at that later time as the pinned version; `clause_version` keeps the version current when the link was first made and never changes on a later govern.
 - S40 (S15 applied): owner is an actor id stored as text with no constraint. Unlike `docs.owner`, which carries an FK to `actors`, `clauses.owner` names no actor row and accepts any string. Tags are free text. Both are set over `PATCH /api/v1/clauses/{id}`.
 - S41 (S17 checked): the clause code keys nothing on project size. One counter per project, one table per fact, no per-project thresholds.
+- S42 (S16 applied): a plan arranges the clauses its `covers` entries reach and mints none of its own; the arrangement is rewritten on every plan body write and again at accept, so a plan accepted after its spec grew governs the current clauses.
+- S43 (S5 applied): a closed plan's tasks each carry a governing link because the store links every ungoverned task of the plan to the plan's arrangement when the plan is withdrawn or spent. This is the minimal form of S3's second writer.
+- S44 (S25 staged): coverage as membership is the arrangement from S42; the `coverage:` levels and `fullCoverageWith` stay in force for their readers (listed in the increment 3 plan) until a plan retires them.
+- S45 (S5 applied): `spent` is set by the store when a plan's last minted task closes; a plan with no minted task never becomes spent. Terminal plans are hidden from the default listings.
+- S46 (S23 applied): `SetClauseStatus` is the one writer of clause status outside acceptance, and withdrawing a clause marks its accepted plans stale with cause `clause_withdrawn`.
+- S47 (S28 applied): `lode work next --replan [ref]` claims the open design task about the stale plan, or mints one when none is open. The doc-lifecycle rule of 025 §8.7 still mints one re-planning task when a plan goes stale, so S28's "never minted automatically" is not yet true; removing that rule is later work.
+- S48 (S19 applied): the token estimate is the rune count times four sevenths, the inverse of the chunk budget's ratio, so the two budgets agree on what a token is.
+- S49 (S6 applied): per-project settings are one JSONB column behind a server-side key allowlist; the plan budget keys, `plan_tokens_soft` and `plan_tokens_hard`, are the first two. The server refuses a settings write that leaves `plan_tokens_soft` above `plan_tokens_hard`. Other increments add keys, never columns.
 
 ## Facts (looked up, not for you to answer)
 
@@ -332,5 +340,5 @@ The clause model solves spec sprawl and will meet its own sprawl. Each risk is p
 
 ## Frontier
 
-Empty after round 6. Every branch of the tree is settled (S1 to S30, with S31 to S36 recorded from the first increment), with three actions recorded (A1 to A3) and one flagged assumption: S8, the clause unit is the lowest heading unit, which drew no objection. Nothing is acted on until you confirm this is a shared understanding; a Finish Review with no comments is that confirmation.
+Empty after round 6. Every branch of the tree is settled (S1 to S30, with S31 to S49 recorded from implementation), with three actions recorded (A1 to A3) and one flagged assumption: S8, the clause unit is the lowest heading unit, which drew no objection. Nothing is acted on until you confirm this is a shared understanding; a Finish Review with no comments is that confirmation.
 
