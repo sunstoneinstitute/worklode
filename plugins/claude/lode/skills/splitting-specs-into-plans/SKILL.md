@@ -132,6 +132,12 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
    of §11's acceptance bullets should claim `coverage: none` or drop the
    section. Claiming a section you cannot prove is the failure this format
    exists to catch.
+7. A plan is bounded by a token budget the server enforces (12 S19): about
+   32,000 tokens is the soft budget, past which `lode doc add` and `lode doc
+   edit` print a warning, and 64,000 is the hard ceiling, past which the
+   write is refused. A project may set `plan_tokens_soft` and
+   `plan_tokens_hard` with `lode project set settings`. Split when the
+   warning appears.
 
 ## 3. Decomposing one part into tasks
 

@@ -120,6 +120,16 @@ type Config struct {
 	// so a typo must not be read as a weaker requirement.
 	ApprovalFlowsDir string `env:"LODE_APPROVAL_FLOWS_DIR"`
 
+	// PlanTokensSoft and PlanTokensHard (LODE_PLAN_TOKENS_SOFT,
+	// LODE_PLAN_TOKENS_HARD) bound a plan document's body (S6, S19): past
+	// the soft budget lode doc add/edit prints a warning, past the hard
+	// ceiling the write is refused. Empty means the planBudget defaults
+	// (32000, 64000). Strings because setEnvTaggedFields fills strings
+	// only; parsed in planBudget. A project's plan_tokens_soft /
+	// plan_tokens_hard setting overrides either bound (planBudgetFor).
+	PlanTokensSoft string `env:"LODE_PLAN_TOKENS_SOFT"`
+	PlanTokensHard string `env:"LODE_PLAN_TOKENS_HARD"`
+
 	// OTLPUpstream is the cluster otel-gateway base URL the ingest route
 	// relays each stored log batch to, and OTLPUpstreamToken the bearer it
 	// presents (spec 071 §3). Both empty disables forwarding, which is the
@@ -341,6 +351,12 @@ type server struct {
 	skillSources     []skillsync.Source
 	skillSyncMu      sync.Mutex
 	skillSyncPending atomic.Bool
+
+	// planSoft and planHard are the instance plan token budget (S6, S19),
+	// parsed from cfg.PlanTokensSoft/PlanTokensHard by planBudget at boot.
+	// A project's plan_tokens_soft/plan_tokens_hard setting overrides either
+	// bound per call (planBudgetFor).
+	planSoft, planHard int
 
 	// flows is the effective approval-flow set, read once at boot from the
 	// embedded defaults plus cfg.ApprovalFlowsDir. Instance configuration, so
@@ -640,6 +656,12 @@ type server struct {
 	// by source (cli, web) and outcome (reported, invalid, not_found, error);
 	// see deliverables.go and observeDeliverableReport.
 	deliverableReports *prometheus.CounterVec
+
+	// planBudgetChecks counts createDoc/updateDocBody's plan token budget
+	// check (S6, S19), by outcome (ok, warn, refused); see planbudget.go and
+	// observePlanBudgetCheck. Only plan bodies are checked, so a spec/ADR
+	// write never contributes a data point.
+	planBudgetChecks *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -864,6 +886,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("DELETE /api/v1/tasks/{id}/governed-by", s.ungovern)
 	r.api("POST /api/v1/tasks/{id}/decompose", s.decomposeTask)
 	r.api("POST /api/v1/tasks/claim-next", s.claimNext)
+	r.api("POST /api/v1/work/replan", s.replan)
 	r.api("POST /api/v1/tasks/{id}/claim", s.claimTask)
 	r.api("POST /api/v1/tasks/{id}/renew", s.renewLease)
 	r.api("POST /api/v1/tasks/{id}/release", s.releaseLease)
@@ -980,6 +1003,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
 	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
+	r.api("PATCH /api/v1/projects/{id}/settings", s.patchProjectSettings)
 	r.api("POST /api/v1/projects/{id}/session-usage", s.reportProjectSessionUsage)
 	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
 	r.api("POST /api/v1/projects/{id}/approval-flow", s.applyApprovalFlow)
@@ -1155,6 +1179,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		return nil, nil, err
 	}
 	s.chunkBudget = budget
+
+	planSoft, planHard, err := planBudget(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.planSoft, s.planHard = planSoft, planHard
 
 	if cfg.QueryEmbeddingURL != "" && cfg.EmbeddingURL == "" {
 		return nil, nil, fmt.Errorf("LODE_QUERY_EMBEDDING_URL requires LODE_EMBEDDING_URL")

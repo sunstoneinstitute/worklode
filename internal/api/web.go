@@ -716,7 +716,11 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 // ListDocs's corpus order — project, kind, number (plans last), slug.
 // Read-only, like the document page below.
 func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
-	docs, err := s.st.ListDocs(r.Context(), docFilterFrom(r))
+	f := docFilterFrom(r)
+	// The page's own default: with no status chosen, withdrawn and spent
+	// plans are hidden; ?status=all shows them (12 S5).
+	f.HideTerminal = !r.URL.Query().Has("status")
+	docs, err := s.st.ListDocs(r.Context(), f)
 	if err != nil {
 		s.webStoreErr(w, err)
 		return

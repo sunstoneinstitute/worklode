@@ -325,14 +325,18 @@ type ClaimNextOpts struct {
 	TTL         time.Duration
 }
 
-// ClaimNextResult reports the outcome of a ClaimNext call. Task and FanOut
-// are set whenever a candidate was found, whether or not it was actually
-// claimed (DryRun, or Claimed). Lease is nil unless a real claim succeeded.
+// ClaimNextResult reports the outcome of a ClaimNext or ReplanNext call.
+// Task and FanOut are set whenever a candidate was found, whether or not it
+// was actually claimed (DryRun, or Claimed). Lease is nil unless a real
+// claim succeeded. Reason names why nothing was claimed when Task is also
+// nil; ClaimNext leaves it "" (its caller supplies the standard
+// "no-ready-task" wire reason), and ReplanNext sets it (replan.go).
 type ClaimNextResult struct {
 	Claimed bool
 	Task    *model.Task
 	FanOut  int
 	Lease   *Lease
+	Reason  string
 }
 
 // ClaimNext ranks the ready set (rankedFrontier — the same pipeline Frontier
@@ -373,11 +377,22 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 			s.metrics.claim("claim_next", "error")
 			return nil, err
 		}
-		task := t
 		s.metrics.claim("claim_next", "ok")
-		return &ClaimNextResult{Claimed: true, Task: &task, FanOut: fanOut[t.ID], Lease: lease}, nil
+		return s.claimNextResultFor(ctx, t.ID, fanOut[t.ID], lease)
 	}
 	// Every candidate lost its race; reported as none, same as an empty ready set.
 	s.metrics.claim("claim_next", "none")
 	return &ClaimNextResult{Claimed: false}, nil
+}
+
+// claimNextResultFor builds the claimed ClaimNextResult for taskID: the
+// shape both ClaimNext (from its ranked candidate) and ReplanNext
+// (replan.go, from a reused or freshly minted design task) return once
+// their Claim call succeeds.
+func (s *Store) claimNextResultFor(ctx context.Context, taskID string, fanOut int, lease *Lease) (*ClaimNextResult, error) {
+	t, err := s.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	return &ClaimNextResult{Claimed: true, Task: t, FanOut: fanOut, Lease: lease}, nil
 }

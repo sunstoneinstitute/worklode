@@ -39,17 +39,17 @@ Twenty-four top-level commands and four shortcuts. The first table is every comm
 | `clause` | L1 | `edit`, `link`/`unlink`, `set owner`, `set tags`; view `versions`. Reading one is `lode show WL-CL-<n> [--version <v>]` |
 | `decision` | L1 | `add`, `edit`, `list`, `resolve`, `show` (addressed as `<task>/<key>`) |
 | `deliverable` | L1 | `add`, `list`, `report <deliverable> <state>` (ids `<KEY>-DEL-<n>`) |
-| `doc` | L1 | `add`, `show`, `list`, `edit`, `revise`, `submit`, `accept`, `withdraw`, `note`, `lint`, `import`, `transfer`, `delete`/`undelete`, `set reviewers`; views `progress`, `referrers`, `reviewers`, `sections`, `todo`, `versions` |
+| `doc` | L1 | `add`, `show`, `list [--status all]`, `edit`, `revise`, `submit`, `accept`, `withdraw`, `note`, `lint`, `import`, `transfer`, `delete`/`undelete`, `set reviewers`; views `progress`, `referrers`, `reviewers`, `sections`, `todo`, `versions` |
 | `event` | L1 | `tail [--follow]`, `seek`; view `subscribers` |
 | `graph` | L1 | `derive`; views `drift`, `gaps`, `quarantines`, `triples` |
 | `inbox` | L1 | `list`, `import`, `link`, `promote`, `dismiss` |
 | `milestone` | L1 | `add`, `list`, `delete`, `attach`/`detach` |
-| `project` | L1 | `add`, `show`, `list`, `resolve [--refresh]`, `set decision`, `set flow`, `set focus [--clear]`, `set focus-note`; nested groups `crew add/remove`, `repo add/edit/remove`; views `overview`, `health`, `focus`, `rally`, `crew` |
+| `project` | L1 | `add`, `show`, `list`, `resolve [--refresh]`, `set decision`, `set flow`, `set focus [--clear]`, `set focus-note`, `set settings`; nested groups `crew add/remove`, `repo add/edit/remove`; views `overview`, `health`, `focus`, `rally`, `crew` |
 | `secret` | L1 | `exec`, `purge`, `pack` (hidden); views `catalog`, `status` |
 | `skill` | L1 | `list`, `install <name>[@<hash>]`, `recommend`, `sync` |
 | `task` | L1 | `add`, `show`, `list`, `edit`, `publish`, `set state`, `set skills`, `set checklist`, `claim`, `release`, `renew`, `submit`, `abandon`, `reopen`, `rework`, `start`, `stop`, `block`/`unblock`, `govern [--pin]`/`ungovern`, `assign`/`unassign`, `parent`/`unparent`, `duplicate`/`unduplicate`, `follow-up`/`unfollow-up`, `attach`/`detach`, `delete`/`undelete`, `decompose`, `instruct`, `escalate`, `gap`, `fix`, `reconcile`; views `blockers`, `board`, `brief`, `checklist`, `cost`, `critical-path`, `frontier`, `skills`, `timeline`, `tree` |
 | `token` | L1 | `add [--task <id>]`, `revoke` |
-| `work` | L8 | `next`, `resume`, `submit`, `block`, `status`, `listen` |
+| `work` | L8 | `next [--replan]`, `resume`, `submit`, `block`, `status`, `listen` |
 | `show`, `search` | L7 | |
 | `doctor`, `install`, `uninstall`, `login`, `logout` | L2 | |
 | `board`, `next`, `overview`, `status` | L9 | |

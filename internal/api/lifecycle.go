@@ -161,8 +161,22 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.writeClaimNextResult(w, r, res, req.DryRun, "no-ready-task")
+}
+
+// writeClaimNextResult converts a store.ClaimNextResult to the wire
+// model.ClaimNextResponse and writes it — the one conversion claimNext and
+// replan (replan.go) both end in, so a replanned claim renders exactly like
+// an ordinary one. notClaimedReason is the wire reason for a not-claimed
+// result that carries none of its own (res.Reason takes priority: ClaimNext
+// never sets it, ReplanNext always does on its not-claimed path).
+func (s *server) writeClaimNextResult(w http.ResponseWriter, r *http.Request, res *store.ClaimNextResult, dryRun bool, notClaimedReason string) {
 	if !res.Claimed && res.Task == nil {
-		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, Reason: "no-ready-task"})
+		reason := res.Reason
+		if reason == "" {
+			reason = notClaimedReason
+		}
+		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, Reason: reason})
 		return
 	}
 	// Same 025 §8.6 flag claimTask carries, on the pick rather than the
@@ -173,7 +187,7 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	if req.DryRun {
+	if dryRun {
 		pick := s.toTaskPickJSON(res.Task, res.FanOut, nil)
 		pick.StalePlan = stalePlan
 		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, DryRun: true, Task: &pick})

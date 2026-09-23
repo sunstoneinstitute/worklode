@@ -58,7 +58,7 @@ func patchAndGroom(t *testing.T, s *Store, in DocPatchInput) (*model.DocPatchRes
 				return err
 			}
 			res = p
-			marked, err = MarkPlansStale(tx, s.Now(), p.UnexecutedCoveringPlans, d.Slug, p.ChangedAnchors, eventID)
+			marked, err = MarkPlansStale(tx, s.Now(), p.UnexecutedCoveringPlans, "amended", d.Slug, p.ChangedAnchors, eventID)
 			return err
 		})
 	return res, marked, err
@@ -190,7 +190,7 @@ func TestPatchMarksUnexecutedPlansStale(t *testing.T) {
 	// version again, MarkPlansStale records nothing and marks nothing.
 	setDocStatus(t, s, plan.ID, "accepted")
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
-		n, err := MarkPlansStale(tx, s.Now(), []int64{plan.ID}, "210-a", []string{"sec-2"}, 0)
+		n, err := MarkPlansStale(tx, s.Now(), []int64{plan.ID}, "amended", "210-a", []string{"sec-2"}, 0)
 		if n != 0 {
 			t.Errorf("re-mark: marked = %d, want 0", n)
 		}

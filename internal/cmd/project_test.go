@@ -751,3 +751,47 @@ func TestProjectSetFlow(t *testing.T) {
 		t.Fatalf("unknown flow: want an error, got nil\noutput: %s", out)
 	}
 }
+
+// TestProjectSetSettings covers `lode project set settings` (increment 3
+// R9): key=value pairs merge into projects.settings, a JSON-looking value
+// (32000) is sent as a number, key= (empty value) removes the key, and an
+// unknown key is refused by the server's allowlist.
+func TestProjectSetSettings(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	// hard is above the instance default soft (32000), so clearing soft
+	// below leaves a valid effective pair (default soft, this stored hard)
+	// rather than tripping M1's soft-above-hard refusal.
+	out, err := runLode(t, "project", "set", "settings", "proj",
+		"plan_tokens_soft=1000", "plan_tokens_hard=50000", "--json")
+	if err != nil {
+		t.Fatalf("set settings: %v\noutput: %s", err, out)
+	}
+	var p model.Project
+	if err := json.Unmarshal([]byte(out), &p); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if string(p.Settings["plan_tokens_soft"]) != "1000" || string(p.Settings["plan_tokens_hard"]) != "50000" {
+		t.Fatalf("settings = %+v, want plan_tokens_soft=1000, plan_tokens_hard=50000", p.Settings)
+	}
+
+	out, err = runLode(t, "project", "set", "settings", "proj", "plan_tokens_soft=", "--json")
+	if err != nil {
+		t.Fatalf("clear setting: %v\noutput: %s", err, out)
+	}
+	// A fresh Project: json.Unmarshal merges into an existing non-nil map
+	// rather than clearing it first, so reusing p would leave the removed
+	// key looking present.
+	var cleared model.Project
+	if err := json.Unmarshal([]byte(out), &cleared); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if _, ok := cleared.Settings["plan_tokens_soft"]; ok {
+		t.Fatalf("settings = %+v, want plan_tokens_soft removed", cleared.Settings)
+	}
+
+	if out, err := runLode(t, "project", "set", "settings", "proj", "bogus_key=1"); err == nil {
+		t.Fatalf("unknown setting: want an error, got nil\noutput: %s", out)
+	}
+}

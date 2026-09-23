@@ -124,8 +124,8 @@ func PlanState(status string, tasks []Task) string {
 	switch status {
 	case "draft":
 		return "draft"
-	case "superseded":
-		return "built" // spent, 026 §2.1
+	case "superseded", "spent":
+		return "built" // 026 §2.1; spent is increment 3 R4's finished plan
 	}
 	var landed, active, unstarted int
 	for _, t := range tasks {

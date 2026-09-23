@@ -55,6 +55,9 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := arrangePlan(tx, id); err != nil {
+		return nil, nil, fmt.Errorf("arrange plan %d: %w", id, err)
+	}
 	governing, err := planClauses(tx, id)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve governing clauses of plan %d: %w", id, err)
@@ -437,7 +440,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		       JOIN docs p ON p.id = e.from_doc
 		      WHERE e.type = 'covers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
-		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded')
+		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')
 		        AND p.deleted_at IS NULL
 		 ),
 		 def_raw AS (
@@ -449,7 +452,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		       LEFT JOIN docs owner_doc ON owner_doc.id = w.to_doc
 		      WHERE e.type = 'defers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
-		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded')
+		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')
 		        AND p.deleted_at IS NULL
 		 ),
 		 def AS (

@@ -24,6 +24,13 @@ import (
 // typo before the round trip).
 var docKinds = []string{"spec", "adr", "plan"}
 
+// docStatusValues is the closed set behind `lode doc list --status`: the
+// live document statuses plus "all", the pseudo-status that also includes
+// the plan-only terminal statuses (withdrawn, spent) the default listing
+// hides (12 S5). The statuses themselves come from ns.DesignDocStatuses,
+// pinned to the docs.status CHECK constraint by internal/store.
+var docStatusValues = append(slices.Clone(ns.DesignDocStatuses), "all")
+
 // resolveDocID resolves a document reference to its id (025 §14.3): a
 // positive integer is the id itself, taken without a round trip; anything
 // else goes to GET /api/v1/docs/resolve. It is the one resolver both `lode
@@ -164,6 +171,9 @@ func newDocAddCmd() *cobra.Command {
 				return nil
 			}
 			cli.DocTable(cmd.OutOrStdout(), []model.Doc{d})
+			for _, w := range d.Warnings {
+				fmt.Fprintln(cmd.ErrOrStderr(), "warning:", w)
+			}
 			return nil
 		},
 	}
@@ -216,7 +226,7 @@ func newDocListCmd() *cobra.Command {
 				Project: sc.Project, Kind: kind, Status: status, Owner: owner,
 				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution, BareSuperseded: bareSuperseded,
 				Unresolved: unresolved, OlderThanDays: olderThanDays,
-				Deleted: deleted, HasNotes: hasNotes,
+				Deleted: deleted, HasNotes: hasNotes, HideTerminal: status == "",
 			})
 			if err != nil {
 				return err
@@ -240,9 +250,10 @@ func newDocListCmd() *cobra.Command {
 	}
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, adr, plan")
-	cmd.Flags().StringVar(&status, "status", "", "filter by status: "+strings.Join(ns.DesignDocStatuses, ", "))
+	cmd.Flags().StringVar(&status, "status", "",
+		"filter by status: "+strings.Join(ns.DesignDocStatuses, ", ")+", or all to include withdrawn and spent plans")
 	completeFlagValues(cmd, "kind", docKinds)
-	completeFlagValues(cmd, "status", ns.DesignDocStatuses)
+	completeFlagValues(cmd, "status", docStatusValues)
 	cmd.Flags().StringVar(&owner, "owner", "", "filter by owning actor")
 	cmd.Flags().BoolVar(&needsPlanning, "needs-planning", false,
 		"accepted specs with a section no accepted plan covers")
@@ -289,7 +300,14 @@ func parseDayDuration(s string) (int, error) {
 // enforces the same rule for clients that are not this one; the mutual
 // exclusion of the three selectors themselves is cobra's, declared on the
 // command.
+//
+// --status all names no status (it widens the listing to terminal plans on
+// top of whatever status filter would otherwise apply, increment 3 S5), so
+// it is treated the same as an absent --status here — never a contradiction.
 func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareSuperseded, unresolved bool) error {
+	if status == "all" {
+		status = ""
+	}
 	for _, c := range []struct {
 		on       bool
 		flag     string
@@ -702,6 +720,9 @@ func newDocEditCmd() *cobra.Command {
 					return nil
 				}
 				cli.DocTable(cmd.OutOrStdout(), []model.Doc{d})
+				for _, w := range d.Warnings {
+					fmt.Fprintln(cmd.ErrOrStderr(), "warning:", w)
+				}
 				return nil
 			}
 			res, raw, err := c.PatchDoc(cmd.Context(), id, model.PatchDocInput{
