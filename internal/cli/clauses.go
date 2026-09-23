@@ -18,6 +18,52 @@ func (c *Client) GetClause(ctx context.Context, ref string) (model.Clause, []byt
 	return doJSON[model.Clause](ctx, c, http.MethodGet, "/api/v1/clauses/"+url.PathEscape(ref), nil, "clause")
 }
 
+// ClauseListFilter narrows ListClauses. Doc is any document ref
+// (WL-SPEC-73, a slug, an id). Zero-valued fields do not filter.
+type ClauseListFilter struct {
+	Project, Doc, Status string
+}
+
+// ListClauses calls GET /api/v1/clauses: clauses without their text, in
+// arrangement order when Doc is set, by number otherwise.
+func (c *Client) ListClauses(ctx context.Context, f ClauseListFilter) ([]model.Clause, []byte, error) {
+	q := url.Values{}
+	if f.Project != "" {
+		q.Set("project", f.Project)
+	}
+	if f.Doc != "" {
+		q.Set("doc", f.Doc)
+	}
+	if f.Status != "" {
+		q.Set("status", f.Status)
+	}
+	path := "/api/v1/clauses"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	return doJSON[[]model.Clause](ctx, c, http.MethodGet, path, nil, "clauses")
+}
+
+// ClausesTable prints `lode clause list`: one row per clause with every
+// placement that arranges it.
+func ClausesTable(w io.Writer, clauses []model.Clause) {
+	tbl := newTable(
+		column{header: "REF"},
+		column{header: "STATUS"},
+		column{header: "VER"},
+		column{header: "ARRANGED"},
+		titleColumn("HEADING"),
+	)
+	for _, c := range clauses {
+		placed := make([]string, len(c.ArrangedIn))
+		for i, a := range c.ArrangedIn {
+			placed[i] = a.DocRef + "#" + a.Anchor
+		}
+		tbl.add(c.Ref, c.Status, strconv.Itoa(c.Version), strings.Join(placed, ", "), c.Heading)
+	}
+	tbl.flush(w)
+}
+
 // ClauseRender is the human view of one clause: its ref and heading, status
 // and version, where it is arranged, then its text.
 func ClauseRender(w io.Writer, c model.Clause) {

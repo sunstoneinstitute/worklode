@@ -36,7 +36,7 @@ Twenty-six top-level commands and four shortcuts. The first table is every comma
 | `approval` | L1 | `add`, `list`, `request` |
 | `blob` | L1 | `gc` |
 | `channel` | L1 | `serve` |
-| `clause` | L1 | `edit`, `link`/`unlink` (`--derived-from <ref>` records `wasDerivedFrom`, a split), `set owner`, `set tags`, `supersede --map <file> [--dry-run]` (the refactor primitive, S24); view `versions`. Reading one is `lode show WL-CL-<n> [--version <v>]` |
+| `clause` | L1 | `show`, `list [--doc <ref>] [--status <s>]`, `edit`, `link`/`unlink` (`--derived-from <ref>` records `wasDerivedFrom`, a split), `set owner`, `set tags`, `supersede --map <file> [--dry-run]` (the refactor primitive, S24); view `versions`. `lode show WL-CL-<n> [--version <v>]` also reads one |
 | `decision` | L1 | `add`, `edit`, `list`, `resolve`, `show` (addressed as `<task>/<key>`) |
 | `deliverable` | L1 | `add`, `list`, `report <deliverable> <state>` (ids `<KEY>-DEL-<n>`) |
 | `doc` | L1 | `add`, `show`, `list [--status all]`, `edit`, `revise`, `submit`, `accept`, `withdraw`, `note`, `lint`, `import`, `transfer`, `delete`/`undelete`, `set reviewers`; views `progress`, `referrers`, `reviewers`, `sections`, `todo`, `versions` |

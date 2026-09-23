@@ -26,15 +26,19 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode channel serve` — Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications
   Flags: --interval
 
-## `lode clause` — Design clauses: edit one, list its versions, link or unlink it to another
+## `lode clause` — Design clauses: show or list them, edit one, list its versions, link or unlink it to another
 
 - `lode clause edit` — Replace a clause's body (and heading) from a file; the document is regenerated around it
   Flags: --file, --heading
 - `lode clause link` — Relate a clause to another: --refines, --constrains, --conflicts-with, --references or --derived-from <ref>
   Flags: --conflicts-with, --constrains, --derived-from, --references, --refines
+- `lode clause list` — List clauses, or one document's clauses in arrangement order
+  Flags: --doc, --project, --repo, --status
 - `lode clause set` — Set a clause's owner or tags
 - `lode clause set owner` — Set a clause's owner; "" clears it
 - `lode clause set tags` — Replace a clause's tags; naming none clears them
+- `lode clause show` — Show a clause: its status, version, placements and text
+  Flags: --version
 - `lode clause supersede` — Apply a refactor map: withdraw old clauses and link each to its successors (S24)
   Flags: --dry-run, --map, --project, --repo
 - `lode clause unlink` — Remove a relation written with clause link

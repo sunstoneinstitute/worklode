@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -140,4 +143,50 @@ func (s *server) getClauseVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, c)
+}
+
+// listClauses handles GET /api/v1/clauses. ?project= and ?status= narrow the
+// list; ?doc= takes any document ref (WL-SPEC-73, a slug, an id) and returns
+// that document's arrangement in order.
+//
+// No dedicated metric: 200, 404 on an unknown doc and 422 on a bad status or
+// an ambiguous doc ref are http_requests_total's {route, code}.
+func (s *server) listClauses(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f := store.ClauseFilter{Project: q.Get("project"), Status: q.Get("status")}
+	if ref := strings.TrimSpace(q.Get("doc")); ref != "" {
+		id, err := s.docIDByRef(r.Context(), ref)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		f.Doc = id
+	}
+	clauses, err := s.st.ListClauses(r.Context(), f)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, clauses)
+}
+
+// docIDByRef resolves a document ref the way GET /api/v1/docs/resolve does:
+// an id or slug first, then the <KEY>-<TYPE>-<n> grammar. An ambiguous
+// grammar ref is ErrInvalidInput.
+func (s *server) docIDByRef(ctx context.Context, ref string) (int64, error) {
+	d, err := s.st.ResolveDocRef(ctx, ref)
+	if err == nil {
+		return d.ID, nil
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		return 0, err
+	}
+	gd, gerr := s.resolveDocRefWeb(ctx, ref, "")
+	if gerr == nil {
+		return gd.ID, nil
+	}
+	if amb := (*designdoc.AmbiguousRefError)(nil); errors.As(gerr, &amb) {
+		return 0, fmt.Errorf("%s: %w", gerr.Error(), store.ErrInvalidInput)
+	}
+	return 0, err
 }
