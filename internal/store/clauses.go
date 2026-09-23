@@ -293,31 +293,11 @@ func (s *Store) GetClause(ctx context.Context, projectKey string, number int64) 
 	c.Tags = nonNil(tags)
 	c.Ref = fmt.Sprintf("%s-CL-%d", c.ProjectKey, c.Number)
 
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT dc.doc_id, p.key, d.kind, d.number, dc.anchor, dc.position, dc.depth, dc.clause_version
-		   FROM doc_clauses dc
-		   JOIN docs d ON d.id = dc.doc_id
-		   JOIN projects p ON p.id = d.project_id
-		  WHERE dc.clause_id = $1
-		  ORDER BY dc.doc_id, dc.position`, c.ID)
+	arr, err := s.clauseArrangements(ctx, []int64{c.ID})
 	if err != nil {
-		return nil, fmt.Errorf("read arrangements of clause %d: %w", c.ID, err)
-	}
-	defer rows.Close()
-	c.ArrangedIn = []model.ClauseArrangement{}
-	for rows.Next() {
-		var a model.ClauseArrangement
-		var key, kind string
-		var docNumber sql.NullInt64
-		if err := rows.Scan(&a.Doc, &key, &kind, &docNumber, &a.Anchor, &a.Position, &a.Depth, &a.ClauseVersion); err != nil {
-			return nil, fmt.Errorf("scan arrangement of clause %d: %w", c.ID, err)
-		}
-		a.DocRef = fmt.Sprintf("%s-%s-%d", key, strings.ToUpper(kind), docNumber.Int64)
-		c.ArrangedIn = append(c.ArrangedIn, a)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	c.ArrangedIn = nonNil(arr[c.ID])
 
 	c.GovernedTasks = []model.ClauseTask{}
 	trows, err := s.db.QueryContext(ctx,
@@ -348,6 +328,106 @@ func (s *Store) GetClause(ctx context.Context, projectKey string, number int64) 
 		return nil, err
 	}
 	return c, nil
+}
+
+// ClauseFilter narrows ListClauses. Zero-valued fields do not filter.
+type ClauseFilter struct {
+	Project string
+	// Doc narrows to the clauses in this document's current arrangement,
+	// returned in arrangement order.
+	Doc    int64
+	Status string
+}
+
+// ListClauses reads clauses with their current heading, owner, tags and every
+// arrangement holding them. Body, governed tasks and edges are left empty, as
+// a document list leaves its bodies: GetClause reads those. Without a Doc
+// filter the order is by project key and number.
+func (s *Store) ListClauses(ctx context.Context, f ClauseFilter) ([]model.Clause, error) {
+	if f.Status != "" && !clauseStatuses[f.Status] {
+		return nil, fmt.Errorf("clause status %q: must be draft, accepted, superseded or withdrawn: %w", f.Status, ErrInvalidInput)
+	}
+	q := `SELECT c.id, c.project_id, p.key, c.number, c.status, c.version,
+	             cv.heading, c.owner, c.tags, c.created_at, c.updated_at
+	        FROM clauses c
+	        JOIN projects p ON p.id = c.project_id
+	        JOIN clause_versions cv ON cv.clause_id = c.id AND cv.version = c.version`
+	args := []any{f.Project, f.Status}
+	order := ` ORDER BY p.key, c.number`
+	if f.Doc != 0 {
+		q += ` JOIN doc_clauses dc ON dc.clause_id = c.id AND dc.doc_id = $3`
+		args = append(args, f.Doc)
+		order = ` ORDER BY dc.position`
+	}
+	q += ` WHERE ($1 = '' OR c.project_id = $1) AND ($2 = '' OR c.status = $2)` + order
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list clauses: %w", err)
+	}
+	defer rows.Close()
+	out := []model.Clause{}
+	var ids []int64
+	for rows.Next() {
+		var c model.Clause
+		var owner sql.NullString
+		var tagsRaw string
+		if err := rows.Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Status, &c.Version,
+			&c.Heading, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan clause: %w", err)
+		}
+		tags, err := scanTextArray(tagsRaw)
+		if err != nil {
+			return nil, fmt.Errorf("scan tags of clause %d: %w", c.ID, err)
+		}
+		c.Owner, c.Tags = owner.String, nonNil(tags)
+		c.Ref = fmt.Sprintf("%s-CL-%d", c.ProjectKey, c.Number)
+		c.GovernedTasks, c.Edges = []model.ClauseTask{}, []model.ClauseEdge{}
+		out = append(out, c)
+		ids = append(ids, c.ID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list clauses: %w", err)
+	}
+	arr, err := s.clauseArrangements(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].ArrangedIn = nonNil(arr[out[i].ID])
+	}
+	return out, nil
+}
+
+// clauseArrangements reads every current arrangement of the given clauses,
+// keyed by clause id, each clause's placements ordered by document and position.
+func (s *Store) clauseArrangements(ctx context.Context, ids []int64) (map[int64][]model.ClauseArrangement, error) {
+	out := map[int64][]model.ClauseArrangement{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT dc.clause_id, dc.doc_id, p.key, d.kind, d.number, dc.anchor, dc.position, dc.depth, dc.clause_version
+		   FROM doc_clauses dc
+		   JOIN docs d ON d.id = dc.doc_id
+		   JOIN projects p ON p.id = d.project_id
+		  WHERE dc.clause_id = ANY($1)
+		  ORDER BY dc.clause_id, dc.doc_id, dc.position`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("read clause arrangements: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var a model.ClauseArrangement
+		var clauseID int64
+		var key, kind string
+		var docNumber sql.NullInt64
+		if err := rows.Scan(&clauseID, &a.Doc, &key, &kind, &docNumber, &a.Anchor, &a.Position, &a.Depth, &a.ClauseVersion); err != nil {
+			return nil, fmt.Errorf("scan clause arrangement: %w", err)
+		}
+		a.DocRef = fmt.Sprintf("%s-%s-%d", key, strings.ToUpper(kind), docNumber.Int64)
+		out[clauseID] = append(out[clauseID], a)
+	}
+	return out, rows.Err()
 }
 
 // ListClauseVersions is a clause's version history, newest first.

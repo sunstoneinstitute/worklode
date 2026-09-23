@@ -263,6 +263,32 @@ func docRefAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion,
 	}
 }
 
+// clauseRefAt completes a clause ref (WL-CL-12) at argument position n,
+// described by its heading, in the current scope's number order.
+func clauseRefAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		if len(args) != n {
+			return nil, cobra.ShellCompDirectiveDefault
+		}
+		ctx, cancel, c, scope, ok := completionScope(cmd)
+		if !ok {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		defer cancel()
+		clauses, _, err := c.ListClauses(ctx, cli.ClauseListFilter{Project: scope.Project})
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		var out []cobra.Completion
+		for _, cl := range clauses {
+			if strings.HasPrefix(cl.Ref, toComplete) {
+				out = append(out, cobra.Completion(cl.Ref+"\t"+completionDescription(cl.Heading)))
+			}
+		}
+		return out, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
 // deletedDocRefAt is docRefAt over the tombstoned corpus, for `lode doc
 // undelete`: the live documents are precisely the ones that command cannot
 // act on.
