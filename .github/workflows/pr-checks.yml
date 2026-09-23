@@ -289,7 +289,9 @@ jobs:
   checks:
     needs: [gate, lint, test, obsidian, build-image, validate-kustomize, spec-gate]
     if: always()
-    runs-on: ubuntu-latest
+    # Needs only jq. An untrusted or failed gate leaves `trusted` unset, which
+    # falls back to ubuntu-latest.
+    runs-on: ${{ needs.gate.outputs.trusted == 'true' && 'self-hosted' || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Fail if any job failed or was cancelled
