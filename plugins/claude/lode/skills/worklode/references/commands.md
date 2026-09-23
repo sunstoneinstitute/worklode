@@ -108,6 +108,11 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode event tail` — List recent events, newest last (--follow to keep watching)
   Flags: --follow, --limit, --since, --type
 
+## `lode gate` — The design authority gate
+
+- `lode gate check` — Refuse a change to a guarded path that names no design clause
+  Flags: --base, --body-file, --head
+
 ## `lode graph` — The knowledge-graph projection: its health, and what it owes
 
 - `lode graph derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout), or --server for the server-side ones

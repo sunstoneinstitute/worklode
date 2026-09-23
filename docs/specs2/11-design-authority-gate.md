@@ -83,6 +83,15 @@ with a `[gate]` table must also require pull requests on its default branch,
 since the gate runs on pull requests; `lode doctor` warns when the repository
 ruleset does not. Without a `[gate]` table nothing runs.
 
+`lode gate check --base <sha> --head <sha> [--body-file <path>]` is the check
+itself: it reads the table, diffs the two revisions, and exits 1 with the
+reason when a guarded path changed and no valid trailer is present on the pull
+request body or in a commit message. It checks the trailer's form offline and
+never calls the server; the server resolves the clause the trailer names
+(§4). `lode doctor` reports whether the table parses. Whether the repository
+requires pull requests is not checked yet, since no API route exposes the
+branch rules the server records.
+
 The gate runs when a pull request touches a guarded path, where "what" changes
 concentrate. The list is a heuristic that decides whether the gate asks, never
 whether a change is a "what" change. Worklode's own list:
@@ -115,9 +124,9 @@ Every commit made inside a task worktree already carries a `Worklode-Task:
 (03-tasks-and-execution.md §1). The gate starts from that task.
 
 A task minted from a plan already knows its spec: the plan covers sections, and
-the task carries the plan ref (05-documents.md). Planned work therefore passes
-the gate with no extra declaration. This is the common case and it costs
-nothing.
+the task carries the plan ref (05-documents.md). Planned work is meant to pass
+the gate with no extra declaration. The CI check does not read plans yet, so
+today planned work carries a trailer too (§5, condition 1).
 
 Unplanned work declares itself with one trailer on the pull request body or
 the final commit:
@@ -128,6 +137,19 @@ Spec: WL-SPEC-4 sec-5 amended  # this section was amended for this change
 Spec: none refactor            # one word from the "how" list in 2.2
 ```
 
+The server's `spec-reconciler` subscriber reads the same trailer from the
+pull request body or the pushed commits (the final commit wins), finds the
+task from the branch name or, when the branch does not resolve, from a
+`Worklode-Task:` trailer in the pull request body, and writes a `governedBy`
+link with `source = 'gate'` when no plan governs the task. It reads the
+default `Spec:` trailer key, so a
+project that renames the key with `[gate] trailer` gets a working CI gate and
+a silent reconciler until the key reaches the server. A `none` trailer writes
+nothing. A trailer naming a clause or section that does not exist is counted
+and logged and writes nothing. Section refs are accepted everywhere until the
+per-project switch `gate_trailer_sections` arrives with the plan lifecycle
+increment (12-spec-refactoring-design-tree.md S50 to S52).
+
 The `none` reasons are the closed list: `fix`, `refactor`, `perf`, `copy`,
 `tests`, `build`, `config`. A `fix` still cites the section it restores:
 `Spec: WL-SPEC-4 sec-5 fix`. A `none fix` with no section is refused, because a
@@ -136,29 +158,42 @@ fix with nothing to cite is a "what" change by the test in §2.
 ## 5. What the gate checks
 
 The gate is one CI job, `spec-gate`, on pull requests whose diff touches a
-guarded path. It calls the backbone through the public API with a read-only
-token. It passes when one of these holds:
+guarded path. The job runs `lode gate check`, which decides offline from the
+repository checkout, the pull request body and the commit messages (§3). The
+four conditions below are the design. What the offline check evaluates today
+is stated under each one.
 
 1. The task has a plan ref and that plan covers at least one section of an
-   accepted spec.
+   accepted spec. Not built. The offline check never reads the task, so
+   planned work passes CI today by carrying a trailer like any other change.
+   The server side of this condition does hold: the `spec-reconciler` sees
+   the plan link and leaves a planned task alone (§4).
 2. A `Spec:` trailer names a section that resolves through `GET
-   /api/v1/docs/{ref}` and is not withdrawn.
+   /api/v1/docs/{ref}` and is not withdrawn. Half built. The offline check
+   reads the ref's form and accepts a clause ref (`WL-CL-456`) or a section
+   ref (`WL-SPEC-4 sec-5`). Whether the ref resolves is decided on the server
+   when the reconciler governs the task, which counts and logs a ref that
+   names nothing (§4). The CI job makes no API call.
 3. A `Spec: ... amended` trailer names a section whose current version was
-   written after the pull request's base commit.
+   written after the pull request's base commit. Half built. The offline
+   check accepts the `amended` qualifier and compares no versions.
 4. A `Spec: none <reason>` trailer carries a reason from the closed list, and
    for `tests`, `build` or `copy` the diff touches only the matching paths.
+   The reason list is checked offline, including the refusal of a bare `none
+   fix`. The path condition on `tests`, `build` and `copy` is not built.
 
-On pass, the job posts one comment quoting the cited section's first
-paragraph under the diff, so the reviewer sees the claim next to the change.
-On fail it says which of the four it looked for and what a passing trailer
-looks like. The gate never judges whether the cited sentence really covers the
-change. That judgment stays with the reviewer, who now has the sentence in
-front of them.
+On fail the job names the guarded paths that changed and the reason the
+trailer was missing or malformed. The gate never judges whether the cited
+sentence really covers the change. That judgment stays with the reviewer.
 
-The gate records the outcome as a `spec_gate` event on the task: the
-classification, the cited section, and the pull request. That is the audit
-trail behind §2.3 and the input to a standing drift query: tasks that landed
-against a guarded path with `none` classifications, grouped by path.
+Two parts of the record are not built. The job posts no comment quoting the
+cited section's first paragraph under the diff. The gate writes no `spec_gate`
+event on the task carrying the classification, the cited section and the pull
+request. Once that event exists it is the audit trail behind §2.3 and the
+input to a standing drift query: tasks that landed against a guarded path with
+`none` classifications, grouped by path. What the gate records today is the
+`governedBy` link with `source = 'gate'` and the `task.governed` event the
+reconciler writes for it (§4).
 
 ## 6. Plans are never back-patched
 

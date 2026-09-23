@@ -378,6 +378,11 @@ type server struct {
 	// nil-safe, so the handler is still callable directly in tests.
 	watcherMetrics *watcher.Metrics
 
+	// reconcilerMetrics counts spec-reconciler outcomes (gate.go). Nil in
+	// every server that starts no subscriber; *reconcilerMetrics is
+	// nil-safe, so the handler is still callable directly in tests.
+	reconcilerMetrics *reconcilerMetrics
+
 	// branchRulesKick pokes the branch-rules refresh loop (branchrules.go)
 	// from the repository_ruleset webhook. Buffered to one, so a kick that
 	// arrives mid-refresh is remembered and a burst collapses into one extra
@@ -1348,6 +1353,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if err := st.EnsureServiceActor(context.Background(), watcherActorID, "doc-lifecycle watcher"); err != nil {
 			return nil, nil, fmt.Errorf("ensure %s actor: %w", watcherActorID, err)
 		}
+		if err := st.EnsureEventSubscriber(context.Background(), specReconcilerSubscriber); err != nil {
+			return nil, nil, fmt.Errorf("ensure %s subscriber: %w", specReconcilerSubscriber, err)
+		}
 		// The corpus convergence loop (040 §7), gated the same way and for
 		// the same reason: it is a background loop with no configuration of
 		// its own to switch it on. It runs with no embedding provider too,
@@ -1370,10 +1378,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		go s.otlpForward.Run(cfg.BackgroundCtx)
 
 		s.watcherMetrics = watcher.NewMetrics(reg)
-		// First and only registration of the eventbus instruments: this is
-		// the process's one subscriber loop. The horizon collector in
+		s.reconcilerMetrics = newReconcilerMetrics(reg)
+		// One registration of the eventbus instruments, shared by both
+		// subscriber loops below: their labels carry the subscriber name, so
+		// one *eventbus.Metrics serves both. The horizon collector in
 		// metrics.go registers a different family (worklode_event_log_horizon_id),
-		// so the two do not collide.
+		// so neither collides with it.
 		busMetrics := eventbus.NewMetrics(reg, st)
 		go func() {
 			err := eventbus.Run(cfg.BackgroundCtx, eventbus.Options{
@@ -1390,6 +1400,19 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			// it is said out loud.
 			if err != nil && !errors.Is(err, context.Canceled) {
 				s.log.Error("doc-lifecycle subscriber stopped", "err", err)
+			}
+		}()
+		go func() {
+			err := eventbus.Run(cfg.BackgroundCtx, eventbus.Options{
+				Store:   st,
+				Name:    specReconcilerSubscriber,
+				Handler: s.handleSpecReconcile,
+				Poll:    cfg.EventPoll,
+				Metrics: busMetrics,
+				Log:     s.log,
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				s.log.Error("spec-reconciler subscriber stopped", "err", err)
 			}
 		}()
 	}
