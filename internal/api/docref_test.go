@@ -34,8 +34,8 @@ func TestDocRefRedirect(t *testing.T) {
 		if rr.Code != http.StatusFound {
 			t.Fatalf("ref %q status = %d, want 302; body %s", ref, rr.Code, rr.Body.String())
 		}
-		if got := rr.Header().Get("Location"); got != "/docs/WL-SPEC-45" {
-			t.Fatalf("ref %q Location = %q, want %q", ref, got, "/docs/WL-SPEC-45")
+		if got := rr.Header().Get("Location"); got != "/projects/proj/spec/45" {
+			t.Fatalf("ref %q Location = %q, want %q", ref, got, "/projects/proj/spec/45")
 		}
 	}
 
@@ -62,7 +62,7 @@ func TestDocPageLinksAndStripsFrontmatter(t *testing.T) {
 		Body: "---\nstatus: draft\nrequires:\n- 004-backbone\namends:\n  \"#sec-1\":\n  - 004-backbone#sec-2\n---\n# Spec 9 — Amender\n\n## 1. One {#sec-1}\n\nPer 004 §2, and spec 004 §2 again.\n",
 	})
 
-	page := doReq(t, h, "GET", "/docs/WL-SPEC-9", "", nil).Body.String()
+	page := getCanonical(t, h, "/docs/WL-SPEC-9").Body.String()
 	if strings.Contains(page, "status: draft") {
 		t.Errorf("frontmatter leaked into the rendered body:\n%s", page)
 	}
@@ -96,10 +96,10 @@ func TestRefShortcut(t *testing.T) {
 	})
 
 	for _, tc := range []struct{ ref, want string }{
-		{taskID, "/tasks/" + taskID},
-		{"WL-SPEC-45", "/docs/WL-SPEC-45"},
-		{"per-project-workflows", "/docs/WL-SPEC-45"},
-		{"45", "/docs/WL-SPEC-45"},
+		{taskID, "/projects/proj/feature/" + strings.TrimPrefix(taskID, "WL-")},
+		{"WL-SPEC-45", "/projects/proj/spec/45"},
+		{"per-project-workflows", "/projects/proj/spec/45"},
+		{"45", "/projects/proj/spec/45"},
 	} {
 		rr := doReq(t, h, "GET", "/"+tc.ref, "", nil)
 		if rr.Code != http.StatusFound {
@@ -140,7 +140,7 @@ func TestDocRefHomeProjectDisambiguates(t *testing.T) {
 	if rr := doReq(t, h, "GET", "/docs/ref/029", "", nil); rr.Code != http.StatusNotFound {
 		t.Fatalf("unscoped ref status = %d, want 404 (ambiguous)", rr.Code)
 	}
-	for key, want := range map[string]string{"WL": "/docs/WL-SPEC-29", "OTHER": "/docs/OTHER-SPEC-29"} {
+	for key, want := range map[string]string{"WL": "/projects/proj/spec/29", "OTHER": "/projects/other/spec/29"} {
 		rr := doReq(t, h, "GET", "/docs/ref/029?p="+key, "", nil)
 		if rr.Code != http.StatusFound || rr.Header().Get("Location") != want {
 			t.Errorf("ref 029?p=%s = %d %q, want 302 %q", key, rr.Code, rr.Header().Get("Location"), want)
@@ -185,7 +185,7 @@ func TestRefShortcutBareNumberAcrossProjects(t *testing.T) {
 
 	// The same number with an explicit home resolves there, so the shortcut
 	// carries the query string through to the resolver rather than dropping it.
-	for key, want := range map[string]string{"WL": "/docs/WL-SPEC-29", "OTHER": "/docs/OTHER-SPEC-29"} {
+	for key, want := range map[string]string{"WL": "/projects/proj/spec/29", "OTHER": "/projects/other/spec/29"} {
 		rr := doReq(t, h, "GET", "/029?p="+key, "", nil)
 		if rr.Code != http.StatusFound || rr.Header().Get("Location") != want {
 			t.Errorf("/029?p=%s = %d %q, want 302 %q", key, rr.Code, rr.Header().Get("Location"), want)
