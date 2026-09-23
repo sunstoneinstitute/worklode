@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/gate"
 	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -181,7 +182,30 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 		}
 	}
 
-	// 5. Git hooks installed in this repo.
+	// worktree.Root walks up from dir to find the repo root, same as check 7
+	// below (which reuses it). The gate's config.toml lives at the repo
+	// root, not necessarily dir, so gate.Load needs this too (checks 1-4
+	// already get this for free through cli.LoadConfig's own walk-up).
+	root, inRepo := worktree.Root(dir)
+
+	// 5. The design authority gate's table parses (11 §3). Whether the
+	// repository also requires pull requests is not checked here yet: the
+	// store knows branch rules but no API route exposes them.
+	switch {
+	case !inRepo:
+		checks = append(checks, skip("gate", "not in a git repository"))
+	default:
+		switch gcfg, enabled, err := gate.Load(root); {
+		case err != nil:
+			checks = append(checks, fail("gate", err.Error(), "fix the [gate] table in .worklode/config.toml"))
+		case !enabled:
+			checks = append(checks, skip("gate", "not enabled (no [gate] table)"))
+		default:
+			checks = append(checks, pass("gate", fmt.Sprintf("%d path patterns, %d regex, trailer %q; PR requirement not checked", len(gcfg.Paths), len(gcfg.Regex), gcfg.Trailer)))
+		}
+	}
+
+	// 6. Git hooks installed in this repo.
 	switch hooksDir, installed, err := githooks.Installed(dir); {
 	case err != nil:
 		checks = append(checks, skip("hooks", "not in a git repository"))
@@ -192,13 +216,13 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 			"run `lode install` in this repo"))
 	}
 
-	// 6. Inside a task worktree: does it map to a task with a live lease.
+	// 7. Inside a task worktree: does it map to a task with a live lease.
 	// layoutFrom/worktree.Root/Layout.TaskID is this repo's established way
 	// to resolve "am I in a task worktree, and which task" (see
 	// resolveWorktreeTask in lifecycle.go) — it is used here directly rather
 	// than via resolveWorktreeTask because that helper returns an error for
-	// "not in a worktree", where doctor wants a skip, not a failure.
-	root, inRepo := worktree.Root(dir)
+	// "not in a worktree", where doctor wants a skip, not a failure. root and
+	// inRepo were already resolved above, for the gate check.
 	taskID, isTaskWT := "", false
 	if inRepo {
 		if l, err := layoutFrom(root); err == nil {
@@ -224,10 +248,10 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 		}
 	}
 
-	// 7. Reap materialized secrets whose lease is gone (017 §4, ADR 048 §4).
+	// 8. Reap materialized secrets whose lease is gone (017 §4, ADR 048 §4).
 	checks = append(checks, sweepSecrets(ctx, c, serverReachable))
 
-	// 8. Local Edge Agent telemetry gateway reachable and healthy. No
+	// 9. Local Edge Agent telemetry gateway reachable and healthy. No
 	// dependency on the checks above: it must still run with the backbone
 	// unreachable.
 	checks = append(checks, checkEdgeAgent(ctx, edgeAgentHealthURL))

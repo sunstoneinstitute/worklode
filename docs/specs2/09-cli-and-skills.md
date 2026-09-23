@@ -8,9 +8,9 @@ Every command is explicable by exactly one of these rules. The law governs spell
 
 | Rule | Statement |
 |---|---|
-| L1 | Entity commands are `lode <entity> <verb>`. Entity nouns are singular and are exactly what the backbone models: `actor`, `approval`, `blob`, `channel`, `clause`, `decision`, `deliverable`, `doc`, `event`, `graph`, `inbox`, `milestone`, `project`, `secret`, `skill`, `task`, `token`. No bare top-level command acts on an entity. |
+| L1 | Entity commands are `lode <entity> <verb>`. Entity nouns are singular and are exactly what the backbone models: `actor`, `approval`, `blob`, `channel`, `clause`, `decision`, `deliverable`, `doc`, `event`, `gate` (the design authority gate, 11-design-authority-gate.md §3), `graph`, `inbox`, `milestone`, `project`, `secret`, `skill`, `task`, `token`. No bare top-level command acts on an entity. |
 | L2 | Bare top-level commands act on this machine or this checkout. The set is closed: `doctor`, `install`, `uninstall`, `login`, `logout`. |
-| L3 | One verb per operation. `add` creates, `show` reads one, `list` reads many, `edit` replaces a body, `set <field>` writes one named field or state, `remove` drops a member from a collection, `delete` tombstones an entity. Any other verb names a domain action none of these expresses. The allowlist: `claim`, `release`, `renew`, `submit`, `abandon`, `reopen`, `rework`, `start`, `stop`, `publish`, `promote`, `revoke`, `sync`, `exec`, `purge`, `import`, `install`, `recommend`, `resolve`, `decompose`, `instruct`, `reconcile`, `transfer`, `accept`, `revise`, `lint`, `derive`, `seek`, `tail`, `gc`, `link`, `dismiss`, `serve`, `listen`, `next`, `resume`, `attach`, `detach`, `assign`, `block`, `govern`, `parent`, `duplicate`, `request`, `pack`, `note`, `escalate`, `gap`, `fix`, `withdraw`, `report`, `fetch`, `supersede`. |
+| L3 | One verb per operation. `add` creates, `show` reads one, `list` reads many, `edit` replaces a body, `set <field>` writes one named field or state, `remove` drops a member from a collection, `delete` tombstones an entity. Any other verb names a domain action none of these expresses. The allowlist: `claim`, `release`, `renew`, `submit`, `abandon`, `reopen`, `rework`, `start`, `stop`, `publish`, `promote`, `revoke`, `sync`, `exec`, `purge`, `import`, `install`, `recommend`, `resolve`, `decompose`, `instruct`, `reconcile`, `transfer`, `accept`, `revise`, `lint`, `derive`, `seek`, `tail`, `gc`, `link`, `dismiss`, `serve`, `listen`, `next`, `resume`, `attach`, `detach`, `assign`, `block`, `govern`, `parent`, `duplicate`, `request`, `pack`, `note`, `escalate`, `gap`, `fix`, `withdraw`, `report`, `fetch`, `supersede`, `check`. |
 | L4 | Verbs are imperative verbs. No adjectives, no hyphenated verbs except the §4 allowlist. `set` is a verb; the field it writes is an argument. |
 | L5 | Inverses take `un-` on the forward verb: `block`/`unblock`, `assign`/`unassign`, `delete`/`undelete`, `install`/`uninstall`. |
 | L6 | Named views are nouns, never verbs. A read-only projection over one entity may be a subcommand named for the view. A view never writes. Its paired write is `set <field>`, never a `--set` flag on the view. `project rally` is the one exception: its content is `blocks` edges, written with `task block`. |
@@ -28,7 +28,7 @@ The general form of a field write is `lode <entity> set <field> <value...>`, wit
 
 ## 2. The command tree
 
-Twenty-four top-level commands and four shortcuts. The first table is every command the built binary exposes, grouped by entity. The second is the commands this document designs that are not built.
+Twenty-six top-level commands and four shortcuts. The first table is every command the built binary exposes, grouped by entity. The second is the commands this document designs that are not built.
 
 | Command | Class | Subcommands |
 |---|---|---|
@@ -41,6 +41,7 @@ Twenty-four top-level commands and four shortcuts. The first table is every comm
 | `deliverable` | L1 | `add`, `list`, `report <deliverable> <state>` (ids `<KEY>-DEL-<n>`) |
 | `doc` | L1 | `add`, `show`, `list [--status all]`, `edit`, `revise`, `submit`, `accept`, `withdraw`, `note`, `lint`, `import`, `transfer`, `delete`/`undelete`, `set reviewers`; views `progress`, `referrers`, `reviewers`, `sections`, `todo`, `versions` |
 | `event` | L1 | `tail [--follow]`, `seek`; view `subscribers` |
+| `gate` | L1 | `check` |
 | `graph` | L1 | `derive`; views `drift`, `gaps`, `quarantines`, `triples` |
 | `inbox` | L1 | `list`, `import`, `link`, `promote`, `dismiss` |
 | `milestone` | L1 | `add`, `list`, `delete`, `attach`/`detach` |
