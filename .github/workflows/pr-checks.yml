@@ -32,7 +32,11 @@ jobs:
   # auto-running the build on a public repo. Docs-only PRs also skip; jobs
   # skipped via `if:` count as satisfied for branch protection.
   gate:
-    runs-on: ubuntu-latest
+    # hel01 for a merge-queue build or a same-repo PR, the `trusted` test
+    # below computed from the payload, since this job cannot read its own
+    # output. A fork PR stays on ubuntu-latest. The script checks out nothing
+    # and needs only gh, so the bare `self-hosted` label.
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       run: ${{ steps.decide.outputs.run }}
