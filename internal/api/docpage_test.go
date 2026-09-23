@@ -36,9 +36,9 @@ func TestDocsPage(t *testing.T) {
 	body := rr.Body.String()
 	assertShell(t, body)
 	bodyContains(t, body,
-		`href="/docs/WL-SPEC-25">WL-SPEC-25</a>`,
-		`href="/docs/WL-SPEC-25">Documents in the backbone</a>`,
-		`href="/docs/WL-PLAN-1">Documents in the backbone, part 2</a>`,
+		`href="/projects/proj/spec/25">WL-SPEC-25</a>`,
+		`href="/projects/proj/spec/25">Documents in the backbone</a>`,
+		`href="/projects/proj/plan/1">Documents in the backbone, part 2</a>`,
 		"accepted",
 		"draft",
 	)
@@ -53,7 +53,7 @@ func TestDocPage(t *testing.T) {
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
 	})
 
-	rr := doReq(t, h, "GET", "/docs/WL-SPEC-25", "", nil)
+	rr := getCanonical(t, h, "/docs/WL-SPEC-25")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -75,7 +75,7 @@ func TestDocPage(t *testing.T) {
 
 	// The far end's corpus reference tells a plan from the spec it covers.
 	// The plan's own page is at its shorthand now that it carries a number.
-	rr = doReq(t, h, "GET", "/docs/WL-PLAN-1", "", nil)
+	rr = getCanonical(t, h, "/docs/WL-PLAN-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("plan page status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -108,7 +108,7 @@ func TestDocPageDegradesWithoutVersions(t *testing.T) {
 		t.Fatalf("drop doc_versions: %v", err)
 	}
 
-	rr := doReq(t, h, "GET", "/docs/WL-SPEC-25", "", nil)
+	rr := getCanonical(t, h, "/docs/WL-SPEC-25")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body %s", rr.Code, rr.Body.String())
 	}
@@ -134,7 +134,7 @@ func TestDocVersionPage(t *testing.T) {
 		t.Fatalf("update body status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr := doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/2", plan.ID), "", nil)
+	rr := getCanonical(t, h, fmt.Sprintf("/docs/versions/%d/2", plan.ID))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("current version status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -145,7 +145,7 @@ func TestDocVersionPage(t *testing.T) {
 		t.Errorf("current version shows the back-to-current banner:\n%s", body)
 	}
 
-	rr = doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/1", plan.ID), "", nil)
+	rr = getCanonical(t, h, fmt.Sprintf("/docs/versions/%d/1", plan.ID))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("superseded version status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -155,7 +155,7 @@ func TestDocVersionPage(t *testing.T) {
 		t.Errorf("superseded version shows the edited body:\n%s", body)
 	}
 
-	if rr := doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/3", plan.ID), "", nil); rr.Code != http.StatusNotFound {
+	if rr := getCanonical(t, h, fmt.Sprintf("/docs/versions/%d/3", plan.ID)); rr.Code != http.StatusNotFound {
 		t.Errorf("unknown version status = %d, want 404", rr.Code)
 	}
 	if rr := doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/x", plan.ID), "", nil); rr.Code != http.StatusBadRequest {
@@ -163,8 +163,8 @@ func TestDocVersionPage(t *testing.T) {
 	}
 }
 
-// TestDocPageVersionQuery covers /docs/<ref>?v=<n>: the same version page as
-// /docs/versions/{id}/{n}, reached through the canonical KEY-KIND-n URL.
+// TestDocPageVersionQuery covers /docs/<ref>?v=<n>: a redirect to the
+// canonical version path, the same page /docs/versions/{id}/{n} reaches.
 func TestDocPageVersionQuery(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -179,7 +179,7 @@ func TestDocPageVersionQuery(t *testing.T) {
 	}
 	ref := fmt.Sprintf("/docs/WL-PLAN-%d", plan.Number)
 
-	rr := doReq(t, h, "GET", ref+"?v=1", "", nil)
+	rr := getCanonical(t, h, ref+"?v=1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("superseded version status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -187,14 +187,14 @@ func TestDocPageVersionQuery(t *testing.T) {
 	assertShell(t, body)
 	bodyContains(t, body, "back to current", "Do the thing.")
 
-	if rr := doReq(t, h, "GET", ref+"?v=3", "", nil); rr.Code != http.StatusNotFound {
+	if rr := getCanonical(t, h, ref+"?v=3"); rr.Code != http.StatusNotFound {
 		t.Errorf("unknown version status = %d, want 404", rr.Code)
 	}
-	if rr := doReq(t, h, "GET", ref+"?v=x", "", nil); rr.Code != http.StatusBadRequest {
-		t.Errorf("non-numeric version status = %d, want 400", rr.Code)
+	if rr := getCanonical(t, h, ref+"?v=x"); rr.Code != http.StatusNotFound {
+		t.Errorf("non-numeric version status = %d, want 404", rr.Code)
 	}
 	// No ?v= is still the document itself.
-	if rr := doReq(t, h, "GET", ref, "", nil); rr.Code != http.StatusOK {
+	if rr := getCanonical(t, h, ref); rr.Code != http.StatusOK {
 		t.Fatalf("doc page status = %d, body %s", rr.Code, rr.Body.String())
 	} else if strings.Contains(rr.Body.String(), "back to current") {
 		t.Error("the document page rendered as a version page")
@@ -260,7 +260,7 @@ func TestDocPageFoldsAmendmentsAndShowsNotes(t *testing.T) {
 		t.Fatalf("add note: status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr := doReq(t, h, "GET", "/docs/WL-SPEC-25", "", nil)
+	rr := getCanonical(t, h, "/docs/WL-SPEC-25")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -275,7 +275,7 @@ func TestDocPageFoldsAmendmentsAndShowsNotes(t *testing.T) {
 	)
 
 	// The stored source stays reachable, and is what it says it is.
-	rr = doReq(t, h, "GET", "/docs/WL-SPEC-25?body=source", "", nil)
+	rr = getCanonical(t, h, "/docs/WL-SPEC-25?body=source")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("source status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -307,7 +307,7 @@ func TestDocPageShowsReviewState(t *testing.T) {
 		t.Fatalf("awaiting rows = %d, want 1", len(open))
 	}
 
-	rr := doReq(t, h, "GET", "/docs/WL-SPEC-25", "", nil)
+	rr := getCanonical(t, h, "/docs/WL-SPEC-25")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -317,7 +317,7 @@ func TestDocPageShowsReviewState(t *testing.T) {
 		">awaiting", // and who still owes a verdict
 		fmt.Sprintf(`action="/approvals/%d/decide"`, open[0].ID),
 		`value="approve"`,
-		`name="return" value="/docs/WL-SPEC-25"`,
+		`name="return" value="/projects/proj/spec/25"`,
 	)
 }
 
@@ -344,7 +344,7 @@ func TestDocPageNamesMintedTasks(t *testing.T) {
 	}
 
 	ref := fmt.Sprintf("/docs/WL-PLAN-%d", plan.Number)
-	page := doReq(t, h, "GET", ref, "", nil)
+	page := getCanonical(t, h, ref)
 	if page.Code != http.StatusOK {
 		t.Fatalf("plan page status = %d, body %s", page.Code, page.Body.String())
 	}
@@ -353,7 +353,7 @@ func TestDocPageNamesMintedTasks(t *testing.T) {
 		bodyContains(t, body, fmt.Sprintf(`(<a href="/tasks/%s" rel="nofollow">%s</a>)`, task.ID, task.ID))
 	}
 
-	src := doReq(t, h, "GET", ref+"?body=source", "", nil)
+	src := getCanonical(t, h, ref+"?body=source")
 	if src.Code != http.StatusOK {
 		t.Fatalf("source view status = %d, body %s", src.Code, src.Body.String())
 	}

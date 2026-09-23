@@ -172,10 +172,11 @@ var routeGuards = map[string]routeGuard{
 	// "clause" segment in the first pattern wins over the {kind} wildcard in
 	// the second for any path both could match (net/http's ServeMux ranks a
 	// literal segment over a wildcard at the same depth), so a clause's own
-	// page is never shadowed by the document-kind redirect.
+	// page is never shadowed by the task and document pages.
 	"GET /projects/{proj}/clause/{n}":       guarded(permWebRead),
 	"GET /projects/{proj}/clause/{n}/{ver}": guarded(permWebRead),
 	"GET /projects/{proj}/{kind}/{n}":       guarded(permWebRead),
+	"GET /projects/{proj}/{kind}/{n}/{ver}": guarded(permWebRead),
 	"GET /clauses/{ref}":                    guarded(permWebRead),
 	// The bare-reference shortcut (WL-721): /{ref} 302s to the task or the
 	// document. An ordinary web read, and less specific than every literal

@@ -64,7 +64,8 @@ navigation in this order: Overview, Crew, Work, Progress, Deliverables, Reviews,
 Decisions, Documents, Activity. Progress appears only when the project has at
 least one spec. Global and local navigation stay visually and semantically
 distinct. Every project-scoped page renders the sidebar, including the task
-detail page `GET /tasks/{id}`, whose subject is no sidebar destination, so its
+detail page at its canonical URL `/projects/<proj>/<kind>/<n>` (`GET /tasks/{id}`
+redirects there), whose subject is no sidebar destination, so its
 local navigation marks nothing current; the handler adds one `store.GetProject`
 lookup for the project's id, name and key. The selected object has one
 canonical URL. Browser back and forward and copying that URL work across
