@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -219,5 +220,93 @@ func TestClauseVersionsCommand(t *testing.T) {
 	}
 	if !strings.HasPrefix(out, "VERSION") || !strings.Contains(out, "2") || !strings.Contains(out, "1") {
 		t.Fatalf("output = %q; want a version table with both versions", out)
+	}
+}
+
+// TestClauseSupersedeCommand covers `lode clause supersede --map <file>
+// --project <p>` end to end: it reads the map, posts it to the project's
+// supersede route, and renders the result.
+func TestClauseSupersedeCommand(t *testing.T) {
+	var posted model.SupersedeInput
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/projects/cow/clauses/supersede" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+			t.Fatalf("decode POST body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(model.SupersedeResult{
+			Entries:   []model.SupersedeResolved{{Old: "WL-CL-2", New: []string{"WL-CL-4", "WL-CL-5"}}, {Old: "WL-CL-3"}},
+			Withdrawn: 2, Edges: 2,
+		})
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	file := filepath.Join(t.TempDir(), "map.txt")
+	mapBody := "# a comment\nWL-CL-2 -> WL-CL-4 WL-CL-5\nWL-CL-3 ->\n"
+	if err := os.WriteFile(file, []byte(mapBody), 0o600); err != nil {
+		t.Fatalf("write fixture map: %v", err)
+	}
+
+	out, err := runLode(t, "clause", "supersede", "--map", file, "--project", "cow")
+	if err != nil {
+		t.Fatalf("lode clause supersede: %v\noutput: %s", err, out)
+	}
+	if len(posted.Entries) != 2 || posted.Entries[0].Old != "WL-CL-2" || len(posted.Entries[0].New) != 2 {
+		t.Fatalf("posted entries = %+v", posted.Entries)
+	}
+	if posted.DryRun {
+		t.Errorf("posted DryRun = true, want false")
+	}
+	if !strings.Contains(out, "WL-CL-2 -> WL-CL-4, WL-CL-5") || !strings.Contains(out, "WL-CL-3 ->") ||
+		!strings.Contains(out, "withdrawn 2, edges 2") {
+		t.Fatalf("output = %q; want the rendered entries and counts", out)
+	}
+	if strings.Contains(out, "dry run:") {
+		t.Fatalf("output = %q; want no dry-run prefix on an applied map", out)
+	}
+
+	out, err = runLode(t, "clause", "supersede", "--project", "cow")
+	if err == nil {
+		t.Fatalf("supersede with no --map succeeded\noutput: %s", out)
+	}
+	want := `no map: pass --map <file>, or "-" to read it from stdin`
+	if err.Error() != want {
+		t.Fatalf("err = %q; want %q", err.Error(), want)
+	}
+}
+
+// TestParseSupersedeMap covers the map parser: a comment line, a blank line,
+// a many-successor entry, a withdraw-only entry, and a malformed line naming
+// its line number.
+func TestParseSupersedeMap(t *testing.T) {
+	in := "# a comment\n\nWL-CL-1 -> WL-CL-2 WL-CL-3\nWL-CL-4 ->\n  # indented comment\n"
+	entries, err := parseSupersedeMap(in)
+	if err != nil {
+		t.Fatalf("parseSupersedeMap: %v", err)
+	}
+	want := []model.SupersedeEntry{
+		{Old: "WL-CL-1", New: []string{"WL-CL-2", "WL-CL-3"}},
+		{Old: "WL-CL-4", New: nil},
+	}
+	if !reflect.DeepEqual(entries, want) {
+		t.Fatalf("entries = %+v, want %+v", entries, want)
+	}
+
+	_, err = parseSupersedeMap("WL-CL-1 -> WL-CL-2\nWL-CL-3 WL-CL-4\n")
+	if err == nil {
+		t.Fatal("malformed line (no \"->\") did not error")
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Fatalf("error = %q, want it to name line 2", err.Error())
+	}
+
+	_, err = parseSupersedeMap(" -> WL-CL-2\n")
+	if err == nil {
+		t.Fatal("empty left side did not error")
 	}
 }

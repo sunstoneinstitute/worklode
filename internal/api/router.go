@@ -315,16 +315,18 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/clauses/{id}/versions/{n}": guardedAny(permDocRead),
 	"POST /api/v1/clauses/{id}/edges":       guardedAny(permDocWrite),
 	"DELETE /api/v1/clauses/{id}/edges":     guardedAny(permDocWrite),
-	"PUT /api/v1/docs/{id}/body":            guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/patch":          guardedAny(permDocWrite),
-	"PUT /api/v1/docs/{id}/edges":           guarded(permDocImport),
-	"POST /api/v1/docs/{id}/submit":         guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/accept":         guarded(permDocWrite),
-	"POST /api/v1/docs/{id}/revise":         guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/withdraw":       guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/owner":          guarded(permDocWrite),
-	"POST /api/v1/docs/{id}/notes":          guardedAny(permDocWrite),
-	"GET /api/v1/docs/{id}/notes":           guardedAny(permDocRead),
+	// The refactor primitive (S24): same guard as the clause edge write above.
+	"POST /api/v1/projects/{id}/clauses/supersede": guardedAny(permDocWrite),
+	"PUT /api/v1/docs/{id}/body":                   guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/patch":                 guardedAny(permDocWrite),
+	"PUT /api/v1/docs/{id}/edges":                  guarded(permDocImport),
+	"POST /api/v1/docs/{id}/submit":                guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/accept":                guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/revise":                guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/withdraw":              guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/owner":                 guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/notes":                 guardedAny(permDocWrite),
+	"GET /api/v1/docs/{id}/notes":                  guardedAny(permDocRead),
 	// Setting the reviewer set (025 §7.3, WL-359) is the same shape as owner
 	// transfer: guarded rather than guardedAny, since it too is a deliberate
 	// act on the document's identity, gated in the store on the same

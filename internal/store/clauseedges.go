@@ -9,15 +9,27 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// clauseEdgeTypes are the wl: properties a clause edge may carry (S12, S26).
-var clauseEdgeTypes = map[string]bool{"refines": true, "constrains": true, "conflictsWith": true, "references": true}
+// clauseEdgeTypes are the wl: properties a clause edge may carry (S12, S26,
+// S22). supersededBy and wasDerivedFrom reuse dct:isReplacedBy and
+// prov:wasDerivedFrom (ns/ontology.ttl's reuse list).
+var clauseEdgeTypes = map[string]bool{
+	"refines": true, "constrains": true, "conflictsWith": true, "references": true,
+	"supersededBy": true, "wasDerivedFrom": true,
+}
+
+// clauseEdgeTypesList names every recognized type, for error messages.
+const clauseEdgeTypesList = "refines, constrains, conflictsWith, references, supersededBy, wasDerivedFrom"
 
 // LinkClauses writes a manual edge (12-spec-refactoring-design-tree.md S12).
 // A second identical edge is ErrEdgeExists; a self edge or an unknown type is
-// ErrInvalidInput; an unknown clause id is ErrNotFound.
+// ErrInvalidInput; an unknown clause id is ErrNotFound. supersededBy has one
+// writer, lode clause supersede (S22, R4): LinkClauses refuses it.
 func LinkClauses(tx *sql.Tx, fromID, toID int64, typ string) error {
 	if !clauseEdgeTypes[typ] {
-		return fmt.Errorf("edge type %q is not one of refines, constrains, conflictsWith, references: %w", typ, ErrInvalidInput)
+		return fmt.Errorf("edge type %q is not one of %s: %w", typ, clauseEdgeTypesList, ErrInvalidInput)
+	}
+	if typ == "supersededBy" {
+		return fmt.Errorf("supersededBy edges are written by lode clause supersede, not clause link: %w", ErrInvalidInput)
 	}
 	if fromID == toID {
 		return fmt.Errorf("a clause cannot relate to itself: %w", ErrInvalidInput)
@@ -38,9 +50,11 @@ func LinkClauses(tx *sql.Tx, fromID, toID int64, typ string) error {
 
 // UnlinkClauses removes a manual edge, or reports ErrNotFound. A derived
 // edge cannot be removed by hand: it comes back on the next version anyway.
+// A refactor edge cannot be removed by hand either (S22, R4): it is undone
+// only by a later refactor.
 func UnlinkClauses(tx *sql.Tx, fromID, toID int64, typ string) error {
 	if !clauseEdgeTypes[typ] {
-		return fmt.Errorf("edge type %q is not one of refines, constrains, conflictsWith, references: %w", typ, ErrInvalidInput)
+		return fmt.Errorf("edge type %q is not one of %s: %w", typ, clauseEdgeTypesList, ErrInvalidInput)
 	}
 	var source string
 	err := tx.QueryRow(`SELECT source FROM clause_edges WHERE from_clause = $1 AND to_clause = $2 AND type = $3`,
@@ -53,6 +67,9 @@ func UnlinkClauses(tx *sql.Tx, fromID, toID int64, typ string) error {
 	}
 	if source == "derived" {
 		return fmt.Errorf("the %s edge from clause %d to %d is derived from its text; edit the clause instead: %w", typ, fromID, toID, ErrInvalidInput)
+	}
+	if source == "refactor" {
+		return fmt.Errorf("the %s edge from clause %d to %d was written by a refactor; only a later refactor can undo it: %w", typ, fromID, toID, ErrInvalidInput)
 	}
 	if _, err := tx.Exec(`DELETE FROM clause_edges WHERE from_clause = $1 AND to_clause = $2 AND type = $3`,
 		fromID, toID, typ); err != nil {

@@ -933,6 +933,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/clauses/{id}/versions/{n}", s.getClauseVersion)
 	r.api("POST /api/v1/clauses/{id}/edges", s.linkClause)
 	r.api("DELETE /api/v1/clauses/{id}/edges", s.unlinkClause)
+	r.api("POST /api/v1/projects/{id}/clauses/supersede", s.supersedeClauses)
 	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
 	r.api("POST /api/v1/docs/{id}/patch", s.patchDoc)
 	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)

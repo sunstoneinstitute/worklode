@@ -1,0 +1,24 @@
+old_ref	old_anchor	new_file	new_anchor	why
+WL-SPEC-1	sec-13	02-identity-actors-and-secrets.md	open-questions	merged into Open questions
+WL-SPEC-4	sec-0	03-tasks-and-execution.md	preamble	merged into preamble
+WL-SPEC-4	sec-12	03-tasks-and-execution.md	preamble	merged into preamble
+WL-SPEC-5	sec-0	03-tasks-and-execution.md	preamble	merged into preamble
+WL-SPEC-5	sec-8	03-tasks-and-execution.md	preamble	merged into preamble
+WL-SPEC-6	sec-15	07-knowledge-graph-and-search.md	open-questions	merged into Open questions
+WL-SPEC-8	sec-1	09-cli-and-skills.md	preamble	naming law amendment, no home section
+WL-SPEC-8	sec-1	01-system-and-deployment.md	preamble	shipped executables amendment, no home section
+WL-SPEC-8	sec-20	08-agent-harness-and-sessions.md	open-questions	moved into Open questions
+WL-SPEC-13	sec-5	08-agent-harness-and-sessions.md	open-questions	moved into Open questions
+WL-SPEC-16	sec-8	09-cli-and-skills.md	open-questions	merged into Open questions
+WL-SPEC-17	sec-9	02-identity-actors-and-secrets.md	open-questions	moved into Open questions
+WL-SPEC-21	sec-14	06-design-queries-intents-decks.md	open-questions	moved into Open questions
+WL-SPEC-21	sec-15.1	06-design-queries-intents-decks.md	open-questions	merged into Open questions
+WL-SPEC-25	sec-23	05-documents.md	preamble	merged into preamble
+WL-SPEC-29	sec-6.2	02-identity-actors-and-secrets.md	10	02 has no sec-13; the real target is sec-10, Task-declared secrets
+WL-SPEC-29	sec-9	03-tasks-and-execution.md	preamble	merged into preamble
+WL-SPEC-32	sec-0	10-cockpit.md	preamble	merged into preamble
+WL-SPEC-37	sec-12	09-cli-and-skills.md	open-questions	merged into Open questions
+WL-SPEC-38	sec-8	01-system-and-deployment.md	open-questions	merged into Open questions
+WL-SPEC-40	sec-12	07-knowledge-graph-and-search.md	open-questions	merged into Open questions
+WL-SPEC-56	sec-0	10-cockpit.md	preamble	merged into preamble
+WL-SPEC-70	sec-8	06-design-queries-intents-decks.md	open-questions	moved into Open questions
