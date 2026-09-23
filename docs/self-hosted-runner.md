@@ -1,6 +1,6 @@
 # Self-hosted CI runner (hel01)
 
-`test`, `lint` and `build-image` in `pr-checks.yml` run on a self-hosted
+`gate`, `test`, `lint`, `build-image` and `checks` in `pr-checks.yml` run on a self-hosted
 GitHub Actions runner on `hel01` when the triggering PR is trustworthy;
 `validate-kustomize`, `obsidian`, and every PR the gate doesn't trust stay on
 `ubuntu-latest`. `deploy-dev.yml`'s `build-image` targets hel01
@@ -20,8 +20,9 @@ repo (`github.event.pull_request.head.repo.full_name ==
 github.repository`), independent of `run` (which the `can-be-tested` label
 or author association can also set true). **A fork PR never gets `trusted`,
 regardless of label or association** — it always runs on `ubuntu-latest`.
-`lint`/`test`/`build-image` route their `runs-on` input off `trusted`, not
-`run`.
+`lint`/`test`/`build-image`/`checks` route their `runs-on` off `trusted`, not
+`run`. `gate` cannot read its own output, so its `runs-on` repeats the same
+head-repo test inline, plus `merge_group`.
 
 Do not widen `trusted` to include forks from collaborators/members: hosted
 CI already accepts that risk for a throwaway VM per job; hel01 is not
