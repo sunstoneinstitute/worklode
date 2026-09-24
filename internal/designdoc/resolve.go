@@ -139,36 +139,40 @@ func kindArticle(kind string) string {
 	return "a " + kind
 }
 
-// clauseRefPattern is the CL arm of 025 §14.3's <KEY>-<TYPE>-<n> grammar
-// (12-spec-refactoring-design-tree.md S20): a design clause's citable ref.
-var clauseRefPattern = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-CL-(\d+)$`)
+// RuleRefText is the RULE arm of 025 §14.3's <KEY>-<TYPE>-<n> grammar
+// (12-spec-refactoring-design-tree.md S20, S64): a design rule's citable ref.
+// The type segment CL is the rule's pre-S64 spelling, still read because
+// accepted document text carries it; every ref is written RULE.
+const RuleRefText = `([A-Z][A-Z0-9]{1,9})-(?:RULE|CL)-(\d+)`
 
-// ClauseRef is a parsed clause ref, e.g. "WL-CL-12".
-type ClauseRef struct {
+var ruleRefPattern = regexp.MustCompile(`^` + RuleRefText + `$`)
+
+// RuleRef is a parsed rule ref, e.g. "WL-RULE-12".
+type RuleRef struct {
 	Key    string
 	Number int64
 }
 
-// ParseClauseRef parses base as a clause ref. It reports false for every
+// ParseRuleRef parses base as a rule ref. It reports false for every
 // other ref form, including document shorthand and a ref carrying a fragment.
-func ParseClauseRef(base string) (ClauseRef, bool) {
-	m := clauseRefPattern.FindStringSubmatch(base)
+func ParseRuleRef(base string) (RuleRef, bool) {
+	m := ruleRefPattern.FindStringSubmatch(base)
 	if m == nil {
-		return ClauseRef{}, false
+		return RuleRef{}, false
 	}
 	n, err := strconv.ParseInt(m[2], 10, 64)
 	if err != nil {
-		return ClauseRef{}, false
+		return RuleRef{}, false
 	}
-	return ClauseRef{Key: m[1], Number: n}, true
+	return RuleRef{Key: m[1], Number: n}, true
 }
 
-// clauseRefInText and sectionRefInText are the ref grammars of
-// ParseClauseRef and ParseShorthand loosened to find refs inside prose
+// ruleRefInText and sectionRefInText are the ref grammars of
+// ParseRuleRef and ParseShorthand loosened to find refs inside prose
 // (S26). A section ref must carry an anchor: a bare document ref names an
-// arrangement, and edges run between clauses.
+// arrangement, and edges run between rules.
 var (
-	clauseRefInText  = regexp.MustCompile(`\b[A-Z][A-Z0-9]{1,9}-CL-\d+\b`)
+	ruleRefInText    = regexp.MustCompile(`\b` + RuleRefText + `\b`)
 	sectionRefInText = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+)#(sec-[0-9A-Za-z._-]+)\b`)
 )
 
@@ -178,19 +182,18 @@ type SectionRef struct {
 	Anchor    string
 }
 
-// FindClauseRefs returns every distinct clause ref in text, in order of
-// first appearance.
-func FindClauseRefs(text string) []ClauseRef {
-	var out []ClauseRef
-	seen := map[string]bool{}
-	for _, m := range clauseRefInText.FindAllString(text, -1) {
-		if seen[m] {
+// FindRuleRefs returns every distinct rule ref in text, in order of
+// first appearance. WL-CL-12 and WL-RULE-12 are the same rule.
+func FindRuleRefs(text string) []RuleRef {
+	var out []RuleRef
+	seen := map[RuleRef]bool{}
+	for _, m := range ruleRefInText.FindAllString(text, -1) {
+		r, ok := ParseRuleRef(m)
+		if !ok || seen[r] {
 			continue
 		}
-		seen[m] = true
-		if r, ok := ParseClauseRef(m); ok {
-			out = append(out, r)
-		}
+		seen[r] = true
+		out = append(out, r)
 	}
 	return out
 }

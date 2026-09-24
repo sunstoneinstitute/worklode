@@ -36,7 +36,7 @@ func release(t *testing.T, s *Store, taskID string) {
 // (S28).
 func TestReplanNextMintsAndClaimsOneDesignTask(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestReplanNextMintsAndClaimsOneDesignTask(t *testing.T) {
 // not stale is a refusal, not a claim.
 func TestReplanNextByRefRefusesNonStalePlan(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
@@ -107,7 +107,7 @@ func TestReplanNextMetrics(t *testing.T) {
 	s := openDocStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestReplanNextMetrics(t *testing.T) {
 // (see task-4-report.md's concurrency section).
 func TestReplanNextConcurrentCallersShareOneMintedTask(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)

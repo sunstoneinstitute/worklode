@@ -11,15 +11,15 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// SupersedeClauses calls POST /api/v1/projects/{id}/clauses/supersede,
+// SupersedeRules calls POST /api/v1/projects/{id}/rules/supersede,
 // applying a refactor map (S24).
-func (c *Client) SupersedeClauses(ctx context.Context, project string, in model.SupersedeInput) (model.SupersedeResult, []byte, error) {
+func (c *Client) SupersedeRules(ctx context.Context, project string, in model.SupersedeInput) (model.SupersedeResult, []byte, error) {
 	return doJSON[model.SupersedeResult](ctx, c, http.MethodPost,
-		"/api/v1/projects/"+url.PathEscape(project)+"/clauses/supersede", in, "supersede")
+		"/api/v1/projects/"+url.PathEscape(project)+"/rules/supersede", in, "supersede")
 }
 
-// SupersedeRender prints one line per resolved map entry, "WL-CL-12 ->
-// WL-CL-40, WL-CL-41" (or "WL-CL-12 ->" for a withdraw-only entry), then the
+// SupersedeRender prints one line per resolved map entry, "WL-RULE-12 ->
+// WL-RULE-40, WL-RULE-41" (or "WL-RULE-12 ->" for a withdraw-only entry), then the
 // counts, prefixed "dry run:" when the result came from --dry-run.
 func SupersedeRender(w io.Writer, res model.SupersedeResult) {
 	for _, e := range res.Entries {

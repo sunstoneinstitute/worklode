@@ -795,16 +795,16 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// The reference redirect (WL-301): not navWrapped — it answers a 302,
 	// never a page.
 	r.web("GET /docs/ref/{ref...}", s.docRefRedirect)
-	// The S20 canonical URL scheme: the clause page and its version sibling,
+	// The S20 canonical URL scheme: the rule page and its version sibling,
 	// the task and document pages under /projects/{proj}/{kind}/{n}, and the
 	// resolving redirect the autolinker targets. projectEntityPage records
 	// the navigation metric for documents itself, since tasks share its
-	// route. clauseRefRedirect only ever 302s, like docRefRedirect above.
-	r.web("GET /projects/{proj}/clause/{n}", s.navWrap("knowledge", s.clausePage))
-	r.web("GET /projects/{proj}/clause/{n}/{ver}", s.navWrap("knowledge", s.clausePage))
+	// route. ruleRefRedirect only ever 302s, like docRefRedirect above.
+	r.web("GET /projects/{proj}/rule/{n}", s.navWrap("knowledge", s.rulePage))
+	r.web("GET /projects/{proj}/rule/{n}/{ver}", s.navWrap("knowledge", s.rulePage))
 	r.web("GET /projects/{proj}/{kind}/{n}", s.projectEntityPage)
 	r.web("GET /projects/{proj}/{kind}/{n}/{ver}", s.projectEntityPage)
-	r.web("GET /clauses/{ref}", s.clauseRefRedirect)
+	r.web("GET /rules/{ref}", s.ruleRefRedirect)
 	r.web("GET /{ref}", s.refShortcut)
 	// The drift board (spec 007) is the graph-backed half of Knowledge, so it
 	// marks that destination current rather than taking an eighth nav entry
@@ -935,15 +935,15 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/docs/{id}/versions", s.listDocVersions)
 	r.api("GET /api/v1/docs/{id}/referrers", s.listDocReferrers)
 	r.api("GET /api/v1/docs/{id}/versions/{n}", s.getDocVersion)
-	r.api("GET /api/v1/clauses", s.listClauses)
-	r.api("GET /api/v1/clauses/{id}", s.getClause)
-	r.api("PUT /api/v1/clauses/{id}", s.editClause)
-	r.api("PATCH /api/v1/clauses/{id}", s.patchClause)
-	r.api("GET /api/v1/clauses/{id}/versions", s.listClauseVersions)
-	r.api("GET /api/v1/clauses/{id}/versions/{n}", s.getClauseVersion)
-	r.api("POST /api/v1/clauses/{id}/edges", s.linkClause)
-	r.api("DELETE /api/v1/clauses/{id}/edges", s.unlinkClause)
-	r.api("POST /api/v1/projects/{id}/clauses/supersede", s.supersedeClauses)
+	r.api("GET /api/v1/rules", s.listRules)
+	r.api("GET /api/v1/rules/{id}", s.getRule)
+	r.api("PUT /api/v1/rules/{id}", s.editRule)
+	r.api("PATCH /api/v1/rules/{id}", s.patchRule)
+	r.api("GET /api/v1/rules/{id}/versions", s.listRuleVersions)
+	r.api("GET /api/v1/rules/{id}/versions/{n}", s.getRuleVersion)
+	r.api("POST /api/v1/rules/{id}/edges", s.linkRule)
+	r.api("DELETE /api/v1/rules/{id}/edges", s.unlinkRule)
+	r.api("POST /api/v1/projects/{id}/rules/supersede", s.supersedeRules)
 	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
 	r.api("POST /api/v1/docs/{id}/patch", s.patchDoc)
 	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)

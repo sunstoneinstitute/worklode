@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Generate a `lode clause supersede --map` file from the old-backbone section map.
+"""Generate a `lode rule supersede --map` file from the old-backbone section map.
 
 docs/specs2/section-map.tsv is the hand-made map from the 47 old backbone
 specs' sections to the 11 new docs/specs2 documents. This resolves each row
-to a map line in the format internal/cmd/clause.go's parseSupersedeMap reads:
+to a map line in the format internal/cmd/rule.go's parseSupersedeMap reads:
 one `<old> -> <new> [<new> ...]` entry per line, `<old> ->` to withdraw with
 no successor. Refs are written `KEY-KIND-N#anchor` (WL-SPEC-1#sec-10), which
-`lode clause supersede` resolves as a section ref.
+`lode rule supersede` resolves as a section ref.
 
-Some rows target a heading that is not one clause: `Open questions` is a
+Some rows target a heading that is not one rule: `Open questions` is a
 bullet list, `-` names no section at all, and one row (WL-SPEC-29 sec-6.2)
 points at a section number that does not exist in its target document.
 docs/specs2/ttl/residue.tsv holds the hand ruling for each of these: which
-new document's preamble or Open-questions clause, or which numbered section,
+new document's preamble or Open-questions rule, or which numbered section,
 is the real successor. A residue.tsv row always wins over the section map's
 own new_section for the same (old_ref, old_anchor, new_file).
 
-`lode clause supersede --map` applies the whole map in one transaction and
+`lode rule supersede --map` applies the whole map in one transaction and
 refuses it on any unresolvable ref. One old_anchor in section-map.tsv is a
 note, not a real anchor; its row becomes a "# skipped" comment instead of a
 map entry, so the run doesn't fail on it, and a count goes to stderr.
@@ -54,7 +54,7 @@ RANGE = re.compile(r"^(\d+)\.(\d+)-(\d+)\.(\d+)$")
 # The 025 §3 anchor grammar, copied from internal/designdoc/lint.go's
 # anchorRE (ValidAnchor): the "sec-" prefix, then a section number or a
 # lowercase slug. section-map.tsv's old_anchor is occasionally a note
-# ("§2 (line 106)") rather than a real anchor; `lode clause supersede`
+# ("§2 (line 106)") rather than a real anchor; `lode rule supersede`
 # resolves every old ref in one transaction and refuses the whole map on
 # any unresolvable one, so a row like that cannot become a map entry.
 ANCHOR_RE = re.compile(r"^sec-[a-z0-9][a-z0-9.-]*$")
@@ -108,7 +108,7 @@ def resolve_anchor(raw, file_stem, anchors, where):
     if key is None:
         return f"sec-{raw}"
     if anchors is None:
-        raise ValueError(f"{where}: {key!r} clause needs --anchors")
+        raise ValueError(f"{where}: {key!r} rule needs --anchors")
     if file_stem not in anchors:
         raise ValueError(f"{where}: {file_stem!r} is not in --anchors")
     if key not in anchors[file_stem]:

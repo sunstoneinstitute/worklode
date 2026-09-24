@@ -23,13 +23,13 @@ func abandon(t *testing.T, s *Store, taskID string) {
 	}
 }
 
-// setClauseStatus runs SetClauseStatus through RecordEvent, the way a caller
+// setRuleStatus runs SetRuleStatus through RecordEvent, the way a caller
 // (increment 4's split/merge lineage) will.
-func setClauseStatus(t *testing.T, s *Store, clauseID int64, status string) error {
+func setRuleStatus(t *testing.T, s *Store, ruleID int64, status string) error {
 	t.Helper()
-	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "clause.status", nil,
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "rule.status", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return SetClauseStatus(tx, s.Now(), clauseID, status, eventID)
+			return SetRuleStatus(tx, s.Now(), ruleID, status, eventID)
 		})
 	return err
 }
@@ -39,7 +39,7 @@ func setClauseStatus(t *testing.T, s *Store, clauseID int64, status string) erro
 // plan's arrangement (S5, increment 3 R4).
 func TestPlanSpentWhenLastTaskCloses(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	_, tasks, err := acceptDoc(t, s, plan.ID, "stig")
 	if err != nil || len(tasks) != 2 {
@@ -68,7 +68,7 @@ func TestPlanSpentWhenLastTaskCloses(t *testing.T) {
 // ungoverned task from the arrangement before closing (S5).
 func TestWithdrawPlanGovernsItsTasks(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	_, tasks, err := acceptDoc(t, s, plan.ID, "stig")
 	if err != nil || len(tasks) == 0 {
@@ -86,11 +86,11 @@ func TestWithdrawPlanGovernsItsTasks(t *testing.T) {
 	}
 }
 
-// TestWithdrawnClauseMakesPlansStale: SetClauseStatus withdrawn marks every
-// accepted plan arranging the clause stale (S23).
-func TestWithdrawnClauseMakesPlansStale(t *testing.T) {
+// TestWithdrawnRuleMakesPlansStale: SetRuleStatus withdrawn marks every
+// accepted plan arranging the rule stale (S23).
+func TestWithdrawnRuleMakesPlansStale(t *testing.T) {
 	s := openDocStore(t)
-	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, spec.ID, "stig"); err != nil {
 		t.Fatal(err)
@@ -98,25 +98,25 @@ func TestWithdrawnClauseMakesPlansStale(t *testing.T) {
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
 	}
-	id := clauseID(t, s, "P1", 1)
-	if err := setClauseStatus(t, s, id, "withdrawn"); err != nil {
+	id := ruleID(t, s, "P1", 1)
+	if err := setRuleStatus(t, s, id, "withdrawn"); err != nil {
 		t.Fatal(err)
 	}
 	d, err := s.GetDoc(t.Context(), plan.ID)
 	if err != nil || d.Status != "stale" {
-		t.Fatalf("plan arranging a withdrawn clause should be stale, got %s %v", d.Status, err)
+		t.Fatalf("plan arranging a withdrawn rule should be stale, got %s %v", d.Status, err)
 	}
 	// The doc.stale event this path records carries a distinct cause from
 	// the 025 §8.6 amend path (TestPatchMarksUnexecutedPlansStale pins
-	// "amended" there) and names the withdrawn clause, not a spec slug.
+	// "amended" there) and names the withdrawn rule, not a spec slug.
 	evs := staleEvents(t, s, StaleExternalID(d.Slug, d.Version))
 	if len(evs) != 1 {
 		t.Fatalf("doc.stale events = %d, want 1", len(evs))
 	}
-	if evs[0]["cause"] != "clause_withdrawn" || evs[0]["spec"] != "P1-CL-1" {
-		t.Errorf("payload = %v, want cause clause_withdrawn on P1-CL-1", evs[0])
+	if evs[0]["cause"] != "rule_withdrawn" || evs[0]["spec"] != "P1-RULE-1" {
+		t.Errorf("payload = %v, want cause rule_withdrawn on P1-RULE-1", evs[0])
 	}
-	if err := setClauseStatus(t, s, id, "nonsense"); err == nil {
+	if err := setRuleStatus(t, s, id, "nonsense"); err == nil {
 		t.Fatal("unknown status should be refused")
 	}
 }
@@ -128,7 +128,7 @@ func TestWithdrawnClauseMakesPlansStale(t *testing.T) {
 // need the whole corpus (final review C1).
 func TestListDocsHidesTerminalPlans(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
@@ -142,7 +142,7 @@ func TestListDocsHidesTerminalPlans(t *testing.T) {
 	if len(all) != 1 || len(hidden) != 0 || len(byStatus) != 1 {
 		t.Fatalf("zero filter %d (want 1), hidden %d (want 0), by status %d (want 1)", len(all), len(hidden), len(byStatus))
 	}
-	adr := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "adr", Slug: "old", Body: clauseDocV1, CreatedBy: "stig"})
+	adr := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "adr", Slug: "old", Body: ruleDocV1, CreatedBy: "stig"})
 	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET status = 'superseded' WHERE id = $1`, adr.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestListDocsHidesTerminalPlans(t *testing.T) {
 // plan — nothing was delivered (C1 fix review, increment 3).
 func TestDeleteLastInProgressTaskLeavesPlanAccepted(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	_, tasks, err := acceptDoc(t, s, plan.ID, "stig")
 	if err != nil || len(tasks) != 2 {
@@ -198,7 +198,7 @@ func TestDeleteLastInProgressTaskLeavesPlanAccepted(t *testing.T) {
 // in_progress rollup that calls settlePlan (C1 fix review, increment 3).
 func TestPlanNeverSpentWithNoLiveTasks(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	_, tasks, err := acceptDoc(t, s, plan.ID, "stig")
 	if err != nil || len(tasks) != 2 {
@@ -225,7 +225,7 @@ func TestPlanNeverSpentWithNoLiveTasks(t *testing.T) {
 // §8.7 sweeper does not pick the plan up (final review C2, increment 3).
 func TestSpentPlanStillCounts(t *testing.T) {
 	s := openDocStore(t)
-	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, spec.ID, "stig"); err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestSpentPlanStillCounts(t *testing.T) {
 // (final review M1, increment 3).
 func TestDeleteLastOpenReadyTaskSpendsPlan(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	_, tasks, err := acceptDoc(t, s, plan.ID, "stig")
 	if err != nil || len(tasks) != 2 {

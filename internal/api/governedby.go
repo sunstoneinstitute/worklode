@@ -10,7 +10,7 @@ import (
 )
 
 // govern handles POST /api/v1/tasks/{id}/governed-by: the architect adds a
-// governing clause to a task by hand (12-spec-refactoring-design-tree.md S3).
+// governing rule to a task by hand (12-spec-refactoring-design-tree.md S3).
 // Every change is an event on the task.
 func (s *server) govern(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -19,18 +19,18 @@ func (s *server) govern(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	ref, ok := designdoc.ParseClauseRef(req.Clause)
+	ref, ok := designdoc.ParseRuleRef(req.Rule)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "rule must look like WL-RULE-12")
 		return
 	}
 	err := s.recordTaskEvent(r.Context(), "cli", "task.governed", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			clauseID, err := store.ClauseIDByRef(tx, ref.Key, ref.Number)
+			ruleID, err := store.RuleIDByRef(tx, ref.Key, ref.Number)
 			if err != nil {
 				return err
 			}
-			return store.Govern(tx, id, clauseID, "manual", req.Pin)
+			return store.Govern(tx, id, ruleID, "manual", req.Pin)
 		})
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -47,18 +47,18 @@ func (s *server) ungovern(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	ref, ok := designdoc.ParseClauseRef(req.Clause)
+	ref, ok := designdoc.ParseRuleRef(req.Rule)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "rule must look like WL-RULE-12")
 		return
 	}
 	err := s.recordTaskEvent(r.Context(), "cli", "task.ungoverned", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			clauseID, err := store.ClauseIDByRef(tx, ref.Key, ref.Number)
+			ruleID, err := store.RuleIDByRef(tx, ref.Key, ref.Number)
 			if err != nil {
 				return err
 			}
-			return store.Ungovern(tx, id, clauseID)
+			return store.Ungovern(tx, id, ruleID)
 		})
 	if err != nil {
 		s.mapStoreErr(w, err)

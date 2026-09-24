@@ -191,7 +191,7 @@ Editing a workflow applies immediately to every task governed by it. A `tasks.wo
 
 ### 8.7 Storage
 
-`projects.workflows jsonb NULL` and `tasks.workflow text NULL`. NULL means built-in default only, no rules. It is a JSON column because it is consulted inside the transition transaction.
+`projects.workflows jsonb NULL` and `tasks.workflow text NULL`. NULL means built-in default only, no automations. It is a JSON column because it is consulted inside the transition transaction.
 
 ```json
 {
@@ -207,7 +207,7 @@ Editing a workflow applies immediately to every task governed by it. A `tasks.wo
       "transitions": [["merged", "released"]]
     }
   },
-  "rules": []
+  "automations": []
 }
 ```
 
@@ -215,7 +215,7 @@ Editing a workflow applies immediately to every task governed by it. A `tasks.wo
 |---|---|
 | `default` | The name a task with no override resolves to. May name the built-in `default`. |
 | `workflows` | Named definitions: `states` (must include the core) plus optional `transitions`. When present, `transitions` is the complete list of declared entries. Core edges are never listed. |
-| `rules` | The ordered rule list (section 10). Optional and orthogonal to `workflows`. |
+| `automations` | The ordered automation list (section 10). Optional and orthogonal to `workflows`. |
 
 ### 8.8 Validation
 
@@ -228,7 +228,7 @@ Enforced in the store on every write of `projects.workflows` and `tasks.workflow
 - Removing or renaming a workflow that open tasks reference by name is refused, naming the tasks. Closed tasks may dangle.
 - Names match `[a-z0-9-]{1,40}`.
 - A repo mapping's `done_state` must be a state of the project's default workflow. A mismatch is a warning and the write succeeds.
-- The `rules` key validates per section 10.2.
+- The `automations` key validates per section 10.2.
 
 A workflow change never moves a task.
 
@@ -260,27 +260,27 @@ Hierarchy never consults a workflow. A task with children moves only among core 
 
 Authorship is not admin-gated because the review task is the control. Every accepted PUT appends a `project.workflows_set` event carrying the full new object and the actor. A watcher rule (`review-on-workflow-change`, peer of `doc-lifecycle`) mints a `review` task, "Review workflow change on <project>", naming the changed workflow names and the rules added, removed or changed. It is suppressed while an open review task from this rule exists for the project. **The change is live when the PUT commits. The review does not block it.** Rejecting a change is another evented PUT.
 
-LLMs may propose and maintain workflows under that review. Containment is structural: the core is not editable, entries come from a fixed table, and rules have no write path to `projects.workflows`.
+LLMs may propose and maintain workflows under that review. Containment is structural: the core is not editable, entries come from a fixed table, and automations have no write path to `projects.workflows`.
 
 ## 9. Relation to `done_state`
 
 `project_repos.done_state` is the per-repo marker for "fully delivered", feeding `taskClosed` and the resolver's frontier logic. Workflow owns which edges exist. `done_state` must be a state of the governing workflow, and disagreement is a warning on the write. A task's definition of done is its deliverables and its workflow's delivered states together.
 
-## 10. The rule engine
+## 10. The automation engine
 
-A **rule** is a project's standing instruction for when to take one of its workflow's legal transitions. Rules are an ordered list per project, evaluated first-match-wins against the events the backbone already records, firing at most one transition per triggering event. **Rules choose which legal edge to take and when, never which edges exist.**
+An **automation** is a project's standing instruction for when to take one of its workflow's legal transitions. Automations are an ordered list per project, evaluated first-match-wins against the events the backbone already records, firing at most one transition per triggering event. **Automations choose which legal edge to take and when, never which edges exist.**
 
-Rules cover what the hardwired movers (claiming, the PR-opened hook, `ResolveDelivery`, manual transitions) do not: policy at joints with more than one legal continuation, or where no observed fact ever arrives, such as `merged -> released` for a CLI project with no Flux frontier. Rules are conveniences. Every core edge stays manually takeable, so a broken rule or an unavailable LLM degrades to "nobody moved the task automatically".
+Automations cover what the hardwired movers (claiming, the PR-opened hook, `ResolveDelivery`, manual transitions) do not: policy at joints with more than one legal continuation, or where no observed fact ever arrives, such as `merged -> released` for a CLI project with no Flux frontier. Automations are conveniences. Every core edge stays manually takeable, so a broken automation or an unavailable LLM degrades to "nobody moved the task automatically".
 
 ### 10.1 Trigger, ordering, cascades
 
-Every committed transition, whatever caused it, emits a **`wl:TaskTransitioned`** domain event in the same transaction as its `state_log` row: `wl:subject` the task, `wl:fromState`, `wl:toState`, `prov:wasAssociatedWith` the actor. This is the whole trigger surface. Keying off transitions lets rules compose with every existing mover without duplicating webhook correlation.
+Every committed transition, whatever caused it, emits a **`wl:TaskTransitioned`** domain event in the same transaction as its `state_log` row: `wl:subject` the task, `wl:fromState`, `wl:toState`, `prov:wasAssociatedWith` the actor. This is the whole trigger surface. Keying off transitions lets automations compose with every existing mover without duplicating webhook correlation.
 
-For each event, the engine evaluates the task's project rules in array order and fires the action of the first rule whose trigger and condition both hold. No match is a no-op. The subscriber consumes events in log order, so evaluation is totally ordered and nondeterminism enters only through a rule's own prompt.
+For each event, the engine evaluates the task's project automations in array order and fires the action of the first automation whose trigger and condition both hold. No match is a no-op. The subscriber consumes events in log order, so evaluation is totally ordered and nondeterminism enters only through an automation's own prompt.
 
-Rule-fired transitions are attributed to the engine's own service actor, and **the engine never evaluates an event whose actor is itself.** One event, at most one rule-fired transition. A project wanting `merged -> deployed_prod -> released` automated writes one rule per hop and lets a non-rule mover supply the intermediate trigger.
+Automation-fired transitions are attributed to the engine's own service actor, and **the engine never evaluates an event whose actor is itself.** One event, at most one automation-fired transition. A project wanting `merged -> deployed_prod -> released` automated writes one automation per hop and lets a non-automation mover supply the intermediate trigger.
 
-### 10.2 Rule shape and validation
+### 10.2 Automation shape and validation
 
 ```json
 {
@@ -299,13 +299,13 @@ Rule-fired transitions are attributed to the engine's own service actor, and **t
 | `prompt` | Optional prose condition, at most 2000 characters, evaluated by the LLM. Required when `then.choose` has more than one target. |
 | `then` | Exactly one of `to` (one target) or `choose` (2 to 5 candidate targets, LLM-picked). A single-element `choose` with a `prompt` means "fire only if the model confirms". |
 
-Every rule names its edges statically: source `on.to`, targets from `then`. Nothing at evaluation time can change which edge a rule is about.
+Every automation names its edges statically: source `on.to`, targets from `then`. Nothing at evaluation time can change which edge an automation is about.
 
-Validation on write, with errors naming the rule:
+Validation on write, with errors naming the automation:
 
-- At most 50 rules. Names valid, unique.
+- At most 50 automations. Names valid, unique.
 - `on.to`, `on.from` and every `then` state in the vocabulary.
-- Every rule edge (`on.to`, target) is a core edge or a row of the 8.3 entry table. `ready -> deployed_prod` is unstorable.
+- Every automation edge (`on.to`, target) is a core edge or a row of the 8.3 entry table. `ready -> deployed_prod` is unstorable.
 - `when.kind` values are valid kinds. `when.workflow` values name workflows in the same object, or `default`.
 - `prompt` present and non-empty when `choose` has more than one target.
 - `then` has exactly one of `to` / `choose`; `choose` lists 2 to 5 distinct states (1 with `prompt`).
@@ -316,43 +316,43 @@ Edge legality is checked against the vocabulary-wide superset because the govern
 
 One `wl:TaskTransitioned` event produces one pass:
 
-1. Skip if the event's actor is the engine, the task is deleted, or the project has no rules.
-2. Load the task's facts and the project's rules once. Evaluate against that snapshot.
-3. In order, test trigger fields against the event and `when` against the task facts. On the first rule that passes: no `prompt` means the rule matches; with `prompt`, ask the model. Holds means match. Does not hold, or any failure, means continue down the list.
+1. Skip if the event's actor is the engine, the task is deleted, or the project has no automations.
+2. Load the task's facts and the project's automations once. Evaluate against that snapshot.
+3. In order, test trigger fields against the event and `when` against the task facts. On the first automation that passes: no `prompt` means the automation matches; with `prompt`, ask the model. Holds means match. Does not hold, or any failure, means continue down the list.
 4. Fire the first match, then stop.
 
-A pass makes at most 10 LLM calls, each with a per-call timeout (default 20s, deployment-configurable). Prompt rules beyond the budget do not match.
+A pass makes at most 10 LLM calls, each with a per-call timeout (default 20s, deployment-configurable). Prompt automations beyond the budget do not match.
 
 Firing calls `Transition` with `from = on.to` under the same guard as every other caller. Two refusals are benign: **stale** (the task moved since the event, from-state check fails, no-op, no falling through) and **refused** (edge is vocabulary-legal but undeclared in the governing workflow, no-op). Any other error ends the pass.
 
-The subscriber is at-least-once. Redelivery is a no-op through two layers: the fired event's dedup identity (`source = watcher`, `external_id = workflow-rules:<triggering event id>:<rule name>`) and the guard's from-state check. The offset commits after the pass regardless of outcome. A poison event must not wedge the log.
+The subscriber is at-least-once. Redelivery is a no-op through two layers: the fired event's dedup identity (`source = watcher`, `external_id = automations:<triggering event id>:<automation name>`) and the guard's from-state check. The offset commits after the pass regardless of outcome. A poison event must not wedge the log.
 
-### 10.4 LLM-backed rules
+### 10.4 LLM-backed automations
 
 The engine builds the whole request. The author contributes only `prompt`, which arrives through the reviewed PUT and is trusted policy. The fixed frame contains: the prompt, the candidate target state names, task facts (id, title, kind, state, governing workflow), the triggering edge, the last 5 `state_log` entries, and the task body truncated to 2000 characters inside delimiters the frame marks as untrusted content not to be followed as instructions. No tools, no fetching, no repo contents, no other tasks. Temperature 0, small `max_tokens`, JSON object only.
 
 The answer space is exact:
 
-| Rule form | Accepted answers |
+| Automation form | Accepted answers |
 |---|---|
 | `then.to` or single-target `choose` | `{"match": true}` or `{"match": false}` |
-| Multi-target `choose` | `{"choice": <zero-based index into the rule's choose array>}` or `{"choice": null}` |
+| Multi-target `choose` | `{"choice": <zero-based index into the automation's choose array>}` or `{"choice": null}` |
 
-Anything else (free text, out-of-range index, a state name, extra keys, JSON in prose) is `unparseable` and the rule does not match. Model output never names a state.
+Anything else (free text, out-of-range index, a state name, extra keys, JSON in prose) is `unparseable` and the automation does not match. Model output never names a state.
 
-Transport error, timeout, HTTP failure, `unparseable`, exhausted budget, or no provider configured: the rule does not match and evaluation falls through. A deployment with no LLM configured runs structured rules at full fidelity and treats every prompt rule as never matching (`unconfigured`).
+Transport error, timeout, HTTP failure, `unparseable`, exhausted budget, or no provider configured: the automation does not match and evaluation falls through. A deployment with no LLM configured runs structured automations at full fidelity and treats every prompt automation as never matching (`unconfigured`).
 
 Three independent layers stand between adversarial model output and an illegal transition: write-time validation (the config cannot store a forbidden edge, and the engine has no write path to config), answer-space bounding (output selects among pre-validated targets or declines), and the guard (every firing passes the per-task legality check). The worst a total compromise of the model achieves is a premature but legal transition, evented, attributed, and reversible through the core reopen edge.
 
 ### 10.5 Execution, client, provenance
 
-`internal/workflowrules` holds the evaluator as a pure function: given parsed rules, the event and task facts, it returns a pass plan (each candidate rule in order is *matched* or *ask(prompt frame, answer schema)*). It has no store, HTTP or LLM handle. The executor is a second eventbus subscriber, `workflow-rules`, wired in `internal/api` beside `docwatch.go`, started only under a `BackgroundCtx`. It supplies facts, makes LLM calls, applies the failure mapping, and fires through the store.
+`internal/automations` holds the evaluator as a pure function: given parsed automations, the event and task facts, it returns a pass plan (each candidate automation in order is *matched* or *ask(prompt frame, answer schema)*). It has no store, HTTP or LLM handle. The executor is a second eventbus subscriber, `workflow-automations`, wired in `internal/api` beside `docwatch.go`, started only under a `BackgroundCtx`. It supplies facts, makes LLM calls, applies the failure mapping, and fires through the store.
 
 `internal/llm` is a minimal chat-completions client shaped like `internal/embed`: OpenAI-compatible endpoint, key and model from `LODE_RULE_LLM_URL`, `LODE_RULE_LLM_KEY`, `LODE_RULE_LLM_MODEL`, nil-safe metrics, per-call timeout. No vendor or model is named in code.
 
-A firing records a **`wl:WorkflowRuleFired`** event: `wl:subject`, `wl:ruleName`, `wl:fromState`/`wl:toState`, `prov:wasInformedBy` the triggering event, with the dedup identity above. The `state_log` row is attributed to that event. The chain webhook, transition, `TaskTransitioned`, rule fired, transition is walkable in one log.
+A firing records a **`wl:AutomationFired`** event: `wl:subject`, `wl:automationName`, `wl:fromState`/`wl:toState`, `prov:wasInformedBy` the triggering event, with the dedup identity above. The `state_log` row is attributed to that event. The chain webhook, transition, `TaskTransitioned`, automation fired, transition is walkable in one log.
 
-Rules ride the workflow surfaces of section 8.10: `GET`/`PUT .../workflows`, `lode project workflow`, `lode project set workflow` and the `workflow.write` grant.
+Automations ride the workflow surfaces of section 8.10: `GET`/`PUT .../workflows`, `lode project workflow`, `lode project set workflow` and the `workflow.write` grant.
 
 ## 11. Metrics
 
@@ -374,7 +374,7 @@ The workflow-change watcher rule reports through the doc-lifecycle rule metric w
 - `ns/` mirrors: the `wlc:DoneCheck` scheme for `merge` and `manual`, and the property for a project's default.
 - Verification for kinds other than `bug`. Executable reproductions.
 - Workflows as spec documents. Per-repo workflow selection. Workflow-driven cockpit columns.
-- Writing `tasks.workflow` from rules (needs a task-creation event and an `assign_workflow` action). Trigger types beyond `wl:TaskTransitioned`. Time-based triggers. Richer `when` predicates. Wider LLM context. Cockpit surfacing of rules and firings.
+- Writing `tasks.workflow` from automations (needs a task-creation event and an `assign_workflow` action). Trigger types beyond `wl:TaskTransitioned`. Time-based triggers. Richer `when` predicates. Wider LLM context. Cockpit surfacing of automations and firings.
 
 ## Sources
 
@@ -382,6 +382,6 @@ WL-SPEC-57 (definition of done), WL-SPEC-58 (verification after delivery), WL-SP
 
 ## Open questions
 
-- Whether workflows and rules should move from the JSON column into spec documents (left open by WL-59).
+- Whether workflows and automations should move from the JSON column into spec documents (left open by WL-59).
 - Whether `project_repos.done_state` should be replaced by a per-repo workflow selector.
-- Which service actor id the rule engine uses, and how it is provisioned (see 02-identity-actors-and-secrets.md).
+- Which service actor id the automation engine uses, and how it is provisioned (see 02-identity-actors-and-secrets.md).

@@ -528,10 +528,10 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 		if g.Pinned > 0 {
 			pin = fmt.Sprintf(", pinned v%d", g.Pinned)
 		}
-		if g.Current != g.ClauseVersion {
-			fmt.Fprintf(w, "  governed by: %s  %s (v%d, clause now v%d%s)\n", g.Clause, g.Heading, g.ClauseVersion, g.Current, pin)
+		if g.Current != g.RuleVersion {
+			fmt.Fprintf(w, "  governed by: %s  %s (v%d, rule now v%d%s)\n", g.Rule, g.Heading, g.RuleVersion, g.Current, pin)
 		} else {
-			fmt.Fprintf(w, "  governed by: %s  %s (v%d%s)\n", g.Clause, g.Heading, g.ClauseVersion, pin)
+			fmt.Fprintf(w, "  governed by: %s  %s (v%d%s)\n", g.Rule, g.Heading, g.RuleVersion, pin)
 		}
 		if len(g.ResolvesTo) > 0 {
 			fmt.Fprintf(w, "    -> %s\n", strings.Join(g.ResolvesTo, ", "))

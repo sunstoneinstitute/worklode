@@ -1,0 +1,40 @@
+# Worklode ontology — proposed rule terms (`wl:` vocabulary, status unstable).
+#
+# The rule model treats the lowest heading unit of a spec as the thing that
+# gets an identity, a status and edges, and a document as an ordered
+# arrangement of rules. It is designed in
+# docs/specs2/12-spec-refactoring-design-tree.md (Q12 to Q20) and has no
+# accepted spec yet, so these terms sit in their own file rather than in
+# ontology.ttl: same namespace, marked vs:term_status "unstable". The rule
+# class and its four edge properties moved to ontology.ttl with 07 §2 (rule
+# model increment 2); the arrangement terms below wait for increment 3.
+
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix vs:   <http://www.w3.org/2003/06/sw-vocab-status/ns#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+
+wl:OpenQuestion a owl:Class ; vs:term_status "unstable" ; rdfs:subClassOf wl:Rule ;
+    rdfs:comment "A rule of a distinct kind: one bullet of a document's Open questions section, never normative." .
+wl:Arrangement a owl:Class ; vs:term_status "unstable" ; rdfs:subClassOf wl:DesignDoc ;
+    rdfs:comment "A document as an ordered selection of rules; owns no text of its own (Q17)." .
+wl:arranges a owl:ObjectProperty ; vs:term_status "unstable" ; rdfs:domain wl:Arrangement ; rdfs:range wl:Rule ;
+    rdfs:comment "Arrangement includes this rule; order is given by wl:position on the rule within the arrangement's wl:ruleList." .
+wl:ruleList a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain wl:Arrangement ; rdfs:range rdf:List ;
+    rdfs:comment "The ordered rdf:List of rules that is the arrangement's frozen reading order (Q17)." .
+wl:position a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rule ; rdfs:range xsd:integer ;
+    rdfs:comment "1-based position of the rule in its first arrangement; convenience alongside wl:ruleList." .
+wl:supersedesSection a owl:ObjectProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rule ; rdfs:range wl:Section ;
+    rdfs:comment "The rule carries the content of an old spec section (section-map.tsv disposition moved, merged or pointer)." .
+wl:tokenCount a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rule ; rdfs:range xsd:integer ;
+    rdfs:comment "Approximate token count of the rule text (words * 1.3)." .
+wl:topic a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rule ; rdfs:range xsd:string ;
+    rdfs:comment "One of the nine sprawl-metrics topics the rule matches on two or more keywords (docs/research/sprawl-metrics.md)." .
+wl:sourceLines a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rule ; rdfs:range xsd:string ;
+    rdfs:comment "file#Lstart-Lend in the git tree the rule was split from." .
+wl:foldedHeading a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rule ; rdfs:range xsd:string ;
+    rdfs:comment "Heading of a sub-100-token leaf folded into this rule by the Q12 folding decision." .

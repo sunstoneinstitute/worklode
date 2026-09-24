@@ -359,7 +359,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this parent")
 	cmd.Flags().StringVar(&followUpTo, "follow-up-to", "",
 		"record that this task was spun out of the work on that task")
-	cmd.Flags().StringArrayVar(&governedBy, "governed-by", nil, "clause that governs the task, e.g. WL-CL-12 (repeatable)")
+	cmd.Flags().StringArrayVar(&governedBy, "governed-by", nil, "rule that governs the task, e.g. WL-RULE-12 (repeatable)")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
 		"org-catalog secret names this task needs, comma-separated (see `lode secret catalog`)")
 	cmd.MarkFlagRequired("title")
@@ -1318,10 +1318,10 @@ func newTaskUnblockCmd() *cobra.Command {
 		"%s is no longer blocked by %s", (*cli.Client).Unblock)
 }
 
-// newTaskClauseCmd builds a `lode task <verb> <id> --by <clause-ref>`
-// command: the subject resolves as a task id, the clause ref is passed
-// through as written (WL-CL-12) and the server validates it.
-func newTaskClauseCmd(use, short, msg string, call taskEdge) *cobra.Command {
+// newTaskRuleCmd builds a `lode task <verb> <id> --by <rule-ref>`
+// command: the subject resolves as a task id, the rule ref is passed
+// through as written (WL-RULE-12) and the server validates it.
+func newTaskRuleCmd(use, short, msg string, call taskEdge) *cobra.Command {
 	var by string
 	cmd := &cobra.Command{
 		Use:               use,
@@ -1340,20 +1340,20 @@ func newTaskClauseCmd(use, short, msg string, call taskEdge) *cobra.Command {
 			return runTaskEdge(cmd, c, id, by, msg, call)
 		},
 	}
-	cmd.Flags().StringVar(&by, "by", "", "clause ref, e.g. WL-CL-12 (required)")
+	cmd.Flags().StringVar(&by, "by", "", "rule ref, e.g. WL-RULE-12 (required)")
 	cmd.MarkFlagRequired("by")
 	return cmd
 }
 
-// newTaskGovernCmd builds `lode task govern <id> --by <clause-ref> [--pin]`.
-// It does not go through newTaskClauseCmd: Govern takes a pin bool that the
+// newTaskGovernCmd builds `lode task govern <id> --by <rule-ref> [--pin]`.
+// It does not go through newTaskRuleCmd: Govern takes a pin bool that the
 // shared taskEdge signature has no room for.
 func newTaskGovernCmd() *cobra.Command {
 	var by string
 	var pin bool
 	cmd := &cobra.Command{
 		Use:               "govern <id>",
-		Short:             "Record a design clause that governs a task",
+		Short:             "Record a design rule that governs a task",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1381,15 +1381,15 @@ func newTaskGovernCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&by, "by", "", "clause ref, e.g. WL-CL-12 (required)")
+	cmd.Flags().StringVar(&by, "by", "", "rule ref, e.g. WL-RULE-12 (required)")
 	cmd.MarkFlagRequired("by")
-	cmd.Flags().BoolVar(&pin, "pin", false, "pin the link to the clause version current now, instead of following its newest")
+	cmd.Flags().BoolVar(&pin, "pin", false, "pin the link to the rule version current now, instead of following its newest")
 	return cmd
 }
 
 func newTaskUngovernCmd() *cobra.Command {
-	return newTaskClauseCmd("ungovern <id>",
-		"Remove a governing clause from a task",
+	return newTaskRuleCmd("ungovern <id>",
+		"Remove a governing rule from a task",
 		"%s is no longer governed by %s", (*cli.Client).Ungovern)
 }
 

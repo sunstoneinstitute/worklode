@@ -7,19 +7,19 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// TestArrangePlanFromCovers: a plan arranges the clauses its covers entries
-// reach (S16): a section-scoped entry reaches the clause at that anchor and
-// the clauses under it; a document-scoped entry reaches every clause; the
+// TestArrangePlanFromCovers: a plan arranges the rules its covers entries
+// reach (S16): a section-scoped entry reaches the rule at that anchor and
+// the rules under it; a document-scoped entry reaches every rule; the
 // arrangement is rewritten on each plan body write and by accept.
 func TestArrangePlanFromCovers(t *testing.T) {
 	s := openDocStore(t)
-	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
-	// clauseDocV1 arranges sec-1 (clause 1), sec-1.1 (clause 2), sec-2 (clause 3).
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	// ruleDocV1 arranges sec-1 (rule 1), sec-1.1 (rule 2), sec-2 (rule 3).
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	got := arrangementOf(t, s, plan.ID)
 	if len(got) != 2 || got[0].Number != 1 || got[0].Anchor != "sec-1" || got[0].Depth != 2 ||
 		got[1].Number != 2 || got[1].Anchor != "sec-1.1" || got[1].Depth != 3 {
-		t.Fatalf("plan covering sec-1 should arrange clauses 1 and 2 with the spec's anchors and depths: %+v", got)
+		t.Fatalf("plan covering sec-1 should arrange rules 1 and 2 with the spec's anchors and depths: %+v", got)
 	}
 
 	whole := strings.Replace(governedPlanBody, "P1-SPEC-1#sec-1", "P1-SPEC-1", 1)
@@ -28,11 +28,11 @@ func TestArrangePlanFromCovers(t *testing.T) {
 	}
 	got = arrangementOf(t, s, plan.ID)
 	if len(got) != 3 || got[2].Number != 3 {
-		t.Fatalf("plan covering the whole spec should arrange all three clauses: %+v", got)
+		t.Fatalf("plan covering the whole spec should arrange all three rules: %+v", got)
 	}
 
-	// The spec gains a clause after the plan was written; accept re-arranges.
-	if _, err := updateDocBody(t, s, spec.ID, clauseDocV1+"\n## 3. Three {#sec-3}\n\nD.\n"); err != nil {
+	// The spec gains a rule after the plan was written; accept re-arranges.
+	if _, err := updateDocBody(t, s, spec.ID, ruleDocV1+"\n## 3. Three {#sec-3}\n\nD.\n"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := acceptDoc(t, s, spec.ID, "stig"); err != nil {
@@ -48,18 +48,18 @@ func TestArrangePlanFromCovers(t *testing.T) {
 	}
 	gov, err := s.GovernedBy(t.Context(), tasks[0].ID)
 	if err != nil || len(gov) != 4 {
-		t.Fatalf("minted task should be governed by all four clauses: %d %v", len(gov), err)
+		t.Fatalf("minted task should be governed by all four rules: %d %v", len(gov), err)
 	}
 }
 
-// TestEditClauseWritesThroughTheSpec: a clause arranged in a spec and in a
+// TestEditRuleWritesThroughTheSpec: a rule arranged in a spec and in a
 // plan is edited through the spec (R2); the plan arrangement only references.
-func TestEditClauseWritesThroughTheSpec(t *testing.T) {
+func TestEditRuleWritesThroughTheSpec(t *testing.T) {
 	s := openDocStore(t)
-	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
-	if _, err := editClause(t, s, "P1", 1, model.EditClauseInput{Heading: "One", Body: "\nChanged.\n\n"}, "stig"); err != nil {
-		t.Fatalf("edit of a clause arranged in a spec and a plan: %v", err)
+	if _, err := editRule(t, s, "P1", 1, model.EditRuleInput{Heading: "One", Body: "\nChanged.\n\n"}, "stig"); err != nil {
+		t.Fatalf("edit of a rule arranged in a spec and a plan: %v", err)
 	}
 	d, err := s.GetDoc(t.Context(), spec.ID)
 	if err != nil || !strings.Contains(d.Body, "Changed.") {
@@ -67,14 +67,14 @@ func TestEditClauseWritesThroughTheSpec(t *testing.T) {
 	}
 }
 
-// TestAcceptDocClausesSkipsPlans: a plan's doc_clauses hold another
-// document's clauses (increment 3 R1). Accepting a plan whose arrangement
-// holds a covered spec's draft clauses must never flip those clauses to
-// accepted, regardless of which caller reaches acceptDocClauses or in what
+// TestAcceptDocRulesSkipsPlans: a plan's doc_rules hold another
+// document's rules (increment 3 R1). Accepting a plan whose arrangement
+// holds a covered spec's draft rules must never flip those rules to
+// accepted, regardless of which caller reaches acceptDocRules or in what
 // order it runs relative to arrangePlan.
-func TestAcceptDocClausesSkipsPlans(t *testing.T) {
+func TestAcceptDocRulesSkipsPlans(t *testing.T) {
 	s := openDocStore(t)
-	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 
 	tx, err := s.db.Begin()
@@ -85,7 +85,7 @@ func TestAcceptDocClausesSkipsPlans(t *testing.T) {
 	if err := arrangePlan(tx, plan.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := acceptDocClauses(tx, plan.ID); err != nil {
+	if err := acceptDocRules(tx, plan.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -94,7 +94,7 @@ func TestAcceptDocClausesSkipsPlans(t *testing.T) {
 
 	for _, row := range arrangementOf(t, s, spec.ID) {
 		if row.Status != "draft" {
-			t.Errorf("spec clause %d status = %q after acceptDocClauses ran on the covering plan, want draft", row.Number, row.Status)
+			t.Errorf("spec rule %d status = %q after acceptDocRules ran on the covering plan, want draft", row.Number, row.Status)
 		}
 	}
 }

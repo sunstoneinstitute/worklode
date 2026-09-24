@@ -13,9 +13,9 @@ import (
 var (
 	l1Entities = map[string]bool{ // L1: exactly what the backbone models, singular
 		"actor": true, "approval": true, "blob": true, "channel": true,
-		"clause": true, "decision": true, "deliverable": true, "doc": true, "event": true,
+		"decision": true, "deliverable": true, "doc": true, "event": true,
 		"gate": true, "graph": true,
-		"inbox": true, "milestone": true, "project": true, "secret": true,
+		"inbox": true, "milestone": true, "project": true, "rule": true, "secret": true,
 		"skill": true, "task": true, "token": true,
 	}
 	l2Machine = map[string]bool{ // L2: acts on this machine or this checkout
@@ -60,7 +60,7 @@ var l3DomainActions = map[string]bool{
 	"parent": true, "duplicate": true, "request": true, "pack": true,
 	"note": true, "escalate": true, "gap": true, "fix": true,
 	"withdraw": true, "report": true, "check": true,
-	"supersede": true, // lode clause supersede: the refactor primitive (S24)
+	"supersede": true, // lode rule supersede: the refactor primitive (S24)
 }
 
 // nounViews is the noun-subcommand table of 061 §5, transcribed by full
@@ -69,7 +69,7 @@ var l3DomainActions = map[string]bool{
 // allowed" is unanswerable until this set is known. The set is closed in the
 // spec's own words — adding a member is part of adding the command.
 var nounViews = map[string]bool{
-	"lode clause versions":    true,
+	"lode rule versions":      true,
 	"lode doc referrers":      true,
 	"lode doc progress":       true,
 	"lode doc reviewers":      true,

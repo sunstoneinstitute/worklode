@@ -8,7 +8,7 @@ with an arrow. Settled decisions move to the top as the tree grows.
 
 ```
 Spec refactoring as a Worklode process
-├── A. Unit of governance                           settled: the design clause (Q12-Q21)
+├── A. Unit of governance                           settled: the design rule (Q12-Q21, S64)
 │   ├── clause = lowest heading unit, ceiling from the embedding config (S7)
 │   ├── immutable versions, links resolve to newest, version recorded (S9)
 │   ├── status on the clause, documents derive theirs (S10)
@@ -113,6 +113,7 @@ Behaviours the implementation increments fixed that the rounds above did not nam
 - S61 (S24 applied): the embedding-derived candidate map, S24's "next step", is deferred. This increment ships only the bookkeeping primitive S24 settled on; the candidate map is a later increment's work.
 - S62 (A2 applied): A2 ships as a generator (`scripts/supersession_map.py`), its hand rulings (`docs/specs2/ttl/residue.tsv`) and a runbook (`docs/specs2/ttl/README.md`); running it against the backbone is the architect's act, done once the eleven `docs/specs2/` documents are imported and carry `{#sec-N}` anchors. A document's preamble, the text before its first `##` heading, is never a section and never gets a clause of its own, so a preamble row always resolves to the document's first arranged clause, its first numbered section. An `Open questions` row resolves to the clause the `{#sec-open-questions}` anchor creates, added by hand to each document's `## Open questions` heading before import (S8 makes the bullet list under it one clause, so section-map.tsv could not point inside it). The 23 residue rows are ruled by hand: twelve name a document's Open-questions clause as successor, eight plus two more (WL-SPEC-8 sec-1, two rows) name a document's preamble clause, and one (WL-SPEC-29 sec-6.2, pointing at a section its target document does not have) is ruled by hand to 02 §10. One old section's anchor in `section-map.tsv` fails the anchor grammar: its `old_anchor` field holds a citation note, `"§2 (line 106)"`. The generator writes that row as a `# skipped` comment line, because `lode clause supersede` applies the whole map in one transaction and would otherwise refuse the run over it. Real counts from the current data: 657 old sections, 113 withdraw-only, 1 skipped, 553 successor edges.
 - S63 (S20 completed): tasks and documents are served at `/projects/<proj>/<kind>/<n>`, documents also at `/<ver>`, and `/tasks/<id>`, `/docs/<KEY>-<TYPE>-<n>`, `/docs/versions/<row id>/<v>` and `/<ref>` redirect there (07-knowledge-graph-and-search.md §10.2). A task named under a kind other than its own redirects to its own kind, so a URL stays valid when a task's kind changes. A document with no number keeps its page at `/docs/<row id>`. Only the cockpit URL moves. The RDF IRIs, the stored strings and the `implements.yaml` section paths keep the `/tasks/` and `/docs/` forms, because the manifest parser and stored data read them; they reach the canonical page through the redirects, and moving them is later work. Task links and autolinked references in rendered pages still target the root routes and take one redirect.
+- S64 (S20 revised): the design clause is renamed **rule**, and its ref `WL-CL-<n>` becomes `WL-RULE-<n>` (kind `RULE`). "Clause" read as legal jargon to everyone but lawyers. Tables, columns, `lode rule`, `/api/v1/rules`, the cockpit page and `wl:Rule` follow; `lode clause` keeps no alias. `WL-CL-<n>` still resolves wherever a ref is read, because accepted document text carries it. The unbuilt workflow rules of WL-SPEC-46 become **automations** so "rule" has one meaning. Entries above S64 keep the word they were settled with.
 
 ## Facts (looked up, not for you to answer)
 
@@ -354,5 +355,5 @@ The clause model solves spec sprawl and will meet its own sprawl. Each risk is p
 
 ## Frontier
 
-Empty after round 6. Every branch of the tree is settled (S1 to S30, with S31 to S63 recorded from implementation), with three actions recorded (A1 to A3) and one flagged assumption: S8, the clause unit is the lowest heading unit, which drew no objection. Nothing is acted on until you confirm this is a shared understanding; a Finish Review with no comments is that confirmation.
+Empty after round 6. Every branch of the tree is settled (S1 to S30, with S31 to S64 recorded from implementation), with three actions recorded (A1 to A3) and one flagged assumption: S8, the clause unit is the lowest heading unit, which drew no objection. Nothing is acted on until you confirm this is a shared understanding; a Finish Review with no comments is that confirmation.
 

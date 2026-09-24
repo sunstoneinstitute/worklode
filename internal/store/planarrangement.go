@@ -7,8 +7,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
 
-// planEntry is one clause a plan's covers edges reach, with the anchor and
-// depth it has in the spec that arranges it. Order is coveredClauses'
+// planEntry is one rule a plan's covers edges reach, with the anchor and
+// depth it has in the spec that arranges it. Order is coveredRules'
 // deterministic edge order (by to_doc, to_anchor), not the order the
 // covers: list was written in.
 type planEntry struct {
@@ -18,12 +18,12 @@ type planEntry struct {
 	anchor  string
 }
 
-// coveredClauses walks a plan's resolved covers edges the way 026 §5.1
-// states it: a section-scoped edge reaches the clause at that anchor and the
-// clauses arranged under it; a document-scoped edge reaches every clause the
+// coveredRules walks a plan's resolved covers edges the way 026 §5.1
+// states it: a section-scoped edge reaches the rule at that anchor and the
+// rules arranged under it; a document-scoped edge reaches every rule the
 // document arranges; an unresolved edge reaches nothing. A covered spec that
-// predates the clause tables is split first (ensureClauses).
-func coveredClauses(tx *sql.Tx, planID int64) ([]planEntry, error) {
+// predates the rule tables is split first (ensureRules).
+func coveredRules(tx *sql.Tx, planID int64) ([]planEntry, error) {
 	rows, err := tx.Query(
 		`SELECT to_doc, coalesce(to_anchor, '') FROM doc_edges
 		  WHERE from_doc = $1 AND type = 'covers' AND to_doc IS NOT NULL
@@ -49,10 +49,10 @@ func coveredClauses(tx *sql.Tx, planID int64) ([]planEntry, error) {
 		return nil, err
 	}
 
-	arrangements := map[int64][]clauseRow{}
+	arrangements := map[int64][]ruleRow{}
 	seen := map[int64]bool{}
 	var out []planEntry
-	add := func(c clauseRow) {
+	add := func(c ruleRow) {
 		if !seen[c.id] {
 			seen[c.id] = true
 			out = append(out, planEntry{id: c.id, version: c.version, depth: c.depth, anchor: c.anchor})
@@ -61,10 +61,10 @@ func coveredClauses(tx *sql.Tx, planID int64) ([]planEntry, error) {
 	for _, e := range edges {
 		entries, ok := arrangements[e.doc]
 		if !ok {
-			if err := ensureClauses(tx, e.doc); err != nil {
+			if err := ensureRules(tx, e.doc); err != nil {
 				return nil, err
 			}
-			entries, err = arrangedClauses(tx, e.doc)
+			entries, err = arrangedRules(tx, e.doc)
 			if err != nil {
 				return nil, err
 			}
@@ -90,37 +90,37 @@ func coveredClauses(tx *sql.Tx, planID int64) ([]planEntry, error) {
 	return out, nil
 }
 
-// arrangePlan rewrites a plan's doc_clauses rows from its covers edges (S16,
-// increment 3 R1). A plan arranges the clauses it covers and mints none of its
-// own; its ## Tasks prose is not a clause. Runs on every plan body write from
+// arrangePlan rewrites a plan's doc_rules rows from its covers edges (S16,
+// increment 3 R1). A plan arranges the rules it covers and mints none of its
+// own; its ## Tasks prose is not a rule. Runs on every plan body write from
 // rebuildEdges and again from acceptPlanDoc, so accept sees the spec as it is.
 func arrangePlan(tx *sql.Tx, planID int64) error {
-	entries, err := coveredClauses(tx, planID)
+	entries, err := coveredRules(tx, planID)
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM doc_clauses WHERE doc_id = $1`, planID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM doc_rules WHERE doc_id = $1`, planID); err != nil {
 		return fmt.Errorf("clear arrangement of plan %d: %w", planID, err)
 	}
 	for i, e := range entries {
 		if _, err := tx.Exec(
-			`INSERT INTO doc_clauses (doc_id, position, clause_id, clause_version, depth, anchor)
+			`INSERT INTO doc_rules (doc_id, position, rule_id, rule_version, depth, anchor)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
 			planID, i, e.id, e.version, e.depth, e.anchor); err != nil {
-			return fmt.Errorf("arrange clause %d in plan %d: %w", e.id, planID, err)
+			return fmt.Errorf("arrange rule %d in plan %d: %w", e.id, planID, err)
 		}
 	}
 	return nil
 }
 
-// ensureClauses splits a spec or ADR that predates the clause tables, so a
-// plan covering it can be governed by its clauses. A document written after
+// ensureRules splits a spec or ADR that predates the rule tables, so a
+// plan covering it can be governed by its rules. A document written after
 // the tables exist is split on every write and is left alone here. When the
-// document is already accepted, its backfilled clauses are accepted too
+// document is already accepted, its backfilled rules are accepted too
 // (S11) — they must not stay draft just because they arrived late.
-func ensureClauses(tx *sql.Tx, docID int64) error {
+func ensureRules(tx *sql.Tx, docID int64) error {
 	var n int
-	if err := tx.QueryRow(`SELECT count(*) FROM doc_clauses WHERE doc_id = $1`, docID).Scan(&n); err != nil {
+	if err := tx.QueryRow(`SELECT count(*) FROM doc_rules WHERE doc_id = $1`, docID).Scan(&n); err != nil {
 		return fmt.Errorf("count arrangement of doc %d: %w", docID, err)
 	}
 	if n > 0 {
@@ -137,11 +137,11 @@ func ensureClauses(tx *sql.Tx, docID int64) error {
 	if err != nil {
 		return fmt.Errorf("parse doc %d: %w", docID, err)
 	}
-	if err := syncClauses(tx, docID, parsed); err != nil {
+	if err := syncRules(tx, docID, parsed); err != nil {
 		return err
 	}
 	if status == "accepted" {
-		return acceptDocClauses(tx, docID)
+		return acceptDocRules(tx, docID)
 	}
 	return nil
 }

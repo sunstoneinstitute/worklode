@@ -26,25 +26,6 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode channel serve` — Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications
   Flags: --interval
 
-## `lode clause` — Design clauses: show or list them, edit one, list its versions, link or unlink it to another
-
-- `lode clause edit` — Replace a clause's body (and heading) from a file; the document is regenerated around it
-  Flags: --file, --heading
-- `lode clause link` — Relate a clause to another: --refines, --constrains, --conflicts-with, --references or --derived-from <ref>
-  Flags: --conflicts-with, --constrains, --derived-from, --references, --refines
-- `lode clause list` — List clauses, or one document's clauses in arrangement order
-  Flags: --doc, --project, --repo, --status
-- `lode clause set` — Set a clause's owner or tags
-- `lode clause set owner` — Set a clause's owner; "" clears it
-- `lode clause set tags` — Replace a clause's tags; naming none clears them
-- `lode clause show` — Show a clause: its status, version, placements and text
-  Flags: --version
-- `lode clause supersede` — Apply a refactor map: withdraw old clauses and link each to its successors (S24)
-  Flags: --dry-run, --map, --project, --repo
-- `lode clause unlink` — Remove a relation written with clause link
-  Flags: --conflicts-with, --constrains, --derived-from, --references, --refines
-- `lode clause versions` — List a clause's versions, newest first
-
 ## `lode decision` — Decisions: the questions a task poses and the answers they wait on
 
 - `lode decision add` — Pose a question on a task
@@ -114,7 +95,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 
 ## `lode gate` — The design authority gate
 
-- `lode gate check` — Refuse a change to a guarded path that names no design clause
+- `lode gate check` — Refuse a change to a guarded path that names no design rule
   Flags: --base, --body-file, --head
 
 ## `lode graph` — The knowledge-graph projection: its health, and what it owes
@@ -197,6 +178,25 @@ Flags: --server
 - `lode project show` — Show a project's repos, focus, and token cost
   Flags: --days, --project
 
+## `lode rule` — Design rules: show or list them, edit one, list its versions, link or unlink it to another
+
+- `lode rule edit` — Replace a rule's body (and heading) from a file; the document is regenerated around it
+  Flags: --file, --heading
+- `lode rule link` — Relate a rule to another: --refines, --constrains, --conflicts-with, --references or --derived-from <ref>
+  Flags: --conflicts-with, --constrains, --derived-from, --references, --refines
+- `lode rule list` — List rules, or one document's rules in arrangement order
+  Flags: --doc, --project, --repo, --status
+- `lode rule set` — Set a rule's owner or tags
+- `lode rule set owner` — Set a rule's owner; "" clears it
+- `lode rule set tags` — Replace a rule's tags; naming none clears them
+- `lode rule show` — Show a rule: its status, version, placements and text
+  Flags: --version
+- `lode rule supersede` — Apply a refactor map: withdraw old rules and link each to its successors (S24)
+  Flags: --dry-run, --map, --project, --repo
+- `lode rule unlink` — Remove a relation written with rule link
+  Flags: --conflicts-with, --constrains, --derived-from, --references, --refines
+- `lode rule versions` — List a rule's versions, newest first
+
 ## `lode search` — Search documents, tasks and skills by meaning and by exact token
 
 Flags: --kind, --limit, --mode, --project, --repo
@@ -264,7 +264,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --project, --repo
 - `lode task gap` — Log that the plan or spec does not cover this case, without escalating it
   Flags: --reason
-- `lode task govern` — Record a design clause that governs a task
+- `lode task govern` — Record a design rule that governs a task
   Flags: --by, --pin
 - `lode task instruct` — Queue a steering instruction for whichever actor next holds the task's lease
 - `lode task list` — List tasks (delivered and abandoned are hidden unless requested with --status)
@@ -295,7 +295,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task undelete` — Restore a deleted task, clearing its tombstone
 - `lode task unduplicate` — Drop a task's duplicate edge to its canonical task
 - `lode task unfollow-up` — Drop a task's follow-up edge to its origin
-- `lode task ungovern` — Remove a governing clause from a task
+- `lode task ungovern` — Remove a governing rule from a task
   Flags: --by
 - `lode task unparent` — Detach a task from its parent
 

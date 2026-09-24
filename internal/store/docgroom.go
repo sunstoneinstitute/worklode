@@ -41,8 +41,8 @@ func StaleExternalID(planSlug string, version int) string {
 // cause, specSlug and anchors say what happened, in the payload's
 // {"cause":...,"spec":...,"anchors":[...]}: cause is "amended" for 025 §8.6
 // (specSlug and anchors name the spec and the sections that moved) and
-// "clause_withdrawn" for increment 3's S23 (specSlug carries the withdrawn
-// clause's ref, WL-CL-<n>, and anchors is empty). eventID is the write this
+// "rule_withdrawn" for increment 3's S23 (specSlug carries the withdrawn
+// rule's ref, WL-RULE-<n>, and anchors is empty). eventID is the write this
 // is a consequence of.
 //
 // Nothing is minted here. The doc.stale event flows to the doc-lifecycle

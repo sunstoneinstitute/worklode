@@ -771,7 +771,7 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 	if kind == "plan" {
 		return after, nil
 	}
-	if err := syncClauses(tx, docID, doc); err != nil {
+	if err := syncRules(tx, docID, doc); err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(`DELETE FROM doc_sections WHERE doc_id = $1`, docID); err != nil {

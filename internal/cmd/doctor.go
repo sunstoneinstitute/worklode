@@ -45,7 +45,7 @@ func skip(name, detail string) doctorCheck {
 
 // doctorReport is the --json form of `lode doctor`'s whole run. Named
 // deliberately, not an anonymous struct literal at the marshal call site:
-// this package's ADR 036 rule (internal/model/rule_test.go's modeNamed for
+// this package's ADR 036 rule (internal/model/modelrule_test.go's modeNamed for
 // internal/cmd) flags anonymous json-tagged struct literals even though
 // named ones are fine for a --json stdout contract that crosses no HTTP
 // boundary (see CLAUDE.md's Architecture section).
@@ -61,7 +61,7 @@ type doctorReport struct {
 var edgeAgentHealthURL = "http://127.0.0.1:7700/healthz"
 
 // edgeAgentHealthBody is /healthz's response shape. Named rather than
-// anonymous per internal/model/rule_test.go's modeNamed for internal/cmd
+// anonymous per internal/model/modelrule_test.go's modeNamed for internal/cmd
 // (see doctorReport's comment) even though this crosses no Worklode HTTP
 // boundary — it is the Edge Agent's own wire shape, decoded here only.
 type edgeAgentHealthBody struct {

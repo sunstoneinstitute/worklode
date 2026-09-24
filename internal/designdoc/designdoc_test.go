@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -270,11 +271,11 @@ func TestSubtreeIsByteIdenticalToSource(t *testing.T) {
 	}
 }
 
-// TestClausesReassembleSpecs2 is 12-spec-refactoring-design-tree.md S21's
-// acceptance test. Every section is one clause, and Preamble plus each
+// TestRulesReassembleSpecs2 is 12-spec-refactoring-design-tree.md S21's
+// acceptance test. Every section is one rule, and Preamble plus each
 // section's HeadingAndBody in order rebuilds the source byte for byte, so an
-// arrangement of clauses loses nothing a document had.
-func TestClausesReassembleSpecs2(t *testing.T) {
+// arrangement of rules loses nothing a document had.
+func TestRulesReassembleSpecs2(t *testing.T) {
 	files, err := filepath.Glob("../../docs/specs2/*.md")
 	if err != nil {
 		t.Fatal(err)
@@ -303,24 +304,26 @@ func TestClausesReassembleSpecs2(t *testing.T) {
 	}
 }
 
-func TestParseClauseRef(t *testing.T) {
+func TestParseRuleRef(t *testing.T) {
 	cases := []struct {
 		in  string
 		key string
 		n   int64
 		ok  bool
 	}{
-		{"WL-CL-12", "WL", 12, true},
+		{"WL-RULE-12", "WL", 12, true},
+		{"P1-RULE-3", "P1", 3, true},
+		{"WL-CL-12", "WL", 12, true}, // pre-S64 spelling, same rule as WL-RULE-12
 		{"P1-CL-3", "P1", 3, true},
 		{"WL-SPEC-12", "", 0, false},
 		{"wl-cl-12", "", 0, false},
-		{"WL-CL-", "", 0, false},
-		{"WL-CL-12#sec-1", "", 0, false},
+		{"WL-RULE-", "", 0, false},
+		{"WL-RULE-12#sec-1", "", 0, false},
 	}
 	for _, c := range cases {
-		got, ok := ParseClauseRef(c.in)
+		got, ok := ParseRuleRef(c.in)
 		if ok != c.ok || got.Key != c.key || got.Number != c.n {
-			t.Errorf("ParseClauseRef(%q) = %+v, %v; want {%s %d}, %v", c.in, got, ok, c.key, c.n, c.ok)
+			t.Errorf("ParseRuleRef(%q) = %+v, %v; want {%s %d}, %v", c.in, got, ok, c.key, c.n, c.ok)
 		}
 	}
 }
@@ -346,14 +349,24 @@ func TestSectionByAnchorEditRerendersHeading(t *testing.T) {
 	}
 }
 
-// TestFindRefs: FindClauseRefs and FindSectionRefs dedupe and skip
-// non-matching ref forms (a lowercased clause ref, an unanchored document
+// TestFindRuleRefsAlias: WL-CL-12 in prose is the rule WL-RULE-12, and the
+// two spellings dedupe to one ref (S64).
+func TestFindRuleRefsAlias(t *testing.T) {
+	cs := FindRuleRefs("Old text cites WL-CL-12, new text WL-RULE-12, and P1-CL-3.")
+	want := []RuleRef{{Key: "WL", Number: 12}, {Key: "P1", Number: 3}}
+	if !reflect.DeepEqual(cs, want) {
+		t.Errorf("FindRuleRefs = %+v, want %+v", cs, want)
+	}
+}
+
+// TestFindRefs: FindRuleRefs and FindSectionRefs dedupe and skip
+// non-matching ref forms (a lowercased rule ref, an unanchored document
 // ref) (S26).
 func TestFindRefs(t *testing.T) {
-	text := "See WL-CL-12 and WL-CL-12 again, then P1-SPEC-4#sec-2.1 and WL-ADR-7 (no anchor) and wl-cl-3."
-	cs := FindClauseRefs(text)
+	text := "See WL-RULE-12 and WL-RULE-12 again, then P1-SPEC-4#sec-2.1 and WL-ADR-7 (no anchor) and wl-cl-3."
+	cs := FindRuleRefs(text)
 	if len(cs) != 1 || cs[0].Key != "WL" || cs[0].Number != 12 {
-		t.Errorf("clause refs: %+v", cs)
+		t.Errorf("rule refs: %+v", cs)
 	}
 	ss := FindSectionRefs(text)
 	if len(ss) != 1 || ss[0].Shorthand.Key != "P1" || ss[0].Shorthand.Number != 4 || ss[0].Anchor != "sec-2.1" {

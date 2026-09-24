@@ -23,13 +23,13 @@ func TestDocRefAutolink(t *testing.T) {
 	}
 }
 
-// TestClauseRefAutolink covers S20: a clause ref links to the resolving
-// redirect /clauses/<ref>, the counterpart of the document shorthand's
+// TestRuleRefAutolink covers S20: a rule ref links to the resolving
+// redirect /rules/<ref>, the counterpart of the document shorthand's
 // /docs/ref/.
-func TestClauseRefAutolink(t *testing.T) {
-	got := string(Body(ProjectKeys{}, "see WL-CL-12."))
-	if !strings.Contains(got, `<a href="/clauses/WL-CL-12" rel="nofollow">WL-CL-12</a>`) {
-		t.Errorf("missing clause ref link in:\n%s", got)
+func TestRuleRefAutolink(t *testing.T) {
+	got := string(Body(ProjectKeys{}, "see WL-RULE-12."))
+	if !strings.Contains(got, `<a href="/rules/WL-RULE-12" rel="nofollow">WL-RULE-12</a>`) {
+		t.Errorf("missing rule ref link in:\n%s", got)
 	}
 }
 

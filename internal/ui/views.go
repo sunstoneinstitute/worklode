@@ -1023,21 +1023,21 @@ func docStatusChip(status string) string {
 	}
 }
 
-// --- clause (docs/specs2/12-spec-refactoring-design-tree.md S20) -----------
+// --- rule (docs/specs2/12-spec-refactoring-design-tree.md S20) -----------
 
-// ClauseView is the cockpit's clause page: one design clause at its current
+// RuleView is the cockpit's rule page: one design rule at its current
 // or a named version.
-type ClauseView struct {
-	Page   PageProps
-	Clause model.Clause
-	// BodyHTML is Clause.Body rendered from markdown and sanitised by
+type RuleView struct {
+	Page PageProps
+	Rule model.Rule
+	// BodyHTML is Rule.Body rendered from markdown and sanitised by
 	// internal/mdrender, filled in by internal/api for the reason DocView's
 	// field gives.
 	BodyHTML template.HTML
 	// Arranged links each arranging document's section page.
-	Arranged []ClauseArrangementRow
-	Versions []model.ClauseVersion
-	// CanonicalURL is /projects/<proj>/clause/<n>, the current version's
+	Arranged []RuleArrangementRow
+	Versions []model.RuleVersion
+	// CanonicalURL is /projects/<proj>/rule/<n>, the current version's
 	// page, with no /<ver> suffix; the version list and the "back to
 	// current" banner both build their hrefs from it.
 	CanonicalURL string
@@ -1046,18 +1046,18 @@ type ClauseView struct {
 	Current bool
 }
 
-// ClauseArrangementRow is one document arranging the clause, with the href
+// RuleArrangementRow is one document arranging the rule, with the href
 // of its section.
-type ClauseArrangementRow struct {
+type RuleArrangementRow struct {
 	DocRef string
 	Anchor string
 	Depth  int
 	Href   string // /docs/ref/<DocRef>#<Anchor>
 }
 
-// clauseVersionURL is one clause version's page path, built off the clause's
+// ruleVersionURL is one rule version's page path, built off the rule's
 // own canonical URL the way docVersionURL is built off a document id.
-func clauseVersionURL(canonicalURL string, version int) string {
+func ruleVersionURL(canonicalURL string, version int) string {
 	return canonicalURL + "/" + strconv.Itoa(version)
 }
 
