@@ -17,7 +17,7 @@ fenced code blocks are text, not headings. Clause id: `<docnum>-<h2>-<h3>[-<part
 
 | File | Content |
 |---|---|
-| ns/clause.ttl | the `wl:` extension (proposal, not in ns/) |
+| ns/rule.ttl | the `wl:` extension (proposal, not in ns/) |
 | clauses.ttl | one node per clause: types, label, source file and line range, tokenCount, topics, status |
 | arrangements.ttl | the 11 documents as `wl:Spec, wl:Arrangement` with `wl:arranges` and an rdf:List |
 | edges.ttl | refines, references, constrains, conflictsWith (hand edges carry an rdf:Statement with `rdfs:comment "hand-added"`) |
@@ -94,7 +94,7 @@ section.
 
 ## Migrate the old specs
 
-This turns `docs/specs2/section-map.tsv` and `residue.tsv` into a map for `lode clause supersede`,
+This turns `docs/specs2/section-map.tsv` and `residue.tsv` into a map for `lode rule supersede`,
 which records every old backbone section as withdrawn and links it to its successor clauses in the
 11 new documents. `scripts/supersession_map.py` generates the map; it does not run it.
 
@@ -107,7 +107,7 @@ content section.
 
 1. Before import, add `{#sec-open-questions}` by hand to the `## Open questions` heading of each
    `docs/specs2/` file that has one. The store only makes a clause from an anchored section
-   (`internal/store/clauses.go` `syncClauses` skips a section with no anchor) and the renumber tooling
+   (`internal/store/rules.go` `syncRules` skips a section with no anchor) and the renumber tooling
    anchors only numbered headings (`internal/designdoc/renumber.go`), so `## Open questions` would
    otherwise get no anchor and no clause. `sec-open-questions` fits the anchor grammar
    (`^sec-[a-z0-9][a-z0-9.-]*$`, `internal/designdoc/lint.go` `ValidAnchor`); check it with `lode doc
@@ -126,12 +126,12 @@ content section.
    scripts/supersession_map.py --section-map docs/specs2/section-map.tsv \
        --residue docs/specs2/ttl/residue.tsv --refs refs.json --anchors anchors.json > map.txt
    ```
-   `lode clause supersede --map` applies the whole map in one transaction and refuses it on any
+   `lode rule supersede --map` applies the whole map in one transaction and refuses it on any
    unresolvable old ref. One row's old_anchor is a note, not a real section anchor (`§2 (line 106)`,
    WL-SPEC-62), so the generator turns it into a `# skipped` comment instead of a map entry, and
    prints a one-line count to stderr. That row needs a hand decision separately; it is not part of
    this map.
-5. `lode clause supersede --map map.txt --dry-run` and check the counts before writing anything:
+5. `lode rule supersede --map map.txt --dry-run` and check the counts before writing anything:
    - 657 old sections, one line each, plus the one skipped comment line.
    - 113 of those lines withdraw with no successor (the dropped-history, dropped-other and
      dropped-stale rows, minus the one skipped row).
