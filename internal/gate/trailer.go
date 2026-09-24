@@ -16,10 +16,10 @@ var NoneReasons = []string{"fix", "refactor", "perf", "copy", "tests", "build", 
 // ErrNoTrailer is returned by Find when no line starts with the key.
 var ErrNoTrailer = errors.New("no trailer")
 
-// Declaration is one parsed trailer line (11 §4). Exactly one of Clause,
+// Declaration is one parsed trailer line (11 §4). Exactly one of Rule,
 // Section and None is set.
 type Declaration struct {
-	Clause    *designdoc.ClauseRef  // Spec: WL-CL-456
+	Rule      *designdoc.RuleRef    // Spec: WL-RULE-456
 	Section   *designdoc.SectionRef // Spec: WL-SPEC-4 sec-5 (transitional, S52)
 	None      string                // Spec: none <reason>: the reason
 	Qualifier string                // "", "amended", or a NoneReasons word on a cited ref
@@ -32,8 +32,8 @@ func (d Declaration) String() string {
 	switch {
 	case d.None != "":
 		return "none " + d.None
-	case d.Clause != nil:
-		ref = fmt.Sprintf("%s-CL-%d", d.Clause.Key, d.Clause.Number)
+	case d.Rule != nil:
+		ref = fmt.Sprintf("%s-RULE-%d", d.Rule.Key, d.Rule.Number)
 	case d.Section != nil:
 		ref = fmt.Sprintf("%s-%s-%d %s", d.Section.Shorthand.Key, d.Section.Shorthand.Type, d.Section.Shorthand.Number, d.Section.Anchor)
 	}
@@ -68,7 +68,7 @@ func ParseLine(key, line string) (d Declaration, matched bool, err error) {
 	d.Line = line
 	fields := strings.Fields(rest)
 	if len(fields) == 0 {
-		return d, true, fmt.Errorf("%q names nothing: a clause ref, a section ref, or none <reason>", line)
+		return d, true, fmt.Errorf("%q names nothing: a rule ref, a section ref, or none <reason>", line)
 	}
 	if fields[0] == "none" {
 		if len(fields) != 2 || !slices.Contains(NoneReasons, fields[1]) {
@@ -80,14 +80,14 @@ func ParseLine(key, line string) (d Declaration, matched bool, err error) {
 		d.None = fields[1]
 		return d, true, nil
 	}
-	if c, ok := designdoc.ParseClauseRef(fields[0]); ok {
-		d.Clause = &c
+	if c, ok := designdoc.ParseRuleRef(fields[0]); ok {
+		d.Rule = &c
 		return qualified(d, fields[1:])
 	}
 	base, anchor, hasAnchor := strings.Cut(fields[0], "#")
 	sh, ok := designdoc.ParseShorthand(base)
 	if !ok {
-		return d, true, fmt.Errorf("%q: %q is not a clause ref, a section ref or none", line, fields[0])
+		return d, true, fmt.Errorf("%q: %q is not a rule ref, a section ref or none", line, fields[0])
 	}
 	fields = fields[1:]
 	if !hasAnchor {
@@ -147,7 +147,7 @@ func Check(cfg Config, in Input) (Verdict, error) {
 	d, err := Find(cfg.Trailer, strings.Join(in.Texts, "\n"))
 	switch {
 	case errors.Is(err, ErrNoTrailer):
-		return v, fmt.Errorf("guarded paths changed (%s) and no %s trailer names the design clause this change makes true (11 §4)",
+		return v, fmt.Errorf("guarded paths changed (%s) and no %s trailer names the design rule this change makes true (11 §4)",
 			strings.Join(v.Guarded, ", "), cfg.Trailer)
 	case err != nil:
 		return v, fmt.Errorf("guarded paths changed (%s): %w", strings.Join(v.Guarded, ", "), err)

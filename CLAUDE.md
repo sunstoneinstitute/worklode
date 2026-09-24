@@ -163,7 +163,7 @@ embeds it. Field names are wire names (`Project`, not `ProjectID`). Only three
 kinds of type stay package-local: `internal/ui` view types, `internal/store`
 scan plumbing, and `internal/api` transport internals (`Subject`, sessions,
 route guards). Anything else needs an amendment to 036, not a new struct.
-`internal/model/rule_test.go` enforces this and names what it rejects;
+`internal/model/modelrule_test.go` enforces this and names what it rejects;
 `deps_test.go` keeps the package a stdlib-only leaf. Read the failure message
 before working around either.
 

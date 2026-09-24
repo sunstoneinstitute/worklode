@@ -108,14 +108,14 @@ class BuildMapTest(unittest.TestCase):
             sm.build_map(rows, [], REFS, None)
         self.assertIn("8.4-9.1", str(cm.exception))
 
-    def test_intro_resolves_to_the_preamble_clause(self):
+    def test_intro_resolves_to_the_preamble_rule(self):
         rows = [row("WL-SPEC-8", "sec-0", "02-identity-actors-and-secrets.md", "intro", "merged")]
         lines = sm.build_map(rows, [], REFS, ANCHORS)
         self.assertEqual(lines, ["WL-SPEC-8#sec-0 -> WL-SPEC-80#sec-0"])
 
     def test_an_invalid_old_anchor_becomes_a_skip_comment_not_an_entry(self):
         # The WL-SPEC-62 shape: old_anchor is a note ("§2 (line 106)"), not a
-        # real "sec-N" anchor. lode clause supersede resolves the whole map
+        # real "sec-N" anchor. lode rule supersede resolves the whole map
         # in one transaction, so this row must never become a map entry.
         rows = [row("WL-SPEC-62", "§2 (line 106)", "01-a.md", "-", "dropped-other")]
         lines = sm.build_map(rows, [], REFS, None)

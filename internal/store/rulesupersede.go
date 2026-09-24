@@ -12,12 +12,12 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// errSupersedeDryRun rolls back a dry run's transaction. SupersedeClauses
+// errSupersedeDryRun rolls back a dry run's transaction. SupersedeRules
 // turns it into a nil error.
 var errSupersedeDryRun = errors.New("supersede dry run")
 
 // supersedeLine is one map line resolved against the store: what applying it
-// changes, computed under the clause row locks before anything is written.
+// changes, computed under the rule row locks before anything is written.
 type supersedeLine struct {
 	old      int64
 	news     []int64
@@ -26,21 +26,21 @@ type supersedeLine struct {
 	tasks    []string // tasks governed by old, told when the line changes anything
 }
 
-// SupersedeClauses applies a refactor map (S24, R2 to R7): every old clause
+// SupersedeRules applies a refactor map (S24, R2 to R7): every old rule
 // becomes withdrawn, a supersededBy edge with source refactor runs from it to
 // each successor, and every task it governs gets a task.governance_superseded
 // event (R5). Its task_governed_by rows stay where they are (S22).
-// Withdrawing marks the accepted plans arranging the clause stale (S23,
-// through SetClauseStatus). The whole map is one clause.superseded event and
+// Withdrawing marks the accepted plans arranging the rule stale (S23,
+// through SetRuleStatus). The whole map is one rule.superseded event and
 // one transaction. A dry run resolves and counts, then rolls back.
 //
 // Every ref is resolved and validated before the first write. A successor
-// that is withdrawn or also on the left side, an old clause listed twice,
+// that is withdrawn or also on the left side, an old rule listed twice,
 // and an unparseable ref are ErrInvalidInput naming the ref; an unknown
-// clause, document or anchor is ErrNotFound. Re-running an applied map
+// rule, document or anchor is ErrNotFound. Re-running an applied map
 // changes nothing and reports zero counts.
-func (s *Store) SupersedeClauses(ctx context.Context, project, actor string, in model.SupersedeInput) (res model.SupersedeResult, err error) {
-	defer func() { s.metrics.clauseSupersede(supersedeOutcome(in.DryRun, err)) }()
+func (s *Store) SupersedeRules(ctx context.Context, project, actor string, in model.SupersedeInput) (res model.SupersedeResult, err error) {
+	defer func() { s.metrics.ruleSupersede(supersedeOutcome(in.DryRun, err)) }()
 	if in.DryRun {
 		err = s.Tx(ctx, func(tx *sql.Tx) error {
 			var rerr error
@@ -64,7 +64,7 @@ func (s *Store) SupersedeClauses(ctx context.Context, project, actor string, in 
 	if err != nil {
 		return model.SupersedeResult{}, err
 	}
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "clause.superseded", payload, func(tx *sql.Tx, eventID int64) error {
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "rule.superseded", payload, func(tx *sql.Tx, eventID int64) error {
 		lines, r, err := resolveSupersede(tx, project, in.Entries)
 		if err != nil {
 			return err
@@ -81,35 +81,35 @@ func (s *Store) SupersedeClauses(ctx context.Context, project, actor string, in 
 	return res, nil
 }
 
-// resolveSupersede resolves every ref, locks the clauses involved in id order
+// resolveSupersede resolves every ref, locks the rules involved in id order
 // (two refactors over overlapping maps cannot deadlock), validates the map,
-// and works out what applying it changes. It writes only what ensureClauses
-// mints for a document that predates the clause tables. The lock is NO KEY
-// UPDATE: a Govern insert holds KEY SHARE on the clause through the
+// and works out what applying it changes. It writes only what ensureRules
+// mints for a document that predates the rule tables. The lock is NO KEY
+// UPDATE: a Govern insert holds KEY SHARE on the rule through the
 // task_governed_by FK while its caller holds a plan row that
-// SetClauseStatus's MarkPlansStale waits on, so FOR UPDATE would close a
+// SetRuleStatus's MarkPlansStale waits on, so FOR UPDATE would close a
 // deadlock cycle.
 func resolveSupersede(tx *sql.Tx, project string, entries []model.SupersedeEntry) ([]supersedeLine, model.SupersedeResult, error) {
 	var res model.SupersedeResult
 	if len(entries) == 0 {
 		return nil, res, fmt.Errorf("empty supersede map: %w", ErrInvalidInput)
 	}
-	oldRef := map[int64]string{} // old clause -> the ref naming it in the map
+	oldRef := map[int64]string{} // old rule -> the ref naming it in the map
 	var lines []supersedeLine
 	var newRefs [][]string
 	var ids []int64
 	for _, e := range entries {
-		old, err := resolveClauseRef(tx, project, e.Old)
+		old, err := resolveRuleRef(tx, project, e.Old)
 		if err != nil {
 			return nil, res, err
 		}
 		if prev, dup := oldRef[old]; dup {
-			return nil, res, fmt.Errorf("%s names the same clause as %s, already on the left side: %w", e.Old, prev, ErrInvalidInput)
+			return nil, res, fmt.Errorf("%s names the same rule as %s, already on the left side: %w", e.Old, prev, ErrInvalidInput)
 		}
 		oldRef[old] = e.Old
 		l := supersedeLine{old: old}
 		for _, n := range e.New {
-			id, err := resolveClauseRef(tx, project, n)
+			id, err := resolveRuleRef(tx, project, n)
 			if err != nil {
 				return nil, res, err
 			}
@@ -131,10 +131,10 @@ func resolveSupersede(tx *sql.Tx, project string, entries []model.SupersedeEntry
 	status := map[int64]string{}
 	ref := map[int64]string{}
 	rows, err := tx.Query(
-		`SELECT c.id, c.status, p.key, c.number FROM clauses c JOIN projects p ON p.id = c.project_id
+		`SELECT c.id, c.status, p.key, c.number FROM rules c JOIN projects p ON p.id = c.project_id
 		  WHERE c.id = ANY($1) ORDER BY c.id FOR NO KEY UPDATE OF c`, ids)
 	if err != nil {
-		return nil, res, fmt.Errorf("lock clauses: %w", err)
+		return nil, res, fmt.Errorf("lock rules: %w", err)
 	}
 	for rows.Next() {
 		var id, number int64
@@ -143,7 +143,7 @@ func resolveSupersede(tx *sql.Tx, project string, entries []model.SupersedeEntry
 			rows.Close()
 			return nil, res, err
 		}
-		status[id], ref[id] = st, key+"-CL-"+strconv.FormatInt(number, 10)
+		status[id], ref[id] = st, key+"-RULE-"+strconv.FormatInt(number, 10)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -183,12 +183,12 @@ func resolveSupersede(tx *sql.Tx, project string, entries []model.SupersedeEntry
 		res.Entries = append(res.Entries, resolved)
 	}
 	if len(withdrawn) > 0 {
-		// The plans SetClauseStatus will mark stale, counted before it runs.
+		// The plans SetRuleStatus will mark stale, counted before it runs.
 		if err := tx.QueryRow(
-			`SELECT count(DISTINCT d.id) FROM doc_clauses dc JOIN docs d ON d.id = dc.doc_id
-			  WHERE dc.clause_id = ANY($1) AND d.kind = 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL`,
+			`SELECT count(DISTINCT d.id) FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
+			  WHERE dc.rule_id = ANY($1) AND d.kind = 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL`,
 			withdrawn).Scan(&res.StalePlans); err != nil {
-			return nil, res, fmt.Errorf("count plans arranging withdrawn clauses: %w", err)
+			return nil, res, fmt.Errorf("count plans arranging withdrawn rules: %w", err)
 		}
 	}
 	return lines, res, nil
@@ -198,15 +198,15 @@ func resolveSupersede(tx *sql.Tx, project string, entries []model.SupersedeEntry
 func applySupersede(tx *sql.Tx, now time.Time, actor string, eventID int64, lines []supersedeLine, resolved []model.SupersedeResolved) error {
 	for i, l := range lines {
 		if l.withdraw {
-			if err := SetClauseStatus(tx, now, l.old, "withdrawn", eventID); err != nil {
+			if err := SetRuleStatus(tx, now, l.old, "withdrawn", eventID); err != nil {
 				return err
 			}
 		}
 		for _, n := range l.edges {
 			if _, err := tx.Exec(
-				`INSERT INTO clause_edges (from_clause, to_clause, type, source) VALUES ($1, $2, 'supersededBy', 'refactor')
-				 ON CONFLICT (from_clause, to_clause, type) DO NOTHING`, l.old, n); err != nil {
-				return fmt.Errorf("supersede clause %d by %d: %w", l.old, n, err)
+				`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersededBy', 'refactor')
+				 ON CONFLICT (from_rule, to_rule, type) DO NOTHING`, l.old, n); err != nil {
+				return fmt.Errorf("supersede rule %d by %d: %w", l.old, n, err)
 			}
 		}
 		for _, task := range l.tasks {
@@ -216,7 +216,7 @@ func applySupersede(tx *sql.Tx, now time.Time, actor string, eventID int64, line
 			}
 			payload, err := EventPayload(map[string]any{
 				"task":               task,
-				"clause":             resolved[i].Old,
+				"rule":               resolved[i].Old,
 				"successors":         resolved[i].New,
 				"actor":              actor,
 				"prov:wasInformedBy": "wlid:event/" + strconv.FormatInt(eventID, 10),
@@ -235,16 +235,16 @@ func applySupersede(tx *sql.Tx, now time.Time, actor string, eventID int64, line
 	return nil
 }
 
-// resolveClauseRef resolves one map ref (R7): "WL-CL-12" by project key and
-// number, which may name another project's clause (S32), or
-// "WL-SPEC-4#sec-2" to the clause that document arranges at that anchor.
-func resolveClauseRef(tx *sql.Tx, project, ref string) (int64, error) {
-	if c, ok := designdoc.ParseClauseRef(ref); ok {
-		return ClauseIDByRef(tx, c.Key, c.Number)
+// resolveRuleRef resolves one map ref (R7): "WL-RULE-12" by project key and
+// number, which may name another project's rule (S32), or
+// "WL-SPEC-4#sec-2" to the rule that document arranges at that anchor.
+func resolveRuleRef(tx *sql.Tx, project, ref string) (int64, error) {
+	if c, ok := designdoc.ParseRuleRef(ref); ok {
+		return RuleIDByRef(tx, c.Key, c.Number)
 	}
 	base, anchor := designdoc.SplitFragment(ref)
 	if _, ok := designdoc.ParseShorthand(base); !ok || anchor == "" {
-		return 0, fmt.Errorf("%q is neither a clause ref nor a section ref: %w", ref, ErrInvalidInput)
+		return 0, fmt.Errorf("%q is neither a rule ref nor a section ref: %w", ref, ErrInvalidInput)
 	}
 	docID, ok, err := resolveDocRef(tx, project, base)
 	if err != nil {
@@ -253,44 +253,44 @@ func resolveClauseRef(tx *sql.Tx, project, ref string) (int64, error) {
 	if !ok {
 		return 0, fmt.Errorf("%s: document %s: %w", ref, base, ErrNotFound)
 	}
-	id, ok, err := clauseAtAnchor(tx, docID, anchor)
+	id, ok, err := ruleAtAnchor(tx, docID, anchor)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", ref, err)
 	}
 	if !ok {
-		return 0, fmt.Errorf("%s: no clause at that anchor: %w", ref, ErrNotFound)
+		return 0, fmt.Errorf("%s: no rule at that anchor: %w", ref, ErrNotFound)
 	}
 	return id, nil
 }
 
-// clauseAtAnchor is the clause a document arranges at anchor, after
-// ensureClauses splits a document that predates the clause tables. A plan's
-// doc_clauses rows borrow its covered clauses, so a plan anchor names none.
-// The sibling increment 4a ships store.ClauseAtSection for the same lookup;
+// ruleAtAnchor is the rule a document arranges at anchor, after
+// ensureRules splits a document that predates the rule tables. A plan's
+// doc_rules rows borrow its covered rules, so a plan anchor names none.
+// The sibling increment 4a ships store.RuleAtSection for the same lookup;
 // whichever branch lands second deletes one of the two (R7).
-func clauseAtAnchor(tx *sql.Tx, docID int64, anchor string) (int64, bool, error) {
-	if err := ensureClauses(tx, docID); err != nil {
+func ruleAtAnchor(tx *sql.Tx, docID int64, anchor string) (int64, bool, error) {
+	if err := ensureRules(tx, docID); err != nil {
 		return 0, false, err
 	}
 	var id int64
 	err := tx.QueryRow(
-		`SELECT dc.clause_id FROM doc_clauses dc JOIN docs d ON d.id = dc.doc_id
+		`SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
 		  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan'`, docID, anchor).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, nil
 	}
 	if err != nil {
-		return 0, false, fmt.Errorf("clause at anchor %s of doc %d: %w", anchor, docID, err)
+		return 0, false, fmt.Errorf("rule at anchor %s of doc %d: %w", anchor, docID, err)
 	}
 	return id, true, nil
 }
 
-// supersededTargets is the set of clauses old already has a supersededBy
+// supersededTargets is the set of rules old already has a supersededBy
 // edge to.
 func supersededTargets(tx *sql.Tx, old int64) (map[int64]bool, error) {
-	rows, err := tx.Query(`SELECT to_clause FROM clause_edges WHERE from_clause = $1 AND type = 'supersededBy'`, old)
+	rows, err := tx.Query(`SELECT to_rule FROM rule_edges WHERE from_rule = $1 AND type = 'supersededBy'`, old)
 	if err != nil {
-		return nil, fmt.Errorf("supersededBy edges of clause %d: %w", old, err)
+		return nil, fmt.Errorf("supersededBy edges of rule %d: %w", old, err)
 	}
 	defer rows.Close()
 	out := map[int64]bool{}
@@ -304,11 +304,11 @@ func supersededTargets(tx *sql.Tx, old int64) (map[int64]bool, error) {
 	return out, rows.Err()
 }
 
-// governedTaskIDs lists the tasks a clause governs, in id order.
-func governedTaskIDs(tx *sql.Tx, clauseID int64) ([]string, error) {
-	rows, err := tx.Query(`SELECT task_id FROM task_governed_by WHERE clause_id = $1 ORDER BY task_id`, clauseID)
+// governedTaskIDs lists the tasks a rule governs, in id order.
+func governedTaskIDs(tx *sql.Tx, ruleID int64) ([]string, error) {
+	rows, err := tx.Query(`SELECT task_id FROM task_governed_by WHERE rule_id = $1 ORDER BY task_id`, ruleID)
 	if err != nil {
-		return nil, fmt.Errorf("tasks governed by clause %d: %w", clauseID, err)
+		return nil, fmt.Errorf("tasks governed by rule %d: %w", ruleID, err)
 	}
 	defer rows.Close()
 	var out []string
@@ -322,7 +322,7 @@ func governedTaskIDs(tx *sql.Tx, clauseID int64) ([]string, error) {
 	return out, rows.Err()
 }
 
-// supersedeOutcome is the worklode_clause_supersede_total label for one call.
+// supersedeOutcome is the worklode_rule_supersede_total label for one call.
 func supersedeOutcome(dryRun bool, err error) string {
 	switch {
 	case err == nil && dryRun:

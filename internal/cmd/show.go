@@ -39,8 +39,8 @@ const (
 	targetMilestone
 	// targetDeliverable: a DEL id — dispatch to runDeliverableShow.
 	targetDeliverable
-	// targetClause: a CL id — dispatch to runClauseShow.
-	targetClause
+	// targetRule: a RULE id — dispatch to runRuleShow.
+	targetRule
 	// targetUnknownType: a typed id whose <TYPE> segment names no known kind.
 	targetUnknownType
 	// targetUnclassified: matches no known shape at all.
@@ -63,6 +63,11 @@ type showTarget struct {
 // is checked as a task first, so `lode show 45` stays task 45 — spec 45 is
 // `--spec 45` or `WL-SPEC-45` (the grammar collision WL-129 records).
 func classify(arg string) showTarget {
+	// A rule ref reads through designdoc's grammar, which also takes the
+	// pre-S64 WL-CL-<n> spelling.
+	if _, ok := designdoc.ParseRuleRef(arg); ok {
+		return showTarget{Kind: targetRule}
+	}
 	if m := typedID.FindStringSubmatch(arg); m != nil {
 		typ := m[2]
 		switch typ {
@@ -72,8 +77,6 @@ func classify(arg string) showTarget {
 			return showTarget{Kind: targetMilestone}
 		case "DEL":
 			return showTarget{Kind: targetDeliverable}
-		case "CL":
-			return showTarget{Kind: targetClause}
 		default:
 			return showTarget{Kind: targetUnknownType, Type: typ}
 		}
@@ -168,12 +171,12 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 				return errors.New("pass only one kind flag")
 			}
 
-			// No --kind or --<kind> flag ever names a clause (there is no
-			// `lode clause show`; a clause is reached only by its WL-CL-<n>
-			// ref), so --version on either flag-routed path is always
-			// refused, before the kind is even looked at.
+			// No --kind or --<kind> flag ever names a rule (a rule is
+			// reached by its WL-RULE-<n> ref), so --version on either
+			// flag-routed path is always refused, before the kind is even
+			// looked at.
 			if versionSet && (kindSet || changedKind != "") {
-				return errors.New("--version applies only to clauses")
+				return errors.New("--version applies only to rules")
 			}
 
 			switch {
@@ -212,7 +215,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or ADR: fold every effective amendment and supersession into the section it acts on (026 §3.2); ignored for tasks and projects")
 	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
-	cmd.Flags().IntVar(&version, "version", 0, "show one version of a clause (WL-CL-<n>)")
+	cmd.Flags().IntVar(&version, "version", 0, "show one version of a rule (WL-RULE-<n>)")
 	// --project is the only way to reach a project through show: a positional
 	// slug classifies as a document (classify, above), so the project
 	// candidates belong on the flag rather than in the positional's union.
@@ -369,22 +372,22 @@ func runDeliverableShow(cmd *cobra.Command, id string) error {
 	return nil
 }
 
-// runClauseShow renders one design clause by its ref (WL-CL-12). When
+// runRuleShow renders one design rule by its ref (WL-RULE-12). When
 // versionSet, it renders that past version (GET .../versions/{n}) instead of
-// the clause's current one.
-func runClauseShow(cmd *cobra.Command, ref string, version int, versionSet bool) error {
+// the rule's current one.
+func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet bool) error {
 	c, err := newAPIClient()
 	if err != nil {
 		return err
 	}
 	var (
-		clause model.Clause
-		raw    []byte
+		rule model.Rule
+		raw  []byte
 	)
 	if versionSet {
-		clause, raw, err = c.GetClauseVersion(cmd.Context(), ref, version)
+		rule, raw, err = c.GetRuleVersion(cmd.Context(), ref, version)
 	} else {
-		clause, raw, err = c.GetClause(cmd.Context(), ref)
+		rule, raw, err = c.GetRule(cmd.Context(), ref)
 	}
 	if err != nil {
 		return err
@@ -393,7 +396,7 @@ func runClauseShow(cmd *cobra.Command, ref string, version int, versionSet bool)
 		printRaw(cmd, raw)
 		return nil
 	}
-	cli.ClauseRender(cmd.OutOrStdout(), clause)
+	cli.RuleRender(cmd.OutOrStdout(), rule)
 	return nil
 }
 
@@ -425,8 +428,8 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 	if usage && t.Kind != targetTask {
 		return errors.New("--usage applies only to tasks")
 	}
-	if versionSet && t.Kind != targetClause {
-		return errors.New("--version applies only to clauses")
+	if versionSet && t.Kind != targetRule {
+		return errors.New("--version applies only to rules")
 	}
 	switch t.Kind {
 	case targetTask:
@@ -437,10 +440,10 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 		return runMilestoneShow(cmd, arg)
 	case targetDeliverable:
 		return runDeliverableShow(cmd, arg)
-	case targetClause:
-		return runClauseShow(cmd, arg, version, versionSet)
+	case targetRule:
+		return runRuleShow(cmd, arg, version, versionSet)
 	case targetUnknownType:
-		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL, CL (a task id has no type segment: WL-12)`, t.Type, arg)
+		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL, RULE (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:
 		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document ref (WL-SPEC-25, a slug, a corpus path)", arg)
 	}

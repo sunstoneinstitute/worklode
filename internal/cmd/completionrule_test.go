@@ -31,14 +31,14 @@ var entityPlaceholders = map[string]bool{
 // hand the user arguments the command refuses. An entry here is a decision;
 // the staleness check below stops it from becoming a habit.
 var entityArgsExempt = map[string]string{
-	"lode project add":      "creates a project: the existing keys are exactly the arguments it rejects",
-	"lode actor add":        "creates an actor: same as project add",
-	"lode clause edit":      "no clause-listing endpoint exists yet to complete refs from",
-	"lode clause versions":  "no clause-listing endpoint exists yet to complete refs from",
-	"lode clause link":      "no clause-listing endpoint exists yet to complete refs from",
-	"lode clause unlink":    "no clause-listing endpoint exists yet to complete refs from",
-	"lode clause set owner": "no clause-listing endpoint exists yet to complete <ref> from; <actor> is left uncompleted too, since the exemption is whole-command",
-	"lode clause set tags":  "no clause-listing endpoint exists yet to complete refs from",
+	"lode project add":    "creates a project: the existing keys are exactly the arguments it rejects",
+	"lode actor add":      "creates an actor: same as project add",
+	"lode rule edit":      "no rule-listing endpoint exists yet to complete refs from",
+	"lode rule versions":  "no rule-listing endpoint exists yet to complete refs from",
+	"lode rule link":      "no rule-listing endpoint exists yet to complete refs from",
+	"lode rule unlink":    "no rule-listing endpoint exists yet to complete refs from",
+	"lode rule set owner": "no rule-listing endpoint exists yet to complete <ref> from; <actor> is left uncompleted too, since the exemption is whole-command",
+	"lode rule set tags":  "no rule-listing endpoint exists yet to complete refs from",
 }
 
 // TestEntityArgsComplete is 061 §3 C1's coverage: a positional argument

@@ -1,30 +1,30 @@
 package ui
 
-// clause.templ renders a design clause's cockpit page
-// (docs/specs2/12-spec-refactoring-design-tree.md S8-S11, S20): the clause's
+// rule.templ renders a design rule's cockpit page
+// (docs/specs2/12-spec-refactoring-design-tree.md S8-S11, S20): the rule's
 // current or a named version, the documents that arrange it, the tasks it
 // governs, and its version history. Read-only, like the document corpus it
-// is drawn from — a clause is edited through its arranging document, never
+// is drawn from — a rule is edited through its arranging document, never
 // on this page (S14, S35).
-templ Clause(v ClauseView) {
+templ Rule(v RuleView) {
 	@Page(v.Page) {
 		@globalShell() {
 			<section class="card pad">
-				<h1>{ v.Clause.Ref }: { v.Clause.Heading }</h1>
+				<h1>{ v.Rule.Ref }: { v.Rule.Heading }</h1>
 				<p>
-					<span class={ "chip " + docStatusChip(v.Clause.Status) }>{ v.Clause.Status }</span>
-					<span class="chip plain">version { v.Clause.Version }</span>
-					if v.Clause.Owner != "" {
-						<span class="chip plain">owner { v.Clause.Owner }</span>
+					<span class={ "chip " + docStatusChip(v.Rule.Status) }>{ v.Rule.Status }</span>
+					<span class="chip plain">version { v.Rule.Version }</span>
+					if v.Rule.Owner != "" {
+						<span class="chip plain">owner { v.Rule.Owner }</span>
 					}
-					for _, tag := range v.Clause.Tags {
+					for _, tag := range v.Rule.Tags {
 						<span class="chip plain">{ tag }</span>
 					}
 				</p>
 			</section>
 			if !v.Current {
 				<section class="card pad">
-					<p><strong>Viewing version { v.Clause.Version }</strong> &mdash; <a href={ v.CanonicalURL }>back to current</a></p>
+					<p><strong>Viewing version { v.Rule.Version }</strong> &mdash; <a href={ v.CanonicalURL }>back to current</a></p>
 				</section>
 			}
 			<section class="card">
@@ -56,16 +56,16 @@ templ Clause(v ClauseView) {
 			<section class="card">
 				<div class="hd"><h3>Governs</h3></div>
 				<div class="bd">
-					if len(v.Clause.GovernedTasks) == 0 {
+					if len(v.Rule.GovernedTasks) == 0 {
 						<p class="muted">No tasks.</p>
 					} else {
 						<ul>
-							for _, t := range v.Clause.GovernedTasks {
+							for _, t := range v.Rule.GovernedTasks {
 								<li>
 									<a href={ templ.SafeURL("/tasks/" + t.ID) }>{ t.ID }</a>
 									{ " " }{ t.Title }{ " " }
 									<span class={ "chip " + stateChip(t.State) }>{ stateLabel(t.State) }</span>
-									<span class="muted small">{ " " }{ t.Source } · v{ t.ClauseVersion }</span>
+									<span class="muted small">{ " " }{ t.Source } · v{ t.RuleVersion }</span>
 								</li>
 							}
 						</ul>
@@ -75,17 +75,17 @@ templ Clause(v ClauseView) {
 			<section class="card">
 				<div class="hd"><h3>Edges</h3></div>
 				<div class="bd">
-					if len(v.Clause.Edges) == 0 {
+					if len(v.Rule.Edges) == 0 {
 						<p class="muted">No edges.</p>
 					} else {
 						<ul>
-							for _, e := range v.Clause.Edges {
+							for _, e := range v.Rule.Edges {
 								<li>
-									if e.From == v.Clause.Ref {
+									if e.From == v.Rule.Ref {
 										<span class="mono">{ e.Type }</span>{ " " }
-										<a href={ templ.SafeURL("/clauses/" + e.To) }>{ e.To }</a>{ " " }{ e.ToHeading }
+										<a href={ templ.SafeURL("/rules/" + e.To) }>{ e.To }</a>{ " " }{ e.ToHeading }
 									} else {
-										<a href={ templ.SafeURL("/clauses/" + e.From) }>{ e.From }</a>{ " " }{ e.FromHeading }{ " " }
+										<a href={ templ.SafeURL("/rules/" + e.From) }>{ e.From }</a>{ " " }{ e.FromHeading }{ " " }
 										<span class="mono">{ e.Type }</span>{ " this" }
 									}
 									<span class="muted small">{ " " }{ e.Source }</span>
@@ -104,8 +104,8 @@ templ Clause(v ClauseView) {
 								<tr><th>Version</th><th>Heading</th><th>Created</th></tr>
 								for _, ver := range v.Versions {
 									<tr>
-										<td class="mono"><a href={ clauseVersionURL(v.CanonicalURL, ver.Version) }>{ ver.Version }</a></td>
-										<td><a href={ clauseVersionURL(v.CanonicalURL, ver.Version) }>{ ver.Heading }</a></td>
+										<td class="mono"><a href={ ruleVersionURL(v.CanonicalURL, ver.Version) }>{ ver.Version }</a></td>
+										<td><a href={ ruleVersionURL(v.CanonicalURL, ver.Version) }>{ ver.Heading }</a></td>
 										<td class="mono">{ fmtTime(ver.CreatedAt) }</td>
 									</tr>
 								}

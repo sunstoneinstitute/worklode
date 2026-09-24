@@ -134,8 +134,8 @@ type CreateTaskInput struct {
 	// FollowUpTo, when set, records the task this one was spun out of in the
 	// same request instead of a separate edge call.
 	FollowUpTo string `json:"follow_up_to,omitempty"`
-	// GovernedBy names clauses ("WL-CL-12") that govern the task from
-	// creation. Optional: a planless task may acquire its clause later (S4).
+	// GovernedBy names rules ("WL-RULE-12") that govern the task from
+	// creation. Optional: a planless task may acquire its rule later (S4).
 	GovernedBy []string `json:"governed_by,omitempty"`
 	// Secrets declares the org-catalog secret names this task needs (spec
 	// 017). Names only; validated against internal/secrets.ValidName.
