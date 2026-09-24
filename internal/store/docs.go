@@ -633,16 +633,15 @@ func TransferDocOwner(tx *sql.Tx, now time.Time, id int64, newOwner, actorID str
 	return getDocTx(tx, id)
 }
 
-// supersedeReplacedDocs flips every accepted document a document-level
-// replaces edge names to superseded, in the accepting transaction.
-// Section-scoped replaces edges flip nothing — section-level supersession
-// stays derived (025 §3.3) — and an edge resolving to to_external names no
-// row here.
+// supersedeReplacedDocs flips every draft or accepted document a
+// document-level replaces edge names to superseded, in the accepting
+// transaction. Section-scoped replaces edges flip nothing — section-level
+// supersession stays derived (025 §3.3) — and an edge resolving to
+// to_external names no row here.
 //
-// Only an accepted target moves: 025 §7's ladder is draft -> accepted ->
-// superseded, and a draft pushed straight to superseded would be unreachable
-// by every verb here — editable by none, acceptable by none, revisable by
-// none. A draft target is therefore left alone, and logs nothing.
+// A draft target moves too: a superseded draft is reachable by no verb, which
+// is the point when a refactor retires specs that were never accepted
+// (WL-SPEC-77 §9). Plan-only statuses (stale, spent, withdrawn) are left alone.
 //
 // Nor does a tombstoned target move. It is found for the caller, not named by
 // them, and that is the case 044 §4 says a tombstone stops: flipping it to
@@ -672,7 +671,7 @@ func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error
 	// when this walked the (already ordered) targets one at a time.
 	rows, err = tx.Query(
 		`UPDATE docs SET status = 'superseded', updated_at = $2
-		  WHERE id = ANY($1::bigint[]) AND status = 'accepted'
+		  WHERE id = ANY($1::bigint[]) AND status IN ('draft', 'accepted')
 		 RETURNING id`, targets, ts)
 	if err != nil {
 		return fmt.Errorf("supersede docs replaced by %d: %w", docID, err)

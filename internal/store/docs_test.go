@@ -1012,9 +1012,8 @@ func TestRecordDocOpMetric(t *testing.T) {
 }
 
 // TestDocAcceptSupersedesReplacedDoc: a document-level replaces edge flips an
-// accepted target in the same transaction (025 §3.3), and leaves a draft one
-// alone — 025 §7's ladder runs draft -> accepted -> superseded, and a draft
-// jumped straight to superseded would be reachable by no verb here.
+// accepted target and a draft one in the same transaction (025 §3.3,
+// WL-SPEC-77 §9), logging each.
 func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1050,20 +1049,19 @@ func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
 		t.Fatalf("state log = %+v, want a superseded entry on the replaced doc", entries)
 	}
 
-	stillDraft, err := s.GetDoc(t.Context(), unaccepted.ID)
+	wasDraft, err := s.GetDoc(t.Context(), unaccepted.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stillDraft.Status != "draft" {
-		t.Errorf("draft target status = %q, want it left as draft", stillDraft.Status)
+	if wasDraft.Status != "superseded" {
+		t.Errorf("draft target status = %q, want superseded", wasDraft.Status)
 	}
-	// Nothing moved, so nothing is logged.
 	entries, err = s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(unaccepted.ID, 10))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 1 {
-		t.Errorf("state log = %+v, want only the create entry", entries)
+	if len(entries) != 2 || !strings.Contains(entries[1].Change, `"superseded"`) {
+		t.Errorf("state log = %+v, want a superseded entry on the draft target", entries)
 	}
 }
 
