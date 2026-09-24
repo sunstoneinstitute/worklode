@@ -1,6 +1,6 @@
 ---
 name: splitting-specs-into-plans
-description: Use when a worklode spec is too large for one implementation plan and must be split into a numbered plan series — "split spec 0NN into plans", "write plan 1 of N", "plan the cockpit", "decompose this spec", "how many parts should this be" — or when checking whether a spec's sections are fully planned. Defines the section-coverage frontmatter and the task decomposition order.
+description: Use when a worklode spec is too large for one implementation plan and must be split into a numbered plan series — "split spec 0NN into plans", "write plan 1 of N", "plan the cockpit", "decompose this spec", "how many parts should this be" — or when checking whether a spec's arranged rules are fully planned.
 ---
 
 # Splitting a spec into a plan series
@@ -8,21 +8,26 @@ description: Use when a worklode spec is too large for one implementation plan a
 Two decisions, in this order. Get the first wrong and the second is wasted
 work.
 
-1. **The split** — which spec sections each part covers, and how completely.
+1. **The split** — which rules each part undertakes, and how completely.
    This is the `covers:` frontmatter. Write it for every part before
    drafting any part's body.
-2. **The decomposition** — how one part's sections become tasks. This is the
-   layer order in §3.
+2. **The decomposition** — how one part's requirements become tasks governed
+   by those rules. This is the layer order in §3.
 
 Derived from the four-way planning comparison on spec 032 part 1
 (2026-08-09): the plans differed more in what they thought part 1 *was* than
 in quality, because nothing recorded the split.
 
+A spec arranges independently versioned rules. A plan selects those rules
+through `covers`; acceptance gives its minted tasks `governedBy` links to the
+selected set. Planning allocates work against the rules, while the existing
+frontmatter and gap queries still address their document sections.
+
 ## 1. Section coverage frontmatter
 
 A plan's `covers:` is a list of objects, one per spec section the plan touches.
-The key is `covers`, not `implements`: a plan writes no code, so it claims
-nothing. `wl:implements` is a component's claim that its code meets a section
+Keep document/section refs in `spec`, not rule refs. The key is `covers`, not
+`implements`: a plan writes no code, so it claims nothing. `wl:implements` is a component's claim that its code meets a section
 (025 §11); a plan undertakes, and its minted tasks discharge that (026 §5).
 
 ```yaml
@@ -58,7 +63,8 @@ that is the point of writing it down.
 Use it for standing rules: 032 §11's "end-to-end tests drive the HTTP UI and
 API surfaces and do not write directly to the store" governs every part while
 being implemented by none of them. Without `none`, a reader cannot tell a
-governing constraint from a forgotten section.
+governing constraint from a forgotten section. The rule still enters the
+plan arrangement and governs its minted tasks.
 
 ### Aggregate coverage is a query
 
@@ -111,10 +117,12 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
 
 ## 2. Choosing the split
 
-1. **List the anchors.** `lode doc show WL-SPEC-<N> --json | jq -r '.sections[].anchor'`
-   (or read the rendered spec with `lode show WL-SPEC-<N>`). Account
-   for every anchor across the series: one or more parts claim `full` or
-   `partial`, or the section is deliberately unplanned. A standing constraint
+1. **List the rules and their anchors.** Read `lode show <spec-ref> --inline`
+   and `lode rule list --doc <spec-ref> --json`. Use
+   `lode doc show <spec-ref> --json` for the section anchors used by `covers`.
+   Run `lode show <rule-ref> --json` for each rule to inspect its existing
+   plans, governed tasks and relationships before declaring new work. Account for every anchored rule across the series: one
+   or more parts claim `full` or `partial`, or the section is deliberately unplanned. A standing constraint
    may repeat as `coverage: none` in every part it governs.
 2. **Check what the spec's `requires:` actually delivers.** Read the schema
    (`ls deploy/base/migrations/`) and the packages (`ls internal/`), not the

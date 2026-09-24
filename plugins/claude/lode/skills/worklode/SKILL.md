@@ -1,6 +1,6 @@
 ---
 name: worklode
-description: Use when asked to explain Worklode itself — what it is, what entities it tracks (task, doc, project, deliverable, actor, approval), how task state changes automatically from GitHub/Flux webhooks vs. by hand, how to create or find a task or a spec/ADR/plan, what edges/relationships exist between objects, or how spec sections version (amend/supersede/anchors). Also use for "what lode commands exist", "how do I file a bug/spec here", or when a project's CLAUDE.md points to this skill. Not for the in-worktree done/block/release judgment loop (working-under-worklode) or credential handling (lode-secrets).
+description: Use when asked to explain Worklode itself — what it is, what entities it tracks (task, rule, doc, project, deliverable, actor, approval), how task state changes automatically from GitHub/Flux webhooks vs. by hand, how to create or find a task or a spec/ADR/plan, what edges/relationships exist between objects, or how specs arrange rules, rules version, and tasks inherit governing rules. Also use for "what lode commands exist", "how do I file a bug/spec here", or when a project's CLAUDE.md points to this skill. Not for the in-worktree done/block/release judgment loop (working-under-worklode) or credential handling (lode-secrets).
 ---
 
 # Worklode
@@ -17,7 +17,8 @@ those on demand, not up front.
 | Entity | Id | For |
 |---|---|---|
 | Task | `WL-217` | Claimable work |
-| Doc | numbered (spec/adr) or slugged (plan) | Specs, ADRs, plans, authored in the backbone |
+| Rule | `WL-RULE-12` | A design requirement with its own identity, status and version history |
+| Doc | `WL-SPEC-25`, `WL-PLAN-7`, or slug | A spec arranges rules for reading; a plan arranges the rules its work undertakes |
 | Project | slug | Umbrella over 1..n repos |
 | Deliverable | `WL-DEL-3` | A shipped thing — state derived from reported facts, never a status a human sets |
 | Actor | free text | Human, agent, or service account |
@@ -70,6 +71,9 @@ instead.
 | Between | Types |
 |---|---|
 | task ↔ task | `child_of` (subtask), `blocks`, `follow_up_to` (spun out of), `duplicate_of` (same request, filed twice) |
+| task → rule | `governedBy` (follows the newest version unless pinned) |
+| doc → rule | Arrangement: rule, version, position, depth and section anchor |
+| rule → rule | `refines`, `constrains`, `conflictsWith`, `references`, `wasDerivedFrom`, `supersededBy` |
 | task → doc | `plan_doc` (the plan that minted this task), `about_doc` (the doc a review/design task concerns) |
 | doc ↔ doc | `covers` (plan→section, `full`\|`partial`\|`none`), `implements` (code→section), `amends`/`amendedBy`, `replaces`/`isReplacedBy`, `requires`, `wasDerivedFrom`, `blocks` (whole-plan ordering) |
 
@@ -154,20 +158,25 @@ regenerated from the CLI itself so it can't drift: `references/commands.md`.
 
 ## Docs, briefly
 
-Three kinds — `spec`, `adr`, `plan` — each `draft → accepted → superseded`.
-A spec/ADR's `{#sec-N}` section anchors are frozen once accepted: amend or
-supersede a section, never renumber it. So the stored body is the text as
-first written, and **what a section says now is that section plus whatever
-amends it**: read one with `lode show <ref> --inline`, which folds every
-in-force amendment and supersession into the section it acts on, attributed
-to the document it came from (026 §3.2). A bare `lode show` gives you the
-original — fine for provenance, wrong for "what does this require of me".
-`lode doc show <ref> --json`'s `edges_in` names `amendedBy`/`isReplacedBy`
-when you want the edges rather than the reading. Frontmatter is mandatory, always;
-a plan's `covers` is how coverage becomes a query (`--needs-planning`) rather
-than a status someone remembers to flip. Full frontmatter schema, the
-cross-project `WL-SPEC-<n>` shorthand, and the doc-lifecycle watcher's two
-minting rules: `references/specs-and-docs.md`.
+A **spec is an arrangement of rules**. A rule has a stable ref such as
+`WL-RULE-12`, its own text, status and version history. The arrangement puts
+that rule at a position, depth and anchor in the spec. A section reference
+names its place in a document; the rule ref names the requirement itself.
+Accepting a spec accepts the draft rule versions it arranges.
+
+A **plan arranges the rules reached by its `covers` entries**. Its task prose
+mints no rules. Acceptance mints tasks governed by those rules. Governance
+follows the newest rule text unless pinned; reorganising a document does not
+complete or rewrite those tasks. Coverage remains a query over plans and work.
+
+Read the arrangement with `lode rule list --doc <spec-ref>` and a rule with
+`lode show <rule-ref>`. Read a spec with `lode show <ref> --inline` to include
+in-force document amendments and supersessions. A bare read returns its
+current stored body; `--version` selects a historical version. Accepted
+section anchors remain stable, and `covers` still uses document/section refs
+and coverage levels. Use `spec` for new design documents; existing ADRs stay
+readable. Frontmatter, rule editing, governance, and refactor mechanics:
+`references/specs-and-docs.md`.
 
 Writing/revising a doc is itself an ordinary task (`kind: design`) that
 closes on submission for review, not on acceptance. A plan's execution *is*
@@ -183,10 +192,11 @@ Paste this into the project's `CLAUDE.md` so every session picks it up:
 
 This project is tracked in Worklode. Work is claimed, not assigned — load
 the `worklode` skill before filing or finding a task, and before creating or
-reading a spec, ADR, or plan.
+reading a spec, rule, or plan.
 
-Specs, ADRs and plans live in the Worklode backbone, not in this tree. Read
-one with `lode show <ref> --inline`; create one with `lode doc add`. When a
+Specs arrange rules; plans turn those rules into tasks. These live in the
+Worklode backbone. Read a spec with `lode show <ref> --inline`; create a
+document with `lode doc add`. When a
 general-purpose planning skill says to save a design doc or plan under
 `docs/` (`superpowers:brainstorming` and `superpowers:writing-plans` both
 do), that path is a scratch buffer — the document is the `lode doc` row, and
@@ -199,7 +209,7 @@ nothing reads the file once the row exists.
 |---|---|
 | `references/commands.md` | Every `lode` command and its flags, generated from the CLI |
 | `references/entities-and-edges.md` | Full entity/edge grammar, exact state-machine transitions, soft-delete |
-| `references/specs-and-docs.md` | Frontmatter schema, amend/supersede mechanics, `WL-SPEC-<n>` shorthand, coverage queries |
+| `references/specs-and-docs.md` | Rule arrangements, versions, governance, frontmatter and coverage queries |
 | `references/webhooks.md` | Which GitHub/Flux event does what, event-by-event |
 
 Neighbours: **working-under-worklode** owns the in-worktree done/block/release

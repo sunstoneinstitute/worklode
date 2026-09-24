@@ -28,15 +28,18 @@ that decided which task to pick up — stay unattributed by design.
 
 `cd` into the worktree the claim printed. Everything below happens there.
 
-**Step 2: read the spec, not the plan of it.** The task's `about_doc` names the
-accepted spec. `lode show <ref>` renders it, `-s <anchor>` one section;
-`lode doc show <ref> --json` gives the same body plus the parsed section
-anchors and edges. The backbone is the only copy — there is no corpus on disk.
+**Step 2: read the spec and its rules.** The task's `about_doc` names the
+accepted spec. Read it with `lode show <ref> --inline`, then
+`lode rule list --doc <ref> --json` for the rules it arranges. Read a rule with
+`lode show <rule-ref>` to inspect its text, version, relationships and existing
+governed tasks. Use `lode doc show <ref> --json` to map rules back to section
+anchors for `covers`. The backbone is the copy of record.
 
 **Step 3: write the plans.** Load `lode:splitting-specs-into-plans` if the spec is
 large enough to need a numbered series, and `superpowers:writing-plans` for
-each plan document. A plan's `covers:` frontmatter must name the spec sections
-it undertakes, anchor by anchor: a whole-document edge discharges nothing, so
+each plan document. Split by the rules the work must satisfy, keeping standing
+constraints with every part they govern. A plan's `covers:` frontmatter still
+names the spec sections it undertakes, anchor by anchor: a whole-document edge discharges nothing, so
 `lode doc list --needs-planning` would keep reporting the spec as unplanned.
 A plan is also bounded by a server-enforced token budget (12 S19); `lode doc
 add` warns past the soft budget and refuses past the hard ceiling, which is
@@ -52,7 +55,10 @@ lode doc add --kind plan --slug <slug> --file <path>
 
 **Step 4: accept the plans.** `lode doc accept <id>` mints each plan's task set
 in the accepting transaction (025 §9.2), which is what turns a written plan
-into claimable work. Only the document's owner may accept it.
+into claimable work. Only the document's owner may accept it. Acceptance also
+links each minted task to the rules the plan arranges. Check `lode rule list --doc <plan-ref>`
+and a minted task's `governed_by` with `lode show <task-id> --json`.
+Unresolved coverage refs select no rules; repair them before accepting.
 
 **Step 5: finish the design task.** `lode task set state merged <design-task-id>` once the
 plan documents are accepted. Writing the plan is the deliverable; executing it
