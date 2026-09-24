@@ -52,7 +52,7 @@ var errReconcileSkip = errors.New("spec-reconciler: skip")
 
 // handleSpecReconcile reads the GitHub pull_request.* and push events the
 // hooks record, finds the task the branch names, and governs it by the
-// clause the Spec: trailer cites when no plan governs it (S51). Section refs
+// rule the Spec: trailer cites when no plan governs it (S51). Section refs
 // are accepted until the per-project switch lands (S52). The task.governed
 // event's external id identifies the link the trailer asks for, so every
 // later delivery carrying the same trailer for the same task collides with
@@ -71,7 +71,7 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	}
 	// Decoded into map[string]any rather than a named struct: GitHub's
 	// payload is a foreign schema internal/model does not own, and
-	// internal/model/rule_test.go (ADR 036 §2) holds internal/api to no
+	// internal/model/modelrule_test.go (ADR 036 §2) holds internal/api to no
 	// json-tagged struct at all — internal/hooks is where such shapes are
 	// named, for the raw webhook delivery this event was recorded from.
 	var payload map[string]any
@@ -126,7 +126,7 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	}
 
 	outcome := "linked"
-	notePayload, _ := json.Marshal(map[string]any{"task": taskID, "clause": decl.String(), "source": "gate", "event": ev.ID})
+	notePayload, _ := json.Marshal(map[string]any{"task": taskID, "rule": decl.String(), "source": "gate", "event": ev.ID})
 	// events.source is "watcher": like doc-lifecycle's mints, this event is
 	// the system inferring a link, not a raw webhook delivery (there is no
 	// "gate" value in events_source_check). The link itself still records
@@ -145,16 +145,16 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 				outcome = "planned"
 				return errReconcileSkip
 			}
-			var clauseID int64
-			if decl.Clause != nil {
-				clauseID, err = store.ClauseIDByRef(tx, decl.Clause.Key, decl.Clause.Number)
+			var ruleID int64
+			if decl.Rule != nil {
+				ruleID, err = store.RuleIDByRef(tx, decl.Rule.Key, decl.Rule.Number)
 			} else {
-				clauseID, err = store.ClauseAtSection(tx, *decl.Section)
+				ruleID, err = store.RuleAtSection(tx, *decl.Section)
 			}
 			if err != nil {
 				return err
 			}
-			return store.Govern(tx, taskID, clauseID, "gate", false)
+			return store.Govern(tx, taskID, ruleID, "gate", false)
 		})
 	switch {
 	case errors.Is(err, errReconcileSkip):

@@ -27,13 +27,13 @@ func newGateCheckCmd() *cobra.Command {
 	var base, head, bodyFile string
 	cmd := &cobra.Command{
 		Use:   "check",
-		Short: "Refuse a change to a guarded path that names no design clause",
+		Short: "Refuse a change to a guarded path that names no design rule",
 		Long: `Reads the [gate] table of .worklode/config.toml, diffs --base to --head,
 and requires a Spec: trailer on the pull request body (--body-file) or in a
 commit message when a guarded path changed. Exit status 1 with the reason
 when the trailer is missing or malformed. Without a [gate] table it does
 nothing. The trailer is checked for form here; the server resolves the
-clause it names (12-spec-refactoring-design-tree.md S50).`,
+rule it names (12-spec-refactoring-design-tree.md S50).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dir, err := os.Getwd()

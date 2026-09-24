@@ -16,8 +16,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// A second spec, P1-SPEC-2, created after clauseDocV1: its sections become
-// clauses 4 (sec-1) and 5 (sec-2).
+// A second spec, P1-SPEC-2, created after ruleDocV1: its sections become
+// rules 4 (sec-1) and 5 (sec-2).
 const supersedeDocU = "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nD.\n\n## 2. Dos {#sec-2}\n\nE.\n"
 
 func entry(old string, news ...string) model.SupersedeEntry {
@@ -26,35 +26,35 @@ func entry(old string, news ...string) model.SupersedeEntry {
 
 func supersede(t *testing.T, s *Store, dry bool, entries ...model.SupersedeEntry) (model.SupersedeResult, error) {
 	t.Helper()
-	return s.SupersedeClauses(t.Context(), "p1", "stig", model.SupersedeInput{Entries: entries, DryRun: dry})
+	return s.SupersedeRules(t.Context(), "p1", "stig", model.SupersedeInput{Entries: entries, DryRun: dry})
 }
 
 func mustSupersede(t *testing.T, s *Store, entries ...model.SupersedeEntry) model.SupersedeResult {
 	t.Helper()
 	res, err := supersede(t, s, false, entries...)
 	if err != nil {
-		t.Fatalf("SupersedeClauses: %v", err)
+		t.Fatalf("SupersedeRules: %v", err)
 	}
 	return res
 }
 
-func clauseStatus(t *testing.T, s *Store, number int64) string {
+func ruleStatus(t *testing.T, s *Store, number int64) string {
 	t.Helper()
 	var st string
 	if err := s.db.QueryRowContext(t.Context(),
-		`SELECT c.status FROM clauses c JOIN projects p ON p.id = c.project_id WHERE p.key = 'P1' AND c.number = $1`,
+		`SELECT c.status FROM rules c JOIN projects p ON p.id = c.project_id WHERE p.key = 'P1' AND c.number = $1`,
 		number).Scan(&st); err != nil {
 		t.Fatal(err)
 	}
 	return st
 }
 
-// refactorEdges lists every supersededBy edge as "from->to" CL numbers.
+// refactorEdges lists every supersededBy edge as "from->to" RULE numbers.
 func refactorEdges(t *testing.T, s *Store) []string {
 	t.Helper()
 	rows, err := s.db.QueryContext(t.Context(),
-		`SELECT f.number, tc.number, e.source FROM clause_edges e
-		   JOIN clauses f ON f.id = e.from_clause JOIN clauses tc ON tc.id = e.to_clause
+		`SELECT f.number, tc.number, e.source FROM rule_edges e
+		   JOIN rules f ON f.id = e.from_rule JOIN rules tc ON tc.id = e.to_rule
 		  WHERE e.type = 'supersededBy' ORDER BY f.number, tc.number`)
 	if err != nil {
 		t.Fatal(err)
@@ -84,48 +84,48 @@ func eventCount(t *testing.T, s *Store, typ string) int {
 	return n
 }
 
-// TestSupersedeMerge: WL-CL-B -> WL-CL-A withdraws B, writes one refactor
+// TestSupersedeMerge: WL-RULE-B -> WL-RULE-A withdraws B, writes one refactor
 // supersededBy edge B->A and leaves A live (S22, R2).
 func TestSupersedeMerge(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
-	res := mustSupersede(t, s, entry("P1-CL-3", "P1-CL-1"))
-	want := model.SupersedeResult{Entries: []model.SupersedeResolved{{Old: "P1-CL-3", New: []string{"P1-CL-1"}}}, Withdrawn: 1, Edges: 1}
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	res := mustSupersede(t, s, entry("P1-RULE-3", "P1-RULE-1"))
+	want := model.SupersedeResult{Entries: []model.SupersedeResolved{{Old: "P1-RULE-3", New: []string{"P1-RULE-1"}}}, Withdrawn: 1, Edges: 1}
 	if !reflect.DeepEqual(res, want) {
 		t.Errorf("result = %+v, want %+v", res, want)
 	}
-	if got := clauseStatus(t, s, 3); got != "withdrawn" {
-		t.Errorf("old clause status = %s, want withdrawn", got)
+	if got := ruleStatus(t, s, 3); got != "withdrawn" {
+		t.Errorf("old rule status = %s, want withdrawn", got)
 	}
-	if got := clauseStatus(t, s, 1); got != "draft" {
+	if got := ruleStatus(t, s, 1); got != "draft" {
 		t.Errorf("successor status = %s, want draft", got)
 	}
 	if got := refactorEdges(t, s); !reflect.DeepEqual(got, []string{"3->1"}) {
 		t.Errorf("edges = %v", got)
 	}
-	if n := eventCount(t, s, "clause.superseded"); n != 1 {
-		t.Errorf("clause.superseded events = %d, want 1", n)
+	if n := eventCount(t, s, "rule.superseded"); n != 1 {
+		t.Errorf("rule.superseded events = %d, want 1", n)
 	}
 	var entries, resolved string
 	if err := s.db.QueryRowContext(t.Context(),
-		`SELECT payload->>'entries', payload->>'resolved' FROM events WHERE type = 'clause.superseded'`).Scan(&entries, &resolved); err != nil {
+		`SELECT payload->>'entries', payload->>'resolved' FROM events WHERE type = 'rule.superseded'`).Scan(&entries, &resolved); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(entries, `"P1-CL-3"`) || !strings.Contains(resolved, `"P1-CL-1"`) {
+	if !strings.Contains(entries, `"P1-RULE-3"`) || !strings.Contains(resolved, `"P1-RULE-1"`) {
 		t.Errorf("payload entries = %s, resolved = %s", entries, resolved)
 	}
 }
 
-// TestSupersedeManyToMany: one old clause to two successors writes two edges,
-// two old clauses to one successor writes two more.
+// TestSupersedeManyToMany: one old rule to two successors writes two edges,
+// two old rules to one successor writes two more.
 func TestSupersedeManyToMany(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: supersedeDocU, CreatedBy: "stig"})
 	res := mustSupersede(t, s,
-		entry("P1-CL-1", "P1-CL-4", "P1-CL-5"),
-		entry("P1-CL-2", "P1-CL-4"),
-		entry("P1-CL-3", "P1-CL-4"))
+		entry("P1-RULE-1", "P1-RULE-4", "P1-RULE-5"),
+		entry("P1-RULE-2", "P1-RULE-4"),
+		entry("P1-RULE-3", "P1-RULE-4"))
 	if res.Withdrawn != 3 || res.Edges != 4 {
 		t.Errorf("result = %+v, want 3 withdrawn and 4 edges", res)
 	}
@@ -134,16 +134,16 @@ func TestSupersedeManyToMany(t *testing.T) {
 	}
 }
 
-// TestSupersedeWithdrawOnly: a line with no successors withdraws the clause
+// TestSupersedeWithdrawOnly: a line with no successors withdraws the rule
 // and writes no edge (R2).
 func TestSupersedeWithdrawOnly(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
-	res := mustSupersede(t, s, entry("P1-CL-2"))
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	res := mustSupersede(t, s, entry("P1-RULE-2"))
 	if res.Withdrawn != 1 || res.Edges != 0 || len(res.Entries) != 1 || len(res.Entries[0].New) != 0 {
 		t.Errorf("result = %+v", res)
 	}
-	if got := clauseStatus(t, s, 2); got != "withdrawn" {
+	if got := ruleStatus(t, s, 2); got != "withdrawn" {
 		t.Errorf("status = %s, want withdrawn", got)
 	}
 	if got := refactorEdges(t, s); len(got) != 0 {
@@ -152,16 +152,16 @@ func TestSupersedeWithdrawOnly(t *testing.T) {
 }
 
 // TestSupersedeSectionRefs: section refs resolve on both sides, and an old
-// document with no clause rows is split first (ensureClauses, R7) so its
-// clause can be minted and then withdrawn.
+// document with no rule rows is split first (ensureRules, R7) so its
+// rule can be minted and then withdrawn.
 func TestSupersedeSectionRefs(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	u := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: supersedeDocU, CreatedBy: "stig"})
-	if _, err := s.db.ExecContext(t.Context(), `DELETE FROM doc_clauses WHERE doc_id = $1`, u.ID); err != nil {
+	if _, err := s.db.ExecContext(t.Context(), `DELETE FROM doc_rules WHERE doc_id = $1`, u.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.ExecContext(t.Context(), `DELETE FROM clauses WHERE number IN (4, 5)`); err != nil {
+	if _, err := s.db.ExecContext(t.Context(), `DELETE FROM rules WHERE number IN (4, 5)`); err != nil {
 		t.Fatal(err)
 	}
 	res := mustSupersede(t, s, entry("P1-SPEC-2#sec-1", "P1-SPEC-1#sec-1.1"))
@@ -172,22 +172,22 @@ func TestSupersedeSectionRefs(t *testing.T) {
 	if arr[0].Anchor != "sec-1" || arr[0].Status != "withdrawn" || arr[1].Status == "withdrawn" {
 		t.Errorf("arrangement = %+v, want sec-1 withdrawn and sec-2 live", arr)
 	}
-	want := []model.SupersedeResolved{{Old: "P1-CL-" + strconv.FormatInt(arr[0].Number, 10), New: []string{"P1-CL-2"}}}
+	want := []model.SupersedeResolved{{Old: "P1-RULE-" + strconv.FormatInt(arr[0].Number, 10), New: []string{"P1-RULE-2"}}}
 	if !reflect.DeepEqual(res.Entries, want) {
 		t.Errorf("entries = %+v, want %+v", res.Entries, want)
 	}
 }
 
-// TestSupersedeMarksPlansStale: an accepted plan arranging the old clause
-// goes stale (S23, through SetClauseStatus).
+// TestSupersedeMarksPlansStale: an accepted plan arranging the old rule
+// goes stale (S23, through SetRuleStatus).
 func TestSupersedeMarksPlansStale(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
 	}
-	res := mustSupersede(t, s, entry("P1-CL-1", "P1-CL-3"))
+	res := mustSupersede(t, s, entry("P1-RULE-1", "P1-RULE-3"))
 	if res.StalePlans != 1 {
 		t.Errorf("stale plans = %d, want 1", res.StalePlans)
 	}
@@ -196,18 +196,18 @@ func TestSupersedeMarksPlansStale(t *testing.T) {
 	}
 }
 
-// TestSupersedeTellsGovernedTasks: a task governed by the old clause keeps
+// TestSupersedeTellsGovernedTasks: a task governed by the old rule keeps
 // its link and gets one task.governance_superseded event naming the old
-// clause and its successors (R5).
+// rule and its successors (R5).
 func TestSupersedeTellsGovernedTasks(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	_, tasks, err := acceptDoc(t, s, plan.ID, "stig")
 	if err != nil || len(tasks) != 2 {
 		t.Fatalf("accept: %d tasks, %v", len(tasks), err)
 	}
-	res := mustSupersede(t, s, entry("P1-CL-1", "P1-CL-3"))
+	res := mustSupersede(t, s, entry("P1-RULE-1", "P1-RULE-3"))
 	if res.Tasks != 2 {
 		t.Errorf("tasks = %d, want 2", res.Tasks)
 	}
@@ -237,7 +237,7 @@ func TestSupersedeTellsGovernedTasks(t *testing.T) {
 			t.Fatalf("%s: %d events, want 1", task.ID, len(payloads))
 		}
 		p := payloads[0]
-		if p["clause"] != "P1-CL-1" || !reflect.DeepEqual(p["successors"], []any{"P1-CL-3"}) {
+		if p["rule"] != "P1-RULE-1" || !reflect.DeepEqual(p["successors"], []any{"P1-RULE-3"}) {
 			t.Errorf("%s payload = %v", task.ID, p)
 		}
 	}
@@ -247,29 +247,29 @@ func TestSupersedeTellsGovernedTasks(t *testing.T) {
 // real run would produce, and writes nothing (R6).
 func TestSupersedeDryRun(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
 	}
-	res, err := supersede(t, s, true, entry("P1-SPEC-1#sec-1", "P1-CL-3"))
+	res, err := supersede(t, s, true, entry("P1-SPEC-1#sec-1", "P1-RULE-3"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := model.SupersedeResult{
-		Entries:   []model.SupersedeResolved{{Old: "P1-CL-1", New: []string{"P1-CL-3"}}},
+		Entries:   []model.SupersedeResolved{{Old: "P1-RULE-1", New: []string{"P1-RULE-3"}}},
 		Withdrawn: 1, Edges: 1, Tasks: 2, StalePlans: 1, DryRun: true,
 	}
 	if !reflect.DeepEqual(res, want) {
 		t.Errorf("result = %+v, want %+v", res, want)
 	}
-	if got := clauseStatus(t, s, 1); got == "withdrawn" {
-		t.Error("dry run withdrew the clause")
+	if got := ruleStatus(t, s, 1); got == "withdrawn" {
+		t.Error("dry run withdrew the rule")
 	}
 	if got := refactorEdges(t, s); len(got) != 0 {
 		t.Errorf("dry run wrote edges %v", got)
 	}
-	for _, typ := range []string{"clause.superseded", "task.governance_superseded", "doc.stale"} {
+	for _, typ := range []string{"rule.superseded", "task.governance_superseded", "doc.stale"} {
 		if n := eventCount(t, s, typ); n != 0 {
 			t.Errorf("dry run wrote %d %s events", n, typ)
 		}
@@ -280,15 +280,15 @@ func TestSupersedeDryRun(t *testing.T) {
 }
 
 // TestSupersedeRerunIsNoOp: applying the same map twice changes nothing the
-// second time; only the second clause.superseded event is new (R6).
+// second time; only the second rule.superseded event is new (R6).
 func TestSupersedeRerunIsNoOp(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
 	}
-	m := []model.SupersedeEntry{entry("P1-CL-1", "P1-CL-3"), entry("P1-CL-2")}
+	m := []model.SupersedeEntry{entry("P1-RULE-1", "P1-RULE-3"), entry("P1-RULE-2")}
 	mustSupersede(t, s, m...)
 	res := mustSupersede(t, s, m...)
 	if res.Withdrawn != 0 || res.Edges != 0 || res.Tasks != 0 || res.StalePlans != 0 {
@@ -297,12 +297,12 @@ func TestSupersedeRerunIsNoOp(t *testing.T) {
 	if got := refactorEdges(t, s); !reflect.DeepEqual(got, []string{"1->3"}) {
 		t.Errorf("edges = %v", got)
 	}
-	// Two tasks, each governed by both old clauses.
+	// Two tasks, each governed by both old rules.
 	if n := eventCount(t, s, "task.governance_superseded"); n != 4 {
 		t.Errorf("task.governance_superseded events = %d, want 4", n)
 	}
-	if n := eventCount(t, s, "clause.superseded"); n != 2 {
-		t.Errorf("clause.superseded events = %d, want 2", n)
+	if n := eventCount(t, s, "rule.superseded"); n != 2 {
+		t.Errorf("rule.superseded events = %d, want 2", n)
 	}
 }
 
@@ -310,26 +310,26 @@ func TestSupersedeRerunIsNoOp(t *testing.T) {
 // nothing (R6, R7).
 func TestSupersedeRefusals(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
-	mustSupersede(t, s, entry("P1-CL-3")) // CL-3 is withdrawn from here on.
+	mustSupersede(t, s, entry("P1-RULE-3")) // RULE-3 is withdrawn from here on.
 	cases := []struct {
 		name    string
 		entries []model.SupersedeEntry
 		want    error
 		names   string
 	}{
-		{"withdrawn successor", []model.SupersedeEntry{entry("P1-CL-1", "P1-CL-3")}, ErrInvalidInput, "P1-CL-3"},
-		{"successor also old", []model.SupersedeEntry{entry("P1-CL-1", "P1-CL-2"), entry("P1-CL-2")}, ErrInvalidInput, "P1-CL-2"},
-		{"self successor", []model.SupersedeEntry{entry("P1-CL-1", "P1-SPEC-1#sec-1")}, ErrInvalidInput, "P1-SPEC-1#sec-1"},
-		{"old twice", []model.SupersedeEntry{entry("P1-CL-1"), entry("P1-SPEC-1#sec-1", "P1-CL-2")}, ErrInvalidInput, "P1-SPEC-1#sec-1"},
-		{"unparseable", []model.SupersedeEntry{entry("nonsense", "P1-CL-1")}, ErrInvalidInput, "nonsense"},
-		{"bare document", []model.SupersedeEntry{entry("P1-SPEC-1", "P1-CL-1")}, ErrInvalidInput, "P1-SPEC-1"},
+		{"withdrawn successor", []model.SupersedeEntry{entry("P1-RULE-1", "P1-RULE-3")}, ErrInvalidInput, "P1-RULE-3"},
+		{"successor also old", []model.SupersedeEntry{entry("P1-RULE-1", "P1-RULE-2"), entry("P1-RULE-2")}, ErrInvalidInput, "P1-RULE-2"},
+		{"self successor", []model.SupersedeEntry{entry("P1-RULE-1", "P1-SPEC-1#sec-1")}, ErrInvalidInput, "P1-SPEC-1#sec-1"},
+		{"old twice", []model.SupersedeEntry{entry("P1-RULE-1"), entry("P1-SPEC-1#sec-1", "P1-RULE-2")}, ErrInvalidInput, "P1-SPEC-1#sec-1"},
+		{"unparseable", []model.SupersedeEntry{entry("nonsense", "P1-RULE-1")}, ErrInvalidInput, "nonsense"},
+		{"bare document", []model.SupersedeEntry{entry("P1-SPEC-1", "P1-RULE-1")}, ErrInvalidInput, "P1-SPEC-1"},
 		{"empty map", nil, ErrInvalidInput, "empty"},
-		{"unknown clause", []model.SupersedeEntry{entry("P1-CL-99", "P1-CL-1")}, ErrNotFound, "P1-CL-99"},
-		{"unknown anchor", []model.SupersedeEntry{entry("P1-CL-1", "P1-SPEC-1#sec-9")}, ErrNotFound, "P1-SPEC-1#sec-9"},
-		{"unknown document", []model.SupersedeEntry{entry("P1-CL-1", "P1-SPEC-7#sec-1")}, ErrNotFound, "P1-SPEC-7#sec-1"},
-		{"plan anchor", []model.SupersedeEntry{entry("P1-PLAN-1#sec-1", "P1-CL-2")}, ErrNotFound, "P1-PLAN-1#sec-1"},
+		{"unknown rule", []model.SupersedeEntry{entry("P1-RULE-99", "P1-RULE-1")}, ErrNotFound, "P1-RULE-99"},
+		{"unknown anchor", []model.SupersedeEntry{entry("P1-RULE-1", "P1-SPEC-1#sec-9")}, ErrNotFound, "P1-SPEC-1#sec-9"},
+		{"unknown document", []model.SupersedeEntry{entry("P1-RULE-1", "P1-SPEC-7#sec-1")}, ErrNotFound, "P1-SPEC-7#sec-1"},
+		{"plan anchor", []model.SupersedeEntry{entry("P1-PLAN-1#sec-1", "P1-RULE-2")}, ErrNotFound, "P1-PLAN-1#sec-1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -342,42 +342,42 @@ func TestSupersedeRefusals(t *testing.T) {
 			}
 		})
 	}
-	if clauseStatus(t, s, 1) == "withdrawn" || clauseStatus(t, s, 2) == "withdrawn" {
-		t.Error("a refused map withdrew a clause")
+	if ruleStatus(t, s, 1) == "withdrawn" || ruleStatus(t, s, 2) == "withdrawn" {
+		t.Error("a refused map withdrew a rule")
 	}
-	if n := eventCount(t, s, "clause.superseded"); n != 1 {
-		t.Errorf("clause.superseded events = %d, want only the fixture's 1", n)
+	if n := eventCount(t, s, "rule.superseded"); n != 1 {
+		t.Errorf("rule.superseded events = %d, want only the fixture's 1", n)
 	}
 }
 
-// TestSupersedeMetrics: worklode_clause_supersede_total counts each outcome.
+// TestSupersedeMetrics: worklode_rule_supersede_total counts each outcome.
 func TestSupersedeMetrics(t *testing.T) {
 	s := openDocStore(t)
 	s.metrics = newStoreMetrics(prometheus.NewRegistry())
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
-	mustSupersede(t, s, entry("P1-CL-3"))
-	_, _ = supersede(t, s, true, entry("P1-CL-2"))
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	mustSupersede(t, s, entry("P1-RULE-3"))
+	_, _ = supersede(t, s, true, entry("P1-RULE-2"))
 	_, _ = supersede(t, s, false, entry("bogus"))
-	_, _ = supersede(t, s, false, entry("P1-CL-99"))
+	_, _ = supersede(t, s, false, entry("P1-RULE-99"))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, _ = s.SupersedeClauses(ctx, "p1", "stig", model.SupersedeInput{Entries: []model.SupersedeEntry{entry("P1-CL-2")}})
+	_, _ = s.SupersedeRules(ctx, "p1", "stig", model.SupersedeInput{Entries: []model.SupersedeEntry{entry("P1-RULE-2")}})
 	for _, o := range []string{"applied", "dry_run", "invalid", "not_found", "error"} {
-		if got := testutil.ToFloat64(s.metrics.clauseSupersedes.WithLabelValues(o)); got != 1 {
+		if got := testutil.ToFloat64(s.metrics.ruleSupersedes.WithLabelValues(o)); got != 1 {
 			t.Errorf("outcome %s = %v, want 1", o, got)
 		}
 	}
 }
 
 // TestSupersedeDoesNotWaitOnGovern: an open transaction that has governed a
-// task by the old clause holds KEY SHARE on it through the FK. The refactor's
-// clause locks are NO KEY UPDATE, so it completes instead of waiting, which
+// task by the old rule holds KEY SHARE on it through the FK. The refactor's
+// rule locks are NO KEY UPDATE, so it completes instead of waiting, which
 // is the lock that closed the settlePlan/WithdrawDoc deadlock cycle.
 func TestSupersedeDoesNotWaitOnGovern(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	task := createTask(t, s, s.Now(), TaskInput{ProjectID: "p1", Title: "Governed", Kind: "feature", Priority: "medium", CreatedBy: "stig"})
-	old := clauseID(t, s, "P1", 1)
+	old := ruleID(t, s, "P1", 1)
 	tx, err := s.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -388,7 +388,7 @@ func TestSupersedeDoesNotWaitOnGovern(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.SupersedeClauses(t.Context(), "p1", "stig", model.SupersedeInput{Entries: []model.SupersedeEntry{entry("P1-CL-1", "P1-CL-3")}})
+		_, err := s.SupersedeRules(t.Context(), "p1", "stig", model.SupersedeInput{Entries: []model.SupersedeEntry{entry("P1-RULE-1", "P1-RULE-3")}})
 		done <- err
 	}()
 	select {

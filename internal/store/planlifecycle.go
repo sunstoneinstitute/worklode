@@ -8,7 +8,7 @@ import (
 )
 
 // governPlanTasks gives every task minted by the plan that carries no
-// governing link the plan's arranged clauses (S5: a closed plan's tasks each
+// governing link the plan's arranged rules (S5: a closed plan's tasks each
 // carry at least one link; S3: the store is the second writer of links, in
 // its minimal form). Tasks that already have links are left alone.
 //
@@ -16,11 +16,11 @@ import (
 // (settlePlan's FOR NO KEY UPDATE, WithdrawDoc's FOR UPDATE), so two closes
 // of the same plan cannot race each other's inserts here.
 func governPlanTasks(tx *sql.Tx, planID int64) error {
-	clauses, err := planClauses(tx, planID)
+	rules, err := planRules(tx, planID)
 	if err != nil {
 		return err
 	}
-	if len(clauses) == 0 {
+	if len(rules) == 0 {
 		return nil
 	}
 	rows, err := tx.Query(
@@ -44,7 +44,7 @@ func governPlanTasks(tx *sql.Tx, planID int64) error {
 		return err
 	}
 	for _, id := range ids {
-		for _, c := range clauses {
+		for _, c := range rules {
 			if err := Govern(tx, id, c, "plan", false); err != nil {
 				return fmt.Errorf("govern task %s from plan %d: %w", id, planID, err)
 			}

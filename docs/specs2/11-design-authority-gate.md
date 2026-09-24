@@ -87,7 +87,7 @@ ruleset does not. Without a `[gate]` table nothing runs.
 itself: it reads the table, diffs the two revisions, and exits 1 with the
 reason when a guarded path changed and no valid trailer is present on the pull
 request body or in a commit message. It checks the trailer's form offline and
-never calls the server; the server resolves the clause the trailer names
+never calls the server; the server resolves the rule the trailer names
 (§4). `lode doctor` reports whether the table parses. Whether the repository
 requires pull requests is not checked yet, since no API route exposes the
 branch rules the server records.
@@ -111,8 +111,8 @@ Everything else merges without the gate asking.
 
 ## 4. Declaration
 
-Once clauses exist (12-spec-refactoring-design-tree.md S30) the trailer names a
-clause: `Spec: WL-CL-456`, or `Spec: WL-CL-456 amended` when the PR ships a new
+Once rules exist (12-spec-refactoring-design-tree.md S30) the trailer names a
+rule: `Spec: WL-RULE-456`, or `Spec: WL-RULE-456 amended` when the PR ships a new
 version of it. Section refs (`WL-SPEC-4 sec-5`) are accepted only while a
 project's server-side gate setting allows them, a transitional per-project
 setting and never a `.worklode/config.toml` key, since it binds the project and
@@ -145,7 +145,7 @@ link with `source = 'gate'` when no plan governs the task. It reads the
 default `Spec:` trailer key, so a
 project that renames the key with `[gate] trailer` gets a working CI gate and
 a silent reconciler until the key reaches the server. A `none` trailer writes
-nothing. A trailer naming a clause or section that does not exist is counted
+nothing. A trailer naming a rule or section that does not exist is counted
 and logged and writes nothing. Section refs are accepted everywhere until the
 per-project switch `gate_trailer_sections` arrives with the plan lifecycle
 increment (12-spec-refactoring-design-tree.md S50 to S52).
@@ -170,7 +170,7 @@ is stated under each one.
    the plan link and leaves a planned task alone (§4).
 2. A `Spec:` trailer names a section that resolves through `GET
    /api/v1/docs/{ref}` and is not withdrawn. Half built. The offline check
-   reads the ref's form and accepts a clause ref (`WL-CL-456`) or a section
+   reads the ref's form and accepts a rule ref (`WL-RULE-456`) or a section
    ref (`WL-SPEC-4 sec-5`). Whether the ref resolves is decided on the server
    when the reconciler governs the task, which counts and logs a ref that
    names nothing (§4). The CI job makes no API call.

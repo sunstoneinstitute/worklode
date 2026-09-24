@@ -177,33 +177,33 @@ func pages(t *testing.T) map[string]string {
 				Age: "2d ago", ReturnURL: "/docs/WL-SPEC-32",
 			}},
 		}),
-		"clause": Clause(ClauseView{
-			Page: PageProps{Title: "worklode: WL-CL-10"},
-			Clause: model.Clause{
-				Ref: "WL-CL-10", Number: 10, Status: "accepted", Version: 3,
+		"rule": Rule(RuleView{
+			Page: PageProps{Title: "worklode: WL-RULE-10"},
+			Rule: model.Rule{
+				Ref: "WL-RULE-10", Number: 10, Status: "accepted", Version: 3,
 				Heading: "Accessibility and responsive behavior",
-				GovernedTasks: []model.ClauseTask{
-					{ID: "WL-234", Title: longTitle, State: "in_progress", Source: "plan", ClauseVersion: 3},
-					{ID: "WL-141", Title: tokenTitle, State: "blocked", Source: "manual", ClauseVersion: 2},
+				GovernedTasks: []model.RuleTask{
+					{ID: "WL-234", Title: longTitle, State: "in_progress", Source: "plan", RuleVersion: 3},
+					{ID: "WL-141", Title: tokenTitle, State: "blocked", Source: "manual", RuleVersion: 2},
 				},
-				Edges: []model.ClauseEdge{
-					{Type: "constrains", From: "WL-CL-10", FromHeading: "Accessibility and responsive behavior", To: "WL-CL-27", ToHeading: longTitle, Source: "manual", CreatedAt: now},
-					{Type: "refines", From: "WL-CL-4", FromHeading: tokenTitle, To: "WL-CL-10", ToHeading: "Accessibility and responsive behavior", Source: "derived", CreatedAt: now},
-					{Type: "references", From: "WL-CL-10", FromHeading: "Accessibility and responsive behavior", To: "WL-CL-31", ToHeading: "Data platform ingestion boundary", Source: "derived", CreatedAt: now},
+				Edges: []model.RuleEdge{
+					{Type: "constrains", From: "WL-RULE-10", FromHeading: "Accessibility and responsive behavior", To: "WL-RULE-27", ToHeading: longTitle, Source: "manual", CreatedAt: now},
+					{Type: "refines", From: "WL-RULE-4", FromHeading: tokenTitle, To: "WL-RULE-10", ToHeading: "Accessibility and responsive behavior", Source: "derived", CreatedAt: now},
+					{Type: "references", From: "WL-RULE-10", FromHeading: "Accessibility and responsive behavior", To: "WL-RULE-31", ToHeading: "Data platform ingestion boundary", Source: "derived", CreatedAt: now},
 				},
 				Owner: "stig@sunstoneinstitute.ai",
 				Tags:  []string{"accessibility", "cockpit-ui", "narrow-viewport"},
 			},
 			BodyHTML: template.HTML(`<p>Measured against ` + token + `.</p><pre><code>./scripts/narrow-check.sh</code></pre>`),
-			Arranged: []ClauseArrangementRow{
+			Arranged: []RuleArrangementRow{
 				{DocRef: "WL-SPEC-32", Anchor: "sec-10", Depth: 2, Href: "/docs/ref/WL-SPEC-32#sec-10"},
 				{DocRef: "WL-PLAN-41", Anchor: "sec-2", Depth: 3, Href: "/docs/ref/WL-PLAN-41#sec-2"},
 			},
-			Versions: []model.ClauseVersion{
+			Versions: []model.RuleVersion{
 				{Version: 3, Heading: "Accessibility and responsive behavior", CreatedAt: now},
 				{Version: 2, Heading: tokenTitle, CreatedAt: now},
 			},
-			CanonicalURL: "/projects/worklode/clause/10",
+			CanonicalURL: "/projects/worklode/rule/10",
 		}),
 		"projects": Projects(ProjectsView{
 			Page: PageProps{Title: "Projects", ActiveGlobal: "projects"},

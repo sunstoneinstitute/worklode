@@ -943,22 +943,22 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 	return view
 }
 
-// clauseView maps one clause into its cockpit page (S20). projectID is the
-// clause's owning project's id, off which CanonicalURL is built.
-func clauseView(md *mdrender.Cache, keys mdrender.ProjectKeys, c *model.Clause, versions []model.ClauseVersion, projectID string) ui.ClauseView {
-	v := ui.ClauseView{
+// ruleView maps one rule into its cockpit page (S20). projectID is the
+// rule's owning project's id, off which CanonicalURL is built.
+func ruleView(md *mdrender.Cache, keys mdrender.ProjectKeys, c *model.Rule, versions []model.RuleVersion, projectID string) ui.RuleView {
+	v := ui.RuleView{
 		Page:         ui.PageProps{Title: "worklode: " + c.Ref, ActiveGlobal: "knowledge"},
-		Clause:       *c,
+		Rule:         *c,
 		BodyHTML:     md.Body(keys, c.Body),
 		Versions:     versions,
-		CanonicalURL: fmt.Sprintf("/projects/%s/clause/%d", projectID, c.Number),
-		// versions is newest first, so its head is the clause's live
+		CanonicalURL: fmt.Sprintf("/projects/%s/rule/%d", projectID, c.Number),
+		// versions is newest first, so its head is the rule's live
 		// version; an empty history is a read that failed, and the page
 		// then makes no claim about which version this is.
 		Current: len(versions) == 0 || c.Version == versions[0].Version,
 	}
 	for _, a := range c.ArrangedIn {
-		v.Arranged = append(v.Arranged, ui.ClauseArrangementRow{
+		v.Arranged = append(v.Arranged, ui.RuleArrangementRow{
 			DocRef: a.DocRef,
 			Anchor: a.Anchor,
 			Depth:  a.Depth,

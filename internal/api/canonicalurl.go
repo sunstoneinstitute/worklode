@@ -1,6 +1,6 @@
 // canonicalurl.go serves the S20 canonical URL scheme for tasks and
 // documents: /projects/{proj}/{kind}/{n}, with /{ver} for a document
-// version. The clause kind has its own literal routes in clausepage.go. The
+// version. The rule kind has its own literal routes in rulepage.go. The
 // root routes /tasks/{id}, /docs/{ref} and /docs/versions/{id}/{n} redirect
 // here.
 
@@ -20,7 +20,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// docKinds are the document kinds a canonical URL can name. clause is not
+// docKinds are the document kinds a canonical URL can name. rule is not
 // here: its literal routes win over the {kind} wildcard.
 var docKinds = []string{"spec", "adr", "plan"}
 

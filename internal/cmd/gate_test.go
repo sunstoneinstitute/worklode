@@ -46,12 +46,12 @@ func TestGateCheckRefusesWithoutTrailer(t *testing.T) {
 }
 
 func TestGateCheckPassesWithTrailerInCommit(t *testing.T) {
-	dir, base, head := gateRepo(t, gateTable, "change a command\n\nSpec: WL-CL-7\n")
+	dir, base, head := gateRepo(t, gateTable, "change a command\n\nSpec: WL-RULE-7\n")
 	out, err := runGateCheck(dir, base, head, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "WL-CL-7") || !strings.Contains(out, "internal/cmd/x.go") {
+	if !strings.Contains(out, "WL-RULE-7") || !strings.Contains(out, "internal/cmd/x.go") {
 		t.Errorf("verdict should name the declaration and the guarded file: %q", out)
 	}
 }

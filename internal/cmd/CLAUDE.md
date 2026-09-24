@@ -23,8 +23,8 @@ tell an adjective from a verb or a view from an action.
 
 - **L1** — Entity commands are `lode <entity> <verb>`. Entity nouns are
   singular and exactly what the backbone models: `actor`, `approval`, `blob`,
-  `channel`, `clause`, `decision`, `deliverable`, `doc`, `event`, `graph`, `inbox`,
-  `milestone`, `project`, `secret`, `skill`, `task`, `token`. No bare
+  `channel`, `decision`, `deliverable`, `doc`, `event`, `graph`, `inbox`,
+  `milestone`, `project`, `rule`, `secret`, `skill`, `task`, `token`. No bare
   top-level command may act on an entity.
 - **L2** — Bare top-level commands act on this machine or this checkout, not
   on an entity. The set is closed: `doctor`, `install`, `uninstall`, `login`,
@@ -76,7 +76,7 @@ The resulting top-level, twenty-two commands and four shortcuts:
 
 | Class | Commands |
 |---|---|
-| Entities (L1) | `actor`, `approval`, `blob`, `channel`, `clause`, `doc`, `event`, `graph`, `inbox`, `project`, `secret`, `skill`, `task`, `token` |
+| Entities (L1) | `actor`, `approval`, `blob`, `channel`, `doc`, `event`, `graph`, `inbox`, `project`, `rule`, `secret`, `skill`, `task`, `token` |
 | Workflow (L8) | `work` |
 | Cross-entity readers (L7) | `show`, `search` |
 | Machine (L2) | `doctor`, `install`, `uninstall`, `login`, `logout` |

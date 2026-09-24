@@ -50,7 +50,7 @@ document exits nonzero, so a typo cannot read as "nothing outstanding".`,
 
 // docTodoItem is one item of `lode doc todo --json`. Per ADR 036 this is an
 // internal/cmd stdout contract, not an HTTP body, so it is declared here —
-// and named, so the guard in internal/model/rule_test.go can see it.
+// and named, so the guard in internal/model/modelrule_test.go can see it.
 //
 // anchor and anchors are disjoint: a plan-level item names the one section it
 // is attributed to, a collapsed planning gap names every section it covers,
