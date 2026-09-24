@@ -81,7 +81,8 @@ type DocFilter struct {
 	// (025 §8.5) — "what has someone remarked on", answered by one EXISTS
 	// rather than by listing the corpus and asking per document.
 	HasNotes bool
-	// HideTerminal hides plans that are withdrawn or spent (12 S5). Only the
+	// HideTerminal hides documents in a terminal status: withdrawn or
+	// superseded documents of any kind and spent plans (12 S5). Only the
 	// user-facing listings set it: `lode doc list` and the cockpit's /docs
 	// page with no status. An explicit Status or Deleted overrides it.
 	HideTerminal bool
@@ -940,7 +941,7 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 		where += " AND EXISTS (SELECT 1 FROM doc_notes n WHERE n.doc_id = docs.id)"
 	}
 	if f.HideTerminal && f.Status == "" && !f.Deleted {
-		where += " AND NOT (kind = 'plan' AND status IN ('withdrawn', 'spent'))"
+		where += " AND status NOT IN ('withdrawn', 'superseded', 'spent')"
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+docColumns+` FROM docs WHERE `+where+

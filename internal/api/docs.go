@@ -368,10 +368,10 @@ func withoutDocBodies(docs []model.Doc) []model.Doc {
 // directly; the JSON API goes through docSelectorFrom, which adds 026 §2's
 // derived selectors on top.
 //
-// status=all is not a status: it means "every status, terminal plans
+// status=all is not a status: it means "every status, terminal documents
 // included", which is what an absent status already means here. It exists so
 // `lode doc list --status all` and the cockpit's /docs?status=all can opt out
-// of the terminal-plan hiding their own default asks for (12 S5).
+// of the terminal-status hiding their own default asks for (12 S5).
 func docFilterFrom(r *http.Request) store.DocFilter {
 	q := r.URL.Query()
 	f := store.DocFilter{
