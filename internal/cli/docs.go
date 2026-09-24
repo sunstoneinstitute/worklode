@@ -50,7 +50,7 @@ type DocListFilter struct {
 	// (025 §8.5). The server answers it with one EXISTS; nothing here filters
 	// a listing client-side.
 	HasNotes bool
-	// HideTerminal hides withdrawn and spent plans (12 S5). Only `lode doc
+	// HideTerminal hides withdrawn, superseded and spent documents (12 S5). Only `lode doc
 	// list` with no --status sets it; every other caller needs the whole
 	// corpus.
 	HideTerminal bool

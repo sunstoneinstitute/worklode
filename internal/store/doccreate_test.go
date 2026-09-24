@@ -547,12 +547,11 @@ func TestDocCreateAcceptedSupersedesReplacedOutOfOrder(t *testing.T) {
 	}
 }
 
-// TestDocCreateAcceptedLeavesDraftTargetAlone: 025 §7's ladder is draft ->
-// accepted -> superseded, and a draft pushed straight to superseded is
-// reachable by no verb. Neither new cascade path may do it — not the
-// accepted-at-create one, and not the one repointExternalEdges runs when the
-// edge resolves late.
-func TestDocCreateAcceptedLeavesDraftTargetAlone(t *testing.T) {
+// TestDocCreateAcceptedSupersedesDraftTarget: an accepted replacer
+// supersedes a draft target as well as an accepted one (WL-SPEC-77 §9), on
+// both cascade paths — the accepted-at-create one, and the one
+// repointExternalEdges runs when the edge resolves late.
+func TestDocCreateAcceptedSupersedesDraftTarget(t *testing.T) {
 	t.Parallel()
 	t.Run("at create", func(t *testing.T) {
 		s := openDocStore(t)
@@ -564,8 +563,8 @@ func TestDocCreateAcceptedLeavesDraftTargetAlone(t *testing.T) {
 			Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
 			Status: "accepted", Body: replacerBody("New", "006-old.md"),
 		})
-		if got := docStatus(t, s, old.ID); got != "draft" {
-			t.Fatalf("006-old status = %q, want draft", got)
+		if got := docStatus(t, s, old.ID); got != "superseded" {
+			t.Fatalf("006-old status = %q, want superseded", got)
 		}
 	})
 
@@ -579,16 +578,8 @@ func TestDocCreateAcceptedLeavesDraftTargetAlone(t *testing.T) {
 			Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
 			CreatedBy: "stig",
 		})
-		if got := docStatus(t, s, old.ID); got != "draft" {
-			t.Fatalf("006-old status = %q, want draft", got)
-		}
-		// The draft target is still reachable by the verb that moves it, and
-		// accepting it is what finally makes it supersedable.
-		if _, _, err := acceptDoc(t, s, old.ID, "stig"); err != nil {
-			t.Fatalf("AcceptDoc(006-old): %v", err)
-		}
-		if got := docStatus(t, s, old.ID); got != "accepted" {
-			t.Fatalf("006-old status after accept = %q, want accepted", got)
+		if got := docStatus(t, s, old.ID); got != "superseded" {
+			t.Fatalf("006-old status = %q, want superseded", got)
 		}
 	})
 }
