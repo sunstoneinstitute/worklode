@@ -18,7 +18,7 @@ import (
 // It crosses no HTTP boundary — it is assembled here from N responses to
 // Task 3's owner endpoint — so it is named and declared in internal/cmd
 // rather than internal/model (ADR 036 §2's modeNamed carve-out for `--json`
-// stdout contracts; see internal/model/rule_test.go).
+// stdout contracts; see internal/model/modelrule_test.go).
 type docTransferResult struct {
 	Doc   model.Doc `json:"doc"`
 	Error string    `json:"error,omitempty"`

@@ -37,4 +37,4 @@ wl:topic a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rul
 wl:sourceLines a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rule ; rdfs:range xsd:string ;
     rdfs:comment "file#Lstart-Lend in the git tree the rule was split from." .
 wl:foldedHeading a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Rule ; rdfs:range xsd:string ;
-    rdfs:comment "Heading of a sub-100-token leaf folded into this rule by the Q12 rule." .
+    rdfs:comment "Heading of a sub-100-token leaf folded into this rule by the Q12 folding decision." .

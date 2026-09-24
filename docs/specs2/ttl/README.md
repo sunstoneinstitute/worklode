@@ -15,6 +15,8 @@ fenced code blocks are text, not headings. Clause id: `<docnum>-<h2>-<h3>[-<part
 
 ## Files and prefixes
 
+The `.ttl` data files predate S64 and still use the clause terms (`wl:Clause`, `wl:clauseList`) that `ns/rule.ttl` now names `wl:Rule` and `wl:ruleList`.
+
 | File | Content |
 |---|---|
 | ns/rule.ttl | the `wl:` extension (proposal, not in ns/) |

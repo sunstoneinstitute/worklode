@@ -171,10 +171,10 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 				return errors.New("pass only one kind flag")
 			}
 
-			// No --kind or --<kind> flag ever names a rule (there is no
-			// `lode rule show`; a rule is reached only by its WL-RULE-<n>
-			// ref), so --version on either flag-routed path is always
-			// refused, before the kind is even looked at.
+			// No --kind or --<kind> flag ever names a rule (a rule is
+			// reached by its WL-RULE-<n> ref), so --version on either
+			// flag-routed path is always refused, before the kind is even
+			// looked at.
 			if versionSet && (kindSet || changedKind != "") {
 				return errors.New("--version applies only to rules")
 			}
