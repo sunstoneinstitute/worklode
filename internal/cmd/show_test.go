@@ -32,7 +32,8 @@ func TestClassify(t *testing.T) {
 		{"WL-PLAN-7", targetDoc, ""},
 		{"WL-MILE-2", targetMilestone, ""},
 		{"WL-DEL-3", targetDeliverable, ""},
-		{"WL-CL-12", targetClause, ""},
+		{"WL-RULE-12", targetRule, ""},
+		{"WL-CL-12", targetRule, ""}, // pre-S64 alias
 		{"XX-FOO-3", targetUnknownType, "FOO"},
 		{"WL-SPEC-0", targetDoc, ""},
 		// Doc-ref shapes: slugs, number forms, paths — resolveDocRef owns
@@ -769,7 +770,7 @@ func TestShowUnknownTypeErrors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("lode show XX-FOO-3 succeeded\noutput: %s", out)
 	}
-	want := `unknown entity type "FOO" in XX-FOO-3; known types: SPEC, ADR, PLAN, MILE, DEL, CL (a task id has no type segment: WL-12)`
+	want := `unknown entity type "FOO" in XX-FOO-3; known types: SPEC, ADR, PLAN, MILE, DEL, RULE (a task id has no type segment: WL-12)`
 	if err.Error() != want {
 		t.Fatalf("err = %q; want %q", err.Error(), want)
 	}
@@ -1070,53 +1071,53 @@ func TestShowErrorsSectionWithTask(t *testing.T) {
 }
 
 // TestShowErrorsVersionWithTask covers --version's target check on the
-// positional path: a clause-only flag applied to a task is refused before
+// positional path: a rule-only flag applied to a task is refused before
 // any network call, the same way --section is.
 func TestShowErrorsVersionWithTask(t *testing.T) {
 	out, err := runLode(t, "show", "--task", "1", "--version", "2")
 	if err == nil {
 		t.Fatalf("lode show --task 1 --version 2 succeeded\noutput: %s", out)
 	}
-	if err.Error() != "--version applies only to clauses" {
-		t.Fatalf("err = %q; want %q", err.Error(), "--version applies only to clauses")
+	if err.Error() != "--version applies only to rules" {
+		t.Fatalf("err = %q; want %q", err.Error(), "--version applies only to rules")
 	}
 }
 
 // TestShowErrorsVersionWithKindFlag covers --version's check on the
 // kind-flag-routed path: no --kind value or --<kind> flag ever names a
-// clause, so --version there is refused before the kind is even looked at.
+// rule, so --version there is refused before the kind is even looked at.
 func TestShowErrorsVersionWithKindFlag(t *testing.T) {
 	out, err := runLode(t, "show", "--kind", "task", "1", "--version", "2")
 	if err == nil {
 		t.Fatalf("lode show --kind task 1 --version 2 succeeded\noutput: %s", out)
 	}
-	if err.Error() != "--version applies only to clauses" {
-		t.Fatalf("err = %q; want %q", err.Error(), "--version applies only to clauses")
+	if err.Error() != "--version applies only to rules" {
+		t.Fatalf("err = %q; want %q", err.Error(), "--version applies only to rules")
 	}
 }
 
-// TestShowClauseVersionDispatch covers `lode show WL-CL-2 --version 1`
-// routing to GET /api/v1/clauses/{ref}/versions/{n} instead of the plain
-// clause GET.
-func TestShowClauseVersionDispatch(t *testing.T) {
+// TestShowRuleVersionDispatch covers `lode show WL-RULE-2 --version 1`
+// routing to GET /api/v1/rules/{ref}/versions/{n} instead of the plain
+// rule GET.
+func TestShowRuleVersionDispatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/clauses/WL-CL-2/versions/1" {
+		if r.URL.Path != "/api/v1/rules/WL-RULE-2/versions/1" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"ref":"WL-CL-2","heading":"Sub","status":"accepted","version":1}`)
+		io.WriteString(w, `{"ref":"WL-RULE-2","heading":"Sub","status":"accepted","version":1}`)
 	}))
 	defer srv.Close()
 	t.Setenv("LODE_SERVER", srv.URL)
 	t.Setenv("LODE_TOKEN", "test-token")
 
-	out, err := runLode(t, "show", "WL-CL-2", "--version", "1")
+	out, err := runLode(t, "show", "WL-RULE-2", "--version", "1")
 	if err != nil {
-		t.Fatalf("lode show WL-CL-2 --version 1: %v\noutput: %s", err, out)
+		t.Fatalf("lode show WL-RULE-2 --version 1: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "WL-CL-2") || !strings.Contains(out, "version:  1") {
-		t.Fatalf("show WL-CL-2 --version 1 output = %q; want the version-1 render", out)
+	if !strings.Contains(out, "WL-RULE-2") || !strings.Contains(out, "version:  1") {
+		t.Fatalf("show WL-RULE-2 --version 1 output = %q; want the version-1 render", out)
 	}
 }
 

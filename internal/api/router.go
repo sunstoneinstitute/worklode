@@ -168,16 +168,16 @@ var routeGuards = map[string]routeGuard{
 	// no /api/v1/docs/ref/{ref...} pattern to collide with.
 	"GET /docs/versions/{id}/{n}": guarded(permWebRead),
 	"GET /docs/ref/{ref...}":      guarded(permWebRead),
-	// The clause page and its canonical URL scheme (S20). The literal
-	// "clause" segment in the first pattern wins over the {kind} wildcard in
+	// The rule page and its canonical URL scheme (S20). The literal
+	// "rule" segment in the first pattern wins over the {kind} wildcard in
 	// the second for any path both could match (net/http's ServeMux ranks a
-	// literal segment over a wildcard at the same depth), so a clause's own
+	// literal segment over a wildcard at the same depth), so a rule's own
 	// page is never shadowed by the task and document pages.
-	"GET /projects/{proj}/clause/{n}":       guarded(permWebRead),
-	"GET /projects/{proj}/clause/{n}/{ver}": guarded(permWebRead),
+	"GET /projects/{proj}/rule/{n}":         guarded(permWebRead),
+	"GET /projects/{proj}/rule/{n}/{ver}":   guarded(permWebRead),
 	"GET /projects/{proj}/{kind}/{n}":       guarded(permWebRead),
 	"GET /projects/{proj}/{kind}/{n}/{ver}": guarded(permWebRead),
-	"GET /clauses/{ref}":                    guarded(permWebRead),
+	"GET /rules/{ref}":                      guarded(permWebRead),
 	// The bare-reference shortcut (WL-721): /{ref} 302s to the task or the
 	// document. An ordinary web read, and less specific than every literal
 	// route above, so it only answers what nothing else claims.
@@ -300,35 +300,35 @@ var routeGuards = map[string]routeGuard{
 	// (§7.3) is the same shape: guarded rather than guardedAny, matching
 	// accept and revision/accept, since it is another deliberate act on the
 	// document's identity rather than routine authoring.
-	"POST /api/v1/docs":                     guardedAny(permDocWrite),
-	"GET /api/v1/docs":                      guardedAny(permDocRead),
-	"GET /api/v1/docs/resolve":              guardedAny(permDocRead),
-	"GET /api/v1/docs/lint":                 guardedAny(permDocRead),
-	"GET /api/v1/docs/sections":             guardedAny(permDocRead),
-	"GET /api/v1/docs/{id}":                 guardedAny(permDocRead),
-	"GET /api/v1/docs/{id}/versions":        guardedAny(permDocRead),
-	"GET /api/v1/docs/{id}/referrers":       guardedAny(permDocRead),
-	"GET /api/v1/docs/{id}/versions/{n}":    guardedAny(permDocRead),
-	"GET /api/v1/clauses":                   guardedAny(permDocRead),
-	"GET /api/v1/clauses/{id}":              guardedAny(permDocRead),
-	"PUT /api/v1/clauses/{id}":              guardedAny(permDocWrite),
-	"PATCH /api/v1/clauses/{id}":            guardedAny(permDocWrite),
-	"GET /api/v1/clauses/{id}/versions":     guardedAny(permDocRead),
-	"GET /api/v1/clauses/{id}/versions/{n}": guardedAny(permDocRead),
-	"POST /api/v1/clauses/{id}/edges":       guardedAny(permDocWrite),
-	"DELETE /api/v1/clauses/{id}/edges":     guardedAny(permDocWrite),
-	// The refactor primitive (S24): same guard as the clause edge write above.
-	"POST /api/v1/projects/{id}/clauses/supersede": guardedAny(permDocWrite),
-	"PUT /api/v1/docs/{id}/body":                   guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/patch":                 guardedAny(permDocWrite),
-	"PUT /api/v1/docs/{id}/edges":                  guarded(permDocImport),
-	"POST /api/v1/docs/{id}/submit":                guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/accept":                guarded(permDocWrite),
-	"POST /api/v1/docs/{id}/revise":                guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/withdraw":              guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/owner":                 guarded(permDocWrite),
-	"POST /api/v1/docs/{id}/notes":                 guardedAny(permDocWrite),
-	"GET /api/v1/docs/{id}/notes":                  guardedAny(permDocRead),
+	"POST /api/v1/docs":                   guardedAny(permDocWrite),
+	"GET /api/v1/docs":                    guardedAny(permDocRead),
+	"GET /api/v1/docs/resolve":            guardedAny(permDocRead),
+	"GET /api/v1/docs/lint":               guardedAny(permDocRead),
+	"GET /api/v1/docs/sections":           guardedAny(permDocRead),
+	"GET /api/v1/docs/{id}":               guardedAny(permDocRead),
+	"GET /api/v1/docs/{id}/versions":      guardedAny(permDocRead),
+	"GET /api/v1/docs/{id}/referrers":     guardedAny(permDocRead),
+	"GET /api/v1/docs/{id}/versions/{n}":  guardedAny(permDocRead),
+	"GET /api/v1/rules":                   guardedAny(permDocRead),
+	"GET /api/v1/rules/{id}":              guardedAny(permDocRead),
+	"PUT /api/v1/rules/{id}":              guardedAny(permDocWrite),
+	"PATCH /api/v1/rules/{id}":            guardedAny(permDocWrite),
+	"GET /api/v1/rules/{id}/versions":     guardedAny(permDocRead),
+	"GET /api/v1/rules/{id}/versions/{n}": guardedAny(permDocRead),
+	"POST /api/v1/rules/{id}/edges":       guardedAny(permDocWrite),
+	"DELETE /api/v1/rules/{id}/edges":     guardedAny(permDocWrite),
+	// The refactor primitive (S24): same guard as the rule edge write above.
+	"POST /api/v1/projects/{id}/rules/supersede": guardedAny(permDocWrite),
+	"PUT /api/v1/docs/{id}/body":                 guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/patch":               guardedAny(permDocWrite),
+	"PUT /api/v1/docs/{id}/edges":                guarded(permDocImport),
+	"POST /api/v1/docs/{id}/submit":              guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/accept":              guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/revise":              guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/withdraw":            guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/owner":               guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/notes":               guardedAny(permDocWrite),
+	"GET /api/v1/docs/{id}/notes":                guardedAny(permDocRead),
 	// Setting the reviewer set (025 §7.3, WL-359) is the same shape as owner
 	// transfer: guarded rather than guardedAny, since it too is a deliberate
 	// act on the document's identity, gated in the store on the same

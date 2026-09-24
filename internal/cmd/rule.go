@@ -11,42 +11,42 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// newClauseCmd is the design-clause entity group (12-spec-refactoring-design-tree.md
-// S14, S35). `lode clause show` and `lode show WL-CL-<n>` read one clause.
-func newClauseCmd() *cobra.Command {
+// newRuleCmd is the design-rule entity group (12-spec-refactoring-design-tree.md
+// S14, S35). `lode rule show` and `lode show WL-RULE-<n>` read one rule.
+func newRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "clause",
-		Short: "Design clauses: show or list them, edit one, list its versions, link or unlink it to another",
+		Use:   "rule",
+		Short: "Design rules: show or list them, edit one, list its versions, link or unlink it to another",
 	}
-	cmd.AddCommand(newClauseShowCmd(), newClauseListCmd(), newClauseEditCmd(), newClauseVersionsCmd(), newClauseLinkCmd(), newClauseUnlinkCmd(), newClauseSetCmd(), newClauseSupersedeCmd())
+	cmd.AddCommand(newRuleShowCmd(), newRuleListCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd())
 	return cmd
 }
 
 func init() {
-	rootCmd.AddCommand(newClauseCmd())
+	rootCmd.AddCommand(newRuleCmd())
 }
 
-func newClauseShowCmd() *cobra.Command {
+func newRuleShowCmd() *cobra.Command {
 	var version int
 	cmd := &cobra.Command{
 		Use:               "show <ref>",
-		ValidArgsFunction: clauseRefAt(0),
-		Short:             "Show a clause: its status, version, placements and text",
+		ValidArgsFunction: ruleRefAt(0),
+		Short:             "Show a rule: its status, version, placements and text",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runClauseShow(cmd, args[0], version, cmd.Flags().Changed("version"))
+			return runRuleShow(cmd, args[0], version, cmd.Flags().Changed("version"))
 		},
 	}
-	cmd.Flags().IntVar(&version, "version", 0, "show one version of the clause")
+	cmd.Flags().IntVar(&version, "version", 0, "show one version of the rule")
 	return cmd
 }
 
-func newClauseListCmd() *cobra.Command {
+func newRuleListCmd() *cobra.Command {
 	var scope scopeFlags
 	var doc, status string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List clauses, or one document's clauses in arrangement order",
+		Short: "List rules, or one document's rules in arrangement order",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -62,7 +62,7 @@ func newClauseListCmd() *cobra.Command {
 				}
 				project = sc.Project
 			}
-			clauses, raw, err := c.ListClauses(cmd.Context(), cli.ClauseListFilter{
+			rules, raw, err := c.ListRules(cmd.Context(), cli.RuleListFilter{
 				Project: project, Doc: doc, Status: status,
 			})
 			if err != nil {
@@ -72,23 +72,23 @@ func newClauseListCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.ClausesTable(cmd.OutOrStdout(), clauses)
+			cli.RulesTable(cmd.OutOrStdout(), rules)
 			return nil
 		},
 	}
 	addScopeFlags(cmd, &scope, "filter by project id")
-	cmd.Flags().StringVar(&doc, "doc", "", "only the clauses a document arranges, in order, e.g. WL-SPEC-73")
+	cmd.Flags().StringVar(&doc, "doc", "", "only the rules a document arranges, in order, e.g. WL-SPEC-73")
 	cmd.Flags().StringVar(&status, "status", "", "filter by status: draft, accepted, superseded, withdrawn")
 	cmd.RegisterFlagCompletionFunc("doc", docRefAt(0))
 	completeFlagValues(cmd, "status", []string{"draft", "accepted", "superseded", "withdrawn"})
 	return cmd
 }
 
-func newClauseEditCmd() *cobra.Command {
+func newRuleEditCmd() *cobra.Command {
 	var file, heading string
 	cmd := &cobra.Command{
 		Use:   "edit <ref>",
-		Short: "Replace a clause's body (and heading) from a file; the document is regenerated around it",
+		Short: "Replace a rule's body (and heading) from a file; the document is regenerated around it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body, err := readBodyFile(cmd, file)
@@ -105,13 +105,13 @@ func newClauseEditCmd() *cobra.Command {
 			// run's resolved value into the second.
 			h := heading
 			if h == "" {
-				current, _, err := c.GetClause(cmd.Context(), args[0])
+				current, _, err := c.GetRule(cmd.Context(), args[0])
 				if err != nil {
 					return err
 				}
 				h = current.Heading
 			}
-			clause, raw, err := c.EditClause(cmd.Context(), args[0], model.EditClauseInput{Heading: strings.TrimSpace(h), Body: body})
+			rule, raw, err := c.EditRule(cmd.Context(), args[0], model.EditRuleInput{Heading: strings.TrimSpace(h), Body: body})
 			if err != nil {
 				return err
 			}
@@ -119,13 +119,13 @@ func newClauseEditCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.ClauseRender(cmd.OutOrStdout(), clause)
+			cli.RuleRender(cmd.OutOrStdout(), rule)
 			// An edit of an accepted document goes to its candidate
-			// revision, so the clause read back is still the old text and
+			// revision, so the rule read back is still the old text and
 			// the render above looks like nothing happened (S13, S35). Say
 			// where the change is waiting.
-			if clause.Status == "accepted" && strings.TrimSpace(clause.Body) != strings.TrimSpace(body) && len(clause.ArrangedIn) == 1 {
-				ref := clause.ArrangedIn[0].DocRef
+			if rule.Status == "accepted" && strings.TrimSpace(rule.Body) != strings.TrimSpace(body) && len(rule.ArrangedIn) == 1 {
+				ref := rule.ArrangedIn[0].DocRef
 				fmt.Fprintf(cmd.OutOrStdout(), "\nSaved to the candidate revision of %s; it lands when you run lode doc revise %s --accept.\n", ref, ref)
 			}
 			return nil
@@ -173,17 +173,17 @@ func edgeTypeFlags(cmd *cobra.Command) func() (typ, target string) {
 // edgeFlagUsage holds each edge-type flag's help text, keyed the same as
 // edgeTypeFlagTypes.
 var edgeFlagUsage = map[string]string{
-	"refines":        "clause this one narrows or details",
-	"constrains":     "clause this one must hold alongside",
-	"conflicts-with": "clause this one is in recorded tension with",
-	"references":     "clause this one points at (a derived edge is written for you when the text names it)",
-	"derived-from":   "clause this one was derived from, e.g. by a split (supersededBy is written by lode clause supersede, not this flag)",
+	"refines":        "rule this one narrows or details",
+	"constrains":     "rule this one must hold alongside",
+	"conflicts-with": "rule this one is in recorded tension with",
+	"references":     "rule this one points at (a derived edge is written for you when the text names it)",
+	"derived-from":   "rule this one was derived from, e.g. by a split (supersededBy is written by lode rule supersede, not this flag)",
 }
 
-func newClauseLinkCmd() *cobra.Command {
+func newRuleLinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "link <ref>",
-		Short: "Relate a clause to another: --refines, --constrains, --conflicts-with, --references or --derived-from <ref>",
+		Short: "Relate a rule to another: --refines, --constrains, --conflicts-with, --references or --derived-from <ref>",
 		Args:  cobra.ExactArgs(1),
 	}
 	typ := edgeTypeFlags(cmd)
@@ -193,7 +193,7 @@ func newClauseLinkCmd() *cobra.Command {
 			return err
 		}
 		t, to := typ()
-		raw, err := c.LinkClauses(cmd.Context(), args[0], model.ClauseEdgeInput{Type: t, To: to})
+		raw, err := c.LinkRules(cmd.Context(), args[0], model.RuleEdgeInput{Type: t, To: to})
 		if err != nil {
 			return err
 		}
@@ -207,10 +207,10 @@ func newClauseLinkCmd() *cobra.Command {
 	return cmd
 }
 
-func newClauseUnlinkCmd() *cobra.Command {
+func newRuleUnlinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unlink <ref>",
-		Short: "Remove a relation written with clause link",
+		Short: "Remove a relation written with rule link",
 		Args:  cobra.ExactArgs(1),
 	}
 	typ := edgeTypeFlags(cmd)
@@ -220,7 +220,7 @@ func newClauseUnlinkCmd() *cobra.Command {
 			return err
 		}
 		t, to := typ()
-		raw, err := c.UnlinkClauses(cmd.Context(), args[0], model.ClauseEdgeInput{Type: t, To: to})
+		raw, err := c.UnlinkRules(cmd.Context(), args[0], model.RuleEdgeInput{Type: t, To: to})
 		if err != nil {
 			return err
 		}
@@ -234,27 +234,27 @@ func newClauseUnlinkCmd() *cobra.Command {
 	return cmd
 }
 
-// newClauseSetCmd is `lode clause set`: owner and tags (S15). Each field
+// newRuleSetCmd is `lode rule set`: owner and tags (S15). Each field
 // takes its own positional shape (owner one actor, tags any number), so the
 // field is a subcommand rather than a leading argument the way `project set`
 // groups its fields (WL-489).
-func newClauseSetCmd() *cobra.Command {
+func newRuleSetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set",
-		Short: "Set a clause's owner or tags",
+		Short: "Set a rule's owner or tags",
 	}
-	cmd.AddCommand(newClauseSetOwnerCmd(), newClauseSetTagsCmd())
+	cmd.AddCommand(newRuleSetOwnerCmd(), newRuleSetTagsCmd())
 	return cmd
 }
 
-// newClauseSetOwnerCmd is `lode clause set owner <ref> <actor>`. "" clears
+// newRuleSetOwnerCmd is `lode rule set owner <ref> <actor>`. "" clears
 // the owner. "-" is deliberately not a second spelling for that: everywhere
 // else in this tree "-" means "read from stdin" (task.go, doc.go), and
 // reusing it here for "clear" would give it two contradictory meanings.
-func newClauseSetOwnerCmd() *cobra.Command {
+func newRuleSetOwnerCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "owner <ref> <actor>",
-		Short: `Set a clause's owner; "" clears it`,
+		Short: `Set a rule's owner; "" clears it`,
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			owner := args[1]
@@ -262,7 +262,7 @@ func newClauseSetOwnerCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			clause, raw, err := c.SetClauseMeta(cmd.Context(), args[0], model.ClauseMetaInput{Owner: &owner})
+			rule, raw, err := c.SetRuleMeta(cmd.Context(), args[0], model.RuleMetaInput{Owner: &owner})
 			if err != nil {
 				return err
 			}
@@ -270,20 +270,20 @@ func newClauseSetOwnerCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.ClauseRender(cmd.OutOrStdout(), clause)
+			cli.RuleRender(cmd.OutOrStdout(), rule)
 			return nil
 		},
 	}
 }
 
-// newClauseSetTagsCmd is `lode clause set tags <ref> [tag ...]`. Naming no
+// newRuleSetTagsCmd is `lode rule set tags <ref> [tag ...]`. Naming no
 // tags clears the list: Tags is always a present, non-nil pointer to a
 // possibly-empty slice, so an omitted list still replaces whatever was set
 // rather than being read as "leave it alone".
-func newClauseSetTagsCmd() *cobra.Command {
+func newRuleSetTagsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "tags <ref> [tag ...]",
-		Short: "Replace a clause's tags; naming none clears them",
+		Short: "Replace a rule's tags; naming none clears them",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tags := append([]string{}, args[1:]...)
@@ -291,7 +291,7 @@ func newClauseSetTagsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			clause, raw, err := c.SetClauseMeta(cmd.Context(), args[0], model.ClauseMetaInput{Tags: &tags})
+			rule, raw, err := c.SetRuleMeta(cmd.Context(), args[0], model.RuleMetaInput{Tags: &tags})
 			if err != nil {
 				return err
 			}
@@ -299,23 +299,23 @@ func newClauseSetTagsCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.ClauseRender(cmd.OutOrStdout(), clause)
+			cli.RuleRender(cmd.OutOrStdout(), rule)
 			return nil
 		},
 	}
 }
 
-func newClauseVersionsCmd() *cobra.Command {
+func newRuleVersionsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "versions <ref>",
-		Short: "List a clause's versions, newest first",
+		Short: "List a rule's versions, newest first",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			vs, raw, err := c.ListClauseVersions(cmd.Context(), args[0])
+			vs, raw, err := c.ListRuleVersions(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -323,24 +323,24 @@ func newClauseVersionsCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.ClauseVersionsTable(cmd.OutOrStdout(), vs)
+			cli.RuleVersionsTable(cmd.OutOrStdout(), vs)
 			return nil
 		},
 	}
 }
 
-// newClauseSupersedeCmd is `lode clause supersede --map <file>` (S24): the
+// newRuleSupersedeCmd is `lode rule supersede --map <file>` (S24): the
 // refactor primitive. The map decides what applying it changes; this command
 // only reads and parses it and hands the entries to the store through the
 // API, the way every other write in this package defers the decision to the
 // server.
-func newClauseSupersedeCmd() *cobra.Command {
+func newRuleSupersedeCmd() *cobra.Command {
 	var mapFile string
 	var dryRun bool
 	var scope scopeFlags
 	cmd := &cobra.Command{
 		Use:   "supersede",
-		Short: "Apply a refactor map: withdraw old clauses and link each to its successors (S24)",
+		Short: "Apply a refactor map: withdraw old rules and link each to its successors (S24)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if mapFile == "" {
@@ -365,7 +365,7 @@ func newClauseSupersedeCmd() *cobra.Command {
 			if sc.Project == "" {
 				return errNoProject
 			}
-			res, raw, err := c.SupersedeClauses(cmd.Context(), sc.Project, model.SupersedeInput{Entries: entries, DryRun: dryRun})
+			res, raw, err := c.SupersedeRules(cmd.Context(), sc.Project, model.SupersedeInput{Entries: entries, DryRun: dryRun})
 			if err != nil {
 				return err
 			}

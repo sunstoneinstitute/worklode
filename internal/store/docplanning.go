@@ -58,9 +58,9 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	if err := arrangePlan(tx, id); err != nil {
 		return nil, nil, fmt.Errorf("arrange plan %d: %w", id, err)
 	}
-	governing, err := planClauses(tx, id)
+	governing, err := planRules(tx, id)
 	if err != nil {
-		return nil, nil, fmt.Errorf("resolve governing clauses of plan %d: %w", id, err)
+		return nil, nil, fmt.Errorf("resolve governing rules of plan %d: %w", id, err)
 	}
 
 	// First pass resolves every definition number to a task id — minting the
@@ -91,8 +91,8 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 		}
 		taskID[def.Number] = task.ID
 		fresh[def.Number] = true
-		for _, clauseID := range governing {
-			if err := Govern(tx, task.ID, clauseID, "plan", false); err != nil {
+		for _, ruleID := range governing {
+			if err := Govern(tx, task.ID, ruleID, "plan", false); err != nil {
 				return nil, nil, fmt.Errorf("govern task %d of plan %d: %w", def.Number, id, err)
 			}
 		}

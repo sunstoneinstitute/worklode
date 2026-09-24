@@ -115,18 +115,18 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	type clauseKey struct {
+	type ruleKey struct {
 		key    string
 		number int64
 	}
-	governing := make([]clauseKey, 0, len(req.GovernedBy))
+	governing := make([]ruleKey, 0, len(req.GovernedBy))
 	for _, ref := range req.GovernedBy {
-		cr, ok := designdoc.ParseClauseRef(ref)
+		cr, ok := designdoc.ParseRuleRef(ref)
 		if !ok {
-			writeErr(w, http.StatusBadRequest, "governed_by entries must look like WL-CL-12, got "+ref)
+			writeErr(w, http.StatusBadRequest, "governed_by entries must look like WL-RULE-12, got "+ref)
 			return
 		}
-		governing = append(governing, clauseKey{cr.Key, cr.Number})
+		governing = append(governing, ruleKey{cr.Key, cr.Number})
 	}
 
 	actorID := actorIDFrom(r)
@@ -158,17 +158,17 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			for _, g := range governing {
-				clauseID, err := store.ClauseIDByRef(tx, g.key, g.number)
+				ruleID, err := store.RuleIDByRef(tx, g.key, g.number)
 				if err != nil {
-					// A caller-supplied ref, not a missing task: ClauseIDByRef's
+					// A caller-supplied ref, not a missing task: RuleIDByRef's
 					// bare ErrNotFound would otherwise map to the same 404 as
 					// the task itself being missing (internal/store/AGENTS.md).
 					if errors.Is(err, store.ErrNotFound) {
-						return fmt.Errorf("governed_by names no clause %s-CL-%d: %w", g.key, g.number, store.ErrInvalidInput)
+						return fmt.Errorf("governed_by names no rule %s-RULE-%d: %w", g.key, g.number, store.ErrInvalidInput)
 					}
 					return err
 				}
-				if err := store.Govern(tx, t.ID, clauseID, "manual", false); err != nil {
+				if err := store.Govern(tx, t.ID, ruleID, "manual", false); err != nil {
 					return err
 				}
 			}

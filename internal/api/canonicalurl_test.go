@@ -21,7 +21,7 @@ func TestCanonicalTaskAndDocURLs(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": projID, "title": "A bug", "priority": "medium", "kind": "bug",
 	})
-	doc := createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "t", Body: clauseDocV1})
+	doc := createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "t", Body: ruleDocV1})
 
 	base := "/projects/" + projID
 	for path, want := range map[string]string{
