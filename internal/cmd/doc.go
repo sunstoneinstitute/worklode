@@ -26,7 +26,7 @@ var docKinds = []string{"spec", "adr", "plan"}
 
 // docStatusValues is the closed set behind `lode doc list --status`: the
 // live document statuses plus "all", the pseudo-status that also includes
-// the plan-only terminal statuses (withdrawn, spent) the default listing
+// the terminal statuses (withdrawn, superseded, spent) the default listing
 // hides (12 S5). The statuses themselves come from ns.DesignDocStatuses,
 // pinned to the docs.status CHECK constraint by internal/store.
 var docStatusValues = append(slices.Clone(ns.DesignDocStatuses), "all")
@@ -251,7 +251,7 @@ func newDocListCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, adr, plan")
 	cmd.Flags().StringVar(&status, "status", "",
-		"filter by status: "+strings.Join(ns.DesignDocStatuses, ", ")+", or all to include withdrawn and spent plans")
+		"filter by status: "+strings.Join(ns.DesignDocStatuses, ", ")+", or all to include withdrawn, superseded and spent documents")
 	completeFlagValues(cmd, "kind", docKinds)
 	completeFlagValues(cmd, "status", docStatusValues)
 	cmd.Flags().StringVar(&owner, "owner", "", "filter by owning actor")
@@ -301,7 +301,7 @@ func parseDayDuration(s string) (int, error) {
 // exclusion of the three selectors themselves is cobra's, declared on the
 // command.
 //
-// --status all names no status (it widens the listing to terminal plans on
+// --status all names no status (it widens the listing to terminal documents on
 // top of whatever status filter would otherwise apply, increment 3 S5), so
 // it is treated the same as an absent --status here — never a contradiction.
 func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareSuperseded, unresolved bool) error {

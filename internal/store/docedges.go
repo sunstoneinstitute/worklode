@@ -679,8 +679,7 @@ func repointExternalEdges(tx *sql.Tx, project string, ts time.Time, newDocID, ev
 // has superseded nothing yet — its own accept will run the cascade, now that
 // the edge resolves. A plan never cascades, matching acceptPlanDoc, which does
 // not run one either. Whether a *target* moves stays supersedeReplacedDocs'
-// own judgement: only an accepted one does, so a draft target is still left to
-// climb 025 §7's ladder rather than being pushed past accepted.
+// own judgement.
 func supersedeReplacedFrom(tx *sql.Tx, ts time.Time, replacers map[int64]bool, eventID int64) error {
 	for _, from := range slices.Sorted(maps.Keys(replacers)) {
 		var kind, status string
