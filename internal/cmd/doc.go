@@ -907,8 +907,9 @@ func newDocWithdrawCmd() *cobra.Command {
 		Short:             "Withdraw an accepted or stale document that will not be executed",
 		Long: "Withdraw a document. It stays readable and keeps its corpus number;\n" +
 			"its status becomes withdrawn, so it leaves the unresolved set\n" +
-			"`lode doc list --unresolved` reports. A draft is deleted instead, and\n" +
-			"a superseded document is already resolved.",
+			"`lode doc list --unresolved` reports. A draft cannot be withdrawn:\n" +
+			"remove it with `lode doc delete`. A superseded document is already\n" +
+			"resolved.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
