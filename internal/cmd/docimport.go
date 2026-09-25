@@ -5,7 +5,7 @@
 // one create path and one edge-resolution path.
 //
 // Import runs in two passes because the corpus references forward as well as
-// backward: a spec amends a spec written after it, a plan covers a spec it
+// backward: a spec requires a spec written after it, a plan covers a spec it
 // precedes in the walk. Pass 1 creates every document (its edges resolving
 // against whatever exists at that moment, the rest landing in to_external);
 // pass 2 asks the server to re-resolve every document's frontmatter now that
@@ -435,10 +435,10 @@ func unresolvedImportRefs(docs []importDoc) []unresolvedRef {
 }
 
 // oneSidedInverseRefs reports document i's inverse-only references
-// (designdoc.InverseOf — isRequiredBy, amendedBy, isReplacedBy today) whose
-// target does not assert the acting relation back (WL-375). designdoc's own
-// Frontmatter.Refs, not importRefs' StoredRels-narrowed view, is walked here
-// because these three are exactly what StoredRels excludes: nothing else
+// (designdoc.InverseOf — isRequiredBy today) whose target does not assert the
+// acting relation back (WL-375). designdoc's own Frontmatter.Refs, not
+// importRefs' StoredRels-narrowed view, is walked here because these are
+// exactly what StoredRels excludes: nothing else
 // ever sees them, which is how a one-sided inverse used to reach neither an
 // edge nor a report.
 //

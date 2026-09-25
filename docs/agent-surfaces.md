@@ -137,10 +137,9 @@ specification.
 What a rename does owe the corpus is a **pointer**, and only where a section's
 subject *is* the command surface — a table of spellings, a "command surface"
 heading. That is an ordinary amendment (see the `lode:writing-docs`
-skill): the
-inline `> **Amended by spec NNN.**` note next to the heading, `amends` on the
-renaming spec, `amendedBy` on the renamed one. A section that merely mentions a
-command in passing gets nothing.
+skill): the inline `> **Amended by spec NNN.**` note next to the heading, and
+a `lode rule link <renaming rule> --amends <renamed rule>` edge. A section that
+merely mentions a command in passing gets nothing.
 
 The current surface is `lode --help`, the generated command catalog, and 061
 §2.5. No spec is a substitute for any of the three.

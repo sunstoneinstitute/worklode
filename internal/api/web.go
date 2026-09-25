@@ -895,7 +895,7 @@ func (s *server) namePlanTasks(r *http.Request, d *model.DocDetail, body string)
 // state rather than what it said before four other specs amended it, and the
 // stored source under ?body=source. It reports which it returned.
 //
-// A fold that fails — an unreadable acting document, an unparseable body —
+// A fold that fails — an unreadable amending rule, an unparseable body —
 // degrades to the source and says so through the false, rather than failing
 // the page: the source is still worth reading, it is just not the whole
 // story, and the page labels it.
@@ -903,9 +903,7 @@ func (s *server) docPageBody(r *http.Request, d *model.DocDetail) (string, bool)
 	if r.URL.Query().Get("body") == "source" {
 		return d.Doc.Body, false
 	}
-	out, err := designdoc.NewInliner(func(id int64) (*model.DocDetail, error) {
-		return s.docDetail(r, id)
-	}, func(ref string) (*model.Rule, error) {
+	out, err := designdoc.NewInliner(func(ref string) (*model.Rule, error) {
 		rr, ok := designdoc.ParseRuleRef(ref)
 		if !ok {
 			return nil, fmt.Errorf("rule ref %q: %w", ref, store.ErrInvalidInput)

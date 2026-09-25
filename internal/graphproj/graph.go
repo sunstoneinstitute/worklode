@@ -39,7 +39,7 @@ func ProjectGraphTriples(g model.ProjectGraph) []Triple {
 		s, o := iri.Doc(from), iri.Doc(to)
 		var p string
 		switch e.Type {
-		case "covers", "implements", "amends", "defers":
+		case "covers", "implements", "defers":
 			p = iri.Term(e.Type)
 		case "blocks":
 			p = iri.Term("blocksPlan")
@@ -47,9 +47,6 @@ func ProjectGraphTriples(g model.ProjectGraph) []Triple {
 			p = DCTRequires
 		case "wasDerivedFrom":
 			p = ProvWasDerivedFrom
-		case "replaces":
-			// dct:isReplacedBy is stated from the replaced document.
-			p, s, o = DCTIsReplacedBy, o, s
 		default:
 			continue
 		}

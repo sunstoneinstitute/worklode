@@ -1384,28 +1384,32 @@ func TestListDocsSelectorRedundantFiltersAllowed(t *testing.T) {
 	}
 }
 
-// TestListDocsBareSuperseded: the selector answers a superseded document
-// nothing explains — 025 §6 rule 2 — and carries the gap detail, not the
-// planning-gap shape, alongside it.
+// TestListDocsBareSuperseded: the selector answers the withdrawn rules no
+// rule supersedes (WL-SPEC-77 §6), with the section arranging each, and
+// leaves the document and planning-gap shapes empty.
 func TestListDocsBareSuperseded(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	old := seedDoc(t, st, store.DocInput{
+	seedDoc(t, st, store.DocInput{
 		Project: "proj", Kind: "spec", Number: 6, Slug: "006-old", Body: docSpecBody,
-		CreatedBy: "alice", Status: "superseded",
-	})
+		CreatedBy: "alice",
+	}) // WL-RULE-1 (sec-1), WL-RULE-2 (sec-2)
+	if _, err := st.SupersedeRules(t.Context(), "proj", "alice", model.SupersedeInput{
+		Entries: []model.SupersedeEntry{{Old: "WL-RULE-2"}},
+	}); err != nil {
+		t.Fatalf("SupersedeRules: %v", err)
+	}
 
 	resp := listDocs(t, h, token, "bare_superseded=true")
-	if len(resp.Docs) != 1 || resp.Docs[0].ID != old.ID {
-		t.Fatalf("docs = %+v, want the superseded doc alone", resp.Docs)
+	if len(resp.Docs) != 0 {
+		t.Fatalf("docs = %+v, want none", resp.Docs)
 	}
-	if len(resp.SupersessionGaps) != 1 {
-		t.Fatalf("supersession_gaps = %+v, want one entry", resp.SupersessionGaps)
+	if len(resp.BareRules) != 1 {
+		t.Fatalf("bare_rules = %+v, want one entry", resp.BareRules)
 	}
-	gap := resp.SupersessionGaps[0]
-	if gap.Doc != old.ID || gap.Sections != 2 || len(gap.Unexplained) != 2 {
-		t.Fatalf("gap = %+v, want doc %d, 2 sections, both unexplained", gap, old.ID)
+	if b := resp.BareRules[0]; b.Rule != "WL-RULE-2" || b.Doc != "WL-SPEC-6" || b.Anchor != "sec-2" {
+		t.Fatalf("bare rule = %+v, want WL-RULE-2 at WL-SPEC-6#sec-2", b)
 	}
 	if resp.PlanningGaps != nil {
 		t.Errorf("planning_gaps = %+v, want it omitted for bare_superseded", resp.PlanningGaps)

@@ -145,8 +145,7 @@ amendment → supersession:
 | `requires` / `isRequiredBy` | reference list | all |
 | `blocks` / `blockedBy` | plan references — orders whole-plan execution; both ends must be plans in the same project | **plans** |
 | `wasDerivedFrom` | scalar reference | specs |
-| `amends` / `amendedBy` | map: your-section-key → their-section-value (`"."` = whole doc) | all |
-| `replaces` / `isReplacedBy` | same map shape, per section | all |
+| `amends`, `amendedBy`, `replaces`, `isReplacedBy` | refused: amendment and supersession are rule edges (`lode rule link --amends`, `lode rule supersede`) | none |
 
 `covers: NO-SPEC` is the reserved sentinel for a plan answering to no
 governing spec (a mechanical refactor, a build fix) — write it explicitly;
@@ -178,11 +177,10 @@ linked it.
 
 A bare `lode show <ref>` reads the current stored body, including landed
 revisions. `--version` reads a historical snapshot. Use `--inline` when acting
-on a spec: it also folds in-force `amends` and `replaces` edges into the
-sections they affect, attributed to the source document. Rule versioning and
-these document edges are separate mechanisms; changing a rule version does
-not require inventing an amending document. `lode doc show <ref> --json`
-exposes `edges_in` when you need the relationships behind that reading.
+on a spec: it also folds in-force rule amendments (`lode rule link --amends`)
+into the sections they affect, attributed to the amending rule.
+`lode doc show <ref> --json` exposes `amendments` when you need the edges
+behind that reading.
 
 ## Coverage as a query, never a stored flag
 
@@ -192,7 +190,7 @@ accepted plans, not by a status a human flips:
 ```bash
 lode doc list --needs-planning     # accepted specs with a section no accepted plan covers
 lode doc list --needs-execution    # accepted plans whose minted task set still has an open task
-lode doc list --bare-superseded    # superseded docs with a section nothing replaces
+lode doc list --bare-superseded    # withdrawn rules no rule supersedes
 lode doc todo <slug> --deps        # one spec's remaining work, recursively through its dependencies
 lode doc progress                  # the whole project at a glance: each spec's state and next act
 ```

@@ -402,7 +402,7 @@ func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline
 	}
 	// The rule's in-force amendments, folded in beneath its text
 	// (WL-SPEC-77 §4).
-	blocks, pending, err := designdoc.NewInliner(nil, ruleFetcher(cmd.Context(), c)).RuleAmendments(&rule)
+	blocks, pending, err := designdoc.NewInliner(ruleFetcher(cmd.Context(), c)).RuleAmendments(&rule)
 	if err != nil {
 		return err
 	}

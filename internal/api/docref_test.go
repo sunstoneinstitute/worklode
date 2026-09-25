@@ -59,7 +59,7 @@ func TestDocPageLinksAndStripsFrontmatter(t *testing.T) {
 	})
 	createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "spec", Number: 9, Slug: "009-amender",
-		Body: "---\nstatus: draft\nrequires:\n- 004-backbone\namends:\n  \"#sec-1\":\n  - 004-backbone#sec-2\n---\n# Spec 9 — Amender\n\n## 1. One {#sec-1}\n\nPer 004 §2, and spec 004 §2 again.\n",
+		Body: "---\nstatus: draft\nrequires:\n- 004-backbone#sec-2\n---\n# Spec 9 — Amender\n\n## 1. One {#sec-1}\n\nPer 004 §2, and spec 004 §2 again.\n",
 	})
 
 	page := getCanonical(t, h, "/docs/WL-SPEC-9").Body.String()

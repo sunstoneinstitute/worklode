@@ -35,14 +35,7 @@ import (
 // because no anchor is being restated.
 //
 // The clock stamps only an artifact declaration the re-read frontmatter
-// carries (rebuildEdges), plus the supersession cascade below when it fires.
-//
-// A repaired document-level `replaces` edge can newly resolve here exactly as
-// it can in repointExternalEdges (WL-133): rebuildEdges re-reads the same
-// frontmatter against a corpus that may now hold the target. The same two
-// guards apply — supersedeReplacedFrom's (a plan replacer cascades nothing,
-// a draft replacer's own accept will run the cascade) and
-// supersedeReplacedDocs' own (only an accepted target moves).
+// carries (rebuildEdges).
 func ReplaceDocEdges(tx *sql.Tx, now time.Time, id, eventID int64) error {
 	d, err := lockDoc(tx, id)
 	if err != nil {
@@ -55,17 +48,8 @@ func ReplaceDocEdges(tx *sql.Tx, now time.Time, id, eventID int64) error {
 	if err := rebuildEdges(tx, now, id, d.kind, d.project, parsed.doc.Frontmatter); err != nil {
 		return err
 	}
-	if err := logDocChange(tx, id, eventID,
-		map[string]string{"field": "edges"}); err != nil {
-		return err
-	}
-	if d.kind != "plan" && d.status != "draft" {
-		ts := now.UTC().Truncate(time.Second)
-		if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
-			return err
-		}
-	}
-	return nil
+	return logDocChange(tx, id, eventID,
+		map[string]string{"field": "edges"})
 }
 
 // docEdgeRef is one frontmatter reference before resolution. ref is verbatim,
@@ -175,46 +159,6 @@ func closureEqual(a, b []closureRef) bool {
 	return slices.Equal(sa, sb)
 }
 
-// reachesByAmends reports whether the section (fromDoc, fromAnchor) is
-// reachable from (startDoc, startAnchor) over stored section-scoped
-// amends/replaces edges — including the zero-hop case, where the two are the
-// same section. rebuildEdges walks it from a proposed edge's *to* end back
-// towards its *from* end: an arrival means the proposed edge closes a cycle.
-//
-// Only section-scoped resolved edges enter the graph (026 §4.1): a
-// document-scoped claim is a banner reference `lode show --inline` never folds
-// (026 §3.2), so it cannot recurse, and an unresolved reference names no
-// section at all. `amends` and `replaces` share one graph because both mean
-// "this newer section acts on that older one".
-//
-// UNION, not UNION ALL: the walk dedupes on the node, so it terminates even
-// over a graph that is already cyclic. Tombstoned documents are not filtered
-// out — undeleting one restores its edges, and a loop written past a
-// tombstone would come back with it.
-func reachesByAmends(tx *sql.Tx, startDoc int64, startAnchor string, fromDoc int64, fromAnchor string) (bool, error) {
-	var one int
-	err := tx.QueryRow(`
-		WITH RECURSIVE reach(doc, anchor) AS (
-		    SELECT $1::bigint, $2::text
-		  UNION
-		    SELECT e.to_doc, e.to_anchor
-		      FROM reach r
-		      JOIN doc_edges e ON e.from_doc = r.doc AND e.from_anchor = r.anchor
-		     WHERE e.type IN ('amends','replaces')
-		       AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
-		)
-		SELECT 1 FROM reach WHERE doc = $3 AND anchor = $4 LIMIT 1`,
-		startDoc, startAnchor, fromDoc, fromAnchor).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("walk amends/replaces edges from doc %d #%s: %w",
-			startDoc, startAnchor, err)
-	}
-	return true, nil
-}
-
 // rebuildEdges replaces the edges a document's frontmatter declares. It
 // deletes and re-inserts, so doc_edges_unique is satisfied across calls;
 // doc_coverage_completed_with cascades off doc_edges, so clearing the parent
@@ -259,9 +203,6 @@ func reachesByAmends(tx *sql.Tx, startDoc int64, startAnchor string, fromDoc int
 // authored twice is one edge, same as covers; the same section deferred to
 // two different owners is the contradiction covers refuses for two
 // disagreeing levels, refused here as ErrInvalidInput too.
-//
-// A section-scoped amends/replaces edge is checked for acyclicity before it is
-// written (026 §4.1, reachesByAmends) — the edge that closes a loop is ErrCycle.
 func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
 	// declared_by, not from_doc: a `blockedBy:` row's from end is the *other*
 	// plan (025 §5), and this document is still the one answerable for it. The
@@ -411,23 +352,6 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 		}
 		seen[row] = docEdgeSeen{level: level, closure: closure}
 
-		// 026 §4.1: the amends/replaces graph stays acyclic. A cycle needs
-		// every one of its edges to exist, so refusing the one that closes it
-		// never blocks a legitimate intermediate state — and a loop, once
-		// written, makes `lode show --inline` a question with no fixed answer.
-		if (row.typ == "amends" || row.typ == "replaces") &&
-			row.fromAnchor != "" && row.toAnchor != "" && row.toDoc != 0 {
-			cyclic, err := reachesByAmends(tx, row.toDoc, row.toAnchor, row.fromDoc, row.fromAnchor)
-			if err != nil {
-				return err
-			}
-			if cyclic {
-				return fmt.Errorf(
-					"doc %d #%s %s %q, closing a loop in the amends/replaces graph (026 §4.1): %w",
-					docID, row.fromAnchor, e.typ, e.ref, ErrCycle)
-			}
-		}
-
 		var coverageCol sql.NullString
 		if e.typ == "covers" {
 			coverageCol = sql.NullString{String: level, Valid: true}
@@ -509,24 +433,13 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 // have refused as a contradiction (026 §5.1). That disagreement is deliberately
 // not ErrInvalidInput here: it lives in *another* document's frontmatter, and
 // failing this document's creation for it would wedge an import on an unrelated
-// defect. An amends/replaces loop that only closes as an edge re-points is left
-// standing for the same reason — rebuildEdges refuses one at write time
-// (026 §4.1), and the re-point is not the write that authored it.
-//
-// A re-pointed document-level `replaces` edge also carries a side effect: the
-// supersession cascade its replacing document could not run, because at accept
-// (or accepted-at-create) time the target was not in the corpus yet. It runs
-// here instead, from the replacing end, once the edge resolves — see
-// supersedeReplacedFrom.
+// defect.
 //
 // The re-point is attributed to the creating document's event and logged as an
 // edges change on each referring document whose rows moved.
-func repointExternalEdges(tx *sql.Tx, project string, ts time.Time, newDocID, eventID int64) error {
+func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) error {
 	// Distinct referring documents whose rows changed, logged once each below.
 	touched := map[int64]bool{}
-	// Referring documents whose re-pointed row was a document-level `replaces`
-	// edge, so the cascade is re-run from each of them below.
-	replacers := map[int64]bool{}
 	type externalEdge struct {
 		id         int64
 		fromDoc    int64
@@ -562,12 +475,6 @@ func repointExternalEdges(tx *sql.Tx, project string, ts time.Time, newDocID, ev
 		}
 		if !resolved || toDoc != newDocID {
 			continue
-		}
-		// Recorded before the duplicate branch: both branches leave a resolved
-		// document-level `replaces` row from c.fromDoc to newDocID standing, so
-		// both owe the cascade.
-		if c.typ == "replaces" && c.fromAnchor == "" {
-			replacers[c.fromDoc] = true
 		}
 		// The pre-check reads live state and candidates run in id order, so two
 		// spellings of one target in one document collapse: the first
@@ -660,43 +567,6 @@ func repointExternalEdges(tx *sql.Tx, project string, ts time.Time, newDocID, ev
 			return err
 		}
 	}
-	// After the edge changes are logged: the supersession is their consequence,
-	// and reads that way in the state log.
-	return supersedeReplacedFrom(tx, ts, replacers, eventID)
-}
-
-// supersedeReplacedFrom re-runs the supersession cascade from each document in
-// replacers, for the documents whose `replaces` edge only just resolved.
-//
-// The cascade normally fires once, when the replacing document is accepted
-// (AcceptDoc, AcceptRevision) or created accepted (CreateDoc). A corpus import
-// that writes the replacing document before its target defeats that: at accept
-// time the edge was still to_external and named no row, so nothing moved.
-// repointExternalEdges is where that edge finally resolves, so it is also where
-// the missed cascade belongs (WL-133).
-//
-// Two guards decide whether a replacer's cascade runs at all. A draft replacer
-// has superseded nothing yet — its own accept will run the cascade, now that
-// the edge resolves. A plan never cascades, matching acceptPlanDoc, which does
-// not run one either. Whether a *target* moves stays supersedeReplacedDocs'
-// own judgement.
-func supersedeReplacedFrom(tx *sql.Tx, ts time.Time, replacers map[int64]bool, eventID int64) error {
-	for _, from := range slices.Sorted(maps.Keys(replacers)) {
-		var kind, status string
-		err := tx.QueryRow(`SELECT kind, status FROM docs WHERE id = $1`, from).Scan(&kind, &status)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("read status of replacing doc %d: %w", from, err)
-		}
-		if kind == "plan" || status == "draft" {
-			continue
-		}
-		if err := supersedeReplacedDocs(tx, ts, from, eventID); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -705,8 +575,7 @@ func supersedeReplacedFrom(tx *sql.Tx, ts time.Time, replacers map[int64]bool, e
 // deterministic order that walk fixes. rebuildEdges dedupes what comes back,
 // on the resolved row rather than on the reference text.
 //
-// The inverse spellings (isRequiredBy, amendedBy, isReplacedBy) are what
-// ActingRels leaves out: one row read backward is the inverse (025 §14), so
+// The inverse spelling isRequiredBy is what ActingRels leaves out: one row read backward is the inverse (025 §14), so
 // writing them too would double every edge and let the two directions
 // disagree.
 //
@@ -1009,8 +878,6 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 var docEdgeInverse = map[string]string{
 	"covers":         "isCoveredBy",
 	"implements":     "isImplementedBy",
-	"amends":         "amendedBy",
-	"replaces":       "isReplacedBy",
 	"requires":       "isRequiredBy",
 	"wasDerivedFrom": "hadDerivation",
 	"blocks":         "blockedBy",
