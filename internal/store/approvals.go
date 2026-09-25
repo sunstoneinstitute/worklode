@@ -576,7 +576,13 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 		if err != nil {
 			return nil, err
 		}
+		selfPlan := false
 		if IsSelfApproval(author, decider) {
+			if selfPlan, err = isPlanDoc(tx, a.EntityKind, a.EntityID); err != nil {
+				return nil, err
+			}
+		}
+		if IsSelfApproval(author, decider) && !selfPlan {
 			allowed, err := SelfReviewAllowed(tx, a.EntityKind, a.EntityID)
 			if err != nil {
 				return nil, err
@@ -760,6 +766,24 @@ func authorAndActorForEntity(tx *sql.Tx, kind, entityID, actorID string) (string
 	}
 	author, err := authorActorForEntity(tx, kind, entityID)
 	return author, actorID, err
+}
+
+// isPlanDoc reports whether an approval governs a plan document. A plan's
+// author may approve it: plans are often written by an agent under the
+// author's own credentials (WL-SPEC-75 §9).
+func isPlanDoc(tx *sql.Tx, kind, entityID string) (bool, error) {
+	if kind != "doc" {
+		return false, nil
+	}
+	var plan bool
+	err := tx.QueryRow(`SELECT kind = 'plan' FROM docs WHERE 'doc:' || id = $1`, entityID).Scan(&plan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("doc kind for %s: %w", entityID, err)
+	}
+	return plan, nil
 }
 
 // projectForApproval returns the project owning what an approval governs; ""
