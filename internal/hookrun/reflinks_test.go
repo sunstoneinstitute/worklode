@@ -41,6 +41,9 @@ func TestSessionStartRefLinkHint(t *testing.T) {
 	if !strings.Contains(ctx, "[WL-7]("+server+"/WL-7)") {
 		t.Fatalf("additionalContext missing the markdown link form: %q", ctx)
 	}
+	if !strings.Contains(ctx, "WL-RULE-12") {
+		t.Fatalf("additionalContext does not name the rule ref form: %q", ctx)
+	}
 	if strings.Contains(ctx, `\x1b]8;;`) || strings.Contains(ctx, "\x1b]8;;") {
 		t.Fatalf("additionalContext asks the agent to emit escape bytes: %q", ctx)
 	}
