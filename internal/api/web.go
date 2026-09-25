@@ -28,6 +28,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
@@ -752,6 +753,8 @@ func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := docsView(docs, s.projectKeyByID(r.Context()))
+	view.Status = r.URL.Query().Get("status")
+	view.Statuses = ns.DesignDocStatuses
 	s.renderWeb(w, r, http.StatusOK, "docs page", ui.Docs(view))
 }
 
