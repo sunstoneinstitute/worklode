@@ -399,24 +399,6 @@ one pass.
   is cheapest before part 2 of the task-secrets series ships a client that
   emits it.
 
-## From knowledge-graph plan part 1 (2026-08-19)
-
-- `[gated]` **The Oxigraph integration tests never run on the common CI path.**
-  `_test.yml` starts its ephemeral Oxigraph under `if: contains(inputs.runs-on,
-  'ubuntu-latest')`, but `pr-checks.yml` routes *trusted* PRs to the
-  `gha-pgvector`/`gha-buildcache` self-hosted runners, which are not targeted
-  at the `docker` label, so a Docker daemon is not guaranteed to the `test` job
-  the way it is to `build-image` (`docs/self-hosted-runner.md`) — so a team PR,
-  the majority path, skips the branch's only
-  triple-store proof (`internal/graphproj/oxigraph_test.go`: the `ns/` parse
-  gate, the project-graph replace round-trip and the `dependsOn+` path) and
-  only a fork PR exercises it. This follows the plan and the runner-label
-  constraint, so it is not a defect. The fix is symmetrical with Postgres: an
-  always-on Oxigraph container beside hel01's Postgres
-  (`docs/self-hosted-runner.md`), with `TEST_SPARQL_URL` set on the
-  self-hosted branch of `_test.yml` the way `postgres-dsn` already is. Worth
-  doing when the graph gets a second consumer — part 2's projector, or a CI
-  SHACL gate over projected graphs.
 ## From WL-141 — three-valued plan coverage (2026-08-20)
 
 - `[gated]` **A plan can close its own section by naming itself in

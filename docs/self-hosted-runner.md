@@ -189,6 +189,36 @@ gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "
 and cache-restore-skipping are two separate facts about hel01, and neither
 implies the other.
 
+## Oxigraph for `test`
+
+The knowledge-graph tests (`internal/graphproj`, `internal/overview`,
+`internal/projector`, `internal/kg/...`) need a SPARQL endpoint.
+`ubuntu-latest` starts an ephemeral Oxigraph per job. The self-hosted path
+points at an always-on container on hel01, like Postgres:
+
+```
+docker run -d --name gha-ci-oxigraph --restart=always \
+  -p 127.0.0.1:17878:7878 --tmpfs /data:rw,size=4g \
+  ghcr.io/oxigraph/oxigraph:0.5.9 serve --location /data --bind 0.0.0.0:7878
+```
+
+- Port 17878, not 7878, keeps it clear of a local-dev Oxigraph on the
+  default port, the same reason Postgres uses 15432.
+- The store lives on tmpfs. Every restart wipes it, which clears graphs a
+  crashed run left behind, and no job checkout can delete its files. An
+  earlier Oxigraph serving a relative `./oxidata` directory lost its files
+  that way and failed every merge-queue run with `IO error ... 000040.log`.
+
+`pr-checks.yml` passes `sparql-url: http://localhost:17878` to `_test.yml`
+when `trusted`, and `_test.yml` sets `TEST_SPARQL_URL` from it. With it set
+on CI, an unreachable endpoint fails the tests instead of skipping them. The
+`gha-pgvector` label covers this container too: label a new runner once both
+exist.
+
+The store is shared by every concurrent `test` job. A test must write only
+run-unique graph IRIs and assert only on its own graphs or subjects, never
+on a store-wide count. `graphtest.PutGraph` drops each graph on cleanup.
+
 ## Persistent build caches (`gha-buildcache`)
 
 `gha-buildcache` asserts one general fact about a runner: **its local disk

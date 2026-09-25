@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -16,50 +17,107 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/overview"
 )
 
-const (
-	compA = "https://worklode.io/ns/id/component/github.com/acme/app/a"
-	compB = "https://worklode.io/ns/id/component/github.com/acme/app/b"
-	compC = "https://worklode.io/ns/id/component/github.com/acme/app/c"
+const ttlPrefixes = "@prefix wl:   <https://worklode.io/ns/ontology#> .\n" +
+	"@prefix wlc:  <https://worklode.io/ns/concept/> .\n" +
+	"@prefix dct:  <http://purl.org/dc/terms/> .\n" +
+	"@prefix dcat: <http://www.w3.org/ns/dcat#> .\n" +
+	"@prefix prov: <http://www.w3.org/ns/prov#> .\n" +
+	"@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n" +
+	"@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .\n"
 
-	ttlPrefixes = "@prefix wl:   <https://worklode.io/ns/ontology#> .\n" +
-		"@prefix wlc:  <https://worklode.io/ns/concept/> .\n" +
-		"@prefix dct:  <http://purl.org/dc/terms/> .\n" +
-		"@prefix dcat: <http://www.w3.org/ns/dcat#> .\n" +
-		"@prefix prov: <http://www.w3.org/ns/prov#> .\n" +
-		"@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n" +
-		"@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .\n"
-)
+// driftFixture is one run's §4.1/§4.2 fixture. The drift queries read every
+// declared and observed graph, so another build's data or a crashed run's
+// leftovers answer too: every IRI here is run-unique, and every assertion
+// keeps only the rows naming this fixture's components (own*).
+type driftFixture struct {
+	a, b, c, doc, dev, declared, observed string
+}
+
+func newDriftFixture() driftFixture {
+	slug := uniqueSlug("drift")
+	comp := func(n string) string { return iri.Component("github.com/wl811/" + slug + "/" + n) }
+	return driftFixture{
+		a: comp("a"), b: comp("b"), c: comp("c"),
+		doc:      "urn:wl811:" + slug + ":doc",
+		dev:      "urn:wl811:" + slug + ":dev",
+		declared: iri.DeclaredGraph(slug),
+		observed: iri.RepoObservedGraph("go-imports", "github.com", "wl811", slug),
+	}
+}
+
+func (f driftFixture) mine(comp string) bool { return comp == f.a || comp == f.b || comp == f.c }
+
+func (f driftFixture) ownEdges(rows []model.DriftEdge) []model.DriftEdge {
+	var out []model.DriftEdge
+	for _, r := range rows {
+		if f.mine(r.From) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func (f driftFixture) ownDeviations(rows []model.Deviation) []model.Deviation {
+	var out []model.Deviation
+	for _, r := range rows {
+		if f.mine(r.From) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func (f driftFixture) ownGaps(rows []model.Gap) []string {
+	var out []string
+	for _, r := range rows {
+		if f.mine(r.Component) {
+			out = append(out, r.Component)
+		}
+	}
+	return out
+}
 
 // declaredTTL plants A→B and B→C plus a doc governing A; extra is appended
 // verbatim (the deviation tests re-PUT the graph with it).
-func declaredTTL(extra string) []byte {
+func (f driftFixture) declaredTTL(extra string) []byte {
 	return []byte(fmt.Sprintf(ttlPrefixes+`
 <%s> dct:requires <%s> .
 <%s> dct:requires <%s> .
-<urn:doc:1> a wl:DesignDoc ; wl:governs <%s> .
-%s`, compA, compB, compB, compC, compA, extra))
+<%s> a wl:DesignDoc ; wl:governs <%s> .
+%s`, f.a, f.b, f.b, f.c, f.doc, f.a, extra))
 }
 
 // observedTTL plants A→B (agreement) and A→C (violation); components typed.
 // B→C has no observed counterpart, so it is the stale-intent edge.
-func observedTTL() []byte {
+func (f driftFixture) observedTTL() []byte {
 	return []byte(fmt.Sprintf(ttlPrefixes+`
 <%s> dct:requires <%s> .
 <%s> dct:requires <%s> .
 <%s> a wl:Component . <%s> a wl:Component . <%s> a wl:Component .
-`, compA, compB, compA, compC, compA, compB, compC))
+`, f.a, f.b, f.a, f.c, f.a, f.b, f.c))
+}
+
+func (f driftFixture) deviationTTL(validUntil string) string {
+	return fmt.Sprintf(`<%s> a wl:AcceptedDeviation ;
+    rdf:subject <%s> ; rdf:predicate dct:requires ; rdf:object <%s> ;
+    wl:sanctionedBy <%s> ;
+    dct:valid "%s"^^xsd:date .
+`, f.dev, f.a, f.c, f.doc, validUntil)
 }
 
 // seed loads both layers into Oxigraph and returns a production client
 // whose reads go through the translating proxy.
-func seed(t *testing.T, declaredExtra string) *graphserver.Client {
+func seed(t *testing.T, declaredExtra func(driftFixture) string) (driftFixture, *graphserver.Client) {
 	t.Helper()
+	f := newDriftFixture()
 	base := graphtest.Endpoint(t)
-	graphtest.PutGraph(t, base, iri.DeclaredGraph("adr-test-0001"), declaredTTL(declaredExtra))
-	graphtest.PutGraph(t, base,
-		iri.RepoObservedGraph("go-imports", "github.com", "sunstoneinstitute", "worklode"),
-		observedTTL())
-	return graphClient(t)
+	extra := ""
+	if declaredExtra != nil {
+		extra = declaredExtra(f)
+	}
+	graphtest.PutGraph(t, base, f.declared, f.declaredTTL(extra))
+	graphtest.PutGraph(t, base, f.observed, f.observedTTL())
+	return f, graphClient(t)
 }
 
 // graphClient returns a production client whose reads reach the test
@@ -69,22 +127,14 @@ func graphClient(t *testing.T) *graphserver.Client {
 	return graphserver.New(sparqlProxy(t, graphtest.Endpoint(t)).URL, nil)
 }
 
-func deviationTTL(validUntil string) string {
-	return fmt.Sprintf(`<urn:dev:1> a wl:AcceptedDeviation ;
-    rdf:subject <%s> ; rdf:predicate dct:requires ; rdf:object <%s> ;
-    wl:sanctionedBy <urn:doc:1> ;
-    dct:valid "%s"^^xsd:date .
-`, compA, compC, validUntil)
-}
-
 func TestDriftBothDirections(t *testing.T) {
-	c := seed(t, "")
+	f, c := seed(t, nil)
 
 	v, err := overview.Violations(t.Context(), c)
 	if err != nil {
 		t.Fatalf("Violations: %v", err)
 	}
-	if len(v) != 1 || v[0].From != compA || v[0].To != compC {
+	if v = f.ownEdges(v); len(v) != 1 || v[0].From != f.a || v[0].To != f.c {
 		t.Fatalf("violations = %+v; want exactly A requires C", v)
 	}
 
@@ -92,7 +142,7 @@ func TestDriftBothDirections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StaleIntent: %v", err)
 	}
-	if len(st) != 1 || st[0].From != compB || st[0].To != compC {
+	if st = f.ownEdges(st); len(st) != 1 || st[0].From != f.b || st[0].To != f.c {
 		t.Fatalf("stale intent = %+v; want exactly B requires C", st)
 	}
 }
@@ -100,50 +150,50 @@ func TestDriftBothDirections(t *testing.T) {
 func TestDeviationSuppressesUntilExpiry(t *testing.T) {
 	// Active deviation for A→C (expires next year): 4.1 must drop it.
 	future := time.Now().UTC().AddDate(1, 0, 0).Format("2006-01-02")
-	c := seed(t, deviationTTL(future))
+	f, c := seed(t, func(f driftFixture) string { return f.deviationTTL(future) })
 
 	v, err := overview.Violations(t.Context(), c)
 	if err != nil {
 		t.Fatalf("Violations: %v", err)
 	}
-	if len(v) != 0 {
+	if v = f.ownEdges(v); len(v) != 0 {
 		t.Fatalf("violations = %+v; the active deviation must suppress A→C", v)
 	}
 	// Stale intent is unaffected by suppression (the deviation never
 	// asserts the edge into the declared layer).
 	st, _ := overview.StaleIntent(t.Context(), c)
-	if len(st) != 1 {
+	if st = f.ownEdges(st); len(st) != 1 {
 		t.Fatalf("stale intent = %+v; must be unchanged by the deviation", st)
 	}
 	// It is listable.
 	ack, err := overview.Acknowledged(t.Context(), c)
-	if err != nil || len(ack) != 1 || ack[0].Expired {
+	if ack = f.ownDeviations(ack); err != nil || len(ack) != 1 || ack[0].Expired {
 		t.Fatalf("acknowledged = %+v, %v; want one active deviation", ack, err)
 	}
 
 	// Expire it — re-PUT the declared graph with a past dct:valid: the
 	// violation re-surfaces and the deviation lists as expired.
 	base := graphtest.Endpoint(t)
-	graphtest.PutGraph(t, base, iri.DeclaredGraph("adr-test-0001"), declaredTTL(deviationTTL("2020-01-01")))
+	graphtest.PutGraph(t, base, f.declared, f.declaredTTL(f.deviationTTL("2020-01-01")))
 	v, _ = overview.Violations(t.Context(), c)
-	if len(v) != 1 {
+	if v = f.ownEdges(v); len(v) != 1 {
 		t.Fatalf("violations after expiry = %+v; want A→C re-surfaced", v)
 	}
 	ack, _ = overview.Acknowledged(t.Context(), c)
-	if len(ack) != 1 || !ack[0].Expired {
+	if ack = f.ownDeviations(ack); len(ack) != 1 || !ack[0].Expired {
 		t.Fatalf("acknowledged after expiry = %+v; want it listed as expired", ack)
 	}
 }
 
 func TestGaps(t *testing.T) {
-	c := seed(t, "")
+	f, c := seed(t, nil)
 	gaps, err := overview.Gaps(t.Context(), c)
 	if err != nil {
 		t.Fatalf("Gaps: %v", err)
 	}
 	// B and C have no governing doc; A does.
-	if len(gaps) != 2 {
-		t.Fatalf("gaps = %+v; want the two ungoverned components", gaps)
+	if got, want := f.ownGaps(gaps), []string{f.b, f.c}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("gaps = %v; want the two ungoverned components %v", got, want)
 	}
 }
 
@@ -168,8 +218,10 @@ type fixtureClaim struct {
 	pinned int
 }
 
+// uniqueSlug is run-unique: the pid separates concurrent test binaries, the
+// clock separates runs and calls within one.
 func uniqueSlug(prefix string) string {
-	return fmt.Sprintf("wl811-%s-%d", prefix, time.Now().UnixNano())
+	return fmt.Sprintf("wl811-%s-%d-%d", prefix, os.Getpid(), time.Now().UnixNano())
 }
 
 // plantCoverage writes one document's canonical graph, one snapshot graph per
