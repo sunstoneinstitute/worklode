@@ -348,10 +348,10 @@ type TaskView struct {
 	Prerequisites *Prerequisites
 }
 
-// Prerequisites is the task page's prerequisite graph: every open task the
-// task transitively depends on, laid out left to right with the task pinned
-// on the right, plus the plans ordered before its own plan. internal/api
-// derives it from store.BlockerTree; positions are in SVG pixels.
+// Prerequisites is the task page's prerequisite tree: every open task the
+// task transitively depends on, the task at the top and each level below
+// the one that needs it, plus the plans ordered before its own plan.
+// internal/api derives it from store.BlockerTree.
 type Prerequisites struct {
 	// Remaining counts distinct open prerequisite tasks; Direct counts the
 	// ones the task depends on with no task in between.
@@ -361,37 +361,47 @@ type Prerequisites struct {
 	// prerequisite of their own. A plan gate or a lease can still hold one,
 	// so the page never calls them claimable.
 	Candidates []string
-	// Cycle names the tasks where the dependsOn relation loops back on
-	// itself. Empty when the graph is acyclic.
+	// Cycle names the tasks on a dependsOn loop. Empty when acyclic.
 	Cycle []string
 	Plans []PrerequisitePlan
-	// Cards and Links are the drawing, the target card included. Hidden
-	// counts prerequisites left out of it once the card cap is reached; List
-	// still carries every one of them.
-	Cards         []PrerequisiteCard
-	Links         []PrerequisiteLink
-	Hidden        int
-	Width, Height int
+	// Levels and Below describe everything under the target, as a node's
+	// fields do for that node.
+	Levels, Below int
+	// Tree is the target's direct prerequisites. Each task is drawn in full
+	// once, at its shallowest position; every later occurrence is a Ref.
+	// Hidden counts tasks left out of the tree once the card cap is reached;
+	// List still carries every one of them.
+	Tree   []PrerequisiteNode
+	Hidden int
 	// List is every prerequisite, nearest first, with full titles: the
-	// accessible and narrow-screen equivalent of the drawing.
-	List []PrerequisiteCard
+	// accessible equivalent of the tree.
+	List []PrerequisiteNode
 }
 
-// PrerequisiteCard is one task in the graph. Label is Title shortened to fit
-// the card; NeededBy is the tasks that depend on it directly.
-type PrerequisiteCard struct {
-	ID, Title, Label, State string
-	NeededBy                []string
-	Target, Cycle           bool
-	X, Y                    int
+// PrerequisiteNode is one task in the tree. A full node carries Levels (how
+// many levels sit beneath it), Below (how many distinct open tasks those
+// levels hold) and its Children, the next level down. A Ref is a later
+// occurrence of a task drawn in full elsewhere: it links to that card and
+// has no children. Cycle marks a Ref whose edge closes a loop, and a listed
+// task that sits on one. NeededBy is the tasks that depend on it directly.
+type PrerequisiteNode struct {
+	ID, Title, State string
+	Ref, Cycle       bool
+	Levels, Below    int
+	Children         []PrerequisiteNode
+	NeededBy         []string
 }
 
-// PrerequisiteLink is one drawn dependsOn edge, as an SVG path from the
-// prerequisite to the task that needs it. Cycle marks the edge that closes
-// a loop.
-type PrerequisiteLink struct {
-	Path  string
-	Cycle bool
+// prereqDepth is a card's depth indicator: "3 levels · 7 tasks below".
+func prereqDepth(levels, tasks int) string {
+	l, t := "levels", "tasks"
+	if levels == 1 {
+		l = "level"
+	}
+	if tasks == 1 {
+		t = "task"
+	}
+	return strconv.Itoa(levels) + " " + l + " · " + strconv.Itoa(tasks) + " " + t + " below"
 }
 
 // PrerequisitePlan is one plan ordered before the task's own plan. A draft
