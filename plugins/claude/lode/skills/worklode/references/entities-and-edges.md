@@ -78,12 +78,12 @@ end only via release, done, block, abandon, reopen, or the expiry sweep.
 | From → to | Meaning |
 |---|---|
 | Spec → rule | An arrangement records a rule version, position, depth and section anchor. |
-| Plan → rule | The rules governing the plan, reached through its `covers` references to spec sections. |
+| Plan → rule (`covers`) | The rules governing the plan. Each `covers` entry (a rule ref, a `<doc>#sec-N` ref, or a whole-document ref) is resolved to rules when the plan is written and stored as a `covers` edge from the plan to each rule, carrying its `full`\|`partial`\|`none` coverage level. |
 | Task → rule (`governedBy`) | Governing requirement, linked by plan acceptance, by hand, or by the `Spec:` trailer gate. The link records the version at link time and follows the newest text unless pinned. |
 | Rule → rule (`refines`, `constrains`, `conflictsWith`, `references`) | Design relationships. Text references also produce derived `references` edges. |
 | Rule → rule (`amends`) | The subject changes how the object is read without replacing it; `lode show --inline` folds it in. Documents do not amend or replace each other. |
 | Rule → rule (`wasDerivedFrom`) | Lineage recorded after a split. |
-| Rule → rule (`supersededBy`) | Successors recorded by a refactor. The old rule is withdrawn; its task links remain and resolve to live successors. |
+| Rule → rule (`supersedes`) | Runs from the new rule to the old rule it replaces, written only by a refactor (`lode rule supersede`). The old rule is withdrawn; its task links remain and resolve to live successors. `supersededBy` is the same fact read from the old rule's end, never stored. |
 
 Read a rule's `arranged_in`, `governed_tasks` and `edges` with
 `lode show <rule-ref> --json`. A task's `governed_by` shows its governing
@@ -107,14 +107,19 @@ resolve):
 
 | Type | Direction / meaning |
 |---|---|
-| `covers` | Plan → spec section. Carries `coverage: full \| partial \| none`; a `partial` may name the other plans that jointly close the section (`fullCoverageWith`, in `doc_coverage_completed_with`). |
 | `implements` | Component (code) → doc section — "this code realises this intent". Retired spelling: `covers` used to mean this too; `implements` is now the only term for it. |
 | `requires` | Dependency between docs. |
 | `wasDerivedFrom` | Provenance: this doc grew out of that one. |
 | `blocks` | Orders whole plan *documents* (never section-scoped) — distinct from the task-level `blocks` above. |
 
-`lode doc list --needs-planning` / `--needs-execution` / `--bare-superseded`
-are standing queries over this edge set, not stored flags — see
+`covers` is a row in the same `doc_edges` table, but points at a rule
+(`to_rule`) rather than a document: see plan → rule in the rule-relationships
+table above. A `partial` may name the other plans that jointly close the
+coverage (`fullCoverageWith`, in `doc_coverage_completed_with`).
+
+`lode doc list --needs-planning` / `--needs-execution` are standing queries
+over the edges above, not stored flags. `--bare-superseded` reads rule edges
+instead — withdrawn rules with no `supersedes` edge pointing at them — see
 `specs-and-docs.md`.
 
 ## Webhooks in one paragraph
