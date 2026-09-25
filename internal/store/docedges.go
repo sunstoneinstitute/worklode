@@ -184,9 +184,10 @@ func closureEqual(a, b []closureRef) bool {
 // §2.1), so that is ErrInvalidInput rather than a raw unique-index violation.
 //
 // A covers entry is stored as one edge per rule it resolves to (coversRules,
-// WL-SPEC-77 §4), so a whole-document entry writes an edge for each rule the
-// document contains when the plan is written. An entry naming no rule keeps
-// its reference in to_external.
+// WL-SPEC-77 §4), so a section entry writes an edge for the rule at its
+// anchor and each rule under it, and a whole-document entry one for each rule
+// the document contains. An entry naming no rule keeps its reference in
+// to_external.
 //
 // A covers edge is checked against 026 §5.1: the key is plan-only, the level
 // is one of full/partial/none, and a qualified entry carries both required
@@ -255,8 +256,33 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			}
 		}
 	}
+	// Resolve every covers entry first: when two entries reach the same rule,
+	// the more specific one (coveredRule.Depth) writes its edge and the other
+	// skips that rule, so `sec-3: none` with `sec-3.1: full` is not a
+	// contradiction. Entries of equal depth still meet the level check below.
+	edges := frontmatterEdges(fm)
+	resolvedCovers := map[string][]coveredRule{}
+	deepest := map[int64]int{}
+	for _, e := range edges {
+		if e.typ != "covers" || kind != "plan" {
+			continue
+		}
+		if _, ok := resolvedCovers[e.ref]; ok {
+			continue
+		}
+		rules, err := coversRules(tx, project, e.ref)
+		if err != nil {
+			return err
+		}
+		resolvedCovers[e.ref] = rules
+		for _, r := range rules {
+			if d, ok := deepest[r.ID]; !ok || r.Depth > d {
+				deepest[r.ID] = r.Depth
+			}
+		}
+	}
 	seen := map[docEdgeRow]docEdgeSeen{}
-	for _, e := range frontmatterEdges(fm) {
+	for _, e := range edges {
 		base, fragment := designdoc.SplitFragment(e.ref)
 		var toDoc int64
 		var resolved bool
@@ -338,13 +364,13 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			// A covers edge runs from the plan to each rule the entry
 			// resolves to (WL-SPEC-77 §4); an entry naming no rule keeps its
 			// reference verbatim.
-			rules, err := coversRules(tx, project, e.ref)
-			if err != nil {
-				return err
-			}
+			rules := resolvedCovers[e.ref]
 			for _, r := range rules {
+				if r.Depth < deepest[r.ID] {
+					continue
+				}
 				rr := row
-				rr.toRule = r
+				rr.toRule = r.ID
 				rows = append(rows, rr)
 			}
 			if len(rules) == 0 {
@@ -630,7 +656,8 @@ func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string
 	if err != nil || len(rules) == 0 {
 		return false, err
 	}
-	for _, r := range rules {
+	for _, rule := range rules {
+		r := rule.ID
 		var newID int64
 		err := tx.QueryRow(
 			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_rule, coverage, declared_by)
