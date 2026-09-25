@@ -188,3 +188,5 @@ configMapGenerator:
       - migrations/0087_gate_source.down.sql
       - migrations/0088_rules.up.sql
       - migrations/0088_rules.down.sql
+      - migrations/0089_rule_amends.up.sql
+      - migrations/0089_rule_amends.down.sql

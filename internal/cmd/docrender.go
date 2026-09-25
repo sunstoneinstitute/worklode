@@ -99,7 +99,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 				return nil, err
 			}
 			return &d, nil
-		})
+		}, ruleFetcher(ctx, c))
 		out, err := inliner.Consolidate(&detail, section)
 		if err != nil {
 			return err
@@ -127,6 +127,17 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 		return fmt.Errorf("no section %s in %s", section, doc.Slug)
 	}
 	return writeDocShow(cmd, doc, section, []byte(text))
+}
+
+// ruleFetcher reads one rule by ref for the inliner.
+func ruleFetcher(ctx context.Context, c *cli.Client) func(string) (*model.Rule, error) {
+	return func(ref string) (*model.Rule, error) {
+		r, _, err := c.GetRule(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		return &r, nil
+	}
 }
 
 // resolveDocRefTiers resolves ref through 026 §4.2's tiers 1 and 2: the pure

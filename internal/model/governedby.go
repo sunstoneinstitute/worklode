@@ -15,7 +15,7 @@ type TaskGovernance struct {
 	URL         string `json:"url"`              // canonical rule page, with /<ver> when pinned (S10, S20)
 
 	// ResolvesTo is the live rules reached from a withdrawn governing
-	// rule by following supersededBy edges transitively (S22, R8): empty
+	// rule by following supersedes edges back from it, transitively (S22, R8): empty
 	// when the governing rule is live.
 	ResolvesTo []string `json:"resolves_to,omitempty"`
 }

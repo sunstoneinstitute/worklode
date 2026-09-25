@@ -19,7 +19,11 @@
 //   - a document-scoped claim (no section on either end) is a banner
 //     reference at the top, never inlined text;
 //   - inlined headings are flattened to bold lines so borrowed text cannot
-//     reshape the outline of the document it lands in.
+//     reshape the outline of the document it lands in;
+//   - a section's rule folds in the rules that amend it (WL-SPEC-77 §4),
+//     attributed to the amending rule, transitively. An accepted or
+//     superseded amending rule is in force, a draft one is pending, and a
+//     withdrawn one is left out.
 
 package designdoc
 
@@ -37,15 +41,92 @@ import (
 const inlineMaxDepth = 8
 
 // Inliner folds a document's inbound claims into its body. fetch loads a
-// document's detail by id (memoized — the same acting document is typically
-// named by many sections).
+// document's detail by id and fetchRule a rule by ref (both memoized — the
+// same acting document is typically named by many sections).
 type Inliner struct {
-	fetch func(int64) (*model.DocDetail, error)
-	cache map[int64]*model.DocDetail
+	fetch     func(int64) (*model.DocDetail, error)
+	fetchRule func(string) (*model.Rule, error)
+	cache     map[int64]*model.DocDetail
+	rules     map[string]*model.Rule
 }
 
-func NewInliner(fetch func(int64) (*model.DocDetail, error)) *Inliner {
-	return &Inliner{fetch: fetch, cache: map[int64]*model.DocDetail{}}
+func NewInliner(fetch func(int64) (*model.DocDetail, error), fetchRule func(string) (*model.Rule, error)) *Inliner {
+	return &Inliner{fetch: fetch, fetchRule: fetchRule, cache: map[int64]*model.DocDetail{}, rules: map[string]*model.Rule{}}
+}
+
+func (in *Inliner) rule(ref string) (*model.Rule, error) {
+	if r, ok := in.rules[ref]; ok {
+		return r, nil
+	}
+	r, err := in.fetchRule(ref)
+	if err != nil {
+		return nil, err
+	}
+	in.rules[ref] = r
+	return r, nil
+}
+
+// amendersOf is the rules with an amends edge onto r, in edge order.
+func amendersOf(r *model.Rule) []string {
+	var out []string
+	for _, e := range r.Edges {
+		if e.Type == "amends" && e.To == r.Ref {
+			out = append(out, e.From)
+		}
+	}
+	return out
+}
+
+// ruleCite names an amending rule and where it is arranged:
+// "WL-RULE-12 (WL-SPEC-45#sec-2)".
+func ruleCite(r *model.Rule) string {
+	if len(r.ArrangedIn) == 0 {
+		return r.Ref
+	}
+	return fmt.Sprintf("%s (%s#%s)", r.Ref, r.ArrangedIn[0].DocRef, r.ArrangedIn[0].Anchor)
+}
+
+// RuleAmendments renders the in-force amendments of r as inlined blocks and
+// the pending ones as references, transitively.
+func (in *Inliner) RuleAmendments(r *model.Rule) (blocks, pending []string, err error) {
+	return in.ruleBlocks(r.Ref, amendersOf(r), map[string]bool{}, 0)
+}
+
+// ruleBlocks renders the amendments by amenders of the rule root. seen keys
+// are rule refs, so a mutually-amending pair stops instead of looping.
+func (in *Inliner) ruleBlocks(root string, amenders []string, seen map[string]bool, depth int) (blocks, pending []string, err error) {
+	if depth >= inlineMaxDepth {
+		return nil, nil, nil
+	}
+	seen[root] = true
+	for _, ref := range amenders {
+		if seen[ref] {
+			continue
+		}
+		a, err := in.rule(ref)
+		if err != nil {
+			return nil, nil, fmt.Errorf("fetch %s: %w", ref, err)
+		}
+		switch {
+		case a.Status == "withdrawn":
+			continue
+		case !effectiveStatus(a.Status):
+			pending = append(pending, "amendment by "+ruleCite(a))
+			continue
+		}
+		nested, nestedPending, err := in.ruleBlocks(a.Ref, amendersOf(a), seen, depth+1)
+		if err != nil {
+			return nil, nil, err
+		}
+		pending = append(pending, nestedPending...)
+		parts := []string{"**" + a.Heading + "**"}
+		if body := strings.TrimSpace(flattenHeadings(a.Body)); body != "" {
+			parts = append(parts, body)
+		}
+		parts = append(parts, nested...)
+		blocks = append(blocks, fmt.Sprintf("**[amending %s]:**<br>\n\n%s", ruleCite(a), strings.Join(parts, "\n\n")))
+	}
+	return blocks, pending, nil
 }
 
 func (in *Inliner) detail(id int64) (*model.DocDetail, error) {
@@ -188,6 +269,13 @@ func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, erro
 		}
 	}
 
+	// The rule at each amended anchor, and the rules amending it.
+	sectionRule, amenders := map[string]string{}, map[string][]string{}
+	for _, a := range d.Amendments {
+		sectionRule[a.Anchor] = a.Rule
+		amenders[a.Anchor] = append(amenders[a.Anchor], a.By)
+	}
+
 	inSubtree := section == ""
 	var subtreeLevel int
 	for _, sec := range parsed.Sections {
@@ -205,6 +293,13 @@ func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, erro
 		blocks, pending, err := in.blocksFor(d, sec.Anchor, map[string]bool{}, 0)
 		if err != nil {
 			return "", err
+		}
+		if by := amenders[sec.Anchor]; len(by) > 0 {
+			rb, rp, err := in.ruleBlocks(sectionRule[sec.Anchor], by, map[string]bool{}, 0)
+			if err != nil {
+				return "", err
+			}
+			blocks, pending = append(blocks, rb...), append(pending, rp...)
 		}
 		// Heading plus the section's own body only — Source() would carry
 		// the whole subtree and duplicate every nested section this loop

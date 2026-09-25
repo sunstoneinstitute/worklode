@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -10,26 +11,28 @@ import (
 )
 
 // ruleEdgeTypes are the wl: properties a rule edge may carry (S12, S26,
-// S22). supersededBy and wasDerivedFrom reuse dct:isReplacedBy and
-// prov:wasDerivedFrom (ns/ontology.ttl's reuse list).
+// S22, WL-SPEC-77 §4). supersedes and wasDerivedFrom reuse dct:replaces and
+// prov:wasDerivedFrom (ns/ontology.ttl's reuse list). supersedes runs new ->
+// old and amends runs amending -> amended; their inverses (supersededBy,
+// amendedBy) are read from the far end and never stored.
 var ruleEdgeTypes = map[string]bool{
 	"refines": true, "constrains": true, "conflictsWith": true, "references": true,
-	"supersededBy": true, "wasDerivedFrom": true,
+	"amends": true, "supersedes": true, "wasDerivedFrom": true,
 }
 
 // ruleEdgeTypesList names every recognized type, for error messages.
-const ruleEdgeTypesList = "refines, constrains, conflictsWith, references, supersededBy, wasDerivedFrom"
+const ruleEdgeTypesList = "refines, constrains, conflictsWith, references, amends, supersedes, wasDerivedFrom"
 
 // LinkRules writes a manual edge (12-spec-refactoring-design-tree.md S12).
 // A second identical edge is ErrEdgeExists; a self edge or an unknown type is
-// ErrInvalidInput; an unknown rule id is ErrNotFound. supersededBy has one
+// ErrInvalidInput; an unknown rule id is ErrNotFound. supersedes has one
 // writer, lode rule supersede (S22, R4): LinkRules refuses it.
 func LinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 	if !ruleEdgeTypes[typ] {
 		return fmt.Errorf("edge type %q is not one of %s: %w", typ, ruleEdgeTypesList, ErrInvalidInput)
 	}
-	if typ == "supersededBy" {
-		return fmt.Errorf("supersededBy edges are written by lode rule supersede, not rule link: %w", ErrInvalidInput)
+	if typ == "supersedes" {
+		return fmt.Errorf("supersedes edges are written by lode rule supersede, not rule link: %w", ErrInvalidInput)
 	}
 	if fromID == toID {
 		return fmt.Errorf("a rule cannot relate to itself: %w", ErrInvalidInput)
@@ -76,6 +79,31 @@ func UnlinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 		return fmt.Errorf("unlink rule %d %s %d: %w", fromID, typ, toID, err)
 	}
 	return nil
+}
+
+// ListDocAmendments lists the amends edges onto the rules a document
+// arranges, in section order then by amending rule (WL-SPEC-77 §4). A
+// plan's doc_rules rows borrow the spec's rules, so a plan has none.
+func (s *Store) ListDocAmendments(ctx context.Context, docID int64) ([]model.DocAmendment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT dr.anchor, p.key || '-RULE-' || r.number, ap.key || '-RULE-' || ar.number
+		   FROM doc_rules dr
+		   JOIN docs d ON d.id = dr.doc_id
+		   JOIN rules r ON r.id = dr.rule_id
+		   JOIN projects p ON p.id = r.project_id
+		   JOIN rule_edges e ON e.to_rule = r.id AND e.type = 'amends'
+		   JOIN rules ar ON ar.id = e.from_rule
+		   JOIN projects ap ON ap.id = ar.project_id
+		  WHERE dr.doc_id = $1 AND d.kind <> 'plan'
+		  ORDER BY dr.position, ap.key, ar.number`, docID)
+	if err != nil {
+		return nil, fmt.Errorf("list amendments of doc %d: %w", docID, err)
+	}
+	return collectRows(rows, fmt.Sprintf("list amendments of doc %d", docID), func(r rowScanner) (model.DocAmendment, error) {
+		var a model.DocAmendment
+		err := r.Scan(&a.Anchor, &a.Rule, &a.By)
+		return a, err
+	})
 }
 
 // ruleEdgesSQL lists every edge in or out of one rule with both refs and

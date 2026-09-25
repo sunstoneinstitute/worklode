@@ -4,6 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -43,7 +47,7 @@ func TestLinkRules(t *testing.T) {
 	if err := link(a, a, "refines"); !errors.Is(err, ErrInvalidInput) {
 		t.Errorf("self link: got %v, want ErrInvalidInput", err)
 	}
-	if err := link(a, b, "amends"); !errors.Is(err, ErrInvalidInput) {
+	if err := link(a, b, "bogus"); !errors.Is(err, ErrInvalidInput) {
 		t.Errorf("unknown type: got %v, want ErrInvalidInput", err)
 	}
 	from, err := s.GetRule(ctx, "P1", 1)
@@ -70,7 +74,7 @@ func TestLinkRules(t *testing.T) {
 
 // TestLinkRulesLineage: LinkRules accepts wasDerivedFrom as an ordinary
 // manual edge, listed on the rule detail like any other, and refuses
-// supersededBy, naming lode rule supersede as its one writer (S22, R4).
+// supersedes, naming lode rule supersede as its one writer (S22, R4).
 func TestLinkRulesLineage(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
@@ -89,12 +93,98 @@ func TestLinkRulesLineage(t *testing.T) {
 	if len(from.Edges) != 1 || from.Edges[0].Type != "wasDerivedFrom" || from.Edges[0].To != "P1-RULE-1" || from.Edges[0].Source != "manual" {
 		t.Errorf("wasDerivedFrom edge: %+v", from.Edges)
 	}
-	err = link(a, b, "supersededBy")
+	err = link(a, b, "supersedes")
 	if !errors.Is(err, ErrInvalidInput) {
-		t.Errorf("supersededBy via link: got %v, want ErrInvalidInput", err)
+		t.Errorf("supersedes via link: got %v, want ErrInvalidInput", err)
 	}
 	if err == nil || !strings.Contains(err.Error(), "lode rule supersede") {
-		t.Errorf("supersededBy via link: error %v does not name lode rule supersede", err)
+		t.Errorf("supersedes via link: error %v does not name lode rule supersede", err)
+	}
+	if err := link(a, b, "supersededBy"); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("supersededBy via link: got %v, want ErrInvalidInput (an inverse is never stored)", err)
+	}
+}
+
+// TestLinkRulesAmends: amends is a manual edge from the amending rule to the
+// amended one, listed on both details and removed by UnlinkRules
+// (WL-SPEC-77 §4). amendedBy is an inverse and is never stored.
+func TestLinkRulesAmends(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	a, b := ruleID(t, s, "P1", 3), ruleID(t, s, "P1", 1)
+	ctx := context.Background()
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return LinkRules(tx, a, b, "amends") }); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return LinkRules(tx, b, a, "amendedBy") }); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("amendedBy via link: got %v, want ErrInvalidInput", err)
+	}
+	amended, err := s.GetRule(ctx, "P1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(amended.Edges) != 1 || amended.Edges[0].Type != "amends" || amended.Edges[0].From != "P1-RULE-3" || amended.Edges[0].Source != "manual" {
+		t.Errorf("amended side: %+v", amended.Edges)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return UnlinkRules(tx, a, b, "amends") }); err != nil {
+		t.Fatal(err)
+	}
+	if amended, err = s.GetRule(ctx, "P1", 1); err != nil {
+		t.Fatal(err)
+	}
+	if len(amended.Edges) != 0 {
+		t.Errorf("after unlink: %+v", amended.Edges)
+	}
+}
+
+// TestRuleAmendsMigrationSwapsSupersession runs migration 0089 down and up
+// over a supersedes and an amends row: down restores the old supersededBy
+// (old -> new) spelling and drops amends, up swaps the ends back.
+func TestRuleAmendsMigrationSwapsSupersession(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	oldID, newID := ruleID(t, s, "P1", 3), ruleID(t, s, "P1", 1)
+	ctx := context.Background()
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersedes', 'refactor'), ($2, $1, 'amends', 'manual')`,
+		newID, oldID); err != nil {
+		t.Fatal(err)
+	}
+	edges := func() []string {
+		t.Helper()
+		rows, err := s.db.QueryContext(ctx, `SELECT from_rule, to_rule, type FROM rule_edges ORDER BY type`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var from, to int64
+			var typ string
+			if err := rows.Scan(&from, &to, &typ); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, fmt.Sprintf("%d %s %d", from, typ, to))
+		}
+		return out
+	}
+	run := func(name string) {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(MigrationsDirForTests(), name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.ExecContext(ctx, string(data)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	run("0089_rule_amends.down.sql")
+	if got, want := edges(), []string{fmt.Sprintf("%d supersededBy %d", oldID, newID)}; !slices.Equal(got, want) {
+		t.Errorf("after down: %v, want %v", got, want)
+	}
+	run("0089_rule_amends.up.sql")
+	if got, want := edges(), []string{fmt.Sprintf("%d supersedes %d", newID, oldID)}; !slices.Equal(got, want) {
+		t.Errorf("after up: %v, want %v", got, want)
 	}
 }
 
@@ -106,12 +196,12 @@ func TestUnlinkRulesRefactor(t *testing.T) {
 	a, b := ruleID(t, s, "P1", 1), ruleID(t, s, "P1", 3)
 	ctx := context.Background()
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersededBy', 'refactor')`, a, b)
+		_, err := tx.Exec(`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersedes', 'refactor')`, a, b)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Tx(ctx, func(tx *sql.Tx) error { return UnlinkRules(tx, a, b, "supersededBy") }); !errors.Is(err, ErrInvalidInput) {
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return UnlinkRules(tx, a, b, "supersedes") }); !errors.Is(err, ErrInvalidInput) {
 		t.Errorf("unlink refactor: got %v, want ErrInvalidInput", err)
 	}
 }
