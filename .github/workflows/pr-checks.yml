@@ -210,6 +210,9 @@ jobs:
       # hel01's own always-on container (see docs/self-hosted-runner.md);
       # `ubuntu-latest` keeps the ephemeral `services:` postgres below.
       postgres-dsn: ${{ needs.gate.outputs.trusted == 'true' && 'postgres://postgres:postgres@localhost:15432/postgres?sslmode=disable' || 'postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable' }}
+      # hel01's always-on Oxigraph; empty on ubuntu-latest, whose ephemeral
+      # one exports TEST_SPARQL_URL itself.
+      sparql-url: ${{ needs.gate.outputs.trusted == 'true' && 'http://localhost:17878' || '' }}
 
   obsidian:
     needs: gate

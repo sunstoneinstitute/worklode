@@ -50,7 +50,7 @@ func TestProjectorEndToEnd(t *testing.T) {
 		t.Fatalf("create project %s: %v", proj, err)
 	}
 	graph := iri.ProjectGraph(proj)
-	t.Cleanup(func() { dropGraph(t, base, graph) })
+	graphtest.DropOnCleanup(t, base, graph)
 
 	p := projector.New(s, graphserver.New(proxy.URL, nil), nil, 100)
 
@@ -149,28 +149,6 @@ func randHex(t *testing.T, n int) string {
 		t.Fatalf("crypto/rand: %v", err)
 	}
 	return hex.EncodeToString(b)
-}
-
-// dropGraph deletes the named graph directly against the SPARQL endpoint
-// (graphtest.PutGraph's own cleanup does not apply here: this test's writes
-// go through the translating proxy, not graphtest.PutGraph).
-func dropGraph(t *testing.T, base, graphIRI string) {
-	t.Helper()
-	req, err := http.NewRequest(http.MethodDelete, base+"/store?graph="+url.QueryEscape(graphIRI), nil)
-	if err != nil {
-		t.Fatalf("build DELETE for %s: %v", graphIRI, err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("DELETE %s: %v", graphIRI, err)
-	}
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
-	// 404 is fine: the graph may never have been written if the test failed
-	// before the first RunOnce.
-	if resp.StatusCode/100 != 2 && resp.StatusCode != http.StatusNotFound {
-		t.Errorf("DELETE %s: HTTP %d", graphIRI, resp.StatusCode)
-	}
 }
 
 // addEdge adds a typed edge through the outbox, mirroring createTask.
