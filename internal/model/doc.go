@@ -192,9 +192,8 @@ type AddDocNoteInput struct {
 //
 // One stored row carries both directions, so an edge in EdgesIn is that row
 // read backward: near and far ends swap, and Type is the inverse spelling —
-// covers/isCoveredBy, implements/isImplementedBy, amends/amendedBy,
-// replaces/isReplacedBy, requires/isRequiredBy, wasDerivedFrom/hadDerivation,
-// blocks/blockedBy.
+// covers/isCoveredBy, implements/isImplementedBy, requires/isRequiredBy,
+// wasDerivedFrom/hadDerivation, blocks/blockedBy, defers/isDeferredBy.
 //
 // ToExternal is outbound-only: it carries a reference this backbone cannot
 // resolve, which by definition names no document that could point back. In

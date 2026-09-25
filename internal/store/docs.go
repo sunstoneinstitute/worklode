@@ -124,8 +124,8 @@ func snapshotDocVersion(tx *sql.Tx, docID int64) error {
 //
 // Status is the corpus importer's affordance. Creating a spec or ADR straight
 // at accepted must therefore establish what AcceptDoc would have: the 025 §6.1
-// depth gate runs here too, the sections land published, and the supersession
-// cascade fires on every document-level `replaces` edge that resolves.
+// depth gate runs here too and the sections land published. It supersedes
+// nothing: a new document's rules are new, so no rule edge leaves them yet.
 func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Doc, error) {
 	if !validDocKinds[in.Kind] {
 		return nil, fmt.Errorf("doc kind %q: %w", in.Kind, ErrInvalidInput)

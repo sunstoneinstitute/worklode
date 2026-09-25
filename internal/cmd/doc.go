@@ -616,7 +616,7 @@ func newDocReferrersCmd() *cobra.Command {
 //
 // This is the listing half of 026 §2.3, which reserves the same name for a
 // wider view: `--with-drafts`, `--show-dropped`, and a footer summarising
-// the sections an effective `replaces` retired. Those are unimplemented, so
+// the sections superseded. Those are unimplemented, so
 // every section of every live document is listed, whatever its status.
 func newDocSectionsCmd() *cobra.Command {
 	var scope scopeFlags

@@ -20,8 +20,8 @@ type ProjectGraph struct {
 
 // GraphDocEdge is one doc_edges relation collapsed to document level: one
 // entry per (from, to, type), whatever anchors the stored rows name. Type is
-// the stored type: covers, implements, amends, replaces, requires,
-// wasDerivedFrom, blocks, defers.
+// the stored type: covers, implements, requires, wasDerivedFrom, blocks,
+// defers.
 type GraphDocEdge struct {
 	From int64  `json:"from_doc"`
 	To   int64  `json:"to_doc"`
