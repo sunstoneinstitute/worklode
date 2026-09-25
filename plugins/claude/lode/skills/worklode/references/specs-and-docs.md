@@ -1,31 +1,117 @@
-# Specs, ADRs, plans: the document model
+# Specs, rules and plans: the document model
 
 Deep reference for the `worklode` skill. Documents live *in the backbone*
-(spec 025) — there is no git corpus to browse for them; `lode doc` is the only
-authoring path.
+(spec 025). Use `lode doc` for document bodies and `lode rule` for individual
+rules. Scratch files are editor buffers.
 
 ## Kinds and lifecycle
 
-Three kinds: `spec`, `adr`, `plan`. Every one moves `draft → accepted →
-superseded`; `proposed` was retired — a document under review just stays
-`draft` (submitting it records a review event, no status column moves).
+A **rule** is a design requirement with its own identity (`WL-RULE-12`),
+heading, body, status and version history. A **spec** arranges rules into a
+readable document. Each placement records the rule and version, position,
+depth and section anchor. A rule ref names the requirement; a ref such as
+`WL-SPEC-25#sec-9` names a place in that spec's arrangement.
 
-- **Spec / ADR** — a durable statement, numbered per (project, kind):
-  `WL-SPEC-25`, `WL-ADR-7`. Carries sections with permanent `{#sec-N}` anchors
-  once accepted.
-- **Plan** — an executable document, unnumbered, no addressable sections
-  (plans are not DesignDocs). Its `## Tasks` block is what `lode doc accept`
-  mints into real tasks — accepting a plan is the only way its tasks come
-  into existence; nothing mints a root/container row above them. An accepted
-  plan stays editable: re-accept it to mint declarations added since, which
-  leaves every already-minted task alone (a declaration's identity is its
-  title, so keep titles unique and retitle only to withdraw).
+- **Spec** — a standing description, revised as the design changes. Each
+  anchored section becomes a rule; content under deeper, unanchored headings
+  belongs to the nearest anchored rule. Acceptance accepts its draft rules.
+- **Plan** — an executable document governed by the rules its `covers`
+  entries reach. Its own prose creates no rules. Accepting its `## Tasks`
+  declarations mints tasks governed by those same rules. No
+  container task is minted. Re-acceptance mints only declarations not already
+  represented by a task; keep declaration titles stable.
+- **Existing ADRs** — still readable and arrange rules like specs. Put new
+  durable rationale in the spec owning the subject.
+
+Specs use `draft`, `accepted` and `superseded`; plans can also be `stale`.
+A submitted spec stays `draft` while review runs. Rules have their own status, including
+`withdrawn`. A rule's text can change while it is draft; changing accepted
+text creates a new draft version, preserving the accepted version.
+
+## Reading and changing rules
+
+```bash
+lode rule list --doc <spec-ref>              # spec arrangement; --doc <plan-ref> lists governing rules
+lode show <rule-ref> --json                  # text, arrangements, governed tasks and edges
+lode rule versions <rule-ref>
+lode show <rule-ref> --version <n>
+lode rule edit <rule-ref> --file <body-file> # text under the heading; optional --heading
+```
+
+Create rules by writing anchored spec sections through `lode doc`. The store
+assigns their refs. On a later document write it matches existing rules in
+three passes: anchor and heading, heading alone, then anchor alone. Each rule
+can match once. An unmatched section creates a rule. Replacing text at the
+same anchor can therefore revise the existing rule; it does not declare that
+rule withdrawn. Check identities after a structural edit.
+
+A rule edit regenerates the arranging spec's body through its document write
+path. On a draft it rewrites the draft rule version. On an accepted spec it
+opens or updates a candidate revision; the change lands with
+`lode doc revise <spec-ref> --accept`. Direct editing requires exactly one
+arranging spec or ADR; covering plans do not count toward that limit. Sharing
+one rule across several specs is not yet supported by this edit path.
+
+## Rules govern plans and their tasks
+
+Keep writing `covers` with **document/section references**, for example
+`WL-SPEC-25#sec-9`, and the existing `coverage` and `fullCoverageWith` keys.
+A rule ref is not a replacement for the `spec` field in this frontmatter.
+A section edge reaches the rule at that anchor and its descendant rules;
+a whole-document edge reaches all its rules. Unresolved refs reach none.
+The governing rules are resolved on each plan write and again at acceptance.
+Governance and section coverage are different questions: a whole-doc edge
+can identify governing rules without discharging section planning gaps.
+
+Tasks minted from a plan receive `governedBy` links to its governing rules,
+including standing constraints declared with `coverage: none`. For work
+filed outside a plan, name the governing rules explicitly:
+
+```bash
+lode task add --title "..." --kind feature --governed-by <rule-ref>
+lode task govern <task-id> --by <rule-ref>
+lode task govern <task-id> --by <rule-ref> --pin
+lode task ungovern <task-id> --by <rule-ref>
+lode show <task-id> --json                   # inspect governed_by
+```
+
+Repeat `--governed-by` for several rules. Links follow the newest rule text by
+default. `--pin` keeps the version current when the link is made; governing
+again without `--pin` restores following. The link-time version remains
+visible so readers can see that the text has moved on. A task's `plan_doc`
+says where it came from; `governed_by` says which requirements it follows.
+Re-accepting a changed plan leaves existing tasks and their governance alone;
+inspect and update affected open tasks explicitly.
+
+## Rule relationships and refactoring
+
+Use `lode rule link <ref>` with one of `--refines`, `--constrains`,
+`--conflicts-with`, `--references` or `--derived-from <other-ref>`.
+`lode rule unlink` removes a manually written link. References in rule text
+also produce derived `references` edges; edit the text to change those.
+
+A split starts with a spec edit creating the narrower rule, then
+`lode rule link <new-ref> --derived-from <old-ref>` records its origin.
+A merge edits the surviving rule to absorb the other text. Record successors
+with a map, one line per old rule: `<old-ref> -> <successor-ref> ...`.
+An empty right side withdraws the rule without a successor.
+
+```bash
+lode rule supersede --map <file> --dry-run
+lode rule supersede --map <file>
+```
+
+The refactor withdraws the old rules, writes `supersededBy` edges and marks
+accepted plans governed by withdrawn rules stale. It preserves task links;
+`governed_by[].resolves_to` reports live successors. Moving text or changing
+document order alone performs none of this and completes no work. Inspect
+arrangements, stale plans and governed tasks after a refactor.
 
 ## Authoring flow
 
 ```bash
 lode doc lint <file>                                       # local lint before creating/editing
-lode doc add --kind spec --slug <slug> --file <file>       # kind: spec, adr, plan — creates it, draft
+lode doc add --kind spec --slug <slug> --file <file>       # creates a draft spec
 lode doc edit <ref> --file <file>                    # replace a draft's body
 lode doc revise <ref> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it
 lode doc revise <ref> --discard                      # withdraw it without landing: owner or its author
@@ -82,7 +168,7 @@ kind, so `WL-SPEC-1` and `WL-PLAN-1` are different documents. A shorthand
 naming a project this checkout can't reach resolves as `unresolved`, not an
 error; `lode show <ref>` is what actually verifies one.
 
-## Anchors are frozen; `--inline` is how you read the current text
+## Section anchors and document amendments
 
 Once a spec is accepted, its `{#sec-N}` anchors never move and never get
 renumbered — inserting between `2.1` and `2.2` uses a letter suffix
@@ -90,16 +176,13 @@ renumbered — inserting between `2.1` and `2.2` uses a letter suffix
 anchor and gets a note saying what replaced it; deleting it breaks whoever
 linked it.
 
-A stored body is therefore never rewritten, so **what a section says now is
-that section plus whatever amends it**. `lode show <ref> --inline` does that
-fold for you (026 §3.2), attributing each change to the document it came
-from; without the flag you get the text as first written, which is what you
-want for provenance and not what you want before acting on a requirement.
-`lode doc show <ref> --json`'s `edges_in` names `amendedBy` and
-`isReplacedBy` when you need the edges rather than the reading. Both
-directions of an amendment are always recorded (the amending
-doc's `amends`, the amended doc's `amendedBy`) so either document alone
-answers "what still constrains this section" without a corpus-wide scan.
+A bare `lode show <ref>` reads the current stored body, including landed
+revisions. `--version` reads a historical snapshot. Use `--inline` when acting
+on a spec: it also folds in-force `amends` and `replaces` edges into the
+sections they affect, attributed to the source document. Rule versioning and
+these document edges are separate mechanisms; changing a rule version does
+not require inventing an amending document. `lode doc show <ref> --json`
+exposes `edges_in` when you need the relationships behind that reading.
 
 ## Coverage as a query, never a stored flag
 

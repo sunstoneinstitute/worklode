@@ -1,15 +1,22 @@
 ---
 name: writing-docs
-description: Use when creating or editing a worklode spec, ADR or plan with lode doc, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc add", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "amend a spec", "supersede a section", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use lode:splitting-specs-into-plans instead.
+description: Use when creating or editing a Worklode spec, rule or plan, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc add", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "arrange rules", "edit a rule", "governedBy", "amend a spec", "supersede a rule", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use lode:splitting-specs-into-plans instead.
 ---
 
 # Authoring specs and plans
 
 Documents live in the Postgres backbone, not in the git tree — no
 `docs/specs/`, no `docs/plans/`, no file to open, no pre-commit hook.
-`lode doc` is the only way to create, read, or change one. This file is the
-reference for the document model: frontmatter, references, section anchors,
-amend/supersede, and how a plan declares its tasks.
+A spec is an **arrangement of rules**: each anchored section carries a rule
+with its own ref, text, status and version history. The arrangement supplies
+reading order, depth and anchors. A plan is governed by the rules its `covers`
+entries reach and declares the tasks that undertake them; its prose creates
+no rules. Accepting the plan gives its minted tasks governing rule links.
+
+Write document bodies with `lode doc`, and edit one rule with `lode rule edit`.
+This skill covers authoring syntax. For rule inspection, versions, pins,
+lineage and refactor maps, read the `lode:worklode` skill's
+`references/specs-and-docs.md`.
 
 ## Where a document lives, and how it gets there
 
@@ -17,7 +24,7 @@ Draft the markdown — frontmatter included — in a scratch file, then:
 
 ```bash
 lode doc lint <file>                                # local lint: anchors, plan ## Tasks
-lode doc add --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
+lode doc add --kind <spec-or-plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body, or a plan's at any status
 lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec/ADR in place (025 §8.4)
 lode doc edit <ref> --file <file> --substantive  # same, judged substantive: reviewers are asked again
@@ -57,12 +64,38 @@ document, and never read the next number off filenames. The corpus lives in
 the backbone (055), so a draft that has no file anywhere still holds its
 number. `lode doc list` is the authority.
 
+## Author rules, arrange them into specs
+
+Write each anchored section as a rule that can be read on its own: state the
+requirement and keep its rationale and exceptions beside it. Reference other
+rules by ref when they constrain it. Use the arranging spec for context and
+reading order; a plan carries the implementation steps.
+
+```bash
+lode rule list --doc <spec-ref> --json       # inspect rule identities before and after editing
+lode show <rule-ref>                         # requirement and where it is arranged
+lode rule edit <rule-ref> --file <body-file> # body under its heading, optional --heading
+```
+
+The store assigns rule refs when new anchored sections are written. Existing
+rules match by anchor and heading, then heading alone, then anchor alone.
+Check the arrangement after moving or renaming sections; copying text into a
+new spec does not establish shared identity. For an accepted spec, a direct
+rule edit goes into its candidate revision and lands only on revision accept.
+A draft rule version is mutable; accepted text is preserved in version history.
+
+Use `spec` for new durable design, including rationale previously written as
+an ADR. Existing ADR references remain valid. Preserve accepted section
+anchors even though the rule has its own identity. To withdraw, split or merge
+rules, use the explicit lineage/refactor procedure in the reference above;
+removing prose alone does not redirect task governance.
+
 ## Frontmatter is mandatory
 
 **Every document you create starts with YAML frontmatter — no exceptions.**
 A spec needs `status` and, once accepted, `issued`. A plan needs `status`
-and `covers` — the spec sections it undertakes to build, optionally
-qualified by a `coverage:` level (`full`/`partial`/`none`) and, for
+and `covers` — document/section references selecting its governing rules,
+optionally qualified by a `coverage:` level (`full`/`partial`/`none`) and, for
 `partial`, a `fullCoverageWith` list of the plans that complete it (see
 `lode:splitting-specs-into-plans` for that mechanism in full) — or
 `covers: NO-SPEC` (026 §4.3, valid only here) when nothing governs it, never
@@ -137,7 +170,12 @@ its heading and anchor** — never delete it — with a note saying what
 replaced it; a bare superseded section is a broken promise to whoever
 linked it.
 
-## Amending or superseding a section
+## Document amendments and supersession
+
+Use a rule edit or a candidate spec revision when changing the owning spec's
+requirement. The document-edge syntax below is for an amendment or replacement
+expressed by another document; it is separate from rule-version history and
+rule `supersededBy` lineage.
 
 Amending changes how a section should be read without replacing its text.
 Two edits, both required, so the claim is discoverable from either document:
@@ -181,6 +219,13 @@ the successor(s) under `isReplacedBy` at `"."`; each successor records
 `replaces` back.
 
 ## Declaring a plan's tasks
+
+A plan's `covers` still names spec sections, with `coverage` and
+`fullCoverageWith` where needed. Keep rule refs out of the `spec` field.
+The store resolves those edges to the plan's governing rules and gives every
+minted task `governedBy` links to that set. Standing constraints with
+`coverage: none` still govern those tasks. Verify the result with
+`lode rule list --doc <plan-ref>` and `lode show <task-id> --json`.
 
 A plan body carries exactly one `## Tasks` section, holding nothing but one
 `### Task <N> — <title>` subsection per task (em dash; the text after it is
@@ -263,10 +308,11 @@ Two failure modes worth checking for by hand, since no linter covers them:
 downstream**, migrations above all, where `./scripts/check-migrations.sh`
 renumbers on collision and what shipped is rarely the number the plan named.
 
-For a spec edit, the same question runs one hop further out: `lode doc todo
-<ref>` for what the change leaves unplanned, and `lode doc list --kind plan`
-for the plans covering the section you touched — each of those plans then has
-its own minted tasks to walk.
+For a spec or rule edit, inspect the rule's `arranged_in` and `governed_tasks`
+with `lode show <rule-ref> --json`. Check task pins and `resolves_to`
+successors, and any plans marked stale by a refactor. Use `lode doc todo
+<ref>` for remaining planning gaps. Each affected plan has minted task bodies
+to compare; a new rule version does not rewrite those snapshots.
 
 ## The `ns/` ontology
 
