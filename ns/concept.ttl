@@ -38,7 +38,7 @@ wlc:accepted a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel
 wlc:stale a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "stale" ;
     skos:definition "A plan whose covered section was amended before execution and needs re-planning." .
 wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "superseded" ;
-    skos:definition "Replaced (whole or in part) by a later doc via dct:replaces." .
+    skos:definition "Every rule the document contains is withdrawn; rule supersession is dct:replaces between rules." .
 wlc:withdrawn a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "withdrawn" ;
     skos:definition "An accepted document closed without a successor." .
 wlc:spent a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "spent" ;
