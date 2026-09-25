@@ -638,8 +638,8 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // renderTaskPage renders the task page: title, state, priority/kind, project,
-// body (rendered as sanitised markdown — see taskView), attachments, lease
-// holder (if any), edges, and the full timeline — built from the same
+// body (rendered as sanitised markdown — see taskView), prerequisites,
+// attachments, lease holder (if any), edges, and the full timeline — built from the same
 // assembleTimeline used by GET /api/v1/tasks/{id}/timeline. It renders
 // through the project shell (spec 056 §2), so an unknown owning project
 // 404s the same way projectHeader's other callers do — though that should
@@ -714,6 +714,15 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 	view.Activity = activityRows(activity)
+
+	// The prerequisite graph reads the same tree GET
+	// /api/v1/tasks/{id}/blockers serves (WL-877).
+	tree, err := s.st.BlockerTree(ctx, id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	view.Prerequisites = prerequisitesView(tree, t.Title)
 
 	// Leaves can never have children, so skip the query — the component
 	// only reads Progress inside the len(Children) > 0 branch anyway.

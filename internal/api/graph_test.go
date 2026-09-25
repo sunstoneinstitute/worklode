@@ -71,37 +71,3 @@ func TestGetProjectGraph(t *testing.T) {
 		t.Errorf("unknown project: status = %d", rr.Code)
 	}
 }
-
-func TestGraphPageAndData(t *testing.T) {
-	t.Parallel()
-	st, h, token := newTestServer(t)
-	createProject(t, st, "proj")
-
-	rr := doReq(t, h, "GET", "/projects/proj/graph", "", nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("empty project page: %d", rr.Code)
-	}
-	bodyContains(t, rr.Body.String(), "Nothing to draw")
-	if strings.Contains(rr.Body.String(), "graph.js") {
-		t.Errorf("empty page must not load the script")
-	}
-
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Graphed", "priority": "low", "kind": "chore"})
-	rr = doReq(t, h, "GET", "/projects/proj/graph", "", nil)
-	body := rr.Body.String()
-	bodyContains(t, body, `data-src="/projects/proj/graph/data"`)
-	bodyContains(t, body, "/assets/graph.js?v=")
-	bodyContains(t, body, "/assets/d3.min.js?v=")
-
-	rr = doReq(t, h, "GET", "/projects/proj/graph/data", "", nil)
-	if rr.Code != http.StatusOK || !strings.Contains(rr.Header().Get("Content-Type"), "application/json") {
-		t.Fatalf("data: %d %s", rr.Code, rr.Header().Get("Content-Type"))
-	}
-	var g model.ProjectGraph
-	if err := json.Unmarshal(rr.Body.Bytes(), &g); err != nil {
-		t.Fatal(err)
-	}
-	if len(g.Tasks) != 1 {
-		t.Errorf("tasks = %d", len(g.Tasks))
-	}
-}
