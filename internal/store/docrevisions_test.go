@@ -696,38 +696,33 @@ func TestDocAcceptRevisionWrongStatus(t *testing.T) {
 	}
 }
 
-// TestDocAcceptRevisionSupersedesReplacedDoc: a replaces edge added by the
-// revision takes effect when the revision lands, not before.
-func TestDocAcceptRevisionSupersedesReplacedDoc(t *testing.T) {
+// TestDocAcceptRevisionSupersedesRetiredDoc: landing a revision supersedes
+// a document whose rules are all withdrawn and superseded by the revised
+// document's rules (WL-SPEC-77 §9). Withdrawing the rules alone moves nothing.
+func TestDocAcceptRevisionSupersedesRetiredDoc(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
 		CreatedBy: "stig", Status: "accepted",
-	})
-	doc := mustAcceptedSpec(t, s, "025-x")
+	}) // rules 1-3
+	doc := mustAcceptedSpec(t, s, "025-x") // rules 4-6
+	mustSupersede(t, s, entry("P1-RULE-1", "P1-RULE-4"), entry("P1-RULE-2", "P1-RULE-5"), entry("P1-RULE-3", "P1-RULE-6"))
+	if got := docStatus(t, s, old.ID); got != "accepted" {
+		t.Fatalf("006-old status = %q before the revision lands, want accepted", got)
+	}
+
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
 		t.Fatalf("ReviseDoc: %v", err)
 	}
-	withReplaces := strings.Replace(revisedSpecBody,
-		"requires: 004-execution-backbone.md#sec-6",
-		"requires: 004-execution-backbone.md#sec-6\nreplaces:\n  \".\":\n    - 006-old.md", 1)
-	if err := updateRevision(t, s, doc.ID, withReplaces); err != nil {
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
 		t.Fatalf("UpdateRevision: %v", err)
 	}
-	if got, err := s.GetDoc(t.Context(), old.ID); err != nil || got.Status != "accepted" {
-		t.Fatalf("doc = %+v, %v; want the target untouched until the revision lands", got, err)
-	}
-
 	if _, err := acceptRevision(t, s, doc.ID, "stig"); err != nil {
 		t.Fatalf("AcceptRevision: %v", err)
 	}
-	got, err := s.GetDoc(t.Context(), old.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != "superseded" {
-		t.Errorf("replaced doc status = %q, want superseded", got.Status)
+	if got := docStatus(t, s, old.ID); got != "superseded" {
+		t.Errorf("006-old status = %q, want superseded", got)
 	}
 }
 

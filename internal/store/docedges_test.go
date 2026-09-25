@@ -1396,7 +1396,7 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 26, Slug: "026-to", Body: specBody, CreatedBy: "stig",
 	})
 
-	types := []string{"covers", "implements", "amends", "replaces", "requires", "wasDerivedFrom", "blocks"}
+	types := []string{"covers", "implements", "requires", "wasDerivedFrom", "blocks"}
 	for _, typ := range types {
 		// Only a covers edge carries a coverage level
 		// (doc_edges_coverage_on_covers).
@@ -1418,6 +1418,17 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 	}
 	if len(in) != len(types) {
 		t.Fatalf("inbound edges = %+v, want %d", in, len(types))
+	}
+
+	// Amendment and supersession are rule edges (WL-SPEC-77 §8): the CHECK
+	// refuses the retired document-level types.
+	for _, typ := range []string{"amends", "replaces", "amendedBy", "isReplacedBy"} {
+		_, err := s.db.ExecContext(t.Context(),
+			`INSERT INTO doc_edges (from_doc, type, to_doc, declared_by) VALUES ($1, $2, $3, $1)`,
+			from.ID, typ, to.ID)
+		if !isCheckViolationOn(err, "doc_edges_type_check") {
+			t.Errorf("insert %s edge: err = %v, want doc_edges_type_check violation", typ, err)
+		}
 	}
 	for _, e := range in {
 		if e.ToDoc != from.ID {
@@ -1771,58 +1782,6 @@ func TestDocEdgesAllowConvergingBlocks(t *testing.T) {
 }
 
 // --- NeedsPlanning / NeedsExecution (026 §2) -----------------------------
-
-// TestReplaceDocEdgesSupersedesReplacedTarget: a document-level `replaces`
-// edge can newly resolve through the repair path too, not only through
-// CreateDoc's accepted-at-create path and repointExternalEdges (WL-133) —
-// ReplaceDocEdges must run the same cascade (WL-278).
-//
-// The corpus shape here is one repointExternalEdges cannot reach on its own:
-// the replacer is tombstoned when its target arrives, so the sweep — scoped
-// to live referring documents — skips its edge. Restoring the replacer does
-// not re-sweep it, so the edge is left exactly as WL-133 describes edges
-// going stale "some other way": ReplaceDocEdges is the only pass left that
-// re-reads its frontmatter, and it owes the cascade the other two paths owe.
-func TestReplaceDocEdgesSupersedesReplacedTarget(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	successor := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
-		Status: "accepted", Body: replacerBody("New", "006-old.md"),
-	})
-	if err := deleteDoc(t, s, successor.ID, "stig", "temporarily out of the corpus"); err != nil {
-		t.Fatalf("DeleteDoc(025-new): %v", err)
-	}
-
-	old := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
-		CreatedBy: "stig", Status: "accepted",
-	})
-
-	if err := undeleteDoc(t, s, successor.ID); err != nil {
-		t.Fatalf("UndeleteDoc(025-new): %v", err)
-	}
-	before := docEdges(t, s, successor.ID)
-	want := []model.DocEdge{{Type: "replaces", ToExternal: "006-old.md"}}
-	if !reflect.DeepEqual(before, want) {
-		t.Fatalf("edges before repair = %+v, want %+v", before, want)
-	}
-	if got := docStatus(t, s, old.ID); got != "accepted" {
-		t.Fatalf("006-old status before repair = %q, want accepted", got)
-	}
-
-	if err := replaceDocEdges(t, s, successor.ID); err != nil {
-		t.Fatalf("ReplaceDocEdges(025-new): %v", err)
-	}
-	after := docEdges(t, s, successor.ID)
-	wantAfter := []model.DocEdge{{Type: "replaces", ToDoc: old.ID}}
-	if !reflect.DeepEqual(after, wantAfter) {
-		t.Fatalf("edges after repair = %+v, want %+v", after, wantAfter)
-	}
-	if got := docStatus(t, s, old.ID); got != "superseded" {
-		t.Fatalf("006-old status after repair = %q, want superseded", got)
-	}
-}
 
 // TestFrontmatterEdgesBlockedByBecomesInverseBlocks: the spelling is resolved
 // where the frontmatter is read, not where the row is written — `blockedBy`

@@ -105,11 +105,9 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 		spec.Sections[1].Position != 1 {
 		t.Errorf("spec sections = %+v", spec.Sections)
 	}
-	if len(spec.Edges) != 1 || spec.Edges[0] != (designdoc.EdgeMeta{
-		SrcAnchor: "sec-1", Rel: "amends",
-		Target: "025-documents-in-the-backbone.md", TargetAnchor: "sec-2",
-	}) {
-		t.Errorf("spec edges = %+v", spec.Edges)
+	// The fixture's retired `amends:` key projects no edge (WL-SPEC-77 §7).
+	if len(spec.Edges) != 0 {
+		t.Errorf("spec edges = %+v, want none", spec.Edges)
 	}
 	if !strings.Contains(string(spec.FrontmatterJSON), `"status":"accepted"`) {
 		t.Errorf("FrontmatterJSON = %s", spec.FrontmatterJSON)

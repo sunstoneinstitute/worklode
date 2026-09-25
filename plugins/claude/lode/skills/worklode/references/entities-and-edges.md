@@ -81,6 +81,7 @@ end only via release, done, block, abandon, reopen, or the expiry sweep.
 | Plan → rule | The rules governing the plan, reached through its `covers` references to spec sections. |
 | Task → rule (`governedBy`) | Governing requirement, linked by plan acceptance, by hand, or by the `Spec:` trailer gate. The link records the version at link time and follows the newest text unless pinned. |
 | Rule → rule (`refines`, `constrains`, `conflictsWith`, `references`) | Design relationships. Text references also produce derived `references` edges. |
+| Rule → rule (`amends`) | The subject changes how the object is read without replacing it; `lode show --inline` folds it in. Documents do not amend or replace each other. |
 | Rule → rule (`wasDerivedFrom`) | Lineage recorded after a split. |
 | Rule → rule (`supersededBy`) | Successors recorded by a refactor. The old rule is withdrawn; its task links remain and resolve to live successors. |
 
@@ -108,7 +109,6 @@ resolve):
 |---|---|
 | `covers` | Plan → spec section. Carries `coverage: full \| partial \| none`; a `partial` may name the other plans that jointly close the section (`fullCoverageWith`, in `doc_coverage_completed_with`). |
 | `implements` | Component (code) → doc section — "this code realises this intent". Retired spelling: `covers` used to mean this too; `implements` is now the only term for it. |
-| `amends` / `replaces` | One doc/section supersedes or extends another. `amends` read backward is `amendedBy`; one row carries both directions so they can't disagree. |
 | `requires` | Dependency between docs. |
 | `wasDerivedFrom` | Provenance: this doc grew out of that one. |
 | `blocks` | Orders whole plan *documents* (never section-scoped) — distinct from the task-level `blocks` above. |

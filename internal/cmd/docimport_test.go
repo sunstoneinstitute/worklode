@@ -189,22 +189,22 @@ func TestDocImport(t *testing.T) {
 	t.Run("two-pass import resolves the forward reference", func(t *testing.T) {
 		target := importedDoc(t, c, "002-target-spec")
 		src := importedDoc(t, c, "001-forward-spec")
-		var amends []model.DocEdge
+		var requires []model.DocEdge
 		for _, e := range src.Edges {
-			if e.Type == "amends" {
-				amends = append(amends, e)
+			if e.Type == "requires" {
+				requires = append(requires, e)
 			}
 		}
-		if len(amends) != 1 {
-			t.Fatalf("amends edges = %+v, want exactly one", amends)
+		if len(requires) != 1 {
+			t.Fatalf("requires edges = %+v, want exactly one", requires)
 		}
-		got := amends[0]
+		got := requires[0]
 		if got.ToDoc != target.ID || got.ToExternal != "" {
-			t.Errorf("amends edge = %+v, want to_doc %d and no to_external "+
+			t.Errorf("requires edge = %+v, want to_doc %d and no to_external "+
 				"(pass 2 must resolve a target created after the source)", got, target.ID)
 		}
-		if got.FromAnchor != "sec-2" || got.ToAnchor != "sec-1" {
-			t.Errorf("amends edge anchors = %q -> %q, want sec-2 -> sec-1", got.FromAnchor, got.ToAnchor)
+		if got.FromAnchor != "" || got.ToAnchor != "sec-1" {
+			t.Errorf("requires edge anchors = %q -> %q, want document -> sec-1", got.FromAnchor, got.ToAnchor)
 		}
 	})
 

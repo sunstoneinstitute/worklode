@@ -24,7 +24,7 @@ var (
 	// ErrKeyTaken means the project key is already used by another project.
 	ErrKeyTaken = errors.New("project key already in use")
 	// ErrCycle means the edge would close a loop: in the task child_of
-	// hierarchy, or in a document's amends/replaces graph (026 §4.1).
+	// hierarchy or the task blocks graph.
 	ErrCycle = errors.New("edge would create a cycle")
 	// ErrEdgeExists means the exact edge (from, to, type) already exists.
 	ErrEdgeExists = errors.New("edge already exists")

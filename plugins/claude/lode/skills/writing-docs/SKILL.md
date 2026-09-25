@@ -116,7 +116,7 @@ dependency → amendment → supersession:
 | `requires` / `isRequiredBy` | any | list of references; plain dependency, no ordering semantics |
 | `blocks` / `blockedBy` | plan | orders one plan's whole execution before another's (025 §5); one row either end declares — prefer `blockedBy` on the later plan in a series, since the alternative is amending an earlier, possibly-accepted plan |
 | `wasDerivedFrom` | spec | scalar reference (provenance) |
-| `amends` / `amendedBy`, `replaces` / `isReplacedBy` | any | maps keyed by anchor, see below |
+| `amends`, `amendedBy`, `replaces`, `isReplacedBy` | none | not keys: a header carrying one is refused. Amendment and supersession are rule edges, see below |
 | `kind` | spec, ADR | `adr`, or absent for a spec — the resolver's document kind, distinct from a plan-task's `kind` (feature/bug/chore/design) below |
 | `artifact` | any | catalog address(es) (`bigquery://…`, `gs://…`) this document is verified by (029 §3.1); declares additively |
 
@@ -141,7 +141,7 @@ spec 042 a risky guess, so the number arm refuses it. It doesn't error, it
 just silently fails to resolve and sits as an unresolved external ref
 instead of an edge. This exact mistake has already produced dangling edges
 in the corpus — check `edges_in` on `lode doc show <ref> --json`, or run
-`lode doc lint`, rather than assume a `covers:`/`amends:` line did what you
+`lode doc lint`, rather than assume a `covers:`/`requires:` line did what you
 meant. (A cross-project shorthand naming a project this instance can't
 reach is `unresolved` too, but for a different reason: nothing in the
 referring project can repair that one.)
@@ -170,53 +170,25 @@ its heading and anchor** — never delete it — with a note saying what
 replaced it; a bare superseded section is a broken promise to whoever
 linked it.
 
-## Document amendments and supersession
+## Amendment and supersession
 
 Use a rule edit or a candidate spec revision when changing the owning spec's
-requirement. The document-edge syntax below is for an amendment or replacement
-expressed by another document; it is separate from rule-version history and
-rule `supersededBy` lineage.
+requirement. Documents do not amend or replace each other: rules do
+(WL-SPEC-77 §4). A header carrying `amends`, `amendedBy`, `replaces` or
+`isReplacedBy` is refused.
 
-Amending changes how a section should be read without replacing its text.
-Two edits, both required, so the claim is discoverable from either document:
+**Amending** changes how a rule is read without replacing its text.
+`lode rule link WL-RULE-A --amends WL-RULE-B` records that rule A amends rule
+B, and `lode rule unlink` removes it. `lode show <ref> --inline` reads the
+result: a section's own text plus every in-force amendment of its rule,
+attributed to the amending rule.
 
-1. **An inline note next to the affected heading**, in the amending
-   document, naming the section it acts on:
-
-   ```markdown
-   ## 2. Lease lifecycle {#sec-2}
-
-   > **Amended by spec 012.** Closing a lease also stamps `ended_at` on every
-   > open `agent_sessions` row for it.
-   ```
-
-2. **`amends` in the amending document's frontmatter, `amendedBy` in the
-   amended one's**, both keyed by anchor:
-
-   ```yaml
-   amends: { ".": [WL-SPEC-4#sec-2] }        # in WL-SPEC-12
-   amendedBy: { "#sec-2": [WL-SPEC-12] }     # the mirror, in WL-SPEC-4
-   ```
-
-The map key is the subject — which part of *this* document acts, `"."`
-meaning the document as a whole — and each value names the *other*
-document's section. Both directions are kept deliberately: "what still
-constrains this section?" should answer from the document already open,
-not a scan of every sibling. Use `"."` only when the amendment genuinely is
-document-wide, never to fake a range of sections. `lode show <ref> --inline`
-reads the result: a section's own text plus every effective amendment.
-
-**Superseding** is the same shape with `replaces`/`isReplacedBy`, and it
-too works per-section:
-
-```yaml
-# the superseding document — its §11 replaces one section of the target
-replaces: { "#sec-11": [WL-SPEC-13#sec-2.3] }
-```
-
-When a **whole document** is superseded, set `status: superseded` and list
-the successor(s) under `isReplacedBy` at `"."`; each successor records
-`replaces` back.
+**Superseding** runs through `lode rule supersede --map <file>`: it withdraws
+the old rules and writes a `supersedes` edge from each successor. A document
+is superseded when all its rules are withdrawn, and accepting a document
+supersedes every document whose rules are all withdrawn and superseded by
+rules it arranges. `lode doc list --bare-superseded` lists withdrawn rules
+with no successor.
 
 ## Declaring a plan's tasks
 

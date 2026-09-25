@@ -426,19 +426,23 @@ func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap
 	})
 }
 
-// DocSupersessionTable prints the `lode doc list --bare-superseded` view: one
-// row per superseded document that has a section nothing explains — 025 §6
-// rule 2 (026 §2.4) — with the bare ratio and the anchors that need it. gaps
-// is keyed by document id, mirroring DocPlanningTable.
-func DocSupersessionTable(w io.Writer, docs []model.Doc, gaps []model.DocSupersessionGap) {
-	byDoc := make(map[int64]model.DocSupersessionGap, len(gaps))
-	for _, g := range gaps {
-		byDoc[g.Doc] = g
+// BareRulesTable prints the `lode doc list --bare-superseded` view: one row
+// per withdrawn rule no rule supersedes (WL-SPEC-77 §6), with the section
+// arranging it. A rule no document arranges shows "-" there.
+func BareRulesTable(w io.Writer, rules []model.BareRule) {
+	tbl := newTable(
+		column{header: "RULE"},
+		column{header: "SECTION"},
+		titleColumn("HEADING"),
+	)
+	for _, r := range rules {
+		section := "-"
+		if r.Doc != "" {
+			section = r.Doc + "#" + r.Anchor
+		}
+		tbl.add(r.Rule, section, r.Heading)
 	}
-	docGapTable(w, "BARE", "UNEXPLAINED", docs, func(d model.Doc) (int, []string) {
-		g := byDoc[d.ID]
-		return g.Sections, g.Unexplained
-	})
+	tbl.flush(w)
 }
 
 // docGapTable is the shape both gap views share: the document's identity, the
@@ -488,7 +492,8 @@ func DocLintTable(w io.Writer, findings []model.DocLintFinding) {
 
 // DocReferrersTable prints one row per referrer of a section — the
 // `lode doc referrers` view. KIND says which surface to go look at (a
-// document to re-read, a task whose worker is mid-flight), REF is the id to
+// document to re-read, a rule that reads the section's rule, a task whose
+// worker is mid-flight), REF is the id to
 // cite it by, and REL is the relation that does the pointing.
 func DocReferrersTable(w io.Writer, refs []model.DocReferrer) {
 	tbl := newTable(

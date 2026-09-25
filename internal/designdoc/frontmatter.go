@@ -28,10 +28,14 @@ type Frontmatter struct {
 	Blocks         RefList      `yaml:"blocks,omitempty"`         // plans only, 025 §5 — orders whole documents
 	BlockedBy      RefList      `yaml:"blockedBy,omitempty"`      // plans only, 025 §5
 	WasDerivedFrom string       `yaml:"wasDerivedFrom,omitempty"` // prov:wasDerivedFrom
-	Amends         AnchorMap    `yaml:"amends,omitempty"`         // 025 §14
-	AmendedBy      AnchorMap    `yaml:"amendedBy,omitempty"`      // 025 §14
-	Replaces       AnchorMap    `yaml:"replaces,omitempty"`       // dct:replaces
-	IsReplacedBy   AnchorMap    `yaml:"isReplacedBy,omitempty"`   // dct:isReplacedBy
+	// Amends, AmendedBy, Replaces and IsReplacedBy are retired keys
+	// (WL-SPEC-77 §7): amendment and supersession are rule edges. Nothing
+	// reads them, and a new write carrying one is refused (RetiredRelKeys).
+	// They stay declared, like Task, because stored bodies keep their text.
+	Amends       AnchorMap `yaml:"amends,omitempty"`
+	AmendedBy    AnchorMap `yaml:"amendedBy,omitempty"`
+	Replaces     AnchorMap `yaml:"replaces,omitempty"`
+	IsReplacedBy AnchorMap `yaml:"isReplacedBy,omitempty"`
 	// Task is the retired `task:` key (026 §5.2). Nothing reads it: a plan's
 	// tasks are the rows carrying its plan_doc (025 §9.2). It is still
 	// declared because the decoder rejects unknown fields and the bodies the
@@ -194,9 +198,28 @@ type Deferral struct {
 type DeferralList []Deferral
 
 // AnchorMap keys references by the anchor in *this* document they apply to:
-// "#sec-3" -> the sections elsewhere that it amends or replaces. Values take
-// the same scalar-or-list latitude as RefList.
+// "#sec-3" -> sections elsewhere. Values take the same scalar-or-list
+// latitude as RefList.
 type AnchorMap map[string]RefList
+
+// RetiredRelKeys names the retired amendment and supersession keys the header
+// carries, in key order. A write carrying any is refused; a stored body
+// carrying them is read as if they were absent (WL-SPEC-77 §7).
+func (f *Frontmatter) RetiredRelKeys() []string {
+	if f == nil {
+		return nil
+	}
+	var out []string
+	for _, k := range []struct {
+		key string
+		m   AnchorMap
+	}{{"amends", f.Amends}, {"amendedBy", f.AmendedBy}, {"replaces", f.Replaces}, {"isReplacedBy", f.IsReplacedBy}} {
+		if len(k.m) > 0 {
+			out = append(out, k.key)
+		}
+	}
+	return out
+}
 
 // splitFrontmatter divides src into the frontmatter block (fences included),
 // the YAML between the fences, and the body. An unterminated block is not

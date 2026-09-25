@@ -75,7 +75,7 @@ instead.
 | spec → rule | Arrangement: rule, version, position, depth and section anchor |
 | rule → rule | `refines`, `constrains`, `conflictsWith`, `references`, `wasDerivedFrom`, `supersededBy` |
 | task → doc | `plan_doc` (the plan that minted this task), `about_doc` (the doc a review/design task concerns) |
-| doc ↔ doc | `covers` (plan→section, `full`\|`partial`\|`none`), `implements` (code→section), `amends`/`amendedBy`, `replaces`/`isReplacedBy`, `requires`, `wasDerivedFrom`, `blocks` (whole-plan ordering) |
+| doc ↔ doc | `covers` (plan→section, `full`\|`partial`\|`none`), `implements` (code→section), `requires`, `wasDerivedFrom`, `blocks` (whole-plan ordering) |
 
 Full table with direction and set-by command: `references/entities-and-edges.md`.
 

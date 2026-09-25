@@ -90,17 +90,10 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 	}
 
 	if inline {
-		// The consolidated view (WL-84): every effective claim folded into
+		// The consolidated view (WL-84): every in-force amendment folded into
 		// the section it acts on, transitively; --section narrows to one
 		// subtree with its folds intact.
-		inliner := designdoc.NewInliner(func(id int64) (*model.DocDetail, error) {
-			d, _, err := c.GetDoc(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			return &d, nil
-		}, ruleFetcher(ctx, c))
-		out, err := inliner.Consolidate(&detail, section)
+		out, err := designdoc.NewInliner(ruleFetcher(ctx, c)).Consolidate(&detail, section)
 		if err != nil {
 			return err
 		}

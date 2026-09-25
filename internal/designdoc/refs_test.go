@@ -6,7 +6,8 @@ import (
 )
 
 // refsFixture carries every relation field the enumerator walks, including the
-// inverse spellings, so the order and the anchor handling are both observable.
+// inverse spellings, plus the four retired amendment and supersession keys,
+// which the walk ignores (WL-SPEC-77 §7).
 const refsFixture = `---
 status: accepted
 covers:
@@ -61,13 +62,6 @@ func TestFrontmatterRefsWalksEveryRelation(t *testing.T) {
 		{Rel: "blocks", Ref: "docs/plans/026-refs-2.md"},
 		{Rel: "blockedBy", Ref: "docs/plans/026-refs-0.md"},
 		{Rel: "wasDerivedFrom", Ref: "docs/specs/024-prior.md"},
-		// AnchorMap keys sort as written ("#sec-3" before "."), and "." — the
-		// document-level subject — is "" as a source anchor, not a literal dot.
-		{SrcAnchor: "sec-3", Rel: "amends", Ref: "docs/specs/006-knowledge-graph.md#sec-5"},
-		{Rel: "amends", Ref: "docs/specs/007-drift-and-overview.md"},
-		{SrcAnchor: "sec-1", Rel: "amendedBy", Ref: "docs/specs/030-later.md#sec-2"},
-		{SrcAnchor: "sec-6", Rel: "replaces", Ref: "docs/specs/006-knowledge-graph.md#sec-8"},
-		{Rel: "isReplacedBy", Ref: "docs/specs/031-successor.md"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Refs() returned %d refs, want %d: %+v", len(got), len(want), got)
@@ -221,11 +215,10 @@ func TestFrontmatterRefsForDefers(t *testing.T) {
 }
 
 func TestFrontmatterRefsFor(t *testing.T) {
-	got := refsFixtureFrontmatter(t).RefsFor("requires", "amends")
+	got := refsFixtureFrontmatter(t).RefsFor("requires", "blocks", "amends")
 	want := []string{
 		"docs/specs/004-execution-backbone.md",
-		"docs/specs/006-knowledge-graph.md#sec-5",
-		"docs/specs/007-drift-and-overview.md",
+		"docs/plans/026-refs-2.md",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("RefsFor() returned %d refs, want %d: %+v", len(got), len(want), got)
@@ -234,6 +227,22 @@ func TestFrontmatterRefsFor(t *testing.T) {
 		if r.Ref != want[i] {
 			t.Errorf("RefsFor()[%d].Ref = %q, want %q", i, r.Ref, want[i])
 		}
+	}
+}
+
+// RetiredRelKeys names every retired key the header carries, in key order,
+// so a write can be refused naming them.
+func TestRetiredRelKeys(t *testing.T) {
+	got := refsFixtureFrontmatter(t).RetiredRelKeys()
+	if want := []string{"amends", "amendedBy", "replaces", "isReplacedBy"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("RetiredRelKeys() = %v, want %v", got, want)
+	}
+	doc, err := Parse([]byte("---\nrequires: [x.md]\n---\n# X\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := doc.Frontmatter.RetiredRelKeys(); got != nil {
+		t.Errorf("RetiredRelKeys() = %v on a header without them, want nil", got)
 	}
 }
 
@@ -252,11 +261,11 @@ func TestFrontmatterRefsNil(t *testing.T) {
 func TestActingRelsExcludesInverseSpellings(t *testing.T) {
 	for _, rel := range ActingRels {
 		switch rel {
-		case "isRequiredBy", "blockedBy", "amendedBy", "isReplacedBy":
-			t.Errorf("ActingRels contains inverse spelling %q", rel)
+		case "isRequiredBy", "blockedBy", "amends", "amendedBy", "replaces", "isReplacedBy":
+			t.Errorf("ActingRels contains %q", rel)
 		}
 	}
-	for _, rel := range []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom", "amends", "replaces"} {
+	for _, rel := range []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom"} {
 		if !contains(ActingRels, rel) {
 			t.Errorf("ActingRels is missing %q", rel)
 		}

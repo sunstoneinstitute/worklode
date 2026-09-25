@@ -371,32 +371,21 @@ func TestTodoDraftSpecAcceptanceItemIsFirst(t *testing.T) {
 	}
 }
 
-// A replaced section is dropped only once the replacing document is
-// accepted; a draft's claim is pending and drops nothing (026 §3.1).
-func TestTodoCurrentSections(t *testing.T) {
-	replacer := func(status string) string {
-		return "---\nstatus: " + status + "\nreplaces:\n  \"#sec-1\":\n    - " + todoSpecRef + "#sec-2\n---\n" +
-			"# Spec 002 — Replacer\n\n## 1. Instead {#sec-1}\n\nBody.\n"
+// The retired `replaces` and `isReplacedBy` keys a stored body may still
+// carry drop nothing: the parser ignores them (WL-SPEC-77 §7).
+func TestTodoRetiredReplacesKeysDropNothing(t *testing.T) {
+	spec := strings.Replace(twoSectionSpec, "issued: 2026-01-01",
+		"issued: 2026-01-01\nisReplacedBy:\n  \"#sec-2\":\n    - 002-replacer.md#sec-1", 1)
+	docs := buildTodoCorpus(t, map[string]string{
+		"001-example.md": spec,
+		"002-replacer.md": "---\nstatus: accepted\nissued: 2026-01-01\nreplaces:\n  \".\":\n    - " +
+			todoSpecRef + "\n---\n# Spec 002 — Replacer\n\n## 1. Instead {#sec-1}\n\nBody.\n",
+	}, nil)
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
+	if err != nil {
+		t.Fatalf("Todo: %v", err)
 	}
-	for _, tc := range []struct {
-		status string
-		want   []string
-	}{
-		{"accepted", []string{"unplanned " + todoSpecRef + "#sec-1 plan= tasks="}},
-		{"draft", []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="}},
-	} {
-		t.Run(tc.status, func(t *testing.T) {
-			docs := buildTodoCorpus(t, map[string]string{
-				"001-example.md":  twoSectionSpec,
-				"002-replacer.md": replacer(tc.status),
-			}, nil)
-			items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
-			if err != nil {
-				t.Fatalf("Todo: %v", err)
-			}
-			checkItems(t, items, tc.want)
-		})
-	}
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="})
 }
 
 // A superseded document contributes no sections at all, and says so rather
@@ -747,39 +736,6 @@ func TestTodoAmendedSectionIsKept(t *testing.T) {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="})
-}
-
-// The supersession reading unions both directions, so the mirror edge alone
-// still drops the section.
-func TestTodoIsReplacedByDropsSection(t *testing.T) {
-	spec := strings.Replace(twoSectionSpec, "issued: 2026-01-01",
-		"issued: 2026-01-01\nisReplacedBy:\n  \"#sec-2\":\n    - 002-replacer.md#sec-1", 1)
-	docs := buildTodoCorpus(t, map[string]string{
-		"001-example.md":  spec,
-		"002-replacer.md": "---\nstatus: accepted\nissued: 2026-01-01\n---\n# Spec 002 — Replacer\n\n## 1. Instead {#sec-1}\n\nBody.\n",
-	}, nil)
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
-	if err != nil {
-		t.Fatalf("Todo: %v", err)
-	}
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1 plan= tasks="})
-}
-
-// A replaces with no fragment names the whole document, which drops all of it.
-func TestTodoDocumentLevelReplaceDropsEverything(t *testing.T) {
-	docs := buildTodoCorpus(t, map[string]string{
-		"001-example.md": twoSectionSpec,
-		"002-replacer.md": "---\nstatus: accepted\nissued: 2026-01-01\nreplaces:\n  \".\":\n    - " +
-			todoSpecRef + "\n---\n# Spec 002 — Replacer\n\n## 1. Instead {#sec-1}\n\nBody.\n",
-	}, nil)
-	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
-	if err != nil {
-		t.Fatalf("Todo: %v", err)
-	}
-	checkItems(t, items, nil)
-	if len(diag.Notes) == 0 {
-		t.Error("Notes is empty, want the dropped document explained")
-	}
 }
 
 // A spec requiring a plan is not a document this walk descends into, with or

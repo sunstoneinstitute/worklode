@@ -62,7 +62,7 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 		return fmt.Errorf("doc %d is %s: only an accepted document has a revision to edit: %w",
 			id, d.status, ErrInvalidInput)
 	}
-	if _, err := parseDocBody(d.kind, body); err != nil {
+	if _, err := parseWrittenDocBody(d.kind, body); err != nil {
 		return err
 	}
 	res, err := tx.Exec(`UPDATE doc_revisions SET body = $2 WHERE doc_id = $1`, id, body)
@@ -138,8 +138,8 @@ func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID 
 // 025 §6 constraint check against the accepted version and, when clean, swaps
 // the body, bumps the version, rebuilds sections and edges, stamps
 // last_revised_in on exactly the changed anchors, publishes every anchor the
-// new version carries, applies any new document-level replaces edges, and
-// consumes the candidate — one transaction, owner-gated like AcceptDoc.
+// new version carries, supersedes the documents its rules retire
+// (supersedeRetiredDocs), and consumes the candidate — one transaction, owner-gated like AcceptDoc.
 //
 // The append-only rule protects the anchors the accepted version *published*
 // (025 §7.2), so a never-published row that disappears is legal; renumbering
@@ -252,7 +252,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if _, err := tx.Exec(`DELETE FROM doc_revisions WHERE doc_id = $1`, id); err != nil {
 		return nil, fmt.Errorf("consume revision of doc %d: %w", id, err)
 	}
-	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
+	if err := supersedeRetiredDocs(tx, ts, id, eventID); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,

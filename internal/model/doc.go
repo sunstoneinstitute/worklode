@@ -192,9 +192,8 @@ type AddDocNoteInput struct {
 //
 // One stored row carries both directions, so an edge in EdgesIn is that row
 // read backward: near and far ends swap, and Type is the inverse spelling —
-// covers/isCoveredBy, implements/isImplementedBy, amends/amendedBy,
-// replaces/isReplacedBy, requires/isRequiredBy, wasDerivedFrom/hadDerivation,
-// blocks/blockedBy.
+// covers/isCoveredBy, implements/isImplementedBy, requires/isRequiredBy,
+// wasDerivedFrom/hadDerivation, blocks/blockedBy, defers/isDeferredBy.
 //
 // ToExternal is outbound-only: it carries a reference this backbone cannot
 // resolve, which by definition names no document that could point back. In
@@ -242,15 +241,17 @@ type DocEdge struct {
 
 // DocReferrer is one piece of open work pointing at a document section
 // (025 §8.2) — the fact a patch of that section has to answer to. Kind is
-// "doc" or "task"; Ref is the citable id (a document's slug, a task's id);
-// Rel is the relation doing the pointing: the document's own edge type, or,
-// for a task, the covers edge its plan holds.
+// "doc", "rule" or "task"; Ref is the citable id (a document's slug, a
+// rule's WL-RULE-<n>, a task's id); Title is the rule's heading for a rule;
+// Rel is the relation doing the pointing: the document's own edge type, the
+// rule's amends or supersedes edge onto the section's rule, or, for a task,
+// the covers edge its plan holds.
 //
 // A covering plan appears through its claimed tasks rather than as a
 // document of its own: an accepted plan nobody has claimed work from states
 // an intention, not open work, and is 025 §8.6's stale-marking business.
 type DocReferrer struct {
-	Kind  string `json:"kind"` // doc | task
+	Kind  string `json:"kind"` // doc | rule | task
 	Ref   string `json:"ref"`
 	Rel   string `json:"rel"`
 	Title string `json:"title"`
@@ -427,17 +428,14 @@ type DocPlanningGap struct {
 	Gaps     []DocSectionGap `json:"gaps"` // in document order
 }
 
-// DocSupersessionGap names the sections of one superseded document that
-// nothing explains — 025 §6 rule 2's "bare superseded section" (026 §2.4). It
-// is keyed by document id for the same reason DocPlanningGap is: one listing
-// shape serves every selector.
-//
-// Sections is the document's whole section count, so a caller can render the
-// "1/3" ratio without a second request.
-type DocSupersessionGap struct {
-	Doc         int64    `json:"doc"`
-	Sections    int      `json:"sections"`
-	Unexplained []string `json:"unexplained"` // anchors, in document order
+// BareRule is a withdrawn rule no rule supersedes: a section retired with no
+// successor (WL-SPEC-77 §6). Doc (a "WL-SPEC-4" ref) and Anchor name the
+// first live document arranging it, both empty when none does.
+type BareRule struct {
+	Rule    string `json:"rule"`
+	Doc     string `json:"doc"`
+	Anchor  string `json:"anchor"`
+	Heading string `json:"heading"`
 }
 
 // DocLintFinding is one dangling frontmatter reference the corpus lint
@@ -475,11 +473,11 @@ type DocLintFinding struct {
 
 // DocListResponse is the response body of GET /api/v1/docs. PlanningGaps is
 // populated only for ?needs_planning=true, one entry per document in Docs;
-// SupersessionGaps only for ?bare_superseded=true.
+// BareRules only for ?bare_superseded=true, which leaves Docs empty.
 type DocListResponse struct {
-	Docs             []Doc                `json:"docs"`
-	PlanningGaps     []DocPlanningGap     `json:"planning_gaps,omitempty"`
-	SupersessionGaps []DocSupersessionGap `json:"supersession_gaps,omitempty"`
+	Docs         []Doc            `json:"docs"`
+	PlanningGaps []DocPlanningGap `json:"planning_gaps,omitempty"`
+	BareRules    []BareRule       `json:"bare_rules,omitempty"`
 }
 
 // AcceptDocResponse is the response body of POST /api/v1/docs/{id}/accept.

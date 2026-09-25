@@ -190,3 +190,5 @@ configMapGenerator:
       - migrations/0088_rules.down.sql
       - migrations/0089_rule_amends.up.sql
       - migrations/0089_rule_amends.down.sql
+      - migrations/0090_retire_doc_amends_replaces.up.sql
+      - migrations/0090_retire_doc_amends_replaces.down.sql

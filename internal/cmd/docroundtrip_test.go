@@ -13,8 +13,7 @@ import (
 
 // roundTripCorpus is a corpus written to exercise the frontmatter edge set
 // across both trees: `covers`, `requires`/`isRequiredBy`,
-// `blocks`/`blockedBy`, `amends`/`amendedBy`, `replaces`/`isReplacedBy` and
-// `wasDerivedFrom`, each authored both section-qualified and bare, on specs
+// `blocks`/`blockedBy` and `wasDerivedFrom`, each authored both section-qualified and bare, on specs
 // and on plans. Every document is draft: the round trip is about edges, and
 // an accepted status would drag the accept gate's cascades in with it.
 //
@@ -36,12 +35,6 @@ requires:
   - 002-beta.md#sec-1
   - 002-beta.md
 isRequiredBy: 2026-01-02-phase-two.md
-amends:
-  "#sec-1":
-    - 002-beta.md#sec-2
-replaces:
-  ".":
-    - 003-gamma.md
 wasDerivedFrom: 003-gamma.md
 ---
 
@@ -56,9 +49,6 @@ status: draft
 isRequiredBy:
   - 001-alpha.md
   - 003-gamma.md
-amendedBy:
-  "#sec-2":
-    - 001-alpha.md#sec-1
 ---
 
 # Beta
@@ -69,9 +59,6 @@ amendedBy:
 `,
 		"specs/003-gamma.md": `---
 status: draft
-isReplacedBy:
-  ".":
-    - 001-alpha.md
 ---
 
 # Gamma
