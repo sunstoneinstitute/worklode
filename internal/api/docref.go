@@ -121,15 +121,20 @@ func scopeDocsToProject(docs []model.Doc, project string) []model.Doc {
 // wildcard and still wins, so the shortcut only sees paths nothing else
 // claims.
 //
-// Task ids resolve first because the lookup is one indexed row, and because
-// <KEY>-<n> and <KEY>-<TYPE>-<n> are not distinguishable by shape alone —
-// model.SplitTaskID reads "WL-SPEC-59" as key "WL-SPEC". Whatever the task
-// lookup misses falls through to the same resolver /docs/ref/{ref...} uses,
-// which already answers every 026 §3 reference form.
+// A rule ref (WL-RULE-<n>, or its WL-CL-<n> alias) goes to the same redirect
+// /rules/{ref} serves. Task ids resolve next because the lookup is one indexed
+// row, and because <KEY>-<n> and <KEY>-<TYPE>-<n> are not distinguishable by
+// shape alone — model.SplitTaskID reads "WL-SPEC-59" as key "WL-SPEC".
+// Whatever the task lookup misses falls through to the same resolver
+// /docs/ref/{ref...} uses, which already answers every 026 §3 reference form.
 func (s *server) refShortcut(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(r.PathValue("ref"))
 	if ref == "" {
 		writeErr(w, http.StatusNotFound, "empty reference")
+		return
+	}
+	if _, ok := designdoc.ParseRuleRef(ref); ok {
+		s.ruleRefRedirect(w, r)
 		return
 	}
 	if t, err := s.st.GetTask(r.Context(), ref); err == nil {
