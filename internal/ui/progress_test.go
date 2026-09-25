@@ -421,3 +421,20 @@ func TestProgressSectionCellPlanLink(t *testing.T) {
 		t.Errorf("uncovered section cell offers a plan link:\n%s", html)
 	}
 }
+
+// TestDocActionsOnlyOnDraft: the document page offers Accept on a draft and
+// on nothing else — a stale or withdrawn document renders distinctly
+// (WL-870) and is not acceptable from the page.
+func TestDocActionsOnlyOnDraft(t *testing.T) {
+	for _, status := range []string{"accepted", "stale", "withdrawn", "superseded"} {
+		v := DocView{Doc: model.Doc{ID: 9, Project: "p", Status: status, Owner: "dana"}, Ref: "WL-PLAN-9", Viewer: "dana"}
+		if acts := docActions(v); len(acts) != 0 {
+			t.Errorf("%s document carries %+v; want no acts", status, acts)
+		}
+	}
+	v := DocView{Doc: model.Doc{ID: 9, Project: "p", Status: "draft", Owner: "dana"}, Ref: "WL-PLAN-9", Viewer: "erin"}
+	acts := docActions(v)
+	if len(acts) != 1 || acts[0].Route != "/projects/p/progress/accept" || acts[0].Reason != "WL-PLAN-9 is owned by dana" {
+		t.Fatalf("draft document as a non-owner = %+v; want a disabled Accept naming the owner", acts)
+	}
+}

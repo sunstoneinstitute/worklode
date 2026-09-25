@@ -148,6 +148,7 @@ templ Doc(v DocView) {
 				if v.Doc.Owner != "" {
 					<p class="muted small">Owned by { v.Doc.Owner }</p>
 				}
+				@pageActs(docActions(v))
 				if v.Doc.GeneratedByTask != "" {
 					<p class="muted small">
 						Written by task <a href={ "/tasks/" + v.Doc.GeneratedByTask }>{ v.Doc.GeneratedByTask }</a>

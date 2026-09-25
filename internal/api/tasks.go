@@ -803,3 +803,98 @@ func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.TaskSkills{Skills: t.Skills})
 }
+
+// publishTasksFromPage handles POST /projects/{id}/tasks/publish: the task
+// page's and a plan page's Publish button, performing `lode task publish`
+// (draft -> ready) through the page-script write gate (066 §4.2). The body
+// names one task, or a plan whose draft tasks are all published.
+//
+// The refusals mirror progressAccept's. A task or plan of another project is
+// a 404, because the route is project-scoped. A task that is not draft, or a
+// plan with no draft task, is a 409: the button is drawn only on a draft, so
+// the request came from a stale page.
+//
+// Each task moves in its own event, so a bulk publish refused part way leaves
+// the tasks before the refusal published and names how many.
+func (s *server) publishTasksFromPage(w http.ResponseWriter, r *http.Request) {
+	var body model.TaskPublishInput
+	_, project, ok := s.beginJSONPost(w, r, "publish", &body)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	fail := func(err error) {
+		s.observeProgressWrite("publish", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+	}
+	refuse := func(code int, outcome, msg string) {
+		s.observeProgressWrite("publish", outcome)
+		writeErr(w, code, msg)
+	}
+
+	var ids []string
+	switch {
+	case body.Task != "" && body.Plan == 0:
+		t, err := s.st.GetTask(ctx, body.Task)
+		if err != nil {
+			fail(err)
+			return
+		}
+		if t.Project != project.ID {
+			refuse(http.StatusNotFound, "refused", "not found")
+			return
+		}
+		if t.State != "draft" {
+			refuse(http.StatusConflict, "conflict", fmt.Sprintf("%s is %s, not draft", t.ID, t.State))
+			return
+		}
+		ids = []string{t.ID}
+	case body.Plan != 0 && body.Task == "":
+		doc, err := s.st.GetDoc(ctx, body.Plan)
+		if err != nil {
+			fail(err)
+			return
+		}
+		if doc.Project != project.ID || doc.Kind != "plan" {
+			refuse(http.StatusNotFound, "refused", "not found")
+			return
+		}
+		tasks, err := s.st.ListTasks(ctx, store.TaskFilter{
+			Project: project.ID, PlanDoc: doc.ID, States: []string{"draft"},
+		})
+		if err != nil {
+			fail(err)
+			return
+		}
+		if len(tasks) == 0 {
+			refuse(http.StatusConflict, "conflict", fmt.Sprintf("plan %d has no draft tasks", doc.ID))
+			return
+		}
+		for _, t := range tasks {
+			ids = append(ids, t.ID)
+		}
+	default:
+		refuse(http.StatusUnprocessableEntity, "refused", "name one task or one plan")
+		return
+	}
+
+	for i, id := range ids {
+		err := s.recordTaskEvent(ctx, "web", "task.transition", id,
+			map[string]string{"from": "draft", "to": "ready", "route": "tasks/publish"},
+			func(tx *sql.Tx, eventID int64) error {
+				return store.Transition(tx, s.st.Now(), id, "draft", "ready", eventID)
+			})
+		switch {
+		case err == nil:
+			continue
+		// The task left draft between the read above and the write.
+		case errors.Is(err, store.ErrBadTransition), errors.Is(err, store.ErrInvalidInput):
+			refuse(http.StatusConflict, "conflict", fmt.Sprintf("%s: %v (published %d before it)", id, err, i))
+		default:
+			fail(err)
+		}
+		return
+	}
+	s.observeProgressWrite("publish", "ok")
+	writeJSON(w, http.StatusOK, model.TaskPublishResponse{Published: ids})
+}

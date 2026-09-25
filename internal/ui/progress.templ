@@ -318,3 +318,17 @@ templ progressAct(a ProgressAction) {
 		<button type="button" class="act" data-route={ a.Route } data-body={ a.Body } data-confirm={ a.Confirm }>{ a.Label }</button>
 	}
 }
+
+// pageActs renders a page's §3.1 buttons outside the Progress page, with
+// act.js to drive them. No acts renders nothing, script included.
+templ pageActs(acts []ProgressAction) {
+	if len(acts) > 0 {
+		<p>
+			for _, a := range acts {
+				@progressAct(a)
+				{ " " }
+			}
+		</p>
+		<script src={ assetURL("act.js") } defer></script>
+	}
+}
