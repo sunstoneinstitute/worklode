@@ -61,6 +61,29 @@ templ Docs(v DocsView) {
 	}
 }
 
+// docsStatusFilter is the global index's ?status= control: one link per
+// status, plus the default (terminal documents hidden) and "all". The chosen
+// one is marked with the lead chip.
+templ docsStatusFilter(current string, statuses []string) {
+	<p class="small">Status: 
+		@docsStatusLink("current", "/docs", current == "")
+		for _, st := range statuses {
+			{ " " }
+			@docsStatusLink(st, "/docs?status="+st, current == st)
+		}
+		{ " " }
+		@docsStatusLink("all", "/docs?status=all", current == "all")
+	</p>
+}
+
+templ docsStatusLink(label, href string, chosen bool) {
+	if chosen {
+		<a class="chip lead" href={ href }>{ label }</a>
+	} else {
+		<a class="chip plain" href={ href }>{ label }</a>
+	}
+}
+
 // docsTable is the corpus listing both flavours of the index share. The
 // project flavour drops the Project column: every row carries the same
 // project as the page.
@@ -68,7 +91,12 @@ templ docsTable(v DocsView) {
 	<section class="card">
 		<div class="hd"><h3>Documents</h3></div>
 		<div class="bd">
-			if len(v.Docs) == 0 {
+			if len(v.Statuses) > 0 {
+				@docsStatusFilter(v.Status, v.Statuses)
+			}
+			if len(v.Docs) == 0 && v.Status != "" {
+				<p class="muted">No documents with this status.</p>
+			} else if len(v.Docs) == 0 {
 				<p class="muted">No documents yet. Specs, ADRs and plans land here as they are authored.</p>
 			} else {
 				@tableWrap("Documents") {

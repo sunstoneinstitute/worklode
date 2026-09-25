@@ -5,7 +5,22 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
+
+// TestDocStatusChipDistinct: every document status gets its own chip class,
+// so a stale or withdrawn document never reads as a draft (WL-870).
+func TestDocStatusChipDistinct(t *testing.T) {
+	seen := map[string]string{}
+	for _, st := range ns.DesignDocStatuses {
+		c := docStatusChip(st)
+		if prev, ok := seen[c]; ok {
+			t.Errorf("docStatusChip(%q) = %q, same as %q", st, c, prev)
+		}
+		seen[c] = st
+	}
+}
 
 func TestHomeActivity(t *testing.T) {
 	cases := []struct {

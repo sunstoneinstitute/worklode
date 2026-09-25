@@ -889,6 +889,12 @@ type DocsView struct {
 	Docs         []DocRow
 	Project      *CockpitProject
 	CanonicalURL string
+	// Status is the ?status= the global index was filtered by ("" for the
+	// default, which hides terminal documents), and Statuses the values its
+	// filter control offers. The project flavour takes no filter and leaves
+	// both empty.
+	Status   string
+	Statuses []string
 }
 
 // DocRow is one document in the index: the stored row, its page URL, and the
@@ -1010,14 +1016,20 @@ type DocEdgeRow struct {
 	URL    string
 }
 
-// docStatusChip returns the .chip variant class for a document status
-// (025 §7's draft -> accepted -> superseded ladder).
+// docStatusChip returns the .chip variant class for a document status, one
+// distinct class per status in ns.DesignDocStatuses.
 func docStatusChip(status string) string {
 	switch status {
 	case "accepted":
 		return "ok"
+	case "stale":
+		return "warn"
 	case "superseded":
 		return "plain"
+	case "withdrawn":
+		return "crit"
+	case "spent":
+		return "declared"
 	default:
 		return "info"
 	}

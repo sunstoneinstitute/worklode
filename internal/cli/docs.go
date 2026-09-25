@@ -570,12 +570,17 @@ func docStaleSuffix(status string) string {
 	return ""
 }
 
-// docStatusBanner is the line `lode doc show` leads with when a document is
-// stale or withdrawn (025 §8.7), and "" for a document in good standing. It
-// says what the status costs the reader: stale text is owed a re-plan, and a
-// withdrawn document is not going to be executed at all.
+// docStatusBanner is the line `lode doc show` leads with for a document that
+// is not current (025 §8.7), and "" for an accepted one. It says what the
+// status costs the reader: a draft is not yet binding, stale text is owed a
+// re-plan, a superseded version has a newer one, and a withdrawn document is
+// not going to be executed at all.
 func docStatusBanner(d model.Doc) string {
 	switch d.Status {
+	case "draft":
+		return "DRAFT — not accepted yet (025 §7)"
+	case "superseded":
+		return fmt.Sprintf("SUPERSEDED since %s — a newer version replaces this one (025 §7)", LocalTime(d.UpdatedAt))
 	case "stale":
 		return fmt.Sprintf("STALE since %s — re-planning owed (025 §8.6)", LocalTime(d.UpdatedAt))
 	case "withdrawn":
