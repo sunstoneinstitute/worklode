@@ -54,6 +54,23 @@ templ Rule(v RuleView) {
 				</div>
 			</section>
 			<section class="card">
+				<div class="hd"><h3>Covered by</h3></div>
+				<div class="bd">
+					if len(v.Rule.CoveredBy) == 0 {
+						<p class="muted">No plan covers this rule.</p>
+					} else {
+						<ul>
+							for _, p := range v.Rule.CoveredBy {
+								<li>
+									<a href={ templ.SafeURL("/docs/ref/" + p.DocRef) }>{ p.DocRef }</a>
+									<span class="muted small">{ " " }{ p.Status } · { p.Coverage }</span>
+								</li>
+							}
+						</ul>
+					}
+				</div>
+			</section>
+			<section class="card">
 				<div class="hd"><h3>Governs</h3></div>
 				<div class="bd">
 					if len(v.Rule.GovernedTasks) == 0 {

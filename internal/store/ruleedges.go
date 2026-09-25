@@ -83,7 +83,7 @@ func UnlinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 
 // ListDocAmendments lists the amends edges onto the rules a document
 // arranges, in section order then by amending rule (WL-SPEC-77 §4). A
-// plan's doc_rules rows borrow the spec's rules, so a plan has none.
+// plan contains no rules, so a plan has none.
 func (s *Store) ListDocAmendments(ctx context.Context, docID int64) ([]model.DocAmendment, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT dr.anchor, p.key || '-RULE-' || r.number, ap.key || '-RULE-' || ar.number
@@ -175,8 +175,7 @@ func deriveReferences(tx *sql.Tx, project string, ruleID int64, text string) err
 			continue
 		}
 		var id int64
-		// A plan's doc_rules rows borrow the spec's rules, so a ref to a
-		// plan anchor names no rule of its own.
+		// A plan contains no rules, so a ref to a plan anchor names none.
 		err = tx.QueryRow(
 			`SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
 			  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan'`, docID, r.Anchor).Scan(&id)

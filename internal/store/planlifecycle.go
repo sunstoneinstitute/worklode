@@ -8,7 +8,7 @@ import (
 )
 
 // governPlanTasks gives every task minted by the plan that carries no
-// governing link the plan's arranged rules (S5: a closed plan's tasks each
+// governing link the rules the plan's covers edges point at (S5: a closed plan's tasks each
 // carry at least one link; S3: the store is the second writer of links, in
 // its minimal form). Tasks that already have links are left alone.
 //

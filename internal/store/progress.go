@@ -164,8 +164,8 @@ SELECT d.id, coalesce(d.number, 0), d.title, d.status, coalesce(p.key, ''), coal
 	args := []any{projectID}
 	if len(specs) > 0 {
 		query += ` AND EXISTS (
-  SELECT 1 FROM doc_edges e
-   WHERE e.from_doc = d.id AND e.type = 'covers' AND e.to_doc = ANY($2))`
+  SELECT 1 FROM covered_sections cs
+   WHERE cs.plan_id = d.id AND cs.doc_id = ANY($2))`
 		args = append(args, specs)
 	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -268,26 +268,32 @@ SELECT t.about_doc, t.id
 }
 
 // progressEdges attaches each plan's covers and requires edges. A covers
-// edge is section-scoped, so one that resolves to no document in this
-// backbone names no section here and is dropped; a requires edge renders as
-// the target's ref, falling back to the raw external reference.
+// edge is read as the sections it reaches (covered_sections), so an edge
+// resolved to no rule names no section here and is dropped; a requires edge
+// renders as the target's ref, falling back to the raw external reference.
 func (s *Store) progressEdges(ctx context.Context, projectID string, plans map[int64]*progress.Plan) error {
 	planIDs := slices.Collect(maps.Keys(plans))
 	if len(planIDs) == 0 {
 		return nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
+WITH e AS (
+  SELECT id, from_doc, type, to_doc, to_anchor, coverage, to_external
+    FROM doc_edges WHERE type = 'requires'
+  UNION ALL
+  SELECT DISTINCT edge_id, plan_id, 'covers', doc_id, anchor, coverage, NULL
+    FROM covered_sections
+)
 SELECT e.from_doc, e.type, e.to_doc, coalesce(e.to_anchor, ''),
        coalesce(e.coverage, 'full'), coalesce(e.to_external, ''),
        coalesce(t.kind, ''), coalesce(t.number, 0), coalesce(tp.key, '')
-  FROM doc_edges e
+  FROM e
   JOIN docs d ON d.id = e.from_doc
   LEFT JOIN docs t ON t.id = e.to_doc
   LEFT JOIN projects tp ON tp.id = t.project_id
  WHERE d.project_id = $1 AND d.kind = 'plan' AND d.deleted_at IS NULL
    AND d.id = ANY($2)
-   AND e.type IN ('covers', 'requires')
- ORDER BY e.from_doc, e.id`, projectID, planIDs)
+ ORDER BY e.from_doc, e.id, e.to_doc, e.to_anchor`, projectID, planIDs)
 	if err != nil {
 		return fmt.Errorf("progress edges of %s: %w", projectID, err)
 	}
@@ -557,9 +563,8 @@ WITH members AS (
     JOIN docs d ON d.id = m.about_doc AND d.kind = 'plan' AND d.deleted_at IS NULL
 )
 SELECT count(*) FROM (
-  SELECT e.to_doc AS spec FROM plans p
-    JOIN doc_edges e ON e.from_doc = p.doc AND e.type = 'covers'
-   WHERE e.to_doc IS NOT NULL
+  SELECT cs.doc_id AS spec FROM plans p
+    JOIN covered_sections cs ON cs.plan_id = p.doc
   UNION
   SELECT m.about_doc FROM members m
     JOIN docs d ON d.id = m.about_doc AND d.kind = 'spec' AND d.deleted_at IS NULL
@@ -727,9 +732,9 @@ func (s *Store) progressRefCovers(ctx context.Context, planIDs []int64) (map[int
 		return out, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT DISTINCT from_doc, to_doc
-  FROM doc_edges
- WHERE type = 'covers' AND from_doc = ANY($1) AND to_doc IS NOT NULL`, planIDs)
+SELECT DISTINCT plan_id, doc_id
+  FROM covered_sections
+ WHERE plan_id = ANY($1)`, planIDs)
 	if err != nil {
 		return nil, fmt.Errorf("progress ref covers: %w", err)
 	}

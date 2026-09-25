@@ -1828,8 +1828,8 @@ func TestLintDocsAPI(t *testing.T) {
 status: draft
 covers:
   - 025-documents-in-the-backbone.md#sec-1
-  - 025-documents-in-the-backbone.md#sec-99
   - 999-nowhere.md#sec-1
+requires: 025-documents-in-the-backbone.md#sec-99
 ---
 
 # Plan under lint

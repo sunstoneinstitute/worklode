@@ -85,8 +85,8 @@ func TestDocCoversBareFormStillFull(t *testing.T) {
 	})
 	var level string
 	if err := s.db.QueryRow(
-		`SELECT coverage FROM doc_edges
-		  WHERE from_doc = $1 AND type = 'covers' AND to_doc = $2`,
+		`SELECT e.coverage FROM doc_edges e JOIN doc_rules dr ON dr.rule_id = e.to_rule
+		  WHERE e.from_doc = $1 AND e.type = 'covers' AND dr.doc_id = $2`,
 		plan.ID, spec.ID).Scan(&level); err != nil {
 		t.Fatalf("read covers edge: %v", err)
 	}

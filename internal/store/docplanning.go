@@ -55,9 +55,6 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := arrangePlan(tx, id); err != nil {
-		return nil, nil, fmt.Errorf("arrange plan %d: %w", id, err)
-	}
 	governing, err := planRules(tx, id)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve governing rules of plan %d: %w", id, err)
@@ -409,11 +406,13 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // above, so it is checked against the same `cov`/`closed` machinery as
 // covers, not against who was named.
 //
-// Four further consequences are deliberate:
+// A covers edge runs from the plan to a rule, and claims every section that
+// arranges the rule or a rule superseding it (the covered_sections view,
+// WL-SPEC-77 §4). A whole-document entry was resolved to one edge per rule
+// when the plan was written, so it claims the sections present then.
 //
-//   - A whole-document edge (to_anchor IS NULL) discharges nothing. It cannot
-//     say which present section it undertakes and would silently claim future
-//     ones (026 §2.1), so it never appears in the discharged set.
+// Three further consequences are deliberate:
+//
 //   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
 //     §4.3), so it falls out of the join without a case of its own.
 //   - Only an accepted spec and an accepted-or-superseded plan participate: a
@@ -434,13 +433,10 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`WITH cov AS (
-		     SELECT e.id, e.from_doc AS plan_id, e.to_doc AS doc_id,
-		            e.to_anchor AS anchor, e.coverage
-		       FROM doc_edges e
-		       JOIN docs p ON p.id = e.from_doc
-		      WHERE e.type = 'covers'
-		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
-		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')
+		     SELECT DISTINCT cs.edge_id AS id, cs.plan_id, cs.doc_id, cs.anchor, cs.coverage
+		       FROM covered_sections cs
+		       JOIN docs p ON p.id = cs.plan_id
+		      WHERE p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')
 		        AND p.deleted_at IS NULL
 		 ),
 		 def_raw AS (
@@ -464,7 +460,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		      GROUP BY doc_id, anchor
 		 ),
 		 closed AS (
-		     SELECT c.id
+		     SELECT c.id, c.doc_id, c.anchor
 		       FROM cov c
 		      WHERE c.coverage = 'partial'
 		        AND EXISTS (SELECT 1 FROM doc_coverage_completed_with w
@@ -483,7 +479,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		            bool_or(c.coverage = 'full' OR cl.id IS NOT NULL) AS discharged,
 		            bool_or(c.coverage = 'partial')                   AS any_partial
 		       FROM cov c
-		       LEFT JOIN closed cl ON cl.id = c.id
+		       LEFT JOIN closed cl ON cl.id = c.id AND cl.doc_id = c.doc_id AND cl.anchor = c.anchor
 		      GROUP BY c.doc_id, c.anchor
 		 )
 		 SELECT `+docColumnsD+`, count(*)::int,

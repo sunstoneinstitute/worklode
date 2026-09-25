@@ -218,6 +218,11 @@ type AddDocNoteInput struct {
 // gone stale or been withdrawn (025 §8.7) without a request per edge; empty
 // on an unresolved ToExternal edge, which names no row to read a status from.
 //
+// ToRule is an outbound covers edge's target rule ("WL-RULE-12"): a covers
+// edge runs from a plan to a rule (WL-SPEC-77 §8), and ToDoc and ToAnchor
+// then name a section arranging that rule. Empty on every other edge and on
+// every inbound one.
+//
 // CompletedWith carries the doc_coverage_completed_with side-table (026 §5,
 // §5.3) that only a `covers` or `defers` edge ever populates: a `partial`
 // covers entry's fullCoverageWith closure, in authored order, or a `defers`
@@ -237,6 +242,7 @@ type DocEdge struct {
 	ToNumber      int      `json:"to_number"`
 	ToStatus      string   `json:"to_status"`
 	CompletedWith []string `json:"completed_with,omitempty"`
+	ToRule        string   `json:"to_rule,omitempty"`
 }
 
 // DocReferrer is one piece of open work pointing at a document section

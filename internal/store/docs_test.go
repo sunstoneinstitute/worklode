@@ -170,11 +170,11 @@ func docVersionRows(t *testing.T, s *Store, docID int64) []docVersionRow {
 func docEdges(t *testing.T, s *Store, docID int64) []model.DocEdge {
 	t.Helper()
 	rows, err := s.db.QueryContext(t.Context(),
-		`SELECT type, coalesce(from_anchor,''), coalesce(to_doc,0),
-		        coalesce(to_anchor,''), coalesce(to_external,'')
-		   FROM doc_edges WHERE from_doc = $1
-		  ORDER BY type, coalesce(from_anchor,''), coalesce(to_doc,0),
-		           coalesce(to_anchor,''), coalesce(to_external,'')`, docID)
+		`SELECT type, coalesce(from_anchor,''), coalesce(to_doc, ra.doc_id, 0) AS td,
+		        coalesce(to_anchor, ra.anchor, '') AS ta, coalesce(to_external,'')
+		   FROM doc_edges e`+ruleArrangementJoin+`
+		  WHERE from_doc = $1
+		  ORDER BY type, coalesce(from_anchor,''), td, ta, coalesce(to_external,'')`, docID)
 	if err != nil {
 		t.Fatalf("read doc_edges: %v", err)
 	}
@@ -193,6 +193,14 @@ func docEdges(t *testing.T, s *Store, docID int64) []model.DocEdge {
 	return out
 }
 
+// ruleArrangementJoin places a covers edge's rule (e.to_rule) at the section
+// arranging it, as ra.doc_id and ra.anchor, so the helpers below read a
+// covers edge in the section terms its entry was written in.
+const ruleArrangementJoin = `
+		   LEFT JOIN LATERAL (SELECT dr.doc_id, dr.anchor FROM doc_rules dr
+		                       WHERE dr.rule_id = e.to_rule
+		                       ORDER BY dr.doc_id, dr.position LIMIT 1) ra ON true`
+
 // docCoverageEdge is one covers edge id and level, for tests exercising
 // 026 §2.1's three-valued coverage that model.DocEdge's plain columns do not
 // carry.
@@ -208,9 +216,11 @@ type docCoverageEdge struct {
 func docCoverageEdges(t *testing.T, s *Store, docID int64) []docCoverageEdge {
 	t.Helper()
 	rows, err := s.db.QueryContext(t.Context(),
-		`SELECT id, coalesce(to_doc,0), coalesce(to_anchor,''), coalesce(coverage,'')
-		   FROM doc_edges WHERE from_doc = $1 AND type = 'covers'
-		  ORDER BY coalesce(to_doc,0), coalesce(to_anchor,'')`, docID)
+		`SELECT id, coalesce(to_doc, ra.doc_id, 0) AS td, coalesce(to_anchor, ra.anchor, '') AS ta,
+		        coalesce(coverage,'')
+		   FROM doc_edges e`+ruleArrangementJoin+`
+		  WHERE from_doc = $1 AND type = 'covers'
+		  ORDER BY td, ta`, docID)
 	if err != nil {
 		t.Fatalf("read covers edges: %v", err)
 	}
@@ -291,7 +301,7 @@ Detail body.
 const planBody = `---
 status: draft
 covers:
-  - 025-documents-in-the-backbone.md#sec-5
+  - 025-documents-in-the-backbone.md#sec-2
   - 999-nowhere.md#sec-1
 wasDerivedFrom: 025-documents-in-the-backbone.md
 ---

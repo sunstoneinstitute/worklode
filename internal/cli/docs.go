@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -770,14 +771,14 @@ func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSect
 	return string(doc.Bytes())
 }
 
-// docEdgeTarget renders one edge's far end: the document's slug and optional
-// anchor — the id only when a read did not resolve the slug — or the external
+// docEdgeTarget renders one edge's far end: a covers edge's rule, the
+// document's slug and optional anchor — the id only when a read did not resolve the slug — or the external
 // reference an unresolved edge carries. A far end that has gone stale carries
 // docStaleSuffix, so a `requires` line says its target is owed a re-plan
 // (025 §8.7) without the reader following the reference to find out.
 func docEdgeTarget(e model.DocEdge) string {
 	if e.ToDoc == 0 {
-		return e.ToExternal
+		return cmp.Or(e.ToRule, e.ToExternal)
 	}
 	name := e.ToSlug
 	if name == "" {
@@ -786,7 +787,12 @@ func docEdgeTarget(e model.DocEdge) string {
 	if e.ToAnchor != "" {
 		name += "#" + e.ToAnchor
 	}
-	return name + docStaleSuffix(e.ToStatus)
+	name += docStaleSuffix(e.ToStatus)
+	if e.ToRule != "" {
+		// A covers edge names a rule; the section is where it is arranged.
+		name = e.ToRule + " (" + name + ")"
+	}
+	return name
 }
 
 // DocPatchRender confirms one in-place amendment (025 §8.4): what it changed

@@ -144,9 +144,8 @@ func (s *Store) StalePlanSlug(ctx context.Context, planDoc int64) (string, error
 // executed when any task minted from it ever held a lease — active or expired,
 // since the fact that matters is that execution happened at all, not whether
 // it is still in progress. A spec counts as executed when an accepted or spent
-// plan covers one of its sections; a plan's `covers` edges point at a spec's
-// section (to_anchor set), but the EXISTS only needs the edge and the covering
-// plan's status, not the anchor.
+// plan covers one of its sections: a rule it arranges, or a successor of one,
+// is reached by the plan's covers edges (the covered_sections view).
 //
 // StaleCandidateDocs and UnresolvedDocs both interpolate this. They ask the
 // same question — the sweeper to decide what has gone stale, the list to
@@ -158,9 +157,9 @@ const docHasExecution = `CASE d.kind
 	              JOIN tasks t ON t.id = l.task_id
 	             WHERE t.plan_doc = d.id)
 	          ELSE EXISTS (
-	            SELECT 1 FROM doc_edges de
-	              JOIN docs p ON p.id = de.from_doc
-	             WHERE de.type = 'covers' AND de.to_doc = d.id
+	            SELECT 1 FROM covered_sections cs
+	              JOIN docs p ON p.id = cs.plan_id
+	             WHERE cs.doc_id = d.id
 	               AND p.status IN ('accepted', 'spent'))
 	        END`
 

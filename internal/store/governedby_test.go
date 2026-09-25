@@ -45,15 +45,15 @@ func equalInt64s(a, b []int64) bool {
 	return true
 }
 
-// A plan covering P1-SPEC-1 sec-1 only. The spec is ruleDocV1 (rules.go
-// tests): sec-1 is rule 1, its child sec-1.1 is rule 2, sec-2 is rule 3.
-const governedPlanBody = "---\nstatus: draft\ncovers: [P1-SPEC-1#sec-1]\n---\n# Plan\n\n## Tasks\n\n### Task 1 — First\n\n```yaml\nkind: feature\n```\n\nDo it.\n\n### Task 2 — Second\n\n```yaml\nkind: chore\n```\n\nDo more.\n"
+// A plan covering P1-SPEC-1 sec-1 and sec-1.1. The spec is ruleDocV1
+// (rules.go tests): sec-1 is rule 1, its child sec-1.1 is rule 2, sec-2 is
+// rule 3.
+const governedPlanBody = "---\nstatus: draft\ncovers: [P1-SPEC-1#sec-1, P1-SPEC-1#sec-1.1]\n---\n# Plan\n\n## Tasks\n\n### Task 1 — First\n\n```yaml\nkind: feature\n```\n\nDo it.\n\n### Task 2 — Second\n\n```yaml\nkind: chore\n```\n\nDo more.\n"
 
 // TestAcceptPlanGovernsMintedTasks: accepting a plan gives every task it mints
-// a governedBy link to each rule the plan's covers edges reach (S2). A
-// section-scoped edge reaches the rule at that anchor and the rules
-// arranged under it, so covering sec-1 governs by rules 1 and 2 and leaves
-// rule 3 out.
+// a governedBy link to each rule the plan's covers edges point at (S2,
+// WL-SPEC-75 §4). Covering sec-1 and sec-1.1 governs by rules 1 and 2 and
+// leaves rule 3 out.
 func TestAcceptPlanGovernsMintedTasks(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
@@ -61,11 +61,11 @@ func TestAcceptPlanGovernsMintedTasks(t *testing.T) {
 
 	var resolved int
 	if err := s.db.QueryRowContext(context.Background(),
-		`SELECT count(*) FROM doc_edges WHERE from_doc = $1 AND type = 'covers' AND to_doc IS NOT NULL`, plan.ID).Scan(&resolved); err != nil {
+		`SELECT count(*) FROM doc_edges WHERE from_doc = $1 AND type = 'covers' AND to_rule IS NOT NULL`, plan.ID).Scan(&resolved); err != nil {
 		t.Fatal(err)
 	}
-	if resolved != 1 {
-		t.Fatalf("plan's covers edge did not resolve to the spec (%d resolved rows); fix the covers ref in governedPlanBody", resolved)
+	if resolved != 2 {
+		t.Fatalf("plan's covers entries did not resolve to two rules (%d resolved rows); fix the covers refs in governedPlanBody", resolved)
 	}
 
 	_, minted, err := acceptDoc(t, s, plan.ID, "stig")
@@ -94,7 +94,7 @@ func TestAcceptPlanGovernsMintedTasks(t *testing.T) {
 }
 
 // TestAcceptPlanSplitsCoveredDocOnFirstUse: a spec written before the rule
-// tables existed has no arrangement yet; accepting a plan that covers it
+// tables existed has no arrangement yet; writing a plan that covers it
 // splits it first so the minted tasks still get their links.
 func TestAcceptPlanSplitsCoveredDocOnFirstUse(t *testing.T) {
 	s := openDocStore(t)

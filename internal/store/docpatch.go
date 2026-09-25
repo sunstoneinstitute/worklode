@@ -296,9 +296,9 @@ func planTaskIDs(tx *sql.Tx, plan int64) (map[string]bool, error) {
 func unexecutedCoveringPlans(tx *sql.Tx, docID int64, anchor string, exclude int64) ([]int64, error) {
 	rows, err := tx.Query(
 		`SELECT DISTINCT p.id
-		   FROM doc_edges e
-		   JOIN docs p ON p.id = e.from_doc
-		  WHERE e.to_doc = $1 AND e.to_anchor = $2 AND e.type = 'covers'
+		   FROM covered_sections cs
+		   JOIN docs p ON p.id = cs.plan_id
+		  WHERE cs.doc_id = $1 AND cs.anchor = $2
 		    AND p.kind = 'plan' AND p.status = 'accepted' AND p.deleted_at IS NULL
 		    AND p.id <> $3
 		    AND NOT EXISTS (

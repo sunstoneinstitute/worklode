@@ -30,7 +30,7 @@ type supersedeLine struct {
 // becomes withdrawn, a supersedes edge with source refactor runs from each
 // successor to it, and every task it governs gets a task.governance_superseded
 // event (R5). Its task_governed_by rows stay where they are (S22).
-// Withdrawing marks the accepted plans arranging the rule stale (S23,
+// Withdrawing marks the accepted plans covering the rule stale (S23,
 // through SetRuleStatus). The whole map is one rule.superseded event and
 // one transaction. A dry run resolves and counts, then rolls back.
 //
@@ -184,12 +184,11 @@ func resolveSupersede(tx *sql.Tx, project string, entries []model.SupersedeEntry
 	}
 	if len(withdrawn) > 0 {
 		// The plans SetRuleStatus will mark stale, counted before it runs.
-		if err := tx.QueryRow(
-			`SELECT count(DISTINCT d.id) FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
-			  WHERE dc.rule_id = ANY($1) AND d.kind = 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL`,
-			withdrawn).Scan(&res.StalePlans); err != nil {
-			return nil, res, fmt.Errorf("count plans arranging withdrawn rules: %w", err)
+		plans, err := acceptedPlansCovering(tx, withdrawn)
+		if err != nil {
+			return nil, res, err
 		}
+		res.StalePlans = len(plans)
 	}
 	return lines, res, nil
 }
@@ -264,8 +263,8 @@ func resolveRuleRef(tx *sql.Tx, project, ref string) (int64, error) {
 }
 
 // ruleAtAnchor is the rule a document arranges at anchor, after
-// ensureRules splits a document that predates the rule tables. A plan's
-// doc_rules rows borrow its covered rules, so a plan anchor names none.
+// ensureRules splits a document that predates the rule tables. A plan
+// contains no rules, so a plan anchor names none.
 // The sibling increment 4a ships store.RuleAtSection for the same lookup;
 // whichever branch lands second deletes one of the two (R7).
 func ruleAtAnchor(tx *sql.Tx, docID int64, anchor string) (int64, bool, error) {

@@ -84,6 +84,9 @@ func RuleRender(w io.Writer, c model.Rule) {
 	for _, a := range c.ArrangedIn {
 		fmt.Fprintf(w, "  arranged: %s#%s (depth %d, v%d)\n", a.DocRef, a.Anchor, a.Depth, a.RuleVersion)
 	}
+	for _, p := range c.CoveredBy {
+		fmt.Fprintf(w, "  covered:  %s (%s, %s)\n", p.DocRef, p.Status, p.Coverage)
+	}
 	for _, gt := range c.GovernedTasks {
 		fmt.Fprintf(w, "  governs:  %s %s (%s, %s, v%d)\n", gt.ID, gt.Title, gt.State, gt.Source, gt.RuleVersion)
 	}
