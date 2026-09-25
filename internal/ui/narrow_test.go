@@ -121,15 +121,16 @@ func pages(t *testing.T) map[string]string {
 			BlockedBy: []string{"WL-140"},
 			// The list is what a narrow screen reads once the drawing is hidden.
 			Prerequisites: &Prerequisites{
-				Remaining: 1, Direct: 1, Candidates: []string{"WL-140"},
+				Remaining: 2, Direct: 1, Candidates: []string{"WL-141"}, Levels: 2, Below: 2,
 				Plans: []PrerequisitePlan{{Slug: token, Title: longTitle, Status: "draft", URL: "/docs/7"}},
-				Cards: []PrerequisiteCard{
-					{ID: "WL-234", Label: "Make the narrow-width re…", Target: true, X: 264, Y: 8},
-					{ID: "WL-140", Title: longTitle, Label: "Make the narrow-width re…", State: "ready", X: 8, Y: 8},
+				Tree: []PrerequisiteNode{{
+					ID: "WL-140", Title: longTitle, State: "ready", Levels: 1, Below: 1,
+					Children: []PrerequisiteNode{{ID: "WL-141", Title: longTitle, State: "ready"}},
+				}},
+				List: []PrerequisiteNode{
+					{ID: "WL-140", Title: longTitle, State: "ready", NeededBy: []string{"WL-234"}},
+					{ID: "WL-141", Title: longTitle, State: "ready", NeededBy: []string{"WL-140"}},
 				},
-				Links: []PrerequisiteLink{{Path: "M208 37 C236 37 236 37 264 37"}},
-				Width: 472, Height: 74,
-				List: []PrerequisiteCard{{ID: "WL-140", Title: longTitle, State: "ready", NeededBy: []string{"WL-234"}}},
 			},
 			Children: []string{"WL-237"},
 			Progress: model.TaskProgress{Closed: 1, Total: 3},
