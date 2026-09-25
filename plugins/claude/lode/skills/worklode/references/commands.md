@@ -182,19 +182,19 @@ Flags: --server
 
 - `lode rule edit` — Replace a rule's body (and heading) from a file; the document is regenerated around it
   Flags: --file, --heading
-- `lode rule link` — Relate a rule to another: --refines, --constrains, --conflicts-with, --references or --derived-from <ref>
-  Flags: --conflicts-with, --constrains, --derived-from, --references, --refines
+- `lode rule link` — Relate a rule to another: --refines, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>
+  Flags: --amends, --conflicts-with, --constrains, --derived-from, --references, --refines
 - `lode rule list` — List rules, or one document's rules in arrangement order
   Flags: --doc, --project, --repo, --status
 - `lode rule set` — Set a rule's owner or tags
 - `lode rule set owner` — Set a rule's owner; "" clears it
 - `lode rule set tags` — Replace a rule's tags; naming none clears them
 - `lode rule show` — Show a rule: its status, version, placements and text
-  Flags: --version
+  Flags: --inline, --version
 - `lode rule supersede` — Apply a refactor map: withdraw old rules and link each to its successors (S24)
   Flags: --dry-run, --map, --project, --repo
 - `lode rule unlink` — Remove a relation written with rule link
-  Flags: --conflicts-with, --constrains, --derived-from, --references, --refines
+  Flags: --amends, --conflicts-with, --constrains, --derived-from, --references, --refines
 - `lode rule versions` — List a rule's versions, newest first
 
 ## `lode search` — Search documents, tasks and skills by meaning and by exact token

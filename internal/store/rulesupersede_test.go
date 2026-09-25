@@ -49,13 +49,14 @@ func ruleStatus(t *testing.T, s *Store, number int64) string {
 	return st
 }
 
-// refactorEdges lists every supersededBy edge as "from->to" RULE numbers.
+// refactorEdges lists every supersedes edge as "old->new" RULE numbers,
+// the map's own notation: the stored edge runs new -> old.
 func refactorEdges(t *testing.T, s *Store) []string {
 	t.Helper()
 	rows, err := s.db.QueryContext(t.Context(),
-		`SELECT f.number, tc.number, e.source FROM rule_edges e
+		`SELECT tc.number, f.number, e.source FROM rule_edges e
 		   JOIN rules f ON f.id = e.from_rule JOIN rules tc ON tc.id = e.to_rule
-		  WHERE e.type = 'supersededBy' ORDER BY f.number, tc.number`)
+		  WHERE e.type = 'supersedes' ORDER BY tc.number, f.number`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func eventCount(t *testing.T, s *Store, typ string) int {
 }
 
 // TestSupersedeMerge: WL-RULE-B -> WL-RULE-A withdraws B, writes one refactor
-// supersededBy edge B->A and leaves A live (S22, R2).
+// supersedes edge A->B and leaves A live (S22, R2).
 func TestSupersedeMerge(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})

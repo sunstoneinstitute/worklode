@@ -51,7 +51,7 @@ func Ungovern(tx *sql.Tx, taskID string, ruleID int64) error {
 // GovernedBy lists a task's governing rules with the version each link was
 // made against and the rule's current version (S10). A withdrawn governing
 // rule also carries ResolvesTo, the live rules it resolves to through
-// supersededBy edges (R8).
+// supersedes edges back from it (R8).
 func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGovernance, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT p.key, c.number, c.id, g.rule_version, c.version, cv.heading, c.status, g.source,
@@ -110,7 +110,8 @@ func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGove
 }
 
 // resolveGoverningRule is the live rules reached from a withdrawn rule
-// by following supersededBy edges transitively (S22, R8): a recursive CTE
+// by following supersedes edges (new -> old) backwards from it,
+// transitively (S22, R8): a recursive CTE
 // with UNION (not UNION ALL) over rule_edges, which dedupes visited
 // rules so a cycle in the edges terminates instead of recursing forever.
 // Withdrawn rules reached along the way are skipped; only live ends are
@@ -120,10 +121,10 @@ func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGove
 func resolveGoverningRule(ctx context.Context, db *meteredDB, ruleID int64) ([]string, error) {
 	rows, err := db.QueryContext(ctx,
 		`WITH RECURSIVE chain(id) AS (
-		    SELECT to_rule FROM rule_edges WHERE from_rule = $1 AND type = 'supersededBy'
+		    SELECT from_rule FROM rule_edges WHERE to_rule = $1 AND type = 'supersedes'
 		    UNION
-		    SELECT ce.to_rule FROM rule_edges ce JOIN chain ch ON ce.from_rule = ch.id
-		     WHERE ce.type = 'supersededBy'
+		    SELECT ce.from_rule FROM rule_edges ce JOIN chain ch ON ce.to_rule = ch.id
+		     WHERE ce.type = 'supersedes'
 		 )
 		 SELECT p.key, c.number FROM chain ch
 		   JOIN rules c ON c.id = ch.id

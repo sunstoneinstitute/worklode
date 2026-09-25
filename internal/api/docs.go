@@ -613,8 +613,13 @@ func (s *server) docDetail(r *http.Request, id int64) (*model.DocDetail, error) 
 	if err != nil {
 		return nil, err
 	}
+	amendments, err := s.st.ListDocAmendments(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	detail := &model.DocDetail{
 		Doc: s.withProjectKey(ctx, *d), Sections: sections, Edges: out, EdgesIn: in, Notes: notes,
+		Amendments: amendments,
 	}
 	// No open revision is the ordinary case, not a failure: only an accepted
 	// spec or ADR ever has one.
