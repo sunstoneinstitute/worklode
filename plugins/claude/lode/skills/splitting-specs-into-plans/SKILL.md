@@ -18,9 +18,9 @@ Derived from the four-way planning comparison on spec 032 part 1
 (2026-08-09): the plans differed more in what they thought part 1 *was* than
 in quality, because nothing recorded the split.
 
-A spec arranges independently versioned rules. A plan selects those rules
-through `covers`; acceptance gives its minted tasks `governedBy` links to the
-selected set. Planning allocates work against the rules, while the existing
+A spec arranges independently versioned rules. A plan is governed by the rules
+reached through `covers`; acceptance gives its minted tasks `governedBy` links to the
+governing set. Planning allocates work against the rules, while the existing
 frontmatter and gap queries still address their document sections.
 
 ## 1. Section coverage frontmatter
@@ -63,8 +63,8 @@ that is the point of writing it down.
 Use it for standing rules: 032 §11's "end-to-end tests drive the HTTP UI and
 API surfaces and do not write directly to the store" governs every part while
 being implemented by none of them. Without `none`, a reader cannot tell a
-governing constraint from a forgotten section. The rule still enters the
-plan arrangement and governs its minted tasks.
+governing constraint from a forgotten section. The rule still governs the
+plan and its minted tasks.
 
 ### Aggregate coverage is a query
 

@@ -18,7 +18,7 @@ those on demand, not up front.
 |---|---|---|
 | Task | `WL-217` | Claimable work |
 | Rule | `WL-RULE-12` | A design requirement with its own identity, status and version history |
-| Doc | `WL-SPEC-25`, `WL-PLAN-7`, or slug | A spec arranges rules for reading; a plan arranges the rules its work undertakes |
+| Doc | `WL-SPEC-25`, `WL-PLAN-7`, or slug | A spec arranges rules for reading; a plan is governed by the rules its work undertakes |
 | Project | slug | Umbrella over 1..n repos |
 | Deliverable | `WL-DEL-3` | A shipped thing — state derived from reported facts, never a status a human sets |
 | Actor | free text | Human, agent, or service account |
@@ -72,7 +72,7 @@ instead.
 |---|---|
 | task ↔ task | `child_of` (subtask), `blocks`, `follow_up_to` (spun out of), `duplicate_of` (same request, filed twice) |
 | task → rule | `governedBy` (follows the newest version unless pinned) |
-| doc → rule | Arrangement: rule, version, position, depth and section anchor |
+| spec → rule | Arrangement: rule, version, position, depth and section anchor |
 | rule → rule | `refines`, `constrains`, `conflictsWith`, `references`, `wasDerivedFrom`, `supersededBy` |
 | task → doc | `plan_doc` (the plan that minted this task), `about_doc` (the doc a review/design task concerns) |
 | doc ↔ doc | `covers` (plan→section, `full`\|`partial`\|`none`), `implements` (code→section), `amends`/`amendedBy`, `replaces`/`isReplacedBy`, `requires`, `wasDerivedFrom`, `blocks` (whole-plan ordering) |
@@ -164,7 +164,7 @@ that rule at a position, depth and anchor in the spec. A section reference
 names its place in a document; the rule ref names the requirement itself.
 Accepting a spec accepts the draft rule versions it arranges.
 
-A **plan arranges the rules reached by its `covers` entries**. Its task prose
+A **plan is governed by the rules reached by its `covers` entries**. Its task prose
 mints no rules. Acceptance mints tasks governed by those rules. Governance
 follows the newest rule text unless pinned; reorganising a document does not
 complete or rewrite those tasks. Coverage remains a query over plans and work.
@@ -194,7 +194,7 @@ This project is tracked in Worklode. Work is claimed, not assigned — load
 the `worklode` skill before filing or finding a task, and before creating or
 reading a spec, rule, or plan.
 
-Specs arrange rules; plans turn those rules into tasks. These live in the
+Specs arrange rules. Plans and their tasks are governed by rules. These live in the
 Worklode backbone. Read a spec with `lode show <ref> --inline`; create a
 document with `lode doc add`. When a
 general-purpose planning skill says to save a design doc or plan under

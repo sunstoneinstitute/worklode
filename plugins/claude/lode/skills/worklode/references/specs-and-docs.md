@@ -15,9 +15,9 @@ depth and section anchor. A rule ref names the requirement; a ref such as
 - **Spec** — a standing description, revised as the design changes. Each
   anchored section becomes a rule; content under deeper, unanchored headings
   belongs to the nearest anchored rule. Acceptance accepts its draft rules.
-- **Plan** — an executable document. Its `covers` entries select existing
-  rules into its arrangement; its own prose creates no rules. Accepting its
-  `## Tasks` declarations mints tasks governed by the arranged rules. No
+- **Plan** — an executable document governed by the rules its `covers`
+  entries reach. Its own prose creates no rules. Accepting its `## Tasks`
+  declarations mints tasks governed by those same rules. No
   container task is minted. Re-acceptance mints only declarations not already
   represented by a task; keep declaration titles stable.
 - **Existing ADRs** — still readable and arrange rules like specs. Put new
@@ -31,7 +31,7 @@ text creates a new draft version, preserving the accepted version.
 ## Reading and changing rules
 
 ```bash
-lode rule list --doc <spec-ref>              # rules in arrangement order; also works for a plan
+lode rule list --doc <spec-ref>              # spec arrangement; --doc <plan-ref> lists governing rules
 lode show <rule-ref> --json                  # text, arrangements, governed tasks and edges
 lode rule versions <rule-ref>
 lode show <rule-ref> --version <n>
@@ -52,18 +52,18 @@ opens or updates a candidate revision; the change lands with
 arranging spec or ADR; covering plans do not count toward that limit. Sharing
 one rule across several specs is not yet supported by this edit path.
 
-## Plans arrange rules; tasks are governed by them
+## Rules govern plans and their tasks
 
 Keep writing `covers` with **document/section references**, for example
 `WL-SPEC-25#sec-9`, and the existing `coverage` and `fullCoverageWith` keys.
 A rule ref is not a replacement for the `spec` field in this frontmatter.
 A section edge reaches the rule at that anchor and its descendant rules;
 a whole-document edge reaches all its rules. Unresolved refs reach none.
-The plan arrangement is rebuilt on each plan write and again at acceptance.
-Rule membership and section coverage are different questions: a whole-doc
-edge can populate an arrangement without discharging section planning gaps.
+The governing rules are resolved on each plan write and again at acceptance.
+Governance and section coverage are different questions: a whole-doc edge
+can identify governing rules without discharging section planning gaps.
 
-Tasks minted from a plan receive `governedBy` links to its arranged rules,
+Tasks minted from a plan receive `governedBy` links to its governing rules,
 including standing constraints declared with `coverage: none`. For work
 filed outside a plan, name the governing rules explicitly:
 
@@ -102,7 +102,7 @@ lode rule supersede --map <file>
 ```
 
 The refactor withdraws the old rules, writes `supersededBy` edges and marks
-accepted plans arranging withdrawn rules stale. It preserves task links;
+accepted plans governed by withdrawn rules stale. It preserves task links;
 `governed_by[].resolves_to` reports live successors. Moving text or changing
 document order alone performs none of this and completes no work. Inspect
 arrangements, stale plans and governed tasks after a refactor.

@@ -56,7 +56,7 @@ lode doc add --kind plan --slug <slug> --file <path>
 **Step 4: accept the plans.** `lode doc accept <id>` mints each plan's task set
 in the accepting transaction (025 §9.2), which is what turns a written plan
 into claimable work. Only the document's owner may accept it. Acceptance also
-links each minted task to the rules the plan arranges. Check `lode rule list --doc <plan-ref>`
+links each minted task to the rules governing the plan. Check `lode rule list --doc <plan-ref>`
 and a minted task's `governed_by` with `lode show <task-id> --json`.
 Unresolved coverage refs select no rules; repair them before accepting.
 

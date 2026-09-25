@@ -11,8 +11,8 @@ command to run (that's `commands.md`) or how documents version (that's
 |---|---|---|
 | Project | slug (`worklode`) | An umbrella over 1..n repos (`project_repos`). Unbounded — there is no "milestone" class; a project is inherently ongoing. |
 | Task | `<PROJECT_KEY>-<n>` (`WL-217`) | The unit of claimable work. Global sequence per project. |
-| Rule | `<PROJECT_KEY>-RULE-<n>` | An independently versioned design requirement, arranged into documents and governing tasks. |
-| Doc | numbered per (project, kind), also addressable by slug | A spec arranges rules for reading; a plan arranges the rules its work undertakes. |
+| Rule | `<PROJECT_KEY>-RULE-<n>` | An independently versioned design requirement, arranged into specs and governing plans and tasks. |
+| Doc | numbered per (project, kind), also addressable by slug | A spec arranges rules for reading; a plan is governed by the rules its work undertakes. |
 | Deliverable | `<PROJECT_KEY>-DEL-<n>` | A thing the project ships (a service, a package) — never claimed or worked; state is derived from reported facts, not a status a human sets. |
 | Actor | free text id | A human, agent, or service account. Carries `admin`, and since spec 029 the Keycloak identity claims (`groups`, `email`) recorded at login. |
 | Lease | numeric id | One worktree's claim on one task. At most one active lease per task and per worktree. Ending a lease (release/done/block/abandon/reopen) never itself changes task state. |
@@ -77,7 +77,8 @@ end only via release, done, block, abandon, reopen, or the expiry sweep.
 
 | From → to | Meaning |
 |---|---|
-| Doc → rule | An arrangement records a rule version, position, depth and section anchor. Specs arrange their design text; plans arrange the rules reached by `covers`. |
+| Spec → rule | An arrangement records a rule version, position, depth and section anchor. |
+| Plan → rule | The rules governing the plan, reached through its `covers` references to spec sections. |
 | Task → rule (`governedBy`) | Governing requirement, linked by plan acceptance, by hand, or by the `Spec:` trailer gate. The link records the version at link time and follows the newest text unless pinned. |
 | Rule → rule (`refines`, `constrains`, `conflictsWith`, `references`) | Design relationships. Text references also produce derived `references` edges. |
 | Rule → rule (`wasDerivedFrom`) | Lineage recorded after a split. |

@@ -9,7 +9,7 @@ Documents live in the Postgres backbone, not in the git tree — no
 `docs/specs/`, no `docs/plans/`, no file to open, no pre-commit hook.
 A spec is an **arrangement of rules**: each anchored section carries a rule
 with its own ref, text, status and version history. The arrangement supplies
-reading order, depth and anchors. A plan arranges the rules its `covers`
+reading order, depth and anchors. A plan is governed by the rules its `covers`
 entries reach and declares the tasks that undertake them; its prose creates
 no rules. Accepting the plan gives its minted tasks governing rule links.
 
@@ -222,7 +222,7 @@ the successor(s) under `isReplacedBy` at `"."`; each successor records
 
 A plan's `covers` still names spec sections, with `coverage` and
 `fullCoverageWith` where needed. Keep rule refs out of the `spec` field.
-The store resolves those edges to the plan's rule arrangement and gives every
+The store resolves those edges to the plan's governing rules and gives every
 minted task `governedBy` links to that set. Standing constraints with
 `coverage: none` still govern those tasks. Verify the result with
 `lode rule list --doc <plan-ref>` and `lode show <task-id> --json`.
