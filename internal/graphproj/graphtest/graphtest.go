@@ -32,12 +32,10 @@ var client = &http.Client{Timeout: 15 * time.Second}
 // TEST_SPARQL_URL or DefaultEndpoint, after probing it with an ASK {}.
 //
 // An unreachable endpoint is fatal only when CI *and* TEST_SPARQL_URL are
-// both set; otherwise the test skips. Both conditions are needed because the
-// self-hosted runner sets CI but is deliberately Docker-less
-// (docs/self-hosted-runner.md), so it has no Oxigraph to reach and never
-// sets TEST_SPARQL_URL: an explicitly configured endpoint that is down is a
-// broken run, an unconfigured one is a runner that was never meant to have
-// it.
+// both set; otherwise the test skips. CI sets TEST_SPARQL_URL on every
+// runner (hel01's always-on Oxigraph, or ubuntu-latest's ephemeral one;
+// docs/self-hosted-runner.md), so there a down endpoint is a broken run. A
+// local run without Oxigraph skips.
 func Endpoint(t *testing.T) string {
 	t.Helper()
 	base, explicit := os.LookupEnv("TEST_SPARQL_URL")
@@ -70,7 +68,16 @@ func probe(base string) error {
 
 // PutGraph replaces the named graph graphIRI with turtle (GSP PUT, so a
 // re-load replaces rather than merges). The graph is dropped on test
-// cleanup, which keeps a shared endpoint free of leftovers between runs.
+// cleanup, registered before the PUT is sent so a PUT the server applied
+// but the client timed out on is still dropped.
+//
+// The endpoint is shared by concurrent builds, so graphIRI must be
+// run-unique and a test's assertions must read only its own graphs or
+// subjects.
+//
+// ponytail: no stale-graph sweeper. A crashed run's graphs stay until the
+// CI Oxigraph restarts (tmpfs); isolation keeps them harmless. Add a sweep
+// if leftovers ever grow the store past its tmpfs size.
 func PutGraph(t *testing.T, base, graphIRI string, turtle []byte) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPut, storeURL(base, graphIRI), bytes.NewReader(turtle))
@@ -78,8 +85,16 @@ func PutGraph(t *testing.T, base, graphIRI string, turtle []byte) {
 		t.Fatalf("build PUT for %s: %v", graphIRI, err)
 	}
 	req.Header.Set("Content-Type", "text/turtle")
+	DropOnCleanup(t, base, graphIRI)
 	// 201 on create, 204 on replace — any 2xx is success.
 	do(t, req, "PUT "+graphIRI)
+}
+
+// DropOnCleanup deletes graphIRI from the endpoint when the test ends, for a
+// graph written by something other than PutGraph. A failed delete is an
+// error, never fatal, so the remaining cleanups still run.
+func DropOnCleanup(t *testing.T, base, graphIRI string) {
+	t.Helper()
 	t.Cleanup(func() { dropGraph(t, base, graphIRI) })
 }
 
@@ -127,15 +142,17 @@ func dropGraph(t *testing.T, base, graphIRI string) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodDelete, storeURL(base, graphIRI), nil)
 	if err != nil {
-		t.Fatalf("build DELETE for %s: %v", graphIRI, err)
+		t.Errorf("build DELETE for %s: %v", graphIRI, err)
+		return
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		t.Fatalf("DELETE %s: %v", graphIRI, err)
+		t.Errorf("DELETE %s: %v", graphIRI, err)
+		return
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
-	// 404 means a repeated PUT already registered a cleanup that ran first.
+	// 404: the graph was never written, or a repeated PUT's cleanup ran first.
 	if resp.StatusCode/100 != 2 && resp.StatusCode != http.StatusNotFound {
 		t.Errorf("DELETE %s: HTTP %d", graphIRI, resp.StatusCode)
 	}
