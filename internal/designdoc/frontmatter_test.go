@@ -95,9 +95,8 @@ func TestParseFrontmatterWholeFile(t *testing.T) {
 	default:
 		t.Errorf("Status = %q, want one of draft/accepted/stale/superseded/withdrawn", fm.Status)
 	}
-	// A section-scoped edge map, the shape a bare list would silently drop.
-	if got := fm.Amends["#sec-2"]; len(got) != 1 || got[0] != "002-target-spec.md#sec-1" {
-		t.Errorf("Amends[#sec-2] = %v", got)
+	if got := fm.Requires; len(got) != 1 || got[0] != "002-target-spec.md#sec-1" {
+		t.Errorf("Requires = %v", got)
 	}
 	if doc.Sections[0].Anchor != "sec-1" {
 		t.Errorf("first anchor = %q, want sec-1", doc.Sections[0].Anchor)
