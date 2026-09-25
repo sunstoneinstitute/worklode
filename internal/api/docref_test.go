@@ -100,6 +100,8 @@ func TestRefShortcut(t *testing.T) {
 		{"WL-SPEC-45", "/projects/proj/spec/45"},
 		{"per-project-workflows", "/projects/proj/spec/45"},
 		{"45", "/projects/proj/spec/45"},
+		{"WL-RULE-1", "/projects/proj/rule/1"},
+		{"WL-CL-1", "/projects/proj/rule/1"},
 	} {
 		rr := doReq(t, h, "GET", "/"+tc.ref, "", nil)
 		if rr.Code != http.StatusFound {
