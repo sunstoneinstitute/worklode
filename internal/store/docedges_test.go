@@ -176,6 +176,7 @@ func TestReplaceDocEdges(t *testing.T) {
 		// 999-nowhere.md names no document here and stays verbatim.
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
 		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-2"},
+		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-2.1"},
 		{Type: "wasDerivedFrom", ToDoc: spec.ID},
 	}
 	if got := docEdges(t, s, plan.ID); !reflect.DeepEqual(got, want) {
@@ -430,7 +431,7 @@ func TestDocCoverageRewriteReplacesCompletedWith(t *testing.T) {
 	firstBody := `---
 status: draft
 covers:
-  - spec: 025-documents-in-the-backbone.md#sec-2
+  - spec: 025-documents-in-the-backbone.md#sec-2.1
     coverage: partial
     fullCoverageWith:
       - other-plan.md
@@ -450,7 +451,7 @@ covers:
 	secondBody := `---
 status: draft
 covers:
-  - spec: 025-documents-in-the-backbone.md#sec-2
+  - spec: 025-documents-in-the-backbone.md#sec-2.1
     coverage: partial
     fullCoverageWith:
       - third-plan.md
@@ -1222,6 +1223,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	wantOut := []model.DocEdge{
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
 		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2", ToRule: "P1-RULE-2"}),
+		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2.1", ToRule: "P1-RULE-3"}),
 		specFar(model.DocEdge{Type: "wasDerivedFrom"}),
 	}
 	if len(out) != len(wantOut) {
@@ -1255,6 +1257,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	}
 	wantIn := []model.DocEdge{
 		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-2"}),
+		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-2.1"}),
 		planFar(model.DocEdge{Type: "hadDerivation"}),
 	}
 	if len(in) != len(wantIn) {

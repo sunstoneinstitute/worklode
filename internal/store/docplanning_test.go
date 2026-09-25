@@ -978,8 +978,8 @@ func TestDocNeedsPlanningPartialClosureIgnoresSiblingCoveringDifferentSection(t 
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial and sec-2 discharged on its own merits", gaps)
+		[]string{"sec-1(partial)"}) {
+		t.Fatalf("gaps = %v, want sec-1 partial and sec-2 with sec-2.1 under it discharged on their own merits", gaps)
 	}
 }
 

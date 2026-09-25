@@ -618,10 +618,11 @@ func TransferDocOwner(tx *sql.Tx, now time.Time, id int64, newOwner, actorID str
 }
 
 // supersedeRetiredDocs supersedes, in the accepting transaction, every draft
-// or accepted document whose rules are all withdrawn and superseded by rules
-// document docID arranges (WL-SPEC-77 §9): each of its rules has a
-// `supersedes` rule edge from one of docID's rules. A document arranging no
-// rule is never a candidate.
+// or accepted document that meets WL-SPEC-77 §9's three conditions: every rule
+// it contains is withdrawn, each of those rules has a successor (a rule
+// anywhere with a `supersedes` edge to it), and at least one of those
+// successors is arranged by document docID. A document arranging no rule is
+// never a candidate.
 //
 // A draft target moves too: a superseded draft is reachable by no verb, which
 // is how a refactor retires specs that were never accepted. A tombstoned
@@ -642,7 +643,6 @@ func supersedeRetiredDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error 
 		         WHERE xr.doc_id = x.id
 		           AND (r.status <> 'withdrawn' OR NOT EXISTS (
 		                SELECT 1 FROM rule_edges e
-		                  JOIN doc_rules dr ON dr.rule_id = e.from_rule AND dr.doc_id = $1
 		                 WHERE e.to_rule = r.id AND e.type = 'supersedes')))
 		 RETURNING x.id`, docID, ts)
 	if err != nil {

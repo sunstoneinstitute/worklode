@@ -155,6 +155,7 @@ func TestDocCreateResolvesEdges(t *testing.T) {
 	want := []model.DocEdge{
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
 		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-2"},
+		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-2.1"},
 		{Type: "wasDerivedFrom", ToDoc: spec.ID},
 	}
 	if len(got) != len(want) {
@@ -459,6 +460,7 @@ func TestDocCreateRepointsExternalEdges(t *testing.T) {
 		return []model.DocEdge{
 			{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
 			{Type: "covers", ToDoc: specID, ToAnchor: "sec-2"},
+			{Type: "covers", ToDoc: specID, ToAnchor: "sec-2.1"},
 			{Type: "wasDerivedFrom", ToDoc: specID},
 		}
 	}

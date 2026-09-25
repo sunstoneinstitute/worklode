@@ -1023,9 +1023,10 @@ func TestRecordDocOpMetric(t *testing.T) {
 
 // TestDocAcceptSupersedesRetiredDoc covers WL-SPEC-77 §9: accepting a
 // document supersedes, in the same transaction, every draft or accepted
-// document whose rules are all withdrawn and superseded by rules it arranges.
-// A document with one rule withdrawn without a successor, or superseded by a
-// rule outside the accepted document, stays as it is.
+// document whose rules are all withdrawn, each with a successor anywhere, and
+// at least one successor arranged by the accepted document. A document with
+// one rule withdrawn without a successor, or with no successor in the
+// accepted document, stays as it is.
 func TestDocAcceptSupersedesRetiredDoc(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1039,7 +1040,9 @@ func TestDocAcceptSupersedesRetiredDoc(t *testing.T) {
 	w := spec("w", "accepted", "# W\n\n## 1. Wa {#sec-1}\n\nW.\n")                                // rule 7
 	o := spec("o", "draft", "# O\n\n## 1. Oh {#sec-1}\n\nO.\n")                                   // rule 8
 	d := spec("d", "draft", supersedeDocU)                                                        // rules 9-10
+	m := spec("m", "accepted", "# M\n\n## 1. Em {#sec-1}\n\nM.\n\n## 2. Emm {#sec-2}\n\nM2.\n")   // rules 11-12
 	mustSupersede(t, s,
+		entry("P1-RULE-11", "P1-RULE-9"), entry("P1-RULE-12", "P1-RULE-8"),
 		entry("P1-RULE-1", "P1-RULE-9"), entry("P1-RULE-2", "P1-RULE-9"), entry("P1-RULE-3", "P1-RULE-10"),
 		entry("P1-RULE-4", "P1-RULE-10"),
 		entry("P1-RULE-5", "P1-RULE-9"), entry("P1-RULE-6"),
@@ -1051,12 +1054,12 @@ func TestDocAcceptSupersedesRetiredDoc(t *testing.T) {
 	for _, tc := range []struct {
 		doc  *model.Doc
 		want string
-	}{{x, "superseded"}, {y, "superseded"}, {z, "accepted"}, {w, "accepted"}, {o, "draft"}, {d, "accepted"}} {
+	}{{x, "superseded"}, {y, "superseded"}, {z, "accepted"}, {w, "accepted"}, {o, "draft"}, {d, "accepted"}, {m, "superseded"}} {
 		if got := docStatus(t, s, tc.doc.ID); got != tc.want {
 			t.Errorf("doc %s status = %q, want %q", tc.doc.Slug, got, tc.want)
 		}
 	}
-	for _, target := range []*model.Doc{x, y} {
+	for _, target := range []*model.Doc{x, y, m} {
 		entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(target.ID, 10))
 		if err != nil {
 			t.Fatal(err)
@@ -1765,14 +1768,23 @@ func TestDocSectionReferrers(t *testing.T) {
 		t.Errorf("DocSectionReferrers = %+v, want %+v", got, want)
 	}
 
-	// A section nothing points at has no referrers, and the result is empty
-	// rather than nil so the JSON reads [].
+	// The plans covering sec-2 cover sec-2.1 under it (WL-SPEC-77 §4).
 	got, err = s.DocSectionReferrers(ctx, specA.ID, "sec-2.1")
 	if err != nil {
 		t.Fatalf("DocSectionReferrers(sec-2.1): %v", err)
 	}
+	if want := want[3:]; !reflect.DeepEqual(got, want) {
+		t.Errorf("DocSectionReferrers(sec-2.1) = %+v, want %+v", got, want)
+	}
+
+	// A section nothing points at has no referrers, and the result is empty
+	// rather than nil so the JSON reads [].
+	got, err = s.DocSectionReferrers(ctx, specA.ID, "sec-9")
+	if err != nil {
+		t.Fatalf("DocSectionReferrers(sec-9): %v", err)
+	}
 	if len(got) != 0 {
-		t.Errorf("DocSectionReferrers(sec-2.1) = %+v, want none", got)
+		t.Errorf("DocSectionReferrers(sec-9) = %+v, want none", got)
 	}
 }
 
