@@ -64,7 +64,7 @@ func (s *server) inboxPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := assembleInbox(inboxInputs{
-		ActorID: sub.ActorID, ActorLogin: actor.ExpectedGitHubLogin,
+		ActorID: sub.ActorID, ActorLogin: actor.GitHubUsername,
 		Reviews: reviews, Facts: facts, Membership: membership, Led: led,
 		Now: s.st.Now(),
 	})

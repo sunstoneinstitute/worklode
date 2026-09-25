@@ -47,7 +47,7 @@ func TestProgressWriteJourney(t *testing.T) {
 
 	session := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups": []string{"user"}, "github_username": "danah",
+		"groups": []string{"user"}, "githubUsername": "danah",
 	})
 	// The login above provisioned "dana" as a human actor; a bearer token for
 	// the same actor is what creates the documents she then owns and accepts,

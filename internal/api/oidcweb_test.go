@@ -75,7 +75,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	// The issuer's /token endpoint will return this ID token.
 	iss.TokenClaims = map[string]any{
 		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
-		"groups": []string{"user"}, "github_username": "gracehop",
+		"groups": []string{"user"}, "githubUsername": "gracehop",
 	}
 
 	// Step 1: hit /auth/login to obtain the oauth-state cookie and the state param.
@@ -102,14 +102,14 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 		t.Fatal("no wl_session cookie set after callback")
 	}
 
-	// The callback's provisionActor call carries the github_username claim
+	// The callback's provisionActor call carries the githubUsername claim
 	// onto the actor (spec 001 §9.2).
 	a, err := st.GetActor(context.Background(), "grace")
 	if err != nil {
 		t.Fatalf("get actor: %v", err)
 	}
-	if a.ExpectedGitHubLogin != "gracehop" {
-		t.Fatalf("ExpectedGitHubLogin = %q, want %q", a.ExpectedGitHubLogin, "gracehop")
+	if a.GitHubUsername != "gracehop" {
+		t.Fatalf("GitHubUsername = %q, want %q", a.GitHubUsername, "gracehop")
 	}
 
 	// Step 3: the session cookie now lets a gated page through.

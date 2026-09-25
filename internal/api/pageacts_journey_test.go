@@ -23,11 +23,11 @@ func TestDocAndTaskPageActsJourney(t *testing.T) {
 
 	dana := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups": []string{"user"}, "github_username": "danah",
+		"groups": []string{"user"}, "githubUsername": "danah",
 	})
 	erin := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "erin", "name": "Erin",
-		"groups": []string{"user"}, "github_username": "erinh",
+		"groups": []string{"user"}, "githubUsername": "erinh",
 	})
 	token, err := st.CreateToken(context.Background(), "dana", "journey token", nil)
 	if err != nil {

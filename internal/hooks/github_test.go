@@ -85,7 +85,7 @@ func newEnvWith(t *testing.T, resolveBranch func(repo, branch string) (string, e
 	}
 }
 
-// seedReviewer creates a human actor whose expected_github_login is login,
+// seedReviewer creates a human actor whose github_username is login,
 // which is what maps a GitHub reviewer to an actor id.
 func (e *env) seedReviewer(t *testing.T, id, login string) {
 	t.Helper()

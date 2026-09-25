@@ -62,7 +62,7 @@ func TestInboxPage(t *testing.T) {
 
 	iss.TokenClaims = map[string]any{
 		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
-		"groups": []string{"user"}, "github_username": "grace-gh",
+		"groups": []string{"user"}, "githubUsername": "grace-gh",
 	}
 	graceSession := webLogin(t, h, "grace")
 
