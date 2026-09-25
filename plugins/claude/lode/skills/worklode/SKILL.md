@@ -73,9 +73,10 @@ instead.
 | task ↔ task | `child_of` (subtask), `blocks`, `follow_up_to` (spun out of), `duplicate_of` (same request, filed twice) |
 | task → rule | `governedBy` (follows the newest version unless pinned) |
 | spec → rule | Arrangement: rule, version, position, depth and section anchor |
-| rule → rule | `refines`, `constrains`, `conflictsWith`, `references`, `wasDerivedFrom`, `supersededBy` |
+| rule → rule | `refines`, `constrains`, `conflictsWith`, `references`, `wasDerivedFrom`, `amends`, `supersedes` (new rule → old rule; `amendedBy`/`supersededBy` are read from the far end, never stored) |
+| plan → rule | `covers` (`full`\|`partial`\|`none`), resolved from the plan's document/section references at write time |
 | task → doc | `plan_doc` (the plan that minted this task), `about_doc` (the doc a review/design task concerns) |
-| doc ↔ doc | `covers` (plan→section, `full`\|`partial`\|`none`), `implements` (code→section), `requires`, `wasDerivedFrom`, `blocks` (whole-plan ordering) |
+| doc ↔ doc | `implements` (code→section), `requires`, `wasDerivedFrom`, `blocks` (whole-plan ordering) |
 
 Full table with direction and set-by command: `references/entities-and-edges.md`.
 

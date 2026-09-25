@@ -54,12 +54,14 @@ one rule across several specs is not yet supported by this edit path.
 
 ## Rules govern plans and their tasks
 
-Keep writing `covers` with **document/section references**, for example
-`WL-SPEC-25#sec-9`, and the existing `coverage` and `fullCoverageWith` keys.
-A rule ref is not a replacement for the `spec` field in this frontmatter.
-A section edge reaches the rule at that anchor and its descendant rules;
-a whole-document edge reaches all its rules. Unresolved refs reach none.
-The governing rules are resolved on each plan write and again at acceptance.
+A `covers` entry is a rule ref (`WL-RULE-<n>`), a document/section reference
+such as `WL-SPEC-25#sec-9`, or a whole-document reference, plus the existing
+`coverage` and `fullCoverageWith` keys. A rule ref resolves to that rule; a
+section reference reaches the rule at that anchor and its descendant rules;
+a whole-document reference reaches all its rules. Unresolved refs reach none.
+Each entry is resolved when the plan is written and stored as a `covers`
+edge from the plan to the rule; the governing rules are re-resolved on each
+plan write and again at acceptance.
 Governance and section coverage are different questions: a whole-doc edge
 can identify governing rules without discharging section planning gaps.
 
@@ -101,8 +103,9 @@ lode rule supersede --map <file> --dry-run
 lode rule supersede --map <file>
 ```
 
-The refactor withdraws the old rules, writes `supersededBy` edges and marks
-accepted plans governed by withdrawn rules stale. It preserves task links;
+The refactor withdraws the old rules, writes a `supersedes` edge from each
+successor to the rule it replaces, and marks accepted plans governed by
+withdrawn rules stale. It preserves task links;
 `governed_by[].resolves_to` reports live successors. Moving text or changing
 document order alone performs none of this and completes no work. Inspect
 arrangements, stale plans and governed tasks after a refactor.
@@ -140,7 +143,7 @@ amendment → supersession:
 |---|---|---|
 | `status` | `draft` \| `accepted` \| `superseded` | all |
 | `issued` | `YYYY-MM-DD` | specs, ADRs |
-| `covers` | spec section reference(s), optionally `coverage: full\|partial\|none` (with `fullCoverageWith` for partial) — or `NO-SPEC` | **plans**, mandatory |
+| `covers` | rule ref(s) (`WL-RULE-<n>`), spec section reference(s), or whole-document reference(s), optionally `coverage: full\|partial\|none` (with `fullCoverageWith` for partial) — or `NO-SPEC` | **plans**, mandatory |
 | `defers` | list of `{spec, to}`: a section this plan hands off (`spec`, with `#sec-N`) and the document that owns it (`to`, no fragment) — reported `deferred` with its owner by `--needs-planning` until some plan covers it (026 §5.3) | **plans** |
 | `requires` / `isRequiredBy` | reference list | all |
 | `blocks` / `blockedBy` | plan references — orders whole-plan execution; both ends must be plans in the same project | **plans** |
@@ -185,7 +188,9 @@ behind that reading.
 ## Coverage as a query, never a stored flag
 
 "Is this spec implemented?" is answered by walking `covers` edges from
-accepted plans, not by a status a human flips:
+accepted plans, not by a status a human flips. Coverage follows supersession:
+a successor rule counts as covered when its predecessor was, so a refactor
+never reopens planning gaps a prior plan already closed.
 
 ```bash
 lode doc list --needs-planning     # accepted specs with a section no accepted plan covers
@@ -196,7 +201,7 @@ lode doc progress                  # the whole project at a glance: each spec's 
 ```
 
 `implements` (component → doc section, "this code realises this intent") is
-the separate, code-side edge — distinct from `covers` (plan → section,
+the separate, code-side edge — distinct from `covers` (plan → rule,
 "this plan promises to see it built"). `covers` used to also mean the
 code-evidence case; that spelling is retired but still parses.
 
