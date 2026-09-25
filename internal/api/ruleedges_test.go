@@ -28,9 +28,16 @@ func TestRuleEdgesAPI(t *testing.T) {
 	if rr.Code != http.StatusConflict {
 		t.Errorf("repeat link: %d", rr.Code)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, model.RuleEdgeInput{Type: "amends", To: "WL-RULE-3"})
+	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, model.RuleEdgeInput{Type: "bogus", To: "WL-RULE-3"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Errorf("bad type: %d", rr.Code)
+	}
+	// supersedes has one writer, lode rule supersede; its inverse is never stored.
+	for _, typ := range []string{"supersedes", "supersededBy"} {
+		rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, model.RuleEdgeInput{Type: typ, To: "WL-RULE-3"})
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%s over the edges API: %d, want 422", typ, rr.Code)
+		}
 	}
 	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, model.RuleEdgeInput{Type: "refines", To: "WL-RULE-999"})
 	if rr.Code != http.StatusNotFound {
@@ -60,5 +67,14 @@ func TestRuleEdgesAPI(t *testing.T) {
 	rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-RULE-1/edges", token, body)
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("unlink absent: %d", rr.Code)
+	}
+
+	// amends is a manual edge: written and removed over the same path.
+	amends := model.RuleEdgeInput{Type: "amends", To: "WL-RULE-1"}
+	if rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-3/edges", token, amends); rr.Code != http.StatusCreated {
+		t.Errorf("link amends: %d %s", rr.Code, rr.Body)
+	}
+	if rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-RULE-3/edges", token, amends); rr.Code != http.StatusNoContent {
+		t.Errorf("unlink amends: %d %s", rr.Code, rr.Body)
 	}
 }

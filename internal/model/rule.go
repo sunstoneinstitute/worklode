@@ -97,7 +97,7 @@ type SupersedeResolved struct {
 }
 
 // SupersedeResult says what a refactor changed, or would change on a dry
-// run: rules withdrawn, supersededBy edges written, tasks told through a
+// run: rules withdrawn, supersedes edges written, tasks told through a
 // task.governance_superseded event, and plans marked stale. A re-run of a
 // map that already applied reports zero for each.
 type SupersedeResult struct {

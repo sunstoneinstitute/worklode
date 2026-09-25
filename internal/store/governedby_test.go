@@ -295,7 +295,7 @@ func TestGovernedByResolvesTo(t *testing.T) {
 	}
 }
 
-// TestGovernedByResolvesToCycleTerminates: a cycle in the supersededBy edges
+// TestGovernedByResolvesToCycleTerminates: a cycle in the supersedes edges
 // (never written by SupersedeRules, which refuses one; inserted by hand
 // here to exercise the CTE's UNION dedup) does not hang GovernedBy.
 func TestGovernedByResolvesToCycleTerminates(t *testing.T) {
@@ -311,7 +311,7 @@ func TestGovernedByResolvesToCycleTerminates(t *testing.T) {
 	}
 	for _, e := range [][2]int64{{id1, id2}, {id2, id1}} {
 		if _, err := s.db.ExecContext(ctx,
-			`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersededBy', 'refactor')`,
+			`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersedes', 'refactor')`,
 			e[0], e[1]); err != nil {
 			t.Fatal(err)
 		}

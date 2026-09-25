@@ -22,13 +22,13 @@ type supersedeLine struct {
 	old      int64
 	news     []int64
 	withdraw bool     // old is not withdrawn yet
-	edges    []int64  // successors with no supersededBy edge from old yet
+	edges    []int64  // successors with no supersedes edge to old yet
 	tasks    []string // tasks governed by old, told when the line changes anything
 }
 
 // SupersedeRules applies a refactor map (S24, R2 to R7): every old rule
-// becomes withdrawn, a supersededBy edge with source refactor runs from it to
-// each successor, and every task it governs gets a task.governance_superseded
+// becomes withdrawn, a supersedes edge with source refactor runs from each
+// successor to it, and every task it governs gets a task.governance_superseded
 // event (R5). Its task_governed_by rows stay where they are (S22).
 // Withdrawing marks the accepted plans arranging the rule stale (S23,
 // through SetRuleStatus). The whole map is one rule.superseded event and
@@ -204,8 +204,8 @@ func applySupersede(tx *sql.Tx, now time.Time, actor string, eventID int64, line
 		}
 		for _, n := range l.edges {
 			if _, err := tx.Exec(
-				`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersededBy', 'refactor')
-				 ON CONFLICT (from_rule, to_rule, type) DO NOTHING`, l.old, n); err != nil {
+				`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersedes', 'refactor')
+				 ON CONFLICT (from_rule, to_rule, type) DO NOTHING`, n, l.old); err != nil {
 				return fmt.Errorf("supersede rule %d by %d: %w", l.old, n, err)
 			}
 		}
@@ -285,12 +285,12 @@ func ruleAtAnchor(tx *sql.Tx, docID int64, anchor string) (int64, bool, error) {
 	return id, true, nil
 }
 
-// supersededTargets is the set of rules old already has a supersededBy
-// edge to.
+// supersededTargets is the set of rules that already have a supersedes
+// edge to old: its recorded successors.
 func supersededTargets(tx *sql.Tx, old int64) (map[int64]bool, error) {
-	rows, err := tx.Query(`SELECT to_rule FROM rule_edges WHERE from_rule = $1 AND type = 'supersededBy'`, old)
+	rows, err := tx.Query(`SELECT from_rule FROM rule_edges WHERE to_rule = $1 AND type = 'supersedes'`, old)
 	if err != nil {
-		return nil, fmt.Errorf("supersededBy edges of rule %d: %w", old, err)
+		return nil, fmt.Errorf("successors of rule %d: %w", old, err)
 	}
 	defer rows.Close()
 	out := map[int64]bool{}
