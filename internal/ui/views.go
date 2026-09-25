@@ -320,6 +320,9 @@ type TaskView struct {
 	// because mdrender's allowlist already stripped every element, attribute
 	// and URL scheme not on it — never assign anything else here.
 	BodyHTML template.HTML
+	// Viewer is the session's actor, empty for an anonymous viewer; the
+	// Publish button is disabled without one.
+	Viewer string
 	// Attachments is the task's blob reference graph row, embedded and
 	// attached alike (spec 021 §3), with URL filled in at the HTTP boundary.
 	Attachments []model.TaskBlob
@@ -1017,6 +1020,55 @@ type DocView struct {
 	// ?editor=1. It is a prototype behind a query parameter: nothing saves,
 	// and no other page has one.
 	Editor bool
+	// Viewer is the session's actor, empty for an anonymous viewer. It decides
+	// whether Accept is enabled, as on the Progress page.
+	Viewer string
+	// DraftTasks is how many of a plan's minted tasks are still draft, which
+	// is what the page's bulk Publish button publishes. Zero for anything else.
+	DraftTasks int
+}
+
+// docActions are the document page's acts: Accept on a draft document, the
+// Progress page's button and route, and Publish on a plan with draft tasks.
+// Route is absolute here, since act.js has no page base to resolve it against.
+func docActions(v DocView) []ProgressAction {
+	var acts []ProgressAction
+	if v.Doc.Status == "draft" {
+		a := progressAcceptAction(v.Doc.ID, v.Ref, v.Doc.Owner, v.Viewer)
+		a.Route = "/projects/" + v.Doc.Project + "/progress/accept"
+		acts = append(acts, a)
+	}
+	if v.DraftTasks > 0 {
+		n := strconv.Itoa(v.DraftTasks) + " draft task"
+		if v.DraftTasks != 1 {
+			n += "s"
+		}
+		acts = append(acts, publishAction(v.Doc.Project,
+			`{"plan":`+strconv.FormatInt(v.Doc.ID, 10)+`}`, "Publish "+n, "Publish "+n+" of "+v.Ref, v.Viewer))
+	}
+	return acts
+}
+
+// taskActions is the task page's Publish button, drawn on a draft task.
+func taskActions(v TaskView) []ProgressAction {
+	if v.Task.State != "draft" {
+		return nil
+	}
+	return []ProgressAction{publishAction(v.Task.Project,
+		`{"task":`+strconv.Quote(v.Task.ID)+`}`, "Publish", "Publish "+v.Task.ID, v.Viewer)}
+}
+
+// publishAction is `lode task publish` as a two-step button. Any signed-in
+// viewer may press it: the route's permTaskWrite guard is the only gate.
+func publishAction(project, body, label, confirm, viewer string) ProgressAction {
+	a := ProgressAction{
+		Route: "/projects/" + project + "/tasks/publish", Body: body,
+		Label: label, Confirm: confirm,
+	}
+	if viewer == "" {
+		a.Reason = "sign in to publish"
+	}
+	return a
 }
 
 // DocNoteRow is one anchored note rendered for the page: the note's own body
@@ -1663,7 +1715,8 @@ func progressPlanAnchorID(specRef, planRef string) string { return "p-" + specRe
 func progressDetailID(ref string) string { return "d-" + ref }
 
 // ProgressAction is one §3.1 action button: the route progress.js posts to
-// under /projects/{id}/progress/, the JSON body it sends, and the sentence
+// under /projects/{id}/progress/ (an absolute path for act.js on the
+// document and task pages), the JSON body it sends, and the sentence
 // the confirmation step shows. A non-empty Reason renders the button
 // disabled with that reason as its hover text, because a hidden button reads
 // as a missing feature (§3).

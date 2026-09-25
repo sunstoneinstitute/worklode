@@ -118,7 +118,10 @@ var routeGuards = map[string]routeGuard{
 	// delivering a task, and it moves that task's state by way of the
 	// webhooks the merge produces. The App's installation token, not the
 	// caller's, does the writing at GitHub (§4.2 rule 9).
-	"POST /projects/{id}/progress/merge":              guarded(permTaskWrite),
+	"POST /projects/{id}/progress/merge": guarded(permTaskWrite),
+	// The task and plan pages' Publish button: `lode task publish` (draft ->
+	// ready) from the cockpit, permTaskWrite like PATCH /api/v1/tasks/{id}.
+	"POST /projects/{id}/tasks/publish":               guarded(permTaskWrite),
 	"GET /projects/{id}/milestones":                   guarded(permWebRead),
 	"POST /projects/{id}/milestones/{mid}/references": guarded(permWebWrite),
 	"GET /projects/{id}/deliverables":                 guarded(permWebRead),

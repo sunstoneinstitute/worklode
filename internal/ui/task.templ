@@ -50,6 +50,7 @@ templ Task(v TaskView) {
 					if v.Holder != nil {
 						<p><strong>Held by:</strong> { v.Holder.ActorID } (expires { fmtTime(v.Holder.ExpiresAt) })</p>
 					}
+					@pageActs(taskActions(v))
 				</section>
 
 				<section class="card" aria-labelledby="body-heading">
