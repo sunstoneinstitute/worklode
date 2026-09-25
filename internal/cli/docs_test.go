@@ -6,7 +6,31 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
+
+// TestDocStatusBannerDistinct: every status but accepted gets its own banner,
+// so an old version never reads as current (WL-870). Accepted is the current
+// state and stays banner-free.
+func TestDocStatusBannerDistinct(t *testing.T) {
+	seen := map[string]string{}
+	for _, st := range ns.DesignDocStatuses {
+		b := docStatusBanner(model.Doc{Status: st})
+		if st == "accepted" {
+			if b != "" {
+				t.Errorf("docStatusBanner(accepted) = %q, want none", b)
+			}
+			continue
+		}
+		if b == "" {
+			t.Errorf("docStatusBanner(%q) is empty", st)
+		}
+		if prev, ok := seen[b]; ok {
+			t.Errorf("docStatusBanner(%q) = %q, same as %q", st, b, prev)
+		}
+		seen[b] = st
+	}
+}
 
 const inlineSpecBody = `---
 status: accepted
