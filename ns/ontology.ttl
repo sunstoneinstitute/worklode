@@ -450,11 +450,11 @@ wl:defers a owl:ObjectProperty ;
 
 wl:amends a owl:ObjectProperty ;
     wl:layer wlc:intent ;
-    rdfs:domain wl:DesignDoc ;
-    rdfs:range wl:DesignDoc ;
-    rdfs:comment """This document amends that one: the frontmatter `amends` edge (025 §6),
-        projected at document level by lode graph triples. The section a row names stays in
-        the backbone's doc_edges; the graph store sees the two documents.""" .
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
+    rdfs:comment """The subject rule changes how the object rule is read without replacing it
+        (05 §4). A rule_edges row from the amending rule to the amended one, written by
+        `lode rule link A --amends B`. Documents do not amend each other.""" .
 
 wl:Deferral a owl:Class ;
     wl:layer wlc:execution ;
@@ -732,8 +732,10 @@ wl:layer a owl:AnnotationProperty ;
 #
 #   dct:requires / dct:isRequiredBy    dependency
 #   dct:hasPart / dct:isPartOf         decomposition; child_of mirror
-#   dct:replaces / dct:isReplacedBy    supersession, whole document or section;
-#                                      rule edges store this as supersededBy (12 S22)
+#   dct:replaces / dct:isReplacedBy    supersession between wl:Rule nodes; rule edges
+#                                      store dct:replaces as supersedes (new → old,
+#                                      12 S22) and dct:isReplacedBy is inferred, never
+#                                      stored. Documents do not replace each other
 #   dct:title / description            labels; Deliverable acceptance criteria
 #   dct:relation                       Deliverable → declared Artifact/Environment target
 #   dct:created / modified / issued / date / valid / identifier
