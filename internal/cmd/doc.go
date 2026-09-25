@@ -239,7 +239,7 @@ func newDocListCmd() *cobra.Command {
 			case needsPlanning:
 				cli.DocPlanningTable(cmd.OutOrStdout(), resp.Docs, resp.PlanningGaps)
 			case bareSuperseded:
-				cli.DocSupersessionTable(cmd.OutOrStdout(), resp.Docs, resp.SupersessionGaps)
+				cli.BareRulesTable(cmd.OutOrStdout(), resp.BareRules)
 			case unresolved:
 				cli.DocUnresolvedTable(cmd.OutOrStdout(), resp.Docs)
 			default:
@@ -260,7 +260,7 @@ func newDocListCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&needsExecution, "needs-execution", false,
 		"accepted plans whose task set has an open task")
 	cmd.Flags().BoolVar(&bareSuperseded, "bare-superseded", false,
-		"superseded documents with a section nothing replaces")
+		"withdrawn rules no rule supersedes")
 	cmd.Flags().BoolVar(&unresolved, "unresolved", false,
 		"accepted specs and plans nothing has executed (025 §8.7)")
 	cmd.Flags().StringVar(&olderThan, "older-than", "",
@@ -562,7 +562,8 @@ func newDocVersionsCmd() *cobra.Command {
 
 // newDocReferrersCmd is `lode doc referrers <ref>#sec-N` (025 §8.2): the
 // open work pointing at one section — an accepted document whose text names
-// it, and the claimed, unfinished tasks of the plans that cover it. It is
+// it, a rule that amends or supersedes its rule, and the claimed, unfinished
+// tasks of the plans that cover it. It is
 // what a fixer reads before patching accepted text, and the same query the
 // §8.3 patch gate runs.
 //

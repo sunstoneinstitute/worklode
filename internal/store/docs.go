@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -175,7 +174,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, fmt.Errorf("doc status %q: %w", status, ErrInvalidInput)
 	}
 
-	parsed, err := parseDocBody(in.Kind, in.Body)
+	parsed, err := parseWrittenDocBody(in.Kind, in.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -245,20 +244,10 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if err := rebuildEdges(tx, now, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
-	// The third thing AcceptDoc does, after the depth gate and the publish flag:
-	// what this document replaces stops being current the moment it lands
-	// accepted. Only targets already in the corpus and already accepted move —
-	// supersedeReplacedDocs' own guard — so an import that writes the replacing
-	// document first is caught later instead, by repointExternalEdges (WL-133).
-	if acceptedAtCreate {
-		if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
-			return nil, err
-		}
-	}
 	// A reference resolves once, at write time, so references already stored
 	// unresolved because this document did not exist yet are re-pointed now —
 	// that is what makes corpus import order-independent (WL-130).
-	if err := repointExternalEdges(tx, in.Project, ts, id, eventID); err != nil {
+	if err := repointExternalEdges(tx, in.Project, id, eventID); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -266,11 +255,6 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, err
 	}
 
-	// Read the row back rather than restating the input: repointExternalEdges
-	// may have superseded this very document on the way in — an already-imported
-	// accepted document that replaces it, whose cascade could not reach it until
-	// now — and a caller told "accepted" by a create that landed superseded is
-	// the same order-dependence this whole path exists to remove.
 	return getDocTx(tx, id)
 }
 
@@ -304,7 +288,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 			id, status, ErrInvalidInput)
 	}
 
-	parsed, err := parseDocBody(kind, body)
+	parsed, err := parseWrittenDocBody(kind, body)
 	if err != nil {
 		return nil, err
 	}
@@ -373,8 +357,8 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 
 // AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
 // owner. For a spec or ADR it freezes the document's published anchor set
-// and flips the target of every document-level replaces edge to superseded,
-// in the same transaction. For a plan it mints the plan's execution tasks
+// and supersedes every document whose rules this one's rules supersede
+// (supersedeRetiredDocs), in the same transaction. For a plan it mints the plan's execution tasks
 // instead (see acceptPlanDoc) — the second return is that minted set, in
 // definition order, and nil for a spec or ADR.
 //
@@ -438,7 +422,7 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if err := publishDocSections(tx, id); err != nil {
 		return nil, nil, err
 	}
-	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
+	if err := supersedeRetiredDocs(tx, ts, id, eventID); err != nil {
 		return nil, nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -633,61 +617,48 @@ func TransferDocOwner(tx *sql.Tx, now time.Time, id int64, newOwner, actorID str
 	return getDocTx(tx, id)
 }
 
-// supersedeReplacedDocs flips every draft or accepted document a
-// document-level replaces edge names to superseded, in the accepting
-// transaction. Section-scoped replaces edges flip nothing — section-level
-// supersession stays derived (025 §3.3) — and an edge resolving to
-// to_external names no row here.
+// supersedeRetiredDocs supersedes, in the accepting transaction, every draft
+// or accepted document whose rules are all withdrawn and superseded by rules
+// document docID arranges (WL-SPEC-77 §9): each of its rules has a
+// `supersedes` rule edge from one of docID's rules. A document arranging no
+// rule is never a candidate.
 //
 // A draft target moves too: a superseded draft is reachable by no verb, which
-// is the point when a refactor retires specs that were never accepted
-// (WL-SPEC-77 §9). Plan-only statuses (stale, spent, withdrawn) are left alone.
-//
-// Nor does a tombstoned target move. It is found for the caller, not named by
-// them, and that is the case 044 §4 says a tombstone stops: flipping it to
-// superseded would mutate and log against a row nothing can see.
-func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error {
+// is how a refactor retires specs that were never accepted. A tombstoned
+// target does not move: it is found for the caller, not named by them, and
+// flipping it would mutate and log against a row nothing can see (044 §4).
+func supersedeRetiredDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error {
 	rows, err := tx.Query(
-		`SELECT DISTINCT e.to_doc FROM doc_edges e
-		   JOIN docs t ON t.id = e.to_doc AND t.deleted_at IS NULL
-		  WHERE e.from_doc = $1 AND e.type = 'replaces'
-		    AND e.from_anchor IS NULL AND e.to_doc IS NOT NULL AND e.to_doc <> $1
-		  ORDER BY e.to_doc`, docID)
+		`UPDATE docs x SET status = 'superseded', updated_at = $2
+		  WHERE x.id IN (
+		        SELECT xr.doc_id
+		          FROM doc_rules dr
+		          JOIN rule_edges e ON e.from_rule = dr.rule_id AND e.type = 'supersedes'
+		          JOIN doc_rules xr ON xr.rule_id = e.to_rule
+		         WHERE dr.doc_id = $1 AND xr.doc_id <> $1)
+		    AND x.status IN ('draft', 'accepted') AND x.deleted_at IS NULL
+		    AND NOT EXISTS (
+		        SELECT 1 FROM doc_rules xr JOIN rules r ON r.id = xr.rule_id
+		         WHERE xr.doc_id = x.id
+		           AND (r.status <> 'withdrawn' OR NOT EXISTS (
+		                SELECT 1 FROM rule_edges e
+		                  JOIN doc_rules dr ON dr.rule_id = e.from_rule AND dr.doc_id = $1
+		                 WHERE e.to_rule = r.id AND e.type = 'supersedes')))
+		 RETURNING x.id`, docID, ts)
 	if err != nil {
-		return fmt.Errorf("read replaces edges of doc %d: %w", docID, err)
+		return fmt.Errorf("supersede docs retired by %d: %w", docID, err)
 	}
-	targets, err := scanColumn[int64](rows, fmt.Sprintf("read replaces edges of doc %d", docID))
-	if err != nil {
-		return err
-	}
-
-	if len(targets) == 0 {
-		return nil
-	}
-
-	// One UPDATE over the whole target set; RETURNING names exactly the rows
-	// that moved, which is what the per-target RowsAffected check used to
-	// establish. Sorted back into id order so the state_log reads the same as
-	// when this walked the (already ordered) targets one at a time.
-	rows, err = tx.Query(
-		`UPDATE docs SET status = 'superseded', updated_at = $2
-		  WHERE id = ANY($1::bigint[]) AND status IN ('draft', 'accepted')
-		 RETURNING id`, targets, ts)
-	if err != nil {
-		return fmt.Errorf("supersede docs replaced by %d: %w", docID, err)
-	}
-	moved, err := scanColumn[int64](rows, fmt.Sprintf("supersede docs replaced by %d", docID))
+	moved, err := scanColumn[int64](rows, fmt.Sprintf("supersede docs retired by %d", docID))
 	if err != nil {
 		return err
 	}
 	slices.Sort(moved)
-
 	for _, target := range moved {
 		if err := logDocChange(tx, target, eventID,
 			map[string]string{
-				"field":       "status",
-				"new":         "superseded",
-				"replaced_by": strconv.FormatInt(docID, 10),
+				"field":         "status",
+				"new":           "superseded",
+				"superseded_by": strconv.FormatInt(docID, 10),
 			}); err != nil {
 			return err
 		}
@@ -729,6 +700,24 @@ func parseDocBody(kind, body string) (parsedDoc, error) {
 		}
 	}
 	return parsedDoc{doc: doc, issued: issued}, nil
+}
+
+// parseWrittenDocBody is parseDocBody for a body a caller is writing now. On
+// top of parseDocBody it refuses the retired amendment and supersession keys
+// (WL-SPEC-77 §7): those are rule edges. A stored body that still carries
+// them is read through parseDocBody, which ignores them.
+func parseWrittenDocBody(kind, body string) (parsedDoc, error) {
+	p, err := parseDocBody(kind, body)
+	if err != nil {
+		return p, err
+	}
+	if keys := p.doc.Frontmatter.RetiredRelKeys(); len(keys) > 0 {
+		return parsedDoc{}, fmt.Errorf(
+			"header key %s: amendment and supersession are rule edges, not document keys (WL-SPEC-77 §7); "+
+				"remove the key and use `lode rule link <A> --amends <B>` or `lode rule supersede`: %w",
+			strings.Join(keys, ", "), ErrInvalidInput)
+	}
+	return p, nil
 }
 
 // priorSection is the accept-time state rebuildSections carries forward.
@@ -1027,91 +1016,44 @@ func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out m
 	return out, nil
 }
 
-// BareSupersededSections returns the superseded specs and ADRs that have at
-// least one section nothing explains — 025 §6 rule 2's "bare superseded
-// section", read as a derived query rather than an accept-time gate (per the
-// decision recorded at 025 §3.3: section-level supersession stays derived).
-// project and kind both narrow the answer; "" in either does not filter.
+// BareSupersededRules returns the withdrawn rules no rule supersedes: 025 §6
+// rule 2's bare superseded section, read as a derived query (WL-SPEC-77 §6).
+// Each rule is reported once, with the first live document arranging it; a
+// rule no live document arranges reports an empty Doc. project and kind (the
+// arranging document's) both narrow the answer; "" in either does not filter.
 //
-// A section counts as explained by a `replaces` edge that names it, at either
-// granularity doc_edges can express:
-//
-//   - a section-scoped edge (to_doc = this document, to_anchor = the section)
-//     explains exactly that section;
-//   - a document-scoped edge (to_doc = this document, to_anchor IS NULL)
-//     explains every section of the document — the successor supersedes it
-//     wholesale, so no per-section listing is owed.
-//
-// The successor's own status is deliberately not required: the edge itself is
-// the explanation 025 §3.3 asks for, and demanding an accepted successor would
-// report an explained section as bare. Its *liveness* is required, though — a
-// tombstoned successor explains nothing, the same way it is not itself
-// reported here. A `to_external` edge names no local row and so explains
-// nothing, whatever it once pointed at. Plans carry no
-// sections (025 §9), so the JOIN against doc_sections excludes them
-// structurally, independent of the kind predicate below.
-//
-// Not answered here: rule 2's other branch, a `dct:description` saying why a
-// section went away. `0027_docs` has no free-text column on doc_sections or
-// doc_edges to read for that, on either the section or its explaining edge, so
-// it stays unmechanised — it lands with section-level supersession in the
-// graph (025 §3.3), tracked by WL-150. This mirrors NeedsPlanning's
-// WL-141 gap: a rule 025 states that today's schema cannot fully answer.
-func (s *Store) BareSupersededSections(ctx context.Context, project, kind string) (
-	[]model.Doc, []model.DocSupersessionGap, error) {
+// Not answered here: rule 2's other branch, a reason text saying why a
+// section went away with no successor (WL-150).
+func (s *Store) BareSupersededRules(ctx context.Context, project, kind string) ([]model.BareRule, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`WITH replaced_section AS (
-		     SELECT DISTINCT e.to_doc AS doc_id, e.to_anchor AS anchor
-		       FROM doc_edges e
-		       JOIN docs s ON s.id = e.from_doc AND s.deleted_at IS NULL
-		      WHERE e.type = 'replaces'
-		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
-		 ), replaced_doc AS (
-		     SELECT DISTINCT e.to_doc AS doc_id
-		       FROM doc_edges e
-		       JOIN docs s ON s.id = e.from_doc AND s.deleted_at IS NULL
-		      WHERE e.type = 'replaces'
-		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NULL
-		 )
-		 SELECT `+docColumnsD+`, count(*)::int,
-		        coalesce(json_agg(sec.anchor ORDER BY sec.position)
-		                 FILTER (WHERE rs.anchor IS NULL), '[]')::text
-		   FROM docs d
-		   JOIN doc_sections sec ON sec.doc_id = d.id
-		   LEFT JOIN replaced_section rs ON rs.doc_id = sec.doc_id AND rs.anchor = sec.anchor
-		  WHERE d.status = 'superseded'
-		    AND d.deleted_at IS NULL
-		    AND ($1 = '' OR d.project_id = $1)
-		    AND ($2 = '' OR d.kind = $2)
-		    AND NOT EXISTS (SELECT 1 FROM replaced_doc rd WHERE rd.doc_id = d.id)
-		  GROUP BY d.id
-		 HAVING count(*) FILTER (WHERE rs.anchor IS NULL) > 0
-		  ORDER BY d.project_id, d.number NULLS LAST, d.slug`, project, kind)
+		`SELECT rule, doc, anchor, heading FROM (
+		     SELECT DISTINCT ON (r.id) p.key AS key, r.number AS number,
+		            p.key || '-RULE-' || r.number AS rule,
+		            coalesce(dp.key || '-' || upper(d.kind) || '-' || d.number, '') AS doc,
+		            CASE WHEN d.id IS NULL THEN '' ELSE dr.anchor END AS anchor,
+		            v.heading AS heading
+		       FROM rules r
+		       JOIN projects p ON p.id = r.project_id
+		       JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+		       LEFT JOIN doc_rules dr ON dr.rule_id = r.id
+		       LEFT JOIN docs d ON d.id = dr.doc_id AND d.deleted_at IS NULL
+		       LEFT JOIN projects dp ON dp.id = d.project_id
+		      WHERE r.status = 'withdrawn'
+		        AND NOT EXISTS (SELECT 1 FROM rule_edges e
+		                         WHERE e.to_rule = r.id AND e.type = 'supersedes')
+		        AND ($1 = '' OR r.project_id = $1)
+		        AND ($2 = '' OR d.kind = $2)
+		      ORDER BY r.id, (d.id IS NULL), d.id, dr.position
+		 ) bare
+		 ORDER BY key, number`, project, kind)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list bare superseded sections: %w", err)
+		return nil, fmt.Errorf("list bare superseded rules: %w", err)
 	}
-	defer rows.Close()
-
-	var docs []model.Doc
-	var gaps []model.DocSupersessionGap
-	for rows.Next() {
-		var gap model.DocSupersessionGap
-		var unexplainedJSON string
-		d, err := scanDoc(appendScan{rows, []any{&gap.Sections, &unexplainedJSON}})
-		if err != nil {
-			return nil, nil, fmt.Errorf("scan bare superseded doc: %w", err)
-		}
-		if err := json.Unmarshal([]byte(unexplainedJSON), &gap.Unexplained); err != nil {
-			return nil, nil, fmt.Errorf("decode unexplained anchors of doc %d: %w", d.ID, err)
-		}
-		gap.Doc = d.ID
-		docs = append(docs, *d)
-		gaps = append(gaps, gap)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("list bare superseded sections: %w", err)
-	}
-	return docs, gaps, nil
+	return collectRows(rows, "list bare superseded rules", func(r rowScanner) (model.BareRule, error) {
+		var b model.BareRule
+		err := r.Scan(&b.Rule, &b.Doc, &b.Anchor, &b.Heading)
+		return b, err
+	})
 }
 
 // appendScan lets scanDoc read a row that carries extra trailing columns: it
@@ -1305,21 +1247,29 @@ func (s *Store) DocSectionReferrers(ctx context.Context, docID int64, anchor str
 // §8.3 patch gate can ask the same question inside the transaction that
 // patches the section.
 //
-// Two halves. An accepted document holding an anchored
-// requires/covers/amends/replaces edge at the section has written text
-// against it. A plan is not counted as such a document: a plan's claim on a
-// section is the work claimed from it, so it enters through its
-// claimed-but-unfinished tasks instead, and an accepted covering plan whose
-// tasks are all unclaimed or already delivered is 025 §8.6's stale-marking
-// business rather than a referrer.
+// Three parts. An accepted document holding an anchored requires/covers edge
+// at the section has written text against it. A rule that amends or
+// supersedes the section's rule reads it (WL-SPEC-77 §10). A plan is not
+// counted as such a document: a plan's claim on a section is the work claimed
+// from it, so it enters through its claimed-but-unfinished tasks instead, and
+// an accepted covering plan whose tasks are all unclaimed or already delivered
+// is 025 §8.6's stale-marking business rather than a referrer.
 func docSectionReferrers(ctx context.Context, q rowQueryer, docID int64, anchor string) ([]model.DocReferrer, error) {
 	rows, err := q.QueryContext(ctx,
 		`SELECT 'doc' AS kind, d.slug AS ref, e.type AS rel, d.title
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
 		  WHERE e.to_doc = $1 AND e.to_anchor = $2
-		    AND e.type IN ('requires','covers','amends','replaces')
+		    AND e.type IN ('requires','covers')
 		    AND d.kind <> 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL
+		  UNION ALL
+		 SELECT 'rule', p.key || '-RULE-' || r.number, e.type, v.heading
+		   FROM doc_rules dr
+		   JOIN rule_edges e ON e.to_rule = dr.rule_id AND e.type IN ('amends','supersedes')
+		   JOIN rules r ON r.id = e.from_rule
+		   JOIN projects p ON p.id = r.project_id
+		   JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+		  WHERE dr.doc_id = $1 AND dr.anchor = $2
 		  UNION ALL
 		 SELECT 'task', t.id, e.type, t.title
 		   FROM tasks t

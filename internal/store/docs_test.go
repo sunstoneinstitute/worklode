@@ -1011,84 +1011,97 @@ func TestRecordDocOpMetric(t *testing.T) {
 	}
 }
 
-// TestDocAcceptSupersedesReplacedDoc: a document-level replaces edge flips an
-// accepted target and a draft one in the same transaction (025 §3.3,
-// WL-SPEC-77 §9), logging each.
-func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
+// TestDocAcceptSupersedesRetiredDoc covers WL-SPEC-77 §9: accepting a
+// document supersedes, in the same transaction, every draft or accepted
+// document whose rules are all withdrawn and superseded by rules it arranges.
+// A document with one rule withdrawn without a successor, or superseded by a
+// rule outside the accepted document, stays as it is.
+func TestDocAcceptSupersedesRetiredDoc(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
-	old := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
-		CreatedBy: "stig", Status: "accepted",
-	})
-	unaccepted := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 7, Slug: "007-draft", Body: specBody,
-		CreatedBy: "stig",
-	})
-	body := "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n    - 007-draft.md\n---\n\n" +
-		"# New\n\n## 1. Scope {#sec-1}\n\na\n"
-	newDoc := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
-	})
+	spec := func(slug, status, body string) *model.Doc {
+		t.Helper()
+		return mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: slug, Body: body, CreatedBy: "stig", Status: status})
+	}
+	x := spec("x", "accepted", ruleDocV1)                                                         // rules 1-3
+	y := spec("y", "draft", "# Y\n\n## 1. Why {#sec-1}\n\nY.\n")                                  // rule 4
+	z := spec("z", "accepted", "# Z\n\n## 1. Zed {#sec-1}\n\nZ.\n\n## 2. Zwei {#sec-2}\n\nZ2.\n") // rules 5-6
+	w := spec("w", "accepted", "# W\n\n## 1. Wa {#sec-1}\n\nW.\n")                                // rule 7
+	o := spec("o", "draft", "# O\n\n## 1. Oh {#sec-1}\n\nO.\n")                                   // rule 8
+	d := spec("d", "draft", supersedeDocU)                                                        // rules 9-10
+	mustSupersede(t, s,
+		entry("P1-RULE-1", "P1-RULE-9"), entry("P1-RULE-2", "P1-RULE-9"), entry("P1-RULE-3", "P1-RULE-10"),
+		entry("P1-RULE-4", "P1-RULE-10"),
+		entry("P1-RULE-5", "P1-RULE-9"), entry("P1-RULE-6"),
+		entry("P1-RULE-7", "P1-RULE-8"))
 
-	if _, _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
+	if _, _, err := acceptDoc(t, s, d.ID, "stig"); err != nil {
 		t.Fatalf("AcceptDoc: %v", err)
 	}
-	got, err := s.GetDoc(t.Context(), old.ID)
-	if err != nil {
-		t.Fatal(err)
+	for _, tc := range []struct {
+		doc  *model.Doc
+		want string
+	}{{x, "superseded"}, {y, "superseded"}, {z, "accepted"}, {w, "accepted"}, {o, "draft"}, {d, "accepted"}} {
+		if got := docStatus(t, s, tc.doc.ID); got != tc.want {
+			t.Errorf("doc %s status = %q, want %q", tc.doc.Slug, got, tc.want)
+		}
 	}
-	if got.Status != "superseded" {
-		t.Errorf("replaced doc status = %q, want superseded", got.Status)
-	}
-	entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(old.ID, 10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 2 || !strings.Contains(entries[1].Change, `"superseded"`) {
-		t.Fatalf("state log = %+v, want a superseded entry on the replaced doc", entries)
-	}
-
-	wasDraft, err := s.GetDoc(t.Context(), unaccepted.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if wasDraft.Status != "superseded" {
-		t.Errorf("draft target status = %q, want superseded", wasDraft.Status)
-	}
-	entries, err = s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(unaccepted.ID, 10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 2 || !strings.Contains(entries[1].Change, `"superseded"`) {
-		t.Errorf("state log = %+v, want a superseded entry on the draft target", entries)
+	for _, target := range []*model.Doc{x, y} {
+		entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(target.ID, 10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		last := entries[len(entries)-1].Change
+		if !strings.Contains(last, `"superseded"`) || !strings.Contains(last, `"superseded_by": "`+strconv.FormatInt(d.ID, 10)+`"`) {
+			t.Errorf("doc %s state log = %+v, want a superseded entry naming doc %d", target.Slug, entries, d.ID)
+		}
 	}
 }
 
-// TestDocAcceptSectionScopedReplacesDoesNotSupersede: section-level
-// supersession stays derived (025 §3.3), so it flips no document.
-func TestDocAcceptSectionScopedReplacesDoesNotSupersede(t *testing.T) {
+// TestDocWriteRefusesRetiredKeys covers WL-SPEC-77 §7: a new write carrying
+// amends, amendedBy, replaces or isReplacedBy is refused, naming the rule
+// edge commands. A stored body that still carries one reads as if it were
+// absent: it writes no edge and supersedes nothing.
+func TestDocWriteRefusesRetiredKeys(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
-		CreatedBy: "stig", Status: "accepted",
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody, CreatedBy: "stig", Status: "accepted",
 	})
-	body := "---\nstatus: draft\nreplaces:\n  \"#sec-1\":\n    - 006-old.md#sec-2\n---\n\n" +
-		"# New\n\n## 1. Scope {#sec-1}\n\na\n"
-	newDoc := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
-	})
-
-	if _, _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
-		t.Fatalf("AcceptDoc: %v", err)
+	retired := "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n---\n\n# New\n\n## 1. Scope {#sec-1}\n\na\n"
+	_, err := createDoc(t, s, DocInput{Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: retired, CreatedBy: "stig"})
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "replaces") || !strings.Contains(err.Error(), "lode rule supersede") {
+		t.Fatalf("create with replaces: err = %v, want ErrInvalidInput naming the key and lode rule supersede", err)
 	}
-	got, err := s.GetDoc(t.Context(), old.ID)
+
+	draft := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n\n# New\n\n## 1. Scope {#sec-1}\n\na\n",
+	})
+	amending := strings.Replace(retired, "replaces:", "amends:", 1)
+	if _, err := updateDocBody(t, s, draft.ID, amending); !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "amends") {
+		t.Fatalf("edit with amends: err = %v, want ErrInvalidInput naming amends", err)
+	}
+
+	// A body stored before the keys retired keeps its text and still accepts.
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET body = $2 WHERE id = $1`, draft.ID, retired); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := acceptDoc(t, s, draft.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc of a legacy body: %v", err)
+	}
+	if got := docStatus(t, s, old.ID); got != "accepted" {
+		t.Errorf("006-old status = %q after accepting a legacy replaces body, want accepted", got)
+	}
+	if err := replaceDocEdges(t, s, draft.ID); err != nil {
+		t.Fatalf("ReplaceDocEdges of a legacy body: %v", err)
+	}
+	out, _, err := s.ListDocEdges(t.Context(), draft.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != "accepted" {
-		t.Errorf("replaced doc status = %q, want it untouched", got.Status)
+	if len(out) != 0 {
+		t.Errorf("legacy body edges = %+v, want none", out)
 	}
 }
 
@@ -1243,50 +1256,6 @@ Model body.
 
 Oldest first.
 `
-
-// TestDocAcceptSupersedesEveryReplacedDoc: a document replacing several
-// accepted documents flips and logs all of them, not just the first — the
-// flip is one UPDATE ... RETURNING over the target set.
-func TestDocAcceptSupersedesEveryReplacedDoc(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	var replaced []int64
-	for _, spec := range []struct {
-		number int
-		slug   string
-	}{{6, "006-old"}, {7, "007-older"}, {8, "008-oldest"}} {
-		d := mustCreateDoc(t, s, DocInput{
-			Project: "p1", Kind: "spec", Number: spec.number, Slug: spec.slug, Body: specBody,
-			CreatedBy: "stig", Status: "accepted",
-		})
-		replaced = append(replaced, d.ID)
-	}
-	body := "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n    - 007-older.md\n" +
-		"    - 008-oldest.md\n---\n\n# New\n\n## 1. Scope {#sec-1}\n\na\n"
-	newDoc := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
-	})
-
-	if _, _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
-		t.Fatalf("AcceptDoc: %v", err)
-	}
-	for _, id := range replaced {
-		got, err := s.GetDoc(t.Context(), id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Status != "superseded" {
-			t.Errorf("doc %d status = %q, want superseded", id, got.Status)
-		}
-		entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(id, 10))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(entries) != 2 || !strings.Contains(entries[1].Change, `"superseded"`) {
-			t.Errorf("doc %d state log = %+v, want a superseded entry", id, entries)
-		}
-	}
-}
 
 // TestDocListSections: the reader the detail endpoint serves returns a spec's
 // sections in document order, and nothing at all for a plan (025 §9).
@@ -1525,35 +1494,6 @@ func needsExecutionSlugs(t *testing.T, s *Store, project string) []string {
 	return slugs
 }
 
-// bareSupersededSlugs runs the query unscoped by kind and returns the
-// matching documents' slugs alongside their gaps, in the same order.
-func bareSupersededSlugs(t *testing.T, s *Store, project string) ([]string, []model.DocSupersessionGap) {
-	t.Helper()
-	return bareSupersededKindSlugs(t, s, project, "")
-}
-
-// bareSupersededKindSlugs is bareSupersededSlugs with a kind narrowing.
-func bareSupersededKindSlugs(t *testing.T, s *Store, project, kind string) ([]string, []model.DocSupersessionGap) {
-	t.Helper()
-	docs, gaps, err := s.BareSupersededSections(t.Context(), project, kind)
-	if err != nil {
-		t.Fatalf("BareSupersededSections: %v", err)
-	}
-	slugs := make([]string, len(docs))
-	for i, d := range docs {
-		slugs[i] = d.Slug
-	}
-	return slugs, gaps
-}
-
-// replacerBody is a minimal accepted-at-create spec whose document-level
-// `replaces` names ref. The corpus importer's shape: status in the
-// frontmatter, no separate accept.
-func replacerBody(title, ref string) string {
-	return "---\nstatus: accepted\nissued: 2026-08-01\nreplaces:\n  \".\":\n    - " + ref +
-		"\n---\n\n# " + title + "\n\n## 1. Scope {#sec-1}\n\nBody.\n"
-}
-
 // docStatus reads one document's stored status, which is the thing the
 // cascade moves — CreateDoc's return value is a projection of the same row,
 // asserted separately where it matters.
@@ -1724,9 +1664,10 @@ func referrerPlanBody(target, anchor string) string {
 }
 
 // TestDocSectionReferrers covers 025 §8.2: which open work points at one
-// section. An accepted document's anchored requires/covers/amends/replaces
-// edge counts; a draft's does not; a document-level edge claims the document,
-// not the section. A covering plan reaches the section through its claimed
+// section. An accepted document's anchored requires/covers edge counts; a
+// draft's does not; a document-level edge claims the document, not the
+// section. A rule that amends or supersedes the section's rule counts
+// (WL-SPEC-77 §10). A covering plan reaches the section through its claimed
 // tasks — never as a document itself — so a plan whose tasks are all
 // unclaimed or already delivered contributes nothing.
 func TestDocSectionReferrers(t *testing.T) {
@@ -1775,12 +1716,39 @@ func TestDocSectionReferrers(t *testing.T) {
 	planTask(planP, "Task 2", "already delivered", "merged")
 	planTask(planQ, "Task 1", "never claimed", "ready")
 
+	// 025-a's sec-1, sec-2 and sec-2.1 are rules 1-3; 026-b's sec-1 is rule 4,
+	// 027-c's rule 5 and 028-d's rule 6. Rule 4 amends sec-2's rule, rule 5
+	// supersedes it, and rule 6 amends sec-1's rule, which is not asked about.
+	ruleID := func(tx *sql.Tx, n int64) int64 {
+		t.Helper()
+		id, err := RuleIDByRef(tx, "P1", n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		if err := LinkRules(tx, ruleID(tx, 4), ruleID(tx, 2), "amends"); err != nil {
+			return err
+		}
+		if err := LinkRules(tx, ruleID(tx, 6), ruleID(tx, 1), "amends"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersedes', 'refactor')`,
+			ruleID(tx, 5), ruleID(tx, 2))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	got, err := s.DocSectionReferrers(ctx, specA.ID, "sec-2")
 	if err != nil {
 		t.Fatalf("DocSectionReferrers: %v", err)
 	}
 	want := []model.DocReferrer{
 		{Kind: "doc", Ref: "026-b", Rel: "requires", Title: "Referring spec"},
+		{Kind: "rule", Ref: "P1-RULE-4", Rel: "amends", Title: "Scope"},
+		{Kind: "rule", Ref: "P1-RULE-5", Rel: "supersedes", Title: "Scope"},
 		{Kind: "task", Ref: claimed.ID, Rel: "covers", Title: "the claimed one"},
 	}
 	if !reflect.DeepEqual(got, want) {

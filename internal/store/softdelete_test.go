@@ -742,21 +742,21 @@ func TestRepointExternalEdgesSkipsDeletedDocs(t *testing.T) {
 	}
 }
 
-// TestSupersedeReplacedDocsSkipsDeletedTarget: accepting a live successor must
+// TestSupersedeRetiredDocsSkipsDeletedTarget: accepting a live successor must
 // not flip a tombstoned target to superseded or log against it.
-func TestSupersedeReplacedDocsSkipsDeletedTarget(t *testing.T) {
+func TestSupersedeRetiredDocsSkipsDeletedTarget(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	ctx := t.Context()
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
 		CreatedBy: "stig", Status: "accepted",
-	})
+	}) // rules 1-3
 	successor := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n---\n\n" +
-			"# New\n\n## 1. Scope {#sec-1}\n\na\n",
-	})
+		Body: "---\nstatus: draft\n---\n\n# New\n\n## 1. Scope {#sec-1}\n\na\n",
+	}) // rule 4
+	mustSupersede(t, s, entry("P1-RULE-1", "P1-RULE-4"), entry("P1-RULE-2", "P1-RULE-4"), entry("P1-RULE-3", "P1-RULE-4"))
 	if err := deleteDoc(t, s, old.ID, "stig", "duplicate import"); err != nil {
 		t.Fatalf("DeleteDoc: %v", err)
 	}

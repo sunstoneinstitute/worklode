@@ -245,14 +245,12 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: s.withProjectKeys(r.Context(), withoutDocBodies(docs))})
 	case sel.bareSuperseded:
-		docs, gaps, err := s.st.BareSupersededSections(r.Context(), sel.filter.Project, sel.filter.Kind)
+		rules, err := s.st.BareSupersededRules(r.Context(), sel.filter.Project, sel.filter.Kind)
 		if err != nil {
 			s.mapStoreErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, model.DocListResponse{
-			Docs: s.withProjectKeys(r.Context(), withoutDocBodies(docs)), SupersessionGaps: gaps,
-		})
+		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: []model.Doc{}, BareRules: rules})
 	default:
 		docs, err := s.st.ListDocs(r.Context(), sel.filter)
 		if err != nil {
