@@ -343,6 +343,61 @@ type TaskView struct {
 	// Activity is the task's activity log, newest first, at most the page's
 	// own limit (spec 071 §4). The live stream prepends to the same list.
 	Activity []ActivityRow
+	// Prerequisites is the open work still holding the task (WL-877). Nil
+	// when nothing holds it, and the page then omits the section.
+	Prerequisites *Prerequisites
+}
+
+// Prerequisites is the task page's prerequisite graph: every open task the
+// task transitively depends on, laid out left to right with the task pinned
+// on the right, plus the plans ordered before its own plan. internal/api
+// derives it from store.BlockerTree; positions are in SVG pixels.
+type Prerequisites struct {
+	// Remaining counts distinct open prerequisite tasks; Direct counts the
+	// ones the task depends on with no task in between.
+	Remaining int
+	Direct    int
+	// Candidates is the dependency frontier: prerequisites with no open
+	// prerequisite of their own. A plan gate or a lease can still hold one,
+	// so the page never calls them claimable.
+	Candidates []string
+	// Cycle names the tasks where the dependsOn relation loops back on
+	// itself. Empty when the graph is acyclic.
+	Cycle []string
+	Plans []PrerequisitePlan
+	// Cards and Links are the drawing, the target card included. Hidden
+	// counts prerequisites left out of it once the card cap is reached; List
+	// still carries every one of them.
+	Cards         []PrerequisiteCard
+	Links         []PrerequisiteLink
+	Hidden        int
+	Width, Height int
+	// List is every prerequisite, nearest first, with full titles: the
+	// accessible and narrow-screen equivalent of the drawing.
+	List []PrerequisiteCard
+}
+
+// PrerequisiteCard is one task in the graph. Label is Title shortened to fit
+// the card; NeededBy is the tasks that depend on it directly.
+type PrerequisiteCard struct {
+	ID, Title, Label, State string
+	NeededBy                []string
+	Target, Cycle           bool
+	X, Y                    int
+}
+
+// PrerequisiteLink is one drawn dependsOn edge, as an SVG path from the
+// prerequisite to the task that needs it. Cycle marks the edge that closes
+// a loop.
+type PrerequisiteLink struct {
+	Path  string
+	Cycle bool
+}
+
+// PrerequisitePlan is one plan ordered before the task's own plan. A draft
+// plan with no minted tasks shows here and nowhere in the graph.
+type PrerequisitePlan struct {
+	Slug, Title, Status, URL string
 }
 
 // ActivityRow is one row of a task's activity log as a page renders it (spec
@@ -1787,19 +1842,4 @@ func progressMergeBody(task string, m model.ProgressMerge) string {
 		return "{}"
 	}
 	return string(b)
-}
-
-// --- graph (WL-856) ---------------------------------------------------------
-
-// GraphView is a project's Graph page: the shell around a canvas that
-// assets/graph.js fills from DataURL (GET /projects/{id}/graph/data, the
-// same model.ProjectGraph the JSON API serves). Empty is true when the
-// project has neither a task nor a document, in which case the page says so
-// and loads no script.
-type GraphView struct {
-	Page         PageProps
-	CanonicalURL string
-	Project      CockpitProject
-	DataURL      string
-	Empty        bool
 }

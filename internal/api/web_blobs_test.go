@@ -61,7 +61,7 @@ func TestTaskPageRendersMarkdown(t *testing.T) {
 	// The blob the body embeds is a reference the task carries, so it is
 	// listed as an attachment too — the same row GET
 	// /api/v1/tasks/{id}/blobs answers with, addressed the same way.
-	bodyContains(t, body, ">Attachments<", `href="/blob/`+hash+`"`, "image/png")
+	bodyContains(t, body, ">Attachments (1)<", `href="/blob/`+hash+`"`, "image/png")
 
 	// Every directive is load-bearing: without img-src/media-src the blob
 	// redirect's origin is refused, and without object-src/base-uri a body
