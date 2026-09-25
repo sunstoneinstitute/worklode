@@ -538,7 +538,7 @@ func joinContext(sections ...string) string {
 }
 
 // refLinkHint asks the agent to print Worklode ids as links to the instance,
-// so a reader can click a task or document ref straight through to the
+// so a reader can click a task, document or rule ref straight through to the
 // cockpit. Empty — so nothing is emitted — unless this terminal is one known
 // to render OSC 8, a server URL is configured, and the checkout has not turned
 // ref_links off.
@@ -558,7 +558,8 @@ func refLinkHint(dir string) string {
 	}
 	return fmt.Sprintf("This terminal renders OSC 8 hyperlinks. In what you print to the "+
 		"terminal — never in files, commit messages or code — write every Worklode task "+
-		"id (WL-7) and document ref (WL-SPEC-4) as a markdown link to %s/<id>, "+
+		"id (WL-7), document ref (WL-SPEC-4) and rule ref (WL-RULE-12) as a markdown link "+
+		"to %s/<id>, "+
 		"e.g. [WL-7](%s/WL-7).", server, server)
 }
 
