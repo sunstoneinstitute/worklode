@@ -147,7 +147,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"form", "outcome"})
 	s.progressWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_progress_writes_total",
-		Help: "Progress page writes issued by the page script (066 §4.2), by route (" +
+		Help: "Cockpit writes issued by a page script through the 066 §4.2 gate (the Progress page, and the document and task pages' Accept and Publish), by route (" +
 			strings.Join(progressWriteRoutes, ", ") + ") and outcome (" +
 			strings.Join(progressWriteOutcomes, ", ") +
 			"). \"refused\" is the act declined before anything changed — a wrong origin, a missing page header, a body naming its own actor, an actor without standing — and \"conflict\" is the backbone refusing the document's state, so steady refused traffic on a route people use means a stale page, not an attack. Labels are bounded: the project, the document and the actor are deliberately not among them.",
@@ -1136,10 +1136,10 @@ func (s *server) observeFormSubmission(form, outcome string) {
 
 // progressWriteRoutes and progressWriteOutcomes bound
 // worklode_progress_writes_total's two labels. The routes are 066 §7's write
-// table; the outcomes are the gate's one ("refused") plus the three a write
+// table plus publish (the task and plan pages' Publish); the outcomes are the gate's one ("refused") plus the three a write
 // handler reports for itself.
 var (
-	progressWriteRoutes   = []string{"accept", "plan", "rally/add", "rally/confirm", "rally/discard", "merge"}
+	progressWriteRoutes   = []string{"accept", "plan", "rally/add", "rally/confirm", "rally/discard", "merge", "publish"}
 	progressWriteOutcomes = []string{"ok", "refused", "conflict", "error"}
 )
 

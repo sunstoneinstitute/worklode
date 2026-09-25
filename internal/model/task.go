@@ -221,3 +221,18 @@ type Edge struct {
 type DecomposeInput struct {
 	Into []string `json:"into"`
 }
+
+// TaskPublishInput is the body POST /projects/{id}/tasks/publish takes: the
+// cockpit's Publish button, `lode task publish` (draft -> ready) from a page.
+// It names one task, or a plan whose draft tasks are all published. The
+// acting actor is the session's (WL-SPEC-66 §4.2 rule 6).
+type TaskPublishInput struct {
+	Task string `json:"task,omitempty"`
+	Plan int64  `json:"plan,omitempty"`
+}
+
+// TaskPublishResponse is the reply to POST /projects/{id}/tasks/publish: the
+// tasks moved to ready. The page applies none of it; it reloads.
+type TaskPublishResponse struct {
+	Published []string `json:"published"`
+}

@@ -110,7 +110,7 @@ func (s *server) blobOrigin() string {
 //     /assets/copy.js, task.templ /
 //     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js,
 //     task.templ's /assets/activity.js, progress.templ's
-//     /assets/progress.js, and graph.templ's
+//     /assets/progress.js and /assets/act.js, and graph.templ's
 //     /assets/d3.min.js and /assets/graph.js. No page has an inline script.
 //   - style-src 'self': /assets/app.css, and nothing else. No page carries a
 //     style attribute or a <style> element, and layout.templ's htmx-config
@@ -683,6 +683,7 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 
 	view := taskView(s.mdcache, s.projectKeys(ctx, t.Project), t, project, blocked, entries, out, in)
 	view.Attachments = refs
+	view.Viewer = actorIDFrom(r)
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)
 		view.Holder = &l
@@ -865,6 +866,17 @@ func (s *server) renderDocPage(w http.ResponseWriter, r *http.Request, d model.D
 		view.Versions = versions
 	}
 	view.Approvals = s.docPageApprovals(r, detail.Doc.ID)
+	view.Viewer = actorIDFrom(r)
+	if detail.Doc.Kind == "plan" {
+		// A failed read degrades to no Publish button, like the reads above.
+		drafts, err := s.st.ListTasks(r.Context(), store.TaskFilter{
+			Project: detail.Doc.Project, PlanDoc: detail.Doc.ID, States: []string{"draft"},
+		})
+		if err != nil {
+			s.log.Warn("rendering plan page without Publish: draft tasks unreadable", "doc", detail.Doc.ID, "err", err)
+		}
+		view.DraftTasks = len(drafts)
+	}
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
 }
 
