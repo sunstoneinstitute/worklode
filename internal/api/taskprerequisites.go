@@ -1,51 +1,37 @@
-// taskprerequisites.go derives the task page's prerequisite graph (WL-877)
-// from store.BlockerTree: the same rows GET /api/v1/tasks/{id}/blockers
-// serves, so the page and the API cannot disagree about what holds a task.
+// taskprerequisites.go derives the task page's prerequisite tree (WL-877,
+// WL-902) from store.BlockerTree: the same rows GET
+// /api/v1/tasks/{id}/blockers serves, so the page and the API cannot
+// disagree about what holds a task.
 package api
 
 import (
-	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
-// Card geometry in SVG pixels, and the most cards one drawing holds. Past the
-// cap the nearest prerequisites are drawn and the rest are counted as hidden.
-const (
-	prereqCardW    = 200
-	prereqCardH    = 58
-	prereqColGap   = 56
-	prereqRowGap   = 14
-	prereqPad      = 8
-	prereqLabelMax = 26
-	prereqMaxCards = 60
-)
+// prereqMaxCards is the most tasks the tree draws in full. Past it the
+// nearest are drawn and the rest are counted as hidden; the list keeps all.
+const prereqMaxCards = 60
 
-// prerequisitesView lays out a blocker tree as a left-to-right layered graph.
-// Nodes are deduplicated by ID and edges by (ID, Via), so a shared
-// prerequisite is one card and a direct edge survives beside an indirect
-// path. A task's column is its longest dependsOn distance from the target,
-// computed over the graph with its cycle-closing edges set aside. title is
-// the target's own, for its card. Nil when nothing holds the task.
-func prerequisitesView(tree model.BlockerTree, title string) *ui.Prerequisites {
+// prerequisitesView lays out a blocker tree top-down, one level per
+// dependsOn hop. Tasks are deduplicated by ID and edges by (ID, Via). A
+// breadth-first walk from the target gives each task its shallowest
+// position, where it is drawn in full; every other edge into it becomes a
+// reference, marked Cycle when the task it points at depends back on the one
+// holding the reference. Nil when nothing holds the task.
+func prerequisitesView(tree model.BlockerTree) *ui.Prerequisites {
 	if len(tree.Blockers) == 0 && len(tree.BlockingPlans) == 0 {
 		return nil
 	}
 	root := tree.Root
-	cards := map[string]*ui.PrerequisiteCard{}
-	var order []string
+	info := map[string]*ui.PrerequisiteNode{}
 	dependsOn := map[string][]string{}
 	seen := map[[2]string]bool{}
 	for _, b := range tree.Blockers {
-		if b.ID != root && cards[b.ID] == nil {
-			cards[b.ID] = &ui.PrerequisiteCard{ID: b.ID, Title: b.Title, Label: prereqLabel(b.Title), State: b.State}
-			order = append(order, b.ID)
-		}
-		if b.Cycle && b.ID != root {
-			cards[b.ID].Cycle = true
+		if b.ID != root && info[b.ID] == nil {
+			info[b.ID] = &ui.PrerequisiteNode{ID: b.ID, Title: b.Title, State: b.State}
 		}
 		edge := [2]string{b.Via, b.ID}
 		if seen[edge] {
@@ -54,60 +40,44 @@ func prerequisitesView(tree model.BlockerTree, title string) *ui.Prerequisites {
 		seen[edge] = true
 		dependsOn[b.Via] = append(dependsOn[b.Via], b.ID)
 		if b.ID != root {
-			cards[b.ID].NeededBy = append(cards[b.ID].NeededBy, b.Via)
+			info[b.ID].NeededBy = append(info[b.ID].NeededBy, b.Via)
 		}
 	}
 
-	// Depth-first from the target: an edge to a task still on the stack
-	// closes a cycle. Reverse postorder over the rest is a topological order,
-	// in which longest distances relax in one pass.
-	onStack, done := map[string]bool{}, map[string]bool{}
-	back := map[[2]string]bool{}
-	var post []string
-	var visit func(string)
-	visit = func(u string) {
-		onStack[u] = true
+	// Breadth-first from the target: the first edge to reach a task is its
+	// tree edge, and the walk order is nearest first.
+	parent := map[string]string{}
+	order := []string{}
+	for queue := []string{root}; len(queue) > 0; queue = queue[1:] {
+		u := queue[0]
 		for _, v := range dependsOn[u] {
-			switch {
-			case onStack[v]:
-				back[[2]string{u, v}] = true
-				if c := cards[v]; c != nil {
-					c.Cycle = true
-				}
-				if c := cards[u]; c != nil {
-					c.Cycle = true
-				}
-			case !done[v]:
-				visit(v)
+			if _, placed := parent[v]; placed || v == root {
+				continue
 			}
-		}
-		onStack[u], done[u] = false, true
-		post = append(post, u)
-	}
-	visit(root)
-	rank := map[string]int{root: 0}
-	for i := len(post) - 1; i >= 0; i-- {
-		u := post[i]
-		for _, v := range dependsOn[u] {
-			if !back[[2]string{u, v}] && rank[u]+1 > rank[v] {
-				rank[v] = rank[u] + 1
-			}
+			parent[v] = u
+			order = append(order, v)
+			queue = append(queue, v)
 		}
 	}
 
 	v := &ui.Prerequisites{Remaining: len(order)}
+	v.Levels, v.Below = below(root, root, dependsOn)
 	for _, id := range dependsOn[root] {
 		if id != root {
 			v.Direct++
 		}
 	}
 	for _, id := range order {
+		n := info[id]
+		n.Levels, n.Below = below(id, root, dependsOn)
 		if len(dependsOn[id]) == 0 {
 			v.Candidates = append(v.Candidates, id)
 		}
-		if cards[id].Cycle {
+		if reaches(id, id, dependsOn) {
+			n.Cycle = true
 			v.Cycle = append(v.Cycle, id)
 		}
+		v.List = append(v.List, *n)
 	}
 	seenPlan := map[int64]bool{}
 	for _, p := range tree.BlockingPlans {
@@ -116,78 +86,77 @@ func prerequisitesView(tree model.BlockerTree, title string) *ui.Prerequisites {
 			v.Plans = append(v.Plans, ui.PrerequisitePlan{Slug: p.Slug, Title: p.Title, Status: p.Status, URL: docPageURL(p.ID)})
 		}
 	}
-	if len(order) == 0 {
-		return v
-	}
 
-	// Nearest first: by column, then in the store's own row order.
-	sorted := slices.Clone(order)
-	slices.SortStableFunc(sorted, func(a, b string) int { return rank[a] - rank[b] })
-	for _, id := range sorted {
-		v.List = append(v.List, *cards[id])
-	}
-	drawn := sorted
-	if len(drawn) > prereqMaxCards {
-		drawn, v.Hidden = drawn[:prereqMaxCards], len(drawn)-prereqMaxCards
-	}
-
-	target := &ui.PrerequisiteCard{ID: root, Title: title, Label: prereqLabel(title), Target: true}
-	cards[root] = target
-	byRank := map[int][]*ui.PrerequisiteCard{0: {target}}
-	maxRank, maxRows := 0, 1
-	for _, id := range drawn {
-		r := rank[id]
-		byRank[r] = append(byRank[r], cards[id])
-		maxRank = max(maxRank, r)
-		maxRows = max(maxRows, len(byRank[r]))
-	}
-	pitch := prereqCardH + prereqRowGap
-	for r := 0; r <= maxRank; r++ {
-		col := byRank[r]
-		offset := (maxRows - len(col)) * pitch / 2
-		for i, c := range col {
-			c.X = prereqPad + (maxRank-r)*(prereqCardW+prereqColGap)
-			c.Y = prereqPad + offset + i*pitch
+	drawn := map[string]bool{}
+	for i, id := range order {
+		if i < prereqMaxCards {
+			drawn[id] = true
 		}
 	}
-	v.Width = 2*prereqPad + (maxRank+1)*(prereqCardW+prereqColGap) - prereqColGap
-	v.Height = 2*prereqPad + maxRows*pitch - prereqRowGap
-	v.Cards = append(v.Cards, *target)
-	for _, id := range drawn {
-		v.Cards = append(v.Cards, *cards[id])
-	}
+	v.Hidden = len(order) - len(drawn)
 
-	isDrawn := map[string]bool{root: true}
-	for _, id := range drawn {
-		isDrawn[id] = true
-	}
-	for _, u := range append([]string{root}, order...) {
-		for _, p := range dependsOn[u] {
-			if !isDrawn[u] || !isDrawn[p] {
-				continue
+	var build func(u string) []ui.PrerequisiteNode
+	build = func(u string) []ui.PrerequisiteNode {
+		var out []ui.PrerequisiteNode
+		for _, c := range dependsOn[u] {
+			switch {
+			case c == root:
+				out = append(out, ui.PrerequisiteNode{ID: root, Ref: true, Cycle: true})
+			case !drawn[c]:
+				// Past the cap: counted in Hidden, carried by the list.
+			case parent[c] == u:
+				n := *info[c]
+				n.Cycle = false
+				n.Children = build(c)
+				out = append(out, n)
+			default:
+				n := info[c]
+				out = append(out, ui.PrerequisiteNode{ID: c, Title: n.Title, State: n.State, Ref: true, Cycle: reaches(c, u, dependsOn)})
 			}
-			v.Links = append(v.Links, ui.PrerequisiteLink{Path: prereqPath(cards[p], cards[u]), Cycle: back[[2]string{u, p}]})
 		}
+		return out
 	}
+	v.Tree = build(root)
 	return v
 }
 
-// prereqPath is a cubic curve from the prerequisite's right edge to the
-// dependent's left edge. The control points bow outward, so a cycle's
-// backward edge still reads as a curve rather than a line through cards.
-func prereqPath(from, to *ui.PrerequisiteCard) string {
-	x1, y1 := from.X+prereqCardW, from.Y+prereqCardH/2
-	x2, y2 := to.X, to.Y+prereqCardH/2
-	bow := max((x2-x1)/2, prereqColGap)
-	return fmt.Sprintf("M%d %d C%d %d %d %d %d %d", x1, y1, x1+bow, y1, x2-bow, y2, x2, y2)
+// below returns how many levels sit beneath id and how many distinct tasks
+// they hold: the farthest shortest-path distance and the reachable set, so a
+// cycle neither loops nor counts a task twice. The target is never counted.
+func below(id, root string, dependsOn map[string][]string) (levels, tasks int) {
+	dist := map[string]int{id: 0}
+	for queue := []string{id}; len(queue) > 0; queue = queue[1:] {
+		u := queue[0]
+		for _, w := range dependsOn[u] {
+			if _, ok := dist[w]; !ok {
+				dist[w] = dist[u] + 1
+				levels = max(levels, dist[w])
+				queue = append(queue, w)
+			}
+		}
+	}
+	tasks = len(dist) - 1
+	if _, ok := dist[root]; ok && id != root {
+		tasks--
+	}
+	return levels, tasks
 }
 
-// prereqLabel shortens a title to what fits on a card. The full title stays
-// on the card's tooltip and in the list.
-func prereqLabel(title string) string {
-	r := []rune(strings.TrimSpace(title))
-	if len(r) <= prereqLabelMax {
-		return string(r)
+// reaches reports whether to is reachable from from by one or more
+// dependsOn hops.
+func reaches(from, to string, dependsOn map[string][]string) bool {
+	seen := map[string]bool{}
+	stack := slices.Clone(dependsOn[from])
+	for len(stack) > 0 {
+		u := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if u == to {
+			return true
+		}
+		if !seen[u] {
+			seen[u] = true
+			stack = append(stack, dependsOn[u]...)
+		}
 	}
-	return strings.TrimSpace(string(r[:prereqLabelMax-1])) + "…"
+	return false
 }

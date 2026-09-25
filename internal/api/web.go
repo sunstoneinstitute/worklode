@@ -723,7 +723,7 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 		s.webStoreErr(w, err)
 		return
 	}
-	view.Prerequisites = prerequisitesView(tree, t.Title)
+	view.Prerequisites = prerequisitesView(tree)
 
 	// Leaves can never have children, so skip the query — the component
 	// only reads Progress inside the len(Children) > 0 branch anyway.

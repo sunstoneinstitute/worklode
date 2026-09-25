@@ -70,7 +70,7 @@ templ Task(v TaskView) {
 				// Every section after the body is a native <details>, collapsed
 				// by default, so the body renders near the top of the page.
 				if v.Prerequisites != nil {
-					@taskPrerequisites(v.Task.ID, v.Prerequisites)
+					@taskPrerequisites(v)
 				}
 
 				if len(v.AgentSessions) > 0 {
@@ -297,11 +297,13 @@ templ timelineIcon(row TimelineRow) {
 	</span>
 }
 
-// taskPrerequisites renders the prerequisite graph (WL-877): a summary, the
-// plans ordered first, the drawing, and a full-title list that says the same
-// thing for screen readers and narrow screens. The drawing is aria-hidden
-// and its links take no focus, because the list is its accessible form.
-templ taskPrerequisites(taskID string, p *Prerequisites) {
+// taskPrerequisites renders the prerequisite tree (WL-877, WL-902): a
+// summary, the plans ordered first, the task with its direct prerequisites
+// below it, and a full-title list. Each level below that opens on demand: a
+// card with prerequisites of its own is a nested <details>, so expanding it
+// shows its next level only, with no script.
+templ taskPrerequisites(v TaskView) {
+	{{ p := v.Prerequisites }}
 	<details class="card" id="prerequisites" aria-labelledby="prerequisites-heading">
 		<summary class="hd"><h3 id="prerequisites-heading">Prerequisites ({ strconv.Itoa(p.Remaining) })</h3></summary>
 		<div class="bd pq">
@@ -321,12 +323,12 @@ templ taskPrerequisites(taskID string, p *Prerequisites) {
 			</p>
 			if len(p.Cycle) > 0 {
 				<p class="pq-warn" role="note">
-					Cycle: the prerequisites loop back through { strings.Join(p.Cycle, ", ") }. No task on the loop can finish first, so the frontier above is incomplete.
+					Cycle: the prerequisites loop back through { strings.Join(p.Cycle, ", ") }. No task on the loop can finish first, so the frontier above is incomplete. The edge that closes the loop shows as a reference marked cycle.
 				</p>
 			}
 			if p.Hidden > 0 {
 				<p class="pq-warn" role="note">
-					The drawing shows the { strconv.Itoa(len(p.Cards)-1) } nearest prerequisites; { strconv.Itoa(p.Hidden) } more are in the list below.
+					The tree shows the { strconv.Itoa(p.Remaining-p.Hidden) } nearest prerequisites; { strconv.Itoa(p.Hidden) } more are in the list below.
 				</p>
 			}
 			if len(p.Plans) > 0 {
@@ -337,45 +339,78 @@ templ taskPrerequisites(taskID string, p *Prerequisites) {
 					}
 				</ul>
 			}
-			if len(p.Cards) > 0 {
-				<div class="pq-graph">
-					<svg viewBox={ "0 0 " + strconv.Itoa(p.Width) + " " + strconv.Itoa(p.Height) } width={ strconv.Itoa(p.Width) } height={ strconv.Itoa(p.Height) } aria-hidden="true" focusable="false">
-						<defs>
-							<marker id="pq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-								<path d="M0 0L10 5L0 10z" class="pq-arrowhead"></path>
-							</marker>
-						</defs>
-						for _, l := range p.Links {
-							<path d={ l.Path } class={ "pq-link", templ.KV("cycle", l.Cycle) } marker-end="url(#pq-arrow)"></path>
-						}
-						for _, c := range p.Cards {
-							<g class={ "pq-card", templ.KV("target", c.Target), templ.KV("cycle", c.Cycle) } transform={ "translate(" + strconv.Itoa(c.X) + " " + strconv.Itoa(c.Y) + ")" }>
-								<title>{ c.ID }: { c.Title }</title>
-								<rect width="200" height="58" rx="8"></rect>
-								<a href={ "/tasks/" + c.ID } tabindex="-1"><text x="10" y="19" class="pq-id">{ c.ID }</text></a>
-								<text x="10" y="36" class="pq-title">{ c.Label }</text>
-								if c.Target {
-									<text x="10" y="51" class="pq-state">this task</text>
-								} else {
-									<text x="10" y="51" class="pq-state">{ c.State }</text>
-								}
-							</g>
-						}
-					</svg>
+			if len(p.Tree) > 0 {
+				<div class="pq-tree">
+					<div class="pq-node pq-target" id={ "pq-" + v.Task.ID }>
+						@prereqCard(PrerequisiteNode{ID: v.Task.ID, Title: v.Task.Title, State: "this task", Levels: p.Levels, Below: p.Below})
+					</div>
+					@prereqLevel(p.Tree)
 				</div>
-				<ol class="pq-list" aria-label={ "Prerequisites of " + taskID + ", nearest first" }>
-					for _, c := range p.List {
-						<li>
-							<a href={ "/tasks/" + c.ID }>{ c.ID }</a> { c.Title }
-							<span class={ "chip " + stateChip(c.State) }>{ c.State }</span>
-							if c.Cycle {
-								<span class="chip crit">cycle</span>
-							}
-							<span class="muted small">needed by { strings.Join(c.NeededBy, ", ") }</span>
-						</li>
-					}
-				</ol>
+				<details class="pq-all">
+					<summary>All { strconv.Itoa(p.Remaining) } prerequisites, nearest first</summary>
+					<ol class="pq-list">
+						for _, c := range p.List {
+							<li>
+								<a href={ "/tasks/" + c.ID }>{ c.ID }</a> { c.Title }
+								<span class={ "chip " + stateChip(c.State) }>{ c.State }</span>
+								if c.Cycle {
+									<span class="chip crit">cycle</span>
+								}
+								<span class="muted small">needed by { strings.Join(c.NeededBy, ", ") }</span>
+							</li>
+						}
+					</ol>
+				</details>
 			}
 		</div>
 	</details>
+}
+
+// prereqLevel renders one level of the tree as a wrapping row of cards.
+templ prereqLevel(nodes []PrerequisiteNode) {
+	<ul class="pq-level">
+		for _, n := range nodes {
+			<li class="pq-item">
+				@prereqNode(n)
+			</li>
+		}
+	</ul>
+}
+
+// prereqNode renders one occurrence of a task: a reference to the card drawn
+// in full elsewhere, a card that opens onto its next level, or a leaf card.
+templ prereqNode(n PrerequisiteNode) {
+	if n.Ref {
+		<a class={ "pq-ref", templ.KV("cycle", n.Cycle) } href={ "#pq-" + n.ID } title={ n.ID + ": " + n.Title }>
+			<span aria-hidden="true">&#8618;</span> { n.ID }
+			if n.Cycle {
+				<span class="chip crit">cycle</span>
+			} else {
+				<span class="muted">shown above</span>
+			}
+		</a>
+	} else if len(n.Children) > 0 {
+		<details class="pq-node" id={ "pq-" + n.ID }>
+			<summary>
+				@prereqCard(n)
+			</summary>
+			@prereqLevel(n.Children)
+		</details>
+	} else {
+		<div class="pq-node" id={ "pq-" + n.ID }>
+			@prereqCard(n)
+		</div>
+	}
+}
+
+// prereqCard is a task's card body: linked id, title, state, and how much
+// sits beneath it.
+templ prereqCard(n PrerequisiteNode) {
+	<span class="pq-card">
+		<span class="pq-head"><a href={ "/tasks/" + n.ID }>{ n.ID }</a> <span class={ "chip " + stateChip(n.State) }>{ n.State }</span></span>
+		<span class="pq-title">{ n.Title }</span>
+		if n.Levels > 0 {
+			<span class="pq-depth">{ prereqDepth(n.Levels, n.Below) }</span>
+		}
+	</span>
 }
