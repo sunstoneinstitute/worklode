@@ -310,3 +310,8 @@ call, or store operation with meaningful outcomes must add or extend
 conventions in `WL-SPEC-22` (Prometheus metrics): nil-safe metrics
 struct in the owning package's `metrics.go`, `prometheus.Registerer`
 threaded from `serve.go`, bounded label values, `worklode_` prefix.
+
+## Learned
+
+- **Dependent increments are stacked PRs; land a stack through the top PR.** When an increment depends on an earlier unmerged change, open it as a stacked PR (base = the earlier branch), never one PR carrying the whole stack against `main`. To land: squash each PR to a single commit on top of its base (n squashes, n−1 rebases, force-push), let CI go green on every head, then submit the stack to the merge queue through the top PR — GitHub's stack API groups them (stack #690, 2026-09-22) and the queue lands one commit per PR on `main` (#686, #688, #689). Do not retarget the top PR to `main` and close the lower ones.
+- **Clause versions: a draft is rewritten in place; accepted versions are locked.** Editors autosave after debouncing, so a write to a clause whose newest version is `draft` rewrites that version — the version number does not move and no row is added. Once the arranging document is accepted the version is locked; a later text change inserts the next version and marks the clause draft again until its document is accepted. Never mint a clause/doc version per save; check the newest version's status before writing (increments #686/#688/#689, commit f590417e).
