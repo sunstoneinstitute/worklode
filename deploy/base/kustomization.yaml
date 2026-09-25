@@ -194,3 +194,5 @@ configMapGenerator:
       - migrations/0090_retire_doc_amends_replaces.down.sql
       - migrations/0091_plan_covers_rules.up.sql
       - migrations/0091_plan_covers_rules.down.sql
+      - migrations/0092_covers_section_subtree.up.sql
+      - migrations/0092_covers_section_subtree.down.sql
