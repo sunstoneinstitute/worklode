@@ -22,11 +22,11 @@ type SectionMeta struct {
 	Position int // 0-based document order over the anchored sections
 }
 
-// EdgeMeta is one frontmatter-derived edge (025 §5.1): exactly the relation
-// list documented there, never requires/isRequiredBy/task.
+// EdgeMeta is one frontmatter-derived edge of a plan: its covers and defers
+// entries, never requires/isRequiredBy/task.
 type EdgeMeta struct {
-	SrcAnchor    string // "" = document-level ("." in the AnchorMap)
-	Rel          string // implements | amends | amendedBy | replaces | isReplacedBy
+	SrcAnchor    string // "" = document-level
+	Rel          string // covers | defers
 	Target       string // the raw reference with any fragment stripped; "NO-SPEC" allowed
 	TargetAnchor string // "sec-2" when the reference carried #sec-2, else ""
 }
@@ -190,8 +190,6 @@ func CorpusDocFromBody(docPath, kind string, number int, body []byte) (CorpusDoc
 		cd.Status, cd.FrontmatterJSON = doc.Frontmatter.Status, fmJSON
 		if kind == "plan" {
 			cd.Edges = planEdges(doc.Frontmatter)
-		} else {
-			cd.Edges = anchorEdges(doc.Frontmatter)
 		}
 	}
 	if title, ok := Title(doc); ok {
@@ -250,7 +248,6 @@ func loadSpecOrADR(dir, name string) (CorpusDoc, error) {
 		return CorpusDoc{}, err
 	}
 	cd.Sections = sections
-	cd.Edges = anchorEdges(doc.Frontmatter)
 	return cd, nil
 }
 
@@ -279,29 +276,15 @@ func sectionMetas(doc *Document, name string) ([]SectionMeta, error) {
 	return out, nil
 }
 
-// anchorRels is the rel set anchorEdges keeps: both kinds' four AnchorMap
-// fields (025 §5.1). Unlike the store, the corpus records both directions —
-// it mirrors the corpus as authored, so an `amendedBy:` a document declares
-// about itself is a fact of that document.
-var anchorRels = []string{"amends", "amendedBy", "replaces", "isReplacedBy"}
-
 // planEdges is a plan's edges: its coverage assertions — the retired
 // `implements` spelling read as `covers` (026 §5.1) — then its defers
-// handoffs (026 §5.3), then the anchor relations every document kind can
-// carry. A defers entry projects the same way a covers entry does — the
-// section it names becomes the edge's target anchor — but carries no owner:
-// EdgeMeta has no field for it, the same deliberate omission as covers
-// carrying no coverage level. The owner lives in the backbone's
+// handoffs (026 §5.3). A defers entry projects the same way a covers entry
+// does — the section it names becomes the edge's target anchor — but carries
+// no owner: EdgeMeta has no field for it, the same deliberate omission as
+// covers carrying no coverage level. The owner lives in the backbone's
 // doc_coverage_completed_with, not the sync-projected corpus.
 func planEdges(fm *Frontmatter) []EdgeMeta {
-	return edgeMetas(fm.RefsFor(append([]string{"covers", "defers"}, anchorRels...)...))
-}
-
-// anchorEdges extracts the amends/amendedBy/replaces/isReplacedBy edges from
-// fm's four AnchorMaps. Frontmatter.Refs fixes the order, so output is
-// deterministic run to run.
-func anchorEdges(fm *Frontmatter) []EdgeMeta {
-	return edgeMetas(fm.RefsFor(anchorRels...))
+	return edgeMetas(fm.RefsFor("covers", "defers"))
 }
 
 // edgeMetas turns frontmatter references into corpus edges, splitting each

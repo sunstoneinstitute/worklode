@@ -1,7 +1,6 @@
 package designdoc
 
 import (
-	"maps"
 	"slices"
 	"strings"
 )
@@ -15,11 +14,11 @@ import (
 // Ref is one reference a frontmatter declares.
 type Ref struct {
 	// SrcAnchor is the anchor in *this* document the reference hangs off,
-	// without its leading '#'; "" is the document-level subject, which
-	// AnchorMap spells ".".
+	// without its leading '#'. Every relation Refs walks is document-level,
+	// so it is "" today.
 	SrcAnchor string
 	// Rel is the relation asserted, as an ontology property local name
-	// ("covers", "amends", …).
+	// ("covers", "requires", …).
 	Rel string
 	// Ref is the reference text as authored, trailing "#sec-…" fragment
 	// included — split it with SplitFragment.
@@ -40,7 +39,7 @@ type Ref struct {
 // relation rather than restate its inverse. A consumer recording one row per
 // fact keeps these and drops the rest — writing both directions would double
 // every edge and let the two disagree (025 §14).
-var ActingRels = []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom", "amends", "replaces"}
+var ActingRels = []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom"}
 
 // StoredRels is what a consumer recording (or reporting) the rows a
 // frontmatter writes actually reads: ActingRels plus `blockedBy`, the one
@@ -53,17 +52,15 @@ var StoredRels = append(slices.Clone(ActingRels), "blockedBy")
 // InverseOf maps each inverse-only spelling — the ones StoredRels excludes
 // because they merely restate an acting relation the other end is expected
 // to declare (025 §14.2) — to the acting relation it restates. `blockedBy`
-// is not here: unlike these three, it writes a real row of its own
+// is not here: unlike these, it writes a real row of its own
 // (StoredRels), rather than depending on the other end declaring anything.
 //
 // A consumer checking "did the other end actually declare this back" reads
-// this map once rather than special-casing three keys (WL-375); a fourth
-// inverse-only field added later (refListRelOrder/anchorRelOrder growing a
-// row) is added here in the same change, and that check inherits it.
+// this map once rather than special-casing keys (WL-375); an inverse-only
+// field added later (refListRelOrder growing a row) is added here in the same
+// change, and that check inherits it.
 var InverseOf = map[string]string{
 	"isRequiredBy": "requires",
-	"amendedBy":    "amends",
-	"isReplacedBy": "replaces",
 }
 
 // refListRelOrder is the fixed order Refs walks the RefList fields, acting
@@ -78,21 +75,11 @@ var refListRelOrder = []struct {
 	{"blockedBy", func(f *Frontmatter) RefList { return f.BlockedBy }},
 }
 
-// anchorRelOrder is the fixed order Refs walks the four AnchorMap fields
-// (025 §5.1), acting spelling before its inverse.
-var anchorRelOrder = []struct {
-	rel string
-	get func(*Frontmatter) AnchorMap
-}{
-	{"amends", func(f *Frontmatter) AnchorMap { return f.Amends }},
-	{"amendedBy", func(f *Frontmatter) AnchorMap { return f.AmendedBy }},
-	{"replaces", func(f *Frontmatter) AnchorMap { return f.Replaces }},
-	{"isReplacedBy", func(f *Frontmatter) AnchorMap { return f.IsReplacedBy }},
-}
-
 // Refs enumerates every reference the frontmatter declares, in a deterministic
-// order — coverage, the dependency lists, provenance, then the anchor maps with
-// their keys sorted — so a caller's output is stable run to run.
+// order — coverage, the dependency lists, then provenance — so a caller's
+// output is stable run to run. The retired amendment and supersession keys
+// (RetiredRelKeys) are never walked: a stored body may still carry them, and
+// they mean nothing (WL-SPEC-77 §7).
 //
 // A reference is trimmed of surrounding whitespace, and one that is then empty
 // is dropped: a coverage entry qualified with a level but no `spec:`, say,
@@ -122,15 +109,6 @@ func (f *Frontmatter) Refs() []Ref {
 		}
 	}
 	add("", "wasDerivedFrom", f.WasDerivedFrom, nil, nil)
-	for _, r := range anchorRelOrder {
-		m := r.get(f)
-		for _, k := range slices.Sorted(maps.Keys(m)) {
-			anchor := anchorMapSrcAnchor(k)
-			for _, ref := range m[k] {
-				add(anchor, r.rel, ref, nil, nil)
-			}
-		}
-	}
 	return out
 }
 
@@ -143,13 +121,4 @@ func (f *Frontmatter) RefsFor(rels ...string) []Ref {
 		}
 	}
 	return out
-}
-
-// anchorMapSrcAnchor converts an AnchorMap key to a SectionMeta-shaped
-// anchor: "." (document-level) is "", "#sec-3" is "sec-3".
-func anchorMapSrcAnchor(key string) string {
-	if key == "." {
-		return ""
-	}
-	return strings.TrimPrefix(key, "#")
 }

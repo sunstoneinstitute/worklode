@@ -1,36 +1,23 @@
-// The consolidated view (WL-84): render a document with every effective
-// amendment and supersession folded into the section it acts on, so a reader
-// sees a spec's current state without chasing the reference chain turn by
-// turn. This is 026 §3.2's consolidated view computed over backbone
-// documents — the same rendering scripts/inlinespec.py produces for the git
-// corpus, driven by doc_edges instead of frontmatter. It backs both
-// `lode show --inline` and the cockpit's document page (WL-716), which is
-// why it lives here rather than in internal/cmd:
+// The consolidated view (WL-84): render a document with every in-force
+// amendment folded into the section it acts on, so a reader sees a spec's
+// current state without chasing the reference chain turn by turn. It backs
+// both `lode show --inline` and the cockpit's document page (WL-716), which
+// is why it lives here rather than in internal/cmd.
 //
-//   - a section an effective claim acts on keeps its own text and gains the
-//     acting section's text beneath it, led by an attribution marker
-//     (**[amending spec 45 §2]:**<br>) so borrowed text is never mistakable
-//     for the document's own;
-//   - inlining is transitive: an amendment that is itself amended is
-//     expanded, depth-capped so a mutually-amending defect cannot hang;
-//   - a claim from a document that is not yet effective (a draft's proposal)
-//     is listed as pending and never folded, so nothing unsettled reads as
-//     design;
-//   - a document-scoped claim (no section on either end) is a banner
-//     reference at the top, never inlined text;
-//   - inlined headings are flattened to bold lines so borrowed text cannot
-//     reshape the outline of the document it lands in;
-//   - a section's rule folds in the rules that amend it (WL-SPEC-77 §4),
-//     attributed to the amending rule, transitively. An accepted or
-//     superseded amending rule is in force, a draft one is pending, and a
-//     withdrawn one is left out.
+// A section's rule folds in the rules that amend it (WL-SPEC-77 §4),
+// attributed to the amending rule (**[amending WL-RULE-12 (WL-SPEC-45#sec-2)]:**<br>)
+// so borrowed text is never mistakable for the document's own, and
+// transitively, depth-capped so a mutually-amending defect cannot hang. An
+// accepted or superseded amending rule is in force, a draft one is pending
+// and listed but never folded, and a withdrawn one is left out. Inlined
+// headings are flattened to bold lines so borrowed text cannot reshape the
+// outline of the document it lands in.
 
 package designdoc
 
 import (
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -40,18 +27,15 @@ import (
 // defect, not a rendering requirement (inlinespec.py uses the same bound).
 const inlineMaxDepth = 8
 
-// Inliner folds a document's inbound claims into its body. fetch loads a
-// document's detail by id and fetchRule a rule by ref (both memoized — the
-// same acting document is typically named by many sections).
+// Inliner folds a document's rule amendments into its body. fetchRule loads
+// a rule by ref, memoized — the same amending rule can act on many sections.
 type Inliner struct {
-	fetch     func(int64) (*model.DocDetail, error)
 	fetchRule func(string) (*model.Rule, error)
-	cache     map[int64]*model.DocDetail
 	rules     map[string]*model.Rule
 }
 
-func NewInliner(fetch func(int64) (*model.DocDetail, error), fetchRule func(string) (*model.Rule, error)) *Inliner {
-	return &Inliner{fetch: fetch, fetchRule: fetchRule, cache: map[int64]*model.DocDetail{}, rules: map[string]*model.Rule{}}
+func NewInliner(fetchRule func(string) (*model.Rule, error)) *Inliner {
+	return &Inliner{fetchRule: fetchRule, rules: map[string]*model.Rule{}}
 }
 
 func (in *Inliner) rule(ref string) (*model.Rule, error) {
@@ -129,49 +113,10 @@ func (in *Inliner) ruleBlocks(root string, amenders []string, seen map[string]bo
 	return blocks, pending, nil
 }
 
-func (in *Inliner) detail(id int64) (*model.DocDetail, error) {
-	if d, ok := in.cache[id]; ok {
-		return d, nil
-	}
-	d, err := in.fetch(id)
-	if err != nil {
-		return nil, err
-	}
-	in.cache[id] = d
-	return d, nil
-}
-
-// effectiveStatus is when a claim takes effect: once the claiming document is
-// accepted (a later supersession does not un-say what it changed).
+// effectiveStatus is when an amendment takes effect: once the amending rule
+// is accepted (a later supersession does not un-say what it changed).
 func effectiveStatus(status string) bool {
 	return status == "accepted" || status == "superseded"
-}
-
-// claimRef names an acting section for a reader: "spec 45 §2", "adr 48 §3",
-// or the slug when the document carries no number.
-func claimRef(e model.DocEdge, anchor string) string {
-	name := e.ToSlug
-	if e.ToNumber != 0 {
-		name = e.ToKind + " " + strconv.Itoa(e.ToNumber)
-	} else if e.ToKind != "" {
-		name = e.ToKind + " " + name
-	}
-	if anchor != "" {
-		name += " §" + strings.TrimPrefix(anchor, "sec-")
-	}
-	return name
-}
-
-// actingVerb maps an inbound edge type to its attribution verb; anything
-// else is not a claim this rendering folds.
-func actingVerb(edgeType string) string {
-	switch edgeType {
-	case "amendedBy":
-		return "amending"
-	case "isReplacedBy":
-		return "superseding"
-	}
-	return ""
 }
 
 var headingLine = regexp.MustCompile(`(?m)^#+[ \t]+(.*?)(?:[ \t]*\{#[^}]*\})?[ \t]*$`)
@@ -182,61 +127,8 @@ func flattenHeadings(text string) string {
 	return headingLine.ReplaceAllString(text, "**$1**")
 }
 
-// sectionClaims returns d's inbound section-scoped claims landing on anchor,
-// in edge order.
-func sectionClaims(d *model.DocDetail, anchor string) []model.DocEdge {
-	var out []model.DocEdge
-	for _, e := range d.EdgesIn {
-		if actingVerb(e.Type) == "" || e.FromAnchor != anchor || e.ToAnchor == "" || e.ToDoc == 0 {
-			continue
-		}
-		out = append(out, e)
-	}
-	return out
-}
-
-// blocksFor renders the inlined blocks and pending notes for one section of
-// one document, transitively expanded. seen keys are (doc id, anchor).
-func (in *Inliner) blocksFor(d *model.DocDetail, anchor string, seen map[string]bool, depth int) (blocks, pending []string, err error) {
-	key := strconv.FormatInt(d.ID, 10) + "#" + anchor
-	if depth >= inlineMaxDepth || seen[key] {
-		return nil, nil, nil
-	}
-	seen[key] = true
-	for _, e := range sectionClaims(d, anchor) {
-		acting, err := in.detail(e.ToDoc)
-		if err != nil {
-			return nil, nil, fmt.Errorf("fetch %s: %w", claimRef(e, e.ToAnchor), err)
-		}
-		if !effectiveStatus(acting.Status) {
-			pending = append(pending, claimRef(e, e.ToAnchor))
-			continue
-		}
-		parsed, err := Parse([]byte(acting.Body))
-		if err != nil {
-			return nil, nil, fmt.Errorf("parse %s: %w", acting.Slug, err)
-		}
-		text, ok := parsed.Subtree(e.ToAnchor)
-		if !ok {
-			// The acting section vanished from its own document — surface
-			// the claim as pending-shaped rather than dropping it silently.
-			pending = append(pending, claimRef(e, e.ToAnchor)+" (section not found)")
-			continue
-		}
-		nested, nestedPending, err := in.blocksFor(acting, e.ToAnchor, seen, depth+1)
-		if err != nil {
-			return nil, nil, err
-		}
-		pending = append(pending, nestedPending...)
-		parts := append([]string{strings.TrimSpace(flattenHeadings(text))}, nested...)
-		blocks = append(blocks, fmt.Sprintf("**[%s %s]:**<br>\n\n%s",
-			actingVerb(e.Type), claimRef(e, e.ToAnchor), strings.Join(parts, "\n\n")))
-	}
-	return blocks, pending, nil
-}
-
-// Consolidate renders the whole consolidated view: banner, preamble, and
-// every section with its claims folded in. section, when non-empty, narrows
+// Consolidate renders the whole consolidated view: preamble and every
+// section with its amendments folded in. section, when non-empty, narrows
 // the output to that section's subtree — each nested section still carries
 // its own folds.
 func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, error) {
@@ -247,23 +139,8 @@ func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, erro
 
 	var b strings.Builder
 
-	// Document-scoped claims: banner references, never inlined text.
-	var banner []string
-	for _, e := range d.EdgesIn {
-		if actingVerb(e.Type) == "" || e.FromAnchor != "" || e.ToDoc == 0 {
-			continue
-		}
-		banner = append(banner, fmt.Sprintf("%s by %s", strings.TrimSuffix(actingVerb(e.Type), "ing")+"ed", claimRef(e, e.ToAnchor)))
-	}
-
 	if section == "" {
 		fmt.Fprintf(&b, "<!-- Consolidated view of %s: effective amendments and supersessions folded in (lode show --inline). Not a source document. -->\n\n", d.Slug)
-		for _, line := range banner {
-			fmt.Fprintf(&b, "> %s\n", line)
-		}
-		if len(banner) > 0 {
-			b.WriteString("\n")
-		}
 		if p := strings.TrimSpace(parsed.Preamble); p != "" {
 			b.WriteString(p + "\n\n")
 		}
@@ -290,16 +167,11 @@ func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, erro
 				continue
 			}
 		}
-		blocks, pending, err := in.blocksFor(d, sec.Anchor, map[string]bool{}, 0)
-		if err != nil {
-			return "", err
-		}
+		var blocks, pending []string
 		if by := amenders[sec.Anchor]; len(by) > 0 {
-			rb, rp, err := in.ruleBlocks(sectionRule[sec.Anchor], by, map[string]bool{}, 0)
-			if err != nil {
+			if blocks, pending, err = in.ruleBlocks(sectionRule[sec.Anchor], by, map[string]bool{}, 0); err != nil {
 				return "", err
 			}
-			blocks, pending = append(blocks, rb...), append(pending, rp...)
 		}
 		// Heading plus the section's own body only — Source() would carry
 		// the whole subtree and duplicate every nested section this loop

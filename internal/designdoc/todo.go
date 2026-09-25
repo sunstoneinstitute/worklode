@@ -63,7 +63,7 @@ type ExecutionTask struct {
 // holds. A nil Tasks is the offline case — the planning half still answers
 // and every plan's execution state reads as unknown.
 // ProjectKey is the current repo's project key ("WL"), for resolving a
-// covers/defers/requires/amends entry written as a <KEY>-<TYPE>-<n>
+// covers/defers/requires entry written as a <KEY>-<TYPE>-<n>
 // shorthand (WL-409) — "" declines every shorthand rather than guessing one,
 // which is every offline caller's answer and every caller predating this.
 type TodoOptions struct {
@@ -129,7 +129,6 @@ type todoWalk struct {
 	specCanon, planCanon string
 	byPath               map[string]CorpusDoc    // canonical repo-relative path -> doc
 	frontmatter          map[string]*Frontmatter // same key; nil when unparseable
-	replacedBy           map[sectionKey][]string // target section -> replacing documents
 	ix                   *PlanIndex
 	visited              map[string]bool
 	docOrder             map[string]int
@@ -147,7 +146,6 @@ func newTodoWalk(docs []CorpusDoc, opts TodoOptions) *todoWalk {
 		planDir:     planDir,
 		byPath:      make(map[string]CorpusDoc, len(docs)),
 		frontmatter: make(map[string]*Frontmatter, len(docs)),
-		replacedBy:  make(map[sectionKey][]string),
 		ix:          NewPlanIndex(docs, opts.ProjectKey),
 		visited:     make(map[string]bool),
 		docOrder:    make(map[string]int),
@@ -160,9 +158,6 @@ func newTodoWalk(docs []CorpusDoc, opts TodoOptions) *todoWalk {
 		w.byPath[canon] = d
 		w.frontmatter[canon] = docFrontmatter(d)
 	}
-	for _, d := range docs {
-		w.indexSupersession(d)
-	}
 	return w
 }
 
@@ -173,50 +168,6 @@ func (w *todoWalk) canon(d CorpusDoc) string {
 		return resolveDoc(d.Path, w.planCanon, w.planDir)
 	}
 	return resolveDoc(d.Path, w.specCanon, w.specDir)
-}
-
-// indexSupersession records both directions of d's supersession edges
-// against the section they land on. Reading `replaces` and `isReplacedBy`
-// and unioning them means a half-maintained mirror still registers, matching
-// scripts/currentspec.py.
-func (w *todoWalk) indexSupersession(d CorpusDoc) {
-	canon := w.canon(d)
-	home := path.Dir(canon)
-	for _, e := range d.Edges {
-		if e.Target == "NO-SPEC" {
-			continue
-		}
-		switch e.Rel {
-		case "replaces":
-			key := sectionKey{spec: w.ix.normalizeRef(e.Target, home), anchor: e.TargetAnchor}
-			w.replacedBy[key] = append(w.replacedBy[key], canon)
-		case "isReplacedBy":
-			key := sectionKey{spec: canon, anchor: e.SrcAnchor}
-			w.replacedBy[key] = append(w.replacedBy[key], w.ix.normalizeRef(e.Target, home))
-		}
-	}
-}
-
-// effective reports whether a claim made by the document at src already
-// holds (026 §3.1): a draft's claim is a proposal and drops nothing, while a
-// document outside the corpus cannot be status-checked and is trusted.
-func (w *todoWalk) effective(src string) bool {
-	d, ok := w.byPath[src]
-	if !ok {
-		return true
-	}
-	return d.Status == "accepted" || d.Status == "superseded"
-}
-
-// dropped reports whether an effective replaces names this section; anchor
-// "" asks about the whole document.
-func (w *todoWalk) dropped(docPath, anchor string) bool {
-	for _, src := range w.replacedBy[sectionKey{spec: docPath, anchor: anchor}] {
-		if w.effective(src) {
-			return true
-		}
-	}
-	return false
 }
 
 // resolve canonicalises the ref the caller named and checks it addresses a
@@ -364,7 +315,7 @@ func (w *todoWalk) emitDoc(docPath string) {
 			docOrder: w.docOrder[docPath], position: posAcceptance,
 		})
 	}
-	if d.Status == "superseded" || w.dropped(docPath, "") {
+	if d.Status == "superseded" {
 		w.diag.Notes = append(w.diag.Notes,
 			fmt.Sprintf("%s is superseded: none of its sections still state the design",
 				path.Base(docPath)))
@@ -372,9 +323,6 @@ func (w *todoWalk) emitDoc(docPath string) {
 	}
 	var unplanned, partial []string
 	for _, sec := range d.Sections {
-		if w.dropped(docPath, sec.Anchor) {
-			continue
-		}
 		switch w.emitSection(docPath, sec) {
 		case TodoUnplanned:
 			unplanned = append(unplanned, sec.Anchor)
@@ -690,9 +638,8 @@ func (w *todoWalk) planDischarged(planPath string) bool {
 // that requires nothing, otherwise one more than the deepest plan it
 // requires. The on-stack guard exists because requires cycles are legal —
 // 026 §2.4 says the graph may contain them and reports one rather than
-// failing, unlike §4.1's gate, which refuses cycles in the section-level
-// amends/replaces graph. A reader who meets one is better served by an
-// order than by a hang.
+// failing. A reader who meets one is better served by an order than by a
+// hang.
 func (w *todoWalk) planRank(planPath string) int {
 	return w.rankOf(planPath, map[string]bool{})
 }

@@ -23,8 +23,8 @@ func TestProjectGraphTriples(t *testing.T) {
 		},
 		DocEdges: []model.GraphDocEdge{
 			{From: 20, To: 10, Type: "covers"},
-			{From: 30, To: 10, Type: "replaces"},
-			{From: 30, To: 10, Type: "amends"},
+			{From: 30, To: 10, Type: "replaces"}, // retired document-level types:
+			{From: 30, To: 10, Type: "amends"},   // not emitted (WL-SPEC-77 §8)
 			{From: 20, To: 99, Type: "requires"}, // 99 is not in Docs: skipped
 		},
 		Links: []model.GraphLink{
@@ -38,8 +38,6 @@ func TestProjectGraphTriples(t *testing.T) {
 		"<" + iri.Task("WL-1") + "> <" + iri.Term("blocks") + "> <" + iri.Task("WL-2") + ">",
 		"<" + iri.Task("WL-2") + "> <" + iri.Term("dependsOn") + "> <" + iri.Task("WL-1") + ">",
 		"<" + iri.Doc("020-plan") + "> <" + iri.Term("covers") + "> <" + iri.Doc("010-spec") + ">",
-		"<" + iri.Doc("010-spec") + "> <" + DCTIsReplacedBy + "> <" + iri.Doc("030-new") + ">",
-		"<" + iri.Doc("030-new") + "> <" + iri.Term("amends") + "> <" + iri.Doc("010-spec") + ">",
 		"<" + iri.Task("WL-1") + "> <" + iri.Term("plannedIn") + "> <" + iri.Doc("020-plan") + ">",
 		"<" + iri.Task("WL-1") + "> <" + iri.Term("about") + "> <" + iri.Doc("010-spec") + ">",
 		"<" + iri.Doc("020-plan") + "> <" + ProvWasGeneratedBy + "> <" + iri.Task("WL-2") + ">",
@@ -48,6 +46,9 @@ func TestProjectGraphTriples(t *testing.T) {
 		if !strings.Contains(doc, w) {
 			t.Errorf("missing triple %s\n%s", w, doc)
 		}
+	}
+	if strings.Contains(doc, DCTIsReplacedBy) || strings.Contains(doc, iri.Term("amends")) {
+		t.Errorf("document-level amends/replaces must not be emitted:\n%s", doc)
 	}
 	if strings.Contains(doc, DCTRequires) {
 		t.Errorf("edge to an unknown doc must be skipped:\n%s", doc)

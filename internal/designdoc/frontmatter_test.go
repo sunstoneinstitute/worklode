@@ -9,11 +9,9 @@ import (
 )
 
 // TestParseFrontmatterAllShapes exercises every shape at once: scalars, a
-// list, and two anchor-keyed maps. It runs on a fixture rather than a real
-// spec because the corpus consolidation absorbed every amendment and
-// supersession edge into the text that states the end result, so no shipped
-// document carries `amends:` or `replaces:` any more. The parser still has to
-// read them: an amendment made after the consolidation writes them again.
+// list, and two anchor-keyed maps. `amends:` and `replaces:` are retired keys
+// (WL-SPEC-77 §7), but the parser still has to decode them: stored bodies
+// keep their text.
 func TestParseFrontmatterAllShapes(t *testing.T) {
 	const src = `---
 status: accepted

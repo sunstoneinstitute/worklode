@@ -385,7 +385,7 @@ func underDir(p, dir string) (rel string, ok bool) {
 // gap, filing it there as a follow-up instead so the two reconverge.
 //
 // A bare reference (no "/") is tried home-relative first — correct for a
-// same-corpus reference, `requires` and `amends` naming another document
+// same-corpus reference, `requires` naming another document
 // right beside the referring one — and only when that guess names no
 // document actually in the corpus is it retried as a number, slug, or
 // <KEY>-<TYPE>-<n> shorthand against every document (WL-409): a covers or
