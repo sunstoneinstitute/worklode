@@ -1,12 +1,16 @@
 ---
 name: spec-coverage
-description: Find accepted specs with sections no accepted plan covers and create Worklode planning tasks for them
+description: Find planning gaps in accepted specs and create tasks to plan their uncovered rules
 argument-hint: "[--project P] [--dry-run]"
 disable-model-invocation: true
 allowed-tools: Bash(lode *) Bash(git *)
 ---
 
 Invocation arguments: $ARGUMENTS
+
+Specs arrange rules. Planning gaps are still reported by section anchor and
+coverage level, so use that query to find gaps, then identify the rules at
+those anchors. Rearranging the spec does not fill a planning gap.
 
 Ask the backbone, which owns the answer:
 
@@ -34,6 +38,11 @@ covers every section (`len(gaps) == sections`) with every `coverage` equal to
 list the rest under them as partial debt, so a spec with one uncovered section
 is not mistaken for an unplanned spec.
 
+For each spec with gaps, read `lode rule list --doc <spec-ref> --json` to map
+anchors to rule refs. Inspect the affected rules with `lode show <rule-ref>`
+for existing covering plans and governed tasks. Report the refs alongside the
+anchors; retain anchors in the proposed plan's `covers` syntax.
+
 For each gap, check whether it is already tracked: `lode task list --status
 all --json` and look for a `kind: design` task whose title starts with `Plan
 spec <N> —` (the convention already in use, e.g. `WL-22`). If one exists,
@@ -49,7 +58,7 @@ Otherwise, for every untracked gap, run:
 ```
 lode task add --kind design \
   --title "Plan spec <N> — <title>" \
-  --body "Write an implementation plan covering <KEY>-SPEC-<N> (<slug>), sections <anchors>. Read it with 'lode show <KEY>-SPEC-<N>'. See the lode:splitting-specs-into-plans skill." \
+  --body "Write an implementation plan covering <KEY>-SPEC-<N> (<slug>), sections <anchors>. Rules: <rule-refs>. Read the spec with 'lode show <KEY>-SPEC-<N> --inline'. See the lode:splitting-specs-into-plans skill." \
   --project <P> --json
 ```
 

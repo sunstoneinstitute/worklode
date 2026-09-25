@@ -30,8 +30,10 @@ in one round of questions, and accept "I don't know" as an answer.
   A bug with no repro is still worth filing; say in the body that the repro is
   missing so whoever picks it up knows to find one first.
 - **feature** — for anything beyond a small, obvious change, a spec. Check
-  whether one exists (`lode doc list --kind spec`). If it does, name it in
-  the body. If it does not and the work is non-trivial,
+  whether one exists (`lode doc list --kind spec`). If it does, read its
+  arrangement with `lode rule list --doc <spec-ref>` and identify the rules
+  governing the work. Name them in the body and pass their refs with
+  `--governed-by` when filing. If it does not and the work is non-trivial,
   say so and offer to file a `design` task for the spec instead, or alongside.
 - **chore** — whether it can be automated away. Repetitive manual upkeep is
   worth a line in the body about what would remove the need to repeat it.
@@ -54,4 +56,6 @@ BODY
 ```
 
 Add `--priority`, `--project`, `--parent` or `--follow-up-to` when they apply.
+Repeat `--governed-by <rule-ref>` for each known governing rule. This records
+requirements as task links; a spec mentioned only in prose does not.
 Report the new task's id.
