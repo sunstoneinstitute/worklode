@@ -64,6 +64,10 @@ func RulesTable(w io.Writer, rules []model.Rule) {
 	tbl.flush(w)
 }
 
+// ruleEdgeInverse names the inverse a reader sees on the far end of a stored
+// edge that has one (WL-SPEC-77 §4). The inverse is never stored.
+var ruleEdgeInverse = map[string]string{"amends": "amendedBy", "supersedes": "supersededBy"}
+
 // RuleRender is the human view of one rule: its ref and heading, status
 // and version, where it is arranged, then its text.
 func RuleRender(w io.Writer, c model.Rule) {
@@ -84,15 +88,33 @@ func RuleRender(w io.Writer, c model.Rule) {
 		fmt.Fprintf(w, "  governs:  %s %s (%s, %s, v%d)\n", gt.ID, gt.Title, gt.State, gt.Source, gt.RuleVersion)
 	}
 	for _, e := range c.Edges {
-		if e.From == c.Ref {
+		switch {
+		case e.From == c.Ref:
 			fmt.Fprintf(w, "  %-9s %s %s (%s)\n", e.Type+":", e.To, e.ToHeading, e.Source)
-		} else {
+		case ruleEdgeInverse[e.Type] != "":
+			fmt.Fprintf(w, "  %-9s %s %s (%s)\n", ruleEdgeInverse[e.Type]+":", e.From, e.FromHeading, e.Source)
+		default:
 			fmt.Fprintf(w, "  %-9s %s %s (%s, incoming)\n", e.Type+":", e.From, e.FromHeading, e.Source)
 		}
 	}
 	if c.Body != "" {
 		fmt.Fprintln(w)
 		Markdown(w, c.Body)
+	}
+}
+
+// RuleAmendmentsRender prints a rule's folded amendments beneath its text:
+// pending ones as references, in-force ones as attributed blocks.
+func RuleAmendmentsRender(w io.Writer, blocks, pending []string) {
+	var b strings.Builder
+	for _, p := range pending {
+		fmt.Fprintf(&b, "\n> Pending %s (not yet effective)\n", p)
+	}
+	for _, block := range blocks {
+		b.WriteString("\n" + block + "\n")
+	}
+	if b.Len() > 0 {
+		Markdown(w, b.String())
 	}
 }
 
