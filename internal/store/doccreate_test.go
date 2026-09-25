@@ -154,7 +154,7 @@ func TestDocCreateResolvesEdges(t *testing.T) {
 	// Unresolved before resolved within a type: to_doc NULL coalesces to 0.
 	want := []model.DocEdge{
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
-		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-5"},
+		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-2"},
 		{Type: "wasDerivedFrom", ToDoc: spec.ID},
 	}
 	if len(got) != len(want) {
@@ -458,7 +458,7 @@ func TestDocCreateRepointsExternalEdges(t *testing.T) {
 	want := func(specID int64) []model.DocEdge {
 		return []model.DocEdge{
 			{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
-			{Type: "covers", ToDoc: specID, ToAnchor: "sec-5"},
+			{Type: "covers", ToDoc: specID, ToAnchor: "sec-2"},
 			{Type: "wasDerivedFrom", ToDoc: specID},
 		}
 	}
@@ -619,8 +619,9 @@ covers:
 // TestDocCreateRepointCollapsesDisagreeingCoverage: two unresolvable spellings
 // of one section at *different* coverage levels both store, then collapse when
 // the target arrives. rebuildEdges would call that a contradiction (026 §5.1),
-// but here it lives in another document's frontmatter, so the lower-id row wins
-// and this create succeeds rather than wedging an import on an unrelated defect.
+// but here it lives in another document's frontmatter, so the lower-id row's
+// level and closure win and this create succeeds rather than wedging an import
+// on an unrelated defect. The survivor is a new edge to the section's rule.
 func TestDocCreateRepointCollapsesDisagreeingCoverage(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -657,16 +658,15 @@ covers:
 	if !slices.Equal(got, want) {
 		t.Fatalf("covers edges = %+v, want %+v", got, want)
 	}
-	// The survivor is the lower-id row — the partial one, written first — so
-	// its closure is the one that stands; the collapsed row's cascaded away.
-	if got[0].id != before[0].id {
-		t.Fatalf("surviving edge id = %d, want the lower-id row %d", got[0].id, before[0].id)
-	}
+	// The lower-id row — the partial one, written first — sets the survivor's
+	// level and closure; both unresolved rows are gone with their closures.
 	wantCW := []docCompletedWithRow{{position: 0, toExternal: "nowhere-plan.md"}}
 	if cw := docCompletedWith(t, s, got[0].id); !slices.Equal(cw, wantCW) {
 		t.Fatalf("completedWith = %+v, want %+v", cw, wantCW)
 	}
-	if cw := docCompletedWith(t, s, before[1].id); len(cw) != 0 {
-		t.Fatalf("collapsed edge %d kept closure rows %+v", before[1].id, cw)
+	for _, b := range before {
+		if cw := docCompletedWith(t, s, b.id); len(cw) != 0 {
+			t.Fatalf("collapsed edge %d kept closure rows %+v", b.id, cw)
+		}
 	}
 }

@@ -20,6 +20,10 @@ type Rule struct {
 	// ArrangedIn lists the documents whose current arrangement holds this
 	// rule, and at which version, position and depth.
 	ArrangedIn []RuleArrangement `json:"arranged_in"`
+	// CoveredBy lists the plans covering this rule, directly or through a
+	// rule it supersedes (WL-SPEC-77 §4). GetRule fills it; a list leaves it
+	// empty.
+	CoveredBy []RulePlan `json:"covered_by"`
 	// GovernedTasks are the tasks this rule governs (S2), newest link first.
 	GovernedTasks []RuleTask `json:"governed_tasks"`
 	// Edges are every typed edge in or out of this rule (S12, S26).
@@ -39,6 +43,14 @@ type RuleArrangement struct {
 	Position    int    `json:"position"`
 	Depth       int    `json:"depth"`
 	RuleVersion int    `json:"rule_version"`
+}
+
+// RulePlan is one plan covering a rule, at the level its covers edge states.
+type RulePlan struct {
+	Doc      int64  `json:"doc"`
+	DocRef   string `json:"doc_ref"` // "WL-PLAN-7"
+	Status   string `json:"status"`
+	Coverage string `json:"coverage"` // full | partial | none
 }
 
 // RuleVersion is one entry of a rule's version history.

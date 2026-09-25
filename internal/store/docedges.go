@@ -75,7 +75,8 @@ type docEdgeRef struct {
 
 // docEdgeRow is one edge after resolution — exactly the tuple
 // doc_edges_unique keys, so equality here is the collision the index would
-// report. toDoc is 0 and toExternal non-empty for an unresolved reference.
+// report. A covers edge sets toRule, every other edge toDoc; both are 0 and
+// toExternal non-empty for an unresolved reference.
 // fromDoc is the writing document for every relation but an inverse-authored
 // `blocks`, which is why it is a field rather than assumed.
 // The coverage level is not part of this tuple — doc_edges_unique does not
@@ -85,6 +86,7 @@ type docEdgeRow struct {
 	fromAnchor string
 	typ        string
 	toDoc      int64
+	toRule     int64
 	toAnchor   string
 	toExternal string
 }
@@ -181,6 +183,11 @@ func closureEqual(a, b []closureRef) bool {
 // different closure is a contradiction the frontmatter cannot mean (026
 // §2.1), so that is ErrInvalidInput rather than a raw unique-index violation.
 //
+// A covers entry is stored as one edge per rule it resolves to (coversRules,
+// WL-SPEC-77 §4), so a whole-document entry writes an edge for each rule the
+// document contains when the plan is written. An entry naming no rule keeps
+// its reference in to_external.
+//
 // A covers edge is checked against 026 §5.1: the key is plan-only, the level
 // is one of full/partial/none, and a qualified entry carries both required
 // keys. An empty level reaches here only from the object form with
@@ -251,9 +258,14 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 	seen := map[docEdgeRow]docEdgeSeen{}
 	for _, e := range frontmatterEdges(fm) {
 		base, fragment := designdoc.SplitFragment(e.ref)
-		toDoc, resolved, err := resolveDocRef(tx, project, base)
-		if err != nil {
-			return err
+		var toDoc int64
+		var resolved bool
+		var err error
+		if e.typ != "covers" {
+			// A covers entry resolves to rules instead (coversRules below).
+			if toDoc, resolved, err = resolveDocRef(tx, project, base); err != nil {
+				return err
+			}
 		}
 		if e.typ == "blocks" {
 			if err := checkPlanOrdering(tx, docID, kind, e.ref, toDoc, resolved, e.inverse); err != nil {
@@ -320,12 +332,33 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 		}
 
 		row := docEdgeRow{fromDoc: docID, fromAnchor: e.fromAnchor, typ: e.typ}
-		if resolved {
+		var rows []docEdgeRow
+		switch {
+		case e.typ == "covers":
+			// A covers edge runs from the plan to each rule the entry
+			// resolves to (WL-SPEC-77 §4); an entry naming no rule keeps its
+			// reference verbatim.
+			rules, err := coversRules(tx, project, e.ref)
+			if err != nil {
+				return err
+			}
+			for _, r := range rules {
+				rr := row
+				rr.toRule = r
+				rows = append(rows, rr)
+			}
+			if len(rules) == 0 {
+				row.toExternal = e.ref
+				rows = append(rows, row)
+			}
+		case resolved:
 			row.toDoc, row.toAnchor = toDoc, fragment
-		} else {
+			rows = append(rows, row)
+		default:
 			// Unresolvable: the whole reference is kept verbatim, fragment
 			// included, since nothing here can say what its anchor names.
 			row.toExternal = e.ref
+			rows = append(rows, row)
 		}
 		if e.inverse {
 			// `blockedBy: [Q]` is the row Q→P, the one `blocks: [P]` on Q
@@ -333,79 +366,86 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			// unresolved or non-plan end, so toDoc is a plan and there is no
 			// to_external case to swap. Anchors stay empty: a blocks edge is
 			// document-level, and the CHECK says so.
-			row.fromDoc, row.toDoc = row.toDoc, docID
+			rows[0].fromDoc, rows[0].toDoc = rows[0].toDoc, docID
 		}
-		if prior, ok := seen[row]; ok {
-			if prior.level != level {
-				return fmt.Errorf("doc %d %s %q twice, as %s and %s (026 §5.1): %w",
-					docID, e.typ, e.ref, prior.level, level, ErrInvalidInput)
-			}
-			if level == "partial" && !closureEqual(prior.closure, closure) {
-				return fmt.Errorf("doc %d %s %q twice, both %s but with different fullCoverageWith closures (026 §5.1): %w",
-					docID, e.typ, e.ref, level, ErrInvalidInput)
-			}
-			if e.typ == "defers" && !closureEqual(prior.closure, closure) {
-				return fmt.Errorf("doc %d defers %q twice, deferred to two different owners (026 §5.3): %w",
-					docID, e.ref, ErrInvalidInput)
-			}
-			continue
-		}
-		seen[row] = docEdgeSeen{level: level, closure: closure}
-
-		var coverageCol sql.NullString
-		if e.typ == "covers" {
-			coverageCol = sql.NullString{String: level, Valid: true}
-		}
-		// ON CONFLICT is reachable for one case only: both plans spelling the
-		// same ordering, one with `blocks:` and one with `blockedBy:`. That is
-		// the same fact twice, not a contradiction, so it stays one row and the
-		// writer takes it over rather than the write failing on the unique
-		// index. Every other relation's from end is docID, and the DELETE above
-		// cleared those, so no cross-document collision exists to swallow.
-		var edgeID int64
-		if err := tx.QueryRow(
-			`INSERT INTO doc_edges
-			   (from_doc, from_anchor, type, to_doc, to_anchor, to_external, coverage, declared_by)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			 ON CONFLICT (from_doc, coalesce(from_anchor,''), type,
-			              coalesce(to_doc, 0), coalesce(to_anchor,''), coalesce(to_external,''))
-			 DO UPDATE SET declared_by = EXCLUDED.declared_by
-			 RETURNING id`,
-			row.fromDoc, nullText(row.fromAnchor), row.typ, nullID(row.toDoc),
-			nullText(row.toAnchor), nullText(row.toExternal), coverageCol, docID,
-		).Scan(&edgeID); err != nil {
-			return fmt.Errorf("insert %s edge from doc %d to %q: %w", e.typ, row.fromDoc, e.ref, err)
-		}
-
-		if level != "partial" && e.typ != "defers" {
-			continue
-		}
-		// resolveClosure already dropped blank entries, so pos here is a
-		// contiguous 0-based rank — unlike ranging over the raw completedWith
-		// list, which would reopen the gap resolveClosure closed. A defers
-		// edge's closure is always the single resolved owner (026 §5.3), so
-		// this loop writes exactly one doc_coverage_completed_with row for it.
-		for pos, c := range closure {
-			var toDocCol sql.NullInt64
-			var toExternalCol sql.NullString
-			if c.resolved {
-				toDocCol = nullID(c.toDoc)
-			} else {
-				toExternalCol = nullText(c.toExternal)
-			}
-			if _, err := tx.Exec(
-				`INSERT INTO doc_coverage_completed_with (edge_id, position, to_doc, to_external)
-				 VALUES ($1, $2, $3, $4)`,
-				edgeID, pos, toDocCol, toExternalCol,
-			); err != nil {
-				return fmt.Errorf("insert fullCoverageWith[%d] of doc %d covers %q: %w",
-					pos, docID, e.ref, err)
+		for _, row := range rows {
+			if err := insertDocEdge(tx, docID, e, row, level, closure, seen); err != nil {
+				return err
 			}
 		}
 	}
-	if kind == "plan" {
-		if err := arrangePlan(tx, docID); err != nil {
-			return err
+	return nil
+}
+
+// insertDocEdge writes one resolved row of rebuildEdges: the dedupe and
+// contradiction checks against rows already seen in this frontmatter, the
+// row itself, and its doc_coverage_completed_with closure.
+func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, level string, closure []closureRef, seen map[docEdgeRow]docEdgeSeen) error {
+	if prior, ok := seen[row]; ok {
+		if prior.level != level {
+			return fmt.Errorf("doc %d %s %q twice, as %s and %s (026 §5.1): %w",
+				docID, e.typ, e.ref, prior.level, level, ErrInvalidInput)
+		}
+		if level == "partial" && !closureEqual(prior.closure, closure) {
+			return fmt.Errorf("doc %d %s %q twice, both %s but with different fullCoverageWith closures (026 §5.1): %w",
+				docID, e.typ, e.ref, level, ErrInvalidInput)
+		}
+		if e.typ == "defers" && !closureEqual(prior.closure, closure) {
+			return fmt.Errorf("doc %d defers %q twice, deferred to two different owners (026 §5.3): %w",
+				docID, e.ref, ErrInvalidInput)
+		}
+		return nil
+	}
+	seen[row] = docEdgeSeen{level: level, closure: closure}
+
+	var coverageCol sql.NullString
+	if e.typ == "covers" {
+		coverageCol = sql.NullString{String: level, Valid: true}
+	}
+	// ON CONFLICT is reachable for one case only: both plans spelling the
+	// same ordering, one with `blocks:` and one with `blockedBy:`. That is
+	// the same fact twice, not a contradiction, so it stays one row and the
+	// writer takes it over rather than the write failing on the unique
+	// index. Every other relation's from end is docID, and the DELETE above
+	// cleared those, so no cross-document collision exists to swallow.
+	var edgeID int64
+	if err := tx.QueryRow(
+		`INSERT INTO doc_edges
+		   (from_doc, from_anchor, type, to_doc, to_rule, to_anchor, to_external, coverage, declared_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 ON CONFLICT (from_doc, coalesce(from_anchor,''), type, coalesce(to_doc, 0),
+		              coalesce(to_rule, 0), coalesce(to_anchor,''), coalesce(to_external,''))
+		 DO UPDATE SET declared_by = EXCLUDED.declared_by
+		 RETURNING id`,
+		row.fromDoc, nullText(row.fromAnchor), row.typ, nullID(row.toDoc), nullID(row.toRule),
+		nullText(row.toAnchor), nullText(row.toExternal), coverageCol, docID,
+	).Scan(&edgeID); err != nil {
+		return fmt.Errorf("insert %s edge from doc %d to %q: %w", e.typ, row.fromDoc, e.ref, err)
+	}
+
+	if level != "partial" && e.typ != "defers" {
+		return nil
+	}
+	// resolveClosure already dropped blank entries, so pos here is a
+	// contiguous 0-based rank — unlike ranging over the raw completedWith
+	// list, which would reopen the gap resolveClosure closed. A defers
+	// edge's closure is always the single resolved owner (026 §5.3), so
+	// this loop writes exactly one doc_coverage_completed_with row for it.
+	for pos, c := range closure {
+		var toDocCol sql.NullInt64
+		var toExternalCol sql.NullString
+		if c.resolved {
+			toDocCol = nullID(c.toDoc)
+		} else {
+			toExternalCol = nullText(c.toExternal)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO doc_coverage_completed_with (edge_id, position, to_doc, to_external)
+			 VALUES ($1, $2, $3, $4)`,
+			edgeID, pos, toDocCol, toExternalCol,
+		); err != nil {
+			return fmt.Errorf("insert fullCoverageWith[%d] of doc %d covers %q: %w",
+				pos, docID, e.ref, err)
 		}
 	}
 	return nil
@@ -474,6 +514,16 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 			return err
 		}
 		if !resolved || toDoc != newDocID {
+			continue
+		}
+		if c.typ == "covers" {
+			moved, err := repointCovers(tx, project, c.id, c.fromDoc, c.ref)
+			if err != nil {
+				return err
+			}
+			if moved {
+				touched[c.fromDoc] = true
+			}
 			continue
 		}
 		// The pre-check reads live state and candidates run in id order, so two
@@ -568,6 +618,44 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 		}
 	}
 	return nil
+}
+
+// repointCovers resolves an unresolved covers edge whose document has just
+// arrived: it is replaced by one edge per rule the reference now names,
+// each carrying the old edge's level and fullCoverageWith closure. An edge
+// the plan already holds is kept as it is. A reference that still names no
+// rule is left in place and reports false.
+func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string) (bool, error) {
+	rules, err := coversRules(tx, project, ref)
+	if err != nil || len(rules) == 0 {
+		return false, err
+	}
+	for _, r := range rules {
+		var newID int64
+		err := tx.QueryRow(
+			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_rule, coverage, declared_by)
+			 SELECT from_doc, from_anchor, type, $2, coverage, from_doc FROM doc_edges WHERE id = $1
+			 ON CONFLICT (from_doc, coalesce(from_anchor,''), type, coalesce(to_doc, 0),
+			              coalesce(to_rule, 0), coalesce(to_anchor,''), coalesce(to_external,''))
+			 DO NOTHING
+			 RETURNING id`, edgeID, r).Scan(&newID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("re-point covers edge %d of doc %d to rule %d: %w", edgeID, fromDoc, r, err)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO doc_coverage_completed_with (edge_id, position, to_doc, to_external)
+			 SELECT $2, position, to_doc, to_external FROM doc_coverage_completed_with WHERE edge_id = $1`,
+			edgeID, newID); err != nil {
+			return false, fmt.Errorf("copy fullCoverageWith of covers edge %d: %w", edgeID, err)
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE id = $1`, edgeID); err != nil {
+		return false, fmt.Errorf("drop re-pointed covers edge %d of doc %d: %w", edgeID, fromDoc, err)
+	}
+	return true, nil
 }
 
 // frontmatterEdges reads the recorded relations out of fm — the walk is
@@ -913,12 +1001,20 @@ var docEdgeInverse = map[string]string{
 // Both lists are fully ordered, so a caller may compare them as sequences.
 func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.DocEdge, err error) {
 	outRows, err := s.db.QueryContext(ctx,
-		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
-		        coalesce(e.to_anchor,''), coalesce(e.to_external,''),
+		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
+		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
-		        coalesce(d.number,0), coalesce(d.status,''), cw.items
+		        coalesce(d.number,0), coalesce(d.status,''), cw.items,
+		        coalesce(rp.key || '-RULE-' || r.number, '')
 		   FROM doc_edges e
-		   LEFT JOIN docs d ON d.id = e.to_doc
+		   LEFT JOIN rules r ON r.id = e.to_rule
+		   LEFT JOIN projects rp ON rp.id = r.project_id
+		   LEFT JOIN LATERAL (
+		            SELECT dr.doc_id, dr.anchor FROM doc_rules dr
+		             WHERE dr.rule_id = e.to_rule
+		             ORDER BY dr.doc_id, dr.position LIMIT 1
+		        ) ra ON true
+		   LEFT JOIN docs d ON d.id = coalesce(e.to_doc, ra.doc_id)
 		   LEFT JOIN LATERAL (
 		            SELECT coalesce(json_agg(coalesce(wd.slug, w.to_external)
 		                             ORDER BY w.position), '[]')::text AS items
@@ -927,8 +1023,8 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		             WHERE w.edge_id = e.id
 		        ) cw ON true
 		  WHERE e.from_doc = $1
-		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
-		           coalesce(e.to_anchor,''), coalesce(e.to_external,'')`, docID)
+		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
+		           coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''), r.number`, docID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list edges out of doc %d: %w", docID, err)
 	}
@@ -942,10 +1038,17 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	// anchor here, and its source anchor is the far one. completedWith is
 	// read the same way regardless of direction — it describes the stored
 	// row itself (e.id), not which end docID sits at.
+	//
+	// A covers edge runs to a rule, so it lands here at each section of docID
+	// arranging a rule it reaches (covered_sections), once per section.
 	inRows, err := s.db.QueryContext(ctx,
-		`SELECT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
-		        d.project_id, d.slug, d.kind, coalesce(d.number,0), d.status, cw.items
-		   FROM doc_edges e
+		`SELECT DISTINCT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
+		        d.project_id, d.slug, d.kind, coalesce(d.number,0), d.status, cw.items, ''
+		   FROM (SELECT id, type, from_doc, from_anchor, to_anchor
+		           FROM doc_edges WHERE to_doc = $1
+		         UNION ALL
+		         SELECT edge_id, 'covers', plan_id, NULL, anchor
+		           FROM covered_sections WHERE doc_id = $1) e
 		   JOIN docs d ON d.id = e.from_doc
 		   LEFT JOIN LATERAL (
 		            SELECT coalesce(json_agg(coalesce(wd.slug, w.to_external)
@@ -954,7 +1057,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		              LEFT JOIN docs wd ON wd.id = w.to_doc
 		             WHERE w.edge_id = e.id
 		        ) cw ON true
-		  WHERE e.to_doc = $1 AND d.deleted_at IS NULL
+		  WHERE d.deleted_at IS NULL
 		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list edges into doc %d: %w", docID, err)
@@ -976,7 +1079,8 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 
 // scanDocEdges drains a query selecting the DocEdge columns in order: the
 // five stored ones, the joined far end's project, slug, kind, number and
-// status, then the completedWith closure as a JSON array of strings (never NULL —
+// status, the completedWith closure, then the rule ref. The closure is a
+// JSON array of strings (never NULL —
 // the caller's lateral join coalesces an edge with no
 // doc_coverage_completed_with rows to "[]", following NeedsPlanning's
 // json_agg-to-text convention rather than scanning a native Postgres array).
@@ -988,7 +1092,7 @@ func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 		var completedWithJSON string
 		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal,
 			&e.ToProject, &e.ToSlug, &e.ToKind, &e.ToNumber, &e.ToStatus,
-			&completedWithJSON); err != nil {
+			&completedWithJSON, &e.ToRule); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(completedWithJSON), &e.CompletedWith); err != nil {

@@ -248,10 +248,9 @@ func publishDocSections(tx *sql.Tx, docID int64) error {
 // acceptDocRules accepts every draft rule a document's current
 // arrangement holds (S11). Called both when a document is accepted and when
 // ensureRules backfills the arrangement of a document that was already
-// accepted before the rule tables existed. Guarded by d.kind <> 'plan':
-// a plan's doc_rules rows are another document's rules (increment 3
-// R1), so accepting a plan must never flip them to accepted regardless of
-// which caller reaches here or in what order.
+// accepted before the rule tables existed. A plan contains no rules
+// (WL-SPEC-77 §4); the d.kind <> 'plan' guard keeps accepting a plan from
+// ever flipping a rule.
 func acceptDocRules(tx *sql.Tx, docID int64) error {
 	if _, err := tx.Exec(
 		`UPDATE rules SET status = 'accepted', updated_at = now()
@@ -298,6 +297,26 @@ func (s *Store) GetRule(ctx context.Context, projectKey string, number int64) (*
 		return nil, err
 	}
 	c.ArrangedIn = nonNil(arr[c.ID])
+
+	prows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT d.id, p.key || '-PLAN-' || coalesce(d.number::text, d.slug), d.status, c.coverage
+		   FROM covered_rules c
+		   JOIN docs d ON d.id = c.plan_id AND d.deleted_at IS NULL
+		   JOIN projects p ON p.id = d.project_id
+		  WHERE c.rule_id = $1
+		  ORDER BY d.id, c.coverage`, c.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read plans covering rule %d: %w", c.ID, err)
+	}
+	cov, err := collectRows(prows, "plans covering rule", func(r rowScanner) (model.RulePlan, error) {
+		var rp model.RulePlan
+		err := r.Scan(&rp.Doc, &rp.DocRef, &rp.Status, &rp.Coverage)
+		return rp, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	c.CoveredBy = nonNil(cov)
 
 	c.GovernedTasks = []model.RuleTask{}
 	trows, err := s.db.QueryContext(ctx,
@@ -381,7 +400,7 @@ func (s *Store) ListRules(ctx context.Context, f RuleFilter) ([]model.Rule, erro
 		}
 		c.Owner, c.Tags = owner.String, nonNil(tags)
 		c.Ref = fmt.Sprintf("%s-RULE-%d", c.ProjectKey, c.Number)
-		c.GovernedTasks, c.Edges = []model.RuleTask{}, []model.RuleEdge{}
+		c.GovernedTasks, c.Edges, c.CoveredBy = []model.RuleTask{}, []model.RuleEdge{}, []model.RulePlan{}
 		out = append(out, c)
 		ids = append(ids, c.ID)
 	}
@@ -489,9 +508,8 @@ func (s *Store) GetRuleVersion(ctx context.Context, projectKey string, number in
 // syncRules rewrites the rule's draft version in place. An accepted
 // document is written through its candidate revision, opened here when none
 // is open; the rule's next version appears when the revision lands. A
-// plan arrangement only references a rule (increment 3 R2), so its
-// doc_rules rows are excluded here: the rule writes through the spec or
-// ADR that arranges it, never through a covering plan. A rule arranged in
+// plan contains no rules, so the rule writes through the spec or ADR that
+// arranges it, never through a covering plan. A rule arranged in
 // no spec or ADR, or in more than one, is refused: editing is document-first
 // in this stage. Returns the arranging document's id.
 func EditRule(tx *sql.Tx, now time.Time, projectKey string, number int64, in model.EditRuleInput, actorID string, eventID int64) (int64, error) {
@@ -658,7 +676,7 @@ var ruleStatuses = map[string]bool{"draft": true, "accepted": true, "superseded"
 
 // SetRuleStatus is the one writer of a rule's status outside document
 // acceptance (increment 3 R7). Withdrawing a rule marks every accepted plan
-// arranging it stale (S23): the plan's frozen arrangement names text that no
+// covering it stale (S23, WL-SPEC-77 §9): the plan undertook text that no
 // longer holds. Increment 4's split and merge lineage is the caller that
 // withdraws. The rule row lock is NO KEY UPDATE so it does not wait on a
 // concurrent Govern's FK KEY SHARE (see resolveSupersede).
@@ -686,23 +704,8 @@ func SetRuleStatus(tx *sql.Tx, now time.Time, ruleID int64, status string, event
 	if status != "withdrawn" {
 		return nil
 	}
-	rows, err := tx.Query(
-		`SELECT DISTINCT d.id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
-		  WHERE dc.rule_id = $1 AND d.kind = 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL`, ruleID)
+	plans, err := acceptedPlansCovering(tx, []int64{ruleID})
 	if err != nil {
-		return fmt.Errorf("plans arranging rule %d: %w", ruleID, err)
-	}
-	var plans []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		plans = append(plans, id)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return err
 	}
 	ref := fmt.Sprintf("%s-RULE-%d", key, number)
