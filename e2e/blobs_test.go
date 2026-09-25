@@ -280,7 +280,7 @@ func TestBlobLifecycle(t *testing.T) {
 	for _, want := range []string{
 		`<img src="/blob/` + upA.Hash + `"`,
 		`<img src="/blob/` + upB.Hash + `"`,
-		">Attachments<",
+		">Attachments (",
 		`href="/blob/` + upLog.Hash + `?filename=crash.log"`,
 		"crash.log",
 	} {

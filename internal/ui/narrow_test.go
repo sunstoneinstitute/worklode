@@ -119,8 +119,20 @@ func pages(t *testing.T) map[string]string {
 			Holder:    &model.Lease{TaskID: "WL-234", ActorID: "claude-worker-01", Worktree: "hel01:/home/stig/git/worklode/.worktrees/WL-234-make-the-narrow-width-reflow-check-runna", ExpiresAt: now},
 			Blocks:    []string{"WL-235", "WL-236"},
 			BlockedBy: []string{"WL-140"},
-			Children:  []string{"WL-237"},
-			Progress:  model.TaskProgress{Closed: 1, Total: 3},
+			// The list is what a narrow screen reads once the drawing is hidden.
+			Prerequisites: &Prerequisites{
+				Remaining: 1, Direct: 1, Candidates: []string{"WL-140"},
+				Plans: []PrerequisitePlan{{Slug: token, Title: longTitle, Status: "draft", URL: "/docs/7"}},
+				Cards: []PrerequisiteCard{
+					{ID: "WL-234", Label: "Make the narrow-width re…", Target: true, X: 264, Y: 8},
+					{ID: "WL-140", Title: longTitle, Label: "Make the narrow-width re…", State: "ready", X: 8, Y: 8},
+				},
+				Links: []PrerequisiteLink{{Path: "M208 37 C236 37 236 37 264 37"}},
+				Width: 472, Height: 74,
+				List: []PrerequisiteCard{{ID: "WL-140", Title: longTitle, State: "ready", NeededBy: []string{"WL-234"}}},
+			},
+			Children: []string{"WL-237"},
+			Progress: model.TaskProgress{Closed: 1, Total: 3},
 			Timeline: []TimelineRow{
 				{At: now, Type: "pr", Label: "Pull request", Summary: "#242 Make the narrow-width reflow check runnable — merged by stig", URL: "https://github.com/sunstoneinstitute/worklode/pull/242"},
 				{At: now, Type: "ci", Label: "Check", Summary: "pr-checks / test (pull_request) succeeded in 4m12s", URL: "https://github.com/sunstoneinstitute/worklode/actions/runs/1234567890"},
@@ -362,11 +374,6 @@ func pages(t *testing.T) map[string]string {
 			Form: FormShell{Page: PageProps{Title: "Declare a deliverable"}, Project: proj, Action: "/projects/worklode/deliverables/new", CancelURL: "/projects/worklode/deliverables"},
 			Name: "Daily casualty reconciliation snapshot", Artifact: token,
 			URL: "https://console.cloud.google.com/bigquery?project=sunstone-prod",
-		}),
-		"graph": Graph(GraphView{
-			Page:    PageProps{Title: "worklode: Worklode backbone: Graph"},
-			Project: CockpitProject{ID: "worklode", Name: longTitle, Key: "WL"},
-			DataURL: "/projects/worklode/graph/data",
 		}),
 		"placeholder": Placeholder(PlaceholderView{
 			Page: PageProps{Title: "Decisions"}, Heading: "Decisions", Project: &proj, ActiveSection: "decisions",

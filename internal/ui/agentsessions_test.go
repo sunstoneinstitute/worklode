@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func renderTask(t *testing.T, v TaskView) string {
@@ -119,6 +121,35 @@ func TestAgentLabel(t *testing.T) {
 	} {
 		if got := agentLabel(in); got != want {
 			t.Errorf("agentLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The task page collapses every section after the body into a <details>, and
+// activity.js must still find its target inside the collapsed Activity card:
+// getElementById("activity"), its data-task, and the ol.activity it prepends
+// into. The body renders before any of them.
+func TestTaskPageCollapsedActivityKeepsStreamTarget(t *testing.T) {
+	body := renderTask(t, TaskView{
+		Page:     PageProps{Title: "WL-7"},
+		Task:     model.Task{ID: "WL-7"},
+		Activity: []ActivityRow{{ID: 3, Event: "tool_result"}},
+	})
+	open := `<details class="card" id="activity" aria-labelledby="activity-heading" data-task="WL-7">`
+	start := strings.Index(body, open)
+	if start < 0 {
+		t.Fatalf("no collapsed Activity card with its id and data-task:\n%s", body)
+	}
+	card := body[start : start+strings.Index(body[start:], "</details>")]
+	if !strings.Contains(card, `<ol class="activity">`) {
+		t.Errorf("ol.activity is not inside the Activity card:\n%s", card)
+	}
+	if b := strings.Index(body, `id="body-heading"`); b < 0 || b > start {
+		t.Errorf("Body does not render before the collapsed sections")
+	}
+	for _, id := range []string{"edges-heading", "timeline-heading"} {
+		if !strings.Contains(body, `<details class="card" aria-labelledby="`+id+`">`) {
+			t.Errorf("%s section is not a collapsed <details>", id)
 		}
 	}
 }
