@@ -1271,12 +1271,12 @@ func docSectionReferrers(ctx context.Context, q rowQueryer, docID int64, anchor 
 		   JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
 		  WHERE dr.doc_id = $1 AND dr.anchor = $2
 		  UNION ALL
-		 SELECT 'task', t.id, e.type, t.title
+		 SELECT DISTINCT 'task', t.id, 'covers', t.title
 		   FROM tasks t
 		   JOIN docs p ON p.id = t.plan_doc
 		    AND p.status = 'accepted' AND p.deleted_at IS NULL
-		   JOIN doc_edges e ON e.from_doc = p.id
-		    AND e.to_doc = $1 AND e.to_anchor = $2 AND e.type = 'covers'
+		   JOIN covered_sections e ON e.plan_id = p.id
+		    AND e.doc_id = $1 AND e.anchor = $2
 		  WHERE t.deleted_at IS NULL AND t.state IN (`+claimedOpenStates+`)
 		  ORDER BY kind, ref`,
 		docID, anchor)

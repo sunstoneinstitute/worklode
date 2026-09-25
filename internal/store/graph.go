@@ -188,13 +188,17 @@ func (s *Store) graphDocs(ctx context.Context, projectID string) ([]model.Doc, e
 }
 
 // graphDocEdges collapses doc_edges to document level: one row per
-// (from, to, type) whatever anchors the stored rows name. Both ends must be
-// live documents of the project; an edge to another project or to an
-// unresolved external reference is not drawn.
+// (from, to, type) whatever anchors the stored rows name. A covers edge runs
+// to a rule, so it is drawn to each document arranging a rule it reaches
+// (covered_sections). Both ends must be live documents of the project; an
+// edge to another project or to an unresolved external reference is not
+// drawn.
 func (s *Store) graphDocEdges(ctx context.Context, projectID string) ([]model.GraphDocEdge, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT DISTINCT e.from_doc, e.to_doc, e.type
-  FROM doc_edges e
+  FROM (SELECT from_doc, to_doc, type FROM doc_edges WHERE to_doc IS NOT NULL
+        UNION
+        SELECT plan_id, doc_id, 'covers' FROM covered_sections) e
   JOIN docs a ON a.id = e.from_doc
   JOIN docs b ON b.id = e.to_doc
  WHERE a.project_id = $1 AND b.project_id = $1

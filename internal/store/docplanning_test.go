@@ -768,19 +768,19 @@ func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
 	}
 }
 
-// TestDocNeedsPlanningWholeDocumentEdgeCoversNothing: a covers edge with no
-// fragment names no section, so it discharges none (026 §2.1 — it cannot say
-// which present section it undertakes and would silently claim future ones).
-func TestDocNeedsPlanningWholeDocumentEdgeCoversNothing(t *testing.T) {
+// TestDocNeedsPlanningWholeDocumentEntryCoversEveryRule: a covers entry with
+// no fragment resolves, when the plan is written, to one edge per rule the
+// document contains (WL-SPEC-77 §4), so it discharges every section present
+// then.
+func TestDocNeedsPlanningWholeDocumentEntryCoversEveryRule(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	coveringPlan(t, s, "plan-a", true, "025-x")
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(unplanned)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want every anchor unplanned", gaps)
+	if len(gaps) != 0 {
+		t.Fatalf("gaps = %v, want none", gaps)
 	}
 }
 

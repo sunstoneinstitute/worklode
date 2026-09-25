@@ -147,21 +147,6 @@ func resolveGoverningRule(ctx context.Context, db *meteredDB, ruleID int64) ([]s
 	return out, rows.Err()
 }
 
-// planRules is the plan's arranged rule ids in arrangement order. The
-// arrangement is written by arrangePlan on every plan body write and again
-// at accept (increment 3 R1).
-func planRules(tx *sql.Tx, planID int64) ([]int64, error) {
-	rows, err := arrangedRules(tx, planID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]int64, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, r.id)
-	}
-	return out, nil
-}
-
 // HasPlanGovernance reports whether a plan governs the task: any link with
 // source = 'plan'. The gate writes only when this is false (S51).
 func HasPlanGovernance(tx *sql.Tx, taskID string) (bool, error) {

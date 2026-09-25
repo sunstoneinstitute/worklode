@@ -42,7 +42,9 @@ func TestDocSchemaBlocksEdgeWithAnchorViolatesCheck(t *testing.T) {
 	}
 }
 
-func TestDocSchemaCoversEdgeSucceeds(t *testing.T) {
+// TestDocSchemaCoversEdgeNeedsRule: a covers edge runs from a plan to a rule
+// (WL-SPEC-77 §8), so one naming a document section is refused.
+func TestDocSchemaCoversEdgeNeedsRule(t *testing.T) {
 	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
@@ -61,8 +63,8 @@ func TestDocSchemaCoversEdgeSucceeds(t *testing.T) {
 		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor, coverage, declared_by)
 		 VALUES ($1, 'covers', $2, 'sec-5', 'full', $1)`,
 		planID, specID)
-	if err != nil {
-		t.Fatalf("insert covers edge: %v", err)
+	if !isCheckViolationOn(err, "doc_edges_covers_rule") {
+		t.Fatalf("expected doc_edges_covers_rule CHECK violation, got: %v", err)
 	}
 }
 
@@ -173,7 +175,7 @@ func TestReplaceDocEdges(t *testing.T) {
 	want := []model.DocEdge{
 		// 999-nowhere.md names no document here and stays verbatim.
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
-		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-5"},
+		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-2"},
 		{Type: "wasDerivedFrom", ToDoc: spec.ID},
 	}
 	if got := docEdges(t, s, plan.ID); !reflect.DeepEqual(got, want) {
@@ -1219,7 +1221,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	}
 	wantOut := []model.DocEdge{
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
-		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-5"}),
+		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2", ToRule: "P1-RULE-2"}),
 		specFar(model.DocEdge{Type: "wasDerivedFrom"}),
 	}
 	if len(out) != len(wantOut) {
@@ -1252,7 +1254,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		return e
 	}
 	wantIn := []model.DocEdge{
-		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-5"}),
+		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-2"}),
 		planFar(model.DocEdge{Type: "hadDerivation"}),
 	}
 	if len(in) != len(wantIn) {
@@ -1399,15 +1401,23 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 	types := []string{"covers", "implements", "requires", "wasDerivedFrom", "blocks"}
 	for _, typ := range types {
 		// Only a covers edge carries a coverage level
-		// (doc_edges_coverage_on_covers).
+		// (doc_edges_coverage_on_covers), and it runs to one of the
+		// document's rules instead of the document (doc_edges_covers_rule).
 		var coverage sql.NullString
+		toDoc := sql.NullInt64{Int64: to.ID, Valid: true}
+		var toRule sql.NullInt64
 		if typ == "covers" {
 			coverage = sql.NullString{String: "full", Valid: true}
+			toDoc = sql.NullInt64{}
+			if err := s.db.QueryRowContext(t.Context(),
+				`SELECT rule_id FROM doc_rules WHERE doc_id = $1 ORDER BY position LIMIT 1`, to.ID).Scan(&toRule); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if _, err := s.db.ExecContext(t.Context(),
-			`INSERT INTO doc_edges (from_doc, type, to_doc, coverage, declared_by)
-			 VALUES ($1, $2, $3, $4, $1)`,
-			from.ID, typ, to.ID, coverage); err != nil {
+			`INSERT INTO doc_edges (from_doc, type, to_doc, to_rule, coverage, declared_by)
+			 VALUES ($1, $2, $3, $4, $5, $1)`,
+			from.ID, typ, toDoc, toRule, coverage); err != nil {
 			t.Fatalf("insert %s edge: %v", typ, err)
 		}
 	}
@@ -1820,10 +1830,11 @@ func TestLintDocs(t *testing.T) {
 		Body: specBody, CreatedBy: "stig",
 	})
 
-	// sec-1 resolves and exists (not reported); sec-99 resolves to the spec
-	// but names no section of it (missing-anchor); 999-nowhere.md resolves to
-	// nothing (unresolved); NO-SPEC resolves to nothing too, but is the
-	// documented sentinel, not a defect.
+	// covers sec-1 resolves to a rule (not reported); covers sec-99 names no
+	// rule of the spec, so it is kept verbatim (unresolved); 999-nowhere.md
+	// resolves to nothing (unresolved); NO-SPEC resolves to nothing too, but
+	// is the documented sentinel, not a defect. requires sec-99 resolves to
+	// the spec but names no section of it (missing-anchor).
 	lintPlanBody := `---
 status: draft
 covers:
@@ -1831,6 +1842,7 @@ covers:
   - 025-documents-in-the-backbone.md#sec-99
   - 999-nowhere.md#sec-1
   - NO-SPEC
+requires: 025-documents-in-the-backbone.md#sec-99
 ---
 
 # Plan under lint
@@ -1863,8 +1875,8 @@ covers:
 
 	// specBody (shared with other tests in this file) carries its own
 	// unresolved requires: ref, so filter to the plan under test rather than
-	// asserting a total count. Exactly two are expected from it: the
-	// unresolved 999-nowhere.md ref and the sec-99 missing-anchor. sec-1
+	// asserting a total count. Exactly three are expected from it: the two
+	// unresolved covers refs and the requires sec-99 missing-anchor. sec-1
 	// (resolved and present) and NO-SPEC (the sentinel) contribute nothing.
 	var planFindings []model.DocLintFinding
 	for _, f := range findings {
@@ -1872,15 +1884,19 @@ covers:
 			planFindings = append(planFindings, f)
 		}
 	}
-	if len(planFindings) != 2 {
-		t.Fatalf("planFindings = %+v, want exactly 2", planFindings)
+	if len(planFindings) != 3 {
+		t.Fatalf("planFindings = %+v, want exactly 3", planFindings)
 	}
 
 	var unresolved, missingAnchor *model.DocLintFinding
+	var unresolvedRefs []string
 	for i := range planFindings {
 		switch planFindings[i].Kind {
 		case "unresolved":
-			unresolved = &planFindings[i]
+			unresolvedRefs = append(unresolvedRefs, planFindings[i].Ref)
+			if planFindings[i].Ref == "999-nowhere.md#sec-1" {
+				unresolved = &planFindings[i]
+			}
 		case "missing-anchor":
 			missingAnchor = &planFindings[i]
 		}
@@ -1896,7 +1912,10 @@ covers:
 	if missingAnchor == nil {
 		t.Fatalf("findings = %+v, want a missing-anchor finding", findings)
 	}
-	if missingAnchor.Doc != plan.ID || missingAnchor.Type != "covers" ||
+	if !slices.Contains(unresolvedRefs, "025-documents-in-the-backbone.md#sec-99") {
+		t.Errorf("unresolved refs = %v, want the covers sec-99 ref kept verbatim", unresolvedRefs)
+	}
+	if missingAnchor.Doc != plan.ID || missingAnchor.Type != "requires" ||
 		missingAnchor.ToDoc != spec.ID || missingAnchor.ToSlug != spec.Slug || missingAnchor.ToAnchor != "sec-99" {
 		t.Errorf("missing-anchor finding = %+v, want it naming plan %d -> spec %d#sec-99",
 			missingAnchor, plan.ID, spec.ID)
