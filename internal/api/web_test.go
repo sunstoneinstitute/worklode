@@ -468,7 +468,6 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		{"/projects/proj/milestones", project, true},
 		{"/projects/proj/reviews", project, true}, {"/projects/proj/decisions", project, true},
 		{"/projects/proj/documents", project, true}, {"/projects/proj/activity", project, true},
-		{"/projects/proj/graph", project, true},
 		{"/projects/proj/deliverables", project, true},
 		{"/projects/proj/deliverables/new", project, true},
 		{"/projects/proj/tasks/new", project, false},
@@ -1817,7 +1816,7 @@ func TestProjectPage(t *testing.T) {
 	// Project local nav, in docs/specs/032-project-cockpit.md §2's order, with
 	// Milestones inserted after Crew: a milestone contains both work and
 	// deliverables (spec 029 §2), so it sits ahead of both lists.
-	assertOrder(t, body, ">Overview<", ">Crew<", ">Milestones<", ">Work<", ">Graph<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
+	assertOrder(t, body, ">Overview<", ">Crew<", ">Milestones<", ">Work<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
 	assertOrder(t, body, `class="backlink"`, "All projects", ">Overview<")
 	// The cockpit is a projection, never a stored workflow field: the page
 	// must not render any of the retired/forbidden concepts. "Crew" and

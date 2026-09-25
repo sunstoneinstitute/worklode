@@ -746,9 +746,6 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/progress/rally/confirm", s.progressRallyConfirm)
 	r.web("POST /projects/{id}/progress/rally/discard", s.progressRallyDiscard)
 	r.web("POST /projects/{id}/progress/merge", s.progressMerge)
-	r.web("GET /projects/{id}/graph", s.navWrap("graph", s.graphPage))
-	// Not navWrapped: the page script fetches it and reads JSON back.
-	r.web("GET /projects/{id}/graph/data", s.graphData)
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
