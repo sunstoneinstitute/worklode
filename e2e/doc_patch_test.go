@@ -424,12 +424,17 @@ func TestDocPatch(t *testing.T) {
 		t.Fatalf("submit doc: %v", err)
 	}
 	// The submit itself opens one unlaned row on the version (029 §7.3),
-	// asynchronously — wait for the loop rather than racing it, then decide
-	// that row here. The accept in step 2 refuses while any row on the
-	// version is open, and the reviewer lanes below are what this test is
-	// about.
-	pollDocLifecycleCaughtUp(t, ctx, admin, "after submitting the spec")
-	submitRows := docLanes(t, ctx, admin, doc.ID)
+	// asynchronously — poll for the row itself, then decide it here. Lag 0
+	// is not enough: it counts only events below the commit horizon, which
+	// the submit's event may not have crossed yet. The accept in step 2
+	// refuses while any row on the version is open, and the reviewer lanes
+	// below are what this test is about.
+	var submitRows []model.AwaitingApproval
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		if submitRows = docLanes(t, ctx, admin, doc.ID); len(submitRows) > 0 || time.Now().After(deadline) {
+			break
+		}
+	}
 	if len(submitRows) != 1 || submitRows[0].Lane != "" {
 		t.Fatalf("after the submit: open rows = %s, want one unlaned row", describeLanes(submitRows))
 	}
