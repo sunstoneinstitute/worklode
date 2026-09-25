@@ -127,7 +127,7 @@ func TestDecideApprovalBySessionResolves(t *testing.T) {
 	})
 	session := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups": []string{"user"}, "github_username": "danah",
+		"groups": []string{"user"}, "githubUsername": "danah",
 	})
 
 	rr := decideForm(t, h, session, seeded.ID, "approve", nil)
@@ -171,7 +171,7 @@ func TestDecideApprovalBySessionResolves(t *testing.T) {
 
 // TestDecideApprovalRefusesSelfApproval checks 029 §7.1's default refusal:
 // the PR's own author cannot decide their change, matched on the actor's
-// expected_github_login against pull_requests.author. The second half is
+// github_username against pull_requests.author. The second half is
 // what keeps this from passing for the wrong reason — the same row is
 // decidable by somebody else.
 func TestDecideApprovalRefusesSelfApproval(t *testing.T) {
@@ -183,7 +183,7 @@ func TestDecideApprovalRefusesSelfApproval(t *testing.T) {
 
 	author := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups": []string{"user"}, "github_username": "danah",
+		"groups": []string{"user"}, "githubUsername": "danah",
 	})
 	rr := decideForm(t, h, author, seeded.ID, "approve", nil)
 	if rr.Code != http.StatusForbidden {
@@ -193,7 +193,7 @@ func TestDecideApprovalRefusesSelfApproval(t *testing.T) {
 
 	other := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "erin", "name": "Erin",
-		"groups": []string{"user"}, "github_username": "erinm",
+		"groups": []string{"user"}, "githubUsername": "erinm",
 	})
 	if rr := decideForm(t, h, other, seeded.ID, "approve", nil); rr.Code != http.StatusSeeOther {
 		t.Fatalf("a non-author decide = %d, want 303; body %s", rr.Code, rr.Body.String())
@@ -236,8 +236,8 @@ func TestDecideApprovalRefusesUndesignatedRevision(t *testing.T) {
 	id := seedUndesignatedApproval(t, st, "WL-DEL-1")
 	session := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups":          []string{"user", "methodology/science-lead"},
-		"github_username": "danah",
+		"groups":         []string{"user", "methodology/science-lead"},
+		"githubUsername": "danah",
 	})
 
 	rr := decideForm(t, h, session, id, "approve", nil)
@@ -267,7 +267,7 @@ func TestDecideApprovalRefusesUnqualifiedRole(t *testing.T) {
 
 	outsider := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "frank", "name": "Frank",
-		"groups": []string{"user"}, "github_username": "frankie",
+		"groups": []string{"user"}, "githubUsername": "frankie",
 	})
 	rr := decideForm(t, h, outsider, seeded.ID, "approve", nil)
 	if rr.Code != http.StatusForbidden {
@@ -277,7 +277,7 @@ func TestDecideApprovalRefusesUnqualifiedRole(t *testing.T) {
 
 	member := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "gina", "name": "Gina",
-		"groups": []string{"user", "crew-backbone"}, "github_username": "ginag",
+		"groups": []string{"user", "crew-backbone"}, "githubUsername": "ginag",
 	})
 	if rr := decideForm(t, h, member, seeded.ID, "approve", nil); rr.Code != http.StatusSeeOther {
 		t.Fatalf("qualified decide = %d, want 303; body %s", rr.Code, rr.Body.String())
@@ -296,7 +296,7 @@ func TestDecideApprovalConflictsOnResolvedRow(t *testing.T) {
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#14", "Decide me once")
 	session := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups": []string{"user"}, "github_username": "danah",
+		"groups": []string{"user"}, "githubUsername": "danah",
 	})
 
 	if rr := decideForm(t, h, session, seeded.ID, "approve", nil); rr.Code != http.StatusSeeOther {
@@ -319,7 +319,7 @@ func TestDecideApprovalRejectsUnknownDecision(t *testing.T) {
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#15", "Not frobnicable")
 	session := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups": []string{"user"}, "github_username": "danah",
+		"groups": []string{"user"}, "githubUsername": "danah",
 	})
 
 	rr := decideForm(t, h, session, seeded.ID, "frobnicate", nil)
@@ -337,7 +337,7 @@ func TestDecideApprovalRefusesCrossOrigin(t *testing.T) {
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#16", "Not from here")
 	session := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups": []string{"user"}, "github_username": "danah",
+		"groups": []string{"user"}, "githubUsername": "danah",
 	})
 
 	rr := decideForm(t, h, session, seeded.ID, "approve",
@@ -360,7 +360,7 @@ func TestApprovalDecisionMetric(t *testing.T) {
 	open := seedAwaitingPRApproval(t, st, "acme/site#22", "Anyone may decide")
 	session := sessionFor(t, h, iss, map[string]any{
 		"preferred_username": "dana", "name": "Dana",
-		"groups": []string{"user"}, "github_username": "danah",
+		"groups": []string{"user"}, "githubUsername": "danah",
 	})
 
 	if rr := decideForm(t, h, session, gated.ID, "approve", nil); rr.Code != http.StatusForbidden {
