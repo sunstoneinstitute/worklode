@@ -734,12 +734,12 @@ func authorActorForEntity(tx *sql.Tx, kind, entityID string) (string, error) {
 	return author, nil
 }
 
-// gitHubLoginForActor returns actorID's expected_github_login; "" when the
+// gitHubLoginForActor returns actorID's github_username; "" when the
 // actor names none. The inverse of ActorIDForGitHubLogin.
 func gitHubLoginForActor(tx *sql.Tx, actorID string) (string, error) {
 	var login string
 	err := tx.QueryRow(
-		`SELECT coalesce(expected_github_login, '') FROM actors WHERE id = $1`,
+		`SELECT coalesce(github_username, '') FROM actors WHERE id = $1`,
 		actorID).Scan(&login)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
@@ -924,11 +924,11 @@ func SetRequiredActor(tx *sql.Tx, id int64, actorID string) error {
 }
 
 // ActorIDForGitHubLogin maps a GitHub login to an actor id via
-// lower(expected_github_login); "" when no actor matches.
+// lower(github_username); "" when no actor matches.
 func ActorIDForGitHubLogin(tx *sql.Tx, login string) (string, error) {
 	var id string
 	err := tx.QueryRow(
-		`SELECT id FROM actors WHERE lower(expected_github_login) = lower($1)`,
+		`SELECT id FROM actors WHERE lower(github_username) = lower($1)`,
 		login).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
@@ -1202,8 +1202,8 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 			 JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
 			 JOIN actors act ON act.id = $1
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
-			   AND pr.author IS NOT NULL AND act.expected_github_login IS NOT NULL
-			   AND lower(pr.author) = lower(act.expected_github_login)
+			   AND pr.author IS NOT NULL AND act.github_username IS NOT NULL
+			   AND lower(pr.author) = lower(act.github_username)
 			   AND a.required_actor IS NOT NULL AND a.required_actor <> $1
 			   AND pr.state = 'open'
 

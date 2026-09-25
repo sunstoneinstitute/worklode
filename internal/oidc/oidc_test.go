@@ -26,7 +26,7 @@ func TestVerifyValidToken(t *testing.T) {
 		"preferred_username": "alice",
 		"name":               "Alice Example",
 		"groups":             []string{"user", "admin"},
-		"github_username":    "stigsb",
+		"githubUsername":     "stigsb",
 	})
 	claims, err := v.Verify(context.Background(), raw)
 	if err != nil {

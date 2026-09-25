@@ -47,7 +47,7 @@ func TestCreateAndGetActor(t *testing.T) {
 	// []string (a NULL groups column, as here, scans to nil), which is not
 	// comparable with ==.
 	if got.ID != "alice" || got.Kind != "human" || got.DisplayName != "Alice Example" ||
-		got.Admin || got.ExpectedGitHubLogin != "" || got.Email != "" || got.Groups != nil {
+		got.Admin || got.GitHubUsername != "" || got.Email != "" || got.Groups != nil {
 		t.Fatalf("GetActor: got %+v", got)
 	}
 }
@@ -88,7 +88,7 @@ func TestEnsureServiceActorIsIdempotent(t *testing.T) {
 		t.Fatalf("GetActor: %v", err)
 	}
 	if got.ID != "watcher" || got.Kind != "service" || got.DisplayName != "doc-lifecycle watcher" ||
-		got.Admin || got.ExpectedGitHubLogin != "" || got.Email != "" || got.Groups != nil {
+		got.Admin || got.GitHubUsername != "" || got.Email != "" || got.Groups != nil {
 		t.Fatalf("GetActor: got %+v", got)
 	}
 }
@@ -341,7 +341,7 @@ func TestUpsertHumanActor(t *testing.T) {
 	}
 }
 
-// TestUpsertHumanActorSyncsGitHubExpectation asserts expected_github_login is
+// TestUpsertHumanActorSyncsGitHubExpectation asserts github_username is
 // re-synced on every login exactly like the admin flag (spec 001 §9.2): the
 // first upsert with a github_username persists it, and a later login without
 // the attribute clears it back to NULL (round-tripped as "").
@@ -357,8 +357,8 @@ func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get actor: %v", err)
 	}
-	if a.ExpectedGitHubLogin != "stigsb" {
-		t.Fatalf("ExpectedGitHubLogin = %q, want %q", a.ExpectedGitHubLogin, "stigsb")
+	if a.GitHubUsername != "stigsb" {
+		t.Fatalf("GitHubUsername = %q, want %q", a.GitHubUsername, "stigsb")
 	}
 
 	// A later login where Keycloak no longer asserts the attribute clears it.
@@ -369,8 +369,8 @@ func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get actor: %v", err)
 	}
-	if a.ExpectedGitHubLogin != "" {
-		t.Fatalf("ExpectedGitHubLogin after clear = %q, want empty", a.ExpectedGitHubLogin)
+	if a.GitHubUsername != "" {
+		t.Fatalf("GitHubUsername after clear = %q, want empty", a.GitHubUsername)
 	}
 }
 
@@ -406,5 +406,28 @@ func TestUpsertHumanActorStoresIdentityClaims(t *testing.T) {
 	}
 	if a.Email != "" || !slices.Equal(a.Groups, []string{"user"}) {
 		t.Fatalf("claims not replaced: %+v", a)
+	}
+}
+
+// TestGitHubUsernameIsUniqueAcrossActors asserts a second actor cannot claim
+// a GitHub login already held by another actor (any case): the unique index
+// on lower(github_username) fails loudly on a Keycloak misconfiguration
+// (two accounts asserting one GitHub identity) instead of silently letting
+// the second login through. Re-login by the login's own holder is not a
+// conflict with itself.
+func TestGitHubUsernameIsUniqueAcrossActors(t *testing.T) {
+	t.Parallel()
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.UpsertHumanActor(ctx, "ada", "Ada", false, "adal", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	err := s.UpsertHumanActor(ctx, "bob", "Bob", false, "AdaL", "", nil)
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "adal") {
+		t.Fatalf("duplicate github login: got %v", err)
+	}
+	if err := s.UpsertHumanActor(ctx, "ada", "Ada", false, "adal", "", nil); err != nil {
+		t.Fatal(err)
 	}
 }

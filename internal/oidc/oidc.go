@@ -18,10 +18,10 @@ type Claims struct {
 	Name              string   `json:"name"`
 	Email             string   `json:"email"`
 	Groups            []string `json:"groups"`
-	// GitHubUsername is the realm's github_username user attribute (spec 001
+	// GitHubUsername is the realm's githubUsername user attribute (spec 001
 	// §9.2): the GitHub login Keycloak asserts for this actor. Empty when the
 	// attribute is unset on the Keycloak account; never required to log in.
-	GitHubUsername string `json:"github_username"`
+	GitHubUsername string `json:"githubUsername"`
 }
 
 // HasRole reports whether role is present in the groups claim. Keycloak's
