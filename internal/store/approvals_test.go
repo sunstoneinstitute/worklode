@@ -1551,7 +1551,8 @@ func TestDecideRefusesUndesignatedRevision(t *testing.T) {
 // TestDecideSelfApprovalByCreatedBy is 029 §7.1's refusal for the three kinds
 // that record their author as an actor id: created_by is the author, and it
 // compares to the decider directly — no GitHub login stands in between. An
-// unknown author (NULL created_by) proves nothing, so it must not refuse.
+// unknown author (NULL created_by) proves nothing, so it must not refuse. A
+// plan is exempt: its author may approve it.
 func TestDecideSelfApprovalByCreatedBy(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t) // project "horndb", actor "stig"
@@ -1576,6 +1577,10 @@ func TestDecideSelfApprovalByCreatedBy(t *testing.T) {
 		ProjectID: "horndb", Title: "stig's plan", Body: "b", Priority: "medium",
 		Kind: "feature", CreatedBy: "stig",
 	})
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "horndb", Kind: "plan", Slug: "029-self-plan",
+		Body: planTaskBody("", "Self plan"), CreatedBy: "stig",
+	})
 
 	for _, tc := range []struct {
 		name, kind, entityID string
@@ -1583,6 +1588,7 @@ func TestDecideSelfApprovalByCreatedBy(t *testing.T) {
 	}{
 		{"doc the decider wrote", "doc", DocEntityID(doc.ID), ErrSelfApproval},
 		{"task the decider filed", "task", reviewed.ID, ErrSelfApproval},
+		{"plan the decider wrote", "doc", DocEntityID(plan.ID), nil},
 		{"deliverable somebody else created", "deliverable", del.ID, nil},
 		{"deliverable with no recorded author", "deliverable", anon.ID, nil},
 	} {
