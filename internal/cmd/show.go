@@ -213,7 +213,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3)")
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
-	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or ADR: fold every effective amendment and supersession into the section it acts on (026 §3.2); ignored for tasks and projects")
+	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec, ADR or rule: fold every effective amendment and supersession into the section or rule it acts on (026 §3.2); ignored for tasks and projects")
 	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
 	cmd.Flags().IntVar(&version, "version", 0, "show one version of a rule (WL-RULE-<n>)")
 	// --project is the only way to reach a project through show: a positional
@@ -375,7 +375,7 @@ func runDeliverableShow(cmd *cobra.Command, id string) error {
 // runRuleShow renders one design rule by its ref (WL-RULE-12). When
 // versionSet, it renders that past version (GET .../versions/{n}) instead of
 // the rule's current one.
-func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet bool) error {
+func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline bool) error {
 	c, err := newAPIClient()
 	if err != nil {
 		return err
@@ -397,6 +397,16 @@ func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet bool) e
 		return nil
 	}
 	cli.RuleRender(cmd.OutOrStdout(), rule)
+	if !inline {
+		return nil
+	}
+	// The rule's in-force amendments, folded in beneath its text
+	// (WL-SPEC-77 §4).
+	blocks, pending, err := designdoc.NewInliner(nil, ruleFetcher(cmd.Context(), c)).RuleAmendments(&rule)
+	if err != nil {
+		return err
+	}
+	cli.RuleAmendmentsRender(cmd.OutOrStdout(), blocks, pending)
 	return nil
 }
 
@@ -441,7 +451,7 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 	case targetDeliverable:
 		return runDeliverableShow(cmd, arg)
 	case targetRule:
-		return runRuleShow(cmd, arg, version, versionSet)
+		return runRuleShow(cmd, arg, version, versionSet, inline)
 	case targetUnknownType:
 		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL, RULE (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:

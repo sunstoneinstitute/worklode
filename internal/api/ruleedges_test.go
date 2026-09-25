@@ -1,7 +1,9 @@
 package api_test
 
 import (
+	"fmt"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -15,7 +17,7 @@ func TestRuleEdgesAPI(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
 	projID := seedProjectWithKey(t, st, "WL")
-	createDocViaAPI(t, h, token, model.CreateDocInput{
+	doc := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: projID, Kind: "spec", Slug: "t", Body: ruleDocV1,
 	}) // WL-RULE-1..3
 
@@ -73,6 +75,12 @@ func TestRuleEdgesAPI(t *testing.T) {
 	amends := model.RuleEdgeInput{Type: "amends", To: "WL-RULE-1"}
 	if rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-3/edges", token, amends); rr.Code != http.StatusCreated {
 		t.Errorf("link amends: %d %s", rr.Code, rr.Body)
+	}
+	// The document detail carries it for lode show --inline to fold.
+	var detail model.DocDetail
+	decodeInto(t, doReq(t, h, http.MethodGet, fmt.Sprintf("/api/v1/docs/%d", doc.ID), token, nil), &detail)
+	if want := []model.DocAmendment{{Anchor: "sec-1", Rule: "WL-RULE-1", By: "WL-RULE-3"}}; !slices.Equal(detail.Amendments, want) {
+		t.Errorf("doc amendments = %+v, want %+v", detail.Amendments, want)
 	}
 	if rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-RULE-3/edges", token, amends); rr.Code != http.StatusNoContent {
 		t.Errorf("unlink amends: %d %s", rr.Code, rr.Body)

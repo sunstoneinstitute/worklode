@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -78,6 +79,31 @@ func UnlinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 		return fmt.Errorf("unlink rule %d %s %d: %w", fromID, typ, toID, err)
 	}
 	return nil
+}
+
+// ListDocAmendments lists the amends edges onto the rules a document
+// arranges, in section order then by amending rule (WL-SPEC-77 §4). A
+// plan's doc_rules rows borrow the spec's rules, so a plan has none.
+func (s *Store) ListDocAmendments(ctx context.Context, docID int64) ([]model.DocAmendment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT dr.anchor, p.key || '-RULE-' || r.number, ap.key || '-RULE-' || ar.number
+		   FROM doc_rules dr
+		   JOIN docs d ON d.id = dr.doc_id
+		   JOIN rules r ON r.id = dr.rule_id
+		   JOIN projects p ON p.id = r.project_id
+		   JOIN rule_edges e ON e.to_rule = r.id AND e.type = 'amends'
+		   JOIN rules ar ON ar.id = e.from_rule
+		   JOIN projects ap ON ap.id = ar.project_id
+		  WHERE dr.doc_id = $1 AND d.kind <> 'plan'
+		  ORDER BY dr.position, ap.key, ar.number`, docID)
+	if err != nil {
+		return nil, fmt.Errorf("list amendments of doc %d: %w", docID, err)
+	}
+	return collectRows(rows, fmt.Sprintf("list amendments of doc %d", docID), func(r rowScanner) (model.DocAmendment, error) {
+		var a model.DocAmendment
+		err := r.Scan(&a.Anchor, &a.Rule, &a.By)
+		return a, err
+	})
 }
 
 // ruleEdgesSQL lists every edge in or out of one rule with both refs and

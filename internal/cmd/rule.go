@@ -28,16 +28,18 @@ func init() {
 
 func newRuleShowCmd() *cobra.Command {
 	var version int
+	var inline bool
 	cmd := &cobra.Command{
 		Use:               "show <ref>",
 		ValidArgsFunction: ruleRefAt(0),
 		Short:             "Show a rule: its status, version, placements and text",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRuleShow(cmd, args[0], version, cmd.Flags().Changed("version"))
+			return runRuleShow(cmd, args[0], version, cmd.Flags().Changed("version"), inline)
 		},
 	}
 	cmd.Flags().IntVar(&version, "version", 0, "show one version of the rule")
+	cmd.Flags().BoolVar(&inline, "inline", false, "fold the rules that amend this one in beneath its text")
 	return cmd
 }
 

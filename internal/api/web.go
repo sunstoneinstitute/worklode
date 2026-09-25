@@ -893,6 +893,12 @@ func (s *server) docPageBody(r *http.Request, d *model.DocDetail) (string, bool)
 	}
 	out, err := designdoc.NewInliner(func(id int64) (*model.DocDetail, error) {
 		return s.docDetail(r, id)
+	}, func(ref string) (*model.Rule, error) {
+		rr, ok := designdoc.ParseRuleRef(ref)
+		if !ok {
+			return nil, fmt.Errorf("rule ref %q: %w", ref, store.ErrInvalidInput)
+		}
+		return s.st.GetRule(r.Context(), rr.Key, rr.Number)
 	}).Consolidate(d, "")
 	if err != nil {
 		s.log.Warn("rendering doc page from its stored source: consolidation failed",

@@ -376,6 +376,17 @@ type DocDetail struct {
 	// Notes are the document's anchored notes (025 §8.5), in the order they
 	// were left. Nil when it has none, which is the ordinary case.
 	Notes []DocNote `json:"notes,omitempty"`
+	// Amendments are the amends edges onto the rules this document's
+	// sections arrange (WL-SPEC-77 §4), which lode show --inline folds in.
+	Amendments []DocAmendment `json:"amendments,omitempty"`
+}
+
+// DocAmendment is one amends edge onto a section's rule: By amends Rule,
+// which the document arranges at Anchor.
+type DocAmendment struct {
+	Anchor string `json:"anchor"`
+	Rule   string `json:"rule"` // "WL-RULE-12"
+	By     string `json:"by"`   // the amending rule, "WL-RULE-40"
 }
 
 // DocRef is a minimal reference to a document — enough to name and link it

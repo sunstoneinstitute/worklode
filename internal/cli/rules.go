@@ -103,6 +103,21 @@ func RuleRender(w io.Writer, c model.Rule) {
 	}
 }
 
+// RuleAmendmentsRender prints a rule's folded amendments beneath its text:
+// pending ones as references, in-force ones as attributed blocks.
+func RuleAmendmentsRender(w io.Writer, blocks, pending []string) {
+	var b strings.Builder
+	for _, p := range pending {
+		fmt.Fprintf(&b, "\n> Pending %s (not yet effective)\n", p)
+	}
+	for _, block := range blocks {
+		b.WriteString("\n" + block + "\n")
+	}
+	if b.Len() > 0 {
+		Markdown(w, b.String())
+	}
+}
+
 // EditRule calls PUT /api/v1/rules/{ref}.
 func (c *Client) EditRule(ctx context.Context, ref string, in model.EditRuleInput) (model.Rule, []byte, error) {
 	return doJSON[model.Rule](ctx, c, http.MethodPut, "/api/v1/rules/"+url.PathEscape(ref), in, "rule")

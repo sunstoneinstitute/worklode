@@ -190,7 +190,7 @@ Flags: --server
 - `lode rule set owner` — Set a rule's owner; "" clears it
 - `lode rule set tags` — Replace a rule's tags; naming none clears them
 - `lode rule show` — Show a rule: its status, version, placements and text
-  Flags: --version
+  Flags: --inline, --version
 - `lode rule supersede` — Apply a refactor map: withdraw old rules and link each to its successors (S24)
   Flags: --dry-run, --map, --project, --repo
 - `lode rule unlink` — Remove a relation written with rule link
