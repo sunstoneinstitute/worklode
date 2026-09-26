@@ -1047,7 +1047,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
-		        coalesce(d.number,0), coalesce(d.status,''), cw.items,
+		        coalesce(d.number,0), coalesce(d.status,''), coalesce(e.coverage,''), cw.items,
 		        coalesce(rp.key || '-RULE-' || r.number, '')
 		   FROM doc_edges e
 		   LEFT JOIN rules r ON r.id = e.to_rule
@@ -1086,11 +1086,11 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	// arranging a rule it reaches (covered_sections), once per section.
 	inRows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
-		        d.project_id, d.slug, d.kind, coalesce(d.number,0), d.status, cw.items, ''
-		   FROM (SELECT id, type, from_doc, from_anchor, to_anchor
+		        d.project_id, d.slug, d.kind, coalesce(d.number,0), d.status, coalesce(e.coverage,''), cw.items, ''
+		   FROM (SELECT id, type, from_doc, from_anchor, to_anchor, coverage
 		           FROM doc_edges WHERE to_doc = $1
 		         UNION ALL
-		         SELECT edge_id, 'covers', plan_id, NULL, anchor
+		         SELECT edge_id, 'covers', plan_id, NULL, anchor, coverage
 		           FROM covered_sections WHERE doc_id = $1) e
 		   JOIN docs d ON d.id = e.from_doc
 		   LEFT JOIN LATERAL (
@@ -1122,7 +1122,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 
 // scanDocEdges drains a query selecting the DocEdge columns in order: the
 // five stored ones, the joined far end's project, slug, kind, number and
-// status, the completedWith closure, then the rule ref. The closure is a
+// status, the coverage level, the completedWith closure, then the rule ref. The closure is a
 // JSON array of strings (never NULL —
 // the caller's lateral join coalesces an edge with no
 // doc_coverage_completed_with rows to "[]", following NeedsPlanning's
@@ -1135,7 +1135,7 @@ func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 		var completedWithJSON string
 		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal,
 			&e.ToProject, &e.ToSlug, &e.ToKind, &e.ToNumber, &e.ToStatus,
-			&completedWithJSON, &e.ToRule); err != nil {
+			&e.Coverage, &completedWithJSON, &e.ToRule); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(completedWithJSON), &e.CompletedWith); err != nil {

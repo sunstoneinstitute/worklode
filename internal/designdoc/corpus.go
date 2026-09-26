@@ -22,13 +22,17 @@ type SectionMeta struct {
 	Position int // 0-based document order over the anchored sections
 }
 
-// EdgeMeta is one frontmatter-derived edge of a plan: its covers and defers
-// entries, never requires/isRequiredBy/task.
+// EdgeMeta is one edge the todo walk reads: a plan's covers, defers and
+// requires, or a spec/ADR's requires.
 type EdgeMeta struct {
 	SrcAnchor    string // "" = document-level
-	Rel          string // covers | defers
+	Rel          string // covers | defers | requires
 	Target       string // the raw reference with any fragment stripped; "NO-SPEC" allowed
 	TargetAnchor string // "sec-2" when the reference carried #sec-2, else ""
+	Coverage     string // covers only: full | partial | none
+	// CompletedWith is a partial covers entry's fullCoverageWith, or a
+	// defers entry's single owner; nil otherwise (026 §5.1, §5.3).
+	CompletedWith []string
 }
 
 // CorpusDoc is one design document loaded for sync, with its file-derived
@@ -48,7 +52,7 @@ type CorpusDoc struct {
 	// unknown. Loaded from a spec/ADR's filename (both loaders can read it: it
 	// leads the filename); a plan loaded from local files carries 0, since 029
 	// §4's plan sequence is a backbone fact no plan file records anywhere. A
-	// plan loaded from the backbone (CorpusDocFromBody) carries its real one.
+	// plan loaded from the backbone carries its real one.
 	Number int
 }
 
@@ -146,73 +150,6 @@ func CorpusDir(kind string) string {
 	return specCanonDefault
 }
 
-// CorpusDocFromBody builds a CorpusDoc from a document body held in memory —
-// the copy the backbone serves — rather than from a file. docPath is the
-// corpus path its references are written against (see CorpusPath), kind is
-// "spec", "adr" or "plan", and number is the document's own backbone number
-// (model.Doc.Number) — the one fact CorpusDocFromBody cannot recover from
-// docPath or body alone, since a shorthand-form reference needs it and
-// neither the corpus path nor the frontmatter carries it (WL-409).
-//
-// It derives everything LoadSyncCorpus does except Ordinal, which is a
-// corpus-position fact no single document carries: the backbone assigns
-// document identity itself, so nothing reading from it needs one.
-//
-// A thin body degrades rather than erroring, unlike loadDoc's file under sync
-// review: a body imported from a pre-055 git corpus carries whatever
-// frontmatter the file had, which is usually none, and one such body must not
-// abort a caller's walk over the whole corpus (WL-724). The cost is that
-// document's frontmatter-derived edges, not the corpus's answer. The returned
-// note names what was missing, empty when nothing was; a caller reports it so
-// the narrowing is visible.
-//
-// Status is left to whatever the frontmatter says, which is nothing when
-// there is none: a caller reading the backbone's own row for a document's
-// status (the authority — WL-478) overwrites it, as docTodoCorpus used to
-// before WL-913 moved it onto GET /docs/{id}'s own Status field instead.
-func CorpusDocFromBody(docPath, kind string, number int, body []byte) (CorpusDoc, string, error) {
-	name := path.Base(docPath)
-	doc, err := Parse(body)
-	if err != nil {
-		return CorpusDoc{}, "", fmt.Errorf("%s: %w", name, err)
-	}
-	cd := CorpusDoc{
-		Filename: name, Source: body,
-		Path: docPath, Kind: kind, Number: number,
-	}
-	var missing []string
-	if doc.Frontmatter == nil {
-		missing = append(missing, "no frontmatter")
-	} else {
-		fmJSON, err := doc.Frontmatter.jsonBytes()
-		if err != nil {
-			return CorpusDoc{}, "", fmt.Errorf("%s: %w", name, err)
-		}
-		cd.Status, cd.FrontmatterJSON = doc.Frontmatter.Status, fmJSON
-		if kind == "plan" {
-			cd.Edges = planEdges(doc.Frontmatter)
-		}
-	}
-	if title, ok := Title(doc); ok {
-		cd.Title = title
-	} else {
-		missing = append(missing, "no H1 title")
-	}
-	if kind != "plan" {
-		// Sections come from the body's own anchored headings, so they
-		// survive missing frontmatter. Plans carry none (025 §9).
-		sections, err := sectionMetas(doc, name)
-		if err != nil {
-			return CorpusDoc{}, "", err
-		}
-		cd.Sections = sections
-	}
-	if len(missing) == 0 {
-		return cd, "", nil
-	}
-	return cd, fmt.Sprintf("%s: %s; read without its frontmatter edges", name, strings.Join(missing, ", ")), nil
-}
-
 // Title is the document's H1 title — the preamble's first "# …" line, hash
 // and whitespace stripped. Reported false when the preamble carries none.
 func Title(d *Document) (string, bool) {
@@ -249,6 +186,7 @@ func loadSpecOrADR(dir, name string) (CorpusDoc, error) {
 		return CorpusDoc{}, err
 	}
 	cd.Sections = sections
+	cd.Edges = edgeMetas(doc.Frontmatter.RefsFor("requires"))
 	return cd, nil
 }
 
@@ -279,25 +217,32 @@ func sectionMetas(doc *Document, name string) ([]SectionMeta, error) {
 
 // planEdges is a plan's edges: its coverage assertions — the retired
 // `implements` spelling read as `covers` (026 §5.1) — then its defers
-// handoffs (026 §5.3). A defers entry projects the same way a covers entry
-// does — the section it names becomes the edge's target anchor — but carries
-// no owner: EdgeMeta has no field for it, the same deliberate omission as
-// covers carrying no coverage level. The owner lives in the backbone's
-// doc_coverage_completed_with, not the sync-projected corpus.
+// handoffs (026 §5.3), then its requires.
 func planEdges(fm *Frontmatter) []EdgeMeta {
-	return edgeMetas(fm.RefsFor("covers", "defers"))
+	return edgeMetas(fm.RefsFor("covers", "defers", "requires"))
 }
 
 // edgeMetas turns frontmatter references into corpus edges, splitting each
-// ref's "#sec-…" fragment off as the target anchor.
+// ref's "#sec-…" fragment off as the target anchor. Like the backbone
+// (store.frontmatterEdges), it keeps fullCoverageWith only on a partial entry.
 func edgeMetas(refs []Ref) []EdgeMeta {
 	var edges []EdgeMeta
 	for _, r := range refs {
 		target, targetAnchor := SplitFragment(r.Ref)
-		edges = append(edges, EdgeMeta{
+		e := EdgeMeta{
 			SrcAnchor: r.SrcAnchor, Rel: r.Rel,
 			Target: target, TargetAnchor: targetAnchor,
-		})
+		}
+		if r.Coverage != nil {
+			e.Coverage = strings.TrimSpace(r.Coverage.Coverage)
+			if e.Coverage == "partial" {
+				e.CompletedWith = slices.Clone([]string(r.Coverage.FullCoverageWith))
+			}
+		}
+		if r.Deferral != nil {
+			e.CompletedWith = []string{r.Deferral.To}
+		}
+		edges = append(edges, e)
 	}
 	return edges
 }

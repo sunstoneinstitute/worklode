@@ -127,8 +127,7 @@ type todoWalk struct {
 	opts                 TodoOptions
 	specDir, planDir     string
 	specCanon, planCanon string
-	byPath               map[string]CorpusDoc    // canonical repo-relative path -> doc
-	frontmatter          map[string]*Frontmatter // same key; nil when unparseable
+	byPath               map[string]CorpusDoc // canonical repo-relative path -> doc
 	ix                   *PlanIndex
 	visited              map[string]bool
 	docOrder             map[string]int
@@ -145,7 +144,6 @@ func newTodoWalk(docs []CorpusDoc, opts TodoOptions) *todoWalk {
 		specDir:     specDir,
 		planDir:     planDir,
 		byPath:      make(map[string]CorpusDoc, len(docs)),
-		frontmatter: make(map[string]*Frontmatter, len(docs)),
 		ix:          NewPlanIndex(docs, opts.ProjectKey),
 		visited:     make(map[string]bool),
 		docOrder:    make(map[string]int),
@@ -156,7 +154,6 @@ func newTodoWalk(docs []CorpusDoc, opts TodoOptions) *todoWalk {
 	for _, d := range docs {
 		canon := w.canon(d)
 		w.byPath[canon] = d
-		w.frontmatter[canon] = docFrontmatter(d)
 	}
 	return w
 }
@@ -226,22 +223,16 @@ func (w *todoWalk) walk(start string) {
 	}
 }
 
-// requires returns docPath's outgoing requires targets, canonicalised. The
-// relation is not in CorpusDoc.Edges — EdgeMeta is 025 §16.2's sync-projected
-// set, which never carries it — so it is read from the frontmatter.
+// requires returns docPath's outgoing requires targets, canonicalised, in
+// the order its Edges list them.
 func (w *todoWalk) requires(docPath string) []string {
-	fm := w.frontmatter[docPath]
-	if fm == nil {
-		return nil
-	}
 	home := path.Dir(docPath)
-	out := make([]string, 0, len(fm.Requires))
-	for _, ref := range fm.Requires {
-		base, _ := SplitFragment(ref)
-		if base == "" || base == "NO-SPEC" {
+	var out []string
+	for _, e := range w.byPath[docPath].Edges {
+		if e.Rel != "requires" || e.Target == "" || e.Target == "NO-SPEC" {
 			continue
 		}
-		out = append(out, w.ix.normalizeRef(base, home))
+		out = append(out, w.ix.normalizeRef(e.Target, home))
 	}
 	return out
 }
@@ -270,8 +261,8 @@ func (w *todoWalk) cycleThrough(from, to string) string {
 }
 
 // requiresPath returns the shortest requires path from `from` to `to`
-// inclusive, or nil when there is none. Neighbours are visited in
-// frontmatter order, so the answer does not move run to run.
+// inclusive, or nil when there is none. Neighbours are visited in Edges
+// order, so the answer does not move run to run.
 func (w *todoWalk) requiresPath(from, to string) []string {
 	prev := map[string]string{from: ""}
 	queue := []string{from}
@@ -698,17 +689,6 @@ func (w *todoWalk) ordered() []TodoItem {
 		out[i] = it.item
 	}
 	return out
-}
-
-// docFrontmatter recovers a document's parsed frontmatter from the source
-// LoadSyncCorpus captured. As with planCoverageEntries, d.Source is
-// required: a hand-built CorpusDoc without it reads as carrying no keys.
-func docFrontmatter(d CorpusDoc) *Frontmatter {
-	doc, err := Parse(d.Source)
-	if err != nil {
-		return nil
-	}
-	return doc.Frontmatter
 }
 
 // corpusDirs reports the spec-corpus and plan-corpus directories exactly as

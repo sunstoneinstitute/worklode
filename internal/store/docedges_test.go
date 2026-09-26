@@ -1221,9 +1221,9 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		return e
 	}
 	wantOut := []model.DocEdge{
-		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
-		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2", ToRule: "P1-RULE-2"}),
-		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2.1", ToRule: "P1-RULE-3"}),
+		{Type: "covers", ToExternal: "999-nowhere.md#sec-1", Coverage: "full"},
+		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2", ToRule: "P1-RULE-2", Coverage: "full"}),
+		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2.1", ToRule: "P1-RULE-3", Coverage: "full"}),
 		specFar(model.DocEdge{Type: "wasDerivedFrom"}),
 	}
 	if len(out) != len(wantOut) {
@@ -1256,8 +1256,8 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		return e
 	}
 	wantIn := []model.DocEdge{
-		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-2"}),
-		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-2.1"}),
+		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-2", Coverage: "full"}),
+		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-2.1", Coverage: "full"}),
 		planFar(model.DocEdge{Type: "hadDerivation"}),
 	}
 	if len(in) != len(wantIn) {

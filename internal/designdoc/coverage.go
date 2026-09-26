@@ -221,41 +221,35 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 		plan := resolveDoc(d.Path, ix.planCanon, ix.planDir)
 		ix.status[plan] = d.Status
 		home := path.Dir(plan)
-		for _, entry := range planCoverageEntries(d) {
-			rawTarget, anchor := SplitFragment(entry.Spec)
-			if anchor == "" || rawTarget == "NO-SPEC" {
-				// A whole-document covers names no section a coverage query
-				// can use, and NO-SPEC has no sections to cover (026 §2.1,
-				// §4.3) — neither contributes to any section's index entry.
+		for _, e := range d.Edges {
+			if e.Rel != "covers" && e.Rel != "defers" {
 				continue
 			}
-			target := resolveNumberedAlias(ix.normalizeRef(rawTarget, home), knownSpecs)
-			if !knownSpecs[target] {
-				unresolved[plan+" covers "+rawTarget] = true
+			if e.TargetAnchor == "" || e.Target == "NO-SPEC" {
+				// A whole-document covers names no section a coverage query
+				// can use, and NO-SPEC has no sections to cover (026 §2.1,
+				// §4.3). A defers entry with no fragment is rejected at write
+				// time (026 §5.3); this skip mirrors covers defensively.
+				continue
 			}
-			key := sectionKey{spec: target, anchor: anchor}
+			target := resolveNumberedAlias(ix.normalizeRef(e.Target, home), knownSpecs)
+			key := sectionKey{spec: target, anchor: e.TargetAnchor}
+			if e.Rel == "defers" {
+				owner := ""
+				if len(e.CompletedWith) > 0 {
+					owner = ix.normalizeRef(e.CompletedWith[0], home)
+				}
+				ix.defers[key] = append(ix.defers[key], deferral{plan: plan, status: d.Status, owner: owner})
+				continue
+			}
+			if !knownSpecs[target] {
+				unresolved[plan+" covers "+e.Target] = true
+			}
 			ix.claims[key] = append(ix.claims[key], claim{
 				plan:             plan,
 				status:           d.Status,
-				level:            entry.Coverage,
-				fullCoverageWith: ix.normalizeList(entry.FullCoverageWith, home),
-			})
-		}
-		for _, entry := range planDeferralEntries(d) {
-			rawTarget, anchor := SplitFragment(entry.Spec)
-			if anchor == "" || rawTarget == "NO-SPEC" {
-				// Unlike covers, a defers entry with no #sec-N fragment is
-				// rejected outright at write time (026 §5.3) — this mirrors
-				// covers' own defensive skip rather than assuming the corpus
-				// is already valid.
-				continue
-			}
-			target := resolveNumberedAlias(ix.normalizeRef(rawTarget, home), knownSpecs)
-			key := sectionKey{spec: target, anchor: anchor}
-			ix.defers[key] = append(ix.defers[key], deferral{
-				plan:   plan,
-				status: d.Status,
-				owner:  ix.normalizeRef(entry.To, home),
+				level:            e.Coverage,
+				fullCoverageWith: ix.normalizeList(e.CompletedWith, home),
 			})
 		}
 	}
@@ -264,35 +258,6 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 	}
 	sort.Strings(ix.unresolved)
 	return ix
-}
-
-// planCoverageEntries recovers d's per-section coverage levels and
-// fullCoverageWith lists. CorpusDoc.Edges does not carry them — EdgeMeta is
-// exactly 025 §16.2's sync-projected relation shape — so this re-parses the
-// frontmatter already captured in d.Source, using CoverageEntries to fold in
-// the retired `implements` spelling (026 §5.1). d.Source is required: a
-// CorpusDoc built without it (rather than through LoadSyncCorpus or with
-// Source set by hand) reads as carrying no claims, silently — never
-// hand-construct one for indexing without also setting Source.
-func planCoverageEntries(d CorpusDoc) CoverageList {
-	doc, err := Parse(d.Source)
-	if err != nil || doc.Frontmatter == nil {
-		return nil
-	}
-	return doc.Frontmatter.CoverageEntries()
-}
-
-// planDeferralEntries recovers d's `defers` entries (026 §5.3), the same way
-// planCoverageEntries recovers `covers`: CorpusDoc.Edges is 025 §16.2's
-// sync-projected relation shape and does not carry the named owner, so this
-// re-parses the frontmatter captured in d.Source. d.Source is required for
-// the same reason planCoverageEntries states.
-func planDeferralEntries(d CorpusDoc) DeferralList {
-	doc, err := Parse(d.Source)
-	if err != nil || doc.Frontmatter == nil {
-		return nil
-	}
-	return doc.Frontmatter.Defers
 }
 
 // resolveDoc canonicalises ref — a bare filename, an already-canonical

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -197,38 +196,66 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 	return srv
 }
 
-// testDocDetail simulates the two structured fields a real GET
-// /api/v1/docs/{id} derives at write time — Sections and Edges — by running
-// d's body through the same header parse docTodoCorpus used to run itself,
-// before WL-913 moved that parse server-side. This keeps every fixture
-// written against a real frontmatter header working unchanged; a fixture
-// that wants to pin the no-header case overrides the result through
-// todoServer.edgeOverrides instead.
+// testDocDetail simulates the Sections and Edges a real GET /api/v1/docs/{id}
+// serves, which the backbone derives from the header when the document is
+// written: anchored sections, and covers/defers/requires edges carrying
+// coverage and completed_with the way store.ListDocEdges returns them. A
+// reference names a fixture document only by its exact corpus path; anything
+// else is kept verbatim in ToExternal. A fixture pinning a headerless body
+// states its edges through todoServer.edgeOverrides instead.
 func testDocDetail(t *testing.T, d model.Doc, docs []model.Doc) ([]model.DocSection, []model.DocEdge) {
 	t.Helper()
-	cd, _, err := designdoc.CorpusDocFromBody(
-		designdoc.CorpusPath(d.Kind, d.Slug), d.Kind, d.Number, []byte(d.Body))
+	parsed, err := designdoc.Parse([]byte(d.Body))
 	if err != nil {
 		t.Fatalf("parse fixture body for %s: %v", d.Slug, err)
 	}
 	var sections []model.DocSection
-	for _, s := range cd.Sections {
-		sections = append(sections, model.DocSection{
-			Anchor: s.Anchor, Heading: s.Heading, Depth: s.Depth, Position: s.Position,
-		})
+	if d.Kind != "plan" {
+		for _, s := range parsed.Sections {
+			if s.Anchor != "" {
+				sections = append(sections, model.DocSection{
+					Anchor: s.Anchor, Heading: s.Title, Depth: s.Level, Position: len(sections),
+				})
+			}
+		}
+	}
+	if parsed.Frontmatter == nil {
+		return sections, nil
 	}
 	byPath := make(map[string]model.Doc, len(docs))
 	for _, other := range docs {
 		byPath[designdoc.CorpusPath(other.Kind, other.Slug)] = other
 	}
+	slugOr := func(ref string) string {
+		if other, ok := byPath[ref]; ok {
+			return other.Slug
+		}
+		return ref
+	}
+	rels := []string{"requires"}
+	if d.Kind == "plan" {
+		rels = []string{"covers", "defers", "requires"}
+	}
 	var edges []model.DocEdge
-	for _, e := range cd.Edges {
-		de := model.DocEdge{Type: e.Rel, FromAnchor: e.SrcAnchor, ToAnchor: e.TargetAnchor}
-		if target, ok := byPath[e.Target]; ok {
-			de.ToDoc, de.ToSlug, de.ToKind = target.ID, target.Slug, target.Kind
+	for _, r := range parsed.Frontmatter.RefsFor(rels...) {
+		de := model.DocEdge{Type: r.Rel, FromAnchor: r.SrcAnchor}
+		base, anchor := designdoc.SplitFragment(r.Ref)
+		if target, ok := byPath[base]; ok {
+			de.ToDoc, de.ToSlug, de.ToKind, de.ToAnchor = target.ID, target.Slug, target.Kind, anchor
 			de.ToNumber, de.ToStatus, de.ToProject = target.Number, target.Status, target.Project
 		} else {
-			de.ToExternal = e.Target
+			de.ToExternal = r.Ref
+		}
+		if r.Coverage != nil {
+			de.Coverage = r.Coverage.Coverage
+			if de.Coverage == "partial" {
+				for _, w := range r.Coverage.FullCoverageWith {
+					de.CompletedWith = append(de.CompletedWith, slugOr(w))
+				}
+			}
+		}
+		if r.Deferral != nil {
+			de.CompletedWith = []string{slugOr(r.Deferral.To)}
 		}
 		edges = append(edges, de)
 	}
@@ -894,67 +921,153 @@ Body.
 	}
 }
 
-// TestDocTodoCorpusReadsStoredEdges pins WL-913 directly against
-// docTodoCorpus, the function it changes: a plan whose body carries no
-// header at all, but whose GET /docs/{id} Edges name the exact same `covers`
-// claim todoPlanOpen's header declares (full coverage of sec-1), must build
-// the exact same designdoc.EdgeMeta and Status that the header-carrying
-// fixture does today. That is the property the switch away from
-// designdoc.CorpusDocFromBody buys: the corpus docTodoCorpus hands the walk
-// no longer depends on the body parsing at all.
-//
-// This checks docTodoCorpus's own output rather than running the walk
-// through `lode doc todo` end to end, because designdoc.Todo's covering-plan
-// classification (internal/designdoc/coverage.go) still re-parses a plan's
-// body for the coverage level and fullCoverageWith a covers claim carries —
-// EdgeMeta deliberately does not (corpus_test.go pins that): that walk stays
-// on the body until a later change teaches it to read CorpusDoc.Edges too.
-func TestDocTodoCorpusReadsStoredEdges(t *testing.T) {
-	srv := setupTodoCorpus(t,
-		map[string]string{"001-example.md": todoSpec},
-		map[string]string{
-			"001-1-first.md":  todoPlanOpen,
-			"001-2-second.md": "# Plan 1-2 — Build the first section\n\nBody.\n",
-		}, noTasks)
-	srv.edgeOverrides = map[string][]model.DocEdge{
-		"001-2-second": {{
-			Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example",
-			ToNumber: 1, ToStatus: "accepted", ToAnchor: "sec-1",
-		}},
-	}
+// todoStoredSpec requires spec 2 and has four sections, one per outcome the
+// plans below give it: full, closed partial, partial, deferred.
+const todoStoredSpec = `---
+status: accepted
+requires: docs/specs/002-other.md
+---
+# Spec 1 — Example
 
-	c := cli.NewClient(cli.Config{ServerURL: os.Getenv("LODE_SERVER"), Token: os.Getenv("LODE_TOKEN")})
-	ctx := context.Background()
-	listed, _, err := c.ListDocs(ctx, cli.DocListFilter{})
-	if err != nil {
-		t.Fatalf("list docs: %v", err)
-	}
-	var corpus []model.Doc
-	for _, d := range listed.Docs {
-		if d.Project == "proj" {
-			corpus = append(corpus, d)
+## 1. First {#sec-1}
+
+## 2. Second {#sec-2}
+
+## 3. Third {#sec-3}
+
+## 4. Fourth {#sec-4}
+`
+
+const todoStoredOther = `---
+status: accepted
+---
+# Spec 2 — Other
+
+## 1. Only {#sec-1}
+`
+
+var todoStoredPlans = map[string]string{
+	"001-1-first.md": `---
+status: accepted
+covers:
+  - spec: docs/specs/001-example.md#sec-1
+    coverage: full
+defers:
+  - spec: docs/specs/001-example.md#sec-4
+    to: docs/specs/002-other.md
+---
+# Plan 1-1 — First
+`,
+	"001-2-second.md": `---
+status: accepted
+covers:
+  - spec: docs/specs/001-example.md#sec-2
+    coverage: partial
+    fullCoverageWith: docs/plans/001-3-third.md
+---
+# Plan 1-2 — Second
+`,
+	"001-3-third.md": `---
+status: accepted
+covers:
+  - spec: docs/specs/001-example.md#sec-2
+    coverage: partial
+    fullCoverageWith: docs/plans/001-2-second.md
+  - spec: docs/specs/001-example.md#sec-3
+    coverage: partial
+---
+# Plan 1-3 — Third
+`,
+}
+
+// todoStoredEdges is what the backbone holds for the fixtures above, keyed by
+// slug: the same claims, stated without any header to derive them from.
+var todoStoredEdges = map[string][]model.DocEdge{
+	"001-example": {{Type: "requires", ToDoc: 2, ToKind: "spec", ToSlug: "002-other", ToNumber: 2, ToStatus: "accepted", ToProject: "proj"}},
+	"001-1-first": {
+		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-1", Coverage: "full"},
+		{Type: "defers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-4", CompletedWith: []string{"002-other"}},
+	},
+	"001-2-second": {
+		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-2", Coverage: "partial", CompletedWith: []string{"001-3-third"}},
+	},
+	"001-3-third": {
+		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-2", Coverage: "partial", CompletedWith: []string{"001-2-second"}},
+		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-3", Coverage: "partial"},
+	},
+}
+
+// stripHeader drops a fixture body's frontmatter block, the shape WL-914
+// leaves every stored body in.
+func stripHeader(body string) string {
+	if rest, ok := strings.CutPrefix(body, "---\n"); ok {
+		if _, after, ok := strings.Cut(rest, "\n---\n"); ok {
+			return after
 		}
 	}
-	docs, err := docTodoCorpus(ctx, c, corpus)
-	if err != nil {
-		t.Fatalf("docTodoCorpus: %v", err)
-	}
+	return body
+}
 
-	byPath := map[string]designdoc.CorpusDoc{}
-	for _, d := range docs {
-		byPath[d.Path] = d
+// TestDocTodoReadsStoredEdges pins WL-913 end to end: bodies with no header,
+// whose detail edges carry the covers (full, closed partial, open partial),
+// defers and requires claims, print the same `lode doc todo` report, text and
+// --json, as the header-carrying fixture.
+func TestDocTodoReadsStoredEdges(t *testing.T) {
+	report := func(t *testing.T, stored bool) (text, js string) {
+		specs := map[string]string{"001-example.md": todoStoredSpec, "002-other.md": todoStoredOther}
+		plans := todoStoredPlans
+		if stored {
+			for _, m := range []*map[string]string{&specs, &plans} {
+				bare := map[string]string{}
+				for name, body := range *m {
+					bare[name] = stripHeader(body)
+				}
+				*m = bare
+			}
+		}
+		srv := setupTodoCorpus(t, specs, plans, noTasks)
+		if stored {
+			srv.edgeOverrides = todoStoredEdges
+		}
+		text, err := runLode(t, "doc", "todo", "WL-SPEC-1")
+		if err != nil {
+			t.Fatalf("doc todo: %v\noutput: %s", err, text)
+		}
+		js, err = runLode(t, "doc", "todo", "WL-SPEC-1", "--json")
+		if err != nil {
+			t.Fatalf("doc todo --json: %v\noutput: %s", err, js)
+		}
+		return text, js
 	}
-	headered := byPath[designdoc.CorpusPath("plan", "001-1-first")]
-	headerless := byPath[designdoc.CorpusPath("plan", "001-2-second")]
+	var headerText, headerJSON, storedText, storedJSON string
+	t.Run("header", func(t *testing.T) { headerText, headerJSON = report(t, false) })
+	t.Run("stored", func(t *testing.T) { storedText, storedJSON = report(t, true) })
 
-	want := []designdoc.EdgeMeta{{Rel: "covers", Target: "docs/specs/001-example.md", TargetAnchor: "sec-1"}}
-	if !slices.Equal(headered.Edges, want) {
-		t.Errorf("headered plan's edges = %+v, want %+v", headered.Edges, want)
+	// The header report is the baseline, so pin what it classifies: sec-2's
+	// partials close each other, sec-3's stays partial, sec-4 is deferred.
+	rows := map[string]bool{}
+	for line := range strings.SplitSeq(headerText, "\n") {
+		if f := strings.Fields(line); len(f) >= 2 {
+			rows[f[0]+" "+f[1]] = true
+		}
 	}
-	if !slices.Equal(headerless.Edges, want) {
-		t.Errorf("headerless plan's edges = %+v, want %+v (same as the headered fixture)", headerless.Edges, want)
+	for _, want := range []string{"partial sec-3", "unexecuted sec-1", "unexecuted sec-2"} {
+		if !rows[want] {
+			t.Errorf("header report has no %q row:\n%s", want, headerText)
+		}
 	}
-	if headerless.Status != headered.Status {
-		t.Errorf("headerless plan's status = %q, want %q (the headered fixture's)", headerless.Status, headered.Status)
+	for _, unwanted := range []string{"partial sec-2", "unplanned sec-4"} {
+		if rows[unwanted] {
+			t.Errorf("header report has a %q row:\n%s", unwanted, headerText)
+		}
+	}
+	if !strings.Contains(headerText, "WL-SPEC-1 requires WL-SPEC-2") {
+		t.Errorf("header report does not name the requires edge:\n%s", headerText)
+	}
+	if storedText != headerText {
+		t.Errorf("stored-edge report differs from the header one\nstored:\n%s\nheader:\n%s", storedText, headerText)
+	}
+	if storedJSON != headerJSON {
+		t.Errorf("stored-edge --json differs from the header one\nstored: %s\nheader: %s", storedJSON, headerJSON)
 	}
 }
