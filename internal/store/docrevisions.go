@@ -42,6 +42,18 @@ func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		}
 		return fmt.Errorf("open revision of doc %d: %w", id, err)
 	}
+	// The candidate starts from the live edge set (WL-SPEC-77 §3).
+	if _, err := tx.Exec(
+		`INSERT INTO doc_revision_edges
+		   (doc_id, from_anchor, type, to_doc, to_anchor, to_external, coverage, to_rule, completed_with)
+		 SELECT e.from_doc, e.from_anchor, e.type, e.to_doc, e.to_anchor, e.to_external, e.coverage, e.to_rule,
+		        (SELECT jsonb_agg(CASE WHEN w.to_doc IS NOT NULL THEN jsonb_build_object('to_doc', w.to_doc)
+		                               ELSE jsonb_build_object('to_external', w.to_external) END
+		                          ORDER BY w.position)
+		           FROM doc_coverage_completed_with w WHERE w.edge_id = e.id)
+		   FROM doc_edges e WHERE e.from_doc = $1`, id); err != nil {
+		return fmt.Errorf("copy edges of doc %d into its revision: %w", id, err)
+	}
 	return logDocChange(tx, id, eventID,
 		map[string]string{"field": "revision", "new": "open"})
 }
@@ -62,7 +74,8 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 		return fmt.Errorf("doc %d is %s: only an accepted document has a revision to edit: %w",
 			id, d.status, ErrInvalidInput)
 	}
-	if _, err := parseWrittenDocBody(d.kind, body); err != nil {
+	parsed, err := parseWrittenDocBody(d.kind, body)
+	if err != nil {
 		return err
 	}
 	res, err := tx.Exec(`UPDATE doc_revisions SET body = $2 WHERE doc_id = $1`, id, body)
@@ -72,6 +85,13 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 	if err := requireOneAffected(res, fmt.Sprintf("update revision of doc %d", id),
 		fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)); err != nil {
 		return err
+	}
+	// Transitional, while bodies still carry headers: a candidate body with
+	// a header restates the candidate's edge set.
+	if fm := parsed.doc.Frontmatter; fm != nil {
+		if err := writeEdges(tx, id, d.kind, d.project, fm, true); err != nil {
+			return err
+		}
 	}
 	return logDocChange(tx, id, eventID,
 		map[string]string{"field": "revision", "new": "updated"})
@@ -212,7 +232,10 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
-	if err := rebuildEdges(tx, now, id, d.kind, d.project, candidate.doc.Frontmatter); err != nil {
+	if err := declareDocArtifacts(tx, now, id, candidate.doc.Frontmatter); err != nil {
+		return nil, err
+	}
+	if err := landRevisionEdges(tx, id); err != nil {
 		return nil, err
 	}
 
@@ -263,6 +286,41 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	return getDocTx(tx, id)
+}
+
+// landRevisionEdges replaces document id's live edges with its candidate's.
+// The candidate row goes when the revision is consumed; its edges cascade.
+func landRevisionEdges(tx *sql.Tx, id int64) error {
+	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, id); err != nil {
+		return fmt.Errorf("clear edges of doc %d: %w", id, err)
+	}
+	rows, err := tx.Query(`SELECT id FROM doc_revision_edges WHERE doc_id = $1 ORDER BY id`, id)
+	if err != nil {
+		return fmt.Errorf("read revision edges of doc %d: %w", id, err)
+	}
+	edgeIDs, err := collectRows(rows, fmt.Sprintf("read revision edges of doc %d", id), func(r rowScanner) (int64, error) {
+		var e int64
+		return e, r.Scan(&e)
+	})
+	if err != nil {
+		return err
+	}
+	for _, e := range edgeIDs {
+		if _, err := tx.Exec(
+			`WITH ins AS (
+			   INSERT INTO doc_edges (from_doc, from_anchor, type, to_doc, to_anchor, to_external, coverage, to_rule)
+			   SELECT doc_id, from_anchor, type, to_doc, to_anchor, to_external, coverage, to_rule
+			     FROM doc_revision_edges WHERE id = $1
+			   RETURNING id)
+			 INSERT INTO doc_coverage_completed_with (edge_id, position, to_doc, to_external)
+			 SELECT ins.id, c.n - 1, (c.w->>'to_doc')::bigint, c.w->>'to_external'
+			   FROM ins, doc_revision_edges r,
+			        jsonb_array_elements(coalesce(r.completed_with, '[]')) WITH ORDINALITY AS c(w, n)
+			  WHERE r.id = $1`, e); err != nil {
+			return fmt.Errorf("land revision edge %d of doc %d: %w", e, id, err)
+		}
+	}
+	return nil
 }
 
 // checkAnchorFreeze applies 025 §6's anchor rules to a diff between a
@@ -323,6 +381,9 @@ func (s *Store) GetDocRevision(ctx context.Context, id int64) (*model.DocRevisio
 	}
 	r.CreatedBy = createdBy.String
 	r.CreatedAt = r.CreatedAt.UTC()
+	if r.Edges, err = s.revisionEdges(ctx, id); err != nil {
+		return nil, err
+	}
 	return &r, nil
 }
 
