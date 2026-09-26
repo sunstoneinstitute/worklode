@@ -322,6 +322,8 @@ wl:reviewer a owl:ObjectProperty ;
 # ---------------------------------------------------------------------------
 
 wl:implements a owl:ObjectProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "doc_edges.implements" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Component ;
     rdfs:range wl:Section ;
@@ -365,6 +367,8 @@ wl:produces a owl:ObjectProperty ;
         wl:mirrors for the issue, the PR's own task binding for the PR.""" .
 
 wl:covers a owl:ObjectProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "doc_edges.covers" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Plan ;
     rdfs:range wl:Section ;
@@ -407,24 +411,32 @@ wl:Rule a owl:Class ;
     rdfs:comment "The lowest heading unit of a spec or ADR: the thing that carries an identity (WL-RULE-<n>), a status, versions and edges (S8 to S11)." .
 
 wl:refines a owl:ObjectProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "rule_edges.refines" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
     rdfs:comment "Subject narrows or details the object (S12)." .
 
 wl:constrains a owl:ObjectProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "rule_edges.constrains" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
     rdfs:comment "Subject must hold whenever the object does; a task implementing the object must also satisfy the subject (S12)." .
 
 wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "rule_edges.conflictsWith" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
     rdfs:comment "A recorded tension an architect chose to leave in place (S12)." .
 
 wl:references a owl:ObjectProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "rule_edges.references" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
@@ -439,6 +451,8 @@ wl:completedWith a owl:ObjectProperty ;
         (026 §2.1).""" .
 
 wl:defers a owl:ObjectProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "doc_edges.defers" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Plan ;
     rdfs:range wl:Section ;
@@ -449,6 +463,8 @@ wl:defers a owl:ObjectProperty ;
         doc_edges 'defers' row with the owner in the completion side-table.""" .
 
 wl:amends a owl:ObjectProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "rule_edges.amends" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
@@ -536,22 +552,27 @@ wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:comment "Kind of task; see wlc:TaskKind. A fixed enum, never free text." .
 
 wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "task_edges.dependsOn" ;
     wl:layer wlc:execution ;
     rdfs:subPropertyOf dct:requires ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Task ;
-    rdfs:comment """This task needs that task done first (backbone blocks/dependency mirror).
-        Transitive, so reachability is a SPARQL property path (?t wl:dependsOn+ ?x) with no
+    rdfs:comment """This task needs that task done first, stored as a task_edges `dependsOn` row
+        from the dependent task (WL-SPEC-75 §4). Transitive, so reachability is a SPARQL property path (?t wl:dependsOn+ ?x) with no
         reasoner, and CI/owlrl proves the closure. Type-homogeneous by ADR-0004.""" .
 
 wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:edgeOrigin wlc:inferred ;
     wl:layer wlc:execution ;
     owl:inverseOf wl:dependsOn ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Task ;
-    rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
+    rdfs:comment "This task blocks that task: inferred from wl:dependsOn, never stored. Transitive." .
 
 wl:blockedByPlan a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "doc_edges.blockedBy" ;
     wl:layer wlc:execution ;
     rdfs:subPropertyOf dct:requires ;
     rdfs:domain wl:Plan ;
@@ -564,19 +585,22 @@ wl:blockedByPlan a owl:ObjectProperty, owl:TransitiveProperty ;
         (?p wl:blockedByPlan+ ?x) with no reasoner. Declared by the document-level plan
         frontmatter keys `blocks`/`blockedBy` (025 §5) — document references, unlike the
         task-level `blockedBy` numbers inside a plan's ## Tasks, which mint Task→Task
-        wl:blocks edges (025 §9.2) — and stored as a doc_edges 'blocks' row between the
-        two plan documents.""" .
+        wl:blocks edges (025 §9.2). Declared by the later plan, stored as a doc_edges
+        `blockedBy` row from the later plan to the earlier one.""" .
 
 wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:edgeOrigin wlc:inferred ;
     wl:layer wlc:execution ;
     owl:inverseOf wl:blockedByPlan ;
     rdfs:domain wl:Plan ;
     rdfs:range wl:Plan ;
-    rdfs:comment """This plan is ordered before that plan (document-level blocks edge,
-        backbone-authoritative doc_edges; 025 §5, §9.3). Transitive. "Plan B after plan A"
+    rdfs:comment """This plan is ordered before that plan (025 §5, §9.3): inferred, never
+        stored. Transitive. "Plan B after plan A"
         is A wl:blocksPlan B.""" .
 
 wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "task_edges.duplicate_of" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Task ;
@@ -590,6 +614,8 @@ wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
         task's duplicates are a backwards traversal, not a second stored edge.""" .
 
 wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "task_edges.follow_up_to" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Task ;
@@ -725,6 +751,46 @@ wl:layer a owl:AnnotationProperty ;
     rdfs:comment """Model-layer membership (wlc:ModelLayer: intent/execution/runtime) of a
         vocabulary term, so all intent classes etc. can be listed. Annotation only, and untagged
         itself: a self-applied wl:layer would name no layer truthfully.""" .
+
+wl:edgeOrigin a owl:AnnotationProperty ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Marks an edge property wlc:declared or wlc:inferred (WL-SPEC-77 §8.1)." .
+
+wl:storedAs a owl:AnnotationProperty ;
+    rdfs:range xsd:string ;
+    rdfs:comment """On a declared edge property, the stored type as "<table>.<type>". A property
+        stored in two tables carries two values.""" .
+
+# Reused edge terms, annotated only: no rdfs:domain or rdfs:range, because a
+# domain on a shared term would type every subject in every graph.
+
+dct:requires wl:edgeOrigin wlc:declared ;
+    wl:storedAs "doc_edges.requires" ;
+    rdfs:comment "Declared between documents: the subject needs the object." .
+
+dct:isRequiredBy wl:edgeOrigin wlc:inferred ;
+    owl:inverseOf dct:requires ;
+    rdfs:comment "Inferred from dct:requires, never stored." .
+
+prov:wasDerivedFrom wl:edgeOrigin wlc:declared ;
+    wl:storedAs "doc_edges.wasDerivedFrom", "rule_edges.wasDerivedFrom" ;
+    rdfs:comment "Declared on a document or rule derived from the object." .
+
+dct:replaces wl:edgeOrigin wlc:declared ;
+    wl:storedAs "rule_edges.supersedes" ;
+    rdfs:comment "Declared on wl:Rule supersession, new → old." .
+
+dct:isReplacedBy wl:edgeOrigin wlc:inferred ;
+    owl:inverseOf dct:replaces ;
+    rdfs:comment "Inferred from dct:replaces, never stored." .
+
+dct:isPartOf wl:edgeOrigin wlc:declared ;
+    wl:storedAs "task_edges.child_of" ;
+    rdfs:comment "Declared on a child task, pointing at its parent." .
+
+dct:hasPart wl:edgeOrigin wlc:inferred ;
+    owl:inverseOf dct:isPartOf ;
+    rdfs:comment "Inferred from dct:isPartOf, never stored." .
 
 
 # ---------------------------------------------------------------------------

@@ -105,6 +105,18 @@ wlc:runtime a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runt
 
 
 # ---------------------------------------------------------------------------
+# Edge origin — the wl:edgeOrigin tag on every edge property (WL-SPEC-77 §8.1).
+# ---------------------------------------------------------------------------
+
+wlc:EdgeOrigin a skos:ConceptScheme ; skos:prefLabel "Edge origin" .
+
+wlc:declared a skos:Concept ; skos:inScheme wlc:EdgeOrigin ; skos:prefLabel "declared" ;
+    skos:definition "Stored subject → object and owned by the subject." .
+wlc:inferred a skos:Concept ; skos:inScheme wlc:EdgeOrigin ; skos:prefLabel "inferred" ;
+    skos:definition "Read from the far end of a declared edge through owl:inverseOf, never stored." .
+
+
+# ---------------------------------------------------------------------------
 # Artifact kind (006 §6). In v1 only git_tag rows are ever created; the other
 # three are grammar, not data (006 §11.1).
 # ---------------------------------------------------------------------------

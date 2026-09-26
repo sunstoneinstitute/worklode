@@ -91,10 +91,12 @@ wl:SectionShape a sh:NodeShape ;
     # it. Read as an implication: not superseded, OR one of the two explanations.
     sh:or (
         [ sh:not [ sh:property [ sh:path wl:status ; sh:hasValue wlc:superseded ] ] ]
-        [ sh:property [ sh:path dct:isReplacedBy ; sh:minCount 1 ] ]
+        # The path reads the declared direction, so the shape holds whether or
+        # not a producer emitted the inverse (WL-SPEC-77 §8.1).
+        [ sh:property [ sh:path [ sh:inversePath dct:replaces ] ; sh:minCount 1 ] ]
         [ sh:property [ sh:path dct:description ; sh:minCount 1 ] ]
     ) ;
-    sh:message "A superseded Section needs dct:isReplacedBy or a dct:description saying why it went away (025 §6)." .
+    sh:message "A superseded Section needs a successor that dct:replaces it, or a dct:description saying why it went away (WL-SPEC-77 §6)." .
 
 wl:DeliverableShape a sh:NodeShape ;
     # Targets wl:Effect too: sh:targetClass follows rdfs:subClassOf*.
