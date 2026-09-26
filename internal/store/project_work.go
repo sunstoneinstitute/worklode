@@ -173,8 +173,8 @@ SELECT e.to_task, b.id, b.title, b.state
 UNION
 SELECT dep.id, b.id, b.title, b.state
   FROM tasks dep
-  JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
-  JOIN tasks b ON b.plan_doc = de.from_doc
+  JOIN doc_edges de ON de.type = 'blockedBy' AND de.from_doc = dep.plan_doc
+  JOIN tasks b ON b.plan_doc = de.to_doc
  WHERE dep.plan_doc IS NOT NULL
    AND b.deleted_at IS NULL
    AND NOT `+taskClosed("b")+`
@@ -211,8 +211,8 @@ func (s *Store) attachBlockingPlans(ctx context.Context, projectID string, facts
 	rows, err := s.db.QueryContext(ctx, `
 SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
   FROM tasks dep
-  JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
-  JOIN docs bd ON bd.id = de.from_doc
+  JOIN doc_edges de ON de.type = 'blockedBy' AND de.from_doc = dep.plan_doc
+  JOIN docs bd ON bd.id = de.to_doc
  WHERE dep.plan_doc IS NOT NULL
    AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)

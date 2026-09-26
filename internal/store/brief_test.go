@@ -478,8 +478,8 @@ func TestBriefPlanBlockers(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
-	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("blocks: plan-b\n", "Plan A"))
+	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("", "Plan A"))
+	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("blockedBy: plan-a\n", "Plan B"))
 
 	b, err := s.Brief(t.Context(), blocked[0], BriefOptions{})
 	if err != nil {
@@ -510,11 +510,11 @@ func TestBriefBlockedByDraftPlan(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "plan-c",
-		Body: planTaskBody("blocks: plan-d\n", "Plan C"), CreatedBy: "stig",
+		Body: planTaskBody("", "Plan C"), CreatedBy: "stig",
 	})
+	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("blockedBy: plan-c\n", "Plan D"))
 
 	b, err := s.Brief(t.Context(), blocked[0], BriefOptions{})
 	if err != nil {

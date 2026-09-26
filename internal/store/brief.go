@@ -207,8 +207,8 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, 
 		   UNION
 		   SELECT b.id, b.title, b.state
 		     FROM tasks dep
-		     JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
-		     JOIN tasks b ON b.plan_doc = de.from_doc
+		     JOIN doc_edges de ON de.type = 'blockedBy' AND de.from_doc = dep.plan_doc
+		     JOIN tasks b ON b.plan_doc = de.to_doc
 		    WHERE dep.id = $1
 		      AND b.deleted_at IS NULL
 		      AND NOT `+taskClosed("b")+`
@@ -251,8 +251,8 @@ func (s *Store) blockingPlansFor(ctx context.Context, ids []string) (map[string]
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
 		   FROM tasks dep
-		   JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
-		   JOIN docs bd ON bd.id = de.from_doc
+		   JOIN doc_edges de ON de.type = 'blockedBy' AND de.from_doc = dep.plan_doc
+		   JOIN docs bd ON bd.id = de.to_doc
 		  WHERE dep.id = ANY($1)
 		    AND `+planUnfinished("bd")+`
 		  ORDER BY dep.id, bd.id`, ids)

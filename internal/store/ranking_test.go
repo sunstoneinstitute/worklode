@@ -735,8 +735,8 @@ func TestPlanBlockedReadySetReleasesWhenBlockerCloses(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
-	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("blocks: plan-b\n", "Plan A"))
+	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("", "Plan A"))
+	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("blockedBy: plan-a\n", "Plan B"))
 
 	if !isBlocked(t, s, blocked[0]) {
 		t.Fatalf("IsBlocked(%s): want true while plan A's set is open", blocked[0])
@@ -779,12 +779,12 @@ func TestPlanBlockedByDraftPlan(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))
 	// Plan C is created and left draft, so it has an edge and no tasks.
 	blocker := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "plan-c",
-		Body: planTaskBody("blocks: plan-d\n", "Plan C"), CreatedBy: "stig",
+		Body: planTaskBody("", "Plan C"), CreatedBy: "stig",
 	})
+	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("blockedBy: plan-c\n", "Plan D"))
 
 	if !isBlocked(t, s, blocked[0]) {
 		t.Fatalf("IsBlocked(%s): want true while the blocking plan is draft", blocked[0])
@@ -808,8 +808,8 @@ func TestPlanBlockedIgnoresTasksWithoutPlan(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	blocked := mintReadyPlan(t, s, "plan-f", planTaskBody("", "Plan F"))
-	mintReadyPlan(t, s, "plan-e", planTaskBody("blocks: plan-f\n", "Plan E"))
+	mintReadyPlan(t, s, "plan-e", planTaskBody("", "Plan E"))
+	blocked := mintReadyPlan(t, s, "plan-f", planTaskBody("blockedBy: plan-e\n", "Plan F"))
 
 	in := defaultTaskInput()
 	in.ProjectID = "p1"

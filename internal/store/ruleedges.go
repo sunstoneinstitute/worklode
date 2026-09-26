@@ -24,7 +24,9 @@ var ruleEdgeTypes = map[string]bool{
 const ruleEdgeTypesList = "refines, constrains, conflictsWith, references, amends, supersedes, wasDerivedFrom"
 
 // LinkRules writes a manual edge (12-spec-refactoring-design-tree.md S12).
-// A second identical edge is ErrEdgeExists; a self edge or an unknown type is
+// A second identical edge is ErrEdgeExists, and so is a conflictsWith edge
+// whose reverse exists: the relation is symmetric and stored once per pair
+// (rule_edges_symmetric_once). A self edge or an unknown type is
 // ErrInvalidInput; an unknown rule id is ErrNotFound. supersedes has one
 // writer, lode rule supersede (S22, R4): LinkRules refuses it.
 func LinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
@@ -41,7 +43,7 @@ func LinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 		`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, $3, 'manual')`,
 		fromID, toID, typ)
 	switch {
-	case isUniqueViolationOn(err, "rule_edges_pkey"):
+	case isUniqueViolationOn(err, "rule_edges_pkey"), isUniqueViolationOn(err, "rule_edges_symmetric_once"):
 		return fmt.Errorf("rule %d already %s rule %d: %w", fromID, typ, toID, ErrEdgeExists)
 	case pgViolation(err, "23503", "rule_edges_from_rule_fkey"), pgViolation(err, "23503", "rule_edges_to_rule_fkey"):
 		return fmt.Errorf("rule: %w", ErrNotFound)
@@ -54,14 +56,17 @@ func LinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 // UnlinkRules removes a manual edge, or reports ErrNotFound. A derived
 // edge cannot be removed by hand: it comes back on the next version anyway.
 // A refactor edge cannot be removed by hand either (S22, R4): it is undone
-// only by a later refactor.
+// only by a later refactor. A conflictsWith edge is removed whichever
+// direction it was stored in.
 func UnlinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 	if !ruleEdgeTypes[typ] {
 		return fmt.Errorf("edge type %q is not one of %s: %w", typ, ruleEdgeTypesList, ErrInvalidInput)
 	}
 	var source string
-	err := tx.QueryRow(`SELECT source FROM rule_edges WHERE from_rule = $1 AND to_rule = $2 AND type = $3`,
-		fromID, toID, typ).Scan(&source)
+	err := tx.QueryRow(`SELECT from_rule, to_rule, source FROM rule_edges
+		 WHERE type = $3 AND ((from_rule = $1 AND to_rule = $2)
+		    OR (type = 'conflictsWith' AND from_rule = $2 AND to_rule = $1))`,
+		fromID, toID, typ).Scan(&fromID, &toID, &source)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("rule %d does not %s rule %d: %w", fromID, typ, toID, ErrNotFound)
 	}

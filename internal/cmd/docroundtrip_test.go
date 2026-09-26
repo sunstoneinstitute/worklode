@@ -12,21 +12,14 @@ import (
 )
 
 // roundTripCorpus is a corpus written to exercise the frontmatter edge set
-// across both trees: `covers`, `requires`/`isRequiredBy`,
-// `blocks`/`blockedBy` and `wasDerivedFrom`, each authored both section-qualified and bare, on specs
-// and on plans. Every document is draft: the round trip is about edges, and
-// an accepted status would drag the accept gate's cascades in with it.
+// across both trees: `covers`, `requires`, `blockedBy` and `wasDerivedFrom`,
+// each authored both section-qualified and bare, on specs and on plans. Every
+// document is draft: the round trip is about edges, and an accepted status
+// would drag the accept gate's cascades in with it.
 //
-// The pairs that cross the two trees are deliberate. A plan's `requires` is
-// what WL-357 reported as silently dropped, so it is authored from both ends —
-// `requires: 001-alpha.md` on the plan and `isRequiredBy: <plan>` on the spec —
-// and the same key on a spec (alpha requires beta) sits beside it as the
-// control that is known to wire.
-//
-// beta's `isRequiredBy` also names gamma, which declares no `requires` back
-// (WL-375): a one-sided inverse, resolving to neither an edge nor silence —
-// it is reported (unresolvedRef.oneSided), which is the property this test
-// asserts of every reference regardless of which of the three ways it lands.
+// A plan's `requires` is what WL-357 reported as silently dropped, and the same
+// key on a spec (alpha requires beta) sits beside it as the control that is
+// known to wire.
 func roundTripCorpus() map[string]string {
 	return map[string]string{
 		"specs/001-alpha.md": `---
@@ -34,7 +27,6 @@ status: draft
 requires:
   - 002-beta.md#sec-1
   - 002-beta.md
-isRequiredBy: 2026-01-02-phase-two.md
 wasDerivedFrom: 003-gamma.md
 ---
 
@@ -46,9 +38,6 @@ Alpha's only section.
 `,
 		"specs/002-beta.md": `---
 status: draft
-isRequiredBy:
-  - 001-alpha.md
-  - 003-gamma.md
 ---
 
 # Beta
@@ -72,7 +61,6 @@ covers:
 requires:
   - 002-beta.md#sec-1
   - 003-gamma.md
-blocks: 2026-01-02-phase-two.md
 ---
 
 # Phase one
@@ -82,6 +70,7 @@ status: draft
 covers: NO-SPEC
 requires: 001-alpha.md
 wasDerivedFrom: 2026-01-01-phase-one.md
+blockedBy: 2026-01-01-phase-one.md
 ---
 
 # Phase two
@@ -114,12 +103,7 @@ requires: other-corpus:SPEC-99
 // reported success. An edge that resolves, an edge kept verbatim in
 // to_external, and a reference named on stderr are all fine; vanishing is not.
 //
-// Read-back is `doc show`'s edge lists rather than a reconstructed header,
-// because the store already presents an incoming edge in the reading
-// document's frame under its inverse spelling (store.docEdgeInverse) — which
-// is exactly how the corpus authors the bidirectional pairs (025 §14.2). So
-// `isRequiredBy` on one document and `requires` on the other are one stored
-// row that satisfies both declarations, and one check covers both directions.
+// Read-back is `doc show`'s edge lists rather than a reconstructed header.
 func TestDocImportRoundTrip(t *testing.T) {
 	files := roundTripCorpus()
 	dir := writeCorpus(t, files)
@@ -166,31 +150,6 @@ func TestDocImportRoundTrip(t *testing.T) {
 		d := importedDoc(t, c, "2026-01-04-orphan")
 		if len(d.Edges) != 1 || d.Edges[0].ToExternal != "other-corpus:SPEC-99" {
 			t.Errorf("edges = %+v, want the one reference kept in to_external", d.Edges)
-		}
-	})
-
-	// WL-375: beta's isRequiredBy names gamma, and gamma declares no requires
-	// back. Neither end stores an edge for it — unlike a dangling reference,
-	// there is nothing to keep verbatim, since the target document is real —
-	// but it is still named, so it cannot vanish silently.
-	t.Run("a one-sided inverse reference is reported and stores no edge", func(t *testing.T) {
-		if !strings.Contains(stderr, "002-beta: 003-gamma.md") {
-			t.Errorf("stderr = %q, want the one-sided inverse spelling named", stderr)
-		}
-		if !strings.Contains(stderr, "1 one-sided inverse reference(s)") {
-			t.Errorf("stderr = %q, want the one-sided summary line", stderr)
-		}
-		beta := importedDoc(t, c, "002-beta")
-		gamma := importedDoc(t, c, "003-gamma")
-		for _, e := range append(append([]model.DocEdge{}, beta.Edges...), beta.EdgesIn...) {
-			if e.ToSlug == "003-gamma" {
-				t.Errorf("beta edges = %+v: no beta<->gamma edge should exist for the one-sided isRequiredBy", beta.Edges)
-			}
-		}
-		for _, e := range append(append([]model.DocEdge{}, gamma.Edges...), gamma.EdgesIn...) {
-			if e.ToSlug == "002-beta" {
-				t.Errorf("gamma edges = %+v: no beta<->gamma edge should exist for the one-sided isRequiredBy", gamma.Edges)
-			}
 		}
 	})
 

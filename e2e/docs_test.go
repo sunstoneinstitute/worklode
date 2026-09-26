@@ -490,10 +490,9 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	// 1. Both plans, in the order a numbered series is actually written:
-	// alpha, then beta declaring `blockedBy: [plan-alpha]`. Either end may
-	// state the ordering, and the later plan naming the earlier one is the
-	// direction that does not require going back to amend a plan that may
-	// already be accepted and spent (025 §5).
+	// alpha, then beta declaring `blockedBy: [plan-alpha]`. The later plan
+	// names the earlier one, so an accepted and spent plan is never amended
+	// to state the ordering (025 §5).
 	alpha, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
 		Project: "plans", Kind: "plan", Slug: "plan-alpha",
 		Body: planAlphaBody, Owner: "planner",
@@ -509,22 +508,22 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 		t.Fatalf("create plan-beta: %v", err)
 	}
 
-	// 2. Beta's frontmatter wrote one doc_edges row — the one alpha's
-	// `blocks: [plan-beta]` would have written — readable from both ends:
-	// blocks leaving alpha, blockedBy arriving at beta (025 §5, §14).
-	alphaDoc, _, err := planner.GetDoc(ctx, alpha.ID)
-	if err != nil {
-		t.Fatalf("get plan-alpha: %v", err)
-	}
-	if !hasDocEdge(alphaDoc.Edges, "blocks", beta.ID) {
-		t.Fatalf("plan-alpha edges = %+v, want a blocks edge to doc %d", alphaDoc.Edges, beta.ID)
-	}
+	// 2. Beta's frontmatter wrote one doc_edges row, beta → alpha, readable
+	// from both ends: blockedBy leaving beta, blocks arriving at alpha
+	// (WL-SPEC-77 §8.1).
 	betaDoc, _, err := planner.GetDoc(ctx, beta.ID)
 	if err != nil {
 		t.Fatalf("get plan-beta: %v", err)
 	}
-	if !hasDocEdge(betaDoc.EdgesIn, "blockedBy", alpha.ID) {
-		t.Fatalf("plan-beta inbound edges = %+v, want a blockedBy edge from doc %d", betaDoc.EdgesIn, alpha.ID)
+	if !hasDocEdge(betaDoc.Edges, "blockedBy", alpha.ID) {
+		t.Fatalf("plan-beta edges = %+v, want a blockedBy edge to doc %d", betaDoc.Edges, alpha.ID)
+	}
+	alphaDoc, _, err := planner.GetDoc(ctx, alpha.ID)
+	if err != nil {
+		t.Fatalf("get plan-alpha: %v", err)
+	}
+	if !hasDocEdge(alphaDoc.EdgesIn, "blocks", beta.ID) {
+		t.Fatalf("plan-alpha inbound edges = %+v, want a blocks edge from doc %d", alphaDoc.EdgesIn, beta.ID)
 	}
 
 	// 3. Accept alpha: one ready task, minted in the accept transaction

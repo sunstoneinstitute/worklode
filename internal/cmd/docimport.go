@@ -11,7 +11,7 @@
 // pass 2 asks the server to re-resolve every document's frontmatter now that
 // the whole corpus is present.
 //
-// One relation cannot wait for pass 2: the server resolves a `blocks` edge at
+// One relation cannot wait for pass 2: the server resolves a `blockedBy` edge at
 // create time and refuses one naming no plan (025 §5), so pass 1 creates the
 // corpus in an order that puts an ordering edge's target first
 // (importCreateOrder).
@@ -55,19 +55,10 @@ type importDoc struct {
 	fm     *designdoc.Frontmatter
 }
 
-// unresolvedRef is one frontmatter reference that will not become a stored
-// edge: either it resolves to no document in the walked corpus, or (WL-375)
-// it is an inverse-only spelling whose target exists but does not declare
-// the acting relation back — designdoc.StoredRels stores neither, so both
-// are reported the same way an import failure is not.
+// unresolvedRef is one frontmatter reference that resolves to no document in
+// the walked corpus; it is stored verbatim as to_external.
 type unresolvedRef struct {
 	slug, ref string
-	// oneSided is true for the WL-375 case: ref names a real document in
-	// this corpus, just not one that reciprocates. Kept apart from a
-	// genuinely dangling reference only for the summary line's wording —
-	// the per-line report and the round-trip test's check are identical
-	// either way.
-	oneSided bool
 }
 
 // driftedDoc is one walked file whose body differs from the stored document
@@ -107,9 +98,10 @@ Edges are wired in a second pass, once every document exists, because the
 corpus references forward as well as backward. A reference no document in the
 project resolves to is kept verbatim as an external reference and reported on
 stderr; that is a fact about the corpus, not an import failure. The exception
-is blocks/blockedBy, which the server resolves at create time: documents
-are created in an order that satisfies those references first, and one still
-unresolvable then is an error.
+is blockedBy, which the server resolves at create time: documents are created
+in an order that satisfies those references first, and one still unresolvable
+then is an error. A plan carrying blocks: fails the import: plan ordering is
+declared on the later plan as blockedBy.
 
 History is not reconstructed: every imported document lands at version 1, so
 last_revised_in is 1 for every section and a claim pinned to an earlier version
@@ -280,6 +272,14 @@ func readImportDoc(file, defaultKind string) (importDoc, error) {
 		body: string(src),
 		fm:   doc.Frontmatter,
 	}
+	// The server refuses an inverse spelling (WL-SPEC-77 §8.1); refusing it
+	// here keeps the corpus from being half imported.
+	for _, r := range d.fm.Refs() {
+		if acting, inverse := designdoc.InverseOf[r.Rel]; inverse {
+			return importDoc{}, fmt.Errorf(
+				"%s carries %s:, which is not stored: declare it on the other document as %s:", file, r.Rel, acting)
+		}
+	}
 	if d.fm != nil && d.fm.Kind == "adr" && defaultKind == "spec" {
 		d.kind = "adr"
 	}
@@ -358,8 +358,7 @@ func (ix importIndex) lookup(ref string) (int, bool) {
 }
 
 // importCreateOrder returns the corpus in the order pass 1 must create it: a
-// document naming another in `blocks:` or `blockedBy:` comes after the one it
-// names.
+// document naming another in `blockedBy:` comes after the one it names.
 //
 // Every other reference can wait for pass 2, which re-resolves the whole
 // frontmatter once the corpus is present. An ordering edge cannot: the server
@@ -379,7 +378,7 @@ func importCreateOrder(docs []importDoc) []importDoc {
 	waiters := make([][]int, len(docs))
 	for i, d := range docs {
 		needs[i] = map[int]bool{}
-		for _, r := range d.fm.RefsFor("blocks", "blockedBy") {
+		for _, r := range d.fm.RefsFor("blockedBy") {
 			j, ok := ix.lookup(r.Ref)
 			// A self-reference is refused by the server either way; holding
 			// it here would only strand the rest of the corpus behind it.
@@ -415,67 +414,20 @@ func importCreateOrder(docs []importDoc) []importDoc {
 }
 
 // unresolvedImportRefs lists the frontmatter references no walked document
-// satisfies, in walk order, plus every one-sided inverse spelling (WL-375).
-// Neither is an error: a reference across corpora (another repo's spec) is a
-// real fact the backbone keeps verbatim in to_external, and a one-sided
-// inverse is a corpus that has not (yet) declared the other half. Reporting
-// them locally is what makes a dry run useful.
+// satisfies, in walk order. It is not an error: a reference across corpora
+// (another repo's spec) is a real fact the backbone keeps verbatim in
+// to_external. Reporting them locally is what makes a dry run useful.
 func unresolvedImportRefs(docs []importDoc) []unresolvedRef {
 	ix := newImportIndex(docs)
 	var out []unresolvedRef
-	for i, d := range docs {
+	for _, d := range docs {
 		for _, ref := range importRefs(d.fm) {
 			if _, ok := ix.lookup(ref); !ok {
 				out = append(out, unresolvedRef{slug: d.slug, ref: ref})
 			}
 		}
-		out = append(out, oneSidedInverseRefs(ix, docs, i)...)
 	}
 	return out
-}
-
-// oneSidedInverseRefs reports document i's inverse-only references
-// (designdoc.InverseOf — isRequiredBy today) whose target does not assert the
-// acting relation back (WL-375). designdoc's own Frontmatter.Refs, not
-// importRefs' StoredRels-narrowed view, is walked here because these are
-// exactly what StoredRels excludes: nothing else
-// ever sees them, which is how a one-sided inverse used to reach neither an
-// edge nor a report.
-//
-// A target this corpus does not hold at all is not handled here — importRefs
-// only reads StoredRels, so that case is not caught by the loop above
-// either, and is exactly as unresolvable as any other dangling reference.
-func oneSidedInverseRefs(ix importIndex, docs []importDoc, i int) []unresolvedRef {
-	d := docs[i]
-	var out []unresolvedRef
-	for _, r := range d.fm.Refs() {
-		acting, isInverse := designdoc.InverseOf[r.Rel]
-		if !isInverse {
-			continue
-		}
-		j, ok := ix.lookup(r.Ref)
-		if !ok {
-			out = append(out, unresolvedRef{slug: d.slug, ref: r.Ref})
-			continue
-		}
-		if !declaresRelTo(ix, docs[j].fm, acting, i) {
-			out = append(out, unresolvedRef{slug: d.slug, ref: r.Ref, oneSided: true})
-		}
-	}
-	return out
-}
-
-// declaresRelTo reports whether fm asserts rel against document i, resolved
-// through the same corpus index every other lookup here uses rather than by
-// comparing reference text: the acting end may spell the target differently
-// (bare filename, path, section-qualified) from how the inverse end named it.
-func declaresRelTo(ix importIndex, fm *designdoc.Frontmatter, rel string, i int) bool {
-	for _, r := range fm.RefsFor(rel) {
-		if j, ok := ix.lookup(r.Ref); ok && j == i {
-			return true
-		}
-	}
-	return false
 }
 
 // importRefs lists the frontmatter references one document would become edges
@@ -533,31 +485,18 @@ func printDriftedDocs(w io.Writer, drifted []driftedDoc) {
 // no spec governs it — so counting it with the genuinely dangling references
 // would make a clean corpus look defective at exactly the moment the count is
 // being read as a go/no-go.
-// oneSided is counted apart from a genuinely dangling reference (WL-375):
-// the target document exists in this corpus, so "kept verbatim" — true of a
-// dangling reference, which becomes a to_external edge — would misdescribe
-// it. A one-sided inverse becomes no edge at all; the other end simply has
-// not declared the relation it restates yet.
 func printUnresolvedRefs(w io.Writer, refs []unresolvedRef) {
-	var dangling, oneSided, sentinels int
+	var dangling, sentinels int
 	for _, u := range refs {
 		if u.ref == noSpecSentinel {
 			sentinels++
 			continue
 		}
-		if u.oneSided {
-			oneSided++
-		} else {
-			dangling++
-		}
+		dangling++
 		fmt.Fprintf(w, "%s: %s\n", u.slug, u.ref)
 	}
 	if dangling > 0 {
 		fmt.Fprintf(w, "%d reference(s) resolve to no document in this project; kept verbatim\n", dangling)
-	}
-	if oneSided > 0 {
-		fmt.Fprintf(w, "%d one-sided inverse reference(s): the named document does not declare "+
-			"the relation back (025 §14.2); no edge stored either way\n", oneSided)
 	}
 	if sentinels > 0 {
 		fmt.Fprintf(w, "%d plan(s) declare %s; kept verbatim, no target expected (026 §4.3)\n",

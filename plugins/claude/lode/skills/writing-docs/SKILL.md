@@ -114,8 +114,9 @@ dependency → amendment → supersession:
 | `covers` | plan | scalar or list of rule refs (`WL-RULE-<n>`), spec-section references, or whole-document references this plan undertakes to build; qualifiable with `coverage:`/`fullCoverageWith:` |
 | `implements` | plan | retired spelling of `covers`; still parses, reported as retired. A document carrying both is an error |
 | `defers` | plan | list of `{spec, to}`: a section this plan hands off, and the document expected to cover it (026 §5.3) |
-| `requires` / `isRequiredBy` | any | list of references; plain dependency, no ordering semantics |
-| `blocks` / `blockedBy` | plan | orders one plan's whole execution before another's (025 §5); one row either end declares — prefer `blockedBy` on the later plan in a series, since the alternative is amending an earlier, possibly-accepted plan |
+| `requires` | any | list of references; plain dependency, no ordering semantics |
+| `blockedBy` | plan | list of plans whose whole execution runs before this one's (025 §5), declared on the later plan |
+| `isRequiredBy`, `blocks` | none | inverse spellings, not keys: a header carrying one is refused, naming `requires` or `blockedBy` (WL-SPEC-77 §8.1) |
 | `wasDerivedFrom` | spec | scalar reference (provenance) |
 | `amends`, `amendedBy`, `replaces`, `isReplacedBy` | none | not keys: a header carrying one is refused. Amendment and supersession are rule edges, see below |
 | `kind` | spec, ADR | `adr`, or absent for a spec — the resolver's document kind, distinct from a plan-task's `kind` (feature/bug/chore/design) below |
@@ -234,7 +235,7 @@ within the plan, and accepting an edited plan mints only the declarations
 with no task yet, leaving every existing task alone (025 §9.2). Append a
 declaration to add work to an accepted plan; retitle one only to withdraw
 that task and declare a new one. Ordering across files (series parts, other
-plans) is the document-level `blocks`/`blockedBy` above, never a task
+plans) is the document-level `blockedBy` above, never a task
 number — `lode doc lint <file>` runs this whole parse first, so a
 malformed task block is caught locally.
 
@@ -322,7 +323,7 @@ Spec 025, as implemented by the document store.
   `child_of` children (004 §6.1).
 - **Groupings are queries, not rows** (025 §1): one plan's tasks = the tasks
   referencing it, everything in a repo set = the project. No sprint concept,
-  no container above a plan's tasks — order plans with `blocks`.
+  no container above a plan's tasks — order plans with `blockedBy`.
 - Spec → plan decomposition is always an explicit human act; skills may
   offer it, never perform it unasked.
 - **The prompt is minted, the act is not** (025 §15.4). `lode doc submit`
