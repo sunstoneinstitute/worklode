@@ -3,6 +3,8 @@ package ui
 import (
 	"strconv"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // task.templ renders one task's detail page (GET /tasks/{id}): identity,
@@ -31,11 +33,8 @@ templ Task(v TaskView) {
 				<section class="card pad">
 					<h1>{ v.Task.ID }: { v.Task.Title }</h1>
 					<p>
-						if v.Blocked {
-							<span class="chip crit">blocked</span>
-						} else {
-							<span class={ "chip " + stateChip(v.Task.State) }>{ v.Task.State }</span>
-						}
+						{{ state := model.DisplayState(v.Task.State, v.Blocked) }}
+						<span class={ "chip " + stateChip(state) }>{ state }</span>
 						<span class="chip plain">{ v.Task.Priority }</span>
 						<span class="chip plain">{ v.Task.Kind }</span>
 						<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Task.Project }>{ v.Task.Project }</a></span>

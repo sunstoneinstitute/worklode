@@ -76,6 +76,13 @@ func TestPrerequisitesView(t *testing.T) {
 	if len(full) != 5 {
 		t.Errorf("full cards = %d; want each of the 5 tasks once", len(full))
 	}
+	// A ready task with an open blocker shows as blocked; other states and
+	// unblocked tasks keep their stored state.
+	for id, want := range map[string]string{"WL-2": "blocked", "WL-3": "in_progress", "WL-4": "blocked", "WL-6": "ready"} {
+		if got := full[id].State; got != want {
+			t.Errorf("%s state = %q; want %q", id, got, want)
+		}
+	}
 	for id, want := range map[string][2]int{"WL-2": {3, 3}, "WL-3": {3, 4}, "WL-4": {2, 2}, "WL-5": {1, 2}, "WL-6": {0, 0}} {
 		if n := full[id]; n.Levels != want[0] || n.Below != want[1] {
 			t.Errorf("%s levels, below = %d, %d; want %d, %d", id, n.Levels, n.Below, want[0], want[1])
