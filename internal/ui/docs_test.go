@@ -58,20 +58,33 @@ func TestDocSectionsLinkAtTheirAnchors(t *testing.T) {
 	}
 }
 
-// TestDocPageOrder: the table of contents opens the page and Relations closes
-// it, both collapsed, so the body sits near the top.
+// TestDocPageOrder: header, Review (carrying Accept), collapsed table of
+// contents, Body, Notes, collapsed Relations, collapsed Versions last.
 func TestDocPageOrder(t *testing.T) {
 	body := renderDoc(t, DocView{
 		Page:     PageProps{Title: "doc"},
-		Doc:      model.Doc{ID: 25, Slug: "025-documents", Title: "Documents"},
+		Doc:      model.Doc{ID: 25, Slug: "025-documents", Title: "Documents", Status: "draft", Project: "p"},
 		Sections: []model.DocSection{{Anchor: "sec-1", Heading: "1. Purpose"}},
+		Versions: []model.DocVersionSummary{{Version: 1, Title: "Documents"}},
 		BodyHTML: `<h2 id="sec-1">1. Purpose</h2>`,
+		Viewer:   "stig",
 	})
-	contents := strings.Index(body, `<details class="card" aria-labelledby="contents-heading">`)
-	bodyAt := strings.Index(body, `<h3>Body</h3>`)
-	relations := strings.Index(body, `<details class="card" aria-labelledby="relations-heading">`)
-	if contents < 0 || bodyAt < 0 || relations < 0 || !(contents < bodyAt && bodyAt < relations) {
-		t.Fatalf("want collapsed Contents, then Body, then collapsed Relations; got positions %d, %d, %d", contents, bodyAt, relations)
+	marks := []string{
+		`id="review-heading"`,
+		`>Accept<`,
+		`<details class="card" aria-labelledby="contents-heading">`,
+		`<h3>Body</h3>`,
+		`id="notes-heading"`,
+		`<details class="card" aria-labelledby="relations-heading">`,
+		`<details class="card" aria-labelledby="versions-heading">`,
+	}
+	prev := -1
+	for _, m := range marks {
+		at := strings.Index(body, m)
+		if at <= prev {
+			t.Fatalf("%q out of order or missing (at %d, previous at %d)", m, at, prev)
+		}
+		prev = at
 	}
 }
 

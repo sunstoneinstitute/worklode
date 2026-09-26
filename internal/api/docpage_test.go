@@ -314,7 +314,7 @@ func TestDocPageShowsReviewState(t *testing.T) {
 	}
 	body := rr.Body.String()
 	bodyContains(t, body,
-		"<li>bob",   // the roster
+		" bob ",     // the roster
 		">awaiting", // and who still owes a verdict
 		fmt.Sprintf(`action="/approvals/%d/decide"`, open[0].ID),
 		`value="approve"`,
