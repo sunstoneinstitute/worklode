@@ -136,19 +136,19 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 			in.ID, ErrInvalidInput)
 	}
 
-	version := d.version + 1
 	// Substantive means the reviewers who approved this document owe a
 	// decision on the version this patch makes (§7.3). A document with none
 	// assigned has nobody to re-approve it, so the patch is refused up front,
 	// before anything is written: the honest paths are assigning reviewers or
 	// revising.
 	if in.Substantive {
-		if err := RequestDocApproval(tx, now, in.ID, version); err != nil {
+		if err := RequestDocApproval(tx, now, in.ID, d.version+1); err != nil {
 			return nil, nil, &patchRefusal{rule: "no-reviewers", err: err}
 		}
 	}
 
-	if err := publishPatch(tx, now, in, d, next, version, changed, prior, eventID); err != nil {
+	version, err := publishPatch(tx, now, in, d, next, changed, prior, eventID)
+	if err != nil {
 		return nil, nil, err
 	}
 	if in.Substantive {
@@ -327,43 +327,44 @@ func unexecutedCoveringPlans(tx *sql.Tx, docID int64, anchor string, exclude int
 // status move. Sections keep their existing published and patched flags
 // through the rebuild, last_revised_in moves on exactly the changed anchors
 // (§6 rule 5), and a section the patch added is published like the rest of
-// the accepted text it now belongs to.
+// the accepted text it now belongs to. It returns the version it published.
 func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
-	next parsedDoc, version int, changed []string, prior map[string]priorSection, eventID int64) error {
+	next parsedDoc, changed []string, prior map[string]priorSection, eventID int64) (int, error) {
 
 	title, ok := designdoc.Title(next.doc)
 	if !ok {
 		title = d.slug
 	}
-	if err := snapshotDocVersion(tx, in.ID); err != nil {
-		return err
+	version, err := bumpDocVersion(tx, in.ID)
+	if err != nil {
+		return 0, err
 	}
 	if _, err := tx.Exec(
 		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
-		                 version = $5, updated_at = $6
+		                 updated_at = $5
 		  WHERE id = $1`,
-		in.ID, in.Body, title, nullText(next.issued), version, now.UTC().Truncate(time.Second),
+		in.ID, in.Body, title, nullText(next.issued), now.UTC().Truncate(time.Second),
 	); err != nil {
-		return fmt.Errorf("patch doc %d: %w", in.ID, err)
+		return 0, fmt.Errorf("patch doc %d: %w", in.ID, err)
 	}
 	if _, err := rebuildSectionsFrom(tx, in.ID, d.kind, next.doc, version, prior); err != nil {
-		return err
+		return 0, err
 	}
 	if len(changed) > 0 {
 		if _, err := tx.Exec(
 			`UPDATE doc_sections SET last_revised_in = $3
 			  WHERE doc_id = $1 AND anchor = ANY($2::text[])`,
 			in.ID, changed, version); err != nil {
-			return fmt.Errorf("stamp last_revised_in on doc %d: %w", in.ID, err)
+			return 0, fmt.Errorf("stamp last_revised_in on doc %d: %w", in.ID, err)
 		}
 	}
 	if err := publishDocSections(tx, in.ID); err != nil {
-		return err
+		return 0, err
 	}
 	if err := rebuildEdges(tx, now, in.ID, d.kind, d.project, next.doc.Frontmatter); err != nil {
-		return err
+		return 0, err
 	}
-	return logDocChange(tx, in.ID, eventID, map[string]string{
+	return version, logDocChange(tx, in.ID, eventID, map[string]string{
 		"field": "version",
 		"old":   strconv.Itoa(d.version),
 		"new":   strconv.Itoa(version),
