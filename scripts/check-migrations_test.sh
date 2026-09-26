@@ -2,7 +2,8 @@
 # Tests scripts/check-migrations.sh: the --no-fix base-max rule added for
 # WL-847 (a branch-added migration numbered at or below the base ref's own
 # highest number is skipped forever by golang-migrate), a regression guard
-# for the pre-existing collision rule, and NEW-<slug> handling (WL-931).
+# for the pre-existing collision rule, NEW-<slug> handling (WL-931), and
+# --renumber-old after a merge-queue dequeue (WL-932).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -193,6 +194,64 @@ check "PR mode accepts NEW files" "$d9" pass
 
 # Case 10: --no-new (merge queue, main) rejects NEW files.
 ARGS="--no-fix --no-new" check "queue mode rejects NEW files" "$d9" fail "unnumbered"
+
+# Builds a PR branch in $1 whose main has 0071 and 0072_other while the
+# branch, cut before 0072_other landed, adds the keys passed after $1 and
+# commits them — a PR dequeued for a number collision looks like this.
+dequeued_repo() {
+	local dir=$1 key
+	shift
+	new_repo "$dir" 0071_entity_edges
+	(
+		cd "$dir"
+		git checkout -q -b pr
+		git checkout -q main
+		add_files "$dir" 0072_other
+		git add -A
+		git commit -q -m other
+		git checkout -q pr
+		for key in "$@"; do
+			add_files "$dir" "$key"
+		done
+		git add -A
+		git commit -q -m pr
+	)
+}
+
+# Case 11: --renumber-old moves the branch's own 0072 above main's 0072.
+d11="$WORK/case11"
+dequeued_repo "$d11" 0072_foo
+ARGS="--number-new --renumber-old" check "renumber-old moves a below-base migration" "$d11" pass
+want_numbered "renumber-old moves a below-base migration" "$d11" 0073_foo
+[ ! -f "$d11/deploy/base/migrations/0072_foo.up.sql" ] || {
+	echo "FAIL: renumber-old left 0072_foo in place"
+	fails=$((fails + 1))
+}
+
+# Case 12: --renumber-old numbers NEW files after the branch's older
+# migrations, both above --min.
+d12="$WORK/case12"
+dequeued_repo "$d12" 0072_foo NEW-bar
+ARGS="--number-new --renumber-old --min 80" check "renumber-old honors --min" "$d12" pass
+want_numbered "renumber-old honors --min" "$d12" 0080_foo 0081_bar
+
+# Case 14: --taken moves a migration whose number another queued PR uses.
+d14="$WORK/case14"
+new_repo "$d14" 0071_entity_edges
+(cd "$d14" && git checkout -q -b pr && add_files "$d14" 0072_foo && git add -A && git commit -q -m pr)
+ARGS="--number-new --renumber-old --taken 72 --min 73" check "renumber-old moves a taken number" "$d14" pass
+want_numbered "renumber-old moves a taken number" "$d14" 0073_foo
+
+# Case 13: a branch above main whose numbers no queued PR uses is left
+# alone, even below --min, so a PR dequeued for another reason gets no commit.
+d13="$WORK/case13"
+new_repo "$d13" 0071_entity_edges
+(cd "$d13" && git checkout -q -b pr && add_files "$d13" 0072_foo && git add -A && git commit -q -m pr)
+ARGS="--number-new --renumber-old --taken 80,81 --min 82" check "renumber-old leaves a clean branch alone" "$d13" pass
+if [ -n "$(git -C "$d13" status --porcelain)" ]; then
+	echo "FAIL: renumber-old changed a branch that needed nothing"
+	fails=$((fails + 1))
+fi
 
 if [ "$fails" -ne 0 ]; then
 	echo "$fails case(s) failed"

@@ -15,8 +15,9 @@ Rules:
 - Never pick a number. Name a new pair `NEW-<slug>.up.sql`/`.down.sql`; for
   several in one PR use `NEW1-<slug>`, `NEW2-<slug>`, which apply in that
   order. The `number-migrations` workflow renames them to the next free
-  numbers on the PR branch when auto-merge is enabled. The merge queue
-  rejects any `NEW` file left unnumbered.
+  numbers on the PR branch on every push. The merge queue rejects any `NEW`
+  file left unnumbered, or a number another PR took first; on that dequeue
+  the workflow renumbers the PR and re-arms auto-merge.
 - New migrations must also be listed in `deploy/base/kustomization.yaml`,
   by their `NEW` name.
 - An accepted or approved migration task authorizes pushing its branch,

@@ -24,13 +24,18 @@
 # A PR adds a new migration as NEW-<slug> (or NEW1-<slug>, NEW2-<slug> for
 # several, applied in lexical order). These are never renumbered by fix mode
 # and are exempt from the number checks. The number-migrations workflow
-# gives them real numbers with --number-new just before the merge queue.
+# gives them real numbers with --number-new on every push to a PR.
 #
-# Usage: check-migrations.sh [--no-fix [--no-new] | --number-new [--min N]]
-#   --no-fix      report collisions instead of renumbering (for CI)
-#   --no-new      with --no-fix: any NEW file is an error (merge queue, main)
-#   --number-new  rename NEW files to the next numbers above main and the
-#                 branch; --min N makes N the lowest number assigned
+# Usage: check-migrations.sh [--no-fix [--no-new] | --number-new [--min N] [--renumber-old [--taken N,...]]]
+#   --no-fix        report collisions instead of renumbering (for CI)
+#   --no-new        with --no-fix: any NEW file is an error (merge queue, main)
+#   --number-new    rename NEW files to the next numbers above main and the
+#                   branch; --min N makes N the lowest number assigned
+#   --renumber-old  with --number-new: first apply fix mode's below-base rule,
+#                   moving the branch's own numbered migrations at or below
+#                   main's max (a PR dequeued for a number collision);
+#                   --taken also moves those whose number is in the comma
+#                   list (numbers other queued PRs already use)
 
 set -euo pipefail
 
@@ -40,9 +45,11 @@ KUSTOMIZATION="deploy/base/kustomization.yaml"
 fix=1
 no_new=0
 number_new=0
+renumber_old=0
+taken=""
 min=0
 usage() {
-	echo "usage: $0 [--no-fix [--no-new] | --number-new [--min N]]" >&2
+	echo "usage: $0 [--no-fix [--no-new] | --number-new [--min N] [--renumber-old [--taken N,...]]]" >&2
 	exit 2
 }
 while [ $# -gt 0 ]; do
@@ -50,6 +57,12 @@ while [ $# -gt 0 ]; do
 		--no-fix) fix=0 ;;
 		--no-new) no_new=1 ;;
 		--number-new) number_new=1 ;;
+		--renumber-old) renumber_old=1 ;;
+		--taken)
+			[[ "${2-x}" =~ ^[0-9,]*$ ]] || usage
+			taken=${2//,/ }
+			shift
+			;;
 		--min)
 			[[ "${2:-}" =~ ^[0-9]+$ ]] || usage
 			min=$2
@@ -102,6 +115,29 @@ renumber_to_next() {
 	done
 	NEW_KEY=$new_key
 	renamed=1
+}
+
+# Renumbers (or in --no-fix mode reports) every numbered migration this
+# branch adds whose number is at or below $1 or in the space-separated list
+# $2. Keys are read from disk, since an earlier renumber may have renamed
+# files.
+renumber_below() {
+	local floor=$1 taken=${2:-} key num
+	for key in $(list_files | strip_suffix | grep -v '^NEW' | sort -u || true); do
+		printf '%s\n' "$base_keys" | grep -Fxq "$key" && continue
+		num=$((10#${key%%_*}))
+		case " $taken " in
+			*" $num "*) ;;
+			*) [ "$num" -gt "$floor" ] && continue ;;
+		esac
+
+		if [ "$fix" -eq 0 ]; then
+			err "$key is numbered at or below $base (max $floor); renumber it above $floor"
+			continue
+		fi
+		renumber_to_next "$key"
+		echo "migrations: $key is numbered at or below $floor, renumbered to $NEW_KEY" >&2
+	done
 }
 
 files=$(list_files)
@@ -178,6 +214,8 @@ renamed=0
 if [ "$number_new" -eq 1 ]; then
 	[ "$fail" -eq 0 ] || exit 1
 	[ "$max" -ge $((min - 1)) ] || max=$((min - 1))
+	[ "$renumber_old" -eq 0 ] || renumber_below "$base_max" "$taken"
+
 	for key in $new_keys; do
 		renumber_to_next "$key"
 		echo "migrations: $key numbered $NEW_KEY" >&2
@@ -214,26 +252,7 @@ done
 # number that only collides after the base ref moves further is not caught
 # by the dup check above, and golang-migrate silently skips a migration
 # merged in below the version it has already recorded (WL-847).
-#
-# Recompute from disk first: the dup loop above may have renamed files, and
-# $keys/$pairs still hold their pre-rename names and numbers.
-keys=$(list_files | strip_suffix | grep -v '^NEW' | sort -u || true)
-pairs=$(for key in $keys; do
-	num=${key%%_*}
-	printf '%d\t%s\n' "$((10#$num))" "$key"
-done)
-for key in $keys; do
-	printf '%s\n' "$base_keys" | grep -Fxq "$key" && continue
-	num=$(printf '%s\n' "$pairs" | awk -F'\t' -v k="$key" '$2 == k {print $1}')
-	[ "$num" -gt "$base_max" ] && continue
-
-	if [ "$fix" -eq 0 ]; then
-		err "$key is numbered at or below $base (max $base_max); renumber it above $base_max"
-		continue
-	fi
-	renumber_to_next "$key"
-	echo "migrations: $key is numbered at or below $base (max $base_max), renumbered to $NEW_KEY" >&2
-done
+renumber_below "$base_max"
 
 if [ "$renamed" -eq 1 ] && [ -f "$KUSTOMIZATION" ]; then
 	git add -- "$KUSTOMIZATION"
