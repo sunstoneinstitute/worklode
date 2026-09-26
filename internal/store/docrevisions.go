@@ -189,23 +189,22 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 
-	version := d.version + 1
 	title, ok := designdoc.Title(candidate.doc)
 	if !ok {
 		title = d.slug
 	}
 	ts := now.UTC().Truncate(time.Second)
-	// Snapshot the version this accept is about to overwrite (025 §4.5):
-	// docs still holds its pre-update body, title and issued here, before the
-	// UPDATE below runs.
-	if err := snapshotDocVersion(tx, id); err != nil {
+	// Snapshot the version this accept replaces (025 §4.5) and move to the
+	// next one, before any other write.
+	version, err := bumpDocVersion(tx, id)
+	if err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(
 		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
-		                 version = $5, updated_at = $6
+		                 updated_at = $5
 		  WHERE id = $1`,
-		id, candidateBody, title, nullText(candidate.issued), version, ts,
+		id, candidateBody, title, nullText(candidate.issued), ts,
 	); err != nil {
 		return nil, fmt.Errorf("land revision of doc %d: %w", id, err)
 	}
