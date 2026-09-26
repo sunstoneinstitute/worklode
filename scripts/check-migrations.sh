@@ -21,8 +21,16 @@
 # missing base, since it must still work in a repo with no main and the
 # collision logic does not depend on one.
 #
-# Usage: check-migrations.sh [--no-fix]
-#   --no-fix  report collisions instead of renumbering (for CI)
+# A PR adds a new migration as NEW-<slug> (or NEW1-<slug>, NEW2-<slug> for
+# several, applied in lexical order). These are never renumbered by fix mode
+# and are exempt from the number checks. The number-migrations workflow
+# gives them real numbers with --number-new just before the merge queue.
+#
+# Usage: check-migrations.sh [--no-fix [--no-new] | --number-new [--min N]]
+#   --no-fix      report collisions instead of renumbering (for CI)
+#   --no-new      with --no-fix: any NEW file is an error (merge queue, main)
+#   --number-new  rename NEW files to the next numbers above main and the
+#                 branch; --min N makes N the lowest number assigned
 
 set -euo pipefail
 
@@ -30,14 +38,27 @@ MIG_DIR="deploy/base/migrations"
 KUSTOMIZATION="deploy/base/kustomization.yaml"
 
 fix=1
-case "${1:-}" in
-	--no-fix) fix=0 ;;
-	"") ;;
-	*)
-		echo "usage: $0 [--no-fix]" >&2
-		exit 2
-		;;
-esac
+no_new=0
+number_new=0
+min=0
+usage() {
+	echo "usage: $0 [--no-fix [--no-new] | --number-new [--min N]]" >&2
+	exit 2
+}
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--no-fix) fix=0 ;;
+		--no-new) no_new=1 ;;
+		--number-new) number_new=1 ;;
+		--min)
+			[[ "${2:-}" =~ ^[0-9]+$ ]] || usage
+			min=$2
+			shift
+			;;
+		*) usage ;;
+	esac
+	shift
+done
 
 cd "$(git rev-parse --show-toplevel)"
 [ -d "$MIG_DIR" ] || exit 0
@@ -52,14 +73,17 @@ list_files() { ls -1 "$MIG_DIR" 2>/dev/null || true; }
 strip_suffix() { sed -nE 's/\.(up|down)\.sql$//p'; }
 
 # Renumbers $1 to the next free number above $max (using $1's own digit
-# width), renaming its files and rewriting the kustomization list. Sets
-# NEW_KEY to the chosen key and bumps the shared $max and $renamed globals.
+# width, or $num_width for a NEW key), renaming its files and rewriting the
+# kustomization list. Sets NEW_KEY to the chosen key and bumps the shared
+# $max and $renamed globals.
 renumber_to_next() {
-	local key=$1 prefix width new old new_key suffix
-	prefix=${key%%_*}
-	width=${#prefix}
+	local key=$1 prefix width slug new old new_key suffix
+	case $key in
+		NEW*) width=$num_width slug=${key#*-} ;;
+		*) prefix=${key%%_*} width=${#prefix} slug=${key#*_} ;;
+	esac
 	max=$((max + 1))
-	new_key=$(printf "%0${width}d_%s" "$max" "${key#*_}")
+	new_key=$(printf "%0${width}d_%s" "$max" "$slug")
 	for suffix in up down; do
 		old="$MIG_DIR/$key.$suffix.sql"
 		new="$MIG_DIR/$new_key.$suffix.sql"
@@ -82,13 +106,13 @@ renumber_to_next() {
 
 files=$(list_files)
 
-bad=$(printf '%s\n' "$files" | grep -v '^$' | grep -Ev '^[0-9]+_[A-Za-z0-9_-]+\.(up|down)\.sql$' || true)
+bad=$(printf '%s\n' "$files" | grep -v '^$' | grep -Ev '^([0-9]+_|NEW[0-9]*-)[A-Za-z0-9_-]+\.(up|down)\.sql$' || true)
 if [ -n "$bad" ]; then
-	err "not named <number>_<name>.(up|down).sql:"
+	err "not named <number>_<name>.(up|down).sql or NEW[<digit>]-<name>.(up|down).sql:"
 	printf '  %s\n' $bad >&2
 fi
 
-keys=$(printf '%s\n' "$files" | strip_suffix | sort -u)
+keys=$(printf '%s\n' "$files" | strip_suffix | LC_ALL=C sort -u)
 if [ -z "$keys" ]; then
 	exit "$fail"
 fi
@@ -98,6 +122,13 @@ for key in $keys; do
 		[ -f "$MIG_DIR/$key.$suffix.sql" ] || err "$key is missing $key.$suffix.sql"
 	done
 done
+
+# NEW keys take no part in the number checks below.
+new_keys=$(printf '%s\n' "$keys" | grep '^NEW' || true)
+keys=$(printf '%s\n' "$keys" | grep -v '^NEW' || true)
+if [ "$no_new" -eq 1 ] && [ -n "$new_keys" ]; then
+	err "unnumbered migrations must be numbered before merging: $(echo $new_keys)"
+fi
 
 # One "<numeric value>\t<key>" line per migration, e.g. "6\t0006_task_hierarchy".
 pairs=$(for key in $keys; do
@@ -119,7 +150,7 @@ fi
 base_keys=""
 base_max=0
 if [ -n "$base" ]; then
-	base_keys=$(git ls-tree -r --name-only "$base" -- "$MIG_DIR" | sed 's|.*/||' | strip_suffix | sort -u)
+	base_keys=$(git ls-tree -r --name-only "$base" -- "$MIG_DIR" | sed 's|.*/||' | strip_suffix | grep -v '^NEW' | sort -u || true)
 	if [ -n "$base_keys" ]; then
 		base_max=$(printf '%s\n' "$base_keys" | while read -r k; do
 			[ -n "$k" ] || continue
@@ -131,11 +162,30 @@ if [ -n "$base" ]; then
 fi
 
 max=$(printf '%s\n' "$pairs" | cut -f1 | sort -n | tail -1)
+max=${max:-0}
 # A renumber must never land at or below the base ref's own highest number,
 # even when nothing on this branch collides with it yet.
 [ "$max" -ge "$base_max" ] || max=$base_max
-dups=$(printf '%s\n' "$pairs" | cut -f1 | sort -n | uniq -d)
+# Digit width for numbering NEW keys: whatever existing migrations use.
+num_width=4
+first=$(printf '%s\n' $keys $base_keys | head -1)
+if [ -n "$first" ]; then
+	first=${first%%_*}
+	num_width=${#first}
+fi
 renamed=0
+
+if [ "$number_new" -eq 1 ]; then
+	[ "$fail" -eq 0 ] || exit 1
+	[ "$max" -ge $((min - 1)) ] || max=$((min - 1))
+	for key in $new_keys; do
+		renumber_to_next "$key"
+		echo "migrations: $key numbered $NEW_KEY" >&2
+	done
+	[ "$renamed" -eq 0 ] || [ ! -f "$KUSTOMIZATION" ] || git add -- "$KUSTOMIZATION"
+	exit 0
+fi
+dups=$(printf '%s\n' "$pairs" | cut -f1 | sort -n | uniq -d)
 
 for dup in $dups; do
 	dup_keys=$(printf '%s\n' "$pairs" | awk -F'\t' -v n="$dup" '$1 == n {print $2}' | sort)
@@ -167,7 +217,7 @@ done
 #
 # Recompute from disk first: the dup loop above may have renamed files, and
 # $keys/$pairs still hold their pre-rename names and numbers.
-keys=$(list_files | strip_suffix | sort -u)
+keys=$(list_files | strip_suffix | grep -v '^NEW' | sort -u || true)
 pairs=$(for key in $keys; do
 	num=${key%%_*}
 	printf '%d\t%s\n' "$((10#$num))" "$key"

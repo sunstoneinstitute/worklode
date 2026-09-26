@@ -122,6 +122,11 @@ func (s *Store) newMigrate(migrationsPath string) (*migrate.Migrate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve migrations path %s: %w", migrationsPath, err)
 	}
+	// golang-migrate silently skips names it cannot parse, so an unnumbered
+	// NEW-<slug> migration would never apply (WL-931).
+	if unnumbered, _ := filepath.Glob(filepath.Join(absPath, "NEW*")); len(unnumbered) > 0 {
+		return nil, fmt.Errorf("migrations in %s are not numbered yet: %s", absPath, filepath.Base(unnumbered[0]))
+	}
 	src, err := source.Open("file://" + absPath)
 	if err != nil {
 		return nil, fmt.Errorf("load migrations from %s: %w", absPath, err)

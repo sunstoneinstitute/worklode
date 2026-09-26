@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -169,5 +170,30 @@ func flipOneByte(t *testing.T, path string) {
 	data[0] ^= 0xFF
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// TestMigrateRefusesUnnumbered checks Migrate rejects a NEW-<slug> file
+// before connecting, since golang-migrate would silently skip it.
+func TestMigrateRefusesUnnumbered(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"0001_a.up.sql", "0001_a.down.sql", "NEW-b.up.sql", "NEW-b.down.sql"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := (&Store{}).Migrate(dir)
+	if err == nil || !strings.Contains(err.Error(), "not numbered") {
+		t.Fatalf("Migrate = %v, want a not-numbered error", err)
+	}
+
+	numbered, err := numberedMigrationsDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"0001_a.up.sql", "0002_b.up.sql", "0002_b.down.sql"} {
+		if _, err := os.Stat(filepath.Join(numbered, name)); err != nil {
+			t.Errorf("numberedMigrationsDir: %v", err)
+		}
 	}
 }
