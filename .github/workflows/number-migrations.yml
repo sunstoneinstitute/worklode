@@ -62,8 +62,9 @@ jobs:
           git fetch --no-tags --depth=1 "$url" +refs/heads/main:refs/remotes/origin/main
 
           # shellcheck disable=SC2016 # $owner/$name are GraphQL variables
-          # Highest migration number any other queued PR adds. Entries are
-          # already numbered, since this workflow ran before they queued.
+          # Highest migration number any other queued or auto-merge-armed PR
+          # adds. Those are already numbered, since this workflow ran when
+          # they were armed.
           queue_max=$(gh api graphql -F owner="$OWNER" -F name="$NAME" -f query='
             query($owner: String!, $name: String!) {
               repository(owner: $owner, name: $name) {
@@ -72,9 +73,13 @@ jobs:
                     nodes { pullRequest { number files(first: 100) { nodes { path } } } }
                   }
                 }
+                pullRequests(states: OPEN, baseRefName: "main", first: 100) {
+                  nodes { number autoMergeRequest { enabledAt } files(first: 100) { nodes { path } } }
+                }
               }
-            }' --jq "(.data.repository.mergeQueue.entries.nodes // [])[]
-              | select(.pullRequest.number != $PR) | .pullRequest.files.nodes[].path" |
+            }' --jq "[(.data.repository.mergeQueue.entries.nodes // [])[].pullRequest,
+                (.data.repository.pullRequests.nodes[] | select(.autoMergeRequest))][]
+              | select(.number != $PR) | .files.nodes[].path" |
             sed -nE 's|^deploy/base/migrations/0*([0-9]+)_.*|\1|p' | sort -n | tail -1)
 
           ./scripts/check-migrations.sh --number-new --min $(( ${queue_max:-0} + 1 ))
