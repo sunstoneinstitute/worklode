@@ -20,6 +20,16 @@ var TaskStates = []string{
 	"merged", "deployed_dev", "deployed_prod", "released", "abandoned",
 }
 
+// DisplayState is the state a surface shows for a task: "blocked" for a
+// ready task with an open blocker or blocking plan, else the stored state.
+// Blocked is derived and never stored, so it is not in TaskStates.
+func DisplayState(state string, blocked bool) string {
+	if state == "ready" && blocked {
+		return "blocked"
+	}
+	return state
+}
+
 // TaskConcerns is the tasks.concern CHECK constraint's value set. Same deal
 // as TaskPriorities: internal/store's TestConcernCheckConstraintMatchesModel
 // pins it to the constraint, so a concern added in a migration cannot leave
