@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"path"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -126,7 +125,7 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 			corpus = append(corpus, d)
 		}
 	}
-	docs, thin, err := docTodoCorpus(cmd.Context(), c, corpus)
+	docs, err := docTodoCorpus(cmd.Context(), c, corpus)
 	if err != nil {
 		return err
 	}
@@ -150,10 +149,6 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
-	// The bodies that parsed thin go in the footer next to the walk's own
-	// degradations: both say the same thing, that the answer is narrower
-	// than the question.
-	diag.Notes = append(diag.Notes, thin...)
 	if jsonOut(cmd) {
 		return writeDocTodoJSON(cmd, newDocTodoRefs(corpus, ""), items, diag)
 	}
@@ -244,21 +239,18 @@ func docTodoLinkBase(cmd *cobra.Command, cfg cli.Config) string {
 const docTodoCorpusConcurrency = 8
 
 // docTodoCorpus loads every document the backbone serves as a CorpusDoc, so
-// the walk of 026 §2.5 reads the same corpus `lode doc list` does. Alongside
-// the documents it returns one note per body that parsed thin (see
-// CorpusDocFromBody), for the caller's footer.
+// the walk of 026 §2.5 reads the same corpus `lode doc list` does.
 //
-// The walk is a pure function over parsed documents, and the corpus facts it
-// needs — a plan's covers levels, its requires — live in frontmatter, which
-// only the body carries. Each document is therefore fetched and re-parsed
-// rather than read from the backbone's own section and edge rows: those rows
-// are the server's index of the same frontmatter, and reading the source keeps
-// one parser rather than two readings that can disagree. The rows are also
-// the narrower record — model.DocEdge drops the coverage level the walk
-// classifies partial coverage by.
-func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]designdoc.CorpusDoc, []string, error) {
+// Status, Sections and Edges come from the backbone's own structured
+// columns (detail.Doc.Status, detail.Sections, detail.Edges) rather than by
+// re-parsing the body's frontmatter header (WL-913): the backbone is the
+// authority for all three, so a body that predates or outlives its header
+// (WL-724, WL-914) no longer narrows the answer. Source is still the raw
+// body: the walk itself re-parses it for the relations EdgeMeta does not
+// carry — requires, coverage level, fullCoverageWith (see
+// designdoc.docFrontmatter, planCoverageEntries, planDeferralEntries).
+func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]designdoc.CorpusDoc, error) {
 	out := make([]designdoc.CorpusDoc, len(docs))
-	notes := make([]string, len(docs))
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(docTodoCorpusConcurrency)
 	for i, d := range docs {
@@ -267,24 +259,65 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 			if err != nil {
 				return fmt.Errorf("read document %s: %w", d.Slug, err)
 			}
-			cd, note, err := designdoc.CorpusDocFromBody(
-				designdoc.CorpusPath(d.Kind, d.Slug), d.Kind, d.Number, []byte(detail.Doc.Body))
-			if err != nil {
-				return err
+			p := designdoc.CorpusPath(d.Kind, d.Slug)
+			cd := designdoc.CorpusDoc{
+				Filename: path.Base(p), Path: p, Kind: d.Kind, Number: d.Number,
+				Status: detail.Doc.Status, Title: detail.Doc.Title,
+				Source:   []byte(detail.Doc.Body),
+				Sections: docTodoSectionMetas(detail.Sections),
 			}
-			// d.Status is the backbone row, the authoritative status;
-			// CorpusDocFromBody filled Status from the body's frontmatter
-			// snapshot, which `doc accept` never rewrites and so drifts in
-			// either direction from the row (WL-478).
-			cd.Status = d.Status
-			out[i], notes[i] = cd, note
+			// Only a plan's covers/defers become an edge here, mirroring
+			// planEdges: a spec or ADR's CorpusDoc.Edges is always empty.
+			if d.Kind == "plan" {
+				cd.Edges = docTodoEdgeMetas(detail.Edges)
+			}
+			out[i] = cd
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return out, slices.DeleteFunc(notes, func(n string) bool { return n == "" }), nil
+	return out, nil
+}
+
+// docTodoSectionMetas maps the backbone's section rows to designdoc.SectionMeta,
+// document order preserved.
+func docTodoSectionMetas(secs []model.DocSection) []designdoc.SectionMeta {
+	if len(secs) == 0 {
+		return nil
+	}
+	out := make([]designdoc.SectionMeta, len(secs))
+	for i, s := range secs {
+		out[i] = designdoc.SectionMeta{
+			Anchor: s.Anchor, Heading: s.Heading, Depth: s.Depth, Position: s.Position,
+		}
+	}
+	return out
+}
+
+// docTodoEdgeMetas maps a plan's stored covers/defers edges to
+// designdoc.EdgeMeta the same way corpus.go's planEdges and edgeMetas map
+// them from a parsed header: every other relation is dropped, and the far
+// end becomes Target/TargetAnchor — its corpus path when the edge resolved
+// to a document in this backbone, its unresolved reference text
+// (ToExternal, "NO-SPEC" included) when it did not.
+func docTodoEdgeMetas(edges []model.DocEdge) []designdoc.EdgeMeta {
+	var out []designdoc.EdgeMeta
+	for _, e := range edges {
+		if e.Type != "covers" && e.Type != "defers" {
+			continue
+		}
+		target := e.ToExternal
+		if target == "" {
+			target = designdoc.CorpusPath(e.ToKind, e.ToSlug)
+		}
+		out = append(out, designdoc.EdgeMeta{
+			SrcAnchor: e.FromAnchor, Rel: e.Type,
+			Target: target, TargetAnchor: e.ToAnchor,
+		})
+	}
+	return out
 }
 
 // docTodoPlanTasks builds the plan → minted-tasks lookup from one task list.

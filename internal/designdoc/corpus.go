@@ -167,8 +167,9 @@ func CorpusDir(kind string) string {
 // the narrowing is visible.
 //
 // Status is left to whatever the frontmatter says, which is nothing when
-// there is none: the backbone row is the authority and every caller here
-// overwrites it (WL-478).
+// there is none: a caller reading the backbone's own row for a document's
+// status (the authority — WL-478) overwrites it, as docTodoCorpus used to
+// before WL-913 moved it onto GET /docs/{id}'s own Status field instead.
 func CorpusDocFromBody(docPath, kind string, number int, body []byte) (CorpusDoc, string, error) {
 	name := path.Base(docPath)
 	doc, err := Parse(body)

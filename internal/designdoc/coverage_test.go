@@ -489,9 +489,9 @@ func TestSectionAbsoluteCorpusRoot(t *testing.T) {
 		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
 }
 
-// shorthandFixture builds the spec+plan pair WL-409's tests share, exactly
-// the way docTodoCorpus builds a CorpusDoc from the backbone (CorpusDocFromBody,
-// not LoadSyncCorpus): a spec numbered 25, and a plan covering it by the
+// shorthandFixture builds the spec+plan pair WL-409's tests share, using
+// CorpusDocFromBody rather than LoadSyncCorpus since the fixture is held in
+// memory, not on disk: a spec numbered 25, and a plan covering it by the
 // <KEY>-<TYPE>-<n> shorthand.
 func shorthandFixture(t *testing.T) []designdoc.CorpusDoc {
 	t.Helper()
