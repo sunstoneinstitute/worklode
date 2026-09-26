@@ -45,8 +45,11 @@ jobs:
         id: app
         if: steps.new.outputs.found == 'true'
         with:
-          client-id: ${{ vars.WORKLODE_BOT_CLIENT_ID }}
-          private-key: ${{ secrets.WORKLODE_BOT_PRIVATE_KEY }}
+          client-id: ${{ vars.MIGRATION_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.MIGRATION_BOT_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: read
       - name: number and push
         if: steps.new.outputs.found == 'true'
         env:
