@@ -94,14 +94,18 @@ func logDocChange(tx *sql.Tx, docID, eventID int64, change map[string]string) er
 	return LogChange(tx, docEntityKind, strconv.FormatInt(docID, 10), eventID, change)
 }
 
-// CreateDoc inserts a document, its section rows and its frontmatter-derived
-// edges inside the given transaction, and appends a state_log row attributed
-// to eventID. Call it from a RecordDocEvent apply callback with the store's
-// clock as now.
+// CreateDoc inserts a document, its section rows and its header-derived edges
+// inside the given transaction, and appends a state_log row attributed to
+// eventID. Call it from a RecordDocEvent apply callback with the store's clock
+// as now.
 //
 // Title comes from the body's H1, falling back to the slug; issued comes from
-// the frontmatter. A parse failure, a malformed issued date, or (on a spec or
-// ADR) an anchor defect is ErrInvalidInput.
+// the header. A parse failure, a malformed issued date, or (on a spec or ADR)
+// an anchor defect is ErrInvalidInput.
+//
+// CreateDoc is the one writer that still reads a header, until `lode doc add`
+// sends its fields structured (WL-PLAN-145 Task 10): it writes the rows the
+// header states and stores the body without it (WL-SPEC-77 §7).
 //
 // Status is the corpus importer's affordance. Creating a spec or ADR straight
 // at accepted must therefore establish what AcceptDoc would have: the 025 §6.1
@@ -155,10 +159,13 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, fmt.Errorf("doc status %q: %w", status, ErrInvalidInput)
 	}
 
-	parsed, err := parseWrittenDocBody(in.Kind, in.Body)
+	parsed, err := parseWrittenDocSource(in.Kind, in.Body)
 	if err != nil {
 		return nil, err
 	}
+	fm := parsed.doc.Frontmatter
+	parsed.doc.Frontmatter = nil
+	body := strings.TrimLeft(string(parsed.doc.Bytes()), "\n")
 	// Created accepted: run AcceptDoc's first-accept gate. Plans skip it: they
 	// carry no sections and no anchors (025 §9).
 	acceptedAtCreate := status == "accepted" && in.Kind != "plan"
@@ -186,7 +193,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		                   issued, owner, created_by, generated_by_task, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8::date, $9, $10, $11, $12, $12)
 		 RETURNING id`,
-		in.Project, in.Kind, number, in.Slug, title, in.Body, status,
+		in.Project, in.Kind, number, in.Slug, title, body, status,
 		nullText(parsed.issued), nullText(owner), nullText(in.CreatedBy),
 		nullText(in.GeneratedByTask), ts,
 	).Scan(&id)
@@ -222,7 +229,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 			return nil, err
 		}
 	}
-	if err := rebuildEdges(tx, now, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, in.Kind, in.Project, fm); err != nil {
 		return nil, err
 	}
 	// A reference resolves once, at write time, so references already stored
@@ -240,8 +247,10 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 }
 
 // UpdateDocBody replaces a document's body in place, rebuilding its sections
-// and edges from the new source, and appends a state_log row attributed to
-// eventID. It returns the updated row so the caller need not re-read it.
+// from the new source, and appends a state_log row attributed to eventID. It
+// returns the updated row so the caller need not re-read it. The body carries
+// no header, and writing it moves no title, issued date or edge: those are set
+// with SetDocColumns and LinkDocEdge (WL-SPEC-77 §7).
 //
 // An accepted spec or ADR is ErrInvalidInput: those are revised, never edited
 // in place, so their published anchors pass the 025 §6 diff gate. Plans stay
@@ -250,11 +259,11 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 // ifVersion is the caller's compare-and-swap; see checkDocVersion. Zero skips
 // the check, which is what every caller did before the option existed.
 func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion int, eventID int64) (*model.Doc, error) {
-	var kind, status, project string
+	var kind, status string
 	var version int
 	err := tx.QueryRow(
-		`SELECT kind, status, project_id, version FROM docs WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&kind, &status, &project, &version)
+		`SELECT kind, status, version FROM docs WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&kind, &status, &version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
@@ -269,15 +278,9 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 			id, status, ErrInvalidInput)
 	}
 
-	parsed, err := parseWrittenDocBody(kind, body)
+	parsed, err := parseDocBody(kind, body)
 	if err != nil {
 		return nil, err
-	}
-	title, ok := designdoc.Title(parsed.doc)
-	if !ok {
-		if err := tx.QueryRow(`SELECT slug FROM docs WHERE id = $1`, id).Scan(&title); err != nil {
-			return nil, fmt.Errorf("load doc %d slug: %w", id, err)
-		}
 	}
 	if kind == "plan" {
 		if err := checkPlanTasksMinted(tx, id, parsed.doc); err != nil {
@@ -306,29 +309,67 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 		ts = ts.Truncate(time.Second)
 	}
 
-	// The frontmatter is part of the body, so title and issued are rederived
-	// from it here for the same reason CreateDoc derives them: the body is
-	// what states them. issued only ever moves forward, though — a plan stays
-	// mutable at accepted (025 §9), and a body edit that drops the key must
-	// not erase the acceptance date, which is a lifecycle fact rather than a
-	// property of the text.
 	if _, err := tx.Exec(
-		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
-		                 updated_at = $5
-		  WHERE id = $1`,
-		id, body, title, nullText(parsed.issued), ts,
+		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`, id, body, ts,
 	); err != nil {
 		return nil, fmt.Errorf("update doc %d body: %w", id, err)
 	}
 	if err := rebuildSections(tx, id, kind, parsed.doc, version); err != nil {
 		return nil, err
 	}
-	if err := rebuildEdges(tx, now, id, kind, project, parsed.doc.Frontmatter); err != nil {
-		return nil, err
-	}
 	if err := logDocChange(tx, id, eventID,
 		map[string]string{"field": "body"}); err != nil {
 		return nil, err
+	}
+	return getDocTx(tx, id)
+}
+
+// SetDocColumns sets a document's title and issued date, the metadata a body
+// no longer states (WL-SPEC-77 §7), logging each field it sets. A nil field is
+// left alone; title must be non-empty and issued YYYY-MM-DD. It works at any
+// status but superseded and withdrawn, and moves no version: neither column is
+// part of the text a version pins.
+func SetDocColumns(tx *sql.Tx, now time.Time, id int64, in model.DocColumnsInput, eventID int64) (*model.Doc, error) {
+	if in.Title == nil && in.Issued == nil {
+		return nil, fmt.Errorf("doc %d: nothing to set: name a title or an issued date: %w", id, ErrInvalidInput)
+	}
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if d.status == "superseded" || d.status == "withdrawn" {
+		return nil, fmt.Errorf("doc %d is %s: its metadata no longer changes: %w", id, d.status, ErrInvalidInput)
+	}
+	cur, err := getDocTx(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	title, issued := cur.Title, cur.Issued
+	var changes []map[string]string
+	if in.Title != nil {
+		title = strings.TrimSpace(*in.Title)
+		if title == "" {
+			return nil, fmt.Errorf("doc %d: title must not be empty: %w", id, ErrInvalidInput)
+		}
+		changes = append(changes, map[string]string{"field": "title", "old": cur.Title, "new": title})
+	}
+	if in.Issued != nil {
+		issued = strings.TrimSpace(*in.Issued)
+		if _, err := time.Parse(docDateLayout, issued); err != nil {
+			return nil, fmt.Errorf("doc %d: issued %q is not YYYY-MM-DD: %w", id, issued, ErrInvalidInput)
+		}
+		changes = append(changes, map[string]string{"field": "issued", "old": cur.Issued, "new": issued})
+	}
+	if _, err := tx.Exec(
+		`UPDATE docs SET title = $2, issued = $3::date, updated_at = $4 WHERE id = $1`,
+		id, title, nullText(issued), now.UTC().Truncate(time.Second),
+	); err != nil {
+		return nil, fmt.Errorf("set columns of doc %d: %w", id, err)
+	}
+	for _, c := range changes {
+		if err := logDocChange(tx, id, eventID, c); err != nil {
+			return nil, err
+		}
 	}
 	return getDocTx(tx, id)
 }
@@ -651,10 +692,28 @@ type parsedDoc struct {
 	issued string
 }
 
-// parseDocBody parses body and rejects what the schema cannot express: an
-// unparseable document, an issued date that is not YYYY-MM-DD, and (on a spec
-// or ADR) an anchor defect.
+// errStoredHeader is parseDocBody's refusal of a body that opens with a
+// header (WL-SPEC-77 §7).
+var errStoredHeader = fmt.Errorf(
+	"a stored body carries no header: set metadata with `lode doc edit --title/--issued` and edges with `lode doc link` (WL-SPEC-77 §7): %w",
+	ErrInvalidInput)
+
+// parseDocBody parses a stored body: parseDocSource, refusing a header.
 func parseDocBody(kind, body string) (parsedDoc, error) {
+	p, err := parseDocSource(kind, body)
+	if err != nil {
+		return p, err
+	}
+	if p.doc.Frontmatter != nil {
+		return parsedDoc{}, errStoredHeader
+	}
+	return p, nil
+}
+
+// parseDocSource parses body and rejects what the schema cannot express: an
+// unparseable document, an issued date that is not YYYY-MM-DD, and (on a spec
+// or ADR) an anchor defect. Only CreateDoc reads a source with a header.
+func parseDocSource(kind, body string) (parsedDoc, error) {
 	doc, err := designdoc.Parse([]byte(body))
 	if err != nil {
 		return parsedDoc{}, fmt.Errorf("parse document body: %w: %w", err, ErrInvalidInput)
@@ -680,12 +739,11 @@ func parseDocBody(kind, body string) (parsedDoc, error) {
 	return parsedDoc{doc: doc, issued: issued}, nil
 }
 
-// parseWrittenDocBody is parseDocBody for a body a caller is writing now. On
-// top of parseDocBody it refuses the retired amendment and supersession keys
-// (WL-SPEC-77 §7): those are rule edges. A stored body that still carries
-// them is read through parseDocBody, which ignores them.
-func parseWrittenDocBody(kind, body string) (parsedDoc, error) {
-	p, err := parseDocBody(kind, body)
+// parseWrittenDocSource is parseDocSource for CreateDoc's header. On top of
+// parseDocSource it refuses the retired amendment and supersession keys
+// (WL-SPEC-77 §7): those are rule edges.
+func parseWrittenDocSource(kind, body string) (parsedDoc, error) {
+	p, err := parseDocSource(kind, body)
 	if err != nil {
 		return p, err
 	}

@@ -35,7 +35,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("doc_versions rows = %+v, want 1 row", rows)
 	}
-	if rows[0].version != 1 || rows[0].body != planMintBody || rows[0].title != doc.Title {
+	if rows[0].version != 1 || rows[0].body != noHeader(t, planMintBody) || rows[0].title != doc.Title {
 		t.Errorf("snapshot = %+v, want version 1 of the pre-edit body/title", rows[0])
 	}
 
@@ -51,7 +51,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocVersion(1): %v", err)
 	}
-	if v1.Body != planMintBody {
+	if v1.Body != noHeader(t, planMintBody) {
 		t.Errorf("GetDocVersion(1).Body = %q, want the pre-edit body", v1.Body)
 	}
 
@@ -59,7 +59,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocVersion(2): %v", err)
 	}
-	if v2.Body != edited {
+	if v2.Body != noHeader(t, edited) {
 		t.Errorf("GetDocVersion(2).Body = %q, want the current body", v2.Body)
 	}
 
@@ -92,7 +92,7 @@ func TestDocVersionsRevisionAccept(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("doc_versions rows = %+v, want 1 row", rows)
 	}
-	if rows[0].version != 1 || rows[0].body != specBody {
+	if rows[0].version != 1 || rows[0].body != noHeader(t, specBody) {
 		t.Errorf("snapshot = %+v, want version 1 of the accepted body", rows[0])
 	}
 
@@ -100,7 +100,7 @@ func TestDocVersionsRevisionAccept(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocVersion(1): %v", err)
 	}
-	if v1.Body != specBody {
+	if v1.Body != noHeader(t, specBody) {
 		t.Errorf("GetDocVersion(1).Body = %q, want the pre-revision body", v1.Body)
 	}
 }
@@ -143,7 +143,7 @@ func TestDocReviseOpensOneCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocRevision: %v", err)
 	}
-	if rev.Body != specBody {
+	if rev.Body != noHeader(t, specBody) {
 		t.Error("candidate body is not a copy of the accepted body")
 	}
 	if rev.CreatedBy != "ada" {
@@ -204,10 +204,10 @@ func TestDocUpdateRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rev.Body != revisedSpecBody {
+	if rev.Body != noHeader(t, revisedSpecBody) {
 		t.Error("candidate body not swapped")
 	}
-	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Body != specBody {
+	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Body != noHeader(t, specBody) {
 		t.Fatal("the accepted body must stay authoritative throughout (025 §7.2)")
 	}
 
@@ -296,7 +296,7 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DiscardRevision: %v", err)
 	}
-	if back.Version != 1 || back.Body != specBody {
+	if back.Version != 1 || back.Body != noHeader(t, specBody) {
 		t.Errorf("returned doc = version %d, want the accepted version untouched", back.Version)
 	}
 
@@ -307,14 +307,14 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rev.CreatedBy != "stig" || rev.Body != specBody {
+	if rev.CreatedBy != "stig" || rev.Body != noHeader(t, specBody) {
 		t.Errorf("revision = %+v, want a fresh copy of the accepted body opened by stig", rev)
 	}
 	got, err := s.GetDoc(t.Context(), doc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Version != 1 || got.Body != specBody {
+	if got.Version != 1 || got.Body != noHeader(t, specBody) {
 		t.Errorf("doc = version %d, want the accepted version untouched by a discard", got.Version)
 	}
 }
@@ -402,7 +402,7 @@ func TestDocDiscardRevisionLogsTheWithdrawnBody(t *testing.T) {
 	if err := json.Unmarshal(change, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got["discarded_body"] != revisedSpecBody {
+	if got["discarded_body"] != noHeader(t, revisedSpecBody) {
 		t.Errorf("discarded_body = %q, want the withdrawn candidate", got["discarded_body"])
 	}
 }
@@ -538,7 +538,7 @@ func TestDocAcceptRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcceptRevision: %v", err)
 	}
-	if updated.Body != revisedSpecBody {
+	if updated.Body != noHeader(t, revisedSpecBody) {
 		t.Error("body not swapped")
 	}
 	if updated.Version != 2 {
@@ -822,9 +822,8 @@ func TestRevisionEdgeWriteRefusesBadRef(t *testing.T) {
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
 		t.Fatalf("ReviseDoc: %v", err)
 	}
-	body := strings.Replace(revisedSpecBody, "status: accepted\n", "status: accepted\nblockedBy: a-plan\n", 1)
-	if err := updateRevision(t, s, doc.ID, body); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("UpdateRevision with blockedBy on a spec = %v, want ErrInvalidInput", err)
+	if err := linkDocEdge(t, s, doc.ID, model.DocEdgeInput{Type: "blockedBy", To: "a-plan"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("link blockedBy on a spec's candidate = %v, want ErrInvalidInput", err)
 	}
 }
 
@@ -844,11 +843,8 @@ func TestAcceptRevisionSwapsEdges(t *testing.T) {
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
 		t.Fatalf("ReviseDoc: %v", err)
 	}
-	body := strings.Replace(revisedSpecBody,
-		"requires: 004-execution-backbone.md#sec-6\n",
-		"requires:\n  - 004-execution-backbone.md#sec-6\n  - 026-other\n", 1)
-	if err := updateRevision(t, s, doc.ID, body); err != nil {
-		t.Fatalf("UpdateRevision: %v", err)
+	if err := linkDocEdge(t, s, doc.ID, model.DocEdgeInput{Type: "requires", To: "026-other"}); err != nil {
+		t.Fatalf("LinkDocEdge: %v", err)
 	}
 	if live := docEdges(t, s, doc.ID); len(live) != len(before) {
 		t.Fatalf("live edges changed before accept: %+v, want %+v", live, before)

@@ -296,7 +296,7 @@ func TestEditRuleDraftRewritesInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := strings.Replace(ruleDocV1, "### 1.1 Sub {#sec-1.1}\n\nB.\n", "### 1.1 Subsection {#sec-1.1}\n\nB changed.\n", 1)
+	want := noHeader(t, strings.Replace(ruleDocV1, "### 1.1 Sub {#sec-1.1}\n\nB.\n", "### 1.1 Subsection {#sec-1.1}\n\nB changed.\n", 1))
 	if got.Body != want {
 		t.Errorf("body after rule edit:\n%s\nwant:\n%s", got.Body, want)
 	}

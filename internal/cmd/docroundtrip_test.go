@@ -95,7 +95,7 @@ requires: other-corpus:SPEC-99
 // TestDocImportRoundTrip walks a corpus through `lode doc import` and reads it
 // back, holding the result to one property: **every reference the frontmatter
 // declares either exists in the store or was reported**, and the body is
-// stored verbatim.
+// stored verbatim less its header (WL-SPEC-77 §7).
 //
 // The third outcome is the defect this test exists for. WL-357 (a plan's
 // `requires` dropped) and PR #336 (bodies drifting on re-import) were both a
@@ -122,13 +122,16 @@ func TestDocImportRoundTrip(t *testing.T) {
 		slug := strings.TrimSuffix(path.Base(file), ".md")
 		t.Run(slug, func(t *testing.T) {
 			d := importedDoc(t, c, slug)
-			if d.Body != src {
-				t.Errorf("body did not round-trip:\n--- on disk ---\n%s\n--- in the store ---\n%s", src, d.Body)
-			}
 			doc, err := designdoc.Parse([]byte(src))
 			if err != nil {
 				t.Fatalf("parse the fixture: %v", err)
 			}
+			fm := doc.Frontmatter
+			doc.Frontmatter = nil
+			if want := strings.TrimLeft(string(doc.Bytes()), "\n"); d.Body != want {
+				t.Errorf("body did not round-trip:\n--- on disk, header removed ---\n%s\n--- in the store ---\n%s", want, d.Body)
+			}
+			doc.Frontmatter = fm
 			for _, ref := range doc.Frontmatter.Refs() {
 				if edgeSurvives(d, ref) || refReported(stderr, slug, ref.Ref) {
 					continue

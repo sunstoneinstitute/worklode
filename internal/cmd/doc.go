@@ -77,6 +77,8 @@ func newDocCmd() *cobra.Command {
 		newDocReferrersCmd(),
 		newDocSectionsCmd(),
 		newDocEditCmd(),
+		newDocLinkCmd(),
+		newDocUnlinkCmd(),
 		newDocAcceptCmd(),
 		newDocSubmitCmd(),
 		newDocReviseCmd(),
@@ -665,18 +667,29 @@ func newDocSectionsCmd() *cobra.Command {
 // is what every caller before it did — two writers racing on one body then
 // lose the first one's work silently.
 func newDocEditCmd() *cobra.Command {
-	var file, note string
+	var file, note, title, issued string
 	var substantive, updateAnchors bool
 	var ifVersion int
 	cmd := &cobra.Command{
 		Use:               "edit <ref>",
 		ValidArgsFunction: docRefAt(0),
-		Short:             "Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment)",
+		Short:             "Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment) or set its title and issued date",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body, err := readBodyFile(cmd, file)
-			if err != nil {
-				return err
+			setTitle, setIssued := cmd.Flags().Changed("title"), cmd.Flags().Changed("issued")
+			if file == "" && !setTitle && !setIssued {
+				return errors.New("nothing to edit: pass --file, --title or --issued")
+			}
+			var body string
+			if file != "" {
+				var err error
+				if body, err = readBodyFile(cmd, file); err != nil {
+					return err
+				}
+				if doc, err := designdoc.Parse([]byte(body)); err == nil && doc.Frontmatter != nil {
+					return errors.New("headers are accepted only by lode doc add and lode doc import (WL-SPEC-77 §7): " +
+						"set the title and issued date with --title and --issued, and edges with lode doc link")
+				}
 			}
 			c, err := newAPIClient()
 			if err != nil {
@@ -685,6 +698,9 @@ func newDocEditCmd() *cobra.Command {
 			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
+			}
+			if file == "" {
+				return setDocColumns(cmd, c, id, setTitle, title, setIssued, issued)
 			}
 			// The kind and status decide the endpoint, so they are read
 			// before the write rather than guessed from the ref.
@@ -716,14 +732,17 @@ func newDocEditCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				for _, w := range d.Warnings {
+					fmt.Fprintln(cmd.ErrOrStderr(), "warning:", w)
+				}
+				if setTitle || setIssued {
+					return setDocColumns(cmd, c, id, setTitle, title, setIssued, issued)
+				}
 				if jsonOut(cmd) {
 					printRaw(cmd, raw)
 					return nil
 				}
 				cli.DocTable(cmd.OutOrStdout(), []model.Doc{d})
-				for _, w := range d.Warnings {
-					fmt.Fprintln(cmd.ErrOrStderr(), "warning:", w)
-				}
 				return nil
 			}
 			res, raw, err := c.PatchDoc(cmd.Context(), id, model.PatchDocInput{
@@ -734,6 +753,9 @@ func newDocEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if setTitle || setIssued {
+				return setDocColumns(cmd, c, id, setTitle, title, setIssued, issued)
+			}
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
 				return nil
@@ -742,7 +764,9 @@ func newDocEditCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&file, "file", "", `markdown source file, frontmatter included ("-" for stdin) (required)`)
+	cmd.Flags().StringVar(&file, "file", "", `markdown source file with no header ("-" for stdin)`)
+	cmd.Flags().StringVar(&title, "title", "", "set the document's title")
+	cmd.Flags().StringVar(&issued, "issued", "", "set the document's issued date (YYYY-MM-DD)")
 	cmd.Flags().BoolVar(&substantive, "substantive", false,
 		"amending an accepted spec or ADR: the change is substantive, so its reviewers are asked again (025 §8.4)")
 	cmd.Flags().StringVar(&note, "note", "",
@@ -751,7 +775,110 @@ func newDocEditCmd() *cobra.Command {
 		"only write if the document is still at this version, the one `doc show` reported (compare-and-swap)")
 	cmd.Flags().BoolVar(&updateAnchors, "update-section-anchors", false,
 		"rewrite the body's section numbers and {#sec-N} anchors to agree with the heading structure (refused on an accepted document)")
-	cmd.MarkFlagRequired("file")
+	return cmd
+}
+
+// setDocColumns is `lode doc edit --title/--issued`: PATCH /api/v1/docs/{id}
+// with the fields named, which the body no longer states (WL-SPEC-77 §7).
+func setDocColumns(cmd *cobra.Command, c *cli.Client, id int64, setTitle bool, title string, setIssued bool, issued string) error {
+	var in model.DocColumnsInput
+	if setTitle {
+		in.Title = &title
+	}
+	if setIssued {
+		in.Issued = &issued
+	}
+	d, raw, err := c.SetDocColumns(cmd.Context(), id, in)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.DocTable(cmd.OutOrStdout(), []model.Doc{d.Doc})
+	return nil
+}
+
+// docEdgeFlags are the relation flags `lode doc link` and `lode doc unlink`
+// take, each naming the target ref, mapped to the stored edge type
+// (WL-SPEC-77 §8.1).
+var docEdgeFlags = []struct{ flag, typ, usage string }{
+	{"covers", "covers", "the plan covers this spec section (ref#sec-N) or spec"},
+	{"defers", "defers", "the plan defers this spec section (ref#sec-N) to --owner"},
+	{"requires", "requires", "the document requires this document or section"},
+	{"derived-from", "wasDerivedFrom", "the document was derived from this document"},
+	{"blocked-by", "blockedBy", "the plan is blocked by this plan"},
+}
+
+func newDocLinkCmd() *cobra.Command {
+	return newDocEdgeCmd("link <ref>", "Add an edge to a document (a plan's next version, a draft in place, an accepted spec or ADR on its candidate revision)",
+		(*cli.Client).LinkDocEdge)
+}
+
+func newDocUnlinkCmd() *cobra.Command {
+	return newDocEdgeCmd("unlink <ref>", "Remove an edge from a document, routed as lode doc link routes it",
+		(*cli.Client).UnlinkDocEdge)
+}
+
+// newDocEdgeCmd builds `lode doc link` and `lode doc unlink`: one relation
+// flag names the edge's type and target, and the server decides where the
+// write lands (WL-SPEC-77 §3).
+func newDocEdgeCmd(use, short string,
+	write func(*cli.Client, context.Context, int64, model.DocEdgeInput) (model.DocDetail, []byte, error)) *cobra.Command {
+	targets := make([]string, len(docEdgeFlags))
+	var in model.DocEdgeInput
+	cmd := &cobra.Command{
+		Use:               use,
+		ValidArgsFunction: docRefAt(0),
+		Short:             short,
+		Args:              cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			in.Type, in.To = "", ""
+			var names []string
+			for i, f := range docEdgeFlags {
+				names = append(names, "--"+f.flag)
+				if cmd.Flags().Changed(f.flag) {
+					in.Type, in.To = f.typ, targets[i]
+				}
+			}
+			if in.Type == "" {
+				return fmt.Errorf("name the edge: pass one of %s", strings.Join(names, ", "))
+			}
+			if in.Owner != "" && in.Type != "defers" {
+				return errors.New("--owner goes with --defers")
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
+			if err != nil {
+				return err
+			}
+			d, raw, err := write(c, cmd.Context(), id, in)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.DocTable(cmd.OutOrStdout(), []model.Doc{d.Doc})
+			return nil
+		},
+	}
+	var names []string
+	for i, f := range docEdgeFlags {
+		cmd.Flags().StringVar(&targets[i], f.flag, "", f.usage)
+		names = append(names, f.flag)
+	}
+	cmd.MarkFlagsMutuallyExclusive(names...)
+	cmd.Flags().StringVar(&in.FromAnchor, "from-anchor", "", "the section of this document the edge leaves from (sec-N)")
+	cmd.Flags().StringVar(&in.Coverage, "coverage", "", "with --covers: full (the default), partial or none")
+	cmd.Flags().StringArrayVar(&in.CompletedWith, "full-coverage-with", nil,
+		"with --covers --coverage partial: a plan that completes the coverage (repeatable)")
+	cmd.Flags().StringVar(&in.Owner, "owner", "", "with --defers: the document the section is deferred to")
 	return cmd
 }
 

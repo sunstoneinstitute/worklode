@@ -48,7 +48,16 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	// what puts those claims in force (026 §2.1). Everything below runs over an
 	// empty definition set and is a no-op.
 	defs, err := designdoc.PlanTasks(parsed.doc)
-	if err != nil && !designdoc.IsCoverageOnlyPlan(parsed.doc) {
+	if err != nil {
+		coverageOnly, cerr := isCoverageOnlyPlan(tx, id, parsed.doc)
+		if cerr != nil {
+			return nil, nil, cerr
+		}
+		if coverageOnly {
+			err = nil
+		}
+	}
+	if err != nil {
 		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %w: %w", id, err, ErrInvalidInput)
 	}
 	minted, err := plantaskRows(tx, id)
@@ -564,4 +573,20 @@ func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc
 // a store opened without WithMetrics records nothing.
 func (s *Store) RecordPlanTasksMinted(n int) {
 	s.metrics.planTasksMinted(n)
+}
+
+// isCoverageOnlyPlan is designdoc.IsCoverageOnlyPlan over a stored plan: the
+// body declares no tasks and the plan holds a covers or defers edge, which is
+// where its coverage lives once the body carries no header (WL-SPEC-77 §7).
+func isCoverageOnlyPlan(tx *sql.Tx, id int64, doc *designdoc.Document) (bool, error) {
+	if !designdoc.DeclaresNoTasks(doc) {
+		return false, nil
+	}
+	var ok bool
+	if err := tx.QueryRow(
+		`SELECT EXISTS (SELECT 1 FROM doc_edges WHERE from_doc = $1 AND type IN ('covers', 'defers'))`,
+		id).Scan(&ok); err != nil {
+		return false, fmt.Errorf("read coverage of plan %d: %w", id, err)
+	}
+	return ok, nil
 }

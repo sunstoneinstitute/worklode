@@ -51,7 +51,8 @@ type importDoc struct {
 	slug   string
 	status string
 	title  string
-	body   string
+	body   string // the file, header included: what POST /api/v1/docs reads
+	stored string // the body without its header, as the server stores it
 	fm     *designdoc.Frontmatter
 }
 
@@ -108,8 +109,9 @@ last_revised_in is 1 for every section and a claim pinned to an earlier version
 re-baselines at import.
 
 Re-running is safe. A slug already present with an identical body is left
-alone, and its edges are re-wired, so an interrupted import is finished by
-running it again. A body that drifted from the backbone is updated in place
+alone, and its edges are re-wired from its header, so an interrupted import is
+finished by running it again. Bodies are compared and stored without their
+header (WL-SPEC-77 §7). A body that drifted from the backbone is updated in place
 where an in-place edit is legal (a plan at any status, a draft spec or ADR);
 a drifted accepted spec or ADR is reported on stderr instead — revise it with
 lode doc revise. A dry run is entirely local and cannot see drift.
@@ -158,6 +160,7 @@ Stating a status needs the admin-only doc.import permission.`,
 
 			var created, present, updated int
 			var drifted []driftedDoc
+			skipEdges := map[string]bool{} // drifted documents keep their stored edges
 			for _, d := range importCreateOrder(docs) {
 				if id, ok := ids[d.slug]; ok {
 					present++
@@ -165,7 +168,7 @@ Stating a status needs the admin-only doc.import permission.`,
 					if err != nil {
 						return fmt.Errorf("read the stored body of %s: %w", d.path, err)
 					}
-					if stored.Body == d.body {
+					if stored.Body == d.stored {
 						continue
 					}
 					// Editable in place: a plan at any status, a draft spec or
@@ -175,10 +178,11 @@ Stating a status needs the admin-only doc.import permission.`,
 						drifted = append(drifted, driftedDoc{
 							path: d.path, kind: stored.Kind, status: stored.Status,
 						})
+						skipEdges[d.slug] = true
 						continue
 					}
 					if _, _, err := c.UpdateDocBody(cmd.Context(), id,
-						model.UpdateDocBodyInput{Body: d.body}); err != nil {
+						model.UpdateDocBodyInput{Body: d.stored}); err != nil {
 						return fmt.Errorf("update the drifted body of %s: %w", d.path, err)
 					}
 					updated++
@@ -194,15 +198,21 @@ Stating a status needs the admin-only doc.import permission.`,
 				ids[d.slug] = nd.ID
 				created++
 			}
-			// Pass 2 covers the skipped documents too: an earlier run that died
-			// between the passes left their references unresolved.
+			// Pass 2 writes each header's edges, now that every target exists.
+			// It covers the skipped documents too: an earlier run that died
+			// between the passes left their references unresolved, and a
+			// header edited since the first run restates its edges. A drifted
+			// document keeps what it has: it is revised, not re-imported.
 			for _, d := range docs {
-				if _, _, err := c.ReplaceDocEdges(cmd.Context(), ids[d.slug]); err != nil {
+				if skipEdges[d.slug] {
+					continue
+				}
+				if _, _, err := c.ReplaceDocEdges(cmd.Context(), ids[d.slug], importEdges(d.fm)); err != nil {
 					return fmt.Errorf("wire the edges of %s: %w", d.path, err)
 				}
 			}
 			summary := fmt.Sprintf("imported %d document(s) into %s: %d created, %d already present, %d updated, %d wired",
-				len(docs), sc.Project, created, present, updated, len(docs))
+				len(docs), sc.Project, created, present, updated, len(docs)-len(skipEdges))
 			if len(drifted) > 0 {
 				summary += fmt.Sprintf(", %d drifted (not updated)", len(drifted))
 			}
@@ -298,6 +308,8 @@ func readImportDoc(file, defaultKind string) (importDoc, error) {
 	} else {
 		d.title = d.slug
 	}
+	doc.Frontmatter = nil
+	d.stored = strings.TrimLeft(string(doc.Bytes()), "\n")
 	return d, nil
 }
 
@@ -502,4 +514,25 @@ func printUnresolvedRefs(w io.Writer, refs []unresolvedRef) {
 		fmt.Fprintf(w, "%d plan(s) declare %s; kept verbatim, no target expected (026 §4.3)\n",
 			sentinels, noSpecSentinel)
 	}
+}
+
+// importEdges is the edge set a header states, as PUT /api/v1/docs/{id}/edges
+// takes it: the relations the server stores (designdoc.StoredRels), each with
+// its covers level and fullCoverageWith closure or its defers owner.
+func importEdges(fm *designdoc.Frontmatter) []model.DocEdgeInput {
+	out := []model.DocEdgeInput{}
+	for _, r := range fm.RefsFor(designdoc.StoredRels...) {
+		e := model.DocEdgeInput{Type: r.Rel, FromAnchor: r.SrcAnchor, To: r.Ref}
+		if r.Coverage != nil {
+			e.Coverage = strings.TrimSpace(r.Coverage.Coverage)
+			if e.Coverage == "partial" {
+				e.CompletedWith = r.Coverage.FullCoverageWith
+			}
+		}
+		if r.Deferral != nil {
+			e.Owner = r.Deferral.To
+		}
+		out = append(out, e)
+	}
+	return out
 }

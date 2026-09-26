@@ -27,7 +27,7 @@ func TestPatchDocRoute(t *testing.T) {
 
 	edited := strings.Replace(docSpecBody, "Scope body.", "Scope body, restated.", 1)
 	rr := doReq(t, h, "POST", docPath(spec.ID, "/patch"), token,
-		model.PatchDocInput{Body: edited, Note: "clarified the scope"})
+		model.PatchDocInput{Body: noHeader(t, edited), Note: "clarified the scope"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -88,14 +88,13 @@ func TestPatchDocRefusedIsUnprocessable(t *testing.T) {
 	createProject(t, st, "proj")
 	spec := acceptedSpec(t, h, token, "proj", "025-refused", 25)
 
-	edited := strings.Replace(docSpecBody, "requires: 004-execution-backbone.md#sec-6",
-		"requires:\n  - 004-execution-backbone.md#sec-6\n  - 022-metrics.md#sec-1", 1)
+	edited := strings.Replace(docSpecBody, "Scope body.", "Scope body, run `lode doc show`.", 1)
 	rr := doReq(t, h, "POST", docPath(spec.ID, "/patch"), token,
-		model.PatchDocInput{Body: edited, Note: "one more dependency"})
+		model.PatchDocInput{Body: noHeader(t, edited), Note: "names a command"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422, body %s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "new-dependency") {
+	if !strings.Contains(rr.Body.String(), "surface-token") {
 		t.Errorf("body = %s, want the rule named", rr.Body.String())
 	}
 	after, err := st.GetDoc(t.Context(), spec.ID)

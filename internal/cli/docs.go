@@ -186,14 +186,31 @@ func (c *Client) PatchDoc(ctx context.Context, id int64, in model.PatchDocInput)
 	return doJSON[model.DocPatchResponse](ctx, c, http.MethodPost, docPath(id, "/patch"), in, "doc patch")
 }
 
-// ReplaceDocEdges calls PUT /api/v1/docs/{id}/edges: re-resolve the document's
-// frontmatter references against the documents that exist now. It is the
-// corpus import's second pass — the first cannot resolve a reference to a
-// document it has not created yet — and needs the admin-only doc.import
-// permission. Nothing else about the document changes; the response is the
-// same detail GET serves, so the caller reads back the resolved edge set.
-func (c *Client) ReplaceDocEdges(ctx context.Context, id int64) (model.DocDetail, []byte, error) {
-	return doJSON[model.DocDetail](ctx, c, http.MethodPut, docPath(id, "/edges"), nil, "doc")
+// ReplaceDocEdges calls PUT /api/v1/docs/{id}/edges: rewrite the document's
+// whole live edge set, resolved against the documents that exist now. It is
+// the corpus importer's write and needs the admin-only doc.import permission;
+// the response is the same detail GET serves.
+func (c *Client) ReplaceDocEdges(ctx context.Context, id int64, edges []model.DocEdgeInput) (model.DocDetail, []byte, error) {
+	return doJSON[model.DocDetail](ctx, c, http.MethodPut, docPath(id, "/edges"),
+		model.ReplaceDocEdgesInput{Edges: edges}, "doc")
+}
+
+// LinkDocEdge calls POST /api/v1/docs/{id}/edges and UnlinkDocEdge DELETE:
+// add or remove one edge (WL-SPEC-77 §3). The server decides where it lands:
+// a plan's next version, a draft's live set, or an accepted document's
+// candidate revision.
+func (c *Client) LinkDocEdge(ctx context.Context, id int64, in model.DocEdgeInput) (model.DocDetail, []byte, error) {
+	return doJSON[model.DocDetail](ctx, c, http.MethodPost, docPath(id, "/edges"), in, "doc")
+}
+
+func (c *Client) UnlinkDocEdge(ctx context.Context, id int64, in model.DocEdgeInput) (model.DocDetail, []byte, error) {
+	return doJSON[model.DocDetail](ctx, c, http.MethodDelete, docPath(id, "/edges"), in, "doc")
+}
+
+// SetDocColumns calls PATCH /api/v1/docs/{id}: set the title and issued date
+// a body no longer states (WL-SPEC-77 §7).
+func (c *Client) SetDocColumns(ctx context.Context, id int64, in model.DocColumnsInput) (model.DocDetail, []byte, error) {
+	return doJSON[model.DocDetail](ctx, c, http.MethodPatch, docPath(id, ""), in, "doc")
 }
 
 // SubmitDoc calls POST /api/v1/docs/{id}/submit: the document enters review.

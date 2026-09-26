@@ -272,7 +272,9 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 		"## 1. Scope {#sec-1}\n\nOriginal scope.\n\n" +
 		"#### Details\n\nStable details.\n\n" +
 		"## 2. Model {#sec-2}\n\nStable model.\n"
-	bodyV2 := strings.Replace(bodyV1, "## 1. Scope {#sec-1}", "## 1. Renamed scope {#sec-1}", 1)
+	// A revision body carries no header (WL-SPEC-77 §7).
+	bodyV2 := strings.Replace(strings.TrimPrefix(bodyV1, "---\nstatus: accepted\nissued: 2026-08-01\n---\n"),
+		"## 1. Scope {#sec-1}", "## 1. Renamed scope {#sec-1}", 1)
 	bodyV3 := strings.Replace(bodyV2, "Stable details.", "Revised details.", 1)
 	var docID int64
 	_, _, err := s.RecordDocEvent(ctx, "create", "cli", "version-graphs-create", "doc.created", nil,
@@ -510,7 +512,7 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 	if f.last(iri.DeclaredVersionGraph("003-doomed", 1)) == "" {
 		t.Fatalf("accepted document version was not projected")
 	}
-	bodyV2 := "---\nstatus: accepted\n---\n# Spec 3 — Doomed\n\n" +
+	bodyV2 := "# Spec 3 — Doomed\n\n" +
 		"## 1. Scope {#sec-1}\n\nRevised scope.\n"
 	if _, _, err := s.RecordDocEvent(ctx, "revise", "cli", "doc-del1-revise", "doc.revise", nil,
 		func(tx *sql.Tx, eventID int64) error {

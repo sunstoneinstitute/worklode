@@ -8,11 +8,10 @@ import (
 	"strings"
 )
 
-// Finding is one §8.3 mechanical-substantive rule firing on one section, or,
-// for new-dependency, on the document as a whole.
+// Finding is one §8.3 mechanical-substantive rule firing on one section.
 type Finding struct {
-	Rule   string // new-dependency | ns-term | surface-token | acceptance-criteria
-	Anchor string // "" for a document-level finding (new-dependency)
+	Rule   string // ns-term | surface-token | acceptance-criteria
+	Anchor string
 	Detail string // what changed, for the refusal message
 }
 
@@ -62,16 +61,12 @@ func ChangedAnchors(old, new *Document) []string {
 }
 
 // MechanicalFindings runs the text-level §8.3 rules over the changed
-// sections between old and new: new-dependency (a document-level frontmatter
-// check) plus, per changed anchor, ns-term, surface-token and
+// sections between old and new: ns-term, surface-token and
 // acceptance-criteria. The referrer rule is a corpus query and lives in the
-// store (WL-PLAN-109 Task 3), not here.
+// store (WL-PLAN-109 Task 3), not here. A new dependency is an edge, written
+// through `lode doc link` onto the candidate revision (WL-SPEC-77 §7).
 func MechanicalFindings(old, new *Document) []Finding {
 	var findings []Finding
-
-	if f := newDependencyFinding(old, new); f != nil {
-		findings = append(findings, *f)
-	}
 
 	oldSecs := anchoredSections(old)
 	newSecs := anchoredSections(new)
@@ -183,39 +178,4 @@ func codeSurfaces(text string) []string {
 		out = append(out, inlineCodePattern.FindAllString(line, -1)...)
 	}
 	return out
-}
-
-// newDependencyFinding fires when new's frontmatter requires list gains an
-// entry not present in old's. Prose-level dependency detection is not
-// mechanical (WL-PLAN-109 Decisions): that is the fixer's judged call.
-func newDependencyFinding(old, new *Document) *Finding {
-	oldReq := requiresSet(old)
-	var added []string
-	for _, r := range requiresOf(new) {
-		if !oldReq[r] {
-			added = append(added, r)
-		}
-	}
-	if len(added) == 0 {
-		return nil
-	}
-	return &Finding{
-		Rule:   "new-dependency",
-		Detail: fmt.Sprintf("requires gained: %s", strings.Join(added, ", ")),
-	}
-}
-
-func requiresOf(d *Document) []string {
-	if d.Frontmatter == nil {
-		return nil
-	}
-	return d.Frontmatter.Requires
-}
-
-func requiresSet(d *Document) map[string]bool {
-	set := make(map[string]bool)
-	for _, r := range requiresOf(d) {
-		set[r] = true
-	}
-	return set
 }

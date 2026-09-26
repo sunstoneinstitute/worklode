@@ -52,10 +52,12 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --file, --kind, --number, --owner, --project, --repo, --slug, --update-section-anchors
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
-- `lode doc edit` — Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment)
-  Flags: --file, --if-version, --note, --substantive, --update-section-anchors
+- `lode doc edit` — Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment) or set its title and issued date
+  Flags: --file, --if-version, --issued, --note, --substantive, --title, --update-section-anchors
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
+- `lode doc link` — Add an edge to a document (a plan's next version, a draft in place, an accepted spec or ADR on its candidate revision)
+  Flags: --blocked-by, --coverage, --covers, --defers, --derived-from, --from-anchor, --full-coverage-with, --owner, --requires
 - `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
   Flags: --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
@@ -79,6 +81,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode doc transfer` — Transfer document ownership to another actor
   Flags: --from, --project, --repo, --to
 - `lode doc undelete` — Restore a deleted document, clearing its tombstone
+- `lode doc unlink` — Remove an edge from a document, routed as lode doc link routes it
+  Flags: --blocked-by, --coverage, --covers, --defers, --derived-from, --from-anchor, --full-coverage-with, --owner, --requires
 - `lode doc versions` — List a document's version history
 - `lode doc withdraw` — Withdraw an accepted or stale document that will not be executed
   Flags: --justification
