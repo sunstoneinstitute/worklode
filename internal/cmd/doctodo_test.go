@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -57,7 +58,17 @@ Body.
 // through GET /docs plus one GET /docs/{id} per document, and task closure
 // through a single GET /tasks. The body fetches run concurrently, so the
 // counters are atomic.
-type todoServer struct{ listCalls, bodyCalls, taskCalls atomic.Int64 }
+type todoServer struct {
+	listCalls, bodyCalls, taskCalls atomic.Int64
+	// edgeOverrides replaces one document's GET /docs/{id} Edges outright,
+	// keyed by its corpus slug (filename minus ".md"). It exists for a
+	// fixture whose body carries no header, so testDocDetail's own
+	// header-derived Edges would be empty: the backbone can still hold
+	// edges for such a document (set structurally, e.g. `lode doc link`,
+	// never by parsing the body — WL-913), and this is how a test states
+	// that fact without writing one.
+	edgeOverrides map[string][]model.DocEdge
+}
 
 // setupTodoCorpus stands up a repo and the backbone that serves its corpus:
 // specs and plans keyed by the corpus filename each document was imported
@@ -164,7 +175,12 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 				continue
 			}
 			d.Body = bodies[id]
-			writeTestJSON(t, w, model.DocDetail{Doc: d})
+			detail := model.DocDetail{Doc: d}
+			detail.Sections, detail.Edges = testDocDetail(t, d, docs)
+			if override, ok := srv.edgeOverrides[d.Slug]; ok {
+				detail.Edges = override
+			}
+			writeTestJSON(t, w, detail)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -179,6 +195,44 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 	t.Setenv("LODE_SERVER", ts.URL)
 	t.Setenv("LODE_TOKEN", "test-token")
 	return srv
+}
+
+// testDocDetail simulates the two structured fields a real GET
+// /api/v1/docs/{id} derives at write time — Sections and Edges — by running
+// d's body through the same header parse docTodoCorpus used to run itself,
+// before WL-913 moved that parse server-side. This keeps every fixture
+// written against a real frontmatter header working unchanged; a fixture
+// that wants to pin the no-header case overrides the result through
+// todoServer.edgeOverrides instead.
+func testDocDetail(t *testing.T, d model.Doc, docs []model.Doc) ([]model.DocSection, []model.DocEdge) {
+	t.Helper()
+	cd, _, err := designdoc.CorpusDocFromBody(
+		designdoc.CorpusPath(d.Kind, d.Slug), d.Kind, d.Number, []byte(d.Body))
+	if err != nil {
+		t.Fatalf("parse fixture body for %s: %v", d.Slug, err)
+	}
+	var sections []model.DocSection
+	for _, s := range cd.Sections {
+		sections = append(sections, model.DocSection{
+			Anchor: s.Anchor, Heading: s.Heading, Depth: s.Depth, Position: s.Position,
+		})
+	}
+	byPath := make(map[string]model.Doc, len(docs))
+	for _, other := range docs {
+		byPath[designdoc.CorpusPath(other.Kind, other.Slug)] = other
+	}
+	var edges []model.DocEdge
+	for _, e := range cd.Edges {
+		de := model.DocEdge{Type: e.Rel, FromAnchor: e.SrcAnchor, ToAnchor: e.TargetAnchor}
+		if target, ok := byPath[e.Target]; ok {
+			de.ToDoc, de.ToSlug, de.ToKind = target.ID, target.Slug, target.Kind
+			de.ToNumber, de.ToStatus, de.ToProject = target.Number, target.Status, target.Project
+		} else {
+			de.ToExternal = e.Target
+		}
+		edges = append(edges, de)
+	}
+	return sections, edges
 }
 
 // noTasks is the empty task list: no plan minted anything, which is the state
@@ -711,8 +765,10 @@ func TestDocTodoReadsOnlyTheTargetsProject(t *testing.T) {
 // TestDocTodoThinBodyDegrades reproduces WL-724: a stored body with no
 // frontmatter — the shape `lode doc import` lands for a pre-055 corpus —
 // aborted the whole errgroup, so every ref on that project reported one
-// unrelated document and no work list. The walk now answers, and the thin
-// body is a footer note rather than an error.
+// unrelated document and no work list. The walk now answers. Status and
+// Sections no longer come from the body at all (WL-913), so a thin plan is
+// no longer a degradation worth a footer note: WL-PLAN-2 simply covers
+// nothing, the same as an accepted plan that declared no `covers` ever would.
 func TestDocTodoThinBodyDegrades(t *testing.T) {
 	setupTodoCorpus(t,
 		map[string]string{"001-example.md": todoSpec},
@@ -728,12 +784,16 @@ func TestDocTodoThinBodyDegrades(t *testing.T) {
 	for _, want := range []string{
 		"WL-SPEC-1",
 		"unplanned", // sec-2's gap: the walk ran
-		"notes (1)",
-		"WL-PLAN-2: no frontmatter",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q\noutput:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "WL-PLAN-2") {
+		t.Errorf("thin plan reported, though it declared no covers claim:\n%s", out)
+	}
+	if strings.Contains(out, "notes (") {
+		t.Errorf("footer states a degradation that no longer exists:\n%s", out)
 	}
 }
 
@@ -831,5 +891,70 @@ Body.
 	}
 	if !stated {
 		t.Errorf("unresolvable covers target not stated:\n%s", out)
+	}
+}
+
+// TestDocTodoCorpusReadsStoredEdges pins WL-913 directly against
+// docTodoCorpus, the function it changes: a plan whose body carries no
+// header at all, but whose GET /docs/{id} Edges name the exact same `covers`
+// claim todoPlanOpen's header declares (full coverage of sec-1), must build
+// the exact same designdoc.EdgeMeta and Status that the header-carrying
+// fixture does today. That is the property the switch away from
+// designdoc.CorpusDocFromBody buys: the corpus docTodoCorpus hands the walk
+// no longer depends on the body parsing at all.
+//
+// This checks docTodoCorpus's own output rather than running the walk
+// through `lode doc todo` end to end, because designdoc.Todo's covering-plan
+// classification (internal/designdoc/coverage.go) still re-parses a plan's
+// body for the coverage level and fullCoverageWith a covers claim carries —
+// EdgeMeta deliberately does not (corpus_test.go pins that): that walk stays
+// on the body until a later change teaches it to read CorpusDoc.Edges too.
+func TestDocTodoCorpusReadsStoredEdges(t *testing.T) {
+	srv := setupTodoCorpus(t,
+		map[string]string{"001-example.md": todoSpec},
+		map[string]string{
+			"001-1-first.md":  todoPlanOpen,
+			"001-2-second.md": "# Plan 1-2 — Build the first section\n\nBody.\n",
+		}, noTasks)
+	srv.edgeOverrides = map[string][]model.DocEdge{
+		"001-2-second": {{
+			Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example",
+			ToNumber: 1, ToStatus: "accepted", ToAnchor: "sec-1",
+		}},
+	}
+
+	c := cli.NewClient(cli.Config{ServerURL: os.Getenv("LODE_SERVER"), Token: os.Getenv("LODE_TOKEN")})
+	ctx := context.Background()
+	listed, _, err := c.ListDocs(ctx, cli.DocListFilter{})
+	if err != nil {
+		t.Fatalf("list docs: %v", err)
+	}
+	var corpus []model.Doc
+	for _, d := range listed.Docs {
+		if d.Project == "proj" {
+			corpus = append(corpus, d)
+		}
+	}
+	docs, err := docTodoCorpus(ctx, c, corpus)
+	if err != nil {
+		t.Fatalf("docTodoCorpus: %v", err)
+	}
+
+	byPath := map[string]designdoc.CorpusDoc{}
+	for _, d := range docs {
+		byPath[d.Path] = d
+	}
+	headered := byPath[designdoc.CorpusPath("plan", "001-1-first")]
+	headerless := byPath[designdoc.CorpusPath("plan", "001-2-second")]
+
+	want := []designdoc.EdgeMeta{{Rel: "covers", Target: "docs/specs/001-example.md", TargetAnchor: "sec-1"}}
+	if !slices.Equal(headered.Edges, want) {
+		t.Errorf("headered plan's edges = %+v, want %+v", headered.Edges, want)
+	}
+	if !slices.Equal(headerless.Edges, want) {
+		t.Errorf("headerless plan's edges = %+v, want %+v (same as the headered fixture)", headerless.Edges, want)
+	}
+	if headerless.Status != headered.Status {
+		t.Errorf("headerless plan's status = %q, want %q (the headered fixture's)", headerless.Status, headered.Status)
 	}
 }
