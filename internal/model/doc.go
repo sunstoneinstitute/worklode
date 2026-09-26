@@ -164,6 +164,8 @@ type DocRevision struct {
 	Body      string    `json:"body"`
 	CreatedBy string    `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
+	// Edges are the candidate's own outgoing edges, which land with it.
+	Edges []DocEdge `json:"edges"`
 }
 
 // DocNote is one anchored, non-blocking note on a document section

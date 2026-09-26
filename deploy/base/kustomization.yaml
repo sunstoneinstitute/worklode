@@ -202,3 +202,5 @@ configMapGenerator:
       - migrations/0094_edge_ownership.down.sql
       - migrations/0095_version_snapshots.up.sql
       - migrations/0095_version_snapshots.down.sql
+      - migrations/0096_doc_revision_edges.up.sql
+      - migrations/0096_doc_revision_edges.down.sql
