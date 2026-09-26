@@ -101,7 +101,7 @@ func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
-		        coalesce(d.number,0), coalesce(d.status,''),
+		        coalesce(d.number,0), coalesce(d.status,''), coalesce(e.coverage,''),
 		        coalesce((SELECT json_agg(coalesce(wd.slug, c.w->>'to_external') ORDER BY c.n)
 		                    FROM jsonb_array_elements(e.completed_with) WITH ORDINALITY AS c(w, n)
 		                    LEFT JOIN docs wd ON wd.id = (c.w->>'to_doc')::bigint), '[]')::text,

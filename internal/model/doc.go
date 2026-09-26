@@ -238,6 +238,9 @@ type AddDocNoteInput struct {
 // then name a section arranging that rule. Empty on every other edge and on
 // every inbound one.
 //
+// Coverage is a covers edge's level ("full", "partial", "none"), empty on
+// every other type.
+//
 // CompletedWith carries the doc_coverage_completed_with side-table (026 §5,
 // §5.3) that only a `covers` or `defers` edge ever populates: a `partial`
 // covers entry's fullCoverageWith closure, in authored order, or a `defers`
@@ -256,6 +259,7 @@ type DocEdge struct {
 	ToKind        string   `json:"to_kind"`
 	ToNumber      int      `json:"to_number"`
 	ToStatus      string   `json:"to_status"`
+	Coverage      string   `json:"coverage,omitempty"`
 	CompletedWith []string `json:"completed_with,omitempty"`
 	ToRule        string   `json:"to_rule,omitempty"`
 }
