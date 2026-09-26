@@ -20,6 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CONCEPT_TTL = ROOT / "ns" / "concept.ttl"
+ONTOLOGY_TTL = ROOT / "ns" / "ontology.ttl"
 
 
 def load_nsgen():
@@ -154,9 +155,6 @@ class TestUnsupportedConstructsRaise(unittest.TestCase):
         with self.assertRaises(nsgen.TurtleError):
             nsgen.extract(ttl(body))
 
-    def test_blank_node_property_list(self):
-        self.assertRaisesTurtle(TWO_KINDS + "wlc:chore skos:note [ skos:prefLabel \"x\" ] .\n")
-
     def test_bare_boolean_literal(self):
         self.assertRaisesTurtle(TWO_KINDS + "wlc:bug skos:note true .\n")
 
@@ -167,6 +165,92 @@ class TestUnsupportedConstructsRaise(unittest.TestCase):
         with self.assertRaises(nsgen.TurtleError) as cm:
             nsgen.extract("@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n")
         self.assertIn("@prefix wlc:", str(cm.exception))
+
+
+class TestBlankNodes(unittest.TestCase):
+    PREFIXES = "@prefix ex: <http://example.org/> .\n"
+
+    def parse(self, body):
+        return nsgen.Parser(self.PREFIXES + body).parse()
+
+    def test_empty_blank_node_as_subject(self):
+        triples = self.parse("[] a ex:C ; ex:p ex:o .\n")
+        self.assertEqual(len(triples), 2)
+        subject = triples[0][0]
+        self.assertTrue(subject.startswith("_:b"))
+        self.assertEqual(triples, [
+            (subject, nsgen.RDF_TYPE, "http://example.org/C"),
+            (subject, "http://example.org/p", "http://example.org/o"),
+        ])
+
+    def test_blank_node_property_list_as_object(self):
+        triples = self.parse("ex:s ex:p [ a ex:C ; ex:q ( ex:a ex:b ) ] .\n")
+        (node,) = [o for s, p, o in triples if s == "http://example.org/s"]
+        self.assertTrue(node.startswith("_:b"))
+        self.assertIn((node, nsgen.RDF_TYPE, "http://example.org/C"), triples)
+        (head,) = [o for s, p, o in triples if s == node and p == "http://example.org/q"]
+        self.assertEqual(nsgen.ordered_list(triples, head),
+                         ["http://example.org/a", "http://example.org/b"])
+
+    def test_unterminated_blank_node_raises(self):
+        with self.assertRaises(nsgen.TurtleError):
+            self.parse("ex:s ex:p [ ex:q ex:o .\n")
+
+
+EDGE_PREAMBLE = """\
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+
+wl:dependsOn a owl:ObjectProperty ; wl:edgeOrigin wlc:declared ; wl:storedAs "task_edges.dependsOn" .
+wl:blocks a owl:ObjectProperty ; wl:edgeOrigin wlc:inferred ; owl:inverseOf wl:dependsOn .
+wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ;
+    wl:edgeOrigin wlc:declared ; wl:storedAs "rule_edges.conflictsWith", "doc_edges.conflictsWith" .
+"""
+
+WL = "https://worklode.io/ns/ontology#"
+
+
+class TestEdges(unittest.TestCase):
+    def test_extracts_declared_edges(self):
+        self.assertEqual(nsgen.extract_edges(EDGE_PREAMBLE), [
+            ("doc_edges", "conflictsWith", WL + "conflictsWith", "", True),
+            ("rule_edges", "conflictsWith", WL + "conflictsWith", "", True),
+            ("task_edges", "dependsOn", WL + "dependsOn", WL + "blocks", False),
+        ])
+
+    def test_real_ontology_parses(self):
+        edges = nsgen.extract_edges(ONTOLOGY_TTL.read_text(encoding="utf-8"))
+        self.assertIn(("task_edges", "dependsOn", WL + "dependsOn", WL + "blocks", False), edges)
+
+    def assertRaisesTurtle(self, body, needle):
+        with self.assertRaises(nsgen.TurtleError) as cm:
+            nsgen.extract_edges(EDGE_PREAMBLE + body)
+        self.assertIn(needle, str(cm.exception))
+
+    def test_unknown_edge_origin(self):
+        self.assertRaisesTurtle("wl:x wl:edgeOrigin wlc:guessed .\n", "neither")
+
+    def test_declared_without_stored_as(self):
+        self.assertRaisesTurtle("wl:x wl:edgeOrigin wlc:declared .\n", "no wl:storedAs")
+
+    def test_malformed_stored_as(self):
+        self.assertRaisesTurtle(
+            'wl:x wl:edgeOrigin wlc:declared ; wl:storedAs "edges.x" .\n', "is not <edge table>")
+
+    def test_inferred_with_stored_as(self):
+        self.assertRaisesTurtle(
+            'wl:x wl:edgeOrigin wlc:inferred ; owl:inverseOf wl:dependsOn ; '
+            'wl:storedAs "task_edges.x" .\n', "carries wl:storedAs")
+
+    def test_inferred_without_declared_inverse(self):
+        self.assertRaisesTurtle(
+            "wl:x wl:edgeOrigin wlc:inferred ; owl:inverseOf wl:nothing .\n", "needs owl:inverseOf")
+
+    def test_duplicate_table_and_type(self):
+        self.assertRaisesTurtle(
+            'wl:x wl:edgeOrigin wlc:declared ; wl:storedAs "task_edges.dependsOn" .\n',
+            "stored by both")
 
 
 class TestCli(unittest.TestCase):
@@ -181,7 +265,10 @@ class TestCli(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_generated_file_is_byte_identical_to_a_regenerate(self):
-        want = nsgen.render(*nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8")))
+        want = nsgen.render(
+            *nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8")),
+            nsgen.extract_edges(ONTOLOGY_TTL.read_text(encoding="utf-8")),
+        )
         self.assertEqual((ROOT / "internal" / "ns" / "gen.go").read_text(encoding="utf-8"), want)
 
 

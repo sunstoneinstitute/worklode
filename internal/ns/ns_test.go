@@ -89,3 +89,41 @@ func TestSet(t *testing.T) {
 		t.Errorf("Set([a b]) = %v", got)
 	}
 }
+
+// TestEdgeTermsMatchTurtle re-derives every `wl:storedAs` literal from
+// ns/ontology.ttl with a regexp, independently of scripts/nsgen.py's parser.
+func TestEdgeTermsMatchTurtle(t *testing.T) {
+	ttl, err := os.ReadFile(filepath.Join("..", "..", "ns", "ontology.ttl"))
+	if err != nil {
+		t.Fatalf("read ns/ontology.ttl: %v", err)
+	}
+	var want []string
+	for _, m := range regexp.MustCompile(`"((?:doc|rule|task)_edges\.\w+)"`).FindAllStringSubmatch(string(ttl), -1) {
+		want = append(want, m[1])
+	}
+	var got []string
+	for _, e := range ns.EdgeTerms {
+		got = append(got, e.Table+"."+e.Type)
+	}
+	slices.Sort(want)
+	slices.Sort(got)
+	if len(want) == 0 || !slices.Equal(got, want) {
+		t.Errorf("ns.EdgeTerms = %v, want %v — run ./scripts/nsgen.py", got, want)
+	}
+}
+
+// TestDeclaredEdges pins the stored types per table: declared terms only,
+// never their inferred inverses.
+func TestDeclaredEdges(t *testing.T) {
+	if got, want := ns.DeclaredEdges("task_edges"), []string{"child_of", "dependsOn", "duplicate_of", "follow_up_to"}; !slices.Equal(got, want) {
+		t.Errorf("DeclaredEdges(task_edges) = %v, want %v", got, want)
+	}
+	doc := ns.DeclaredEdges("doc_edges")
+	if !slices.Contains(doc, "blockedBy") || slices.Contains(doc, "blocks") {
+		t.Errorf("DeclaredEdges(doc_edges) = %v, want blockedBy and not blocks", doc)
+	}
+	rule := ns.DeclaredEdges("rule_edges")
+	if !slices.Contains(rule, "supersedes") || slices.Contains(rule, "supersededBy") {
+		t.Errorf("DeclaredEdges(rule_edges) = %v, want supersedes and not supersededBy", rule)
+	}
+}
