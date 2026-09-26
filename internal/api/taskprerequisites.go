@@ -72,11 +72,8 @@ func prerequisitesView(tree model.BlockerTree) *ui.Prerequisites {
 		n.Levels, n.Below = below(id, root, dependsOn)
 		if len(dependsOn[id]) == 0 {
 			v.Candidates = append(v.Candidates, id)
-		} else if n.State == "ready" {
-			// Blocked is derived, never stored: a ready task with an open
-			// blocker cannot be claimed.
-			n.State = "blocked"
 		}
+		n.State = model.DisplayState(n.State, len(dependsOn[id]) > 0)
 		if reaches(id, id, dependsOn) {
 			n.Cycle = true
 			v.Cycle = append(v.Cycle, id)
