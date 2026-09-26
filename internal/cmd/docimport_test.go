@@ -357,11 +357,11 @@ func TestDocImportDryRun(t *testing.T) {
 	}
 }
 
-// TestDocImportForwardBlockingPlanChain: a plan series whose phases each block
-// the next imports whole. `blocks` is the one relation the server resolves at
-// create time (025 §5), so pass 1 has to create the chain back to front
-// (WL-339) — in walk order every phase would name a plan that does not exist
-// yet and the whole import would fail on the first one.
+// TestDocImportForwardBlockingPlanChain: a plan series whose phases each name
+// the next in `blockedBy` imports whole. It is the one relation the server
+// resolves at create time (025 §5), so pass 1 has to create the chain back to
+// front (WL-339) — in walk order every phase would name a plan that does not
+// exist yet and the whole import would fail on the first one.
 func TestDocImportForwardBlockingPlanChain(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -375,7 +375,7 @@ func TestDocImportForwardBlockingPlanChain(t *testing.T) {
 	for i, slug := range slugs {
 		body := "---\nstatus: draft\n"
 		if i+1 < len(slugs) {
-			body += "blocks: " + slugs[i+1] + ".md\n"
+			body += "blockedBy: " + slugs[i+1] + ".md\n"
 		}
 		body += "---\n\n# " + slug + "\n"
 		if err := os.WriteFile(filepath.Join(plans, slug+".md"), []byte(body), 0o644); err != nil {
@@ -393,11 +393,30 @@ func TestDocImportForwardBlockingPlanChain(t *testing.T) {
 	for i := 0; i+1 < len(slugs); i++ {
 		d := importedDoc(t, c, slugs[i])
 		if len(d.Edges) != 1 {
-			t.Fatalf("%s edges = %+v, want the one blocks edge", slugs[i], d.Edges)
+			t.Fatalf("%s edges = %+v, want the one blockedBy edge", slugs[i], d.Edges)
 		}
 		if want := importedDoc(t, c, slugs[i+1]).ID; d.Edges[0].ToDoc != want {
-			t.Errorf("%s blocks edge = %+v, want to_doc %d", slugs[i], d.Edges[0], want)
+			t.Errorf("%s blockedBy edge = %+v, want to_doc %d", slugs[i], d.Edges[0], want)
 		}
+	}
+}
+
+// TestDocImportRefusesBlocks: `blocks:` is an inverse spelling the server
+// never stores (WL-SPEC-77 §8.1), so the import fails before writing and
+// names blockedBy.
+func TestDocImportRefusesBlocks(t *testing.T) {
+	dir := t.TempDir()
+	plans := filepath.Join(dir, "plans")
+	if err := os.MkdirAll(plans, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(plans, "2026-08-22-a.md"),
+		[]byte("---\nstatus: draft\nblocks: 2026-08-22-b.md\n---\n\n# A\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runLode(t, "doc", "import", "--dry-run", "--docs", dir)
+	if err == nil || !strings.Contains(err.Error(), "blockedBy") {
+		t.Fatalf("doc import = %v (output %q), want an error naming blockedBy", err, out)
 	}
 }
 

@@ -308,8 +308,8 @@ func TestListProjectWorkFactsPlanBlocked(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
-	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("blocks: plan-b\n", "Plan A"))
+	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("", "Plan A"))
+	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("blockedBy: plan-a\n", "Plan B"))
 
 	facts, err := s.ListProjectWorkFacts(t.Context(), "p1")
 	if err != nil {
@@ -347,11 +347,11 @@ func TestListProjectWorkFactsBlockedByDraftPlan(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "plan-c",
-		Body: planTaskBody("blocks: plan-d\n", "Plan C"), CreatedBy: "stig",
+		Body: planTaskBody("", "Plan C"), CreatedBy: "stig",
 	})
+	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("blockedBy: plan-c\n", "Plan D"))
 
 	facts, err := s.ListProjectWorkFacts(t.Context(), "p1")
 	if err != nil {

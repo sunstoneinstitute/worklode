@@ -212,11 +212,9 @@ Body format, task YAML keys (`kind`/`priority`/`skills`/`blockedBy`), and
 reference syntax: the `lode:writing-docs` skill's "Declaring a plan's
 tasks" section, which also covers how a document is created. A series
 part restarts task numbering at 1; ordering across parts is a document-level
-edge, never a task number. Declare it with `blockedBy:` on the later part
-(WL-143): it writes the same single `blocks` row with the ends swapped, and it
-is the only spelling that works while writing a series forward, since `blocks:`
-on the earlier part would mean amending a plan that may already be accepted.
-Both ends must already resolve, so create the earlier part first either way.
+edge, never a task number. Declare it with `blockedBy:` on the later part;
+`blocks:` is refused (WL-SPEC-77 §8.1). The named part must already resolve,
+so create the earlier part first.
 
 Constraints a plan inherits in the worklode repo itself — state them once in
 Global Constraints, do not repeat per task. A plan in another project inherits

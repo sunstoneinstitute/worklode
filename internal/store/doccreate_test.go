@@ -403,37 +403,24 @@ func TestDocCreateDuplicateIsErrDocExists(t *testing.T) {
 	}
 }
 
-// TestDocCreateWritesPlanBlocksEdge: a plan's document-level `blocks` orders
-// it before another plan (025 §5, §9.3), and `blockedBy` says the same thing
-// from the other end — the same single row with its ends swapped, so plan-two
-// declaring both leaves plan-one blocking it and plan-two blocking plan-three.
-// One direction is still all that is stored.
-func TestDocCreateWritesPlanBlocksEdge(t *testing.T) {
+// TestDocCreateWritesPlanBlockedByEdge: a plan's document-level `blockedBy`
+// orders it after another plan (025 §5, §9.3), stored from the declaring plan.
+func TestDocCreateWritesPlanBlockedByEdge(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
 	one := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "plan-one", Body: planMintBody, CreatedBy: "stig",
 	})
-	three := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-three", Body: planMintBody, CreatedBy: "stig",
-	})
 	two := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "plan-two", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nblocks: plan-three\nblockedBy: plan-one\n---\n\n# Plan two\n",
+		Body: "---\nstatus: draft\nblockedBy: plan-one\n---\n\n# Plan two\n",
 	})
 
 	got := docEdges(t, s, two.ID)
-	want := []model.DocEdge{{Type: "blocks", ToDoc: three.ID}}
+	want := []model.DocEdge{{Type: "blockedBy", ToDoc: one.ID}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges of plan-two = %+v, want %+v", got, want)
-	}
-	// The blockedBy row leaves plan-one, which is where "plan-one blocks
-	// plan-two" belongs — plan-two only authored it.
-	gotOne := docEdges(t, s, one.ID)
-	wantOne := []model.DocEdge{{Type: "blocks", ToDoc: two.ID}}
-	if !reflect.DeepEqual(gotOne, wantOne) {
-		t.Fatalf("edges of plan-one = %+v, want %+v", gotOne, wantOne)
 	}
 }
 

@@ -1307,9 +1307,9 @@ func TestDocListSections(t *testing.T) {
 	}
 }
 
-// blockingPlanBody renders a draft plan ordering itself before blocked.
-func blockingPlanBody(blocked string) string {
-	return "---\nstatus: draft\nblocks: " + blocked + "\n---\n\n# Plan\n"
+// blockedByPlanBody renders a draft plan ordering itself after blocker.
+func blockedByPlanBody(blocker string) string {
+	return "---\nstatus: draft\nblockedBy: " + blocker + "\n---\n\n# Plan\n"
 }
 
 // planCoveringBody renders a plan whose frontmatter covers refs and whose
@@ -1571,8 +1571,8 @@ func TestDocIRIRoundTrip(t *testing.T) {
 
 // TestDocEdgeTypesWithoutWriter pins the one gap between the doc_edges type
 // set and what can produce a row in it. rebuildEdges derives every edge from
-// frontmatter through frontmatterEdges, which resolves `blockedBy` to a
-// `blocks` edge and otherwise records designdoc.ActingRels, so a type outside
+// frontmatter through frontmatterEdges, which records designdoc.ActingRels,
+// so a type outside
 // that set is a value the CHECK admits and no surface writes.
 //
 // Today that is exactly `implements`, and deliberately so: 026 §5.1 makes

@@ -227,9 +227,9 @@ func checkPlanTasksMinted(tx *sql.Tx, id int64, doc *designdoc.Document) error {
 	return nil
 }
 
-// checkPlanOrdering enforces that a blocks edge runs between two *distinct*
+// checkPlanOrdering enforces that a blockedBy edge runs between two *distinct*
 // plan documents (025 §5): it orders plan against plan, and
-// planBlockedCondition reads it as the blocking plan's whole task set. An
+// planBlockedCondition reads its to end as the blocking plan's whole task set. An
 // unresolved reference is refused too — nothing here can say it names a plan,
 // and a to_external ordering edge would gate nothing while looking like it
 // did.
@@ -243,58 +243,50 @@ func checkPlanTasksMinted(tx *sql.Tx, id int64, doc *designdoc.Document) error {
 // only the write closing the cycle that can catch it. Both are refused here,
 // the way AddEdge refuses a child_of cycle between tasks (WL-144).
 //
-// docKind is the *declaring* document's own kind, which every caller already
+// docKind is the declaring document's own kind, which every caller already
 // holds (from lockDoc or from the create input) — re-reading it here would
-// cost a query per blocks edge in the frontmatter. inverse says which end of
-// the row the declaring document is: false for `blocks:`, where it is the from
-// end, true for `blockedBy:`, where it is the to end (025 §5). Every check
-// below is about the row, so it reads the ends rather than the author — which
-// is why the two spellings cannot disagree about what is legal.
-func checkPlanOrdering(tx *sql.Tx, docID int64, docKind, ref string, otherDoc int64, resolved, inverse bool) error {
+// cost a query per blockedBy edge in the frontmatter. The declaring document
+// is the row's from end (the blocked plan); toDoc is the named, blocking plan.
+func checkPlanOrdering(tx *sql.Tx, docID int64, docKind, ref string, toDoc int64, resolved bool) error {
 	if !resolved {
 		return fmt.Errorf(
-			"blocks edge from doc %d names %q, which no plan in this project resolves to (025 §5): %w",
+			"blockedBy edge from doc %d names %q, which no plan in this project resolves to (025 §5): %w",
 			docID, ref, ErrInvalidInput)
 	}
-	if otherDoc == docID {
+	if toDoc == docID {
 		return fmt.Errorf(
-			"blocks edge from doc %d names %q, itself: a plan cannot block itself (025 §5): %w",
+			"blockedBy edge from doc %d names %q, itself: a plan cannot block itself (025 §5): %w",
 			docID, ref, ErrInvalidInput)
 	}
-	var otherKind string
-	if err := tx.QueryRow(`SELECT kind FROM docs WHERE id = $1`, otherDoc).Scan(&otherKind); err != nil {
-		return fmt.Errorf("read kind of doc %d: %w", otherDoc, err)
+	var toKind string
+	if err := tx.QueryRow(`SELECT kind FROM docs WHERE id = $1`, toDoc).Scan(&toKind); err != nil {
+		return fmt.Errorf("read kind of doc %d: %w", toDoc, err)
 	}
-	fromDoc, fromKind, toDoc, toKind := docID, docKind, otherDoc, otherKind
-	if inverse {
-		fromDoc, fromKind, toDoc, toKind = otherDoc, otherKind, docID, docKind
-	}
-	// The from end first, matching the order the two-query loop reported in.
-	if fromKind != "plan" {
-		return fmt.Errorf("blocks orders plan documents, but the from end (doc %d) is a %s (025 §5): %w",
-			fromDoc, fromKind, ErrInvalidInput)
+	if docKind != "plan" {
+		return fmt.Errorf("blockedBy orders plan documents, but the from end (doc %d) is a %s (025 §5): %w",
+			docID, docKind, ErrInvalidInput)
 	}
 	if toKind != "plan" {
-		return fmt.Errorf("blocks orders plan documents, but the to end (doc %d) is a %s (025 §5): %w",
+		return fmt.Errorf("blockedBy orders plan documents, but the to end (doc %d) is a %s (025 §5): %w",
 			toDoc, toKind, ErrInvalidInput)
 	}
-	back, err := blocksPath(tx, toDoc, fromDoc)
+	back, err := blocksPath(tx, toDoc, docID)
 	if err != nil {
 		return err
 	}
 	if back != nil {
-		chain, err := blocksChainText(tx, append([]int64{fromDoc}, back...))
+		chain, err := blocksChainText(tx, append([]int64{docID}, back...))
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("blocks edge from doc %d names %q, closing the cycle %s (025 §5): %w",
+		return fmt.Errorf("blockedBy edge from doc %d names %q, closing the cycle %s (025 §5): %w",
 			docID, ref, chain, ErrInvalidInput)
 	}
 	return nil
 }
 
 // blocksPath returns the documents on a path from start to target over stored
-// `blocks` edges — start first, target last — or nil when target is
+// `blockedBy` edges — start first, target last — or nil when target is
 // unreachable. checkPlanOrdering walks it from the proposed edge's *to* end
 // back towards its *from* end: a path that arrives means the proposed edge
 // closes a cycle.
@@ -317,9 +309,9 @@ func blocksPath(tx *sql.Tx, start, target int64) ([]int64, error) {
 
 		rows, err := tx.Query(
 			`SELECT to_doc FROM doc_edges
-			  WHERE from_doc = $1 AND type = 'blocks' AND to_doc IS NOT NULL`, cur)
+			  WHERE from_doc = $1 AND type = 'blockedBy' AND to_doc IS NOT NULL`, cur)
 		if err != nil {
-			return nil, fmt.Errorf("walk blocks edges of doc %d: %w", cur, err)
+			return nil, fmt.Errorf("walk blockedBy edges of doc %d: %w", cur, err)
 		}
 		var next []int64
 		for rows.Next() {
@@ -356,7 +348,7 @@ func blocksPath(tx *sql.Tx, start, target int64) ([]int64, error) {
 	return nil, nil
 }
 
-// blocksChainText renders a chain of document ids as "a blocks b blocks a", by
+// blocksChainText renders a chain of document ids as "a blockedBy b blockedBy a", by
 // slug, so a refused write names the cycle rather than just reporting one. A
 // document whose slug cannot be read falls back to its id — the caller is
 // already on an error path and a lookup failure must not mask what refused the
@@ -373,7 +365,7 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 		}
 		parts = append(parts, slug)
 	}
-	return strings.Join(parts, " blocks "), nil
+	return strings.Join(parts, " blockedBy "), nil
 }
 
 // NeedsPlanning returns the accepted specs that have at least one section no

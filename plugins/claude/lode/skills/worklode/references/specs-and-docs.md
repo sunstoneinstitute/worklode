@@ -145,8 +145,8 @@ amendment → supersession:
 | `issued` | `YYYY-MM-DD` | specs, ADRs |
 | `covers` | rule ref(s) (`WL-RULE-<n>`), spec section reference(s), or whole-document reference(s), optionally `coverage: full\|partial\|none` (with `fullCoverageWith` for partial) — or `NO-SPEC` | **plans**, mandatory |
 | `defers` | list of `{spec, to}`: a section this plan hands off (`spec`, with `#sec-N`) and the document that owns it (`to`, no fragment) — reported `deferred` with its owner by `--needs-planning` until some plan covers it (026 §5.3) | **plans** |
-| `requires` / `isRequiredBy` | reference list | all |
-| `blocks` / `blockedBy` | plan references — orders whole-plan execution; both ends must be plans in the same project | **plans** |
+| `requires` | reference list (`isRequiredBy` is refused) | all |
+| `blockedBy` | plan references — the named plans run first; both ends must be plans in the same project (`blocks` is refused) | **plans** |
 | `wasDerivedFrom` | scalar reference | specs |
 | `amends`, `amendedBy`, `replaces`, `isReplacedBy` | refused: amendment and supersession are rule edges (`lode rule link --amends`, `lode rule supersede`) | none |
 

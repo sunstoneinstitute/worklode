@@ -29,8 +29,8 @@ var blockerRelation = `
 	UNION
 	SELECT dep.id AS blocked, b.id, b.title, b.state, b.project_id
 	  FROM tasks dep
-	  JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
-	  JOIN tasks b ON b.plan_doc = de.from_doc
+	  JOIN doc_edges de ON de.type = 'blockedBy' AND de.from_doc = dep.plan_doc
+	  JOIN tasks b ON b.plan_doc = de.to_doc
 	 WHERE dep.deleted_at IS NULL
 	   AND b.deleted_at IS NULL
 	   AND NOT ` + taskClosed("b")

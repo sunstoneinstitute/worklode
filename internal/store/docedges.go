@@ -58,11 +58,6 @@ func ReplaceDocEdges(tx *sql.Tx, now time.Time, id, eventID int64) error {
 // entry, its fullCoverageWith closure (026 §2.1, §5); owner carries a defers
 // entry's named owner, verbatim, the same way (026 §5.3). Every other
 // relation leaves all three zero.
-//
-// inverse marks the one spelling that writes a row with its ends the other way
-// round: `blockedBy` is `blocks` authored from the blocked plan (025 §5). typ
-// is already the stored type by then, so everything downstream sees a `blocks`
-// edge and only the row's two ends differ.
 type docEdgeRef struct {
 	fromAnchor    string
 	typ           string
@@ -70,19 +65,16 @@ type docEdgeRef struct {
 	coverage      string
 	completedWith []string
 	owner         string
-	inverse       bool
 }
 
 // docEdgeRow is one edge after resolution — exactly the tuple
 // doc_edges_unique keys, so equality here is the collision the index would
 // report. A covers edge sets toRule, every other edge toDoc; both are 0 and
-// toExternal non-empty for an unresolved reference.
-// fromDoc is the writing document for every relation but an inverse-authored
-// `blocks`, which is why it is a field rather than assumed.
+// toExternal non-empty for an unresolved reference. The from end is always
+// the writing document, so it is not a field.
 // The coverage level is not part of this tuple — doc_edges_unique does not
 // cover it — so rebuildEdges tracks it alongside the row in its dedupe map.
 type docEdgeRow struct {
-	fromDoc    int64
 	fromAnchor string
 	typ        string
 	toDoc      int64
@@ -164,13 +156,12 @@ func closureEqual(a, b []closureRef) bool {
 // rebuildEdges replaces the edges a document's frontmatter declares. It
 // deletes and re-inserts, so doc_edges_unique is satisfied across calls;
 // doc_coverage_completed_with cascades off doc_edges, so clearing the parent
-// clears it too.
+// clears it too. Every row it writes runs from this document, so it clears
+// exactly the rows whose from end is this document (WL-SPEC-77 §8).
 //
-// "Declares" rather than "outbound" because of `blockedBy:`, the one spelling
-// whose row runs the other way: it stores the `blocks` row the *other* plan
-// would have written (025 §5), so the row's from end is that plan while
-// declared_by stays this document. Everything below therefore scopes by
-// declared_by, and the two coincide for every other relation.
+// A header carrying an inverse spelling (`blocks`, `isRequiredBy`) is
+// refused: only the acting direction is stored, and the header naming it is
+// the one on the from end (`blockedBy`, `requires`).
 //
 // Within one frontmatter it dedupes on the *resolved* row rather than on the
 // reference: two spellings of one target ("004-x.md" and
@@ -212,12 +203,7 @@ func closureEqual(a, b []closureRef) bool {
 // two different owners is the contradiction covers refuses for two
 // disagreeing levels, refused here as ErrInvalidInput too.
 func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
-	// declared_by, not from_doc: a `blockedBy:` row's from end is the *other*
-	// plan (025 §5), and this document is still the one answerable for it. The
-	// two coincide for every other relation, so this only widens what a
-	// rewrite clears to exactly what the frontmatter put there — and, just as
-	// importantly, leaves the rows the other plan declared alone.
-	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE declared_by = $1`, docID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
 		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
 	}
 	// The artifact key is not an edge — it declares the catalog address(es)
@@ -244,6 +230,16 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 	// reads one coverage key and drops an entry naming no spec, so neither
 	// reaches frontmatterEdges.
 	if fm != nil {
+		if len(fm.Blocks) > 0 {
+			return fmt.Errorf(
+				"doc %d carries blocks, which is not stored: declare the ordering on the later plan as blockedBy (WL-SPEC-77 §8): %w",
+				docID, ErrInvalidInput)
+		}
+		if len(fm.IsRequiredBy) > 0 {
+			return fmt.Errorf(
+				"doc %d carries isRequiredBy, which is not stored: declare it on the other document as requires (WL-SPEC-77 §8): %w",
+				docID, ErrInvalidInput)
+		}
 		if fm.Covers != nil && fm.Implements != nil {
 			return fmt.Errorf(
 				"doc %d carries both covers and implements, which are one key under two names (026 §5.1): %w",
@@ -293,8 +289,8 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 				return err
 			}
 		}
-		if e.typ == "blocks" {
-			if err := checkPlanOrdering(tx, docID, kind, e.ref, toDoc, resolved, e.inverse); err != nil {
+		if e.typ == "blockedBy" {
+			if err := checkPlanOrdering(tx, docID, kind, e.ref, toDoc, resolved); err != nil {
 				return err
 			}
 		}
@@ -357,7 +353,7 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			}
 		}
 
-		row := docEdgeRow{fromDoc: docID, fromAnchor: e.fromAnchor, typ: e.typ}
+		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
 		var rows []docEdgeRow
 		switch {
 		case e.typ == "covers":
@@ -385,14 +381,6 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			// included, since nothing here can say what its anchor names.
 			row.toExternal = e.ref
 			rows = append(rows, row)
-		}
-		if e.inverse {
-			// `blockedBy: [Q]` is the row Q→P, the one `blocks: [P]` on Q
-			// would have written. checkPlanOrdering has already refused an
-			// unresolved or non-plan end, so toDoc is a plan and there is no
-			// to_external case to swap. Anchors stay empty: a blocks edge is
-			// document-level, and the CHECK says so.
-			rows[0].fromDoc, rows[0].toDoc = rows[0].toDoc, docID
 		}
 		for _, row := range rows {
 			if err := insertDocEdge(tx, docID, e, row, level, closure, seen); err != nil {
@@ -428,25 +416,16 @@ func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, level 
 	if e.typ == "covers" {
 		coverageCol = sql.NullString{String: level, Valid: true}
 	}
-	// ON CONFLICT is reachable for one case only: both plans spelling the
-	// same ordering, one with `blocks:` and one with `blockedBy:`. That is
-	// the same fact twice, not a contradiction, so it stays one row and the
-	// writer takes it over rather than the write failing on the unique
-	// index. Every other relation's from end is docID, and the DELETE above
-	// cleared those, so no cross-document collision exists to swallow.
 	var edgeID int64
 	if err := tx.QueryRow(
 		`INSERT INTO doc_edges
-		   (from_doc, from_anchor, type, to_doc, to_rule, to_anchor, to_external, coverage, declared_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		 ON CONFLICT (from_doc, coalesce(from_anchor,''), type, coalesce(to_doc, 0),
-		              coalesce(to_rule, 0), coalesce(to_anchor,''), coalesce(to_external,''))
-		 DO UPDATE SET declared_by = EXCLUDED.declared_by
+		   (from_doc, from_anchor, type, to_doc, to_rule, to_anchor, to_external, coverage)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING id`,
-		row.fromDoc, nullText(row.fromAnchor), row.typ, nullID(row.toDoc), nullID(row.toRule),
-		nullText(row.toAnchor), nullText(row.toExternal), coverageCol, docID,
+		docID, nullText(row.fromAnchor), row.typ, nullID(row.toDoc), nullID(row.toRule),
+		nullText(row.toAnchor), nullText(row.toExternal), coverageCol,
 	).Scan(&edgeID); err != nil {
-		return fmt.Errorf("insert %s edge from doc %d to %q: %w", e.typ, row.fromDoc, e.ref, err)
+		return fmt.Errorf("insert %s edge from doc %d to %q: %w", e.typ, docID, e.ref, err)
 	}
 
 	if level != "partial" && e.typ != "defers" {
@@ -660,8 +639,8 @@ func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string
 		r := rule.ID
 		var newID int64
 		err := tx.QueryRow(
-			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_rule, coverage, declared_by)
-			 SELECT from_doc, from_anchor, type, $2, coverage, from_doc FROM doc_edges WHERE id = $1
+			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_rule, coverage)
+			 SELECT from_doc, from_anchor, type, $2, coverage FROM doc_edges WHERE id = $1
 			 ON CONFLICT (from_doc, coalesce(from_anchor,''), type, coalesce(to_doc, 0),
 			              coalesce(to_rule, 0), coalesce(to_anchor,''), coalesce(to_external,''))
 			 DO NOTHING
@@ -690,18 +669,13 @@ func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string
 // deterministic order that walk fixes. rebuildEdges dedupes what comes back,
 // on the resolved row rather than on the reference text.
 //
-// The inverse spelling isRequiredBy is what ActingRels leaves out: one row read backward is the inverse (025 §14), so
-// writing them too would double every edge and let the two directions
-// disagree.
+// The inverse spellings (designdoc.InverseOf) are what StoredRels leaves out:
+// one row read backward is the inverse (025 §14), and rebuildEdges refuses a
+// header carrying one.
 //
-// `blockedBy` is the exception, and not a second edge: it writes the same
-// single `blocks` row with its two ends swapped, so `blockedBy: [plan-2]` on
-// plan-3 stores exactly what `blocks: [plan-3]` on plan-2 would have (025 §5,
-// WL-143). Only the row's ends move — one direction is still all that is
-// stored — and the spelling exists because a numbered plan series is authored
-// forward: part 3 knows it follows part 2, while part 2 may be accepted and
-// spent by then. That is why it is translated to typ "blocks" here rather than
-// carried as a type of its own.
+// Plan ordering is `blockedBy`, written by the later plan: a numbered plan
+// series is authored forward, so part 3 knows it follows part 2 while part 2
+// may be accepted and spent by then (WL-SPEC-77 §8).
 //
 // covers reads the retired `implements` spelling too (026 §5.1). Each entry's
 // level and, for a partial entry, its fullCoverageWith closure ride along with
@@ -726,17 +700,12 @@ func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string
 // something producing it; TestDocEdgeTypesWithoutWriter pins that gap so it is
 // not re-diagnosed as a defect (WL-132).
 //
-// blocks orders whole plan documents (025 §5, §9.3) — the ordering edge that
-// would otherwise need a container row to attach to. ns/ontology.ttl still
-// declares wl:blocks Task-to-Task; mirroring the document-level edge there is
-// WL-142.
+// blockedBy orders whole plan documents (025 §5, §9.3); it projects as
+// wl:blockedByPlan.
 func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 	var out []docEdgeRef
 	for _, r := range fm.RefsFor(designdoc.StoredRels...) {
 		e := docEdgeRef{fromAnchor: r.SrcAnchor, typ: r.Rel, ref: r.Ref}
-		if r.Rel == "blockedBy" {
-			e.typ, e.inverse = "blocks", true
-		}
 		if r.Coverage != nil {
 			e.coverage = strings.TrimSpace(r.Coverage.Coverage)
 			if e.coverage == "partial" {
@@ -995,7 +964,7 @@ var docEdgeInverse = map[string]string{
 	"implements":     "isImplementedBy",
 	"requires":       "isRequiredBy",
 	"wasDerivedFrom": "hadDerivation",
-	"blocks":         "blockedBy",
+	"blockedBy":      "blocks",
 	"defers":         "isDeferredBy",
 }
 
@@ -1007,10 +976,8 @@ var docEdgeInverse = map[string]string{
 // inbound edge never has ToExternal, since an unresolved reference names no
 // row here.
 //
-// Both lists are edges of this document, not necessarily declarations by it:
-// a plan's `blockedBy` writes the row from the *other* plan (025 §5), so it
-// shows up outbound there and inbound here. Direction is the relation, never
-// authorship.
+// Outbound edges are the ones this document's frontmatter declares; inbound
+// ones are declared by the far end.
 //
 // Each resolved far end is named as well as identified: one join carries the
 // other document's project, slug, kind and number back with its id, so a

@@ -41,8 +41,8 @@ func ProjectGraphTriples(g model.ProjectGraph) []Triple {
 		switch e.Type {
 		case "covers", "implements", "defers":
 			p = iri.Term(e.Type)
-		case "blocks":
-			p = iri.Term("blocksPlan")
+		case "blockedBy":
+			p = iri.Term("blockedByPlan")
 		case "requires":
 			p = DCTRequires
 		case "wasDerivedFrom":

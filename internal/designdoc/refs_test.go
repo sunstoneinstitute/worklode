@@ -2,6 +2,7 @@ package designdoc
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -260,33 +261,31 @@ func TestFrontmatterRefsNil(t *testing.T) {
 // off the acting row (025 §14) and must stay out of it.
 func TestActingRelsExcludesInverseSpellings(t *testing.T) {
 	for _, rel := range ActingRels {
+		if _, inverse := InverseOf[rel]; inverse {
+			t.Errorf("ActingRels contains inverse spelling %q", rel)
+		}
 		switch rel {
-		case "isRequiredBy", "blockedBy", "amends", "amendedBy", "replaces", "isReplacedBy":
+		case "amends", "amendedBy", "replaces", "isReplacedBy":
 			t.Errorf("ActingRels contains %q", rel)
 		}
 	}
-	for _, rel := range []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom"} {
+	for _, rel := range []string{"covers", "defers", "requires", "blockedBy", "wasDerivedFrom"} {
 		if !contains(ActingRels, rel) {
 			t.Errorf("ActingRels is missing %q", rel)
 		}
 	}
-}
-
-// StoredRels is what store and the importer read: ActingRels plus exactly one
-// inverse spelling. `blockedBy` earns its place because it writes the same
-// `blocks` row with its ends swapped (025 §5) rather than a second row; the
-// other three inverses restate a row and so write nothing.
-func TestStoredRelsIsActingRelsPlusBlockedBy(t *testing.T) {
-	for _, rel := range ActingRels {
-		if !contains(StoredRels, rel) {
-			t.Errorf("StoredRels is missing acting relation %q", rel)
+	for inverse, acting := range InverseOf {
+		if !contains(ActingRels, acting) {
+			t.Errorf("InverseOf[%q] = %q, which is not an acting relation", inverse, acting)
 		}
 	}
-	if !contains(StoredRels, "blockedBy") {
-		t.Error("StoredRels is missing blockedBy")
-	}
-	if len(StoredRels) != len(ActingRels)+1 {
-		t.Errorf("StoredRels = %v, want ActingRels plus blockedBy only", StoredRels)
+}
+
+// StoredRels is what store and the importer read: every stored row runs from
+// its declaring document, so it is exactly ActingRels (WL-SPEC-77 §8).
+func TestStoredRelsIsActingRels(t *testing.T) {
+	if !slices.Equal(StoredRels, ActingRels) {
+		t.Errorf("StoredRels = %v, want ActingRels %v", StoredRels, ActingRels)
 	}
 }
 
