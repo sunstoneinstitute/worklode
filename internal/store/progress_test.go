@@ -534,8 +534,8 @@ func TestProjectProgressQueryFootprint(t *testing.T) {
 	}
 	for i := 1; i < len(planIDs); i++ {
 		if _, err := s.db.ExecContext(ctx,
-			`INSERT INTO doc_edges (from_doc, type, to_doc, declared_by)
-			 VALUES ($1, 'blocks', $2, $2)`, planIDs[i-1], planIDs[i]); err != nil {
+			`INSERT INTO doc_edges (from_doc, type, to_doc)
+			 VALUES ($1, 'blockedBy', $2)`, planIDs[i], planIDs[i-1]); err != nil {
 			t.Fatalf("insert plan blocks edge: %v", err)
 		}
 	}

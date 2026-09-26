@@ -110,7 +110,7 @@ resolve):
 | `implements` | Component (code) → doc section — "this code realises this intent". Retired spelling: `covers` used to mean this too; `implements` is now the only term for it. |
 | `requires` | Dependency between docs. |
 | `wasDerivedFrom` | Provenance: this doc grew out of that one. |
-| `blocks` | Orders whole plan *documents* (never section-scoped) — distinct from the task-level `blocks` above. |
+| `blockedBy` | Orders whole plan *documents* (never section-scoped): stored from the later plan to the earlier one, read back from the earlier plan as `blocks`. |
 
 `covers` is a row in the same `doc_edges` table, but points at a rule
 (`to_rule`) rather than a document: see plan → rule in the rule-relationships

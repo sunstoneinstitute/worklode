@@ -198,3 +198,5 @@ configMapGenerator:
       - migrations/0092_covers_section_subtree.down.sql
       - migrations/0093_actor_github_username.up.sql
       - migrations/0093_actor_github_username.down.sql
+      - migrations/0094_edge_ownership.up.sql
+      - migrations/0094_edge_ownership.down.sql

@@ -39,21 +39,17 @@ type Ref struct {
 // relation rather than restate its inverse. A consumer recording one row per
 // fact keeps these and drops the rest — writing both directions would double
 // every edge and let the two disagree (025 §14).
-var ActingRels = []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom"}
+// Plan ordering is `blockedBy`, declared by the later plan (WL-SPEC-77 §8).
+var ActingRels = []string{"covers", "defers", "requires", "blockedBy", "wasDerivedFrom"}
 
 // StoredRels is what a consumer recording (or reporting) the rows a
-// frontmatter writes actually reads: ActingRels plus `blockedBy`, the one
-// inverse spelling that is not merely a restatement. It writes no row of its
-// own — it writes the *same* `blocks` row with its two ends swapped, so plan
-// ordering can be authored from either end (025 §5). Still one row, still one
-// direction stored; only who typed it moves.
-var StoredRels = append(slices.Clone(ActingRels), "blockedBy")
+// frontmatter writes reads. Every stored row runs from the document that
+// declares it, so it is exactly ActingRels.
+var StoredRels = slices.Clone(ActingRels)
 
 // InverseOf maps each inverse-only spelling — the ones StoredRels excludes
-// because they merely restate an acting relation the other end is expected
-// to declare (025 §14.2) — to the acting relation it restates. `blockedBy`
-// is not here: unlike these, it writes a real row of its own
-// (StoredRels), rather than depending on the other end declaring anything.
+// because they merely restate an acting relation the other end declares
+// (025 §14.2) — to the acting relation it restates.
 //
 // A consumer checking "did the other end actually declare this back" reads
 // this map once rather than special-casing keys (WL-375); an inverse-only
@@ -61,6 +57,7 @@ var StoredRels = append(slices.Clone(ActingRels), "blockedBy")
 // change, and that check inherits it.
 var InverseOf = map[string]string{
 	"isRequiredBy": "requires",
+	"blocks":       "blockedBy",
 }
 
 // refListRelOrder is the fixed order Refs walks the RefList fields, acting
