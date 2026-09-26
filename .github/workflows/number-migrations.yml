@@ -1,14 +1,18 @@
 name: number-migrations
 
 # PRs add migrations as deploy/base/migrations/NEW-<slug>.{up,down}.sql. This
-# gives them real numbers on the PR branch just before the merge queue, so
-# parallel PRs never pick the same number (WL-931). Numbering logic lives in
-# scripts/check-migrations.sh --number-new.
+# gives them real numbers on the PR branch on every push, above main and any
+# queued or auto-merge-armed PR (WL-931). A queued branch cannot be pushed to,
+# so numbering waits for nothing. Two PRs numbered before either was armed can
+# still collide: the merge queue's --no-new lint dequeues the loser, and on
+# `dequeued` this renumbers its migrations above main and re-arms auto-merge
+# (WL-932). A PR dequeued for any other reason is left out of the queue.
+# Numbering logic lives in scripts/check-migrations.sh --number-new.
 
 on:
   pull_request:
     branches: [main]
-    types: [auto_merge_enabled, enqueued, dequeued, synchronize]
+    types: [opened, reopened, synchronize, dequeued]
 
 permissions:
   contents: read
@@ -19,11 +23,8 @@ concurrency:
 
 jobs:
   number:
-    # Forks cannot receive the bot's push. A plain push only numbers once
-    # auto-merge is armed, so a PR is numbered as late as possible.
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.action != 'synchronize' || github.event.pull_request.auto_merge)
+    # Forks cannot receive the bot's push.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -33,14 +34,16 @@ jobs:
           persist-credentials: false
       - name: find NEW migrations
         id: new
+        env:
+          ACTION: ${{ github.event.action }}
         run: |
-          if compgen -G 'deploy/base/migrations/NEW*' >/dev/null; then
+          if [ "$ACTION" = dequeued ] || compgen -G 'deploy/base/migrations/NEW*' >/dev/null; then
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
             echo "No NEW migrations; nothing to number."
           fi
-      # Bot steps run only when there is something to number, so a missing
-      # App secret cannot fail unrelated PRs.
+      # Bot steps run only when there may be something to number, so a
+      # missing App secret cannot fail unrelated pushes.
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app
         if: steps.new.outputs.found == 'true'
@@ -49,12 +52,13 @@ jobs:
           private-key: ${{ secrets.MIGRATION_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
-          permission-pull-requests: read
+          permission-pull-requests: write
       - name: number and push
         if: steps.new.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           OWNER: ${{ github.repository_owner }}
           NAME: ${{ github.event.repository.name }}
@@ -65,10 +69,10 @@ jobs:
           git fetch --no-tags --depth=1 "$url" +refs/heads/main:refs/remotes/origin/main
 
           # shellcheck disable=SC2016 # $owner/$name are GraphQL variables
-          # Highest migration number any other queued or auto-merge-armed PR
-          # adds. Those are already numbered, since this workflow ran when
-          # they were armed.
-          queue_max=$(gh api graphql -F owner="$OWNER" -F name="$NAME" -f query='
+          # Migration numbers every other queued or auto-merge-armed PR adds.
+          # Those are already numbered, since this workflow ran on their last
+          # push.
+          queue_nums=$(gh api graphql -F owner="$OWNER" -F name="$NAME" -f query='
             query($owner: String!, $name: String!) {
               repository(owner: $owner, name: $name) {
                 mergeQueue(branch: "main") {
@@ -83,11 +87,26 @@ jobs:
             }' --jq "[(.data.repository.mergeQueue.entries.nodes // [])[].pullRequest,
                 (.data.repository.pullRequests.nodes[] | select(.autoMergeRequest))][]
               | select(.number != $PR) | .files.nodes[].path" |
-            sed -nE 's|^deploy/base/migrations/0*([0-9]+)_.*|\1|p' | sort -n | tail -1)
+            sed -nE 's|^deploy/base/migrations/0*([0-9]+)_.*|\1|p' | sort -nu)
+          queue_max=$(tail -1 <<<"$queue_nums")
 
-          ./scripts/check-migrations.sh --number-new --min $(( ${queue_max:-0} + 1 ))
+          args=(--number-new --min $(( ${queue_max:-0} + 1 )))
+          # Dequeued: also move this PR's numbered migrations that main has
+          # overtaken or that another queued PR already uses.
+          [ "$ACTION" != dequeued ] || args+=(--renumber-old --taken "$(paste -sd, - <<<"$queue_nums")")
+          ./scripts/check-migrations.sh "${args[@]}"
 
+          if git diff --cached --quiet; then
+            echo "Nothing to renumber."
+            exit 0
+          fi
           git config user.name "$BOT"
           git config user.email "$BOT@users.noreply.github.com"
           git commit -m "Number migrations"
           git push "$url" HEAD:"refs/heads/$HEAD_REF"
+
+          # The dequeue cleared auto-merge. Re-arm it only because this run
+          # fixed the numbering, so the PR goes back into the queue.
+          if [ "$ACTION" = dequeued ]; then
+            gh pr merge "$PR" --auto --squash --repo "$GITHUB_REPOSITORY"
+          fi
