@@ -84,30 +84,46 @@ func bumpRuleVersion(tx *sql.Tx, ruleID int64, heading, body string) (int, error
 }
 
 // docEdgeSnapshot reads document id's outgoing edges as snapshotted at
-// version, with the far end named the way ListDocEdges names it.
+// version.
 func (s *Store) docEdgeSnapshot(ctx context.Context, id int64, version int) ([]model.DocEdge, error) {
+	return s.storedEdgeSet(ctx, "doc_edge_versions", "e.doc_id = $1 AND e.version = $2", id, version)
+}
+
+// revisionEdges reads the edge set of document id's open candidate revision.
+func (s *Store) revisionEdges(ctx context.Context, id int64) ([]model.DocEdge, error) {
+	return s.storedEdgeSet(ctx, "doc_revision_edges", "e.doc_id = $1", id)
+}
+
+// storedEdgeSet reads an edge set kept outside doc_edges, whose closure is
+// completed_with JSON, with the far end named the way ListDocEdges names it.
+func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...any) ([]model.DocEdge, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, 0),
-		        coalesce(e.to_anchor,''), coalesce(e.to_external,''),
+		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
+		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
 		        coalesce(d.number,0), coalesce(d.status,''),
-		        coalesce((SELECT json_agg(coalesce(wd.slug, w->>'to_external') ORDER BY n)
+		        coalesce((SELECT json_agg(coalesce(wd.slug, c.w->>'to_external') ORDER BY c.n)
 		                    FROM jsonb_array_elements(e.completed_with) WITH ORDINALITY AS c(w, n)
-		                    LEFT JOIN docs wd ON wd.id = (w->>'to_doc')::bigint), '[]')::text,
+		                    LEFT JOIN docs wd ON wd.id = (c.w->>'to_doc')::bigint), '[]')::text,
 		        coalesce(rp.key || '-RULE-' || r.number, '')
-		   FROM doc_edge_versions e
-		   LEFT JOIN docs d ON d.id = e.to_doc
+		   FROM `+table+` e
 		   LEFT JOIN rules r ON r.id = e.to_rule
 		   LEFT JOIN projects rp ON rp.id = r.project_id
-		  WHERE e.doc_id = $1 AND e.version = $2
-		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, 0),
-		           coalesce(e.to_anchor,''), coalesce(e.to_external,''), r.number`, id, version)
+		   LEFT JOIN LATERAL (
+		            SELECT dr.doc_id, dr.anchor FROM doc_rules dr
+		             WHERE dr.rule_id = e.to_rule
+		             ORDER BY dr.doc_id, dr.position LIMIT 1
+		        ) ra ON true
+		   LEFT JOIN docs d ON d.id = coalesce(e.to_doc, ra.doc_id)
+		  WHERE `+where+`
+		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
+		           coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''), r.number`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("read edges of doc %d v%d: %w", id, version, err)
+		return nil, fmt.Errorf("read edges from %s: %w", table, err)
 	}
 	out, err := scanDocEdges(rows)
 	if err != nil {
-		return nil, fmt.Errorf("read edges of doc %d v%d: %w", id, version, err)
+		return nil, fmt.Errorf("read edges from %s: %w", table, err)
 	}
 	return out, nil
 }

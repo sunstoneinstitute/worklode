@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // TestDocVersionsPlanBodyEdit: editing a plan's body snapshots the version it
@@ -773,5 +774,132 @@ func TestUpdateDocBodyIfVersion(t *testing.T) {
 	// caller had before the option existed.
 	if _, err := updateDocBody(t, s, doc.ID, planMintBody); err != nil {
 		t.Fatalf("UpdateDocBody with no expected version: %v", err)
+	}
+}
+
+// revisionEdgeCount counts the rows of doc's candidate edge set.
+func revisionEdgeCount(t *testing.T, s *Store, doc int64) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM doc_revision_edges WHERE doc_id = $1`, doc).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// TestRevisionSeedsEdges: opening a candidate copies the live edge set.
+func TestRevisionSeedsEdges(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	live, _, err := s.ListDocEdges(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rev, err := s.GetDocRevision(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatalf("GetDocRevision: %v", err)
+	}
+	if len(live) == 0 || !slices.EqualFunc(rev.Edges, live, func(a, b model.DocEdge) bool {
+		return a.Type == b.Type && a.ToDoc == b.ToDoc && a.ToAnchor == b.ToAnchor && a.ToExternal == b.ToExternal
+	}) {
+		t.Errorf("revision edges = %+v, want the live set %+v", rev.Edges, live)
+	}
+}
+
+// TestRevisionEdgeWriteRefusesBadRef: the candidate's edges go through the
+// same guards as the live ones, so a spec candidate naming blockedBy is
+// refused.
+func TestRevisionEdgeWriteRefusesBadRef(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "a-plan", Body: planMintBody, CreatedBy: "stig"})
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	body := strings.Replace(revisedSpecBody, "status: accepted\n", "status: accepted\nblockedBy: a-plan\n", 1)
+	if err := updateRevision(t, s, doc.ID, body); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("UpdateRevision with blockedBy on a spec = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestAcceptRevisionSwapsEdges: landing a candidate that adds a requires
+// edge puts it in doc_edges, and doc_edge_versions keeps the old set.
+func TestAcceptRevisionSwapsEdges(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	other := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 26, Slug: "026-other", Body: specBody, CreatedBy: "stig",
+	})
+	doc := mustAcceptedSpec(t, s, "025-x")
+	before, _, err := s.ListDocEdges(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	body := strings.Replace(revisedSpecBody,
+		"requires: 004-execution-backbone.md#sec-6\n",
+		"requires:\n  - 004-execution-backbone.md#sec-6\n  - 026-other\n", 1)
+	if err := updateRevision(t, s, doc.ID, body); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if live := docEdges(t, s, doc.ID); len(live) != len(before) {
+		t.Fatalf("live edges changed before accept: %+v, want %+v", live, before)
+	}
+	if _, err := acceptRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+	after, _, err := s.ListDocEdges(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(after, func(e model.DocEdge) bool { return e.Type == "requires" && e.ToDoc == other.ID }) {
+		t.Errorf("edges after accept = %+v, want requires 026-other", after)
+	}
+	v1, err := s.GetDocVersion(t.Context(), doc.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v1.Edges) != len(before) {
+		t.Errorf("version 1 edges = %+v, want the old set %+v", v1.Edges, before)
+	}
+	if n := revisionEdgeCount(t, s, doc.ID); n != 0 {
+		t.Errorf("candidate edges after accept = %d, want 0", n)
+	}
+}
+
+// TestDiscardDeletesCandidateEdges: discarding the candidate drops its edges.
+func TestDiscardDeletesCandidateEdges(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if n := revisionEdgeCount(t, s, doc.ID); n == 0 {
+		t.Fatal("fixture: candidate has no edges")
+	}
+	if _, err := discardRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("DiscardRevision: %v", err)
+	}
+	if n := revisionEdgeCount(t, s, doc.ID); n != 0 {
+		t.Errorf("candidate edges after discard = %d, want 0", n)
+	}
+}
+
+// TestRevisionEdgeTypeCheckMatchesDeclared holds doc_revision_edges' type
+// CHECK to the declared doc_edges set in ns/ (WL-SPEC-77 §8.1).
+func TestRevisionEdgeTypeCheckMatchesDeclared(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	if got, want := checkedValues(t, s, "doc_revision_edges", "type"), ns.DeclaredEdges("doc_edges"); !slices.Equal(got, want) {
+		t.Errorf("doc_revision_edges type CHECK = %v, want ns.DeclaredEdges(doc_edges) %v", got, want)
 	}
 }
