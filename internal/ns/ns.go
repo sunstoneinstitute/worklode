@@ -5,7 +5,10 @@
 
 package ns
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Set turns a generated enum into the lookup map a validation gate wants.
 func Set(values []string) map[string]bool {
@@ -30,4 +33,25 @@ func OrList(values []string) string {
 	default:
 		return strings.Join(values[:len(values)-1], ", ") + ", or " + values[len(values)-1]
 	}
+}
+
+// EdgeTerm is one stored edge type and the terms it projects as (WL-SPEC-77 §8.1).
+type EdgeTerm struct {
+	Table     string // doc_edges, rule_edges or task_edges
+	Type      string // the stored type value
+	Property  string // full IRI of the declared property
+	Inverse   string // full IRI of the inferred inverse, "" when none
+	Symmetric bool
+}
+
+// DeclaredEdges returns the stored types of one edge table, sorted.
+func DeclaredEdges(table string) []string {
+	var out []string
+	for _, e := range EdgeTerms {
+		if e.Table == table {
+			out = append(out, e.Type)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
