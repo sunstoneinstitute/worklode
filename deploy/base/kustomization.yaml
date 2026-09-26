@@ -204,3 +204,5 @@ configMapGenerator:
       - migrations/0095_version_snapshots.down.sql
       - migrations/0096_doc_revision_edges.up.sql
       - migrations/0096_doc_revision_edges.down.sql
+      - migrations/NEW-strip_headers.up.sql
+      - migrations/NEW-strip_headers.down.sql

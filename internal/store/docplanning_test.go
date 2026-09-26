@@ -416,7 +416,7 @@ func TestDocUpdateBodyMintedPlanRequiresReadableTasks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetDoc: %v", err)
 			}
-			if got.Body != planMintBody {
+			if got.Body != noHeader(t, planMintBody) {
 				t.Errorf("body moved to %q, want the refused edit not to land", got.Body)
 			}
 		})

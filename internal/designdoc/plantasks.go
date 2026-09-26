@@ -350,6 +350,13 @@ func IsCoverageOnlyPlan(d *Document) bool {
 	if len(d.Frontmatter.CoverageEntries()) == 0 && len(d.Frontmatter.Defers) == 0 {
 		return false
 	}
+	return DeclaresNoTasks(d)
+}
+
+// DeclaresNoTasks is IsCoverageOnlyPlan's body half: no "## Tasks" heading and
+// no heading reaching for the task format. The store asks it of a stored
+// body, whose coverage is in doc_edges rather than a header (WL-SPEC-77 §7).
+func DeclaresNoTasks(d *Document) bool {
 	for _, sec := range d.Sections {
 		title := strings.TrimSpace(sec.Title)
 		if sec.Level == 2 && title == "Tasks" {

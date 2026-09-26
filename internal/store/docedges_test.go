@@ -146,10 +146,10 @@ func TestResolveDocRefFallsBackToTombstones(t *testing.T) {
 	}
 }
 
-// TestReplaceDocEdges is the corpus import's second pass: a frontmatter
-// reference that resolved to nothing when the document was created becomes a
-// real edge once its target exists. Nothing authored moves — and unlike
-// UpdateDocBody it runs at accepted, because no anchor is being restated.
+// TestReplaceDocEdges is the corpus import's edge write: the edges it is
+// given resolve against the documents that exist now, so a reference that
+// named nothing at creation becomes a real edge. Nothing authored moves, and
+// unlike UpdateDocBody it runs at accepted, because no anchor is restated.
 func TestReplaceDocEdges(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -169,7 +169,11 @@ func TestReplaceDocEdges(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-documents-in-the-backbone",
 		Body: specBody, CreatedBy: "stig",
 	})
-	if err := replaceDocEdges(t, s, plan.ID); err != nil {
+	if err := replaceDocEdges(t, s, plan.ID,
+		model.DocEdgeInput{Type: "covers", To: "025-documents-in-the-backbone.md#sec-2"},
+		model.DocEdgeInput{Type: "covers", To: "999-nowhere.md#sec-1"},
+		model.DocEdgeInput{Type: "wasDerivedFrom", To: "025-documents-in-the-backbone.md"},
+	); err != nil {
 		t.Fatalf("ReplaceDocEdges: %v", err)
 	}
 	want := []model.DocEdge{
@@ -186,7 +190,7 @@ func TestReplaceDocEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDoc: %v", err)
 	}
-	if after.Version != 1 || after.Status != "accepted" || after.Body != planBody {
+	if after.Version != 1 || after.Status != "accepted" || after.Body != noHeader(t, planBody) {
 		t.Errorf("doc = {version:%d status:%s}, want the source untouched at version 1",
 			after.Version, after.Status)
 	}
@@ -198,7 +202,8 @@ func TestReplaceDocEdges(t *testing.T) {
 		Body: specBody, CreatedBy: "stig", Status: "accepted",
 	})
 	sectionsBefore := docSections(t, s, acceptedSpec.ID)
-	if err := replaceDocEdges(t, s, acceptedSpec.ID); err != nil {
+	if err := replaceDocEdges(t, s, acceptedSpec.ID,
+		model.DocEdgeInput{Type: "requires", To: "025-documents-in-the-backbone#sec-1"}); err != nil {
 		t.Fatalf("ReplaceDocEdges on an accepted spec: %v", err)
 	}
 	if got := docSections(t, s, acceptedSpec.ID); !slices.Equal(got, sectionsBefore) {
@@ -409,9 +414,9 @@ func TestDocCoverageBareStringIsFull(t *testing.T) {
 	}
 }
 
-// TestDocCoverageRewriteReplacesCompletedWith: editing the body rebuilds
-// doc_coverage_completed_with from the new source with no orphaned or
-// duplicated rows, the same as it rebuilds doc_edges.
+// TestDocCoverageRewriteReplacesCompletedWith: rewriting the edge set
+// rebuilds doc_coverage_completed_with with no orphaned or duplicated rows,
+// the same as it rebuilds doc_edges.
 func TestDocCoverageRewriteReplacesCompletedWith(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -448,20 +453,11 @@ covers:
 	}
 	firstEdgeID := firstEdges[0].id
 
-	secondBody := `---
-status: draft
-covers:
-  - spec: 025-documents-in-the-backbone.md#sec-2.1
-    coverage: partial
-    fullCoverageWith:
-      - third-plan.md
-      - other-plan.md
----
-
-# Main plan
-`
-	if _, err := updateDocBody(t, s, plan.ID, secondBody); err != nil {
-		t.Fatalf("UpdateDocBody: %v", err)
+	if err := replaceDocEdges(t, s, plan.ID, model.DocEdgeInput{
+		Type: "covers", To: "025-documents-in-the-backbone.md#sec-2.1", Coverage: "partial",
+		CompletedWith: []string{"third-plan.md", "other-plan.md"},
+	}); err != nil {
+		t.Fatalf("ReplaceDocEdges: %v", err)
 	}
 
 	// The old edge row (and its FK-cascaded completedWith rows) is gone.
@@ -1484,7 +1480,7 @@ func TestBlockedByStoredFromLaterPlan(t *testing.T) {
 }
 
 // TestRewriteClearsOnlyOwnEdges: rewriting plan A leaves plan B's row to A,
-// and B dropping the key clears it.
+// and B unlinking it clears it.
 func TestRewriteClearsOnlyOwnEdges(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1505,8 +1501,8 @@ func TestRewriteClearsOnlyOwnEdges(t *testing.T) {
 		t.Fatalf("edges of plan-b after plan-a's rewrite = %+v, want %+v", got, want)
 	}
 
-	if _, err := updateDocBody(t, s, b.ID, "---\nstatus: draft\n---\n\n# Plan\n"); err != nil {
-		t.Fatalf("rewrite plan-b without blockedBy: %v", err)
+	if err := unlinkDocEdge(t, s, b.ID, model.DocEdgeInput{Type: "blockedBy", To: "plan-a"}); err != nil {
+		t.Fatalf("unlink plan-b's blockedBy: %v", err)
 	}
 	if got := docEdges(t, s, b.ID); len(got) != 0 {
 		t.Fatalf("edges of plan-b after dropping blockedBy = %+v, want none", got)
@@ -1638,7 +1634,7 @@ func TestDocEdgesRejectBlocksCycleBetweenPlans(t *testing.T) {
 	})
 
 	// Two hops back to plan-a: the whole cycle is named, in order.
-	_, err := updateDocBody(t, s, a.ID, blockedByPlanBody("plan-c"))
+	err := linkDocEdge(t, s, a.ID, model.DocEdgeInput{Type: "blockedBy", To: "plan-c"})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("plan-a blockedBy plan-c = %v, want ErrInvalidInput", err)
 	}
@@ -1651,7 +1647,7 @@ func TestDocEdgesRejectBlocksCycleBetweenPlans(t *testing.T) {
 	}
 
 	// One hop back: the two-plan cycle the self-block guard never saw.
-	_, err = updateDocBody(t, s, a.ID, blockedByPlanBody("plan-b"))
+	err = linkDocEdge(t, s, a.ID, model.DocEdgeInput{Type: "blockedBy", To: "plan-b"})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("plan-a blockedBy plan-b = %v, want ErrInvalidInput", err)
 	}

@@ -23,7 +23,7 @@ func TestDocVersions(t *testing.T) {
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
 	})
 	edited := strings.Replace(docPlanBody, "Do the thing.", "Do it now.", 1)
-	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited}); rr.Code != http.StatusOK {
+	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: noHeader(t, edited)}); rr.Code != http.StatusOK {
 		t.Fatalf("update body status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
@@ -43,7 +43,7 @@ func TestDocVersions(t *testing.T) {
 	}
 	var v1 model.DocVersion
 	decodeInto(t, rr, &v1)
-	if v1.Body != docPlanBody {
+	if v1.Body != noHeader(t, docPlanBody) {
 		t.Errorf("version 1 body = %q, want the pre-edit body", v1.Body)
 	}
 	if len(v1.Edges) == 0 {
@@ -56,7 +56,7 @@ func TestDocVersions(t *testing.T) {
 	}
 	var v2 model.DocVersion
 	decodeInto(t, rr, &v2)
-	if v2.Body != edited {
+	if v2.Body != noHeader(t, edited) {
 		t.Errorf("version 2 body = %q, want the edited body", v2.Body)
 	}
 
