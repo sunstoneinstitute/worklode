@@ -2,7 +2,6 @@ package designdoc
 
 import (
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -14,8 +13,6 @@ func TestMechanicalFindings(t *testing.T) {
 	}{
 		{"reworded prose, no assertion changed",
 			specWith("plain text"), specWith("plain text, clarified"), nil},
-		{"requires gains an entry",
-			specRequiring(), specRequiring("029-research-work.md"), []string{"new-dependency"}},
 		{"wl: token added",
 			specWith("nothing"), specWith("emits `wl:DocumentAccepted`"), []string{"ns-term", "surface-token"}},
 		{"code span changed",
@@ -86,20 +83,6 @@ func specWithFence(line string) string {
 // specSection returns a single-section document with a custom heading.
 func specSection(heading, text string) string {
 	return "# Spec\n\n## " + heading + " {#sec-1}\n\n" + text + "\n"
-}
-
-// specRequiring returns a document whose frontmatter `requires` list holds
-// deps (possibly none) and whose body never changes.
-func specRequiring(deps ...string) string {
-	var front strings.Builder
-	if len(deps) > 0 {
-		front.WriteString("---\nrequires:\n")
-		for _, d := range deps {
-			front.WriteString("  - " + d + "\n")
-		}
-		front.WriteString("---\n")
-	}
-	return front.String() + "# Spec\n\n## Section {#sec-1}\n\nbody text\n"
 }
 
 // twoSections returns a document with two sections: §sec-2's body is

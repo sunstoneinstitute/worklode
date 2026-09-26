@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
@@ -800,28 +801,93 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 		Doc: s.withProjectKey(r.Context(), *doc), Patch: *patch})
 }
 
-// replaceDocEdges handles PUT /api/v1/docs/{id}/edges. It re-resolves the
-// document's frontmatter references against the documents that exist now,
-// turning to_external placeholders into real to_doc edges. CreateDoc re-points
-// references as their targets arrive, so this is a repair path — an import that
-// died between passes, say — not the mechanism import depends on.
-//
-// It carries no request body: the document's own stored body is the source,
-// and nothing else about the document changes. The response is the same
-// DocDetail GET serves, so the caller reads back the edge set it asked for.
+// replaceDocEdges handles PUT /api/v1/docs/{id}/edges: the importer's
+// rewrite of a document's whole live edge set (ReplaceDocEdgesInput). The
+// response is the same DocDetail GET serves, so the caller reads back the
+// edge set it wrote.
 func (s *server) replaceDocEdges(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
 		return
 	}
+	var req model.ReplaceDocEdgesInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
 	now := s.st.Now()
-	err := s.recordDocEvent(w, r, "edges", "doc.edges_rebuilt", id, nil,
+	err := s.recordDocEvent(w, r, "edges", "doc.edges_replaced", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.ReplaceDocEdges(tx, now, id, eventID)
+			return store.ReplaceDocEdges(tx, now, id, req.Edges, eventID)
 		})
 	if err != nil {
 		return
 	}
+	s.writeDocDetail(w, r, id)
+}
+
+// linkDocEdge handles POST /api/v1/docs/{id}/edges and unlinkDocEdge DELETE:
+// add or remove one edge (WL-SPEC-77 §3). The store routes the write: a
+// plan's next version, a draft's live set, or an accepted document's
+// candidate revision.
+func (s *server) linkDocEdge(w http.ResponseWriter, r *http.Request) {
+	s.changeDocEdge(w, r, "doc.edge_linked", store.LinkDocEdge)
+}
+
+func (s *server) unlinkDocEdge(w http.ResponseWriter, r *http.Request) {
+	s.changeDocEdge(w, r, "doc.edge_unlinked", store.UnlinkDocEdge)
+}
+
+func (s *server) changeDocEdge(w http.ResponseWriter, r *http.Request, eventType string,
+	write func(*sql.Tx, time.Time, int64, model.DocEdgeInput, string, int64) error) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.DocEdgeInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	actorID := actorIDFrom(r)
+	now := s.st.Now()
+	err := s.recordDocEvent(w, r, "edges", eventType, id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			return write(tx, now, id, req, actorID, eventID)
+		})
+	if err != nil {
+		return
+	}
+	s.writeDocDetail(w, r, id)
+}
+
+// setDocColumns handles PATCH /api/v1/docs/{id}: sets the title and issued
+// date a body no longer states (WL-SPEC-77 §7).
+func (s *server) setDocColumns(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.DocColumnsInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	now := s.st.Now()
+	err := s.recordDocEvent(w, r, "update", "doc.columns_set", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.SetDocColumns(tx, now, id, req, eventID)
+			return err
+		})
+	if err != nil {
+		return
+	}
+	s.writeDocDetail(w, r, id)
+}
+
+// writeDocDetail answers with GET /api/v1/docs/{id}'s projection, read after
+// the transaction that wrote it.
+func (s *server) writeDocDetail(w http.ResponseWriter, r *http.Request, id int64) {
 	detail, err := s.docDetail(r, id)
 	if err != nil {
 		s.mapStoreErr(w, err)

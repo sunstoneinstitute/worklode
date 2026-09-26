@@ -287,8 +287,8 @@ func TestDocImport(t *testing.T) {
 		if len(d.Edges) != 0 || len(d.EdgesIn) != 0 {
 			t.Errorf("edges = %+v / %+v, want none: task: is not a relation", d.Edges, d.EdgesIn)
 		}
-		if !strings.Contains(d.Body, "task: WL-99") {
-			t.Errorf("body = %q, want the source stored verbatim", d.Body)
+		if strings.Contains(d.Body, "task: WL-99") {
+			t.Errorf("body = %q, want it stored without its header (WL-SPEC-77 §7)", d.Body)
 		}
 		// The task set is asserted empty above; nothing else on the document
 		// can carry a task id.

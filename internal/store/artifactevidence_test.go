@@ -155,29 +155,20 @@ func TestDocFrontmatterDeclaresArtifact(t *testing.T) {
 		t.Fatalf("after create: open declarations = %+v, want one doc %s", got, docID)
 	}
 
-	// A body edit with a list declares the new address and re-declares the
-	// old one as a no-op; an edit dropping the key entirely undeclares
-	// nothing.
-	second := "gs://sunstone-prod/cow/exports"
-	if _, err := updateDocBody(t, s, doc.ID,
-		"---\nstatus: draft\nartifact:\n- "+testArtifact+"\n- "+second+"\n---\n# Spec 9 — Artifact spec\n"); err != nil {
+	// A body edit carries no header and undeclares nothing (WL-SPEC-77 §7).
+	if _, err := updateDocBody(t, s, doc.ID, "# Spec 9 — Artifact spec\n\nMore.\n"); err != nil {
 		t.Fatalf("update body: %v", err)
 	}
-	if got := openDeclarations(t, s, second); len(got) != 1 || got[0].ID != docID {
-		t.Fatalf("after edit: declarations for %s = %+v, want the doc", second, got)
-	}
-	if _, err := updateDocBody(t, s, doc.ID,
-		"---\nstatus: draft\n---\n# Spec 9 — Artifact spec\n"); err != nil {
-		t.Fatalf("update body dropping key: %v", err)
-	}
 	if got := openDeclarations(t, s, testArtifact); len(got) != 1 {
-		t.Fatalf("dropping the key undeclared: %+v", got)
+		t.Fatalf("a body edit undeclared: %+v", got)
 	}
 
 	// The cap holds on the doc path too.
 	long := "gs://" + strings.Repeat("x", 2000)
-	_, err := updateDocBody(t, s, doc.ID,
-		"---\nstatus: draft\nartifact: "+long+"\n---\n# Spec 9 — Artifact spec\n")
+	_, err := createDoc(t, s, DocInput{
+		Project: "horndb", Kind: "spec", Number: 10, Slug: "long-artifact-spec",
+		Body: "---\nstatus: draft\nartifact: " + long + "\n---\n# Spec 10\n",
+	})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("over-long artifact: err = %v, want ErrInvalidInput", err)
 	}

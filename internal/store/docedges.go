@@ -17,39 +17,177 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
-// ReplaceDocEdges re-resolves a document's outbound edges from its stored
-// body and appends a state_log row attributed to eventID: the frontmatter
-// references that resolved to nothing when the document was created become
-// real edges once the rest of the corpus is present.
-//
-// CreateDoc now re-points existing unresolved references as their targets
-// arrive (repointExternalEdges), so corpus import no longer depends on this
-// pass; it is a repair path for edges that went stale some other way.
-//
-// Nothing authored changes — not the body, not the sections, not the status,
-// and the version does not move: the same source is being read again against a
-// larger corpus. That is why, unlike UpdateDocBody, it works at any status
-// including accepted and superseded; there is no published anchor to protect
-// because no anchor is being restated.
-//
-// The clock stamps only an artifact declaration the re-read frontmatter
-// carries (rebuildEdges).
-func ReplaceDocEdges(tx *sql.Tx, now time.Time, id, eventID int64) error {
+// ReplaceDocEdges rewrites document id's whole live edge set from edges,
+// through the same resolution and guards a header's edges went through, and
+// appends a state_log row attributed to eventID. It is the importer's write
+// (PUT /api/v1/docs/{id}/edges): it works at any status and moves no version,
+// since it restates a corpus rather than editing one document.
+func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id int64, edges []model.DocEdgeInput, eventID int64) error {
 	d, err := lockDoc(tx, id)
 	if err != nil {
 		return err
 	}
-	parsed, err := parseDocBody(d.kind, d.body)
+	refs := make([]docEdgeRef, 0, len(edges))
+	for _, in := range edges {
+		e, err := edgeRefFromInput(in)
+		if err != nil {
+			return err
+		}
+		refs = append(refs, e)
+	}
+	if err := replaceEdgeRefs(tx, id, d.kind, d.project, refs, false); err != nil {
+		return err
+	}
+	return logDocChange(tx, id, eventID, map[string]string{"field": "edges"})
+}
+
+// LinkDocEdge adds one edge to document docID (WL-SPEC-77 §3, §8). Where it
+// lands depends on the document: a plan moves to its next version first
+// (bumpDocVersion) and writes doc_edges; a draft spec or ADR writes doc_edges
+// in place; an accepted one writes its candidate revision's edge set, opening
+// a candidate authored by actor when none is open. A superseded, withdrawn or
+// spent document is ErrInvalidInput, and an edge it already holds is
+// ErrEdgeExists.
+func LinkDocEdge(tx *sql.Tx, now time.Time, docID int64, in model.DocEdgeInput, actor string, eventID int64) error {
+	return changeDocEdge(tx, now, docID, in, actor, eventID, true)
+}
+
+// UnlinkDocEdge removes one edge from document docID, routed exactly as
+// LinkDocEdge routes. An edge the target set does not hold is ErrNotFound.
+func UnlinkDocEdge(tx *sql.Tx, now time.Time, docID int64, in model.DocEdgeInput, actor string, eventID int64) error {
+	return changeDocEdge(tx, now, docID, in, actor, eventID, false)
+}
+
+func changeDocEdge(tx *sql.Tx, now time.Time, docID int64, in model.DocEdgeInput, actor string, eventID int64, link bool) error {
+	e, err := edgeRefFromInput(in)
 	if err != nil {
 		return err
 	}
-	if err := rebuildEdges(tx, now, id, d.kind, d.project, parsed.doc.Frontmatter); err != nil {
+	d, err := lockDoc(tx, docID)
+	if err != nil {
 		return err
 	}
-	return logDocChange(tx, id, eventID,
-		map[string]string{"field": "edges"})
+	candidate := false
+	switch {
+	case d.status == "superseded" || d.status == "withdrawn" || d.status == "spent":
+		return fmt.Errorf("doc %d is %s: its edges no longer change: %w", docID, d.status, ErrInvalidInput)
+	case d.kind == "plan":
+		if _, err := bumpDocVersion(tx, docID); err != nil {
+			return err
+		}
+	case d.status == "accepted":
+		candidate = true
+		var open bool
+		if err := tx.QueryRow(`SELECT EXISTS (SELECT 1 FROM doc_revisions WHERE doc_id = $1)`, docID).Scan(&open); err != nil {
+			return fmt.Errorf("read revision of doc %d: %w", docID, err)
+		}
+		if !open {
+			if err := openRevision(tx, now, docID, d.body, actor); err != nil {
+				return err
+			}
+		}
+	}
+	if link {
+		err = insertEdgeRefs(tx, docID, d.kind, d.project, []docEdgeRef{e}, candidate)
+		if isUniqueViolationOn(err, "doc_edges_unique") || isUniqueViolationOn(err, "doc_revision_edges_unique") {
+			return fmt.Errorf("doc %d already %s %q: %w", docID, e.typ, e.ref, ErrEdgeExists)
+		}
+	} else {
+		err = deleteEdgeRef(tx, docID, d.kind, d.project, e, candidate)
+	}
+	if err != nil {
+		return err
+	}
+	return logDocChange(tx, docID, eventID, map[string]string{"field": "edges"})
+}
+
+// edgeRefFromInput checks one caller-named edge and turns it into the
+// docEdgeRef a header entry would have produced. The type must be a declared
+// doc_edges type with a writer; an inverse spelling is refused naming the
+// type to declare instead (WL-SPEC-77 §8.1). A covers edge with no level is
+// full, as the header's bare form was.
+func edgeRefFromInput(in model.DocEdgeInput) (docEdgeRef, error) {
+	typ := strings.TrimSpace(in.Type)
+	if acting, ok := designdoc.InverseOf[typ]; ok {
+		return docEdgeRef{}, fmt.Errorf(
+			"edge type %s is an inverse and is not stored: declare it on the other document as %s (WL-SPEC-77 §8.1): %w",
+			typ, acting, ErrInvalidInput)
+	}
+	if !slices.Contains(ns.DeclaredEdges("doc_edges"), typ) {
+		return docEdgeRef{}, fmt.Errorf("edge type %q is not a document edge type; use %s (WL-SPEC-77 §8.1): %w",
+			typ, ns.OrList(designdoc.StoredRels), ErrInvalidInput)
+	}
+	if !slices.Contains(designdoc.StoredRels, typ) {
+		return docEdgeRef{}, fmt.Errorf("edge type %s has no writer (026 §6.2); use %s: %w",
+			typ, ns.OrList(designdoc.StoredRels), ErrInvalidInput)
+	}
+	e := docEdgeRef{
+		fromAnchor: strings.TrimSpace(in.FromAnchor),
+		typ:        typ,
+		ref:        strings.TrimSpace(in.To),
+		coverage:   strings.TrimSpace(in.Coverage),
+		owner:      strings.TrimSpace(in.Owner),
+	}
+	if e.ref == "" {
+		return docEdgeRef{}, fmt.Errorf("a %s edge names its target: %w", typ, ErrInvalidInput)
+	}
+	if typ != "covers" && (e.coverage != "" || len(in.CompletedWith) > 0) {
+		return docEdgeRef{}, fmt.Errorf("coverage and completed_with belong to a covers edge, not %s (026 §5.1): %w",
+			typ, ErrInvalidInput)
+	}
+	if typ != "defers" && e.owner != "" {
+		return docEdgeRef{}, fmt.Errorf("owner belongs to a defers edge, not %s (026 §5.3): %w", typ, ErrInvalidInput)
+	}
+	if typ == "covers" && e.coverage == "" {
+		e.coverage = "full"
+	}
+	if len(in.CompletedWith) > 0 && e.coverage != "partial" {
+		return docEdgeRef{}, fmt.Errorf("completed_with needs coverage partial, not %s (026 §5.1): %w",
+			e.coverage, ErrInvalidInput)
+	}
+	e.completedWith = in.CompletedWith
+	return e, nil
+}
+
+// deleteEdgeRef removes the rows e resolves to from docID's live or candidate
+// edge set. ErrNotFound when none of them is there.
+func deleteEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef, candidate bool) error {
+	edges := []docEdgeRef{e}
+	resolvedCovers, deepest, err := resolveCoversRefs(tx, kind, project, edges)
+	if err != nil {
+		return err
+	}
+	rows, _, _, err := resolveEdgeRef(tx, docID, kind, project, e, resolvedCovers, deepest)
+	if err != nil {
+		return err
+	}
+	table, from := "doc_edges", "from_doc"
+	if candidate {
+		table, from = "doc_revision_edges", "doc_id"
+	}
+	var n int64
+	for _, row := range rows {
+		res, err := tx.Exec(
+			`DELETE FROM `+table+` WHERE `+from+` = $1 AND coalesce(from_anchor,'') = $2 AND type = $3
+			    AND coalesce(to_doc,0) = $4 AND coalesce(to_rule,0) = $5
+			    AND coalesce(to_anchor,'') = $6 AND coalesce(to_external,'') = $7`,
+			docID, row.fromAnchor, row.typ, row.toDoc, row.toRule, row.toAnchor, row.toExternal)
+		if err != nil {
+			return fmt.Errorf("unlink %s edge of doc %d to %q: %w", e.typ, docID, e.ref, err)
+		}
+		k, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		n += k
+	}
+	if n == 0 {
+		return fmt.Errorf("doc %d has no %s edge to %q: %w", docID, e.typ, e.ref, ErrNotFound)
+	}
+	return nil
 }
 
 // docEdgeRef is one frontmatter reference before resolution. ref is verbatim,
@@ -238,13 +376,6 @@ func declareDocArtifacts(tx *sql.Tx, now time.Time, docID int64, fm *designdoc.F
 // the live doc_edges (closures in doc_coverage_completed_with), true the open
 // candidate revision's doc_revision_edges (closures as completed_with JSON).
 func writeEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Frontmatter, candidate bool) error {
-	clear := `DELETE FROM doc_edges WHERE from_doc = $1`
-	if candidate {
-		clear = `DELETE FROM doc_revision_edges WHERE doc_id = $1`
-	}
-	if _, err := tx.Exec(clear, docID); err != nil {
-		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
-	}
 	// The two covers defects a single header settles on its own (026 §5.1,
 	// §7). Both are checked here rather than in the loop below: designdoc.Refs
 	// reads one coverage key and drops an entry naming no spec, so neither
@@ -272,11 +403,50 @@ func writeEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Fro
 			}
 		}
 	}
-	// Resolve every covers entry first: when two entries reach the same rule,
-	// the more specific one (coveredRule.Depth) writes its edge and the other
-	// skips that rule, so `sec-3: none` with `sec-3.1: full` is not a
-	// contradiction. Entries of equal depth still meet the level check below.
-	edges := frontmatterEdges(fm)
+	return replaceEdgeRefs(tx, docID, kind, project, frontmatterEdges(fm), candidate)
+}
+
+// replaceEdgeRefs clears docID's live or candidate edge set and writes edges.
+func replaceEdgeRefs(tx *sql.Tx, docID int64, kind, project string, edges []docEdgeRef, candidate bool) error {
+	clear := `DELETE FROM doc_edges WHERE from_doc = $1`
+	if candidate {
+		clear = `DELETE FROM doc_revision_edges WHERE doc_id = $1`
+	}
+	if _, err := tx.Exec(clear, docID); err != nil {
+		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
+	}
+	return insertEdgeRefs(tx, docID, kind, project, edges, candidate)
+}
+
+// insertEdgeRefs resolves and validates edges and adds them to docID's live
+// or candidate edge set: the one path every edge write goes through
+// (rebuildEdges documents the guards).
+func insertEdgeRefs(tx *sql.Tx, docID int64, kind, project string, edges []docEdgeRef, candidate bool) error {
+	resolvedCovers, deepest, err := resolveCoversRefs(tx, kind, project, edges)
+	if err != nil {
+		return err
+	}
+	seen := map[docEdgeRow]docEdgeSeen{}
+	for _, e := range edges {
+		rows, level, closure, err := resolveEdgeRef(tx, docID, kind, project, e, resolvedCovers, deepest)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if err := insertDocEdge(tx, docID, e, row, level, closure, seen, candidate); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// resolveCoversRefs resolves every covers entry of a plan's edges first: when
+// two entries reach the same rule, the more specific one (coveredRule.Depth)
+// writes its edge and the other skips that rule, so `sec-3: none` with
+// `sec-3.1: full` is not a contradiction. Entries of equal depth still meet
+// the level check in insertDocEdge.
+func resolveCoversRefs(tx *sql.Tx, kind, project string, edges []docEdgeRef) (map[string][]coveredRule, map[int64]int, error) {
 	resolvedCovers := map[string][]coveredRule{}
 	deepest := map[int64]int{}
 	for _, e := range edges {
@@ -288,7 +458,7 @@ func writeEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Fro
 		}
 		rules, err := coversRules(tx, project, e.ref)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		resolvedCovers[e.ref] = rules
 		for _, r := range rules {
@@ -297,118 +467,117 @@ func writeEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Fro
 			}
 		}
 	}
-	seen := map[docEdgeRow]docEdgeSeen{}
-	for _, e := range edges {
-		base, fragment := designdoc.SplitFragment(e.ref)
-		var toDoc int64
-		var resolved bool
-		var err error
-		if e.typ != "covers" {
-			// A covers entry resolves to rules instead (coversRules below).
-			if toDoc, resolved, err = resolveDocRef(tx, project, base); err != nil {
-				return err
-			}
-		}
-		if e.typ == "blockedBy" {
-			if err := checkPlanOrdering(tx, docID, kind, e.ref, toDoc, resolved); err != nil {
-				return err
-			}
-		}
-		if e.typ == "defers" {
-			if kind != "plan" {
-				return fmt.Errorf("doc %d defers %q, but defers is plan-only and doc %d is a %s (026 §5.3): %w",
-					docID, e.ref, docID, kind, ErrInvalidInput)
-			}
-			if fragment == "" {
-				return fmt.Errorf(
-					"doc %d defers %q with no #sec-N fragment: defers is section-scoped, unlike covers (026 §5.3): %w",
-					docID, e.ref, ErrInvalidInput)
-			}
-			if strings.TrimSpace(e.owner) == "" {
-				return fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (026 §5.3): %w",
-					docID, e.ref, ErrInvalidInput)
-			}
-			if _, ownerFragment := designdoc.SplitFragment(e.owner); ownerFragment != "" {
-				return fmt.Errorf(
-					"doc %d defers %q to %q: the owner is a document, no fragment (026 §5.3): %w",
-					docID, e.ref, e.owner, ErrInvalidInput)
-			}
-		}
+	return resolvedCovers, deepest, nil
+}
 
-		level := ""
-		if e.typ == "covers" {
-			if kind != "plan" {
-				return fmt.Errorf("doc %d covers %q, but covers is plan-only and doc %d is a %s (026 §5.1): %w",
-					docID, e.ref, docID, kind, ErrInvalidInput)
-			}
-			level = strings.TrimSpace(e.coverage)
-			if level == "" {
-				// Only the mapping form arrives empty: the bare form decodes
-				// straight to "full" (designdoc.Coverage.UnmarshalYAML), and
-				// `coverage` is required on a qualified entry (026 §5.1).
-				return fmt.Errorf("doc %d covers %q with no coverage level (026 §5.1): %w",
-					docID, e.ref, ErrInvalidInput)
-			}
-			if level != "full" && level != "partial" && level != "none" {
-				return fmt.Errorf("doc %d covers %q with unknown coverage level %q (026 §5.1): %w",
-					docID, e.ref, level, ErrInvalidInput)
-			}
+// resolveEdgeRef resolves one edge to the rows it stores, with its coverage
+// level and closure, refusing what the guards in rebuildEdges refuse.
+func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
+	resolvedCovers map[string][]coveredRule, deepest map[int64]int) ([]docEdgeRow, string, []closureRef, error) {
+	base, fragment := designdoc.SplitFragment(e.ref)
+	var toDoc int64
+	var resolved bool
+	var err error
+	if e.typ != "covers" {
+		// A covers entry resolves to rules instead (coversRules below).
+		if toDoc, resolved, err = resolveDocRef(tx, project, base); err != nil {
+			return nil, "", nil, err
 		}
-		var closure []closureRef
-		if level == "partial" {
-			closure, err = resolveClosure(tx, project, e.completedWith)
-			if err != nil {
-				return err
-			}
+	}
+	if e.typ == "blockedBy" {
+		if err := checkPlanOrdering(tx, docID, kind, e.ref, toDoc, resolved); err != nil {
+			return nil, "", nil, err
 		}
-		if e.typ == "defers" {
-			closure, err = resolveClosure(tx, project, []string{e.owner})
-			if err != nil {
-				return err
-			}
-			if len(closure) == 1 && closure[0].resolved && closure[0].toDoc == docID {
-				return fmt.Errorf(
-					"doc %d defers %q to itself: a plan cannot defer a section to itself (026 §5.3): %w",
-					docID, e.ref, ErrInvalidInput)
-			}
+	}
+	if e.typ == "defers" {
+		if kind != "plan" {
+			return nil, "", nil, fmt.Errorf("doc %d defers %q, but defers is plan-only and doc %d is a %s (026 §5.3): %w",
+				docID, e.ref, docID, kind, ErrInvalidInput)
 		}
+		if fragment == "" {
+			return nil, "", nil, fmt.Errorf(
+				"doc %d defers %q with no #sec-N fragment: defers is section-scoped, unlike covers (026 §5.3): %w",
+				docID, e.ref, ErrInvalidInput)
+		}
+		if strings.TrimSpace(e.owner) == "" {
+			return nil, "", nil, fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (026 §5.3): %w",
+				docID, e.ref, ErrInvalidInput)
+		}
+		if _, ownerFragment := designdoc.SplitFragment(e.owner); ownerFragment != "" {
+			return nil, "", nil, fmt.Errorf(
+				"doc %d defers %q to %q: the owner is a document, no fragment (026 §5.3): %w",
+				docID, e.ref, e.owner, ErrInvalidInput)
+		}
+	}
 
-		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
-		var rows []docEdgeRow
-		switch {
-		case e.typ == "covers":
-			// A covers edge runs from the plan to each rule the entry
-			// resolves to (WL-SPEC-77 §4); an entry naming no rule keeps its
-			// reference verbatim.
-			rules := resolvedCovers[e.ref]
-			for _, r := range rules {
-				if r.Depth < deepest[r.ID] {
-					continue
-				}
-				rr := row
-				rr.toRule = r.ID
-				rows = append(rows, rr)
+	level := ""
+	if e.typ == "covers" {
+		if kind != "plan" {
+			return nil, "", nil, fmt.Errorf("doc %d covers %q, but covers is plan-only and doc %d is a %s (026 §5.1): %w",
+				docID, e.ref, docID, kind, ErrInvalidInput)
+		}
+		level = strings.TrimSpace(e.coverage)
+		if level == "" {
+			// Only the mapping form arrives empty: the bare form decodes
+			// straight to "full" (designdoc.Coverage.UnmarshalYAML), and
+			// `coverage` is required on a qualified entry (026 §5.1).
+			return nil, "", nil, fmt.Errorf("doc %d covers %q with no coverage level (026 §5.1): %w",
+				docID, e.ref, ErrInvalidInput)
+		}
+		if level != "full" && level != "partial" && level != "none" {
+			return nil, "", nil, fmt.Errorf("doc %d covers %q with unknown coverage level %q (026 §5.1): %w",
+				docID, e.ref, level, ErrInvalidInput)
+		}
+	}
+	var closure []closureRef
+	if level == "partial" {
+		closure, err = resolveClosure(tx, project, e.completedWith)
+		if err != nil {
+			return nil, "", nil, err
+		}
+	}
+	if e.typ == "defers" {
+		closure, err = resolveClosure(tx, project, []string{e.owner})
+		if err != nil {
+			return nil, "", nil, err
+		}
+		if len(closure) == 1 && closure[0].resolved && closure[0].toDoc == docID {
+			return nil, "", nil, fmt.Errorf(
+				"doc %d defers %q to itself: a plan cannot defer a section to itself (026 §5.3): %w",
+				docID, e.ref, ErrInvalidInput)
+		}
+	}
+
+	row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
+	var rows []docEdgeRow
+	switch {
+	case e.typ == "covers":
+		// A covers edge runs from the plan to each rule the entry
+		// resolves to (WL-SPEC-77 §4); an entry naming no rule keeps its
+		// reference verbatim.
+		rules := resolvedCovers[e.ref]
+		for _, r := range rules {
+			if r.Depth < deepest[r.ID] {
+				continue
 			}
-			if len(rules) == 0 {
-				row.toExternal = e.ref
-				rows = append(rows, row)
-			}
-		case resolved:
-			row.toDoc, row.toAnchor = toDoc, fragment
-			rows = append(rows, row)
-		default:
-			// Unresolvable: the whole reference is kept verbatim, fragment
-			// included, since nothing here can say what its anchor names.
+			rr := row
+			rr.toRule = r.ID
+			rows = append(rows, rr)
+		}
+		if len(rules) == 0 {
 			row.toExternal = e.ref
 			rows = append(rows, row)
 		}
-		for _, row := range rows {
-			if err := insertDocEdge(tx, docID, e, row, level, closure, seen, candidate); err != nil {
-				return err
-			}
-		}
+	case resolved:
+		row.toDoc, row.toAnchor = toDoc, fragment
+		rows = append(rows, row)
+	default:
+		// Unresolvable: the whole reference is kept verbatim, fragment
+		// included, since nothing here can say what its anchor names.
+		row.toExternal = e.ref
+		rows = append(rows, row)
 	}
-	return nil
+	return rows, level, closure, nil
 }
 
 // insertDocEdge writes one resolved row of writeEdges: the dedupe and

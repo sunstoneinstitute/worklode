@@ -104,8 +104,86 @@ func TestDocEditMissingFile(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), `"file"`) {
-		t.Fatalf("err = %v; want cobra's required-flag error naming \"file\"", err)
+	if err == nil || !strings.Contains(err.Error(), "--file, --title or --issued") {
+		t.Fatalf("err = %v; want it to name --file, --title and --issued", err)
+	}
+}
+
+// TestDocEditRefusesHeader: a body file opening with a header is refused
+// before any request (WL-SPEC-77 §7).
+func TestDocEditRefusesHeader(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "body.md")
+	if err := os.WriteFile(file, []byte("---\nstatus: draft\n---\n\n# T\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := newDocEditCmd()
+	cmd.SetArgs([]string{"5", "--file", file})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "headers are accepted only by lode doc add and lode doc import (WL-SPEC-77 §7)") {
+		t.Fatalf("err = %v; want the client-side header refusal", err)
+	}
+}
+
+// TestDocLinkFlags: lode doc link and unlink take exactly one relation flag,
+// write the edge the server routes, and lode doc edit --title sets the title.
+func TestDocLinkFlags(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	for i, slug := range []string{"my-spec", "other-spec"} {
+		if _, _, err := c.CreateDoc(ctx, model.CreateDocInput{
+			Project: "proj", Kind: "spec", Number: i + 1, Slug: slug, Body: docTestBody,
+		}); err != nil {
+			t.Fatalf("create %s: %v", slug, err)
+		}
+	}
+	edges := func() []model.DocEdge {
+		id, err := resolveDocID(ctx, c, "my-spec")
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, _, err := c.GetDoc(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.Edges
+	}
+
+	if out, err := runLode(t, "doc", "link", "my-spec", "--requires", "other-spec"); err != nil {
+		t.Fatalf("doc link: %v\n%s", err, out)
+	}
+	if e := edges(); len(e) != 1 || e[0].Type != "requires" || e[0].ToSlug != "other-spec" {
+		t.Errorf("edges = %+v, want requires other-spec", e)
+	}
+	if out, err := runLode(t, "doc", "unlink", "my-spec", "--requires", "other-spec"); err != nil {
+		t.Fatalf("doc unlink: %v\n%s", err, out)
+	}
+	if e := edges(); len(e) != 0 {
+		t.Errorf("edges after unlink = %+v, want none", e)
+	}
+
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"doc", "link", "my-spec"}, "pass one of --covers"},
+		{[]string{"doc", "link", "my-spec", "--requires", "a", "--covers", "b"}, "none of the others can be"},
+		{[]string{"doc", "link", "my-spec", "--requires", "a", "--owner", "b"}, "--owner goes with --defers"},
+	} {
+		if _, err := runLode(t, tc.args...); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%v: err = %v, want %q", tc.args, err, tc.want)
+		}
+	}
+
+	out, err := runLode(t, "doc", "edit", "my-spec", "--title", "Renamed", "--json")
+	if err != nil {
+		t.Fatalf("doc edit --title: %v\n%s", err, out)
+	}
+	var d model.DocDetail
+	if err := json.Unmarshal([]byte(out), &d); err != nil || d.Title != "Renamed" {
+		t.Errorf("doc edit --title --json = %q (%v), want a DocDetail titled Renamed", out, err)
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -272,7 +273,7 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("revise doc: %v", err)
 	}
 	droppedNumberBody := strings.Replace(specSourceBody, "## 2. Model {#sec-2}", "## Model {#sec-2}", 1)
-	if _, _, err := actorA.UpdateDocRevision(ctx, doc.ID, droppedNumberBody); err != nil {
+	if _, _, err := actorA.UpdateDocRevision(ctx, doc.ID, noHeader(t, droppedNumberBody)); err != nil {
 		t.Fatalf("update revision (dropped number): %v", err)
 	}
 	if _, _, err := actorA.AcceptDocRevision(ctx, doc.ID); err == nil {
@@ -298,7 +299,7 @@ func TestDocLifecycle(t *testing.T) {
 	// 8. Replace the open revision with one that adds sec-1a and edits only
 	// sec-2's body: this must be accepted, landing as version 2 with
 	// last_revised_in moved on exactly sec-2 (025 §6 rule 5).
-	if _, _, err := actorA.UpdateDocRevision(ctx, doc.ID, specRevisedBody); err != nil {
+	if _, _, err := actorA.UpdateDocRevision(ctx, doc.ID, noHeader(t, specRevisedBody)); err != nil {
 		t.Fatalf("update revision (valid): %v", err)
 	}
 	landed, _, err := actorA.AcceptDocRevision(ctx, doc.ID)
@@ -357,13 +358,13 @@ func TestDocLifecycle(t *testing.T) {
 	// --if-version carried through: the caller names the version it read, and
 	// the edit lands because nothing else has written the plan since.
 	if _, _, err := actorA.UpdateDocBody(ctx, plan.ID,
-		model.UpdateDocBodyInput{Body: editedPlanBody, IfVersion: plan.Version}); err != nil {
+		model.UpdateDocBodyInput{Body: noHeader(t, editedPlanBody), IfVersion: plan.Version}); err != nil {
 		t.Fatalf("edit plan body while draft: %v", err)
 	}
 	// The same version again is stale now, and the server refuses with 409
 	// instead of overwriting the edit above.
 	if _, _, err := actorA.UpdateDocBody(ctx, plan.ID,
-		model.UpdateDocBodyInput{Body: planSourceBody, IfVersion: plan.Version}); err == nil {
+		model.UpdateDocBodyInput{Body: noHeader(t, planSourceBody), IfVersion: plan.Version}); err == nil {
 		t.Fatal("stale --if-version edit: want an error, got nil")
 	} else if status := clientErrStatus(t, err); status != http.StatusConflict {
 		t.Fatalf("stale --if-version edit: status = %d, want 409 (err %v)", status, err)
@@ -739,4 +740,17 @@ func TestDocOperationsMetricOnMetrics(t *testing.T) {
 	if want := `worklode_doc_operations_total{op="create",outcome="ok"}`; !strings.Contains(body, want) {
 		t.Fatalf("/metrics missing %s; body:\n%s", want, body)
 	}
+}
+
+// noHeader is body with its header removed. The fixtures carry headers
+// because POST /api/v1/docs reads one; every later body write takes none
+// (WL-SPEC-77 §7).
+func noHeader(t *testing.T, body string) string {
+	t.Helper()
+	d, err := designdoc.Parse([]byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Frontmatter = nil
+	return strings.TrimLeft(string(d.Bytes()), "\n")
 }
