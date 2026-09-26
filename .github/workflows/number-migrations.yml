@@ -45,8 +45,8 @@ jobs:
         id: app
         if: steps.new.outputs.found == 'true'
         with:
-          app-id: ${{ secrets.MIGRATION_BOT_APP_ID }}
-          private-key: ${{ secrets.MIGRATION_BOT_PRIVATE_KEY }}
+          client-id: ${{ vars.WORKLODE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.WORKLODE_BOT_PRIVATE_KEY }}
       - name: number and push
         if: steps.new.outputs.found == 'true'
         env:
