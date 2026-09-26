@@ -15,7 +15,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-func TestDocSchemaBlocksEdgeWithAnchorViolatesCheck(t *testing.T) {
+func TestDocSchemaBlockedByEdgeWithAnchorViolatesCheck(t *testing.T) {
 	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
@@ -31,14 +31,14 @@ func TestDocSchemaBlocksEdgeWithAnchorViolatesCheck(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO doc_edges (from_doc, from_anchor, type, to_doc, declared_by)
-		 VALUES ($1, 'sec-1', 'blocks', $2, $1)`,
+		`INSERT INTO doc_edges (from_doc, from_anchor, type, to_doc)
+		 VALUES ($1, 'sec-1', 'blockedBy', $2)`,
 		fromID, toID)
 	if err == nil {
 		t.Fatal("expected CHECK violation, got nil error")
 	}
-	if !isCheckViolationOn(err, "doc_edges_check1") {
-		t.Fatalf("expected doc_edges_check1 CHECK violation, got: %v", err)
+	if !isCheckViolationOn(err, "doc_edges_blocked_by_whole_docs") {
+		t.Fatalf("expected doc_edges_blocked_by_whole_docs CHECK violation, got: %v", err)
 	}
 }
 
@@ -60,8 +60,8 @@ func TestDocSchemaCoversEdgeNeedsRule(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor, coverage, declared_by)
-		 VALUES ($1, 'covers', $2, 'sec-5', 'full', $1)`,
+		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor, coverage)
+		 VALUES ($1, 'covers', $2, 'sec-5', 'full')`,
 		planID, specID)
 	if !isCheckViolationOn(err, "doc_edges_covers_rule") {
 		t.Fatalf("expected doc_edges_covers_rule CHECK violation, got: %v", err)
@@ -978,8 +978,8 @@ func TestDocSchemaDefersEdgeSucceeds(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor, declared_by)
-		 VALUES ($1, 'defers', $2, 'sec-1', $1)`,
+		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor)
+		 VALUES ($1, 'defers', $2, 'sec-1')`,
 		planID, specID)
 	if err != nil {
 		t.Fatalf("insert defers edge: %v", err)
@@ -1004,8 +1004,8 @@ func TestDocSchemaBogusEdgeTypeViolatesCheck(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor, declared_by)
-		 VALUES ($1, 'bogus', $2, 'sec-1', $1)`,
+		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor)
+		 VALUES ($1, 'bogus', $2, 'sec-1')`,
 		planID, specID)
 	if err == nil {
 		t.Fatal("expected CHECK violation, got nil error")
@@ -1401,7 +1401,7 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 26, Slug: "026-to", Body: specBody, CreatedBy: "stig",
 	})
 
-	types := []string{"covers", "implements", "requires", "wasDerivedFrom", "blocks"}
+	types := []string{"covers", "implements", "requires", "wasDerivedFrom", "blockedBy"}
 	for _, typ := range types {
 		// Only a covers edge carries a coverage level
 		// (doc_edges_coverage_on_covers), and it runs to one of the
@@ -1418,8 +1418,8 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 			}
 		}
 		if _, err := s.db.ExecContext(t.Context(),
-			`INSERT INTO doc_edges (from_doc, type, to_doc, to_rule, coverage, declared_by)
-			 VALUES ($1, $2, $3, $4, $5, $1)`,
+			`INSERT INTO doc_edges (from_doc, type, to_doc, to_rule, coverage)
+			 VALUES ($1, $2, $3, $4, $5)`,
 			from.ID, typ, toDoc, toRule, coverage); err != nil {
 			t.Fatalf("insert %s edge: %v", typ, err)
 		}
@@ -1437,7 +1437,7 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 	// refuses the retired document-level types.
 	for _, typ := range []string{"amends", "replaces", "amendedBy", "isReplacedBy"} {
 		_, err := s.db.ExecContext(t.Context(),
-			`INSERT INTO doc_edges (from_doc, type, to_doc, declared_by) VALUES ($1, $2, $3, $1)`,
+			`INSERT INTO doc_edges (from_doc, type, to_doc) VALUES ($1, $2, $3)`,
 			from.ID, typ, to.ID)
 		if !isCheckViolationOn(err, "doc_edges_type_check") {
 			t.Errorf("insert %s edge: err = %v, want doc_edges_type_check violation", typ, err)
@@ -1453,112 +1453,103 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 	}
 }
 
-// TestDocBlockedByWritesTheSameRowAsBlocks: the whole point of the inverse
-// spelling is authoring order. A numbered plan series is written forward, so
-// part 3 must be able to say it follows part 2 without part 2 being edited —
-// and the row it writes is byte-for-byte the one part 2's `blocks:` would
-// have written (025 §5, WL-143).
-func TestDocBlockedByWritesTheSameRowAsBlocks(t *testing.T) {
+// TestBlockedByStoredFromLaterPlan: plan B's header `blockedBy: [A]` stores
+// one row B → A, owned by B (WL-SPEC-77 §8). A numbered plan series is
+// authored forward, so the later plan is the one that knows the order.
+func TestBlockedByStoredFromLaterPlan(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	// Forward: the earlier plan first, the later plan naming it.
-	early := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-early", Body: planMintBody, CreatedBy: "stig",
-	})
-	late := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-late", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nblockedBy: plan-early\n---\n\n# Plan late\n",
-	})
-
-	if got := docEdges(t, s, late.ID); len(got) != 0 {
-		t.Fatalf("edges of plan-late = %+v, want none: the row leaves the blocking plan", got)
-	}
-	got := docEdges(t, s, early.ID)
-	want := []model.DocEdge{{Type: "blocks", ToDoc: late.ID}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("edges of plan-early = %+v, want %+v", got, want)
-	}
-
-	// Backward: the same ordering over a second pair, declared the old way.
-	// The row is the same shape, which is the claim — `blockedBy` is a
-	// spelling, not a second kind of edge.
-	b := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-second-late", Body: planMintBody, CreatedBy: "stig",
-	})
 	a := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-second-early", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nblocks: plan-second-late\n---\n\n# Plan early\n",
+		Project: "p1", Kind: "plan", Slug: "plan-a", Body: planMintBody, CreatedBy: "stig",
 	})
-	if got, want := docEdges(t, s, a.ID), []model.DocEdge{{Type: "blocks", ToDoc: b.ID}}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("edges of plan-second-early declared with blocks = %+v, want %+v", got, want)
+	b := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-b", CreatedBy: "stig",
+		Body: blockedByPlanBody("plan-a"),
+	})
+
+	if got, want := docEdges(t, s, b.ID), []model.DocEdge{{Type: "blockedBy", ToDoc: a.ID}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("edges of plan-b = %+v, want %+v", got, want)
+	}
+	if got := docEdges(t, s, a.ID); len(got) != 0 {
+		t.Fatalf("edges of plan-a = %+v, want none", got)
+	}
+	_, in, err := s.ListDocEdges(t.Context(), a.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges(plan-a): %v", err)
+	}
+	if len(in) != 1 || in[0].Type != "blocks" || in[0].ToDoc != b.ID {
+		t.Fatalf("inbound edges of plan-a = %+v, want one blocks edge from plan-b", in)
 	}
 }
 
-// TestDocBlockedByIsOwnedByItsAuthor: the row leaves the *other* plan, so the
-// rewrite that clears it has to be scoped by who declared it (doc_edges
-// .declared_by), not by where it points from. Dropping the key drops the row;
-// rewriting the blocking plan does not.
-func TestDocBlockedByIsOwnedByItsAuthor(t *testing.T) {
+// TestRewriteClearsOnlyOwnEdges: rewriting plan A leaves plan B's row to A,
+// and B dropping the key clears it.
+func TestRewriteClearsOnlyOwnEdges(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	early := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-early", Body: planMintBody, CreatedBy: "stig",
+	a := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-a", Body: planMintBody, CreatedBy: "stig",
 	})
-	late := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-late", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nblockedBy: plan-early\n---\n\n# Plan late\n",
+	b := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-b", CreatedBy: "stig",
+		Body: blockedByPlanBody("plan-a"),
 	})
 
-	// The blocking plan's own rewrite leaves the row standing: it is not its
-	// declaration to clear.
-	if _, err := updateDocBody(t, s, early.ID, planMintBody+"\nMore prose.\n"); err != nil {
-		t.Fatalf("rewrite plan-early: %v", err)
+	if _, err := updateDocBody(t, s, a.ID, planMintBody+"\nMore prose.\n"); err != nil {
+		t.Fatalf("rewrite plan-a: %v", err)
 	}
-	want := []model.DocEdge{{Type: "blocks", ToDoc: late.ID}}
-	if got := docEdges(t, s, early.ID); !reflect.DeepEqual(got, want) {
-		t.Fatalf("edges of plan-early after its own rewrite = %+v, want %+v", got, want)
+	want := []model.DocEdge{{Type: "blockedBy", ToDoc: a.ID}}
+	if got := docEdges(t, s, b.ID); !reflect.DeepEqual(got, want) {
+		t.Fatalf("edges of plan-b after plan-a's rewrite = %+v, want %+v", got, want)
 	}
 
-	// The declaring plan dropping the key clears it.
-	if _, err := updateDocBody(t, s, late.ID, "---\nstatus: draft\n---\n\n# Plan late\n"); err != nil {
-		t.Fatalf("rewrite plan-late without blockedBy: %v", err)
+	if _, err := updateDocBody(t, s, b.ID, "---\nstatus: draft\n---\n\n# Plan\n"); err != nil {
+		t.Fatalf("rewrite plan-b without blockedBy: %v", err)
 	}
-	if got := docEdges(t, s, early.ID); len(got) != 0 {
-		t.Fatalf("edges of plan-early after plan-late dropped blockedBy = %+v, want none", got)
+	if got := docEdges(t, s, b.ID); len(got) != 0 {
+		t.Fatalf("edges of plan-b after dropping blockedBy = %+v, want none", got)
 	}
 }
 
-// TestDocBlocksDeclaredFromBothEndsIsOneRow: both plans spelling the same
-// ordering is the same fact twice, not a contradiction. It stays one row —
-// the unique index is the arbiter — and the later writer owns it.
-func TestDocBlocksDeclaredFromBothEndsIsOneRow(t *testing.T) {
+// TestHeaderRefusesBlocksAndIsRequiredBy: only the acting direction is
+// stored, so a header carrying an inverse spelling is refused and the error
+// names the spelling to use on the other document.
+func TestHeaderRefusesBlocksAndIsRequiredBy(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	early := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-early", Body: planMintBody, CreatedBy: "stig",
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "a-real-plan", Body: planMintBody, CreatedBy: "stig",
 	})
-	late := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-late", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nblockedBy: plan-early\n---\n\n# Plan late\n",
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
 	})
-	if _, err := updateDocBody(t, s, early.ID,
-		"---\nstatus: draft\nblocks: plan-late\n---\n\n# Plan early\n"); err != nil {
-		t.Fatalf("add blocks to plan-early: %v", err)
-	}
-
-	want := []model.DocEdge{{Type: "blocks", ToDoc: late.ID}}
-	if got := docEdges(t, s, early.ID); !reflect.DeepEqual(got, want) {
-		t.Fatalf("edges of plan-early = %+v, want exactly %+v", got, want)
+	for _, tc := range []struct {
+		name, body, want string
+	}{
+		{"blocks", "---\nstatus: draft\nblocks: a-real-plan\n---\n\n# Plan\n", "blockedBy"},
+		{"isRequiredBy", "---\nstatus: draft\nisRequiredBy: 025-documents-in-the-backbone\n---\n\n# Plan\n", "requires"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := createDoc(t, s, DocInput{
+				Project: "p1", Kind: "plan", Slug: "refused-" + tc.name, CreatedBy: "stig", Body: tc.body,
+			})
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("createDoc = %v, want ErrInvalidInput", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("createDoc = %v, want it to name %q", err, tc.want)
+			}
+		})
 	}
 }
 
-// TestDocEdgesRejectBadBlockedByEnds: `blockedBy` is the same edge, so it is
-// held to the same guards — both ends plans, the reference resolvable, no
-// self-block, no cycle. Reading them off the row rather than off the author is
-// what keeps the two spellings from disagreeing about what is legal.
+// TestDocEdgesRejectBadBlockedByEnds: blockedBy orders two distinct plans
+// (025 §5). An end that is not a plan, an unresolvable reference, or a plan
+// naming itself is ErrInvalidInput rather than a dead edge.
 func TestDocEdgesRejectBadBlockedByEnds(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1570,10 +1561,6 @@ func TestDocEdgesRejectBadBlockedByEnds(t *testing.T) {
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "a-real-plan", Body: planMintBody, CreatedBy: "stig",
 	})
-	mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-head", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nblocks: a-real-plan\n---\n\n# Plan\n",
-	})
 
 	cases := []struct {
 		name string
@@ -1581,18 +1568,16 @@ func TestDocEdgesRejectBadBlockedByEnds(t *testing.T) {
 		in   DocInput
 	}{
 		{
-			// The declaring plan is the *to* end here, so the spec lands on
-			// the from end — the mirror of "spec blocks a plan".
 			name: "plan blockedBy a spec",
-			want: "the from end",
+			want: "the to end",
 			in: DocInput{
 				Project: "p1", Kind: "plan", Slug: "blocked-by-a-spec", CreatedBy: "stig",
-				Body: "---\nstatus: draft\nblockedBy: 025-documents-in-the-backbone\n---\n\n# Plan\n",
+				Body: blockedByPlanBody("025-documents-in-the-backbone"),
 			},
 		},
 		{
 			name: "spec blockedBy a plan",
-			want: "the to end",
+			want: "the from end",
 			in: DocInput{
 				Project: "p1", Kind: "spec", Number: 26, Slug: "026-blocked-spec", CreatedBy: "stig",
 				Body: "---\nstatus: draft\nblockedBy: a-real-plan\n---\n\n# Spec\n\n## 1. One {#sec-1}\n\nx\n",
@@ -1603,26 +1588,16 @@ func TestDocEdgesRejectBadBlockedByEnds(t *testing.T) {
 			want: "no plan in this project resolves to",
 			in: DocInput{
 				Project: "p1", Kind: "plan", Slug: "blocked-by-nowhere", CreatedBy: "stig",
-				Body: "---\nstatus: draft\nblockedBy: 999-nowhere.md\n---\n\n# Plan\n",
+				Body: blockedByPlanBody("999-nowhere.md"),
 			},
 		},
 		{
+			// A plan naming itself would wedge its own task set forever.
 			name: "plan blockedBy itself",
 			want: "cannot block itself",
 			in: DocInput{
 				Project: "p1", Kind: "plan", Slug: "self-blocked", CreatedBy: "stig",
-				Body: "---\nstatus: draft\nblockedBy: self-blocked\n---\n\n# Plan\n",
-			},
-		},
-		{
-			// `blocks` is walked before `blockedBy`, so the first key has
-			// already stored this-plan → plan-head when the second proposes
-			// plan-head → this-plan: a two-plan cycle closed from the far end.
-			name: "plan blockedBy a plan it already blocks",
-			want: "plan-head blocks cycle-both-ways blocks plan-head",
-			in: DocInput{
-				Project: "p1", Kind: "plan", Slug: "cycle-both-ways", CreatedBy: "stig",
-				Body: "---\nstatus: draft\nblocks: plan-head\nblockedBy: plan-head\n---\n\n# Plan\n",
+				Body: blockedByPlanBody("self-blocked"),
 			},
 		},
 	}
@@ -1636,84 +1611,6 @@ func TestDocEdgesRejectBadBlockedByEnds(t *testing.T) {
 				t.Fatalf("createDoc = %v, want it to mention %q", err, tc.want)
 			}
 		})
-	}
-}
-
-// TestDocEdgesRejectBlocksBetweenNonPlans: `blocks` orders whole plan
-// documents (025 §5). An end that is not a plan, or a reference this project
-// cannot resolve to one, is ErrInvalidInput rather than a dead edge.
-func TestDocEdgesRejectBlocksBetweenNonPlans(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-
-	mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 25,
-		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
-	})
-	mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "a-real-plan", Body: planMintBody, CreatedBy: "stig",
-	})
-
-	cases := []struct {
-		name string
-		want string // substring, so the right guard is what refused
-		in   DocInput
-	}{
-		{
-			name: "plan blocks a spec",
-			want: "the to end",
-			in: DocInput{
-				Project: "p1", Kind: "plan", Slug: "blocks-a-spec", CreatedBy: "stig",
-				Body: "---\nstatus: draft\nblocks: 025-documents-in-the-backbone\n---\n\n# Plan\n",
-			},
-		},
-		{
-			name: "spec blocks a plan",
-			want: "the from end",
-			in: DocInput{
-				Project: "p1", Kind: "spec", Number: 26, Slug: "026-blocking-spec", CreatedBy: "stig",
-				Body: "---\nstatus: draft\nblocks: a-real-plan\n---\n\n# Spec\n\n## 1. One {#sec-1}\n\nx\n",
-			},
-		},
-		{
-			name: "plan blocks an unresolvable reference",
-			want: "no plan in this project resolves to",
-			in: DocInput{
-				Project: "p1", Kind: "plan", Slug: "blocks-nowhere", CreatedBy: "stig",
-				Body: "---\nstatus: draft\nblocks: 999-nowhere.md\n---\n\n# Plan\n",
-			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := createDoc(t, s, tc.in)
-			if !errors.Is(err, ErrInvalidInput) {
-				t.Fatalf("createDoc = %v, want ErrInvalidInput", err)
-			}
-			if !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("createDoc = %v, want it to mention %q", err, tc.want)
-			}
-		})
-	}
-}
-
-// TestDocEdgesRejectSelfBlockingPlan: a plan whose `blocks` names its own slug
-// resolves to itself and would wedge its own task set forever — every task of
-// the plan would block itself, and while the plan is draft the unminted-set
-// arm blocks too. It is refused at write time (025 §5).
-func TestDocEdgesRejectSelfBlockingPlan(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-
-	_, err := createDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "self-blocker", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nblocks: self-blocker\n---\n\n# Plan\n",
-	})
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("createDoc = %v, want ErrInvalidInput", err)
-	}
-	if !strings.Contains(err.Error(), "cannot block itself") {
-		t.Fatalf("createDoc = %v, want it to say a plan cannot block itself", err)
 	}
 }
 
@@ -1726,40 +1623,40 @@ func TestDocEdgesRejectBlocksCycleBetweenPlans(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	// a blocks b blocks c, written back to front so every reference resolves.
-	c := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-c", CreatedBy: "stig",
+	// c blockedBy b blockedBy a, written forward so every reference resolves.
+	a := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-a", CreatedBy: "stig",
 		Body: "---\nstatus: draft\n---\n\n# Plan\n",
 	})
-	b := mustCreateDoc(t, s, DocInput{
+	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "plan-b", CreatedBy: "stig",
-		Body: blockingPlanBody("plan-c"),
+		Body: blockedByPlanBody("plan-a"),
 	})
 	mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-a", CreatedBy: "stig",
-		Body: blockingPlanBody("plan-b"),
+		Project: "p1", Kind: "plan", Slug: "plan-c", CreatedBy: "stig",
+		Body: blockedByPlanBody("plan-b"),
 	})
 
 	// Two hops back to plan-a: the whole cycle is named, in order.
-	_, err := updateDocBody(t, s, c.ID, blockingPlanBody("plan-a"))
+	_, err := updateDocBody(t, s, a.ID, blockedByPlanBody("plan-c"))
 	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("plan-c blocks plan-a = %v, want ErrInvalidInput", err)
+		t.Fatalf("plan-a blockedBy plan-c = %v, want ErrInvalidInput", err)
 	}
-	if want := "plan-c blocks plan-a blocks plan-b blocks plan-c"; !strings.Contains(err.Error(), want) {
-		t.Fatalf("plan-c blocks plan-a = %v, want it to name the cycle %q", err, want)
+	if want := "plan-a blockedBy plan-c blockedBy plan-b blockedBy plan-a"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("plan-a blockedBy plan-c = %v, want it to name the cycle %q", err, want)
 	}
-	// The refused write left plan-c's edges alone, cycle or not.
-	if edges := docEdges(t, s, c.ID); len(edges) != 0 {
-		t.Fatalf("edges of plan-c = %+v, want none", edges)
+	// The refused write left plan-a's edges alone.
+	if edges := docEdges(t, s, a.ID); len(edges) != 0 {
+		t.Fatalf("edges of plan-a = %+v, want none", edges)
 	}
 
 	// One hop back: the two-plan cycle the self-block guard never saw.
-	_, err = updateDocBody(t, s, b.ID, blockingPlanBody("plan-a"))
+	_, err = updateDocBody(t, s, a.ID, blockedByPlanBody("plan-b"))
 	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("plan-b blocks plan-a = %v, want ErrInvalidInput", err)
+		t.Fatalf("plan-a blockedBy plan-b = %v, want ErrInvalidInput", err)
 	}
-	if want := "plan-b blocks plan-a blocks plan-b"; !strings.Contains(err.Error(), want) {
-		t.Fatalf("plan-b blocks plan-a = %v, want it to name the cycle %q", err, want)
+	if want := "plan-a blockedBy plan-b blockedBy plan-a"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("plan-a blockedBy plan-b = %v, want it to name the cycle %q", err, want)
 	}
 }
 
@@ -1770,39 +1667,36 @@ func TestDocEdgesAllowConvergingBlocks(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	last := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-last", CreatedBy: "stig",
+	first := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-first", CreatedBy: "stig",
 		Body: "---\nstatus: draft\n---\n\n# Plan\n",
 	})
 	mid := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "plan-mid", CreatedBy: "stig",
-		Body: blockingPlanBody("plan-last"),
+		Body: blockedByPlanBody("plan-first"),
 	})
-	first := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "plan-first", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nblocks:\n  - plan-mid\n  - plan-last\n---\n\n# Plan\n",
+	last := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-last", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nblockedBy:\n  - plan-mid\n  - plan-first\n---\n\n# Plan\n",
 	})
 
-	got := docEdges(t, s, first.ID)
+	got := docEdges(t, s, last.ID)
 	want := []model.DocEdge{
-		{Type: "blocks", ToDoc: mid.ID},
-		{Type: "blocks", ToDoc: last.ID},
+		{Type: "blockedBy", ToDoc: mid.ID},
+		{Type: "blockedBy", ToDoc: first.ID},
 	}
 	slices.SortFunc(want, func(x, y model.DocEdge) int { return cmp.Compare(x.ToDoc, y.ToDoc) })
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("edges of plan-first = %+v, want %+v", got, want)
+		t.Fatalf("edges of plan-last = %+v, want %+v", got, want)
 	}
 }
 
 // --- NeedsPlanning / NeedsExecution (026 §2) -----------------------------
 
-// TestFrontmatterEdgesBlockedByBecomesInverseBlocks: the spelling is resolved
-// where the frontmatter is read, not where the row is written — `blockedBy`
-// leaves frontmatterEdges as a `blocks` edge marked inverse, so every guard
-// and every dedupe downstream sees one relation with one type and only the
-// row's two ends move (025 §5, WL-143). No database: this is the translation
-// itself.
-func TestFrontmatterEdgesBlockedByBecomesInverseBlocks(t *testing.T) {
+// TestFrontmatterEdgesReadsBlockedByOnly: plan ordering is read as blockedBy
+// and nothing else; a `blocks` key never becomes an edge (rebuildEdges
+// refuses it before this runs). No database.
+func TestFrontmatterEdgesReadsBlockedByOnly(t *testing.T) {
 	t.Parallel()
 	doc, err := designdoc.Parse([]byte(
 		"---\nstatus: draft\nblocks: plan-three\nblockedBy: plan-one\n---\n\n# Plan two\n"))
@@ -1811,10 +1705,7 @@ func TestFrontmatterEdgesBlockedByBecomesInverseBlocks(t *testing.T) {
 	}
 
 	got := frontmatterEdges(doc.Frontmatter)
-	want := []docEdgeRef{
-		{typ: "blocks", ref: "plan-three"},
-		{typ: "blocks", ref: "plan-one", inverse: true},
-	}
+	want := []docEdgeRef{{typ: "blockedBy", ref: "plan-one"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("frontmatterEdges = %+v, want %+v", got, want)
 	}

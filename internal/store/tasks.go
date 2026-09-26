@@ -1364,7 +1364,7 @@ func planUnfinished(alias string) string {
 }
 
 // planBlockedCondition holds a task while its plan is ordered after another
-// plan whose work is unfinished (025 §9.3): a document-level blocks edge
+// plan whose work is unfinished (025 §9.3): a document-level blockedBy edge
 // between the two plan documents, evaluated over the blocking plan through
 // planUnfinished.
 //
@@ -1372,8 +1372,8 @@ func planUnfinished(alias string) string {
 // enclosing query must alias the task row as `t`.
 var planBlockedCondition = `t.plan_doc IS NOT NULL AND EXISTS (
 	 SELECT 1 FROM doc_edges de
-	  JOIN docs bd ON bd.id = de.from_doc
-	  WHERE de.type = 'blocks' AND de.to_doc = t.plan_doc
+	  JOIN docs bd ON bd.id = de.to_doc
+	  WHERE de.type = 'blockedBy' AND de.from_doc = t.plan_doc
 	    AND ` + planUnfinished("bd") + `)`
 
 // BlockedTaskIDs returns the ids of tasks that have at least one open

@@ -72,6 +72,33 @@ func TestLinkRules(t *testing.T) {
 	}
 }
 
+// TestConflictsWithOncePerPair: conflictsWith is symmetric and stored once
+// per pair, so linking the reverse is ErrEdgeExists and unlinking either
+// direction removes the one row (WL-SPEC-77 §8.1).
+func TestConflictsWithOncePerPair(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	a, b := ruleID(t, s, "P1", 1), ruleID(t, s, "P1", 3)
+	ctx := context.Background()
+	tx := func(f func(tx *sql.Tx) error) error { return s.Tx(ctx, f) }
+	if err := tx(func(tx *sql.Tx) error { return LinkRules(tx, a, b, "conflictsWith") }); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx(func(tx *sql.Tx) error { return LinkRules(tx, b, a, "conflictsWith") }); !errors.Is(err, ErrEdgeExists) {
+		t.Fatalf("link B->A after A->B: got %v, want ErrEdgeExists", err)
+	}
+	if err := tx(func(tx *sql.Tx) error { return UnlinkRules(tx, b, a, "conflictsWith") }); err != nil {
+		t.Fatalf("unlink B->A: %v", err)
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM rule_edges WHERE type = 'conflictsWith'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("conflictsWith rows after unlink = %d, want 0", n)
+	}
+}
+
 // TestLinkRulesLineage: LinkRules accepts wasDerivedFrom as an ordinary
 // manual edge, listed on the rule detail like any other, and refuses
 // supersedes, naming lode rule supersede as its one writer (S22, R4).
