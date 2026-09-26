@@ -659,7 +659,9 @@ nav.local a .cnt{margin-left:auto;font-size:0.8125rem;font-weight:600;color:var(
  * a .tablewrap the way the page's own tables are; display:block makes the
  * table its own scroll container instead, which is the same 1.4.10 outcome. */
 .prose table{border-collapse:collapse;display:block;width:max-content;max-width:100%;overflow-x:auto}
-.prose th,.prose td{border:1px solid var(--line);padding:5px 9px;text-align:left}
+/* A table scrolls inside itself, so its cells drop .prose's anywhere: that
+ * shrinks each column's min-content width and splits short identifiers. */
+.prose th,.prose td{border:1px solid var(--line);padding:5px 9px;text-align:left;overflow-wrap:normal}
 .prose th{background:var(--surface-2);font-weight:600}
 
 .attachments{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}

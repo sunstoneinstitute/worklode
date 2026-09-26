@@ -1982,6 +1982,7 @@ nav.local a .cnt {
   border: 1px solid var(--line);
   padding: 5px 9px;
   text-align: left;
+  overflow-wrap: normal;
 }
 .prose th {
   background: var(--surface-2);
