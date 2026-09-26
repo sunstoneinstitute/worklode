@@ -203,27 +203,47 @@ func closureEqual(a, b []closureRef) bool {
 // two different owners is the contradiction covers refuses for two
 // disagreeing levels, refused here as ErrInvalidInput too.
 func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
-	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
-		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
+	if err := declareDocArtifacts(tx, now, docID, fm); err != nil {
+		return err
 	}
-	// The artifact key is not an edge — it declares the catalog address(es)
-	// this document is verified by (029 §3.1), which is what routes a
-	// /hooks/catalog delivery to it (WL-255). Declarations are additive and
-	// idempotent: removing the key from a later body does not undeclare, the
-	// same as every other declaration surface.
-	if fm != nil {
-		for _, a := range fm.Artifact {
-			a = strings.TrimSpace(a)
-			if a == "" {
-				continue
-			}
-			if utf8.RuneCountInString(a) > maxArtifactURI {
-				return fmt.Errorf("doc %d artifact %q is too long: %w", docID, a[:40]+"…", ErrInvalidInput)
-			}
-			if err := DeclareArtifact(tx, now, "doc", strconv.FormatInt(docID, 10), "address", a); err != nil {
-				return err
-			}
+	return writeEdges(tx, docID, kind, project, fm, false)
+}
+
+// declareDocArtifacts records a header's artifact key. It is not an edge — it
+// declares the catalog address(es) this document is verified by (029 §3.1),
+// which is what routes a /hooks/catalog delivery to it (WL-255). Declarations
+// are additive and idempotent: removing the key from a later body does not
+// undeclare, the same as every other declaration surface.
+func declareDocArtifacts(tx *sql.Tx, now time.Time, docID int64, fm *designdoc.Frontmatter) error {
+	if fm == nil {
+		return nil
+	}
+	for _, a := range fm.Artifact {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
 		}
+		if utf8.RuneCountInString(a) > maxArtifactURI {
+			return fmt.Errorf("doc %d artifact %q is too long: %w", docID, a[:40]+"…", ErrInvalidInput)
+		}
+		if err := DeclareArtifact(tx, now, "doc", strconv.FormatInt(docID, 10), "address", a); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeEdges replaces docID's edge set with the one fm declares, through the
+// guards rebuildEdges documents. candidate selects the table: false writes
+// the live doc_edges (closures in doc_coverage_completed_with), true the open
+// candidate revision's doc_revision_edges (closures as completed_with JSON).
+func writeEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Frontmatter, candidate bool) error {
+	clear := `DELETE FROM doc_edges WHERE from_doc = $1`
+	if candidate {
+		clear = `DELETE FROM doc_revision_edges WHERE doc_id = $1`
+	}
+	if _, err := tx.Exec(clear, docID); err != nil {
+		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
 	}
 	// The two covers defects a single header settles on its own (026 §5.1,
 	// §7). Both are checked here rather than in the loop below: designdoc.Refs
@@ -383,7 +403,7 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			rows = append(rows, row)
 		}
 		for _, row := range rows {
-			if err := insertDocEdge(tx, docID, e, row, level, closure, seen); err != nil {
+			if err := insertDocEdge(tx, docID, e, row, level, closure, seen, candidate); err != nil {
 				return err
 			}
 		}
@@ -391,10 +411,11 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 	return nil
 }
 
-// insertDocEdge writes one resolved row of rebuildEdges: the dedupe and
+// insertDocEdge writes one resolved row of writeEdges: the dedupe and
 // contradiction checks against rows already seen in this frontmatter, the
-// row itself, and its doc_coverage_completed_with closure.
-func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, level string, closure []closureRef, seen map[docEdgeRow]docEdgeSeen) error {
+// row itself, and its closure — doc_coverage_completed_with rows for a live
+// edge, completed_with JSON for a candidate's.
+func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, level string, closure []closureRef, seen map[docEdgeRow]docEdgeSeen, candidate bool) error {
 	if prior, ok := seen[row]; ok {
 		if prior.level != level {
 			return fmt.Errorf("doc %d %s %q twice, as %s and %s (026 §5.1): %w",
@@ -415,6 +436,34 @@ func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, level 
 	var coverageCol sql.NullString
 	if e.typ == "covers" {
 		coverageCol = sql.NullString{String: level, Valid: true}
+	}
+	if candidate {
+		var completedWith any // NULL unless the edge carries a closure
+		if level == "partial" || e.typ == "defers" {
+			items := make([]map[string]any, 0, len(closure))
+			for _, c := range closure {
+				if c.resolved {
+					items = append(items, map[string]any{"to_doc": c.toDoc})
+				} else {
+					items = append(items, map[string]any{"to_external": c.toExternal})
+				}
+			}
+			b, err := json.Marshal(items)
+			if err != nil {
+				return err
+			}
+			completedWith = string(b)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO doc_revision_edges
+			   (doc_id, from_anchor, type, to_doc, to_rule, to_anchor, to_external, coverage, completed_with)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			docID, nullText(row.fromAnchor), row.typ, nullID(row.toDoc), nullID(row.toRule),
+			nullText(row.toAnchor), nullText(row.toExternal), coverageCol, completedWith,
+		); err != nil {
+			return fmt.Errorf("insert candidate %s edge of doc %d to %q: %w", e.typ, docID, e.ref, err)
+		}
+		return nil
 	}
 	var edgeID int64
 	if err := tx.QueryRow(
