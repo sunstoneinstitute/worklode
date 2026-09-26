@@ -232,24 +232,23 @@ func docTodoLinkBase(cmd *cobra.Command, cfg cli.Config) string {
 	return strings.TrimSuffix(cfg.ServerURL, "/")
 }
 
-// docTodoCorpusConcurrency bounds the body fetches below. The walk needs every
-// document's frontmatter, and only GET /docs/{id} carries a body, so the cost
-// is one request per document; a small fan-out turns a corpus-sized serial
+// docTodoCorpusConcurrency bounds the detail fetches below. The walk needs
+// every document's sections and edges, and only GET /docs/{id} carries them,
+// so the cost is one request per document; a small fan-out turns a corpus-sized serial
 // round trip into roughly one, without opening a connection per document.
 const docTodoCorpusConcurrency = 8
 
 // docTodoCorpus loads every document the backbone serves as a CorpusDoc, so
 // the walk of 026 §2.5 reads the same corpus `lode doc list` does.
 //
-// Status, Sections and Edges come from the backbone's own structured
-// columns (detail.Doc.Status, detail.Sections, detail.Edges) rather than by
-// re-parsing the body's frontmatter header (WL-913): the backbone is the
-// authority for all three, so a body that predates or outlives its header
-// (WL-724, WL-914) no longer narrows the answer. Source is still the raw
-// body: the walk itself re-parses it for the relations EdgeMeta does not
-// carry — requires, coverage level, fullCoverageWith (see
-// designdoc.docFrontmatter, planCoverageEntries, planDeferralEntries).
+// Status, Sections and Edges come from GET /docs/{id}'s structured fields,
+// never from the body's header (WL-913): the backbone is the authority for
+// all three, and a body may carry no header at all (WL-724, WL-914).
 func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]designdoc.CorpusDoc, error) {
+	pathBySlug := make(map[string]string, len(docs))
+	for _, d := range docs {
+		pathBySlug[d.Slug] = designdoc.CorpusPath(d.Kind, d.Slug)
+	}
 	out := make([]designdoc.CorpusDoc, len(docs))
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(docTodoCorpusConcurrency)
@@ -259,19 +258,13 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 			if err != nil {
 				return fmt.Errorf("read document %s: %w", d.Slug, err)
 			}
-			p := designdoc.CorpusPath(d.Kind, d.Slug)
-			cd := designdoc.CorpusDoc{
+			p := pathBySlug[d.Slug]
+			out[i] = designdoc.CorpusDoc{
 				Filename: path.Base(p), Path: p, Kind: d.Kind, Number: d.Number,
 				Status: detail.Doc.Status, Title: detail.Doc.Title,
-				Source:   []byte(detail.Doc.Body),
 				Sections: docTodoSectionMetas(detail.Sections),
+				Edges:    docTodoEdgeMetas(detail.Edges, pathBySlug),
 			}
-			// Only a plan's covers/defers become an edge here, mirroring
-			// planEdges: a spec or ADR's CorpusDoc.Edges is always empty.
-			if d.Kind == "plan" {
-				cd.Edges = docTodoEdgeMetas(detail.Edges)
-			}
-			out[i] = cd
 			return nil
 		})
 	}
@@ -296,25 +289,33 @@ func docTodoSectionMetas(secs []model.DocSection) []designdoc.SectionMeta {
 	return out
 }
 
-// docTodoEdgeMetas maps a plan's stored covers/defers edges to
-// designdoc.EdgeMeta the same way corpus.go's planEdges and edgeMetas map
-// them from a parsed header: every other relation is dropped, and the far
-// end becomes Target/TargetAnchor — its corpus path when the edge resolved
-// to a document in this backbone, its unresolved reference text
-// (ToExternal, "NO-SPEC" included) when it did not.
-func docTodoEdgeMetas(edges []model.DocEdge) []designdoc.EdgeMeta {
+// docTodoEdgeMetas maps a document's stored covers, defers and requires
+// edges to designdoc.EdgeMeta, the shape corpus.go's edgeMetas builds from a
+// header. The far end becomes its corpus path when the edge resolved to a
+// document, else its verbatim reference (ToExternal, "NO-SPEC" included)
+// split at its fragment. A CompletedWith element is a slug when it resolved;
+// pathBySlug turns a slug of this corpus into its path.
+func docTodoEdgeMetas(edges []model.DocEdge, pathBySlug map[string]string) []designdoc.EdgeMeta {
 	var out []designdoc.EdgeMeta
 	for _, e := range edges {
-		if e.Type != "covers" && e.Type != "defers" {
+		if e.Type != "covers" && e.Type != "defers" && e.Type != "requires" {
 			continue
 		}
-		target := e.ToExternal
-		if target == "" {
-			target = designdoc.CorpusPath(e.ToKind, e.ToSlug)
+		target, anchor := designdoc.CorpusPath(e.ToKind, e.ToSlug), e.ToAnchor
+		if e.ToExternal != "" {
+			target, anchor = designdoc.SplitFragment(e.ToExternal)
+		}
+		var with []string
+		for _, w := range e.CompletedWith {
+			if p, ok := pathBySlug[w]; ok {
+				w = p
+			}
+			with = append(with, w)
 		}
 		out = append(out, designdoc.EdgeMeta{
 			SrcAnchor: e.FromAnchor, Rel: e.Type,
-			Target: target, TargetAnchor: e.ToAnchor,
+			Target: target, TargetAnchor: anchor,
+			Coverage: e.Coverage, CompletedWith: with,
 		})
 	}
 	return out

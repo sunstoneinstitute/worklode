@@ -386,7 +386,7 @@ func TestNewPlanIndexIgnoresNonPlanDocs(t *testing.T) {
 		Kind:   "spec",
 		Path:   "docs/specs/001-example.md",
 		Status: "accepted",
-		Source: []byte("---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# S\n\nBody.\n"),
+		Edges:  []designdoc.EdgeMeta{{Rel: "covers", Target: specSec1, TargetAnchor: "sec-1", Coverage: "full"}},
 	}
 	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{specDoc}, "")
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
@@ -403,7 +403,7 @@ func TestSectionCoveringSortedByPath(t *testing.T) {
 			Kind:   "plan",
 			Path:   "docs/plans/" + name,
 			Status: "accepted",
-			Source: []byte("---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# " + name + "\n\nBody.\n"),
+			Edges:  []designdoc.EdgeMeta{{Rel: "covers", Target: specSec1, TargetAnchor: "sec-1", Coverage: "full"}},
 		}
 	}
 	docs := []designdoc.CorpusDoc{mk("z.md"), mk("a.md"), mk("m.md")}
@@ -425,7 +425,7 @@ func TestSectionNumberedAliasResolvesToKnownSlug(t *testing.T) {
 	spec := designdoc.CorpusDoc{Kind: "spec", Path: "docs/specs/per-project-workflows.md"}
 	plan := designdoc.CorpusDoc{
 		Kind: "plan", Path: "docs/plans/a.md", Status: "accepted",
-		Source: []byte("---\nstatus: accepted\ncovers: docs/specs/045-per-project-workflows.md#sec-1\n---\n# A\n\nBody.\n"),
+		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "docs/specs/045-per-project-workflows.md", TargetAnchor: "sec-1", Coverage: "full"}},
 	}
 	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{spec, plan}, "")
 	checkSection(t, ix, "docs/specs/per-project-workflows.md", "sec-1", designdoc.Full,
@@ -439,7 +439,7 @@ func TestSectionNumberedAliasResolvesToKnownSlug(t *testing.T) {
 func TestSectionNumberedAliasRequiresAKnownDocument(t *testing.T) {
 	plan := designdoc.CorpusDoc{
 		Kind: "plan", Path: "docs/plans/a.md", Status: "accepted",
-		Source: []byte("---\nstatus: accepted\ncovers: docs/specs/045-per-project-workflows.md#sec-1\n---\n# A\n\nBody.\n"),
+		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "docs/specs/045-per-project-workflows.md", TargetAnchor: "sec-1", Coverage: "full"}},
 	}
 	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{plan}, "")
 	checkSection(t, ix, "docs/specs/per-project-workflows.md", "sec-1", designdoc.Unplanned, nil)
@@ -489,21 +489,17 @@ func TestSectionAbsoluteCorpusRoot(t *testing.T) {
 		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
 }
 
-// shorthandFixture builds the spec+plan pair WL-409's tests share, using
-// CorpusDocFromBody rather than LoadSyncCorpus since the fixture is held in
-// memory, not on disk: a spec numbered 25, and a plan covering it by the
-// <KEY>-<TYPE>-<n> shorthand.
+// shorthandFixture builds the spec+plan pair WL-409's tests share: a spec
+// numbered 25, and a plan covering it by the <KEY>-<TYPE>-<n> shorthand.
 func shorthandFixture(t *testing.T) []designdoc.CorpusDoc {
 	t.Helper()
-	spec, _, err := designdoc.CorpusDocFromBody(designdoc.CorpusPath("spec", "example"), "spec", 25,
-		[]byte("---\nstatus: accepted\n---\n# Spec\n\n## 1. One {#sec-1}\n\nBody.\n"))
-	if err != nil {
-		t.Fatalf("spec: %v", err)
+	spec := designdoc.CorpusDoc{
+		Kind: "spec", Path: designdoc.CorpusPath("spec", "example"), Number: 25, Status: "accepted",
+		Sections: []designdoc.SectionMeta{{Anchor: "sec-1", Heading: "1. One", Depth: 2}},
 	}
-	plan, _, err := designdoc.CorpusDocFromBody(designdoc.CorpusPath("plan", "a"), "plan", 1,
-		[]byte("---\nstatus: accepted\ncovers: WL-SPEC-25#sec-1\n---\n# A\n\nBody.\n"))
-	if err != nil {
-		t.Fatalf("plan: %v", err)
+	plan := designdoc.CorpusDoc{
+		Kind: "plan", Path: designdoc.CorpusPath("plan", "a"), Number: 1, Status: "accepted",
+		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "WL-SPEC-25", TargetAnchor: "sec-1", Coverage: "full"}},
 	}
 	return []designdoc.CorpusDoc{spec, plan}
 }
