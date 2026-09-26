@@ -63,7 +63,16 @@ jobs:
           # if the fetch fails, the script's own no-base guard errors instead
           # of silently skipping the check.
           git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main || true
-          ./scripts/check-migrations.sh --no-fix
+          # NEW-<slug> migrations are fine on a PR but must be numbered by
+          # number-migrations.yml before they reach the queue or main.
+          flags=(--no-fix)
+          if [ "$EVENT" = merge_group ] || [ "$REF" = refs/heads/main ]; then
+            flags+=(--no-new)
+          fi
+          ./scripts/check-migrations.sh "${flags[@]}"
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
       # Only reached on mixed or `can-be-tested` PRs — docs-only PRs skip this
       # workflow, so the pre-commit hook is the primary gate.
       - name: codex marketplace mirrors claude
