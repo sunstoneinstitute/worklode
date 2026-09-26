@@ -298,6 +298,8 @@ nav.local a .cnt{margin-left:auto;font-size:0.8125rem;font-weight:600;color:var(
 .card > .hd{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
 .card > .hd h3{font-size:1.125rem}
 .card > .hd .meta{margin-left:auto;font-size:0.90625rem;color:var(--ink-3);display:flex;align-items:center;gap:8px}
+.card > .hd .meta p{margin:0}
+.card > .hd:last-child{border-bottom:0}
 .card > .bd{padding:14px 16px}
 .card.pad{padding:14px 16px}
 .muted{color:var(--ink-3)}

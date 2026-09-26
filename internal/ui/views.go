@@ -994,7 +994,7 @@ type DocView struct {
 	Revision *model.DocRevision
 	// Versions is the document's version history (025 §4.5), newest first —
 	// its live row and every version it has superseded — rendered as the
-	// Versions table below the chips.
+	// Versions table at the bottom of the page.
 	Versions []model.DocVersionSummary
 	// Consolidated says BodyHTML is the folded view (026 §3.2) rather than
 	// the stored source: every effective amendment and supersession inlined

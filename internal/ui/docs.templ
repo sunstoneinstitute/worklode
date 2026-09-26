@@ -135,34 +135,30 @@ templ Doc(v DocView) {
 		@globalShell() {
 			<section class="card pad">
 				<h1>{ v.Doc.Title }</h1>
-				<p>
-					<span class={ "chip " + docStatusChip(v.Doc.Status) }>{ v.Doc.Status }</span>
-					<span class="chip plain">{ v.Ref }</span>
-					<span class="chip plain">version { v.Doc.Version }</span>
-					<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Doc.Project }>{ v.Doc.Project }</a></span>
-				</p>
+				// One meta line: status, ref, version, project, provenance.
 				<p class="muted small">
-					Created { fmtTime(v.Doc.CreatedAt) } by { v.Doc.CreatedBy } &mdash; updated { fmtTime(v.Doc.UpdatedAt) }
+					<span class={ "chip " + docStatusChip(v.Doc.Status) }>{ v.Doc.Status }</span>
+					{ " " + v.Ref + " · version " + strconv.Itoa(v.Doc.Version) + " · " }
+					<a href={ "/projects/" + v.Doc.Project }>{ v.Doc.Project }</a>
+					{ " · created " + fmtTime(v.Doc.CreatedAt) + " by " + v.Doc.CreatedBy + " · updated " + fmtTime(v.Doc.UpdatedAt) }
+					if v.Doc.Owner != "" && v.Doc.Owner != v.Doc.CreatedBy {
+						{ " · owned by " + v.Doc.Owner }
+					}
 					if v.Doc.Issued != "" {
 						{ " · issued " + v.Doc.Issued }
 					}
+					if v.Doc.GeneratedByTask != "" {
+						{ " · written by " }<a href={ "/tasks/" + v.Doc.GeneratedByTask }>{ v.Doc.GeneratedByTask }</a>
+					}
 				</p>
-				if v.Doc.Owner != "" {
-					<p class="muted small">Owned by { v.Doc.Owner }</p>
-				}
-				@pageActs(docActions(v))
-				if v.Doc.GeneratedByTask != "" {
-					<p class="muted small">
-						Written by task <a href={ "/tasks/" + v.Doc.GeneratedByTask }>{ v.Doc.GeneratedByTask }</a>
-					</p>
-				}
 				if v.Revision != nil {
 					<p><strong>A candidate revision is open</strong>, by { v.Revision.CreatedBy } ({ fmtTime(v.Revision.CreatedAt) }). The accepted version below stays authoritative until it lands.</p>
 				}
 			</section>
+			@docReview(v)
 			if len(v.Sections) > 0 {
 				<details class="card" aria-labelledby="contents-heading">
-					<summary class="hd"><h3 id="contents-heading">Contents ({ strconv.Itoa(len(v.Sections)) })</h3></summary>
+					<summary class="hd"><h3 id="contents-heading">Table of contents ({ strconv.Itoa(len(v.Sections)) })</h3></summary>
 					<div class="bd">
 						@tableWrap("Sections") {
 							<table>
@@ -170,11 +166,9 @@ templ Doc(v DocView) {
 								for _, sec := range v.Sections {
 									<tr>
 										// The anchor links at the heading it names in the
-										// body below, which is what makes this table a table
-										// of contents rather than a list of fragment names.
-										// An anchor outside the 025 §3 grammar is stored but
-										// dropped by the sanitiser, so its link goes nowhere
-										// — the corpus lint is what stops one being written.
+										// body below. An anchor outside the 025 §3 grammar
+										// is dropped by the sanitiser, so its link goes
+										// nowhere; the corpus lint stops one being written.
 										<td class="mono"><a href={ "#" + sec.Anchor }>{ "#" + sec.Anchor }</a></td>
 										<td>{ sec.Heading }</td>
 										<td class="mono">{ sec.LastRevisedIn }</td>
@@ -192,28 +186,6 @@ templ Doc(v DocView) {
 					</div>
 				</details>
 			}
-			if len(v.Versions) > 0 {
-				<section class="card">
-					<div class="hd"><h3>Versions</h3></div>
-					<div class="bd">
-						@tableWrap("Versions") {
-							<table>
-								<tr><th>Version</th><th>Title</th><th>Issued</th><th>Snapshot at</th></tr>
-								for _, ver := range v.Versions {
-									<tr>
-										<td class="mono"><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Version }</a></td>
-										<td><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Title }</a></td>
-										<td class="mono">{ ver.Issued }</td>
-										<td class="mono">{ fmtTime(ver.CreatedAt) }</td>
-									</tr>
-								}
-							</table>
-						}
-					</div>
-				</section>
-			}
-			@docReview(v)
-			@docNotes(v)
 			<section class="card">
 				<div class="hd">
 					<h3>Body</h3>
@@ -239,6 +211,7 @@ templ Doc(v DocView) {
 					}
 				}
 			</section>
+			@docNotes(v)
 			<details class="card" aria-labelledby="relations-heading">
 				<summary class="hd"><h3 id="relations-heading">Relations ({ strconv.Itoa(len(v.Edges) + len(v.EdgesIn)) })</h3></summary>
 				<div class="bd">
@@ -246,6 +219,26 @@ templ Doc(v DocView) {
 					@docEdges("Into this document", v.EdgesIn)
 				</div>
 			</details>
+			if len(v.Versions) > 0 {
+				<details class="card" aria-labelledby="versions-heading">
+					<summary class="hd"><h3 id="versions-heading">Versions ({ strconv.Itoa(len(v.Versions)) })</h3></summary>
+					<div class="bd">
+						@tableWrap("Versions") {
+							<table>
+								<tr><th>Version</th><th>Title</th><th>Issued</th><th>Snapshot at</th></tr>
+								for _, ver := range v.Versions {
+									<tr>
+										<td class="mono"><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Version }</a></td>
+										<td><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Title }</a></td>
+										<td class="mono">{ ver.Issued }</td>
+										<td class="mono">{ fmtTime(ver.CreatedAt) }</td>
+									</tr>
+								}
+							</table>
+						}
+					</div>
+				</details>
+			}
 		}
 	}
 }
@@ -309,42 +302,47 @@ templ DocVersion(v DocVersionView) {
 	}
 }
 
-// docReview renders the review state 025 §7.3 and 029 §7 already hold: the
-// durable reviewer roster with who still owes a verdict, and every approval
-// still awaiting a decision, each with the same decide form the Reviews queue
-// posts (the form carries this page as its return, so deciding here comes
-// back here). It states an empty roster and an empty queue outright rather
-// than rendering a card that looks like it failed to load.
+// docReview renders the review state 025 §7.3 and 029 §7 hold, plus the
+// document's actions (Accept, Publish): the reviewer roster with who still
+// owes a verdict, and every approval awaiting a decision, each with the same
+// decide form the Reviews queue posts. An empty roster and queue collapse to
+// one line that says so.
 templ docReview(v DocView) {
-	<section class="card">
-		<div class="hd"><h3>Review</h3></div>
+	<section class="card" aria-labelledby="review-heading">
+		<div class="hd">
+			<h3 id="review-heading">Review</h3>
+			<div class="meta">
+				@pageActs(docActions(v))
+			</div>
+		</div>
 		<div class="bd">
-			<h4>Reviewers</h4>
-			if len(v.Reviewers) == 0 {
-				<p class="muted">No reviewers are assigned.</p>
+			if len(v.Reviewers) == 0 && len(v.Approvals) == 0 {
+				<p class="muted">No reviewers assigned. No approvals open.</p>
 			} else {
-				<ul>
-					for _, rev := range v.Reviewers {
-						<li>
-							{ rev.Actor }{ " " }
+				if len(v.Reviewers) == 0 {
+					<p class="muted">No reviewers assigned.</p>
+				} else {
+					<p>
+						Reviewers:
+						for _, rev := range v.Reviewers {
+							{ " " + rev.Actor + " " }
 							if rev.Awaiting {
 								<span class="chip warn">awaiting</span>
 							} else {
 								<span class="chip ok">reviewed</span>
 							}
-						</li>
-					}
-				</ul>
-			}
-			<h4>Approvals</h4>
-			if len(v.Approvals) == 0 {
-				<p class="muted">No approvals are open on this document.</p>
-			} else {
-				<ul class="approvalq">
-					for _, row := range v.Approvals {
-						@approvalRow(row)
-					}
-				</ul>
+						}
+					</p>
+				}
+				if len(v.Approvals) == 0 {
+					<p class="muted">No approvals open.</p>
+				} else {
+					<ul class="approvalq">
+						for _, row := range v.Approvals {
+							@approvalRow(row)
+						}
+					</ul>
+				}
 			}
 		</div>
 	</section>
@@ -352,14 +350,18 @@ templ docReview(v DocView) {
 
 // docNotes renders the document's anchored notes (025 §8.5). A note settles
 // nothing and blocks nothing, so it is listed where it applies — the anchor
-// links at the section in the body below — and never presented as a verdict.
+// links at the section in the body above — and never presented as a verdict.
+// No notes collapses the card to its header.
 templ docNotes(v DocView) {
-	<section class="card">
-		<div class="hd"><h3>Notes</h3></div>
-		<div class="bd">
+	<section class="card" aria-labelledby="notes-heading">
+		<div class="hd">
+			<h3 id="notes-heading">Notes</h3>
 			if len(v.Notes) == 0 {
-				<p class="muted">No notes.</p>
-			} else {
+				<span class="meta">none</span>
+			}
+		</div>
+		if len(v.Notes) > 0 {
+			<div class="bd">
 				<ul>
 					for _, n := range v.Notes {
 						<li>
@@ -376,8 +378,8 @@ templ docNotes(v DocView) {
 						</li>
 					}
 				</ul>
-			}
-		</div>
+			</div>
+		}
 	</section>
 }
 
