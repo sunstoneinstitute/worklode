@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Generate internal/ns/gen.go from ns/concept.ttl.
+"""Generate internal/ns/gen.go from ns/concept.ttl and ns/ontology.ttl.
 
 ns/concept.ttl is the source of the enums that also appear as CHECK
-constraints and as Go literals (025 §17). This makes the Turtle the one that
-is typed by hand and the Go the one that is derived, so a kind or a status
+constraints and as Go literals (025 §17). ns/ontology.ttl is the source of
+the stored edge types, read from its `wl:edgeOrigin`/`wl:storedAs`
+annotations (WL-SPEC-77 §8.1). This makes the Turtle the one that is typed by
+hand and the Go the one that is derived, so a kind, a status or an edge type
 cannot be added in one place and forgotten in the other.
 
 Stdlib only, deliberately. The obvious implementation imports rdflib, but that
@@ -28,6 +30,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CONCEPT_TTL = ROOT / "ns" / "concept.ttl"
+ONTOLOGY_TTL = ROOT / "ns" / "ontology.ttl"
 GEN_GO = ROOT / "internal" / "ns" / "gen.go"
 
 SKOS = "http://www.w3.org/2004/02/skos/core#"
@@ -35,6 +38,9 @@ RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 RDF_NIL = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
 RDF_FIRST = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
 RDF_REST = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
+OWL = "http://www.w3.org/2002/07/owl#"
+WL = "https://worklode.io/ns/ontology#"
+WLC = "https://worklode.io/ns/concept/"
 
 
 class TurtleError(Exception):
@@ -89,12 +95,14 @@ class Parser:
 
     Supported: @prefix/@base directives, IRIs, prefixed names, `a`, string
     literals (short and long, with optional language tag or ^^datatype),
-    predicate-object lists (`;`), object lists (`,`), and RDF collections
-    (`( ... )`).
+    predicate-object lists (`;`), object lists (`,`), RDF collections
+    (`( ... )`), and blank node property lists (`[]`, `[ p o ; ... ]`).
 
-    Everything else raises TurtleError: blank node property lists, bare
-    numeric and boolean literals, SPARQL-style PREFIX/BASE, the default
-    prefix (`:x`), and - the one a human might actually write - a language
+    A literal is returned as its quoted source text minus any language tag or
+    datatype, so an IRI can never be mistaken for one.
+
+    Everything else raises TurtleError: bare numeric and boolean literals,
+    SPARQL-style PREFIX/BASE, the default prefix (`:x`), and - the one a human might actually write - a language
     tag with a subtag, `"hi"@en-GB`.
     """
 
@@ -125,7 +133,7 @@ class Parser:
 
     def fresh_bnode(self) -> str:
         self._bnode += 1
-        return f"_:list{self._bnode}"
+        return f"_:b{self._bnode}"
 
     # -- terms ------------------------------------------------------------
 
@@ -145,17 +153,24 @@ class Parser:
         if kind == "word" and text == "a":
             return RDF_TYPE
         if kind in ("str", "longstr"):
-            # Literals are not needed by any caller; keep the raw form so the
-            # parser stays total, and consume any language/datatype suffix.
             nxt = self.peek()
             if nxt and nxt[1].startswith("@"):
                 self.next()
             elif nxt and nxt[1] == "^^":
                 self.next()
                 self.term()
-            return "\x00literal"
+            return text
         if kind == "punct" and text == "(":
             return self.collection()
+        if kind == "punct" and text == "[":
+            node = self.fresh_bnode()
+            tok = self.peek()
+            if tok and tok[1] == "]":
+                self.next()
+                return node
+            self.predicate_objects(node)
+            self.expect("]")
+            return node
         raise TurtleError(f"unsupported term {text!r}")
 
     def collection(self) -> str:
@@ -201,7 +216,10 @@ class Parser:
         self.expect(".")
 
     def statement(self) -> None:
-        subject = self.term()
+        self.predicate_objects(self.term())
+        self.expect(".")
+
+    def predicate_objects(self, subject: str) -> None:
         while True:
             predicate = self.term()
             while True:
@@ -215,11 +233,10 @@ class Parser:
                 self.next()
                 # A trailing `;` before `.` is legal Turtle.
                 nxt = self.peek()
-                if nxt and nxt[1] == ".":
+                if nxt and nxt[1] in (".", "]"):
                     break
                 continue
             break
-        self.expect(".")
 
 
 # --------------------------------------------------------------------------
@@ -336,11 +353,68 @@ def extract(ttl: str) -> tuple[dict[str, list[str]], list[str]]:
     return schemes, statuses
 
 
+EDGE_TABLES = ("doc_edges", "rule_edges", "task_edges")
+_STORED_AS_RE = re.compile(r"^(doc_edges|rule_edges|task_edges)\.[A-Za-z_]+$")
+
+
+def extract_edges(ttl: str) -> list[tuple[str, str, str, str, bool]]:
+    """Stored edge types from ontology.ttl, sorted by table then type.
+
+    Each entry is (table, type, property IRI, inverse IRI or "", symmetric).
+    A declared property is stored, one entry per `wl:storedAs` literal; an
+    inferred one is only ever derived as the `owl:inverseOf` of a declared one.
+    """
+    triples = Parser(ttl).parse()
+    origins: dict[str, str] = {}
+    for s, p, o in triples:
+        if p != WL + "edgeOrigin":
+            continue
+        if o not in (WLC + "declared", WLC + "inferred"):
+            raise TurtleError(f"{s}: wl:edgeOrigin {o!r} is neither wlc:declared nor wlc:inferred")
+        origins[s] = o
+    declared = {s for s, o in origins.items() if o == WLC + "declared"}
+    stored: dict[str, list[str]] = {}
+    for s, p, o in triples:
+        if p == WL + "storedAs":
+            stored.setdefault(s, []).append(o)
+    inverse_of: dict[str, list[str]] = {}
+    for s, p, o in triples:
+        if p == OWL + "inverseOf":
+            inverse_of.setdefault(s, []).append(o)
+    symmetric = {s for s, p, o in triples if p == RDF_TYPE and o == OWL + "SymmetricProperty"}
+
+    inverses: dict[str, str] = {}
+    for s, o in origins.items():
+        if o != WLC + "inferred":
+            continue
+        if s in stored:
+            raise TurtleError(f"{s}: an inferred property carries wl:storedAs")
+        targets = [t for t in inverse_of.get(s, []) if t in declared]
+        if not targets:
+            raise TurtleError(f"{s}: an inferred property needs owl:inverseOf a declared property")
+        for t in targets:
+            inverses.setdefault(t, s)
+
+    edges: dict[tuple[str, str], tuple[str, str, str, str, bool]] = {}
+    for prop in sorted(declared):
+        if prop not in stored:
+            raise TurtleError(f"{prop}: a declared property has no wl:storedAs")
+        for lit in stored[prop]:
+            value = lit[1:-1] if lit.startswith('"') else lit
+            if not _STORED_AS_RE.match(value):
+                raise TurtleError(f"{prop}: wl:storedAs {lit} is not <edge table>.<type>")
+            table, _, typ = value.partition(".")
+            if (table, typ) in edges:
+                raise TurtleError(f"{table}.{typ} is stored by both {edges[table, typ][2]} and {prop}")
+            edges[table, typ] = (table, typ, prop, inverses.get(prop, ""), prop in symmetric)
+    return [edges[k] for k in sorted(edges)]
+
+
 # --------------------------------------------------------------------------
 # Emission
 # --------------------------------------------------------------------------
 
-TEMPLATE = '''// Code generated by scripts/nsgen.py from ns/concept.ttl. DO NOT EDIT.
+TEMPLATE = '''// Code generated by scripts/nsgen.py from ns/concept.ttl and ns/ontology.ttl. DO NOT EDIT.
 
 // Package ns exposes the concept schemes of ns/concept.ttl as Go values.
 //
@@ -364,10 +438,15 @@ var TaskKinds = Schemes["TaskKind"]
 // DesignDocStatuses mirrors wlc:DesignDocStatus and the docs.status CHECK
 // constraint, in the lifecycle order of wlc:DesignDocStatusOrder.
 var DesignDocStatuses = []string{%s}
+
+// EdgeTerms is every stored edge type of ns/ontology.ttl, sorted by table
+// then type.
+var EdgeTerms = []EdgeTerm{
+%s}
 '''
 
 
-def render(schemes: dict[str, list[str]], statuses: list[str]) -> str:
+def render(schemes: dict[str, list[str]], statuses: list[str], edges) -> str:
     def lit(values: list[str]) -> str:
         return ", ".join(f'"{v}"' for v in values)
 
@@ -378,7 +457,11 @@ def render(schemes: dict[str, list[str]], statuses: list[str]) -> str:
         f'\t{(chr(34) + name + chr(34) + ":").ljust(width)}{{{lit(members)}}},\n'
         for name, members in sorted(schemes.items())
     )
-    return TEMPLATE % (table, lit(statuses))
+    terms = "".join(
+        f'\t{{Table: "{t}", Type: "{typ}", Property: "{prop}", Inverse: "{inv}", Symmetric: {str(sym).lower()}}},\n'
+        for t, typ, prop, inv, sym in edges
+    )
+    return TEMPLATE % (table, lit(statuses), terms)
 
 
 def main() -> int:
@@ -395,7 +478,12 @@ def main() -> int:
     except (TurtleError, OSError) as exc:
         print(f"{CONCEPT_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
-    want = render(schemes, statuses)
+    try:
+        edges = extract_edges(ONTOLOGY_TTL.read_text(encoding="utf-8"))
+    except (TurtleError, OSError) as exc:
+        print(f"{ONTOLOGY_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
+        return 1
+    want = render(schemes, statuses, edges)
 
     if not args.check:
         GEN_GO.parent.mkdir(parents=True, exist_ok=True)
@@ -411,7 +499,7 @@ def main() -> int:
             have.splitlines(keepends=True),
             want.splitlines(keepends=True),
             fromfile=f"{rel} (on disk)",
-            tofile=f"{rel} (from ns/concept.ttl)",
+            tofile=f"{rel} (from ns/)",
         )
     )
     print(f"{rel} is stale — run ./scripts/nsgen.py and commit", file=sys.stderr)
