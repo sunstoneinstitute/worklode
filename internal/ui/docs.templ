@@ -1,5 +1,7 @@
 package ui
 
+import "strconv"
+
 // docs.templ renders the backbone's document corpus (spec 025 §5): the index
 // at /docs and one document at /docs/{id}. Both are read-only. Authoring is
 // not a page: a document's body is a markdown artifact with frontmatter,
@@ -10,7 +12,7 @@ package ui
 // internal/mdrender, the way the task page's body does. A spec is long-form
 // prose with headings, tables and code fences, none of which survive the <pre>
 // this used to be; the document flavour also keeps the {#sec-N} heading
-// anchors, which is what lets the Sections table link into it.
+// anchors, which is what lets the Contents table link into it.
 //
 // The document page is a review surface (WL-716), so what it defaults to
 // showing is the consolidated body — every effective amendment folded into
@@ -158,29 +160,9 @@ templ Doc(v DocView) {
 					<p><strong>A candidate revision is open</strong>, by { v.Revision.CreatedBy } ({ fmtTime(v.Revision.CreatedAt) }). The accepted version below stays authoritative until it lands.</p>
 				}
 			</section>
-			if len(v.Versions) > 0 {
-				<section class="card">
-					<div class="hd"><h3>Versions</h3></div>
-					<div class="bd">
-						@tableWrap("Versions") {
-							<table>
-								<tr><th>Version</th><th>Title</th><th>Issued</th><th>Snapshot at</th></tr>
-								for _, ver := range v.Versions {
-									<tr>
-										<td class="mono"><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Version }</a></td>
-										<td><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Title }</a></td>
-										<td class="mono">{ ver.Issued }</td>
-										<td class="mono">{ fmtTime(ver.CreatedAt) }</td>
-									</tr>
-								}
-							</table>
-						}
-					</div>
-				</section>
-			}
 			if len(v.Sections) > 0 {
-				<section class="card">
-					<div class="hd"><h3>Sections</h3></div>
+				<details class="card" aria-labelledby="contents-heading">
+					<summary class="hd"><h3 id="contents-heading">Contents ({ strconv.Itoa(len(v.Sections)) })</h3></summary>
 					<div class="bd">
 						@tableWrap("Sections") {
 							<table>
@@ -208,15 +190,28 @@ templ Doc(v DocView) {
 							</table>
 						}
 					</div>
+				</details>
+			}
+			if len(v.Versions) > 0 {
+				<section class="card">
+					<div class="hd"><h3>Versions</h3></div>
+					<div class="bd">
+						@tableWrap("Versions") {
+							<table>
+								<tr><th>Version</th><th>Title</th><th>Issued</th><th>Snapshot at</th></tr>
+								for _, ver := range v.Versions {
+									<tr>
+										<td class="mono"><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Version }</a></td>
+										<td><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Title }</a></td>
+										<td class="mono">{ ver.Issued }</td>
+										<td class="mono">{ fmtTime(ver.CreatedAt) }</td>
+									</tr>
+								}
+							</table>
+						}
+					</div>
 				</section>
 			}
-			<section class="card">
-				<div class="hd"><h3>Relations</h3></div>
-				<div class="bd">
-					@docEdges("Out of this document", v.Edges)
-					@docEdges("Into this document", v.EdgesIn)
-				</div>
-			</section>
 			@docReview(v)
 			@docNotes(v)
 			<section class="card">
@@ -244,6 +239,13 @@ templ Doc(v DocView) {
 					}
 				}
 			</section>
+			<details class="card" aria-labelledby="relations-heading">
+				<summary class="hd"><h3 id="relations-heading">Relations ({ strconv.Itoa(len(v.Edges) + len(v.EdgesIn)) })</h3></summary>
+				<div class="bd">
+					@docEdges("Out of this document", v.Edges)
+					@docEdges("Into this document", v.EdgesIn)
+				</div>
+			</details>
 		}
 	}
 }

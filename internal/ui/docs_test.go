@@ -58,6 +58,23 @@ func TestDocSectionsLinkAtTheirAnchors(t *testing.T) {
 	}
 }
 
+// TestDocPageOrder: the table of contents opens the page and Relations closes
+// it, both collapsed, so the body sits near the top.
+func TestDocPageOrder(t *testing.T) {
+	body := renderDoc(t, DocView{
+		Page:     PageProps{Title: "doc"},
+		Doc:      model.Doc{ID: 25, Slug: "025-documents", Title: "Documents"},
+		Sections: []model.DocSection{{Anchor: "sec-1", Heading: "1. Purpose"}},
+		BodyHTML: `<h2 id="sec-1">1. Purpose</h2>`,
+	})
+	contents := strings.Index(body, `<details class="card" aria-labelledby="contents-heading">`)
+	bodyAt := strings.Index(body, `<h3>Body</h3>`)
+	relations := strings.Index(body, `<details class="card" aria-labelledby="relations-heading">`)
+	if contents < 0 || bodyAt < 0 || relations < 0 || !(contents < bodyAt && bodyAt < relations) {
+		t.Fatalf("want collapsed Contents, then Body, then collapsed Relations; got positions %d, %d, %d", contents, bodyAt, relations)
+	}
+}
+
 // TestDriftCardIsAdminOnly: the drift board reads as a finished feature to
 // anyone who finds it and is not one yet, so the card linking to it renders
 // only for an admin. The route and `lode graph drift` are deliberately not
