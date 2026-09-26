@@ -94,25 +94,6 @@ func logDocChange(tx *sql.Tx, docID, eventID int64, change map[string]string) er
 	return LogChange(tx, docEntityKind, strconv.FormatInt(docID, 10), eventID, change)
 }
 
-// snapshotDocVersion archives a document's current row into doc_versions
-// (025 §4.5), before the caller's own UPDATE docs SET ... overwrites it in
-// the same transaction. Called only from the two sites that bump
-// docs.version — UpdateDocBody's plan branch and AcceptRevision — so a draft
-// spec/ADR body edit, which never bumps version, never snapshots.
-func snapshotDocVersion(tx *sql.Tx, docID int64) error {
-	if _, err := tx.Exec(
-		// ON CONFLICT DO NOTHING is unreachable with both current callers:
-		// docs.version only increases and each snapshots the pre-bump value.
-		// Kept as belt-and-braces against a version somehow going backwards.
-		`INSERT INTO doc_versions (doc_id, version, body, title, issued, created_at)
-		 SELECT id, version, body, title, issued, updated_at FROM docs WHERE id = $1
-		 ON CONFLICT (doc_id, version) DO NOTHING`, docID,
-	); err != nil {
-		return fmt.Errorf("snapshot doc %d before version bump: %w", docID, err)
-	}
-	return nil
-}
-
 // CreateDoc inserts a document, its section rows and its frontmatter-derived
 // edges inside the given transaction, and appends a state_log row attributed
 // to eventID. Call it from a RecordDocEvent apply callback with the store's
@@ -302,20 +283,17 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 		if err := checkPlanTasksMinted(tx, id, parsed.doc); err != nil {
 			return nil, err
 		}
-		// Snapshot the version this edit is about to overwrite (025 §4.5):
-		// docs still holds its pre-update body, title and issued here, before
-		// the UPDATE below runs.
-		if err := snapshotDocVersion(tx, id); err != nil {
-			return nil, err
-		}
 		// A plan is edited in place rather than revised (025 §9), so its body
 		// edit is what a spec's accepted revision is: the next version of the
 		// document. Nothing else moves the number for a plan, and re-accepting
 		// one needs it to — the acceptance event's external id is derived from
 		// the document's IRI and version (§15.3), so a re-accept at an
 		// unchanged version collapses at the log, which is exactly the no-op
-		// an unedited plan should be.
-		version++
+		// an unedited plan should be. bumpDocVersion snapshots the version
+		// being replaced first (025 §4.5).
+		if version, err = bumpDocVersion(tx, id); err != nil {
+			return nil, err
+		}
 	}
 	// A plan's edit bumps version above, so second precision is enough to
 	// order its history; a draft spec/ADR is edited in place with no version
@@ -336,9 +314,9 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 	// property of the text.
 	if _, err := tx.Exec(
 		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
-		                 version = $5, updated_at = $6
+		                 updated_at = $5
 		  WHERE id = $1`,
-		id, body, title, nullText(parsed.issued), version, ts,
+		id, body, title, nullText(parsed.issued), ts,
 	); err != nil {
 		return nil, fmt.Errorf("update doc %d body: %w", id, err)
 	}
@@ -990,6 +968,12 @@ func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out m
 			out.Issued = issued.Time.Format(docDateLayout)
 		}
 		out.CreatedAt = out.CreatedAt.UTC()
+		if out.Edges, _, err = s.ListDocEdges(ctx, id); err != nil {
+			return model.DocVersion{}, err
+		}
+		if out.Rules, err = s.docVersionRules(ctx, id, version, false); err != nil {
+			return model.DocVersion{}, err
+		}
 		return out, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -1013,6 +997,12 @@ func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out m
 		out.Issued = issued.Time.Format(docDateLayout)
 	}
 	out.CreatedAt = out.CreatedAt.UTC()
+	if out.Edges, err = s.docEdgeSnapshot(ctx, id, version); err != nil {
+		return model.DocVersion{}, err
+	}
+	if out.Rules, err = s.docVersionRules(ctx, id, version, true); err != nil {
+		return model.DocVersion{}, err
+	}
 	return out, nil
 }
 

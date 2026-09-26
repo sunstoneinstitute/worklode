@@ -140,6 +140,19 @@ type DocVersion struct {
 	Issued  string `json:"issued"`
 	// CreatedAt: see DocVersionSummary.CreatedAt (WL-346).
 	CreatedAt time.Time `json:"created_at"`
+	// Edges are the document's outgoing edges and Rules its arrangement, as
+	// they stood at this version (WL-SPEC-77 §3).
+	Edges []DocEdge        `json:"edges"`
+	Rules []DocVersionRule `json:"rules"`
+}
+
+// DocVersionRule is one rule a document version arranged, in position order.
+type DocVersionRule struct {
+	Position    int    `json:"position"`
+	Rule        string `json:"rule"` // WL-RULE-<n>
+	RuleVersion int    `json:"rule_version"`
+	Depth       int    `json:"depth"`
+	Anchor      string `json:"anchor"`
 }
 
 // DocRevision is a document's open candidate revision (025 §7.2): a copy of
