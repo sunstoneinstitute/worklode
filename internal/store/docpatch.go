@@ -73,9 +73,10 @@ func PatchRule(err error) string {
 // at all.
 //
 // The gates are mechanical and the server owns them (§8.3). A changed section
-// that carries a wl:/wlc: term, a code surface or acceptance criteria, a
-// frontmatter `requires` that grew, or a section open work already points at
-// (§8.2) is refused outright — that edit is a revision. What survives is the
+// that carries a wl:/wlc: term, a code surface or acceptance criteria, or a
+// section open work already points at (§8.2) is refused outright — that edit
+// is a revision. A new dependency is a `lode doc link`, which writes the
+// candidate revision. What survives is the
 // caller's own judgment: a non-substantive patch records a note saying what
 // changed and why, a substantive one reopens the document's reviewers on the
 // new version and marks the sections it touched. The document stays accepted
@@ -105,7 +106,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse the accepted body of doc %d: %w", in.ID, err)
 	}
-	next, err := parseWrittenDocBody(d.kind, in.Body)
+	next, err := parseDocBody(d.kind, in.Body)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -327,23 +328,18 @@ func unexecutedCoveringPlans(tx *sql.Tx, docID int64, anchor string, exclude int
 // status move. Sections keep their existing published and patched flags
 // through the rebuild, last_revised_in moves on exactly the changed anchors
 // (§6 rule 5), and a section the patch added is published like the rest of
-// the accepted text it now belongs to. It returns the version it published.
+// the accepted text it now belongs to. Title, issued and edges are not the
+// body's, so the patch leaves them. It returns the version it published.
 func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 	next parsedDoc, changed []string, prior map[string]priorSection, eventID int64) (int, error) {
 
-	title, ok := designdoc.Title(next.doc)
-	if !ok {
-		title = d.slug
-	}
 	version, err := bumpDocVersion(tx, in.ID)
 	if err != nil {
 		return 0, err
 	}
 	if _, err := tx.Exec(
-		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
-		                 updated_at = $5
-		  WHERE id = $1`,
-		in.ID, in.Body, title, nullText(next.issued), now.UTC().Truncate(time.Second),
+		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`,
+		in.ID, in.Body, now.UTC().Truncate(time.Second),
 	); err != nil {
 		return 0, fmt.Errorf("patch doc %d: %w", in.ID, err)
 	}
@@ -359,9 +355,6 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 		}
 	}
 	if err := publishDocSections(tx, in.ID); err != nil {
-		return 0, err
-	}
-	if err := rebuildEdges(tx, now, in.ID, d.kind, d.project, next.doc.Frontmatter); err != nil {
 		return 0, err
 	}
 	return version, logDocChange(tx, in.ID, eventID, map[string]string{

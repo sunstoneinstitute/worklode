@@ -80,8 +80,13 @@ func mustCreateDoc(t *testing.T, s *Store, in DocInput) *model.Doc {
 
 // updateDocBody runs UpdateDocBody through RecordDocEvent. The optional
 // ifVersion is the compare-and-swap; omitted, the write is unconditional.
+//
+// The fixtures carry headers because CreateDoc reads one; a body write takes
+// none (WL-SPEC-77 §7), so this and updateRevision drop it first.
+// TestBodyWritesRefuseHeader calls the store directly.
 func updateDocBody(t *testing.T, s *Store, id int64, body string, ifVersion ...int) (*model.Doc, error) {
 	t.Helper()
+	body = noHeader(t, body)
 	want := 0
 	if len(ifVersion) > 0 {
 		want = ifVersion[0]
@@ -98,14 +103,48 @@ func updateDocBody(t *testing.T, s *Store, id int64, body string, ifVersion ...i
 }
 
 // replaceDocEdges runs ReplaceDocEdges through RecordDocEvent.
-func replaceDocEdges(t *testing.T, s *Store, id int64) error {
+func replaceDocEdges(t *testing.T, s *Store, id int64, edges ...model.DocEdgeInput) error {
 	t.Helper()
 	_, _, err := s.RecordDocEvent(t.Context(), "edges", "cli",
 		fmt.Sprintf("doc-edges-%d", docEventSeq.Add(1)), "doc.edges_rebuilt", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return ReplaceDocEdges(tx, s.Now(), id, eventID)
+			return ReplaceDocEdges(tx, s.Now(), id, edges, eventID)
 		})
 	return err
+}
+
+// linkDocEdge and unlinkDocEdge run LinkDocEdge and UnlinkDocEdge through
+// RecordDocEvent, acting as stig.
+func linkDocEdge(t *testing.T, s *Store, id int64, in model.DocEdgeInput) error {
+	t.Helper()
+	_, _, err := s.RecordDocEvent(t.Context(), "edges", "cli",
+		fmt.Sprintf("doc-link-%d", docEventSeq.Add(1)), "doc.edge_linked", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return LinkDocEdge(tx, s.Now(), id, in, "stig", eventID)
+		})
+	return err
+}
+
+func unlinkDocEdge(t *testing.T, s *Store, id int64, in model.DocEdgeInput) error {
+	t.Helper()
+	_, _, err := s.RecordDocEvent(t.Context(), "edges", "cli",
+		fmt.Sprintf("doc-unlink-%d", docEventSeq.Add(1)), "doc.edge_unlinked", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return UnlinkDocEdge(tx, s.Now(), id, in, "stig", eventID)
+		})
+	return err
+}
+
+// noHeader is body with its header removed, the form a body is stored and
+// written in (WL-SPEC-77 §7).
+func noHeader(t *testing.T, body string) string {
+	t.Helper()
+	d, err := designdoc.Parse([]byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Frontmatter = nil
+	return strings.TrimLeft(string(d.Bytes()), "\n")
 }
 
 // docSections reads a document's section rows in position order.
@@ -473,11 +512,11 @@ func TestDocUpdateBodyDraftSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDocBody: %v", err)
 	}
-	if updated.Body != edited {
+	if updated.Body != noHeader(t, edited) {
 		t.Error("body not swapped")
 	}
-	if updated.Title != "Retitled" {
-		t.Errorf("title = %q, want Retitled", updated.Title)
+	if updated.Title != doc.Title {
+		t.Errorf("title = %q, want %q: the H1 does not set it (WL-SPEC-77 §7)", updated.Title, doc.Title)
 	}
 	secs := docSections(t, s, doc.ID)
 	if len(secs) != 1 || secs[0].Anchor != "sec-1" {
@@ -598,11 +637,11 @@ func TestDocUpdateBodyAcceptedPlanAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDocBody on an accepted plan: %v", err)
 	}
-	if updated.Body != edited {
+	if updated.Body != noHeader(t, edited) {
 		t.Error("body not swapped")
 	}
-	if edges := docEdges(t, s, doc.ID); len(edges) != 0 {
-		t.Errorf("edges = %+v, want the old ones gone", edges)
+	if edges := docEdges(t, s, doc.ID); len(edges) == 0 {
+		t.Error("edges gone: a body edit writes no edge (WL-SPEC-77 §7)")
 	}
 }
 
@@ -631,7 +670,7 @@ func TestDocGetAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDoc: %v", err)
 	}
-	if got.Slug != "025-x" || got.Body != specBody {
+	if got.Slug != "025-x" || got.Body != noHeader(t, specBody) {
 		t.Errorf("GetDoc = %+v, want the spec", got)
 	}
 	if _, err := s.GetDoc(t.Context(), 9999); !errors.Is(err, ErrNotFound) {
@@ -806,6 +845,7 @@ func reviseDoc(t *testing.T, s *Store, id int64, actor string) error {
 // updateRevision runs UpdateRevision through RecordDocEvent.
 func updateRevision(t *testing.T, s *Store, id int64, body string) error {
 	t.Helper()
+	body = noHeader(t, body)
 	_, _, err := s.RecordDocEvent(t.Context(), "revise", "cli",
 		fmt.Sprintf("doc-revision-edit-%d", docEventSeq.Add(1)), "doc.revision.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
@@ -1071,50 +1111,19 @@ func TestDocAcceptSupersedesRetiredDoc(t *testing.T) {
 	}
 }
 
-// TestDocWriteRefusesRetiredKeys covers WL-SPEC-77 §7: a new write carrying
-// amends, amendedBy, replaces or isReplacedBy is refused, naming the rule
-// edge commands. A stored body that still carries one reads as if it were
-// absent: it writes no edge and supersedes nothing.
+// TestDocWriteRefusesRetiredKeys covers WL-SPEC-77 §7: a create whose header
+// carries amends, amendedBy, replaces or isReplacedBy is refused, naming the
+// rule edge commands. Every later body write refuses any header.
 func TestDocWriteRefusesRetiredKeys(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
-	old := mustCreateDoc(t, s, DocInput{
+	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody, CreatedBy: "stig", Status: "accepted",
 	})
 	retired := "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n---\n\n# New\n\n## 1. Scope {#sec-1}\n\na\n"
 	_, err := createDoc(t, s, DocInput{Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: retired, CreatedBy: "stig"})
 	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "replaces") || !strings.Contains(err.Error(), "lode rule supersede") {
 		t.Fatalf("create with replaces: err = %v, want ErrInvalidInput naming the key and lode rule supersede", err)
-	}
-
-	draft := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
-		Body: "---\nstatus: draft\n---\n\n# New\n\n## 1. Scope {#sec-1}\n\na\n",
-	})
-	amending := strings.Replace(retired, "replaces:", "amends:", 1)
-	if _, err := updateDocBody(t, s, draft.ID, amending); !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "amends") {
-		t.Fatalf("edit with amends: err = %v, want ErrInvalidInput naming amends", err)
-	}
-
-	// A body stored before the keys retired keeps its text and still accepts.
-	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET body = $2 WHERE id = $1`, draft.ID, retired); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := acceptDoc(t, s, draft.ID, "stig"); err != nil {
-		t.Fatalf("AcceptDoc of a legacy body: %v", err)
-	}
-	if got := docStatus(t, s, old.ID); got != "accepted" {
-		t.Errorf("006-old status = %q after accepting a legacy replaces body, want accepted", got)
-	}
-	if err := replaceDocEdges(t, s, draft.ID); err != nil {
-		t.Fatalf("ReplaceDocEdges of a legacy body: %v", err)
-	}
-	out, _, err := s.ListDocEdges(t.Context(), draft.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(out) != 0 {
-		t.Errorf("legacy body edges = %+v, want none", out)
 	}
 }
 
