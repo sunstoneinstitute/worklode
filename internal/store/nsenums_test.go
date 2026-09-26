@@ -40,6 +40,7 @@ var schemeChecks = map[string]struct {
 // than values in a column, so no CHECK constraint mirrors them.
 var schemesWithoutTable = map[string]string{
 	"ModelLayer": "wl:layer tags ontology terms; it is never stored",
+	"EdgeOrigin": "wl:edgeOrigin tags ontology terms; it is never stored",
 }
 
 // checkedValues returns the values the single CHECK constraint over

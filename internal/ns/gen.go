@@ -18,6 +18,7 @@ var Schemes = map[string][]string{
 	"DeployTargetKind": {"flux_kustomization", "manual", "pypi_target"},
 	"DeploymentStatus": {"deployed", "failed", "pending", "reconciling"},
 	"DesignDocStatus":  {"accepted", "draft", "spent", "stale", "superseded", "withdrawn"},
+	"EdgeOrigin":       {"declared", "inferred"},
 	"ModelLayer":       {"execution", "intent", "runtime"},
 	"RuntimeEventKind": {"crashloop", "flux_failure", "flux_recovery", "oom"},
 	"TaskKind":         {"bug", "chore", "decision", "design", "feature", "rally", "review", "spike"},
