@@ -244,11 +244,82 @@ func ModuleRootForTests() string {
 	return moduleRoot
 }
 
+var (
+	migrationsDirOnce sync.Once
+	migrationsDir     string
+)
+
 // MigrationsDirForTests returns the absolute path to deploy/base/migrations.
 // Tests that need a migrated database call Open then
-// Migrate(store.MigrationsDirForTests()).
+// Migrate(store.MigrationsDirForTests()). When a branch carries unnumbered
+// NEW-<slug> migrations, it returns a temp copy with them numbered instead,
+// since Migrate refuses NEW files.
 func MigrationsDirForTests() string {
-	return filepath.Join(ModuleRootForTests(), "deploy", "base", "migrations")
+	migrationsDirOnce.Do(func() {
+		var err error
+		migrationsDir, err = numberedMigrationsDir(filepath.Join(ModuleRootForTests(), "deploy", "base", "migrations"))
+		if err != nil {
+			panic(fmt.Sprintf("MigrationsDirForTests: %v", err))
+		}
+	})
+	return migrationsDir
+}
+
+// numberedMigrationsDir returns src unchanged when it has no NEW files, or a
+// temp copy with each NEW key numbered after the highest existing one, in
+// lexical order (as scripts/check-migrations.sh --number-new does).
+// ponytail: the temp copy is never removed; it is a few hundred KB per run.
+func numberedMigrationsDir(src string) (string, error) {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return "", err
+	}
+	highest := 0
+	renames := map[string]string{} // NEW key -> numbered key
+	var newKeys []string
+	for _, e := range entries {
+		name := e.Name()
+		if key, ok := strings.CutPrefix(name, "NEW"); ok {
+			key = "NEW" + strings.TrimSuffix(strings.TrimSuffix(key, ".up.sql"), ".down.sql")
+			if _, seen := renames[key]; !seen {
+				renames[key] = ""
+				newKeys = append(newKeys, key)
+			}
+			continue
+		}
+		if prefix, _, ok := strings.Cut(name, "_"); ok {
+			if n, err := strconv.Atoi(prefix); err == nil && n > highest {
+				highest = n
+			}
+		}
+	}
+	if len(newKeys) == 0 {
+		return src, nil
+	}
+	for i, key := range newKeys { // ReadDir sorts by name, so this is lexical order
+		_, slug, _ := strings.Cut(key, "-")
+		renames[key] = fmt.Sprintf("%04d_%s", highest+i+1, slug)
+	}
+	dst, err := os.MkdirTemp("", "wl-migrations-")
+	if err != nil {
+		return "", err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		data, err := os.ReadFile(filepath.Join(src, name))
+		if err != nil {
+			return "", err
+		}
+		for key, numbered := range renames {
+			if rest, ok := strings.CutPrefix(name, key+"."); ok {
+				name = numbered + "." + rest
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), data, 0o644); err != nil {
+			return "", err
+		}
+	}
+	return dst, nil
 }
 
 // Template-database machinery.

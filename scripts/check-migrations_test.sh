@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Tests scripts/check-migrations.sh's --no-fix checks: the base-max rule
-# added for WL-847 (a branch-added migration numbered at or below the base
-# ref's own highest number is skipped forever by golang-migrate) and a
-# regression guard for the pre-existing collision rule.
+# Tests scripts/check-migrations.sh: the --no-fix base-max rule added for
+# WL-847 (a branch-added migration numbered at or below the base ref's own
+# highest number is skipped forever by golang-migrate), a regression guard
+# for the pre-existing collision rule, and NEW-<slug> handling (WL-931).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -81,10 +81,11 @@ new_repo_no_base() {
 }
 
 # Runs the check in $dir and fails the test if the exit status or stderr
-# don't match what's expected.
+# don't match what's expected. $ARGS overrides the default --no-fix.
 check() {
 	local name=$1 dir=$2 want=$3 grep_for=${4:-} out status=0
-	out=$(cd "$dir" && ./scripts/check-migrations.sh --no-fix 2>&1) || status=$?
+	# shellcheck disable=SC2086
+	out=$(cd "$dir" && ./scripts/check-migrations.sh ${ARGS---no-fix} 2>&1) || status=$?
 	if [ "$want" = "pass" ] && [ "$status" -ne 0 ]; then
 		echo "FAIL: $name — expected exit 0, got $status:"
 		echo "$out"
@@ -129,6 +130,69 @@ check "collision between two new keys" "$d3" fail "number 80 is used by"
 d4="$WORK/case4"
 new_repo_no_base "$d4" 0071_entity_edges
 check "no base ref resolvable" "$d4" fail "no base ref"
+
+# Fails the test unless every named migration file exists and is listed in
+# kustomization.yaml, and no NEW file or listing is left.
+want_numbered() {
+	local name=$1 dir=$2 key suffix
+	shift 2
+	for key in "$@"; do
+		for suffix in up down; do
+			if [ ! -f "$dir/deploy/base/migrations/$key.$suffix.sql" ] ||
+				! grep -qF "migrations/$key.$suffix.sql" "$dir/deploy/base/kustomization.yaml"; then
+				echo "FAIL: $name — $key.$suffix.sql missing or not listed"
+				fails=$((fails + 1))
+			fi
+		done
+	done
+	if ls "$dir/deploy/base/migrations" | grep -q '^NEW' ||
+		grep -q 'migrations/NEW' "$dir/deploy/base/kustomization.yaml"; then
+		echo "FAIL: $name — NEW files or listings remain"
+		fails=$((fails + 1))
+	fi
+}
+
+# Case 5: --number-new gives NEW-foo main's max + 1.
+d5="$WORK/case5"
+new_repo "$d5" 0071_entity_edges
+add_files "$d5" NEW-foo
+ARGS=--number-new check "number-new numbers one NEW file" "$d5" pass
+want_numbered "number-new numbers one NEW file" "$d5" 0072_foo
+ARGS="--no-fix --no-new" check "numbered result passes the queue check" "$d5" pass
+
+# Case 6: several NEWn files are numbered in lexical order.
+d6="$WORK/case6"
+new_repo "$d6" 0071_entity_edges
+add_files "$d6" NEW2-alpha
+add_files "$d6" NEW1-beta
+ARGS=--number-new check "number-new numbers NEWn in order" "$d6" pass
+want_numbered "number-new numbers NEWn in order" "$d6" 0072_beta 0073_alpha
+
+# Case 7: --min raises the first number assigned.
+d7="$WORK/case7"
+new_repo "$d7" 0071_entity_edges
+add_files "$d7" NEW-foo
+ARGS="--number-new --min 80" check "number-new honors --min" "$d7" pass
+want_numbered "number-new honors --min" "$d7" 0080_foo
+
+# Case 8: fix mode (the pre-commit hook) leaves NEW files alone.
+d8="$WORK/case8"
+new_repo "$d8" 0071_entity_edges
+add_files "$d8" NEW-foo
+ARGS="" check "fix mode leaves NEW files alone" "$d8" pass
+[ -f "$d8/deploy/base/migrations/NEW-foo.up.sql" ] || {
+	echo "FAIL: fix mode renamed NEW-foo"
+	fails=$((fails + 1))
+}
+
+# Case 9: --no-fix (PR mode) accepts NEW files.
+d9="$WORK/case9"
+new_repo "$d9" 0071_entity_edges
+add_files "$d9" NEW-foo
+check "PR mode accepts NEW files" "$d9" pass
+
+# Case 10: --no-new (merge queue, main) rejects NEW files.
+ARGS="--no-fix --no-new" check "queue mode rejects NEW files" "$d9" fail "unnumbered"
 
 if [ "$fails" -ne 0 ]; then
 	echo "$fails case(s) failed"
