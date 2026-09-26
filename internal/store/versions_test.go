@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // snapshotRows returns query's rows as JSON text, one per row, so a live
@@ -99,7 +101,7 @@ func TestBumpDocVersionSnapshotsEdgesAndRules(t *testing.T) {
 	}
 }
 
-// TestPlanEditSnapshotsEdges: a plan body edit bumps the version and keeps
+// TestPlanEditSnapshotsEdges: a plan edge edit bumps the version and keeps
 // the replaced version's edges.
 func TestPlanEditSnapshotsEdges(t *testing.T) {
 	t.Parallel()
@@ -112,10 +114,12 @@ func TestPlanEditSnapshotsEdges(t *testing.T) {
 	if len(edges) == 0 {
 		t.Fatal("fixture: plan has no edges")
 	}
-	edited := strings.Replace(planBody, "  - 999-nowhere.md#sec-1\n", "", 1)
-	updated, err := updateDocBody(t, s, plan.ID, edited)
+	if err := unlinkDocEdge(t, s, plan.ID, model.DocEdgeInput{Type: "covers", To: "999-nowhere.md#sec-1"}); err != nil {
+		t.Fatalf("UnlinkDocEdge: %v", err)
+	}
+	updated, err := s.GetDoc(t.Context(), plan.ID)
 	if err != nil {
-		t.Fatalf("UpdateDocBody: %v", err)
+		t.Fatal(err)
 	}
 	if updated.Version != 2 {
 		t.Fatalf("version = %d, want 2", updated.Version)

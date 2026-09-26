@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -288,9 +289,9 @@ func TestCreateDocAtAcceptedForAnImporter(t *testing.T) {
 	}
 }
 
-// TestReplaceDocEdges is the corpus import's second pass: a reference that
-// resolved to nothing at create time becomes a real edge once its target
-// exists, and nothing else about the document moves.
+// TestReplaceDocEdges is the corpus import's edge write: the edges it sends
+// resolve against the documents that exist now, and nothing else about the
+// document moves.
 func TestReplaceDocEdges(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -313,7 +314,10 @@ func TestReplaceDocEdges(t *testing.T) {
 		Slug: "025-documents-in-the-backbone", Body: docSpecBody,
 	})
 
-	rr = doReq(t, h, "PUT", docPath(plan.ID, "/edges"), token, nil)
+	edges := model.ReplaceDocEdgesInput{Edges: []model.DocEdgeInput{
+		{Type: "covers", To: "025-documents-in-the-backbone.md#sec-1"},
+	}}
+	rr = doReq(t, h, "PUT", docPath(plan.ID, "/edges"), token, edges)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -345,11 +349,15 @@ func TestReplaceDocEdges(t *testing.T) {
 
 	// Import authority, not authoring authority.
 	bobToken := docActor(t, st, "bob")
-	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/edges"), bobToken, nil); rr.Code != http.StatusForbidden {
+	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/edges"), bobToken, edges); rr.Code != http.StatusForbidden {
 		t.Errorf("non-admin status = %d, want 403, body %s", rr.Code, rr.Body.String())
 	}
-	if rr := doReq(t, h, "PUT", "/api/v1/docs/4711/edges", token, nil); rr.Code != http.StatusNotFound {
+	if rr := doReq(t, h, "PUT", "/api/v1/docs/4711/edges", token, edges); rr.Code != http.StatusNotFound {
 		t.Errorf("unknown id status = %d, want 404", rr.Code)
+	}
+	inverse := model.ReplaceDocEdgesInput{Edges: []model.DocEdgeInput{{Type: "blocks", To: "025-part-2"}}}
+	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/edges"), token, inverse); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("inverse type status = %d, want 422, body %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -640,7 +648,7 @@ func TestListDocsOmitsBodies(t *testing.T) {
 	rr = doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
 	var detail model.DocDetail
 	decodeInto(t, rr, &detail)
-	if detail.Body != docSpecBody {
+	if detail.Body != noHeader(t, docSpecBody) {
 		t.Errorf("detail body = %q, want the whole source", detail.Body)
 	}
 
@@ -742,20 +750,24 @@ func TestUpdateDocBody(t *testing.T) {
 		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
 	})
 	edited := strings.Replace(docSpecBody, "# Documents in the backbone", "# Retitled", 1)
-	rr := doReq(t, h, "PUT", docPath(spec.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited})
+	rr := doReq(t, h, "PUT", docPath(spec.ID, "/body"), token, model.UpdateDocBodyInput{Body: noHeader(t, edited)})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("draft spec status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	var got model.Doc
 	decodeInto(t, rr, &got)
-	if got.Title != "Retitled" || got.Body != edited {
-		t.Errorf("doc = %+v, want the new title and body", got)
+	if got.Title != spec.Title || got.Body != noHeader(t, edited) {
+		t.Errorf("doc = %+v, want the new body and the title unchanged", got)
+	}
+	rr = doReq(t, h, "PUT", docPath(spec.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited})
+	if msg, _ := decodeMap(t, rr)["error"].(string); rr.Code != http.StatusUnprocessableEntity || !strings.Contains(msg, "carries no header") {
+		t.Errorf("body with a header: status = %d, error = %q; want 422 naming the header", rr.Code, msg)
 	}
 
 	if rr := doReq(t, h, "POST", docPath(spec.ID, "/accept"), token, nil); rr.Code != http.StatusOK {
 		t.Fatalf("accept status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	rr = doReq(t, h, "PUT", docPath(spec.ID, "/body"), token, model.UpdateDocBodyInput{Body: docSpecBody})
+	rr = doReq(t, h, "PUT", docPath(spec.ID, "/body"), token, model.UpdateDocBodyInput{Body: noHeader(t, docSpecBody)})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("accepted spec status = %d, want 422, body %s", rr.Code, rr.Body.String())
 	}
@@ -770,13 +782,13 @@ func TestUpdateDocBody(t *testing.T) {
 		CreatedBy: "alice", Status: "accepted",
 	})
 	rr = doReq(t, h, "PUT", docPath(plan.ID, "/body"), token,
-		model.UpdateDocBodyInput{Body: strings.Replace(docPlanBody, "Do the thing.", "Do it twice.", 1)})
+		model.UpdateDocBodyInput{Body: noHeader(t, strings.Replace(docPlanBody, "Do the thing.", "Do it twice.", 1))})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("accepted plan status = %d, want 200, body %s", rr.Code, rr.Body.String())
 	}
 
 	if rr := doReq(t, h, "PUT", "/api/v1/docs/4711/body", token,
-		model.UpdateDocBodyInput{Body: docSpecBody}); rr.Code != http.StatusNotFound {
+		model.UpdateDocBodyInput{Body: noHeader(t, docSpecBody)}); rr.Code != http.StatusNotFound {
 		t.Errorf("unknown id status = %d, want 404", rr.Code)
 	}
 }
@@ -883,7 +895,7 @@ kind: chore
 
 Do the third thing.
 `
-	rr = doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited})
+	rr = doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: noHeader(t, edited)})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("edit status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -989,7 +1001,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 	}
 	var rev model.DocRevision
 	decodeInto(t, rr, &rev)
-	if rev.Doc != spec.ID || rev.Body != docSpecBody || rev.CreatedBy != "alice" {
+	if rev.Doc != spec.ID || rev.Body != noHeader(t, docSpecBody) || rev.CreatedBy != "alice" {
 		t.Errorf("revision = %+v, want a copy of the accepted body", rev)
 	}
 
@@ -1002,7 +1014,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 	rr = doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
 	var detail model.DocDetail
 	decodeInto(t, rr, &detail)
-	if detail.Revision == nil || detail.Revision.Body != docSpecBody {
+	if detail.Revision == nil || detail.Revision.Body != noHeader(t, docSpecBody) {
 		t.Fatalf("detail revision = %+v, want the open candidate", detail.Revision)
 	}
 
@@ -1010,7 +1022,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 	// the 422 lists the violation.
 	dropped := strings.Replace(docSpecBody, "## 1. Scope {#sec-1}\n\nScope body.\n\n", "", 1)
 	if rr := doReq(t, h, "PUT", docPath(spec.ID, "/revision"), token,
-		model.UpdateDocBodyInput{Body: dropped}); rr.Code != http.StatusOK {
+		model.UpdateDocBodyInput{Body: noHeader(t, dropped)}); rr.Code != http.StatusOK {
 		t.Fatalf("update revision status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	rr = doReq(t, h, "POST", docPath(spec.ID, "/revision/accept"), token, nil)
@@ -1026,7 +1038,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 	// last_revised_in on exactly the changed anchor.
 	added := docSpecBody + "\n## 3. Added {#sec-3}\n\nAdded body.\n"
 	if rr := doReq(t, h, "PUT", docPath(spec.ID, "/revision"), token,
-		model.UpdateDocBodyInput{Body: added}); rr.Code != http.StatusOK {
+		model.UpdateDocBodyInput{Body: noHeader(t, added)}); rr.Code != http.StatusOK {
 		t.Fatalf("update revision status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	rr = doReq(t, h, "POST", docPath(spec.ID, "/revision/accept"), token, nil)
@@ -1035,7 +1047,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 	}
 	var landed model.Doc
 	decodeInto(t, rr, &landed)
-	if landed.Version != 2 || landed.Body != added {
+	if landed.Version != 2 || landed.Body != noHeader(t, added) {
 		t.Errorf("doc = version %d, want 2 with the candidate body", landed.Version)
 	}
 
@@ -1101,7 +1113,7 @@ func TestDocRevisionDiscard(t *testing.T) {
 	}
 	var after model.Doc
 	decodeInto(t, rr, &after)
-	if after.Version != 1 || after.Body != docSpecBody {
+	if after.Version != 1 || after.Body != noHeader(t, docSpecBody) {
 		t.Errorf("doc = version %d, want the accepted version untouched by a discard", after.Version)
 	}
 
@@ -1142,7 +1154,7 @@ func TestDocRevisionRefusals(t *testing.T) {
 		t.Errorf("revise draft status = %d, want 422", rr.Code)
 	}
 	if rr := doReq(t, h, "PUT", docPath(draft.ID, "/revision"), token,
-		model.UpdateDocBodyInput{Body: docSpecBody}); rr.Code != http.StatusUnprocessableEntity {
+		model.UpdateDocBodyInput{Body: noHeader(t, docSpecBody)}); rr.Code != http.StatusUnprocessableEntity {
 		t.Errorf("update revision of a draft status = %d, want 422", rr.Code)
 	}
 
@@ -1151,7 +1163,7 @@ func TestDocRevisionRefusals(t *testing.T) {
 		t.Errorf("accept with no open revision status = %d, want 404", rr.Code)
 	}
 	if rr := doReq(t, h, "PUT", docPath(spec.ID, "/revision"), token,
-		model.UpdateDocBodyInput{Body: docSpecBody}); rr.Code != http.StatusNotFound {
+		model.UpdateDocBodyInput{Body: noHeader(t, docSpecBody)}); rr.Code != http.StatusNotFound {
 		t.Errorf("update with no open revision status = %d, want 404", rr.Code)
 	}
 	// Landing a revision is owner-gated like the first accept.
@@ -1907,4 +1919,16 @@ func TestDocReferrers(t *testing.T) {
 	if rr := doReq(t, h, "GET", docPath(spec.ID, "/referrers"), token, nil); rr.Code != http.StatusBadRequest {
 		t.Errorf("referrers without anchor status = %d, want 400", rr.Code)
 	}
+}
+
+// noHeader is body with its header removed: fixtures carry headers because
+// POST /api/v1/docs reads one, and a body write takes none (WL-SPEC-77 §7).
+func noHeader(t *testing.T, body string) string {
+	t.Helper()
+	d, err := designdoc.Parse([]byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Frontmatter = nil
+	return strings.TrimLeft(string(d.Bytes()), "\n")
 }

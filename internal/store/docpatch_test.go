@@ -18,13 +18,7 @@ import (
 // the §8.4 rule split is about what an edit does to them, so none of them
 // carries a code span, a wl: term or an acceptance-criteria heading that
 // would fire a mechanical rule on its own.
-const patchSpecBody = `---
-status: accepted
-issued: 2026-08-01
-requires: 004-execution-backbone.md#sec-6
----
-
-# In-place amendment
+const patchSpecBody = `# In-place amendment
 
 Intro prose.
 
@@ -47,11 +41,6 @@ func reword(body string) string {
 
 func rewordSec2(body string) string {
 	return strings.Replace(body, "Model body.", "Model body, restated.", 1)
-}
-
-func addRequire(body string) string {
-	return strings.Replace(body, "requires: 004-execution-backbone.md#sec-6",
-		"requires:\n  - 004-execution-backbone.md#sec-6\n  - 022-metrics.md#sec-1", 1)
 }
 
 func narrowRule(body string) string {
@@ -114,7 +103,6 @@ func TestPatchDocRuleSplit(t *testing.T) {
 		{"non-substantive wording with note", reword, false, "clarified §2", []string{"ada"}, "", nil},
 		{"non-substantive without note", reword, false, "", []string{"ada"}, "note", nil},
 		{"referenced section refused", rewordSec2, false, "n", []string{"ada"}, "referrer", nil},
-		{"requires grows refused", addRequire, false, "n", []string{"ada"}, "new-dependency", nil},
 		{"judged substantive marks patched", narrowRule, true, "", []string{"ada"}, "", []string{"sec-3"}},
 		{"substantive with no reviewers refused", narrowRule, true, "", nil, "reviewers", nil},
 	}
@@ -148,7 +136,7 @@ func TestPatchDocRuleSplit(t *testing.T) {
 				if getErr != nil {
 					t.Fatal(getErr)
 				}
-				if after.Version != 1 || after.Body != patchSpecBody {
+				if after.Version != 1 || after.Body != noHeader(t, patchSpecBody) {
 					t.Errorf("refused patch still moved the document: version %d", after.Version)
 				}
 				return

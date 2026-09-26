@@ -330,8 +330,8 @@ type WithdrawDocInput struct {
 }
 
 // UpdateDocBodyInput is the request body for PUT /api/v1/docs/{id}/body and
-// PUT /api/v1/docs/{id}/revision: the whole markdown source, frontmatter
-// included, since the body is the authority for title, issued and edges.
+// PUT /api/v1/docs/{id}/revision: the whole markdown source, which carries no
+// header (WL-SPEC-77 §7).
 //
 // IfVersion is an optional compare-and-swap: the version the caller read and
 // means to overwrite. The write is refused when the stored version has moved
@@ -344,9 +344,38 @@ type UpdateDocBodyInput struct {
 	IfVersion int    `json:"if_version,omitempty"`
 }
 
+// DocEdgeInput is one document edge as a caller names it: the request body of
+// POST and DELETE /api/v1/docs/{id}/edges, and an element of
+// ReplaceDocEdgesInput. Type is a declared doc_edges type (WL-SPEC-77 §8.1);
+// To is a reference and may end in #sec-N. Coverage, CompletedWith (its
+// fullCoverageWith closure) and Owner (a defers edge's owner) carry what the
+// header's covers and defers entries carried (026 §5.1, §5.3).
+type DocEdgeInput struct {
+	Type          string   `json:"type"`
+	FromAnchor    string   `json:"from_anchor,omitempty"`
+	To            string   `json:"to"`
+	Coverage      string   `json:"coverage,omitempty"`
+	CompletedWith []string `json:"completed_with,omitempty"`
+	Owner         string   `json:"owner,omitempty"`
+}
+
+// ReplaceDocEdgesInput is the request body for PUT /api/v1/docs/{id}/edges,
+// the importer's rewrite of a document's whole live edge set.
+type ReplaceDocEdgesInput struct {
+	Edges []DocEdgeInput `json:"edges"`
+}
+
+// DocColumnsInput is the request body for PATCH /api/v1/docs/{id}: the
+// metadata a body no longer states (WL-SPEC-77 §7). A nil field is left as
+// it is. Issued is YYYY-MM-DD.
+type DocColumnsInput struct {
+	Title  *string `json:"title,omitempty"`
+	Issued *string `json:"issued,omitempty"`
+}
+
 // PatchDocInput is the request body for POST /api/v1/docs/{id}/patch: the
 // 025 §8.4 in-place amendment of an accepted spec or ADR. Body is the whole
-// markdown source, the same authority UpdateDocBodyInput carries.
+// markdown source, headerless like UpdateDocBodyInput's.
 //
 // Substantive is the caller's own judgment (§8.3 leaves it to them once the
 // mechanical rules pass): true reopens the document's reviewers on the new

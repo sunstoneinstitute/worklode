@@ -32,10 +32,19 @@ func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		return fmt.Errorf("doc %d is %s: only an accepted document is revised (025 §7.2): %w",
 			id, d.status, ErrInvalidInput)
 	}
+	if err := openRevision(tx, now, id, d.body, actorID); err != nil {
+		return err
+	}
+	return logDocChange(tx, id, eventID,
+		map[string]string{"field": "revision", "new": "open"})
+}
 
+// openRevision inserts document id's candidate revision, starting from body
+// and the live edge set (WL-SPEC-77 §3). ErrRevisionExists when one is open.
+func openRevision(tx *sql.Tx, now time.Time, id int64, body, actorID string) error {
 	if _, err := tx.Exec(
 		`INSERT INTO doc_revisions (doc_id, body, created_by, created_at) VALUES ($1, $2, $3, $4)`,
-		id, d.body, nullText(actorID), now.UTC().Truncate(time.Second),
+		id, body, nullText(actorID), now.UTC().Truncate(time.Second),
 	); err != nil {
 		if isUniqueViolation(err) {
 			return fmt.Errorf("doc %d already has an open revision: %w", id, ErrRevisionExists)
@@ -54,8 +63,7 @@ func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		   FROM doc_edges e WHERE e.from_doc = $1`, id); err != nil {
 		return fmt.Errorf("copy edges of doc %d into its revision: %w", id, err)
 	}
-	return logDocChange(tx, id, eventID,
-		map[string]string{"field": "revision", "new": "open"})
+	return nil
 }
 
 // UpdateRevision replaces the body of a document's open candidate revision.
@@ -74,8 +82,7 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 		return fmt.Errorf("doc %d is %s: only an accepted document has a revision to edit: %w",
 			id, d.status, ErrInvalidInput)
 	}
-	parsed, err := parseWrittenDocBody(d.kind, body)
-	if err != nil {
+	if _, err := parseDocBody(d.kind, body); err != nil {
 		return err
 	}
 	res, err := tx.Exec(`UPDATE doc_revisions SET body = $2 WHERE doc_id = $1`, id, body)
@@ -85,13 +92,6 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 	if err := requireOneAffected(res, fmt.Sprintf("update revision of doc %d", id),
 		fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)); err != nil {
 		return err
-	}
-	// Transitional, while bodies still carry headers: a candidate body with
-	// a header restates the candidate's edge set.
-	if fm := parsed.doc.Frontmatter; fm != nil {
-		if err := writeEdges(tx, id, d.kind, d.project, fm, true); err != nil {
-			return err
-		}
 	}
 	return logDocChange(tx, id, eventID,
 		map[string]string{"field": "revision", "new": "updated"})
@@ -156,7 +156,8 @@ func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID 
 
 // AcceptRevision lands a document's open candidate revision: it runs the
 // 025 §6 constraint check against the accepted version and, when clean, swaps
-// the body, bumps the version, rebuilds sections and edges, stamps
+// the body, bumps the version, rebuilds sections, lands the candidate's own
+// edge set (title and issued are columns, untouched by the body), stamps
 // last_revised_in on exactly the changed anchors, publishes every anchor the
 // new version carries, supersedes the documents its rules retire
 // (supersedeRetiredDocs), and consumes the candidate — one transaction, owner-gated like AcceptDoc.
@@ -209,10 +210,6 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 
-	title, ok := designdoc.Title(candidate.doc)
-	if !ok {
-		title = d.slug
-	}
 	ts := now.UTC().Truncate(time.Second)
 	// Snapshot the version this accept replaces (025 §4.5) and move to the
 	// next one, before any other write.
@@ -221,18 +218,12 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	if _, err := tx.Exec(
-		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
-		                 updated_at = $5
-		  WHERE id = $1`,
-		id, candidateBody, title, nullText(candidate.issued), ts,
+		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`, id, candidateBody, ts,
 	); err != nil {
 		return nil, fmt.Errorf("land revision of doc %d: %w", id, err)
 	}
 	after, err := rebuildSectionsFrom(tx, id, d.kind, candidate.doc, version, prior)
 	if err != nil {
-		return nil, err
-	}
-	if err := declareDocArtifacts(tx, now, id, candidate.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 	if err := landRevisionEdges(tx, id); err != nil {

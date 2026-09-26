@@ -486,7 +486,7 @@ func TestDocPatch(t *testing.T) {
 	// through the API and rendered on the document's own page.
 	const note = "Dropped a stray word from the model section."
 	patched, _, err := author.PatchDoc(ctx, doc.ID, model.PatchDocInput{
-		Body: gateSpecV2, Note: note,
+		Body: noHeader(t, gateSpecV2), Note: note,
 	})
 	if err != nil {
 		t.Fatalf("non-substantive patch: %v", err)
@@ -546,7 +546,7 @@ func TestDocPatch(t *testing.T) {
 	}
 	clientErr(t, func() error {
 		_, _, err := author.PatchDoc(ctx, doc.ID, model.PatchDocInput{
-			Body: gateSpecV2b, Note: "Another pass at the model.",
+			Body: noHeader(t, gateSpecV2b), Note: "Another pass at the model.",
 		})
 		return err
 	}(), "patch a section a second spec requires", "referrer", "sec-2", "requiring-spec")
@@ -556,7 +556,7 @@ func TestDocPatch(t *testing.T) {
 	// reviewers are reopened at the new version, and the watcher mints the
 	// re-review task that asks for those decisions.
 	substantive, _, err := author.PatchDoc(ctx, doc.ID, model.PatchDocInput{
-		Body: gateSpecV3, Substantive: true,
+		Body: noHeader(t, gateSpecV3), Substantive: true,
 	})
 	if err != nil {
 		t.Fatalf("substantive patch: %v", err)

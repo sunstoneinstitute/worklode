@@ -408,7 +408,7 @@ func TestEscalationLadder(t *testing.T) {
 	modelling := acceptTwo.Tasks[0]
 
 	patched, _, err := alice.PatchDoc(ctx, spec.ID, model.PatchDocInput{
-		Body: ladderSpecAmended, Note: "Dropped a stray word from the model section.",
+		Body: noHeader(t, ladderSpecAmended), Note: "Dropped a stray word from the model section.",
 	})
 	if err != nil {
 		t.Fatalf("amend the spec: %v", err)
