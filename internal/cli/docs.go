@@ -562,6 +562,18 @@ func DocVersionRender(w io.Writer, v model.DocVersion, current int) {
 		fmt.Fprintln(w)
 		Markdown(w, v.Body)
 	}
+	if len(v.Edges) > 0 {
+		fmt.Fprintln(w, "\nedges:")
+		for _, e := range v.Edges {
+			fmt.Fprintf(w, "  %s %s\n", e.Type, docEdgeTarget(e))
+		}
+	}
+	if len(v.Rules) > 0 {
+		fmt.Fprintln(w, "\nrules:")
+		for _, r := range v.Rules {
+			fmt.Fprintf(w, "  #%s  %s v%d\n", r.Anchor, r.Rule, r.RuleVersion)
+		}
+	}
 }
 
 // docStaleSuffix is what a reference to a stale document carries wherever one

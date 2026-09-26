@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -222,15 +223,9 @@ func reviseRule(tx *sql.Tx, id int64, heading, body string) (int64, int, error) 
 		}
 		return id, version, nil
 	}
-	if err := tx.QueryRow(
-		`UPDATE rules SET version = version + 1, status = 'draft', updated_at = now() WHERE id = $1 RETURNING version`,
-		id).Scan(&version); err != nil {
-		return 0, 0, fmt.Errorf("bump rule %d: %w", id, err)
-	}
-	if _, err := tx.Exec(
-		`INSERT INTO rule_versions (rule_id, version, heading, body) VALUES ($1, $2, $3, $4)`,
-		id, version, heading, body); err != nil {
-		return 0, 0, fmt.Errorf("insert rule %d v%d: %w", id, version, err)
+	version, err := bumpRuleVersion(tx, id, heading, body)
+	if err != nil {
+		return 0, 0, err
 	}
 	return id, version, nil
 }
@@ -481,9 +476,10 @@ func (s *Store) ListRuleVersions(ctx context.Context, projectKey string, number 
 
 // GetRuleVersion reads a rule as it stood at one version: the detail
 // with Version, Heading and Body taken from that version's row. ArrangedIn
-// and GovernedTasks are the current ones. Edges are unversioned too and
-// always reflect the neighbours' current headings (S26), so an old version's
-// edges are not what stood when that version was written.
+// and GovernedTasks are the current ones. For a superseded version the
+// outgoing edges are the ones snapshotted at that version
+// (rule_edge_versions); inbound edges are the current ones, since they are
+// owned by the other rule.
 func (s *Store) GetRuleVersion(ctx context.Context, projectKey string, number int64, version int) (*model.Rule, error) {
 	c, err := s.GetRule(ctx, projectKey, number)
 	if err != nil {
@@ -497,6 +493,19 @@ func (s *Store) GetRuleVersion(ctx context.Context, projectKey string, number in
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read rule %s v%d: %w", c.Ref, version, err)
+	}
+	if version != c.Version {
+		inbound := slices.DeleteFunc(c.Edges, func(e model.RuleEdge) bool { return e.From == c.Ref })
+		rows, err := s.db.QueryContext(ctx, ruleEdgeSnapshotSQL, c.ID, version)
+		if err != nil {
+			return nil, fmt.Errorf("read edges of rule %s v%d: %w", c.Ref, version, err)
+		}
+		defer rows.Close()
+		out, err := scanRuleEdges(rows)
+		if err != nil {
+			return nil, err
+		}
+		c.Edges = append(out, inbound...)
 	}
 	c.Version = version
 	return c, nil
