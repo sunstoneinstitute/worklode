@@ -753,30 +753,26 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 }
 
 // workBuckets is the per-project bucketing of work facts shared by the
-// board (assembleBoard) and Home's card counts. Blocked means a ready task
-// with at least one open blocker or blocking plan (ProjectWorkFact.Blocked);
-// in_progress and in_review tasks bucket by state; done tasks bucket
-// nowhere. Order within each bucket matches the input order. The
-// /projects/{id} cockpit (cockpit.go) computes the same ready&&Blocked()
-// rule separately, for its own response shape.
+// board (assembleBoard) and Home's card counts, keyed by model.DisplayState;
+// done tasks bucket nowhere. Order within each bucket matches the input
+// order.
 type workBuckets struct {
 	InProgress, InReview, Ready, Blocked []store.ProjectWorkFact
 }
 
 // bucketWorkFacts buckets one project's facts the way assembleBoard and
-// Home's card counts both need, so "blocked" is computed in exactly one
-// place for the web surface.
+// Home's card counts both need.
 func bucketWorkFacts(facts []store.ProjectWorkFact) workBuckets {
 	var b workBuckets
 	for _, f := range facts {
-		switch {
-		case f.Task.State == "in_progress":
+		switch model.DisplayState(f.Task.State, f.Blocked()) {
+		case "in_progress":
 			b.InProgress = append(b.InProgress, f)
-		case f.Task.State == "in_review":
+		case "in_review":
 			b.InReview = append(b.InReview, f)
-		case f.Task.State == "ready" && f.Blocked():
+		case "blocked":
 			b.Blocked = append(b.Blocked, f)
-		case f.Task.State == "ready":
+		case "ready":
 			b.Ready = append(b.Ready, f)
 		}
 	}

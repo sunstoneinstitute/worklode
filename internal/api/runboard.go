@@ -117,12 +117,12 @@ const (
 )
 
 // runGroupOf classifies one task's facts per the pinned table in the plan's
-// Global Constraints. Blockedness is f.Blocked() — the claim path's own
-// predicate — and "running" requires the active lease ListProjectWorkFacts
+// Global Constraints. Blockedness is model.DisplayState over f.Blocked(), the
+// claim path's own predicate, and "running" requires the active lease ListProjectWorkFacts
 // attaches, so an in_progress task whose lease expired lands in Needs
 // judgment rather than lying about a worker that is gone.
 func runGroupOf(f store.ProjectWorkFact) runGroup {
-	switch f.Task.State {
+	switch model.DisplayState(f.Task.State, f.Blocked()) {
 	case "merged", "deployed_dev", "deployed_prod", "released":
 		return runGroupCompleted
 	case "abandoned":
@@ -134,10 +134,9 @@ func runGroupOf(f store.ProjectWorkFact) runGroup {
 			return runGroupRunning
 		}
 		return runGroupJudgment
+	case "blocked":
+		return runGroupWaiting
 	case "ready":
-		if f.Blocked() {
-			return runGroupWaiting
-		}
 		return runGroupReady
 	default:
 		return runGroupNone

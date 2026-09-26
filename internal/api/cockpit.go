@@ -191,17 +191,15 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*model.
 	for _, f := range facts {
 		var bucket *[]model.CockpitWorkItem
 		blocked := false
-		switch f.Task.State {
+		switch model.DisplayState(f.Task.State, f.Blocked()) {
 		case "in_progress":
 			bucket = &work.InProgress
 		case "in_review":
 			bucket = &work.InReview
+		case "blocked":
+			bucket, blocked = &work.Blocked, true
 		case "ready":
-			if f.Blocked() {
-				bucket, blocked = &work.Blocked, true
-			} else {
-				bucket = &work.Ready
-			}
+			bucket = &work.Ready
 		default:
 			continue
 		}

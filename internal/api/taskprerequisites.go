@@ -73,6 +73,7 @@ func prerequisitesView(tree model.BlockerTree) *ui.Prerequisites {
 		if len(dependsOn[id]) == 0 {
 			v.Candidates = append(v.Candidates, id)
 		}
+		n.State = model.DisplayState(n.State, len(dependsOn[id]) > 0)
 		if reaches(id, id, dependsOn) {
 			n.Cycle = true
 			v.Cycle = append(v.Cycle, id)

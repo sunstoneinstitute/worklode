@@ -114,7 +114,7 @@ func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) ([]rankedRoo
 
 	var held []store.ProjectWorkFact
 	for _, f := range facts {
-		if f.Task.State == "ready" && f.Blocked() {
+		if model.DisplayState(f.Task.State, f.Blocked()) == "blocked" {
 			held = append(held, f)
 		}
 	}
