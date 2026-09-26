@@ -16,6 +16,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Write(**/deploy/base/migrations/*.sql)",
+            "command": "f=$(jq -r .tool_input.file_path); case \"$(basename \"$f\")\" in [0-9]*) [ -e \"$f\" ] || { echo 'New migrations are named NEW-<slug>.up.sql/.down.sql (NEW1-, NEW2- for several in one PR). The number-migrations workflow assigns the number. See .claude/rules/migrations.md.' >&2; exit 2; } ;; esac"
+          }
+        ]
+      }
     ]
   }
 }
