@@ -19,21 +19,24 @@ var ErrNoTrailer = errors.New("no trailer")
 // Declaration is one parsed trailer line (11 §4). Exactly one of Rule,
 // Section and None is set.
 type Declaration struct {
-	Rule      *designdoc.RuleRef    // Spec: WL-RULE-456
+	Rule      *designdoc.RuleRef    // Spec: WL-REQ-456
 	Section   *designdoc.SectionRef // Spec: WL-SPEC-4 sec-5 (transitional, S52)
 	None      string                // Spec: none <reason>: the reason
 	Qualifier string                // "", "amended", or a NoneReasons word on a cited ref
 	Line      string                // the line as written, trimmed
 }
 
-// String renders the declaration in its canonical trailer form, without the key.
+// String renders the declaration in its canonical trailer form, without the
+// key. The gate runs offline and cannot see a rule's kind, so a rule ref
+// prints as FormatRuleRef does for an unknown kind; the form doubles as the
+// reconciler's idempotency key, which a kind change must not move.
 func (d Declaration) String() string {
 	var ref string
 	switch {
 	case d.None != "":
 		return "none " + d.None
 	case d.Rule != nil:
-		ref = fmt.Sprintf("%s-RULE-%d", d.Rule.Key, d.Rule.Number)
+		ref = designdoc.FormatRuleRef(d.Rule.Key, d.Rule.Number, "")
 	case d.Section != nil:
 		ref = fmt.Sprintf("%s-%s-%d %s", d.Section.Shorthand.Key, d.Section.Shorthand.Type, d.Section.Shorthand.Number, d.Section.Anchor)
 	}

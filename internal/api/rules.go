@@ -14,18 +14,19 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// ruleRef reads the {id} path value as a rule ref such as WL-RULE-12.
+// ruleRef reads the {id} path value as a rule ref such as WL-REQ-12; any
+// infix resolves the rule by its number.
 func ruleRef(w http.ResponseWriter, r *http.Request) (designdoc.RuleRef, bool) {
 	ref, ok := designdoc.ParseRuleRef(r.PathValue("id"))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "rule id must look like WL-RULE-12")
+		writeErr(w, http.StatusBadRequest, "rule id must look like WL-REQ-12")
 		return designdoc.RuleRef{}, false
 	}
 	return ref, true
 }
 
 // getRule handles GET /api/v1/rules/{id}, where {id} is a rule ref
-// such as WL-RULE-12.
+// such as WL-REQ-12.
 func (s *server) getRule(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
 	if !ok {
@@ -79,7 +80,7 @@ func (s *server) editRule(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
-// patchRule handles PATCH /api/v1/rules/{id}: owner and tags (S15). The
+// patchRule handles PATCH /api/v1/rules/{id}: owner, tags and kind (S15). The
 // text is PUT; this is the metadata write, the way docs split body from owner.
 func (s *server) patchRule(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
@@ -91,7 +92,7 @@ func (s *server) patchRule(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	payload := map[string]any{"rule": r.PathValue("id"), "owner": req.Owner, "tags": req.Tags}
+	payload := map[string]any{"rule": r.PathValue("id"), "owner": req.Owner, "tags": req.Tags, "kind": req.Kind}
 	err := s.recordEvent(r.Context(), "cli", "rule.updated", payload,
 		func(tx *sql.Tx, _ int64) error {
 			id, err := store.RuleIDByRef(tx, ref.Key, ref.Number)

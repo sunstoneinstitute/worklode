@@ -8,40 +8,50 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
 
-// coversRules resolves one covers entry to the rules it names, when the plan
-// is written (WL-SPEC-77 §4, WL-SPEC-78 §4.1): a rule ref (WL-RULE-<n>, or its
-// earlier spelling WL-CL-<n>) to that rule, a <doc>#sec-N entry to the rule at
-// that anchor and every rule arranged under it, and a whole-document entry to
-// every rule the document contains, in arrangement order. Only specs and ADRs
-// contain rules, so an entry naming a plan, an unknown rule, a missing anchor
-// or nothing resolves to none and the caller keeps the reference in
+// coversRules resolves one covers entry to the requirements it names, when
+// the plan is written (WL-SPEC-77 §4, WL-SPEC-78 §4.1): a rule ref (any
+// infix) to that rule, a <doc>#sec-N entry to the requirements at that
+// anchor and under it, and a whole-document entry to every requirement the
+// document contains, in arrangement order. A section or document entry skips
+// invariants and informative rules; a rule ref naming one is refused. named
+// is false when the entry names no rule of any kind: a plan, an unknown
+// rule, a missing anchor or nothing, and the caller keeps the reference in
 // to_external.
-func coversRules(tx *sql.Tx, project, ref string) ([]int64, error) {
+func coversRules(tx *sql.Tx, project, ref string) (rules []int64, named bool, err error) {
 	base, fragment := designdoc.SplitFragment(ref)
 	if r, ok := designdoc.ParseRuleRef(base); ok && fragment == "" {
-		id, err := RuleIDByRef(tx, r.Key, r.Number)
-		if errors.Is(err, ErrNotFound) {
-			return nil, nil
+		var id int64
+		var kind string
+		err := tx.QueryRow(
+			`SELECT c.id, c.kind FROM rules c JOIN projects p ON p.id = c.project_id
+			  WHERE p.key = $1 AND c.number = $2`, r.Key, r.Number).Scan(&id, &kind)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false, nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, false, fmt.Errorf("resolve covers %s: %w", ref, err)
 		}
-		return []int64{id}, nil
+		if kind != designdoc.RuleKindRequirement {
+			return nil, true, fmt.Errorf("covers %s: %s is an %s rule, and a plan covers only requirements (WL-SPEC-78 §4.1): %w",
+				ref, designdoc.FormatRuleRef(r.Key, r.Number, kind), kind, ErrInvalidInput)
+		}
+		return []int64{id}, true, nil
 	}
 	docID, resolved, err := resolveDocRef(tx, project, base)
 	if err != nil || !resolved {
-		return nil, err
+		return nil, false, err
 	}
 	if err := ensureRules(tx, docID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// A section's subtree is its own rule and every later rule in position
 	// order until the next heading at its depth or shallower.
 	rows, err := tx.Query(
-		`SELECT s.rule_id
+		`SELECT s.rule_id, r.kind
 		   FROM docs d
 		   LEFT JOIN doc_rules a ON a.doc_id = d.id AND a.anchor = $2
 		   JOIN doc_rules s ON s.doc_id = d.id
+		   JOIN rules r ON r.id = s.rule_id
 		  WHERE d.id = $1 AND d.kind <> 'plan'
 		    AND ($2 = '' OR (a.rule_id IS NOT NULL AND s.position >= a.position
 		         AND NOT EXISTS (SELECT 1 FROM doc_rules n
@@ -49,9 +59,26 @@ func coversRules(tx *sql.Tx, project, ref string) ([]int64, error) {
 		                            AND n.position > a.position AND n.position <= s.position)))
 		  ORDER BY s.position`, docID, fragment)
 	if err != nil {
-		return nil, fmt.Errorf("rules of %s: %w", ref, err)
+		return nil, false, fmt.Errorf("rules of %s: %w", ref, err)
 	}
-	return scanColumn[int64](rows, "rules of "+ref)
+	type scoped struct {
+		id   int64
+		kind string
+	}
+	all, err := collectRows(rows, "rules of "+ref, func(r rowScanner) (scoped, error) {
+		var x scoped
+		err := r.Scan(&x.id, &x.kind)
+		return x, err
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	for _, x := range all {
+		if x.kind == designdoc.RuleKindRequirement {
+			rules = append(rules, x.id)
+		}
+	}
+	return rules, len(all) > 0, nil
 }
 
 // planRules is the rules a plan's covers edges point at, in edge order: the

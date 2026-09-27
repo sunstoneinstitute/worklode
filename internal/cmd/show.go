@@ -63,8 +63,8 @@ type showTarget struct {
 // is checked as a task first, so `lode show 45` stays task 45 — spec 45 is
 // `--spec 45` or `WL-SPEC-45` (the grammar collision WL-129 records).
 func classify(arg string) showTarget {
-	// A rule ref reads through designdoc's grammar, which also takes the
-	// pre-S64 WL-CL-<n> spelling.
+	// A rule ref reads through designdoc's grammar: WL-REQ-<n>, WL-RULE-<n>
+	// or the pre-S64 WL-CL-<n>.
 	if _, ok := designdoc.ParseRuleRef(arg); ok {
 		return showTarget{Kind: targetRule}
 	}
@@ -172,7 +172,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 			}
 
 			// No --kind or --<kind> flag ever names a rule (a rule is
-			// reached by its WL-RULE-<n> ref), so --version on either
+			// reached by its WL-REQ-<n> ref), so --version on either
 			// flag-routed path is always refused, before the kind is even
 			// looked at.
 			if versionSet && (kindSet || changedKind != "") {
@@ -215,7 +215,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec, ADR or rule: fold every effective amendment and supersession into the section or rule it acts on (026 §3.2); ignored for tasks and projects")
 	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
-	cmd.Flags().IntVar(&version, "version", 0, "show one version of a rule (WL-RULE-<n>)")
+	cmd.Flags().IntVar(&version, "version", 0, "show one version of a rule (WL-REQ-<n>)")
 	// --project is the only way to reach a project through show: a positional
 	// slug classifies as a document (classify, above), so the project
 	// candidates belong on the flag rather than in the positional's union.
@@ -372,7 +372,7 @@ func runDeliverableShow(cmd *cobra.Command, id string) error {
 	return nil
 }
 
-// runRuleShow renders one design rule by its ref (WL-RULE-12). When
+// runRuleShow renders one design rule by its ref (WL-REQ-12). When
 // versionSet, it renders that past version (GET .../versions/{n}) instead of
 // the rule's current one.
 func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline bool) error {
@@ -453,7 +453,7 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 	case targetRule:
 		return runRuleShow(cmd, arg, version, versionSet, inline)
 	case targetUnknownType:
-		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL, RULE (a task id has no type segment: WL-12)`, t.Type, arg)
+		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL, REQ, RULE (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:
 		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document ref (WL-SPEC-25, a slug, a corpus path)", arg)
 	}

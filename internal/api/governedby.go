@@ -21,7 +21,7 @@ func (s *server) govern(w http.ResponseWriter, r *http.Request) {
 	}
 	ref, ok := designdoc.ParseRuleRef(req.Rule)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "rule must look like WL-RULE-12")
+		writeErr(w, http.StatusBadRequest, "rule must look like WL-REQ-12")
 		return
 	}
 	err := s.recordTaskEvent(r.Context(), "cli", "task.governed", id, req,
@@ -49,7 +49,7 @@ func (s *server) ungovern(w http.ResponseWriter, r *http.Request) {
 	}
 	ref, ok := designdoc.ParseRuleRef(req.Rule)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "rule must look like WL-RULE-12")
+		writeErr(w, http.StatusBadRequest, "rule must look like WL-REQ-12")
 		return
 	}
 	err := s.recordTaskEvent(r.Context(), "cli", "task.ungoverned", id, req,

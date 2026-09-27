@@ -79,8 +79,8 @@ const taskRefPrefix = "/tasks/"
 var (
 	// WL-SPEC-42, WL-ADR-7, optionally #sec-10 / #sec-3.1a.
 	shorthandRef = regexp.MustCompile(`\b[A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+(?:#sec-[0-9A-Za-z._-]+)?`)
-	// WL-RULE-12 (or WL-CL-12, S64) — the RULE arm of the shorthand grammar (S20). It links to the
-	// resolving redirect /rules/<ref>, the counterpart of docRefPrefix.
+	// WL-REQ-12, WL-RULE-12 or WL-CL-12 — the rule arm of the shorthand grammar (S20, WL-SPEC-77
+	// §4). It links to the resolving redirect /rules/<ref>, the counterpart of docRefPrefix.
 	ruleRefRe = regexp.MustCompile(`\b` + designdoc.RuleRefText + `\b`)
 	// spec 042 §10, ADR 048 §2, Spec 25 — keyword, number, optional §.
 	keywordRef = regexp.MustCompile(`\b(?:[Ss]pec|ADR|[Aa]dr)\s(\d{1,4})(?:\s?§\s?([0-9][0-9A-Za-z.]*))?`)

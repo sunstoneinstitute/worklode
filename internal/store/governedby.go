@@ -49,19 +49,31 @@ func Ungovern(tx *sql.Tx, taskID string, ruleID int64) error {
 }
 
 // GovernedBy lists a task's governing rules with the version each link was
-// made against and the rule's current version (S10). A withdrawn governing
-// rule also carries ResolvesTo, the live rules it resolves to through
-// supersedes edges back from it (R8).
+// made against and the rule's current version (S10): its task_governed_by
+// links, then its project's accepted invariants it has no link to, with
+// source "invariant" (WL-SPEC-77 §4). The invariants are derived here on
+// every read and never stored. A withdrawn governing rule also carries
+// ResolvesTo, the live rules it resolves to through supersedes edges back
+// from it (R8).
 func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGovernance, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT p.key, c.number, c.id, g.rule_version, c.version, cv.heading, c.status, g.source,
+		`SELECT p.key, c.number, c.kind, c.id, g.rule_version, c.version, cv.heading, c.status, g.source,
 		        g.pinned_version, c.project_id
 		   FROM task_governed_by g
 		   JOIN rules c ON c.id = g.rule_id
 		   JOIN projects p ON p.id = c.project_id
 		   JOIN rule_versions cv ON cv.rule_id = c.id AND cv.version = c.version
 		  WHERE g.task_id = $1
-		  ORDER BY c.number`, taskID)
+		  UNION ALL
+		 SELECT p.key, c.number, c.kind, c.id, c.version, c.version, cv.heading, c.status, 'invariant',
+		        NULL, c.project_id
+		   FROM tasks t
+		   JOIN rules c ON c.project_id = t.project_id AND c.kind = 'invariant' AND c.status = 'accepted'
+		   JOIN projects p ON p.id = c.project_id
+		   JOIN rule_versions cv ON cv.rule_id = c.id AND cv.version = c.version
+		  WHERE t.id = $1
+		    AND NOT EXISTS (SELECT 1 FROM task_governed_by g WHERE g.task_id = t.id AND g.rule_id = c.id)
+		  ORDER BY 2`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("read governing rules of %s: %w", taskID, err)
 	}
@@ -72,15 +84,15 @@ func (s *Store) GovernedBy(ctx context.Context, taskID string) ([]model.TaskGove
 	var raw []withID
 	for rows.Next() {
 		var g model.TaskGovernance
-		var key, projectID string
+		var key, kind, projectID string
 		var number, id int64
 		var pinned sql.NullInt64
-		if err := rows.Scan(&key, &number, &id, &g.RuleVersion, &g.Current, &g.Heading, &g.Status, &g.Source,
+		if err := rows.Scan(&key, &number, &kind, &id, &g.RuleVersion, &g.Current, &g.Heading, &g.Status, &g.Source,
 			&pinned, &projectID); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan governing rule of %s: %w", taskID, err)
 		}
-		g.Rule = fmt.Sprintf("%s-RULE-%d", key, number)
+		g.Rule = designdoc.FormatRuleRef(key, number, kind)
 		g.Pinned = int(pinned.Int64)
 		g.URL = fmt.Sprintf("/projects/%s/rule/%d", projectID, number)
 		if pinned.Valid {
@@ -126,7 +138,7 @@ func resolveGoverningRule(ctx context.Context, db *meteredDB, ruleID int64) ([]s
 		    SELECT ce.from_rule FROM rule_edges ce JOIN chain ch ON ce.to_rule = ch.id
 		     WHERE ce.type = 'supersedes'
 		 )
-		 SELECT p.key, c.number FROM chain ch
+		 SELECT `+ruleRefSQL("p", "c")+` FROM chain ch
 		   JOIN rules c ON c.id = ch.id
 		   JOIN projects p ON p.id = c.project_id
 		  WHERE c.status <> 'withdrawn'
@@ -137,12 +149,11 @@ func resolveGoverningRule(ctx context.Context, db *meteredDB, ruleID int64) ([]s
 	defer rows.Close()
 	var out []string
 	for rows.Next() {
-		var key string
-		var number int64
-		if err := rows.Scan(&key, &number); err != nil {
+		var ref string
+		if err := rows.Scan(&ref); err != nil {
 			return nil, fmt.Errorf("scan successor of rule %d: %w", ruleID, err)
 		}
-		out = append(out, fmt.Sprintf("%s-RULE-%d", key, number))
+		out = append(out, ref)
 	}
 	return out, rows.Err()
 }

@@ -212,7 +212,7 @@ func TestGetRule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Ref != "P1-RULE-2" || c.Heading != "Sub" || c.Body != "\nB.\n\n" || c.Status != "draft" || c.Version != 1 {
+	if c.Ref != "P1-REQ-2" || c.Heading != "Sub" || c.Body != "\nB.\n\n" || c.Status != "draft" || c.Version != 1 {
 		t.Errorf("rule = %+v", c)
 	}
 	if len(c.ArrangedIn) != 1 || c.ArrangedIn[0].Doc != d.ID || c.ArrangedIn[0].DocRef != "P1-SPEC-1" ||
@@ -253,7 +253,7 @@ func TestRuleVersionsAndGovernedTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v1.Version != 1 || strings.Contains(v1.Body, "changed") || v1.Ref != "P1-RULE-3" {
+	if v1.Version != 1 || strings.Contains(v1.Body, "changed") || v1.Ref != "P1-REQ-3" {
 		t.Errorf("v1 = %+v", v1)
 	}
 	if _, err := s.GetRuleVersion(context.Background(), "P1", 3, 9); !errors.Is(err, ErrNotFound) {
@@ -535,7 +535,7 @@ func TestListRules(t *testing.T) {
 			t.Errorf("%s: body %q, want empty on a list", c.Ref, c.Body)
 		}
 	}
-	if got := strings.Join(refs, " "); got != "P1-RULE-1 P1-RULE-2 P1-RULE-3 P1-RULE-4" {
+	if got := strings.Join(refs, " "); got != "P1-REQ-1 P1-REQ-2 P1-REQ-3 P1-REQ-4" {
 		t.Errorf("all = %s", got)
 	}
 

@@ -386,7 +386,8 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // does. A superseded plan is spent (accepted, then executed) and discharges
 // what it covered. A covers edge runs from the plan to a rule and claims
 // every section arranging the rule or a rule superseding it (the
-// covered_sections view, WL-SPEC-77 §4).
+// covered_sections view, WL-SPEC-77 §4). Only a section whose rule is a
+// requirement is counted or reported (WL-SPEC-78 §1.3).
 //
 // An unplanned section reports the strongest outcome that applies:
 // "plan-draft" when a draft plan covers it, "deferred" when an accepted or
@@ -432,10 +433,13 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		                 FILTER (WHERE NOT coalesce(c.discharging AND NOT c.draft, false)), '[]')::text
 		   FROM docs d
 		   JOIN doc_sections sec ON sec.doc_id = d.id
+		   LEFT JOIN doc_rules dr ON dr.doc_id = sec.doc_id AND dr.anchor = sec.anchor
+		   LEFT JOIN rules r ON r.id = dr.rule_id
 		   LEFT JOIN cov c ON c.doc_id = sec.doc_id AND c.anchor = sec.anchor
 		   LEFT JOIN def ON def.doc_id = sec.doc_id AND def.anchor = sec.anchor
 		  WHERE d.kind = 'spec' AND d.status = 'accepted'
 		    AND d.deleted_at IS NULL
+		    AND coalesce(r.kind, 'requirement') = 'requirement'
 		    AND ($1 = '' OR d.project_id = $1)
 		  GROUP BY d.id
 		 HAVING count(*) FILTER (WHERE NOT coalesce(c.discharging AND NOT c.draft, false)) > 0
