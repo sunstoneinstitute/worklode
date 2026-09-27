@@ -150,11 +150,12 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string)
 	if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, parent).Scan(&parentKind); err != nil {
 		return fmt.Errorf("parent kind of %s: %w", parent, err)
 	}
-	if parentKind == "decision" {
-		return fmt.Errorf("task %s is a decision and cannot take children: %w", parent, ErrInvalidInput)
+	policy, err := taskKindPolicy(parentKind)
+	if err != nil {
+		return err
 	}
-	if parentKind == "rally" {
-		return fmt.Errorf("task %s is a rally and cannot take children: %w", parent, ErrInvalidInput)
+	if !policy.AllowsChildren {
+		return fmt.Errorf("task %s is a %s and cannot take children: %w", parent, parentKind, ErrInvalidInput)
 	}
 
 	existing, hasParent, err := parentOf(tx, child)
@@ -426,17 +427,12 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 		return nil, fmt.Errorf("task %s is in state %s and cannot take children: %w",
 			parentID, state, ErrBadTransition)
 	}
-	// A decision closes by its recorded answer in one transaction; a parent
-	// closes by roll-up, and the two cannot both hold (004 §6.3 as amended).
-	if kind == "decision" {
-		return nil, fmt.Errorf("task %s is a decision and cannot take children: %w",
-			parentID, ErrInvalidInput)
+	policy, err := taskKindPolicy(kind)
+	if err != nil {
+		return nil, err
 	}
-	// A rally holds its members by 'blocks', which is the whole of what it
-	// says; child_of would give it a second, contradicting set.
-	if kind == "rally" {
-		return nil, fmt.Errorf("task %s is a rally and cannot take children: %w",
-			parentID, ErrInvalidInput)
+	if !policy.AllowsChildren {
+		return nil, fmt.Errorf("task %s is a %s and cannot take children: %w", parentID, kind, ErrInvalidInput)
 	}
 	already, err := hasChildren(tx, parentID)
 	if err != nil {

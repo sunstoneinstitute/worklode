@@ -515,8 +515,8 @@ func TestPlanMintableKindsMatchLiveKindSet(t *testing.T) {
 	}
 	sort.Strings(want)
 
-	got := make([]string, len(planMintableKinds))
-	copy(got, planMintableKinds)
+	got := make([]string, len(planMintableKinds()))
+	copy(got, planMintableKinds())
 	sort.Strings(got)
 
 	if !reflect.DeepEqual(got, want) {
@@ -653,5 +653,17 @@ func TestAnnotatedHeadingKeepsPlanTasksParse(t *testing.T) {
 	}
 	if len(tasks) != 1 || tasks[0].Title != "Do the thing (WL-7)" {
 		t.Fatalf("got %+v", tasks)
+	}
+}
+
+func TestPlanTasksUsesKindPolicy(t *testing.T) {
+	original := ns.TaskKindDescriptors["review"]
+	policy := original
+	policy.PlanMintable = true
+	ns.TaskKindDescriptors["review"] = policy
+	defer func() { ns.TaskKindDescriptors["review"] = original }()
+	d := mustParsePlan(t, "## Tasks\n\n### Task 1 — Review\n\n```yaml\nkind: review\n```\n")
+	if _, err := PlanTasks(d); err != nil {
+		t.Fatalf("configured plan-mintable kind: %v", err)
 	}
 }
