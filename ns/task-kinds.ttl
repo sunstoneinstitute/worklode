@@ -1,0 +1,72 @@
+# Instance configuration for the task kinds declared in concept.ttl.
+# Every kind supplies every property; missing values are errors, not defaults.
+# These descriptors record current policy. Runtime checks are not yet driven
+# by them. kindMutable records the public API policy; the store currently
+# permits some decision retags which the API rejects.
+
+@prefix wl:  <https://worklode.io/ns/ontology#> .
+@prefix wlc: <https://worklode.io/ns/concept/> .
+
+wlc:feature wl:claimable true ;
+    wl:allowsChildren true ;
+    wl:planMintable true ;
+    wl:allowsDecisions true ;
+    wl:canBlock true ;
+    wl:kindMutable true ;
+    wl:closesOnAnswers false .
+
+wlc:bug wl:claimable true ;
+    wl:allowsChildren true ;
+    wl:planMintable true ;
+    wl:allowsDecisions true ;
+    wl:canBlock true ;
+    wl:kindMutable true ;
+    wl:closesOnAnswers false .
+
+wlc:chore wl:claimable true ;
+    wl:allowsChildren true ;
+    wl:planMintable true ;
+    wl:allowsDecisions true ;
+    wl:canBlock true ;
+    wl:kindMutable true ;
+    wl:closesOnAnswers false .
+
+wlc:design wl:claimable true ;
+    wl:allowsChildren true ;
+    wl:planMintable true ;
+    wl:allowsDecisions true ;
+    wl:canBlock true ;
+    wl:kindMutable true ;
+    wl:closesOnAnswers false .
+
+wlc:review wl:claimable true ;
+    wl:allowsChildren true ;
+    wl:planMintable false ;
+    wl:allowsDecisions true ;
+    wl:canBlock true ;
+    wl:kindMutable true ;
+    wl:closesOnAnswers false .
+
+wlc:spike wl:claimable true ;
+    wl:allowsChildren true ;
+    wl:planMintable false ;
+    wl:allowsDecisions true ;
+    wl:canBlock true ;
+    wl:kindMutable true ;
+    wl:closesOnAnswers false .
+
+wlc:decision wl:claimable false ;
+    wl:allowsChildren false ;
+    wl:planMintable true ;
+    wl:allowsDecisions true ;
+    wl:canBlock true ;
+    wl:kindMutable false ;
+    wl:closesOnAnswers true .
+
+wlc:rally wl:claimable false ;
+    wl:allowsChildren false ;
+    wl:planMintable false ;
+    wl:allowsDecisions false ;
+    wl:canBlock false ;
+    wl:kindMutable true ;
+    wl:closesOnAnswers false .

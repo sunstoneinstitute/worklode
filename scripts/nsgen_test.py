@@ -155,8 +155,8 @@ class TestUnsupportedConstructsRaise(unittest.TestCase):
         with self.assertRaises(nsgen.TurtleError):
             nsgen.extract(ttl(body))
 
-    def test_bare_boolean_literal(self):
-        self.assertRaisesTurtle(TWO_KINDS + "wlc:bug skos:note true .\n")
+    def test_bare_numeric_literal(self):
+        self.assertRaisesTurtle(TWO_KINDS + "wlc:bug skos:note 123 .\n")
 
     def test_sparql_style_prefix(self):
         self.assertRaisesTurtle(TWO_KINDS + "PREFIX ex: <http://example.org/>\n")
@@ -253,6 +253,52 @@ class TestEdges(unittest.TestCase):
             "stored by both")
 
 
+class TestTaskKindDescriptors(unittest.TestCase):
+    PREFIXES = """\
+@prefix wl: <https://worklode.io/ns/ontology#> .
+@prefix wlc: <https://worklode.io/ns/concept/> .
+"""
+    BODY = """\
+wlc:bug wl:claimable true ; wl:allowsChildren true ;
+    wl:planMintable true ; wl:allowsDecisions true ; wl:canBlock true ;
+    wl:kindMutable true ; wl:closesOnAnswers false .
+"""
+
+    def test_extracts_explicit_booleans(self):
+        rows = nsgen.extract_task_kinds(self.PREFIXES + self.BODY, ["bug"])
+        self.assertTrue(rows["bug"]["claimable"])
+        self.assertFalse(rows["bug"]["closesOnAnswers"])
+
+    def test_configuration_uses_defined_boolean_properties(self):
+        kinds = nsgen.extract(CONCEPT_TTL.read_text())[0]["TaskKind"]
+        rows = nsgen.extract_task_kinds(nsgen.TASK_KINDS_TTL.read_text(), kinds)
+        triples = nsgen.Parser(ONTOLOGY_TTL.read_text()).parse()
+        for prop in rows["bug"]:
+            self.assertIn((WL + prop, nsgen.RDF_TYPE, nsgen.OWL + "DatatypeProperty"), triples)
+            self.assertIn((WL + prop, "http://www.w3.org/2000/01/rdf-schema#range",
+                           "http://www.w3.org/2001/XMLSchema#boolean"), triples)
+        self.assertEqual({k for k, v in rows.items() if not v["claimable"]}, {"decision", "rally"})
+        self.assertEqual({k for k, v in rows.items() if not v["planMintable"]}, {"review", "spike", "rally"})
+        self.assertFalse(rows["decision"]["kindMutable"])
+        self.assertTrue(rows["decision"]["closesOnAnswers"])
+        self.assertFalse(rows["rally"]["allowsDecisions"])
+        self.assertFalse(rows["rally"]["canBlock"])
+
+    def test_invalid_descriptors_fail_instead_of_defaulting(self):
+        cases = {
+            "missing kind": "",
+            "unknown kind": self.BODY.replace("wlc:bug", "wlc:typo"),
+            "missing property": self.BODY.replace("wl:claimable true ;", ""),
+            "unknown property": self.BODY.replace("wl:claimable", "wl:claimble"),
+            "IRI boolean": self.BODY.replace("wl:claimable true", "wl:claimable <true>"),
+            "quoted boolean": self.BODY.replace("wl:claimable true", 'wl:claimable "true"'),
+            "duplicate value": self.BODY.replace("wl:claimable true", "wl:claimable true, false"),
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name), self.assertRaises(nsgen.TurtleError):
+                nsgen.extract_task_kinds(self.PREFIXES + body, ["bug"])
+
+
 class TestCli(unittest.TestCase):
     def run_nsgen(self, *args):
         return subprocess.run(
@@ -268,6 +314,10 @@ class TestCli(unittest.TestCase):
         want = nsgen.render(
             *nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8")),
             nsgen.extract_edges(ONTOLOGY_TTL.read_text(encoding="utf-8")),
+            nsgen.extract_task_kinds(
+                nsgen.TASK_KINDS_TTL.read_text(encoding="utf-8"),
+                nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8"))[0]["TaskKind"],
+            ),
         )
         self.assertEqual((ROOT / "internal" / "ns" / "gen.go").read_text(encoding="utf-8"), want)
 
