@@ -218,7 +218,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	); err != nil {
 		return nil, fmt.Errorf("land revision of doc %d: %w", id, err)
 	}
-	after, err := rebuildSectionsFrom(tx, id, d.kind, candidate.doc, version, prior)
+	after, err := rebuildSectionsFrom(tx, id, d.kind, candidate.doc, version, prior, eventID)
 	if err != nil {
 		return nil, err
 	}
