@@ -1,0 +1,277 @@
+plan	target	rules	class	reason
+DP-PLAN-1	DP-SPEC-1#sec-0		N1	Purpose, scope, and dependency narrative; nothing to build.
+DP-PLAN-1	DP-SPEC-1#sec-1		N1	What exists today; description of current state.
+DP-PLAN-1	DP-SPEC-1#sec-14		unsure	Mostly risks and open items, but R2 handling names a mock OIDC server and dev smoke test no other section specifies.
+DP-PLAN-1	DP-SPEC-1#sec-2		N2	Decisions D1-D11 are buildable requirements that bind the plan's tasks (it builds D9 via §10) but are delivered in later sections.
+DP-PLAN-2	DP-SPEC-1#sec-0		N1	Purpose and scope narrative; nothing to build.
+DP-PLAN-2	DP-SPEC-1#sec-1		N1	Describes what exists today; nothing to build.
+DP-PLAN-2	DP-SPEC-1#sec-14		unsure	Mostly risks and open items, but R2 handling names a mock OIDC server and dev smoke test no other section specifies.
+DP-PLAN-2	DP-SPEC-1#sec-2		N2	Decisions D1-D11 bind the Python client (PKCE plus client credentials, GSP publish, DCAT versioning); plan obeys them.
+DP-PLAN-3	DP-SPEC-1#sec-0		N1	Purpose, scope, and dependency narrative; nothing to build.
+DP-PLAN-3	DP-SPEC-1#sec-1		N1	What exists today; description of current state.
+DP-PLAN-3	DP-SPEC-1#sec-14		unsure	Mostly risks and open items, but R2 handling names a mock OIDC server and dev smoke test no other section specifies.
+DP-PLAN-3	DP-SPEC-1#sec-2		N2	Decisions D1-D11 bind the plan's work (D2 import pipeline retarget) but are delivered in later sections.
+EA-PLAN-6	EA-SPEC-1#sec-11		N2	Security model states binding trust-boundary rules (1Password only, nothing on disk) that the plan's credential and hardening work must obey.
+EA-PLAN-7	EA-SPEC-1#sec-11		N2	Security model has concrete mitigations (mlockall, dumpable=0, UID check); plan's Secret type respects it, hardening is phase 2.
+EA-PLAN-8	EA-SPEC-2#sec-0		N1	Summary and orientation narrative; constraints it names are specified in later sections.
+EA-PLAN-8	EA-SPEC-2#sec-1		N1	Goals and non-goals; the requirements are specified in later sections.
+EA-PLAN-8	EA-SPEC-2#sec-11		N2	Standing security constraints binding the mesh work; plan records they are delivered by other phase tasks.
+EA-PLAN-8	EA-SPEC-2#sec-13		N2	Phasing binds the series and requires the phase-4 mesh suspend opt-out; delivered by other plans, not this one.
+EA-PLAN-8	EA-SPEC-2#sec-14		N1	Open questions, open by design; nothing to build.
+EA-PLAN-8	EA-SPEC-2#sec-15		N1	Out-of-scope list; plan says nothing to build.
+EA-PLAN-8	EA-SPEC-2#sec-2		N2	Structural rules (agent dials out, bulk bytes bypass coordinator) bind the mesh; plan says phases 1 and 4 honour them.
+EA-PLAN-9	EA-SPEC-1#sec-0		N1	Summary and reconciliation narrative; the rules it names are specified in later sections.
+EA-PLAN-9	EA-SPEC-1#sec-1		N1	Goals; the requirements are specified in sections 4, 5, 8 and 9.
+EA-PLAN-9	EA-SPEC-1#sec-10		N1	Language rationale for a choice already made in go.mod; nothing to build.
+EA-PLAN-9	EA-SPEC-1#sec-13		N1	Open questions; the spec says none block implementation.
+EA-PLAN-9	EA-SPEC-1#sec-14		N1	Out-of-scope list; nothing to build.
+EA-PLAN-9	EA-SPEC-1#sec-2		N1	Non-goals list; nothing to build.
+EA-PLAN-9	EA-SPEC-1#sec-3		N1	Architecture overview diagram only; components are specified in sec-5.
+EA-PLAN-9	EA-SPEC-1#sec-4		N1	Parent heading with no text of its own; requirements live in child sections 4.x.
+EA-PLAN-9	EA-SPEC-1#sec-5		N1	Parent heading with no text of its own; requirements live in child sections 5.x.
+EA-PLAN-9	EA-SPEC-1#sec-5.2		unsure	Deferred but real design for internal/caller; not informative, yet it does not bind this plan's tasks.
+EA-PLAN-9	EA-SPEC-1#sec-6		N1	Parent heading with no text of its own; flows live in child sections 6.x.
+EA-PLAN-9	EA-SPEC-1#sec-6.1		N1	Withdrawn flow; says sign-in involves no agent code, so nothing to build.
+EA-PLAN-13	EA-SPEC-3#sec-0		N1	Summary of what the spec adds and why; nothing to build.
+EA-PLAN-13	EA-SPEC-3#sec-1		N2	Goals carry binding constraints (model-agnostic protocol, only Macs eligible for embed leases) the series must obey.
+EA-PLAN-13	EA-SPEC-3#sec-11		N1	Phasing table sequencing the plan series; nothing to build.
+EA-PLAN-13	EA-SPEC-3#sec-12		N1	Open questions; plan notes they are settled by constants elsewhere or deferred to a later spec.
+EA-PLAN-13	EA-SPEC-3#sec-13		N1	Out-of-scope list; nothing to build.
+EA-PLAN-13	EA-SPEC-3#sec-2		N2	Topology states architecture constraints (sidecar over UDS, no coordinator access or credential) built by phase 3.
+HDB-PLAN-4	HDB-SPEC-2#sec-1		N1	Purpose statement; nothing to build.
+HDB-PLAN-4	HDB-SPEC-2#sec-2		N1	Scope narrative; the buildable requirements are stated as F/NF items in sec-3 and sec-4.
+HDB-PLAN-4	HDB-SPEC-2#sec-5		N2	Prescribes libraries and access methods (arrow-rs, roaring, HDT, io_uring, dax mmap) that storage work must use; plan uses arrow and roaring.
+HDB-PLAN-4	HDB-SPEC-2#sec-7		N2	Carries binding Stage-1 defaults (inline xsd:int only, copy-on-write snapshots, no WAL); plan follows inline-int and defers the rest.
+HDB-PLAN-63	HDB-SPEC-25#sec-1		N1	Problem statement describing what Stage 1 ships and where it stops; nothing to build.
+HDB-PLAN-63	HDB-SPEC-25#sec-2		N2	Non-goals carry binding constraints: Stage-1 contract unchanged, same read surface for consumers, single-writer model.
+HDB-PLAN-63	HDB-SPEC-25#sec-3		N1	Parent heading with no body of its own; the requirements live in the §3.1+ subsections, which have their own anchors.
+HDB-PLAN-63	HDB-SPEC-25#sec-4		N2	Phasing binds every increment to stay harness-gated (SPEC-01 subset green, suites extend); plan honors that, builds nothing here.
+HDB-PLAN-63	HDB-SPEC-25#sec-6		N2	Risks impose obligations on the S1 plan: bench against the NF4 write-amp budget and honor one-tick-one-batch atomicity.
+WL-PLAN-1	WL-SPEC-38#sec-0	WL-RULE-825	N1	Why section; motivation only, plan says §§0-1 orient.
+WL-PLAN-1	WL-SPEC-38#sec-1	WL-RULE-826	N1	What does not change and why; orientation with nothing to build.
+WL-PLAN-1	WL-SPEC-38#sec-2.1	WL-RULE-828	N1	Rationale for declining a tool manager, with a revisit trigger; nothing to build.
+WL-PLAN-1	WL-SPEC-38#sec-2.2	WL-RULE-829	N2	Binding rule: system packages live in the Dockerfile and bootstrap.sh fails loudly; plan tasks obey it.
+WL-PLAN-1	WL-SPEC-38#sec-4.1	WL-RULE-835	N2	Entry-point contract (lode worktree next --json); plan says task 7 exercises it but builds nothing for it.
+WL-PLAN-1	WL-SPEC-38#sec-4.4	WL-RULE-838	N1	Secrets deferred to spec 017; nothing to build in this section.
+WL-PLAN-1	WL-SPEC-38#sec-5	WL-RULE-840	N2	Plan says §5 constrains task shape: build the human path only so dispatch substitutes values, never code.
+WL-PLAN-1	WL-SPEC-38#sec-5.1	WL-RULE-841	N1	Why not an external agent runtime yet: declined-with-trigger rationale, nothing to build.
+WL-PLAN-1	WL-SPEC-38#sec-7	WL-RULE-843	N1	Out-of-scope list.
+WL-PLAN-1	WL-SPEC-38#sec-8	WL-RULE-844	N1	Open questions, deliberately left unsettled.
+WL-PLAN-2	WL-SPEC-40#sec-0	WL-RULE-854	N1	Motivation section; plan calls it rationale with no work to undertake.
+WL-PLAN-2	WL-SPEC-40#sec-12	WL-RULE-879	N1	Open questions deliberately left unresolved; nothing to build.
+WL-PLAN-2	WL-SPEC-40#sec-2.1	WL-RULE-857	N1	Rationale for excluding Anthropic as an embeddings provider; nothing to build.
+WL-PLAN-4	WL-SPEC-39#sec-0	WL-RULE-846	N1	Purpose and scope narrative; nothing to build.
+WL-PLAN-4	WL-SPEC-39#sec-1	WL-RULE-847	N1	Rationale describing what the prod instance holds and why placement matters; nothing to build.
+WL-PLAN-4	WL-SPEC-39#sec-5	WL-RULE-852	N1	Non-goals list; nothing to build.
+WL-PLAN-4	WL-SPEC-39#sec-6	WL-RULE-853	N1	Relationship to other documents; references and context only.
+WL-PLAN-6	WL-SPEC-55#sec-0	WL-RULE-987	N1	Rationale for the cutover; plan says nothing is owed.
+WL-PLAN-6	WL-SPEC-55#sec-1	WL-RULE-988	N1	Describes an existing tool; plan says nothing is owed.
+WL-PLAN-6	WL-SPEC-55#sec-6	WL-RULE-994	N1	Out-of-scope list; plan says nothing is owed.
+WL-PLAN-7	WL-SPEC-53#sec-0	WL-RULE-966	N1	Problem statement and motivation; nothing to build.
+WL-PLAN-7	WL-SPEC-53#sec-7	WL-RULE-973	N1	Out-of-scope list; nothing to build.
+WL-PLAN-81	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says 032 sec-11 binds it (e2e through public surfaces only) while implemented by none of it.
+WL-PLAN-83	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says the standing rule binds (e2e via public surfaces only); the three-slice release content is built elsewhere.
+WL-PLAN-85	WL-SPEC-32#sec-1	WL-RULE-777	N2	Plan says binding, not delivered: card counts must derive from facts and never invent status.
+WL-PLAN-85	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says standing rule: e2e drives public surfaces only; release content not planned here.
+WL-PLAN-87	WL-SPEC-29#sec-8.2	WL-RULE-772	N2	Plan says binding constraint: no producing handler gains a hardcoded notifier; crew mutations only emit events.
+WL-PLAN-87	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says 032 §10 is a standing rule governing the crew page without being implemented here.
+WL-PLAN-87	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says 032 §11 is a standing rule governing its e2e task without being implemented here.
+WL-PLAN-93	WL-SPEC-26#sec-5	WL-RULE-737,WL-RULE-738,WL-RULE-739,WL-RULE-740,WL-RULE-741	N2	Defines the covers contract the plan's coverage predicate reads (026 §5.1 CoverageList); binding, built elsewhere.
+WL-PLAN-97	WL-SPEC-29#sec-0	WL-RULE-754	N1	Why section naming the four problems the series fixes; motivation, nothing to build directly.
+WL-PLAN-97	WL-SPEC-29#sec-9	WL-RULE-775	N1	Out-of-scope list and stated assumptions; nothing any plan builds.
+WL-PLAN-97	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says standing rule: Milestones and Deliverables pages inherit the narrow-width and keyboard rules.
+WL-PLAN-97	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says the e2e task inherits §11's public-surfaces-only rule; release acceptance built elsewhere.
+WL-PLAN-98	WL-SPEC-29#sec-1	WL-RULE-755	N2	Section defines buildable project metadata (seeded_by, labels, horizon) built by part 4; plan is bound by its seeded_by definition.
+WL-PLAN-99	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says 032 §10 binds every task here and none implements it: accessibility rules apply to the surfaces built.
+WL-PLAN-99	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says 032 §11 binds every task: e2e drives public surfaces only; release slices are not built here.
+WL-PLAN-100	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says 032 §10 binds every page it builds (narrow-check measured) while it builds no accessibility machinery.
+WL-PLAN-100	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says 032 §11 binds its e2e style; the release demonstration is buildable acceptance that no single plan owns.
+WL-PLAN-101	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says §10 binds it (narrow-width primary decisions) while implementing none of it; WCAG and responsive rules apply to its new pages.
+WL-PLAN-101	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says §11 binds it (e2e through public surfaces only); the release acceptance demo is buildable but not delivered here.
+WL-PLAN-103	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says binding, not delivered: the brief section obeys the narrow-width and accessibility rules.
+WL-PLAN-103	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says standing rule: e2e drives public surfaces only; release slices are not built here.
+WL-PLAN-104	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says standing rules govern the crew pages: WCAG 2.2 AA and narrow-width rules apply without being delivered here.
+WL-PLAN-104	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says standing rule governs its e2e task (public surfaces only); the release demonstration is built elsewhere.
+WL-PLAN-105	WL-SPEC-29#sec-8.2	WL-RULE-772	N2	Plan says the no-hardcoded-notifier rule governs it; the subscriber must be offset-tracked, not wired into the Crew handler.
+WL-PLAN-106	WL-SPEC-1#sec-0	WL-RULE-373	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-1#sec-1	WL-RULE-374	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-1#sec-12	WL-RULE-398	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-1#sec-13	WL-RULE-399	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-12#sec-0	WL-RULE-545	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-13#sec-0	WL-RULE-553	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-13#sec-4	WL-RULE-562	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-13#sec-5	WL-RULE-563	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-16#sec-0	WL-RULE-566	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-16#sec-7	WL-RULE-573	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-16#sec-8	WL-RULE-574	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-17#sec-0	WL-RULE-576	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-17#sec-7	WL-RULE-583	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-17#sec-8	WL-RULE-584	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-17#sec-9	WL-RULE-585	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-19#sec-0	WL-RULE-587	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-19#sec-6	WL-RULE-601	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-20#sec-0	WL-RULE-602	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-20#sec-1	WL-RULE-603	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-20#sec-5	WL-RULE-615	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-20#sec-6	WL-RULE-616	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-21#sec-0	WL-RULE-617	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-21#sec-14	WL-RULE-635	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-21#sec-15.1	WL-RULE-637	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-22#sec-0	WL-RULE-638	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-0	WL-RULE-648	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-1	WL-RULE-649	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-16	WL-RULE-708,WL-RULE-709,WL-RULE-710,WL-RULE-711,WL-RULE-712,WL-RULE-713	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-16.1	WL-RULE-709	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-16.2	WL-RULE-710	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-16.3	WL-RULE-711	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-16.4	WL-RULE-712	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-16.5	WL-RULE-713	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-21	WL-RULE-718	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-22	WL-RULE-719	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-23	WL-RULE-720	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-25#sec-5.1	WL-RULE-664	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-26#sec-11	WL-RULE-752	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-29#sec-0	WL-RULE-754	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-29#sec-9	WL-RULE-775	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-32#sec-13	WL-RULE-790	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-37#sec-0	WL-RULE-791	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-37#sec-1	WL-RULE-792	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-37#sec-10	WL-RULE-821	unsure	Testing section lists concrete required tests; buildable.
+WL-PLAN-106	WL-SPEC-37#sec-11	WL-RULE-822	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-37#sec-12	WL-RULE-823	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-37#sec-3.3	WL-RULE-801	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-37#sec-5.1	WL-RULE-807	unsure	States where the vendored-skill pin is recorded (lode install); reads as a requirement, not rationale.
+WL-PLAN-106	WL-SPEC-37#sec-9	WL-RULE-820	unsure	Degradation behaviours are testable requirements (fallbacks, reported errors), not rationale.
+WL-PLAN-106	WL-SPEC-38#sec-0	WL-RULE-825	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-38#sec-2.1	WL-RULE-828	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-38#sec-2.2	WL-RULE-829	unsure	Listed as rationale here, but WL-PLAN-1 treats it as binding (bootstrap.sh fails loudly naming what is missing).
+WL-PLAN-106	WL-SPEC-38#sec-4.5	WL-RULE-839	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-38#sec-5	WL-RULE-840	unsure	Dispatch seams are constraints the human path must keep; WL-PLAN-1 classes it N2. 5.1 is its own entry.
+WL-PLAN-106	WL-SPEC-38#sec-5.1	WL-RULE-841	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-38#sec-7	WL-RULE-843	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-38#sec-8	WL-RULE-844	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-39#sec-0	WL-RULE-846	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-39#sec-1	WL-RULE-847	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-39#sec-5	WL-RULE-852	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-39#sec-6	WL-RULE-853	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-4#sec-0	WL-RULE-407	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-4#sec-10	WL-RULE-443	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-4#sec-11	WL-RULE-444	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-4#sec-12	WL-RULE-445	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-4#sec-6.1	WL-RULE-430	unsure	Decisions table states buildable rules (parent never claimable, forbidden parent states); not rationale despite the plan listing it as none.
+WL-PLAN-106	WL-SPEC-40#sec-0	WL-RULE-854	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-40#sec-12	WL-RULE-879	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-40#sec-2.1	WL-RULE-857	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-41#sec-0	WL-RULE-881	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-41#sec-5	WL-RULE-886	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-41#sec-7	WL-RULE-888	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-42#sec-0	WL-RULE-889	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-44#sec-0	WL-RULE-897	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-45#sec-0	WL-RULE-904	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-45#sec-1	WL-RULE-905,WL-RULE-906,WL-RULE-907,WL-RULE-908,WL-RULE-909	unsure	Resolves to 45 §1.1-1.x: the state vocabulary, mandatory core and default workflow are core buildable requirements.
+WL-PLAN-106	WL-SPEC-45#sec-10	WL-RULE-929	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-45#sec-6	WL-RULE-922,WL-RULE-923,WL-RULE-924,WL-RULE-925	unsure	Resolves to 45 §6.x: workflow API surface, event and review task are buildable requirements.
+WL-PLAN-106	WL-SPEC-46#sec-0	WL-RULE-931	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-46#sec-1.1	WL-RULE-933	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-46#sec-4.4	WL-RULE-949	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-46#sec-7	WL-RULE-956	unsure	Testing section lists concrete required tests; buildable.
+WL-PLAN-106	WL-SPEC-46#sec-8	WL-RULE-957	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-46#sec-9	WL-RULE-958	unsure	Acceptance criteria are checkable requirements, not rationale.
+WL-PLAN-106	WL-SPEC-5#sec-0	WL-RULE-447	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-5#sec-7	WL-RULE-455	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-5#sec-8	WL-RULE-456	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-52#sec-0	WL-RULE-959	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-52#sec-6	WL-RULE-965	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-53#sec-0	WL-RULE-966	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-53#sec-7	WL-RULE-973	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-54#sec-0	WL-RULE-974	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-54#sec-1	WL-RULE-975	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-54#sec-2	WL-RULE-976,WL-RULE-977,WL-RULE-978,WL-RULE-979	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-54#sec-2.1	WL-RULE-977	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-54#sec-2.2	WL-RULE-978	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-54#sec-2.3	WL-RULE-979	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-54#sec-5	WL-RULE-985	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-54#sec-6	WL-RULE-986	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-55#sec-0	WL-RULE-987	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-55#sec-5	WL-RULE-993	unsure	Order of operations for the corpus cutover is a procedure of work steps; unclear whether informative now that it ran.
+WL-PLAN-106	WL-SPEC-55#sec-6	WL-RULE-994	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-56#sec-0	WL-RULE-996	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-56#sec-3.4	WL-RULE-1003	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-56#sec-5	WL-RULE-1005	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-57#sec-0	WL-RULE-1006	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-57#sec-1	WL-RULE-1007	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-57#sec-6	WL-RULE-1017	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-57#sec-8	WL-RULE-1019	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-57#sec-9	WL-RULE-1020	unsure	Acceptance criteria are checkable requirements, not rationale.
+WL-PLAN-106	WL-SPEC-6#sec-0	WL-RULE-458	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-6#sec-13.4	WL-RULE-482	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-6#sec-14	WL-RULE-483	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-6#sec-15	WL-RULE-484	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-7#sec-0	WL-RULE-486	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-7#sec-6	WL-RULE-501	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-7#sec-7	WL-RULE-502	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-0	WL-RULE-504	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-16	WL-RULE-526,WL-RULE-527,WL-RULE-528,WL-RULE-529,WL-RULE-530,WL-RULE-531	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-16.1	WL-RULE-527	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-16.2	WL-RULE-528	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-16.3	WL-RULE-529	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-16.4	WL-RULE-530	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-16.5	WL-RULE-531	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-19	WL-RULE-541	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-20	WL-RULE-542	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-106	WL-SPEC-8#sec-22	WL-RULE-544	N1	WL-PLAN-106 v6 listed it as pure rationale or scope narrative; section text agrees. Edge already removed in v7.
+WL-PLAN-112	WL-SPEC-56#sec-0	WL-RULE-996	N1	Purpose and motivation narrative; nothing to build.
+WL-PLAN-112	WL-SPEC-56#sec-3.4	WL-RULE-1003	N1	Section says it is a note about direction, not a requirement; no decisions bucket in v1.
+WL-PLAN-112	WL-SPEC-56#sec-5	WL-RULE-1005	N1	Non-goals list; nothing to build.
+WL-PLAN-113	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says binding, not delivered: the board obeys reflow and table rules but adds no accessibility scope.
+WL-PLAN-113	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says standing rule: e2e drives public surfaces only; slice 3's unattended run is not planned here.
+WL-PLAN-113	WL-SPEC-32#sec-13	WL-RULE-790	N1	Non-goals list; plan notes no plan will ever cover it.
+WL-PLAN-121	WL-SPEC-57#sec-0	WL-RULE-1006	N1	Why section: rationale and background; plan calls it rationale with nothing owed.
+WL-PLAN-121	WL-SPEC-57#sec-6	WL-RULE-1017	N1	Spec marks it "sketch, not built here" (what the design unlocks); plan says nothing is owed against it.
+WL-PLAN-125	WL-SPEC-41#sec-0	WL-RULE-881	N1	Purpose and scope; plan says nothing is implementable, and its no-shadow-state rule is restated in §2.
+WL-PLAN-125	WL-SPEC-41#sec-7	WL-RULE-888	N1	Dependencies and primary sources; references only.
+WL-PLAN-127	WL-SPEC-61#sec-0	WL-RULE-1077	N2	Problem section ends with a binding decision: hard renames, no compatibility aliases, no deprecation period.
+WL-PLAN-127	WL-SPEC-61#sec-1.1	WL-RULE-1079	N2	States task start and task claim keep their names; binds this plan's task-group renames.
+WL-PLAN-127	WL-SPEC-61#sec-6	WL-RULE-1089	N2	Plan says the rename procedure is 061 §6, in order, for every task.
+WL-PLAN-127	WL-SPEC-61#sec-7	WL-RULE-1090	N1	Out-of-scope list; its two command additions are specified in §2.1 and §2.2.
+WL-PLAN-128	WL-SPEC-61#sec-0	WL-RULE-1077	N2	Problem section ends with a binding decision: hard renames, no compatibility aliases, no deprecation period.
+WL-PLAN-128	WL-SPEC-61#sec-1	WL-RULE-1078,WL-RULE-1079	N2	Plan's tasks are written against the naming law (L3, L4, L6 cited); the law binds, enforcement is part 4's.
+WL-PLAN-128	WL-SPEC-61#sec-6	WL-RULE-1089	N2	Plan's global constraints require the §6 rename procedure in order; procedure binds, nothing delivered.
+WL-PLAN-128	WL-SPEC-61#sec-7	WL-RULE-1090	N1	Out-of-scope list; project repo remove and set state are specified and built under §2.2 and §2.1.
+WL-PLAN-129	WL-SPEC-61#sec-0	WL-RULE-1077	N2	Problem section ends with a binding decision: hard renames, no compatibility aliases, no deprecation period.
+WL-PLAN-129	WL-SPEC-61#sec-1	WL-RULE-1078,WL-RULE-1079	N2	The naming law binds every rename this plan makes (L8 cited); enforcement is part 4's.
+WL-PLAN-129	WL-SPEC-61#sec-6	WL-RULE-1089	N2	Plan's global constraints require following the §6 rename procedure in order; procedure binds, nothing delivered.
+WL-PLAN-129	WL-SPEC-61#sec-7	WL-RULE-1090	N1	Out-of-scope list; the two additions it names are specified and built under §2.1 and §2.2.
+WL-PLAN-130	WL-SPEC-61#sec-0	WL-RULE-1077	N2	Problem section ends with a binding decision: hard renames, no compatibility aliases, no deprecation period.
+WL-PLAN-130	WL-SPEC-61#sec-1.1	WL-RULE-1079	N2	States task start and task claim keep their names under L3; a constraint the rename and name-rule test must respect.
+WL-PLAN-130	WL-SPEC-61#sec-2.5	WL-RULE-1085	N2	Resulting top-level set is built by parts 1-3; this plan's enforcement test must respect it but builds none of it.
+WL-PLAN-130	WL-SPEC-61#sec-6	WL-RULE-1089	N2	Plan adopts the 061 §6 rename procedure as a global constraint on every task.
+WL-PLAN-130	WL-SPEC-61#sec-7	WL-RULE-1090	N1	Out-of-scope list; its two command additions are specified in §2.1 and §2.2.
+WL-PLAN-131	WL-SPEC-63#sec-0	WL-RULE-1114	N1	Why section: motivation for OTel usage accounting; nothing to build.
+WL-PLAN-132	WL-SPEC-59#sec-0	WL-RULE-1036	N1	Why section: history and rationale for the review surface; nothing to build.
+WL-PLAN-132	WL-SPEC-59#sec-14	WL-RULE-1058	N1	Out-of-scope list of non-goals; nothing to build.
+WL-PLAN-132	WL-SPEC-59#sec-16	WL-RULE-1060	N1	Dependencies list naming other specs; nothing to build.
+WL-PLAN-133	WL-SPEC-59#sec-14	WL-RULE-1058	N1	Out-of-scope list; nothing to build.
+WL-PLAN-134	WL-SPEC-59#sec-1	WL-RULE-1037,WL-RULE-1038,WL-RULE-1039	N2	Review-is-the-API principle binds the guide (served only via GET, never agent-to-agent); built across the series.
+WL-PLAN-134	WL-SPEC-59#sec-14	WL-RULE-1058	N1	Out-of-scope list; nothing to build.
+WL-PLAN-135	WL-SPEC-59#sec-14	WL-RULE-1058	N1	Out-of-scope list of non-goals; nothing to build.
+WL-PLAN-136	WL-SPEC-66#sec-0	WL-RULE-1146	N1	Purpose and boundary narrative; the derived-not-stored invariant is carried by §1.
+WL-PLAN-136	WL-SPEC-66#sec-4	WL-RULE-1165,WL-RULE-1167,WL-RULE-1168,WL-RULE-1169,WL-RULE-1170	N2	Write-safety rules (CSP, POST-only, same-origin) bind the page; this read-only part obeys the CSP, part 2 builds the writes.
+WL-PLAN-136	WL-SPEC-66#sec-4.1	WL-RULE-1166	N1	What holds today: describes existing CSRF locks; the requirements are in §4.2.
+WL-PLAN-136	WL-SPEC-66#sec-9	WL-RULE-1182	N1	Non-goals list; nothing to build.
+WL-PLAN-137	WL-SPEC-66#sec-0	WL-RULE-1146	N1	Purpose and boundary narrative; the derived-not-stored invariant is carried by §1.
+WL-PLAN-137	WL-SPEC-66#sec-2.5	WL-RULE-1157	N2	Constraint the page must obey: no percentage, counts only; the write plan must respect it.
+WL-PLAN-137	WL-SPEC-66#sec-4.1	WL-RULE-1166	N1	What holds today: describes existing CSRF locks; the requirements are in §4.2.
+WL-PLAN-137	WL-SPEC-66#sec-9	WL-RULE-1182	N1	Non-goals list.
+WL-PLAN-138	WL-SPEC-66#sec-0	WL-RULE-1146	N1	Purpose and boundary narrative; the derived-not-stored invariant is carried by §1.
+WL-PLAN-138	WL-SPEC-66#sec-2.5	WL-RULE-1157	N2	Binding rule that the Progress page shows no percentage; the plan's live-update work must obey it.
+WL-PLAN-138	WL-SPEC-66#sec-9	WL-RULE-1182	N1	Non-goals list; nothing to build.
+WL-PLAN-139	WL-SPEC-66#sec-0	WL-RULE-1146	N1	Purpose and boundary narrative; the derived-not-stored invariant is carried by §1.
+WL-PLAN-139	WL-SPEC-66#sec-2.5	WL-RULE-1157	N2	Binding rule that the Progress page shows no percentage; the plan's page work must obey it.
+WL-PLAN-139	WL-SPEC-66#sec-9	WL-RULE-1182	N1	Non-goals list; nothing to build.
+WL-PLAN-140	WL-SPEC-32#sec-10	WL-RULE-787	N2	Plan says binding, not delivered: the due-date form must be keyboard-operable and follow the accessibility rules.
+WL-PLAN-140	WL-SPEC-32#sec-11	WL-RULE-788	N2	Plan says the standing rule applies: e2e drives public surfaces only.
+WL-PLAN-141	WL-SPEC-67#sec-0	WL-RULE-1183	N1	Why section: motivation and a worked example of drift; nothing to build.
+WL-PLAN-141	WL-SPEC-67#sec-1	WL-RULE-1184	N2	Scope carries binding invariants (adds no state, changes no rule, referrers unchanged) that the plan explicitly obeys.
+WL-PLAN-141	WL-SPEC-67#sec-8	WL-RULE-1197	N2	Deferral with conditions for a future --sync; binds the plan not to build it, which the plan says it respects.
+WL-PLAN-142	WL-SPEC-67#sec-8	WL-RULE-1197	N2	Deferral with conditions for a future --sync; binds the plan not to build it, which the plan says it respects.
