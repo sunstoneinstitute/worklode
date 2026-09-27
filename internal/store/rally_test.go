@@ -486,12 +486,13 @@ func retag(t *testing.T, s *Store, id, kind string) error {
 	return err
 }
 
-// TestRetagRefusesStateTheKindForbids is the guard on the one door every
-// other rule leaves open: the kind is checked when each of these states is
-// created, and never again. Each case builds a state that the target kind's
-// own creation paths refuse, then retags into it. rally and decision share
-// the first two; the last two are rally's alone, since a decision task is
-// meant to carry decision rows and may block other work.
+// TestRetagRefusesStateTheKindForbids checks that changing a task's kind
+// cannot sneak in a state that kind does not allow. A rally or decision task
+// may not have children or be leased, and a rally also may not carry decision
+// rows or block other tasks. Those rules are enforced when the child, lease,
+// row or edge is added, so each case starts from a plain feature task, adds
+// the forbidden state first, then retags. The retag must fail and the kind
+// must stay feature.
 func TestRetagRefusesStateTheKindForbids(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
