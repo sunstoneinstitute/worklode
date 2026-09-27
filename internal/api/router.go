@@ -298,10 +298,12 @@ var routeGuards = map[string]routeGuard{
 	// (§7.3) is the same shape: guarded rather than guardedAny, matching
 	// accept and revision/accept, since it is another deliberate act on the
 	// document's identity rather than routine authoring.
-	"POST /api/v1/docs":                   guardedAny(permDocWrite),
-	"GET /api/v1/docs":                    guardedAny(permDocRead),
-	"GET /api/v1/docs/resolve":            guardedAny(permDocRead),
-	"GET /api/v1/docs/lint":               guardedAny(permDocRead),
+	"POST /api/v1/docs":        guardedAny(permDocWrite),
+	"GET /api/v1/docs":         guardedAny(permDocRead),
+	"GET /api/v1/docs/resolve": guardedAny(permDocRead),
+	"GET /api/v1/docs/lint":    guardedAny(permDocRead),
+	// A corpus-wide edge repair, admin-only like the importer's PUT edges.
+	"POST /api/v1/docs/covers/resolve":    guarded(permDocImport),
 	"GET /api/v1/docs/sections":           guardedAny(permDocRead),
 	"GET /api/v1/docs/{id}":               guardedAny(permDocRead),
 	"GET /api/v1/docs/{id}/versions":      guardedAny(permDocRead),

@@ -343,7 +343,7 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 	); err != nil {
 		return 0, fmt.Errorf("patch doc %d: %w", in.ID, err)
 	}
-	if _, err := rebuildSectionsFrom(tx, in.ID, d.kind, next.doc, version, prior); err != nil {
+	if _, err := rebuildSectionsFrom(tx, in.ID, d.kind, next.doc, version, prior, eventID); err != nil {
 		return 0, err
 	}
 	if len(changed) > 0 {

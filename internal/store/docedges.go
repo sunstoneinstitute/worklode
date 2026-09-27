@@ -660,20 +660,7 @@ func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string
 	if err != nil || !named {
 		return false, err
 	}
-	for _, r := range rules {
-		if _, err := tx.Exec(
-			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_rule)
-			 SELECT from_doc, from_anchor, type, $2 FROM doc_edges WHERE id = $1
-			 ON CONFLICT (from_doc, coalesce(from_anchor,''), type, coalesce(to_doc, 0),
-			              coalesce(to_rule, 0), coalesce(to_anchor,''), coalesce(to_external,''))
-			 DO NOTHING`, edgeID, r); err != nil {
-			return false, fmt.Errorf("re-point covers edge %d of doc %d to rule %d: %w", edgeID, fromDoc, r, err)
-		}
-	}
-	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE id = $1`, edgeID); err != nil {
-		return false, fmt.Errorf("drop re-pointed covers edge %d of doc %d: %w", edgeID, fromDoc, err)
-	}
-	return true, nil
+	return true, replaceExternalCover(tx, edgeID, fromDoc, rules)
 }
 
 // frontmatterEdges reads the recorded relations out of fm — the walk is
