@@ -233,7 +233,7 @@ For local testing without a public URL, forward deliveries from a real repo:
 
 ```bash
 gh webhook forward --repo=sunstoneinstitute/<repo> \
-  --events=issues,pull_request,pull_request_review,workflow_run,release,push,deployment_status \
+  --events=issues,pull_request,pull_request_review,workflow_run,check_run,check_suite,release,push,deployment_status \
   --url=http://localhost:8080/hooks/github
 ```
 
