@@ -59,6 +59,8 @@ var touchKinds = map[string]string{
 	"pull_request":      "pr",
 	"merge_group":       "pr",
 	"workflow_run":      "ci",
+	"check_run":         "ci",
+	"check_suite":       "ci",
 	"push":              "deploy",
 	"deployment_status": "deploy",
 	"flux":              "deploy",

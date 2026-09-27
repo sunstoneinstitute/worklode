@@ -88,6 +88,10 @@ func (a *applier) applyFunc(event string, env envelope, body []byte, resolvedCom
 		return func(tx *sql.Tx, eventID int64) error {
 			return a.applyWorkflowRun(tx, eventID, repo, body)
 		}
+	case "check_run", "check_suite":
+		return func(tx *sql.Tx, eventID int64) error {
+			return a.applyCheck(tx, eventID, repo, event, body)
+		}
 	case "release":
 		if env.Action != "published" {
 			return nil
