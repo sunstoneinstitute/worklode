@@ -263,7 +263,7 @@ func docRefAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion,
 	}
 }
 
-// ruleRefAt completes a rule ref (WL-RULE-12) at argument position n,
+// ruleRefAt completes a rule ref (WL-REQ-12) at argument position n,
 // described by its heading, in the current scope's number order.
 func ruleRefAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {

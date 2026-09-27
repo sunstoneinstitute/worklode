@@ -383,7 +383,15 @@ wl:covers a owl:ObjectProperty ;
 wl:Rule a owl:Class ;
     wl:layer wlc:intent ;
     rdfs:subClassOf wl:Section ;
-    rdfs:comment "The lowest heading unit of a spec or ADR: the thing that carries an identity (WL-RULE-<n>), a status, versions and edges (S8 to S11)." .
+    rdfs:comment "The lowest heading unit of a spec or ADR: the thing that carries an identity (WL-REQ-<n> or WL-RULE-<n>), a kind, a status, versions and edges (S8 to S11)." .
+
+wl:ruleKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Rule ;
+    rdfs:range skos:Concept ;
+    rdfs:comment """The rule's kind, from wlc:RuleKind: wlc:requirement, wlc:invariant or
+        wlc:informative (05 §4). Only a requirement is covered by a plan; an invariant governs
+        every task in its project.""" .
 
 wl:refines a owl:ObjectProperty ;
     wl:edgeOrigin wlc:declared ;

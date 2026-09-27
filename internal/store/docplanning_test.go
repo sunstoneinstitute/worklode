@@ -1104,8 +1104,8 @@ func TestDocBareSupersededRules(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: supersedeDocU, CreatedBy: "stig"})
-	// P1-RULE-1 gets a successor; P1-RULE-3 is withdrawn with none.
-	mustSupersede(t, s, entry("P1-RULE-1", "P1-RULE-4"), entry("P1-RULE-3"))
+	// P1-REQ-1 gets a successor; P1-REQ-3 is withdrawn with none.
+	mustSupersede(t, s, entry("P1-REQ-1", "P1-REQ-4"), entry("P1-REQ-3"))
 
 	got, err := s.BareSupersededRules(t.Context(), "p1", "")
 	if err != nil {
@@ -1114,8 +1114,8 @@ func TestDocBareSupersededRules(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("bare rules = %+v, want one", got)
 	}
-	if b := got[0]; b.Rule != "P1-RULE-3" || b.Doc != "P1-SPEC-1" || b.Anchor != "sec-2" || !strings.Contains(b.Heading, "Two") {
-		t.Errorf("bare rule = %+v, want P1-RULE-3 at P1-SPEC-1#sec-2", b)
+	if b := got[0]; b.Rule != "P1-REQ-3" || b.Doc != "P1-SPEC-1" || b.Anchor != "sec-2" || !strings.Contains(b.Heading, "Two") {
+		t.Errorf("bare rule = %+v, want P1-REQ-3 at P1-SPEC-1#sec-2", b)
 	}
 
 	// kind narrows on the arranging document, project on the rule.

@@ -208,3 +208,5 @@ configMapGenerator:
       - migrations/0097_strip_headers.down.sql
       - migrations/0098_retire-coverage-levels.up.sql
       - migrations/0098_retire-coverage-levels.down.sql
+      - migrations/NEW-rule-kinds.up.sql
+      - migrations/NEW-rule-kinds.down.sql

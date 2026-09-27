@@ -312,6 +312,10 @@ func (w *todoWalk) emitDoc(docPath string) {
 	}
 	var unplanned []string
 	for _, sec := range d.Sections {
+		// Only a requirement is owed a plan (WL-SPEC-78 §1.7).
+		if sec.Kind != "" && sec.Kind != RuleKindRequirement {
+			continue
+		}
 		if w.emitSection(docPath, sec) {
 			unplanned = append(unplanned, sec.Anchor)
 		}

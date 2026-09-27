@@ -139,15 +139,32 @@ func kindArticle(kind string) string {
 	return "a " + kind
 }
 
-// RuleRefText is the RULE arm of 025 §14.3's <KEY>-<TYPE>-<n> grammar
-// (12-spec-refactoring-design-tree.md S20, S64): a design rule's citable ref.
-// The type segment CL is the rule's pre-S64 spelling, still read because
-// accepted document text carries it; every ref is written RULE.
-const RuleRefText = `([A-Z][A-Z0-9]{1,9})-(?:RULE|CL)-(\d+)`
+// RuleRefText is the rule arm of 025 §14.3's <KEY>-<TYPE>-<n> grammar
+// (12-spec-refactoring-design-tree.md S20, S64; WL-SPEC-77 §4): a design
+// rule's citable ref. Every kind shares one counter, so any infix resolves
+// any rule by its number: REQ, RULE, and CL, the pre-S64 spelling that
+// accepted document text still carries. FormatRuleRef writes the kind's own.
+const RuleRefText = `([A-Z][A-Z0-9]{1,9})-(?:REQ|RULE|CL)-(\d+)`
+
+// RuleKindRequirement is the rule kind a plan covers and the store mints by
+// default (WL-SPEC-77 §4). The kinds are ns.Schemes["RuleKind"].
+const RuleKindRequirement = "requirement"
+
+// FormatRuleRef prints a rule's ref with the infix of its kind: REQ for a
+// requirement, RULE for any other kind (WL-SPEC-77 §4). Every printed rule
+// ref goes through here, or through the store's SQL mirror of it.
+func FormatRuleRef(key string, number int64, kind string) string {
+	infix := "RULE"
+	if kind == RuleKindRequirement {
+		infix = "REQ"
+	}
+	return fmt.Sprintf("%s-%s-%d", key, infix, number)
+}
 
 var ruleRefPattern = regexp.MustCompile(`^` + RuleRefText + `$`)
 
-// RuleRef is a parsed rule ref, e.g. "WL-RULE-12".
+// RuleRef is a parsed rule ref, e.g. "WL-REQ-12". It carries no kind: the
+// number alone names the rule.
 type RuleRef struct {
 	Key    string
 	Number int64
@@ -183,7 +200,7 @@ type SectionRef struct {
 }
 
 // FindRuleRefs returns every distinct rule ref in text, in order of
-// first appearance. WL-CL-12 and WL-RULE-12 are the same rule.
+// first appearance. WL-REQ-12, WL-RULE-12 and WL-CL-12 are the same rule.
 func FindRuleRefs(text string) []RuleRef {
 	var out []RuleRef
 	seen := map[RuleRef]bool{}

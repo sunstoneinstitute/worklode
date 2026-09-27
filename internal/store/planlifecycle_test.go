@@ -113,8 +113,8 @@ func TestWithdrawnRuleMakesPlansStale(t *testing.T) {
 	if len(evs) != 1 {
 		t.Fatalf("doc.stale events = %d, want 1", len(evs))
 	}
-	if evs[0]["cause"] != "rule_withdrawn" || evs[0]["spec"] != "P1-RULE-1" {
-		t.Errorf("payload = %v, want cause rule_withdrawn on P1-RULE-1", evs[0])
+	if evs[0]["cause"] != "rule_withdrawn" || evs[0]["spec"] != "P1-REQ-1" {
+		t.Errorf("payload = %v, want cause rule_withdrawn on P1-REQ-1", evs[0])
 	}
 	if err := setRuleStatus(t, s, id, "nonsense"); err == nil {
 		t.Fatal("unknown status should be refused")
