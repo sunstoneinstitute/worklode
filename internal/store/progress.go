@@ -278,14 +278,14 @@ func (s *Store) progressEdges(ctx context.Context, projectID string, plans map[i
 	}
 	rows, err := s.db.QueryContext(ctx, `
 WITH e AS (
-  SELECT id, from_doc, type, to_doc, to_anchor, coverage, to_external
+  SELECT id, from_doc, type, to_doc, to_anchor, to_external
     FROM doc_edges WHERE type = 'requires'
   UNION ALL
-  SELECT DISTINCT edge_id, plan_id, 'covers', doc_id, anchor, coverage, NULL
+  SELECT DISTINCT edge_id, plan_id, 'covers', doc_id, anchor, NULL
     FROM covered_sections
 )
 SELECT e.from_doc, e.type, e.to_doc, coalesce(e.to_anchor, ''),
-       coalesce(e.coverage, 'full'), coalesce(e.to_external, ''),
+       coalesce(e.to_external, ''),
        coalesce(t.kind, ''), coalesce(t.number, 0), coalesce(tp.key, '')
   FROM e
   JOIN docs d ON d.id = e.from_doc
@@ -301,10 +301,10 @@ SELECT e.from_doc, e.type, e.to_doc, coalesce(e.to_anchor, ''),
 
 	for rows.Next() {
 		var fromDoc int64
-		var edgeType, anchor, coverage, external string
+		var edgeType, anchor, external string
 		var toDoc sql.NullInt64
 		var target model.Doc
-		if err := rows.Scan(&fromDoc, &edgeType, &toDoc, &anchor, &coverage, &external,
+		if err := rows.Scan(&fromDoc, &edgeType, &toDoc, &anchor, &external,
 			&target.Kind, &target.Number, &target.ProjectKey); err != nil {
 			return fmt.Errorf("scan progress edge: %w", err)
 		}
@@ -324,7 +324,7 @@ SELECT e.from_doc, e.type, e.to_doc, coalesce(e.to_anchor, ''),
 			continue
 		}
 		plan.Covers = append(plan.Covers, progress.Cover{
-			Spec: toDoc.Int64, Anchor: anchor, Level: coverage,
+			Spec: toDoc.Int64, Anchor: anchor,
 		})
 	}
 	if err := rows.Err(); err != nil {

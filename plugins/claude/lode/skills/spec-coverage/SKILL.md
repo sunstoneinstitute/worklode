@@ -8,8 +8,8 @@ allowed-tools: Bash(lode *) Bash(git *)
 
 Invocation arguments: $ARGUMENTS
 
-Specs arrange rules. Planning gaps are still reported by section anchor and
-coverage level, so use that query to find gaps, then identify the rules at
+Specs arrange rules. Planning gaps are reported by section anchor and
+outcome, so use that query to find gaps, then identify the rules at
 those anchors. Rearranging the spec does not fill a planning gap.
 
 Ask the backbone, which owns the answer:
@@ -22,21 +22,20 @@ The response is `{"docs":[…], "planning_gaps":[…]}`: one `docs` entry per
 **accepted spec** with at least one section no accepted plan discharges, and a
 matching `planning_gaps` entry keyed by document id — `{"doc":…,
 "sections":<the spec's section count>, "gaps":[{"anchor":"sec-3",
-"coverage":"unplanned|partial|bound-only|deferred"}]}`. A `deferred` gap also
+"coverage":"plan-draft|deferred|unplanned"}]}`. A `deferred` gap also
 carries `"owner"`: the document a plan explicitly handed the section to
-(026 §5.3) — someone was named, nothing is scheduled, so it is the first kind
-of gap to chase.
+(WL-SPEC-78 §1.3) — someone was named, nothing is scheduled, so it is the
+first kind of gap to chase.
 
-**What this reports, and why.** The whole `--needs-planning` result, coverage
+**What this reports, and why.** The whole `--needs-planning` result, outcome
 classification included — that selector *is* the backbone's definition of a
-planning gap (026 §2.1), and this skill exists to turn gaps into planning
-tasks. It is wider than the old file-corpus check, which reported only specs
-with zero referencing plans and treated section-level partial debt as a plan's
-own declared debt. That case is still visible here: it is a spec whose gap set
-covers every section (`len(gaps) == sections`) with every `coverage` equal to
-`unplanned`. Lead the report with those — nothing has been planned at all — and
-list the rest under them as partial debt, so a spec with one uncovered section
-is not mistaken for an unplanned spec.
+planning gap (WL-SPEC-78 §1.3), and this skill exists to turn gaps into
+planning tasks. It is wider than the old file-corpus check, which reported
+only specs with zero referencing plans. Lead the report with the specs whose
+gap set covers every section (`len(gaps) == sections`) with every `coverage`
+equal to `unplanned` — nothing has been planned at all — and list the rest
+below them, so a spec with one uncovered section is not mistaken for an
+unplanned spec.
 
 For each spec with gaps, read `lode rule list --doc <spec-ref> --json` to map
 anchors to rule refs. Inspect the affected rules with `lode show <rule-ref>`

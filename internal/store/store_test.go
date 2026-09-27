@@ -32,7 +32,6 @@ var wantTables = []string{
 	"docs",
 	"doc_sections",
 	"doc_edges",
-	"doc_coverage_completed_with",
 	"doc_revisions",
 	"approvals",
 }

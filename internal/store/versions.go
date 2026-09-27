@@ -27,14 +27,9 @@ func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO doc_edge_versions
-		   (doc_id, version, from_anchor, type, to_doc, to_anchor, to_external, coverage, to_rule, completed_with)
+		   (doc_id, version, from_anchor, type, to_doc, to_anchor, to_external, to_rule, owner_doc, owner_external)
 		 SELECT e.from_doc, d.version, e.from_anchor, e.type, e.to_doc, e.to_anchor, e.to_external,
-		        e.coverage, e.to_rule,
-		        (SELECT jsonb_agg(CASE WHEN w.to_doc IS NOT NULL
-		                               THEN jsonb_build_object('to_doc', w.to_doc)
-		                               ELSE jsonb_build_object('to_external', w.to_external) END
-		                          ORDER BY w.position)
-		           FROM doc_coverage_completed_with w WHERE w.edge_id = e.id)
+		        e.to_rule, e.owner_doc, e.owner_external
 		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc
 		  WHERE e.from_doc = $1`, docID,
 	); err != nil {
@@ -94,17 +89,14 @@ func (s *Store) revisionEdges(ctx context.Context, id int64) ([]model.DocEdge, e
 	return s.storedEdgeSet(ctx, "doc_revision_edges", "e.doc_id = $1", id)
 }
 
-// storedEdgeSet reads an edge set kept outside doc_edges, whose closure is
-// completed_with JSON, with the far end named the way ListDocEdges names it.
+// storedEdgeSet reads an edge set kept outside doc_edges, with the far end
+// and a defers owner named the way ListDocEdges names them.
 func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...any) ([]model.DocEdge, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
-		        coalesce(d.number,0), coalesce(d.status,''), coalesce(e.coverage,''),
-		        coalesce((SELECT json_agg(coalesce(wd.slug, c.w->>'to_external') ORDER BY c.n)
-		                    FROM jsonb_array_elements(e.completed_with) WITH ORDINALITY AS c(w, n)
-		                    LEFT JOIN docs wd ON wd.id = (c.w->>'to_doc')::bigint), '[]')::text,
+		        coalesce(d.number,0), coalesce(d.status,''), coalesce(od.slug, e.owner_external, ''),
 		        coalesce(rp.key || '-RULE-' || r.number, '')
 		   FROM `+table+` e
 		   LEFT JOIN rules r ON r.id = e.to_rule
@@ -115,6 +107,7 @@ func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...
 		             ORDER BY dr.doc_id, dr.position LIMIT 1
 		        ) ra ON true
 		   LEFT JOIN docs d ON d.id = coalesce(e.to_doc, ra.doc_id)
+		   LEFT JOIN docs od ON od.id = e.owner_doc
 		  WHERE `+where+`
 		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		           coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''), r.number`, args...)

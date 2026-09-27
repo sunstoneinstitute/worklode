@@ -377,133 +377,68 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 	return strings.Join(parts, " blockedBy "), nil
 }
 
-// NeedsPlanning returns the accepted specs that have at least one section no
-// accepted or superseded plan discharges, each with the anchors that made it
-// a gap and why (026 §2.1). project narrows the answer; "" answers over every
-// project.
+// NeedsPlanning returns the accepted specs that have at least one section not
+// planned, each with the anchors that made it a gap and why (WL-SPEC-78
+// §1.3). project narrows the answer; "" answers over every project.
 //
-// The discharging set is not `accepted` alone: 026 §2.1's "A superseded plan
-// discharges what it covered" reads the status as "not draft", since a
-// superseded plan is one that was accepted and then carried out (025 §9's "a
-// plan is spent once executed") — reading the set as `accepted` alone would
-// report a shipped third of the corpus as unplanned work. A section is
-// discharged when some such plan's `covers` edge claims it `full`, or claims
-// it `partial` with a `fullCoverageWith` set that closes: every named plan is
-// itself accepted or superseded and itself contributes `full` or `partial` to
-// that same section. `fullCoverageWith` is checked, never taken on trust — an
-// empty list, an unresolved reference, a draft target, a `none` target, or a
-// target that does not itself cover the section all leave it open.
+// A covers edge means the plan builds the whole rule, so a section is planned
+// when some accepted or superseded plan covers it and no draft plan also
+// does. A superseded plan is spent (accepted, then executed) and discharges
+// what it covered. A covers edge runs from the plan to a rule and claims
+// every section arranging the rule or a rule superseding it (the
+// covered_sections view, WL-SPEC-77 §4).
 //
-// An undischarged section is classified by the strongest reading that holds,
-// in order: "partial" when some accepted-or-superseded plan claims it
-// `partial` (whether or not that claim closed); "deferred" when none claims
-// `partial` but some such plan hands it off to a named owner with `defers`
-// (026 §5.3) — the report names the owner, recovered from the same
-// doc_coverage_completed_with row a partial entry's fullCoverageWith uses,
-// because a deferral is that same assertion read at level zero; "bound-only"
-// when every accepted-or-superseded plan naming it claims `none`; "unplanned"
-// when no such plan names it, deferral included, at all. A deferral is
-// delivered by any covering plan discharging the section under the rules
-// above, so it is checked against the same `cov`/`closed` machinery as
-// covers, not against who was named.
-//
-// A covers edge runs from the plan to a rule, and claims every section that
-// arranges the rule or a rule superseding it (the covered_sections view,
-// WL-SPEC-77 §4). A whole-document entry was resolved to one edge per rule
-// when the plan was written, so it claims the sections present then.
-//
-// Three further consequences are deliberate:
-//
-//   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
-//     §4.3), so it falls out of the join without a case of its own.
-//   - Only an accepted spec and an accepted-or-superseded plan participate: a
-//     draft spec is not yet owed planning, and a draft plan has not yet
-//     undertaken work — its `defers` entries do not classify a section either.
-//     A tombstoned document participates on neither end (044 §4) — it is
-//     neither owed planning nor able to discharge or defer a section.
-//   - A deferral's owner is reported however it resolved at write time: a
-//     slug when the reference named a live document, the reference text
-//     verbatim (`w.to_external`) when it did not — the same fallback
-//     fullCoverageWith uses.
-//
-// A plan naming itself in its own `fullCoverageWith` closes its own section.
-// §2.1's closure test is only that each named plan is accepted or superseded
-// and contributes `full` or `partial` — it says nothing about the naming plan
-// — so this is not a bug; narrowing it to siblings would be a spec change
-// (tracked in docs/follow-ups.md).
+// An unplanned section reports the strongest outcome that applies:
+// "plan-draft" when a draft plan covers it, "deferred" when an accepted or
+// superseded plan defers it to a named owner (reported beside the anchor: a
+// slug, or the reference verbatim when it did not resolve), "unplanned"
+// otherwise. A draft plan's deferral classifies nothing. `covers: NO-SPEC`
+// resolves to no rule and falls out of the join, and a tombstoned document
+// participates on neither end (044 §4).
 func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`WITH cov AS (
-		     SELECT DISTINCT cs.edge_id AS id, cs.plan_id, cs.doc_id, cs.anchor, cs.coverage
+		     SELECT cs.doc_id, cs.anchor,
+		            bool_or(p.status IN ('accepted','superseded','spent')) AS discharging,
+		            bool_or(p.status = 'draft')                           AS draft
 		       FROM covered_sections cs
 		       JOIN docs p ON p.id = cs.plan_id
-		      WHERE p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')
-		        AND p.deleted_at IS NULL
+		      WHERE p.kind = 'plan' AND p.deleted_at IS NULL
+		      GROUP BY cs.doc_id, cs.anchor
 		 ),
-		 def_raw AS (
+		 def AS (
 		     SELECT e.to_doc AS doc_id, e.to_anchor AS anchor,
-		            coalesce(owner_doc.slug, w.to_external) AS owner
+		            -- Comma without a space: the CLI joins anchors with spaces,
+		            -- so a spaced separator would split one gap across tokens.
+		            string_agg(DISTINCT coalesce(o.slug, e.owner_external), ','
+		                       ORDER BY coalesce(o.slug, e.owner_external)) AS owner
 		       FROM doc_edges e
 		       JOIN docs p ON p.id = e.from_doc
-		       JOIN doc_coverage_completed_with w ON w.edge_id = e.id
-		       LEFT JOIN docs owner_doc ON owner_doc.id = w.to_doc
+		       LEFT JOIN docs o ON o.id = e.owner_doc
 		      WHERE e.type = 'defers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')
 		        AND p.deleted_at IS NULL
-		 ),
-		 def AS (
-		     SELECT doc_id, anchor,
-		            -- Comma without a space: the CLI joins anchors with spaces,
-		            -- so a spaced separator would split one gap across tokens.
-		            string_agg(DISTINCT owner, ',' ORDER BY owner) AS owner
-		       FROM def_raw
-		      GROUP BY doc_id, anchor
-		 ),
-		 closed AS (
-		     SELECT c.id, c.doc_id, c.anchor
-		       FROM cov c
-		      WHERE c.coverage = 'partial'
-		        AND EXISTS (SELECT 1 FROM doc_coverage_completed_with w
-		                     WHERE w.edge_id = c.id)
-		        AND NOT EXISTS (
-		              SELECT 1 FROM doc_coverage_completed_with w
-		               WHERE w.edge_id = c.id
-		                 AND NOT EXISTS (
-		                       SELECT 1 FROM cov o
-		                        WHERE o.plan_id = w.to_doc
-		                          AND o.doc_id = c.doc_id AND o.anchor = c.anchor
-		                          AND o.coverage IN ('full','partial')))
-		 ),
-		 resolved AS (
-		     SELECT c.doc_id, c.anchor,
-		            bool_or(c.coverage = 'full' OR cl.id IS NOT NULL) AS discharged,
-		            bool_or(c.coverage = 'partial')                   AS any_partial
-		       FROM cov c
-		       LEFT JOIN closed cl ON cl.id = c.id AND cl.doc_id = c.doc_id AND cl.anchor = c.anchor
-		      GROUP BY c.doc_id, c.anchor
+		      GROUP BY e.to_doc, e.to_anchor
 		 )
 		 SELECT `+docColumnsD+`, count(*)::int,
 		        coalesce(json_agg(json_strip_nulls(json_build_object(
 		                     'anchor', sec.anchor,
-		                     'coverage', CASE WHEN coalesce(r.any_partial, false) THEN 'partial'
-		                                      WHEN def.doc_id IS NOT NULL         THEN 'deferred'
-		                                      WHEN r.doc_id IS NOT NULL           THEN 'bound-only'
+		                     'coverage', CASE WHEN coalesce(c.draft, false) THEN 'plan-draft'
+		                                      WHEN def.doc_id IS NOT NULL   THEN 'deferred'
 		                                      ELSE 'unplanned' END,
-		                     'owner', CASE WHEN NOT coalesce(r.any_partial, false)
-		                                        AND def.doc_id IS NOT NULL
-		                                   THEN def.owner END))
+		                     'owner', CASE WHEN NOT coalesce(c.draft, false) THEN def.owner END))
 		                 ORDER BY sec.position)
-		                 FILTER (WHERE r.discharged IS NOT TRUE), '[]')::text
+		                 FILTER (WHERE NOT coalesce(c.discharging AND NOT c.draft, false)), '[]')::text
 		   FROM docs d
 		   JOIN doc_sections sec ON sec.doc_id = d.id
-		   LEFT JOIN resolved r ON r.doc_id = sec.doc_id AND r.anchor = sec.anchor
+		   LEFT JOIN cov c ON c.doc_id = sec.doc_id AND c.anchor = sec.anchor
 		   LEFT JOIN def ON def.doc_id = sec.doc_id AND def.anchor = sec.anchor
 		  WHERE d.kind = 'spec' AND d.status = 'accepted'
 		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 		  GROUP BY d.id
-		 HAVING count(*) FILTER (WHERE r.discharged IS NOT TRUE) > 0
+		 HAVING count(*) FILTER (WHERE NOT coalesce(c.discharging AND NOT c.draft, false)) > 0
 		  ORDER BY d.project_id, d.number NULLS LAST, d.slug`, project)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list specs needing planning: %w", err)

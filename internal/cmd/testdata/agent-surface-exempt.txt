@@ -3,13 +3,6 @@
 # line, exactly as written in the markdown. Every entry needs a comment saying
 # why it is here and what removes it.
 
-# Draft spec 026 5.4's decomposition stamp. lode:splitting-specs-into-plans
-# names the command while telling authors it does not exist yet and to keep
-# writing fullCoverageWith. Remove both entries when 026 5.4 ships and the
-# skill stops hedging.
-lode decompose <ref>
-lode decompose
-
 # Spec 061 §1's naming law (internal/cmd/CLAUDE.md "Naming") states the
 # pattern itself. `<entity>` and `<verb>` are placeholders, so this can never
 # resolve however real the surface gets. Remove it only if the law's wording

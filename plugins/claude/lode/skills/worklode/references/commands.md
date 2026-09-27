@@ -57,7 +57,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc link` — Add an edge to a document (a plan's next version, a draft in place, an accepted spec or ADR on its candidate revision)
-  Flags: --blocked-by, --coverage, --covers, --defers, --derived-from, --from-anchor, --full-coverage-with, --owner, --requires
+  Flags: --blocked-by, --covers, --defers, --derived-from, --from-anchor, --owner, --requires
 - `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
   Flags: --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
@@ -82,7 +82,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --from, --project, --repo, --to
 - `lode doc undelete` — Restore a deleted document, clearing its tombstone
 - `lode doc unlink` — Remove an edge from a document, routed as lode doc link routes it
-  Flags: --blocked-by, --coverage, --covers, --defers, --derived-from, --from-anchor, --full-coverage-with, --owner, --requires
+  Flags: --blocked-by, --covers, --defers, --derived-from, --from-anchor, --owner, --requires
 - `lode doc versions` — List a document's version history
 - `lode doc withdraw` — Withdraw an accepted or stale document that will not be executed
   Flags: --justification

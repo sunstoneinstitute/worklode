@@ -37,7 +37,7 @@ already in dependency order. Walk it each pass:
 
 - `unexecuted` — `lode task list --plan <that item's plan slug> --status ready
   --json`; the first task it returns is the pick.
-- `unplanned`, `partial`, `plan-draft`, `blocked` — not loop work. Each needs a
+- `unplanned`, `plan-draft`, `blocked` — not loop work. Each needs a
   plan written or a human to accept one. Note it and move to the next item.
 
 When no item is `unexecuted`, the loop has taken the spec as far as it can:

@@ -14,25 +14,24 @@ import (
 //
 // Anchor and Anchors are disjoint, and which is filled says what shape the
 // item is: a plan-level item is attributed to one section and fills Anchor;
-// an unplanned or partial item collapses a document's whole planning gap and
+// an unplanned item collapses a document's whole planning gap and
 // fills Anchors; the document-level acceptance item fills neither. Heading
 // follows the same split — the section's heading on a plan-level item, the
 // document's title on the other two.
 type TodoItem struct {
-	Type    string   // unplanned | partial | plan-draft | unexecuted | blocked
+	Type    string   // unplanned | plan-draft | unexecuted | blocked
 	Doc     string   // repo-relative spec path the item belongs to
 	Anchor  string   // "sec-9.2"; empty on a document-level item
-	Anchors []string // the sections a collapsed unplanned/partial item names, in document order
+	Anchors []string // the sections a collapsed unplanned item names, in document order
 	Heading string   // section heading on a plan-level item, document title otherwise
-	Plan    string   // repo-relative plan path; empty for unplanned and partial
+	Plan    string   // repo-relative plan path; empty for unplanned
 	Tasks   []string // the plan's still-open minted tasks; empty when it minted none
 	Detail  string   // one line naming why
 }
 
-// The five item types of 026 §2.4's table.
+// The item types of WL-SPEC-78 §1.7's table.
 const (
 	TodoUnplanned  = "unplanned"  // no plan covers the section
-	TodoPartial    = "partial"    // covered only partial, nothing closes it
 	TodoPlanDraft  = "plan-draft" // a draft plan covers it: a human must accept
 	TodoUnexecuted = "unexecuted" // covering plan accepted, task absent or open
 	TodoBlocked    = "blocked"    // covering plan accepted, a required plan is not discharged
@@ -118,9 +117,8 @@ type rankedItem struct {
 // planning gaps — nothing blocks writing a plan — then the plan items in the
 // document's own section order (026 §2.4).
 const (
-	posAcceptance = -3
-	posUnplanned  = -2
-	posPartial    = -1
+	posAcceptance = -2
+	posUnplanned  = -1
 )
 
 type todoWalk struct {
@@ -312,17 +310,13 @@ func (w *todoWalk) emitDoc(docPath string) {
 				path.Base(docPath)))
 		return
 	}
-	var unplanned, partial []string
+	var unplanned []string
 	for _, sec := range d.Sections {
-		switch w.emitSection(docPath, sec) {
-		case TodoUnplanned:
+		if w.emitSection(docPath, sec) {
 			unplanned = append(unplanned, sec.Anchor)
-		case TodoPartial:
-			partial = append(partial, sec.Anchor)
 		}
 	}
 	w.emitGap(docPath, d.Title, TodoUnplanned, unplanned, posUnplanned)
-	w.emitGap(docPath, d.Title, TodoPartial, partial, posPartial)
 }
 
 // emitGap records a document's whole planning gap of one type as a single
@@ -348,60 +342,23 @@ func (w *todoWalk) emitGap(docPath, title, typ string, anchors []string, positio
 // and the pronoun varying with the count, rather than a bare count pasted
 // into one fixed sentence.
 func gapDetail(typ string, n int) string {
-	switch {
-	case typ == TodoUnplanned && n == 1:
+	if n == 1 {
 		return "1 section has no covering plan"
-	case typ == TodoUnplanned:
-		return fmt.Sprintf("%d sections have no covering plan", n)
-	case n == 1:
-		return "1 section is only partly covered, and no plan completes it"
-	default:
-		return fmt.Sprintf("%d sections are only partly covered, and no plan completes them", n)
 	}
+	return fmt.Sprintf("%d sections have no covering plan", n)
 }
 
-// emitSection emits one section's plan-level items and reports the
-// section-level gap type it still has ("" when none), which emitDoc collapses
-// into one item per document.
-func (w *todoWalk) emitSection(docPath string, sec SectionMeta) string {
-	// The owner is 026 §2.1's business, not §2.5's: no item type here names a
-	// deferred section (see the gap switch below), so lode doc todo has no
-	// column to put it in yet. Discarded here, not dropped from the index —
-	// coverage.go's own Section tests pin outcome and owner together.
+// emitSection emits one section's plan-level items and reports whether the
+// section is unplanned, which emitDoc collapses into one item per document.
+func (w *todoWalk) emitSection(docPath string, sec SectionMeta) bool {
+	// The owner is §1.3's business, not §1.7's: no item type here names a
+	// deferred section, so a deferred section yields no item.
 	outcome, covering, _ := w.ix.Section(docPath, sec.Anchor)
 
-	// The section-level gap, discharged by writing a plan. It is suppressed
-	// when a draft plan already covers the section: 026 §2.4 calls reporting
-	// that as unplanned "the opposite error", since the plan exists and
-	// rewriting it wastes the drafting — the pending act is the acceptance
-	// the plan-draft item below carries. §2.4 extends the same suppression to
-	// `partial` when the draft plan claims `full`.
-	//
-	// A section bound at `none` is suppressed at any plan status, draft
-	// included (§2.4, and PlanIndex.Bound): the level says the plan read the
-	// section and undertakes nothing in it, so no act — writing a plan,
-	// accepting this one — is pending there. §2.1's not-draft rule stays
-	// where it belongs, on the outcome, which is why this reads Bound rather
-	// than BoundOnly.
-	//
-	// Deferred falls through to no item, the same as BoundOnly: §2.5's five
-	// types are each an act this document's own plans can discharge, and a
-	// deferred section's next act belongs to the named owner, not to writing
-	// a plan here. §2.1 is where a deferral is reported (--needs-planning
-	// sweeps for it); this walk is silent on it until §2.5 grows a type for
-	// it.
-	gap := ""
-	switch {
-	case outcome == Unplanned && len(covering) == 0 && !w.ix.Bound(docPath, sec.Anchor):
-		gap = TodoUnplanned
-	case outcome == Partial && !coveredFullByDraft(covering):
-		gap = TodoPartial
-	}
-
 	// Every accepted covering plan is descended into, whatever the section's
-	// outcome: 026 §2.4's unexecuted and blocked rows key on the plan's
-	// status, not on the outcome, so gating this on `full` would hide an
-	// accepted partial plan that has never been executed.
+	// outcome: the unexecuted and blocked rows key on the plan's status. A
+	// draft covering plan yields a plan-draft item, and the section is not
+	// unplanned: the pending act is accepting that plan.
 	for _, plan := range covering {
 		if plan.Status == "draft" || plan.Status == "accepted" {
 			// A cycle is a corpus fact — independent of the plan's status,
@@ -417,22 +374,9 @@ func (w *todoWalk) emitSection(docPath string, sec SectionMeta) string {
 		case "accepted":
 			w.emitAcceptedPlan(docPath, sec, plan)
 		}
-		// A superseded plan is spent: the work it covered is done, and there
-		// is no task state left to consult (026 §2.1, §2.4).
+		// A superseded plan is spent: the work it covered is done.
 	}
-	return gap
-}
-
-// coveredFullByDraft reports whether some draft plan claims full coverage,
-// which makes "covered only partial" false — the pending act there is
-// acceptance, not more planning.
-func coveredFullByDraft(covering []CoveringPlan) bool {
-	for _, p := range covering {
-		if p.Status == "draft" && p.Level == "full" {
-			return true
-		}
-	}
-	return false
+	return outcome == Unplanned && len(covering) == 0
 }
 
 // emitAcceptedPlan decides what an accepted covering plan still owes:

@@ -2876,9 +2876,6 @@ nav.local a .cnt {
   background: var(--warn-bg);
   border-color: var(--warn);
 }
-.cell-partial {
-  box-shadow: inset 0 0 0 2px var(--surface);
-}
 details.card > summary.hd {
   cursor: pointer;
   list-style: none;

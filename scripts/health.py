@@ -18,8 +18,8 @@ Every source is the worklode backbone, read through the `lode` CLI:
   lode doc list --kind plan       plan inventory and status
   lode doc list --needs-planning  the backbone's own verdict on which spec
                                   sections no accepted plan discharges
-                                  (026 sec-2.1), each classified unplanned,
-                                  partial or bound-only
+                                  (WL-SPEC-78 sec-1.3), each classified
+                                  plan-draft, deferred or unplanned
   lode doc show <id>              a spec's section count and a plan's `covers`
                                   edges -- one round trip per document, so it
                                   is issued only where a list cannot answer
@@ -30,10 +30,8 @@ Every source is the worklode backbone, read through the `lode` CLI:
                                   time are measured, not guessed
 
 Coverage comes from --needs-planning rather than from recomputing it over
-`covers` edges. The wire form of an edge carries no coverage level, so a plan
-declaring `coverage: none` -- stating that it deliberately does *not* discharge
-a section -- would be indistinguishable from one that does. Asking the backbone
-also means this report and the backbone cannot disagree about what is planned.
+`covers` edges, so this report and the backbone cannot disagree about what is
+planned.
 
 Asymmetry worth knowing about: tasks carry real history, documents carry only a
 last touch. The task half of this report is a trend; the doc half is a

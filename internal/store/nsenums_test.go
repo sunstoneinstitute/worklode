@@ -23,7 +23,6 @@ var schemeChecks = map[string]struct {
 }{
 	"TaskKind":         {table: "tasks", column: "kind"},
 	"DesignDocStatus":  {table: "docs", column: "status"},
-	"CoverageLevel":    {table: "doc_edges", column: "coverage"},
 	"ArtifactKind":     {table: "artifacts", column: "kind"},
 	"DeploymentStatus": {table: "deployments", column: "status"},
 	"RuntimeEventKind": {table: "runtime_events", column: "kind"},
@@ -45,9 +44,9 @@ var schemesWithoutTable = map[string]string{
 
 // checkedValues returns the values the single CHECK constraint over
 // table.column admits. Postgres normalises `col IN (...)` to
-// `col = ANY (ARRAY[...])`, and a column may carry more than one CHECK — the
-// coverage column has a second one tying it to the edge type — so the match
-// is on the ANY form, and finding anything but exactly one is a failure.
+// `col = ANY (ARRAY[...])`, and a column may carry more than one CHECK, so
+// the match is on the ANY form, and finding anything but exactly one is a
+// failure.
 func checkedValues(t *testing.T, s *Store, table, column string) []string {
 	t.Helper()
 	rows, err := s.DBForTests().Query(

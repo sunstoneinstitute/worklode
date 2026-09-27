@@ -23,11 +23,6 @@ type Ref struct {
 	// Ref is the reference text as authored, trailing "#sec-…" fragment
 	// included — split it with SplitFragment.
 	Ref string
-	// Coverage is the covers entry this reference came from, non-nil only
-	// when Rel is "covers": that relation alone carries a level and, for a
-	// partial entry, its fullCoverageWith closure (026 §5.1). It is a copy,
-	// so writing through it does not reach the frontmatter.
-	Coverage *Coverage
 	// Deferral is the defers entry this reference came from, non-nil only
 	// when Rel is "defers": that relation alone carries a named owner
 	// (026 §5.3). It is a copy, so writing through it does not reach the
@@ -86,26 +81,25 @@ func (f *Frontmatter) Refs() []Ref {
 		return nil
 	}
 	var out []Ref
-	add := func(anchor, rel, ref string, cov *Coverage, def *Deferral) {
+	add := func(anchor, rel, ref string, def *Deferral) {
 		if ref = strings.TrimSpace(ref); ref != "" {
-			out = append(out, Ref{SrcAnchor: anchor, Rel: rel, Ref: ref, Coverage: cov, Deferral: def})
+			out = append(out, Ref{SrcAnchor: anchor, Rel: rel, Ref: ref, Deferral: def})
 		}
 	}
 	// covers reads the retired `implements` spelling too (026 §5.1).
 	for _, entry := range f.CoverageEntries() {
-		add("", "covers", entry.Spec, &entry, nil)
+		add("", "covers", entry.Spec, nil)
 	}
-	// defers, like covers, carries its qualifier (here the owner) with the
-	// reference rather than as a separate field (026 §5.3).
+	// defers carries its owner with the reference (026 §5.3).
 	for _, entry := range f.Defers {
-		add("", "defers", entry.Spec, nil, &entry)
+		add("", "defers", entry.Spec, &entry)
 	}
 	for _, r := range refListRelOrder {
 		for _, ref := range r.get(f) {
-			add("", r.rel, ref, nil, nil)
+			add("", r.rel, ref, nil)
 		}
 	}
-	add("", "wasDerivedFrom", f.WasDerivedFrom, nil, nil)
+	add("", "wasDerivedFrom", f.WasDerivedFrom, nil)
 	return out
 }
 

@@ -29,7 +29,7 @@ between them into one work list (026 §2.5).
 
 <ref> is any reference §4 resolves: a slug, a bare number, or the
 WL-SPEC-25 shorthand. Every item is typed by the act that discharges
-it — writing a plan (unplanned, partial), a human accepting one
+it — writing a plan (unplanned), a human accepting one
 (plan-draft), executing one (unexecuted), or landing the plan that holds
 it up (blocked).
 
@@ -293,7 +293,7 @@ func docTodoSectionMetas(secs []model.DocSection) []designdoc.SectionMeta {
 // edges to designdoc.EdgeMeta, the shape corpus.go's edgeMetas builds from a
 // header. The far end becomes its corpus path when the edge resolved to a
 // document, else its verbatim reference (ToExternal, "NO-SPEC" included)
-// split at its fragment. A CompletedWith element is a slug when it resolved;
+// split at its fragment. A defers owner is a slug when it resolved;
 // pathBySlug turns a slug of this corpus into its path.
 func docTodoEdgeMetas(edges []model.DocEdge, pathBySlug map[string]string) []designdoc.EdgeMeta {
 	var out []designdoc.EdgeMeta
@@ -305,17 +305,13 @@ func docTodoEdgeMetas(edges []model.DocEdge, pathBySlug map[string]string) []des
 		if e.ToExternal != "" {
 			target, anchor = designdoc.SplitFragment(e.ToExternal)
 		}
-		var with []string
-		for _, w := range e.CompletedWith {
-			if p, ok := pathBySlug[w]; ok {
-				w = p
-			}
-			with = append(with, w)
+		owner := e.Owner
+		if p, ok := pathBySlug[owner]; ok {
+			owner = p
 		}
 		out = append(out, designdoc.EdgeMeta{
 			SrcAnchor: e.FromAnchor, Rel: e.Type,
-			Target: target, TargetAnchor: anchor,
-			Coverage: e.Coverage, CompletedWith: with,
+			Target: target, TargetAnchor: anchor, Owner: owner,
 		})
 	}
 	return out
@@ -448,8 +444,8 @@ type docTodoRow struct{ doc, typ, sections, plan, detail, reason string }
 // ("plan is draft: accepting it is a human act") only restates its type, and
 // the detail column is better spent on the section's heading — which the
 // --json consumer could already read and the human reader could not.
-const docTodoLegend = "types: unplanned, partial — write a plan;   plan-draft — a human accepts it\n" +
-	"       unexecuted — execute the plan;       blocked — land the plan it waits on"
+const docTodoLegend = "types: unplanned — write a plan;       plan-draft — a human accepts it\n" +
+	"       unexecuted — execute the plan;  blocked — land the plan it waits on"
 
 // docTodoContinuedNote explains a heading the queue comes back to. The repeat
 // is not a duplicate: those items rank later because they wait on plans listed

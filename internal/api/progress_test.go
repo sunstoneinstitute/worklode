@@ -11,8 +11,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// progressSpecBody is a spec with three anchored sections — the ones
-// progressPlanBody covers at coverage none, full and partial.
+// progressSpecBody is a spec with three anchored sections, the ones
+// progressPlanBody covers.
 const progressSpecBody = `---
 status: draft
 ---
@@ -32,18 +32,15 @@ Scope body.
 Model body.
 `
 
-// progressPlanBody covers those three sections at none/full/partial and
-// mints two tasks, so accepting it puts the plan in not_started (§1.1) and
-// both owed sections in "Accepted, not started" (§1.2).
+// progressPlanBody covers those three sections and mints two tasks, so
+// accepting it puts the plan in not_started (§1.1) and every section in
+// "Accepted, not started" (§1.2).
 const progressPlanBody = `---
 status: draft
 covers:
-  - spec: 066-progress.md#sec-0
-    coverage: none
-  - spec: 066-progress.md#sec-1
-    coverage: full
-  - spec: 066-progress.md#sec-2
-    coverage: partial
+  - 066-progress.md#sec-0
+  - 066-progress.md#sec-1
+  - 066-progress.md#sec-2
 ---
 
 # Progress plan
@@ -95,9 +92,9 @@ func seedProgressProject(t *testing.T, h http.Handler, token, project string) mo
 }
 
 // TestProgressPage: the page over real data. One spec covered by one accepted
-// plan whose tasks are all unstarted lands in Active, draws one cell per owed
-// section and none for the coverage-none section (§1.4), says so about the
-// missing rally, and carries no percentage anywhere (§2.5).
+// plan whose tasks are all unstarted lands in Active, draws one cell per
+// section, says so about the missing rally, and carries no percentage
+// anywhere (§2.5).
 func TestProgressPage(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -117,18 +114,14 @@ func TestProgressPage(t *testing.T) {
 		}
 	}
 
-	// Two owed sections, both "accepted, not started"; the coverage-none
-	// section is bound only and gets no cell at all (§1.4). The legend draws
-	// one swatch per state, so count the strip's cells alone.
+	// Three sections, all "accepted, not started". The legend draws one
+	// swatch per state, so count the strip's cells alone.
 	strip := between(t, body, `<div class="strip">`, "</div>")
-	if got := strings.Count(strip, "cell-not_started"); got != 2 {
-		t.Errorf("strip has %d not_started cells, want 2 — strip was %s", got, strip)
+	if got := strings.Count(strip, "cell-not_started"); got != 3 {
+		t.Errorf("strip has %d not_started cells, want 3 — strip was %s", got, strip)
 	}
-	if got := strings.Count(strip, `<i class="cell `); got != 2 {
-		t.Errorf("strip has %d cells, want 2 (the bound-only section draws none) — strip was %s", got, strip)
-	}
-	if !strings.Contains(strip, "cell-partial") {
-		t.Errorf("strip has no partial ring for the partially covered section — strip was %s", strip)
+	if got := strings.Count(strip, `<i class="cell `); got != 3 {
+		t.Errorf("strip has %d cells, want 3 — strip was %s", got, strip)
 	}
 
 	// §2.5: counts are counts. No count element carries a percentage.
@@ -194,7 +187,6 @@ func TestProgressExpandedRow(t *testing.T) {
 		`<div class="detail" id="d-WL-SPEC-66">`, // rendered server-side, hidden by CSS
 		"0 landed",                               // the plan's counts, still no percentage
 		"2 open",
-		"bound only", // §1.4's section: listed in the table, drawn nowhere
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("expanded row does not contain %q", want)

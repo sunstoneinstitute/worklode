@@ -63,7 +63,7 @@ templ Rule(v RuleView) {
 							for _, p := range v.Rule.CoveredBy {
 								<li>
 									<a href={ templ.SafeURL("/docs/ref/" + p.DocRef) }>{ p.DocRef }</a>
-									<span class="muted small">{ " " }{ p.Status } · { p.Coverage }</span>
+									<span class="muted small">{ " " }{ p.Status }</span>
 								</li>
 							}
 						</ul>

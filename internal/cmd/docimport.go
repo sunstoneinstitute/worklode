@@ -290,6 +290,14 @@ func readImportDoc(file, defaultKind string) (importDoc, error) {
 				"%s carries %s:, which is not stored: declare it on the other document as %s:", file, r.Rel, acting)
 		}
 	}
+	if d.fm != nil {
+		for _, c := range d.fm.CoverageEntries() {
+			if !c.Plain() {
+				return importDoc{}, fmt.Errorf(
+					"%s covers %q with a coverage level: levels are retired, write a plain reference (WL-SPEC-78 §4.1)", file, c.Spec)
+			}
+		}
+	}
 	if d.fm != nil && d.fm.Kind == "adr" && defaultKind == "spec" {
 		d.kind = "adr"
 	}
@@ -517,18 +525,12 @@ func printUnresolvedRefs(w io.Writer, refs []unresolvedRef) {
 }
 
 // importEdges is the edge set a header states, as PUT /api/v1/docs/{id}/edges
-// takes it: the relations the server stores (designdoc.StoredRels), each with
-// its covers level and fullCoverageWith closure or its defers owner.
+// takes it: the relations the server stores (designdoc.StoredRels), a defers
+// edge with its owner.
 func importEdges(fm *designdoc.Frontmatter) []model.DocEdgeInput {
 	out := []model.DocEdgeInput{}
 	for _, r := range fm.RefsFor(designdoc.StoredRels...) {
 		e := model.DocEdgeInput{Type: r.Rel, FromAnchor: r.SrcAnchor, To: r.Ref}
-		if r.Coverage != nil {
-			e.Coverage = strings.TrimSpace(r.Coverage.Coverage)
-			if e.Coverage == "partial" {
-				e.CompletedWith = r.Coverage.FullCoverageWith
-			}
-		}
 		if r.Deferral != nil {
 			e.Owner = r.Deferral.To
 		}

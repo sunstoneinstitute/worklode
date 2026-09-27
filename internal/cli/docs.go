@@ -419,10 +419,9 @@ func DocTransferTable(w io.Writer, outcomes []DocTransferOutcome) {
 }
 
 // DocPlanningTable prints the `lode doc list --needs-planning` view: one row
-// per accepted spec, with the gap ratio 026 §2.1 shows and each undischarged
-// anchor annotated with why it is still a gap — "sec-2.4(partial)
-// sec-4(unplanned)" (026 §2.1's sample output), or "sec-4(deferred:OWNER)"
-// when a defers entry names who it is owed to (026 §5.3). gaps is keyed by
+// per accepted spec, with the gap ratio and each unplanned anchor annotated
+// with its WL-SPEC-78 §1.3 outcome — "sec-2.4(plan-draft) sec-4(unplanned)",
+// or "sec-6(deferred:OWNER)" when a defers entry names who it is owed to. gaps is keyed by
 // document id, so a document without one renders as no gap rather than
 // misaligning the table.
 func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap) {

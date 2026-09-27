@@ -1580,15 +1580,13 @@ type ProgressView struct {
 }
 
 // LegendEntry is one section state in the bar's legend: §1.2's label, a
-// one-line meaning, and how many owed sections carry it. The bound state has
-// no entry — §1.4 keeps it off the page entirely.
+// one-line meaning, and how many sections carry it.
 type LegendEntry struct {
 	State, Label, Help string
 	Count              int
 }
 
 // progressStates is §2.1's section-bar order, which is also the legend's.
-// "bound" is absent by design (§1.4).
 var progressStates = []string{"built", "in_progress", "not_started", "no_record", "draft", "unplanned"}
 
 // progressStateLabels is §1.2's "Label on the page" column, verbatim.
@@ -1647,14 +1645,9 @@ func ProgressLegend(p model.ProjectProgress) []LegendEntry {
 	return out
 }
 
-// progressCellClass is a strip cell's class: its state colour plus the inset
-// ring a partially covered section carries (§1.2).
+// progressCellClass is a strip cell's class: its state colour.
 func progressCellClass(s model.ProgressSection) string {
-	c := "cell cell-" + s.State
-	if s.Partial {
-		c += " cell-partial"
-	}
-	return c
+	return "cell cell-" + s.State
 }
 
 // progressSectionNumber renders an anchor as the section number a reader

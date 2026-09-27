@@ -103,6 +103,14 @@ type Coverage struct {
 	Spec             string  `yaml:"spec,omitempty"`
 	Coverage         string  `yaml:"coverage,omitempty"`
 	FullCoverageWith RefList `yaml:"fullCoverageWith,omitempty"`
+	levelKey         bool    // the authored mapping carried a `coverage` key
+}
+
+// Plain reports whether the entry is a bare reference. The `coverage` and
+// `fullCoverageWith` keys are retired (WL-SPEC-78 §4.5): they still parse, and
+// a write carrying either is refused.
+func (c Coverage) Plain() bool {
+	return !c.levelKey && (c.Coverage == "" || c.Coverage == "full") && len(c.FullCoverageWith) == 0
 }
 
 func (c Coverage) isNoSpecScalar() bool {
@@ -154,6 +162,7 @@ func (c *Coverage) UnmarshalYAML(n *yaml.Node) error {
 			return err
 		}
 		*c = Coverage(fields)
+		c.levelKey = c.Coverage != ""
 		return nil
 	default:
 		return fmt.Errorf("coverage: want scalar or mapping, got YAML node kind %d", n.Kind)

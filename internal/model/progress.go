@@ -76,9 +76,8 @@ type ProgressSection struct {
 	Anchor  string   `json:"anchor"`
 	Heading string   `json:"heading"`
 	Depth   int      `json:"depth"`
-	State   string   `json:"state"` // built | in_progress | not_started | no_record | draft | unplanned | bound
-	Partial bool     `json:"partial"`
-	Plans   []string `json:"plans"` // refs of covering plans, level none excluded
+	State   string   `json:"state"` // built | in_progress | not_started | no_record | draft | unplanned
+	Plans   []string `json:"plans"` // refs of covering plans
 }
 
 type ProgressPlan struct {

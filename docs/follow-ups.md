@@ -399,21 +399,6 @@ one pass.
   is cheapest before part 2 of the task-secrets series ships a client that
   emits it.
 
-## From WL-141 — three-valued plan coverage (2026-08-20)
-
-- `[gated]` **A plan can close its own section by naming itself in
-  `fullCoverageWith`.** `Store.NeedsPlanning` (`internal/store/docs.go`)
-  discharges a `partial` claim once every plan named in its
-  `fullCoverageWith` is accepted and itself contributes `full` or `partial`
-  to the same section — and nothing excludes the naming plan from that set.
-  026 §2.1's text permits this: the test is per-named-plan ("accepted and
-  contributes `full` or `partial` to S"), stated with no case for the naming
-  plan. But §2.1's stated rationale for the closure check is about siblings
-  covering the rest of a section, and self-naming is a roundabout spelling of
-  `coverage: full` rather than a real closure, so the rule probably wants
-  narrowing to exclude the naming plan. That is an amendment to 026 §2.1, not
-  a query fix.
-
 ## From WL-148 — `lode task cost` (2026-08-20)
 
 - `[P4]` **`leases` has no plain index on `task_id`.** Only the partial

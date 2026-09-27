@@ -238,30 +238,22 @@ type AddDocNoteInput struct {
 // then name a section arranging that rule. Empty on every other edge and on
 // every inbound one.
 //
-// Coverage is a covers edge's level ("full", "partial", "none"), empty on
-// every other type.
-//
-// CompletedWith carries the doc_coverage_completed_with side-table (026 §5,
-// §5.3) that only a `covers` or `defers` edge ever populates: a `partial`
-// covers entry's fullCoverageWith closure, in authored order, or a `defers`
-// entry's single-element owner. Each element is a slug when the reference
-// resolved to a live document, or the reference verbatim when it did not —
-// the same fallback NeedsPlanning's owner column uses. Nil for every other
-// edge, and for a `full`/`none` covers entry.
+// Owner is a defers edge's owner (WL-SPEC-78 §4.2): a slug when it resolved
+// to a document, the reference verbatim when it did not. Empty on every
+// other type.
 type DocEdge struct {
-	Type          string   `json:"type"`
-	FromAnchor    string   `json:"from_anchor"`
-	ToDoc         int64    `json:"to_doc"`
-	ToAnchor      string   `json:"to_anchor"`
-	ToExternal    string   `json:"to_external"`
-	ToProject     string   `json:"to_project"`
-	ToSlug        string   `json:"to_slug"`
-	ToKind        string   `json:"to_kind"`
-	ToNumber      int      `json:"to_number"`
-	ToStatus      string   `json:"to_status"`
-	Coverage      string   `json:"coverage,omitempty"`
-	CompletedWith []string `json:"completed_with,omitempty"`
-	ToRule        string   `json:"to_rule,omitempty"`
+	Type       string `json:"type"`
+	FromAnchor string `json:"from_anchor"`
+	ToDoc      int64  `json:"to_doc"`
+	ToAnchor   string `json:"to_anchor"`
+	ToExternal string `json:"to_external"`
+	ToProject  string `json:"to_project"`
+	ToSlug     string `json:"to_slug"`
+	ToKind     string `json:"to_kind"`
+	ToNumber   int    `json:"to_number"`
+	ToStatus   string `json:"to_status"`
+	Owner      string `json:"owner,omitempty"`
+	ToRule     string `json:"to_rule,omitempty"`
 }
 
 // DocReferrer is one piece of open work pointing at a document section
@@ -347,16 +339,13 @@ type UpdateDocBodyInput struct {
 // DocEdgeInput is one document edge as a caller names it: the request body of
 // POST and DELETE /api/v1/docs/{id}/edges, and an element of
 // ReplaceDocEdgesInput. Type is a declared doc_edges type (WL-SPEC-77 §8.1);
-// To is a reference and may end in #sec-N. Coverage, CompletedWith (its
-// fullCoverageWith closure) and Owner (a defers edge's owner) carry what the
-// header's covers and defers entries carried (026 §5.1, §5.3).
+// To is a reference and may end in #sec-N. Owner is a defers edge's owner
+// (WL-SPEC-78 §4.2).
 type DocEdgeInput struct {
-	Type          string   `json:"type"`
-	FromAnchor    string   `json:"from_anchor,omitempty"`
-	To            string   `json:"to"`
-	Coverage      string   `json:"coverage,omitempty"`
-	CompletedWith []string `json:"completed_with,omitempty"`
-	Owner         string   `json:"owner,omitempty"`
+	Type       string `json:"type"`
+	FromAnchor string `json:"from_anchor,omitempty"`
+	To         string `json:"to"`
+	Owner      string `json:"owner,omitempty"`
 }
 
 // ReplaceDocEdgesInput is the request body for PUT /api/v1/docs/{id}/edges,
@@ -454,18 +443,15 @@ type DocRef struct {
 	Status string `json:"status"`
 }
 
-// DocSectionGap is one section of a spec that no accepted or superseded plan
-// discharges, with the reason 026 §2.1 gives: "partial" when a plan covers
-// part of it and no fullCoverageWith set closes it, "deferred" when some such
-// plan hands it off to a named owner with `defers` (026 §5.3) and none claims
-// `partial`, "bound-only" when every such plan naming it claims `none`,
-// "unplanned" when none names it at all.
+// DocSectionGap is one section of a spec that is not planned, with its
+// WL-SPEC-78 §1.3 outcome: "plan-draft" when a draft plan covers it,
+// "deferred" when no plan covers it and an accepted or superseded plan
+// defers it to a named owner, "unplanned" otherwise.
 type DocSectionGap struct {
 	Anchor   string `json:"anchor"`
-	Coverage string `json:"coverage"` // partial | deferred | bound-only | unplanned
+	Coverage string `json:"coverage"` // plan-draft | deferred | unplanned
 	// Owner is the deferral's named owner — a slug, or the external reference
-	// verbatim when it did not resolve — set only when Coverage is "deferred"
-	// (026 §2.1, §5.3).
+	// verbatim when it did not resolve — set only when Coverage is "deferred".
 	Owner string `json:"owner,omitempty"`
 }
 
@@ -495,7 +481,7 @@ type BareRule struct {
 // DocLintFinding is one dangling frontmatter reference the corpus lint
 // found: a reference that resolved to nothing when its document's edges
 // were last built ("unresolved" — doc_edges.to_external or
-// doc_coverage_completed_with.to_external is set), or one that resolved but
+// doc_edges.owner_external is set), or one that resolved but
 // whose anchor names no section of the target document
 // ("missing-anchor" — doc_edges.to_doc resolved, but to_anchor is not
 // among the target's doc_sections rows).

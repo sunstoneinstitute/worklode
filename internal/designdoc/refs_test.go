@@ -74,37 +74,6 @@ func TestFrontmatterRefsWalksEveryRelation(t *testing.T) {
 	}
 }
 
-// The covers entry rides along with its reference: it is the one relation
-// carrying a level and a fullCoverageWith closure (026 §5.1).
-func TestFrontmatterRefsCarriesCoverageEntry(t *testing.T) {
-	got := refsFixtureFrontmatter(t).Refs()
-	partial := got[0]
-	if partial.Coverage == nil {
-		t.Fatalf("Refs()[0].Coverage = nil, want the covers entry")
-	}
-	if partial.Coverage.Coverage != "partial" {
-		t.Errorf("coverage level = %q, want %q", partial.Coverage.Coverage, "partial")
-	}
-	if want := (RefList{"docs/plans/026-refs-2.md"}); !reflect.DeepEqual(partial.Coverage.FullCoverageWith, want) {
-		t.Errorf("fullCoverageWith = %v, want %v", partial.Coverage.FullCoverageWith, want)
-	}
-	for _, r := range got[2:] {
-		if r.Coverage != nil {
-			t.Errorf("rel %q carries a coverage entry, want nil", r.Rel)
-		}
-	}
-}
-
-// Mutating a returned entry must not reach back into the frontmatter: the
-// enumerator is a read of the header, not a handle on it.
-func TestFrontmatterRefsCoverageIsACopy(t *testing.T) {
-	fm := refsFixtureFrontmatter(t)
-	fm.Refs()[0].Coverage.Coverage = "none"
-	if got := fm.CoverageEntries()[0].Coverage; got != "partial" {
-		t.Errorf("frontmatter coverage level = %q after mutating the returned copy, want %q", got, "partial")
-	}
-}
-
 func TestFrontmatterRefsReadsRetiredCoverageSpelling(t *testing.T) {
 	doc, err := Parse([]byte("---\nimplements:\n- docs/specs/025-documents.md\n---\n# X\n"))
 	if err != nil {

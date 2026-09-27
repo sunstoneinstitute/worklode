@@ -45,12 +45,11 @@ type RuleArrangement struct {
 	RuleVersion int    `json:"rule_version"`
 }
 
-// RulePlan is one plan covering a rule, at the level its covers edge states.
+// RulePlan is one plan covering a rule.
 type RulePlan struct {
-	Doc      int64  `json:"doc"`
-	DocRef   string `json:"doc_ref"` // "WL-PLAN-7"
-	Status   string `json:"status"`
-	Coverage string `json:"coverage"` // full | partial | none
+	Doc    int64  `json:"doc"`
+	DocRef string `json:"doc_ref"` // "WL-PLAN-7"
+	Status string `json:"status"`
 }
 
 // RuleVersion is one entry of a rule's version history.

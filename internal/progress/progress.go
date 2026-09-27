@@ -69,7 +69,6 @@ type Plan struct {
 type Cover struct {
 	Spec   int64
 	Anchor string
-	Level  string // full | partial | none
 }
 
 // Task is one task minted from a plan.
@@ -92,8 +91,8 @@ type CoverState struct {
 var sectionRank = []string{"built", "in_progress", "not_started", "no_record", "draft"}
 
 // BarOrder is §2.1's section-bar order: sectionRank plus "unplanned" at the
-// end. "bound" never appears — it is not owed (§1.4). It is exported because
-// every renderer of the derived model orders section states by it.
+// end. It is exported because every renderer of the derived model orders
+// section states by it.
 var BarOrder = append(append([]string{}, sectionRank...), "unplanned")
 
 // groupOrder is §1.3's fixed group order.
@@ -152,34 +151,19 @@ func PlanState(status string, tasks []Task) string {
 }
 
 // SectionState is §1.2: a section's state is the furthest-along state among
-// its non-"none" covers. A section with no covers at all is unplanned; one
-// whose covers are all "none" is bound (§1.4) — not owed, not drawn. Partial
-// is set only when every remaining cover is at coverage "partial".
-func SectionState(covers []CoverState) (state string, partial bool) {
+// its covers. A section with no covers at all is unplanned.
+func SectionState(covers []CoverState) string {
 	if len(covers) == 0 {
-		return "unplanned", false
+		return "unplanned"
 	}
-	var active []CoverState
+	state, bestRank := "", len(sectionRank)
 	for _, c := range covers {
-		if c.Level != "none" {
-			active = append(active, c)
-		}
-	}
-	if len(active) == 0 {
-		return "bound", false
-	}
-	bestRank := len(sectionRank)
-	partial = true
-	for _, c := range active {
-		if c.Level != "partial" {
-			partial = false
-		}
 		if r := slices.Index(sectionRank, c.State); r >= 0 && r < bestRank {
 			bestRank = r
 			state = c.State
 		}
 	}
-	return state, partial
+	return state
 }
 
 // planInfo is a plan's state and derived strip, computed once and reused
@@ -230,9 +214,7 @@ func Derive(in Input) model.ProjectProgress {
 				coversByAnchor[c.Anchor] = append(coversByAnchor[c.Anchor], CoverState{
 					Cover: c, PlanRef: p.Ref, State: pi.State,
 				})
-				if c.Level != "none" {
-					coveringDocs[p.Doc] = true
-				}
+				coveringDocs[p.Doc] = true
 			}
 		}
 
@@ -241,21 +223,15 @@ func Derive(in Input) model.ProjectProgress {
 		unplannedCount := 0
 		for _, sec := range spec.Sections {
 			covers := coversByAnchor[sec.Anchor]
-			state, partial := SectionState(covers)
+			state := SectionState(covers)
 			var coverPlans []string
 			for _, c := range covers {
-				if c.Level == "none" {
-					continue
-				}
 				coverPlans = append(coverPlans, c.PlanRef)
 			}
 			sections = append(sections, model.ProgressSection{
 				Anchor: sec.Anchor, Heading: sec.Heading, Depth: sec.Depth,
-				State: state, Partial: partial, Plans: coverPlans,
+				State: state, Plans: coverPlans,
 			})
-			if state == "bound" {
-				continue // not owed: not counted, not a group signal
-			}
 			barCounts[state]++
 			switch state {
 			case "in_progress", "not_started":

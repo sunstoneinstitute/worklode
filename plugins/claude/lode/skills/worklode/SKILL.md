@@ -74,7 +74,7 @@ instead.
 | task → rule | `governedBy` (follows the newest version unless pinned) |
 | spec → rule | Arrangement: rule, version, position, depth and section anchor |
 | rule → rule | `refines`, `constrains`, `conflictsWith`, `references`, `wasDerivedFrom`, `amends`, `supersedes` (new rule → old rule; `amendedBy`/`supersededBy` are read from the far end, never stored) |
-| plan → rule | `covers` (`full`\|`partial`\|`none`), resolved from the plan's document/section references at write time |
+| plan → rule | `covers`, resolved from the plan's document/section references at write time; the plan builds the whole rule |
 | task → doc | `plan_doc` (the plan that minted this task), `about_doc` (the doc a review/design task concerns) |
 | doc ↔ doc | `implements` (code→section), `requires`, `wasDerivedFrom`, `blockedBy` (whole-plan ordering) |
 
@@ -174,8 +174,9 @@ Read the arrangement with `lode rule list --doc <spec-ref>` and a rule with
 `lode show <rule-ref>`. Read a spec with `lode show <ref> --inline` to include
 in-force document amendments and supersessions. A bare read returns its
 current stored body; `--version` selects a historical version. Accepted
-section anchors remain stable, and `covers` still uses document/section refs
-and coverage levels. Use `spec` for new design documents; existing ADRs stay
+section anchors remain stable, and `covers` uses document/section refs, each
+a plain reference — a `covers` edge always means the plan builds the whole
+rule, no levels. Use `spec` for new design documents; existing ADRs stay
 readable. Frontmatter, rule editing, governance, and refactor mechanics:
 `references/specs-and-docs.md`.
 

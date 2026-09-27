@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 )
 
 // progressSpecBody is a spec with three anchored sections, the ones
-// progressPlanBody covers at each of the three levels.
+// progressPlanBody covers.
 const progressSpecBody = `---
 status: draft
 ---
@@ -32,17 +33,13 @@ Scope body.
 Model body.
 `
 
-// progressPlanBody covers the three sections at none/full/partial and mints
-// two tasks.
+// progressPlanBody covers the three sections and mints two tasks.
 const progressPlanBody = `---
 status: draft
 covers:
-  - spec: 066-progress.md#sec-0
-    coverage: none
-  - spec: 066-progress.md#sec-1
-    coverage: full
-  - spec: 066-progress.md#sec-2
-    coverage: partial
+  - 066-progress.md#sec-0
+  - 066-progress.md#sec-1
+  - 066-progress.md#sec-2
 ---
 
 # Progress plan
@@ -97,7 +94,7 @@ func seedProgressCorpus(t *testing.T, s *Store) (specID, planID int64, taskIDs [
 }
 
 // TestProjectProgress: one read returns the project's specs with their
-// sections in document order, its plans with their covers levels, and the
+// sections in document order, its plans with their covers, and the
 // tasks each plan minted with the position each one sits at.
 func TestProjectProgress(t *testing.T) {
 	t.Parallel()
@@ -151,17 +148,15 @@ func TestProjectProgress(t *testing.T) {
 	if plan.Owner != "stig" {
 		t.Errorf("plan Owner = %q, want stig", plan.Owner)
 	}
-	wantLevels := map[string]string{"sec-0": "none", "sec-1": "full", "sec-2": "partial"}
-	if len(plan.Covers) != len(wantLevels) {
-		t.Fatalf("got %d covers, want %d", len(plan.Covers), len(wantLevels))
-	}
+	var gotAnchors []string
 	for _, c := range plan.Covers {
 		if c.Spec != specID {
 			t.Errorf("cover %s Spec = %d, want %d", c.Anchor, c.Spec, specID)
 		}
-		if want := wantLevels[c.Anchor]; c.Level != want {
-			t.Errorf("cover %s Level = %q, want %q", c.Anchor, c.Level, want)
-		}
+		gotAnchors = append(gotAnchors, c.Anchor)
+	}
+	if !slices.Equal(gotAnchors, wantAnchors) {
+		t.Errorf("covers = %v, want %v", gotAnchors, wantAnchors)
 	}
 
 	if len(plan.Tasks) != 2 {
@@ -473,7 +468,7 @@ func TestProgressRefs(t *testing.T) {
 // tens of fixtures.
 func progressLoadPlanBody(name string, n int) string {
 	var b strings.Builder
-	b.WriteString("---\nstatus: draft\ncovers:\n  - spec: 066-progress.md#sec-1\n    coverage: partial\n---\n\n# " +
+	b.WriteString("---\nstatus: draft\ncovers:\n  - 066-progress.md#sec-1\n---\n\n# " +
 		name + "\n\n## Tasks\n\n")
 	for i := 1; i <= n; i++ {
 		fmt.Fprintf(&b, "### Task %d — %s task %d\n\n```yaml\nkind: feature\npriority: medium\nblockedBy: []\n```\n\nBody.\n\n",

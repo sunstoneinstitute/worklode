@@ -259,48 +259,6 @@ wl:coversShape a sh:NodeShape ;
         sh:message "wl:covers names a Section — a plan claiming a whole document says nothing a coverage query can use (026 §5.1)." ;
     ] .
 
-wl:CoverageShape a sh:NodeShape ;
-    sh:targetClass wl:Coverage ;
-    sh:property [
-        sh:path wl:coveringPlan ;
-        sh:class wl:Plan ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-    ] ;
-    sh:property [
-        sh:path wl:coveredSection ;
-        sh:class wl:Section ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-    ] ;
-    sh:property [
-        sh:path wl:coverageLevel ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:in ( wlc:full wlc:partial wlc:none ) ;
-    ] ;
-    sh:property [
-        sh:path wl:completedWith ;
-        sh:class wl:Plan ;
-    ] ;
-    # A partial claim may name the plans which complete it. Full and none are
-    # self-contained claims, so neither can carry a completion set.
-    sh:or (
-        [ sh:property [ sh:path wl:coverageLevel ; sh:hasValue wlc:partial ] ]
-        [ sh:property [ sh:path wl:coverageLevel ; sh:in ( wlc:full wlc:none ) ] ;
-          sh:property [ sh:path wl:completedWith ; sh:maxCount 0 ] ]
-    ) ;
-    sh:sparql [
-        sh:message "A qualified coverage record must reify a direct wl:covers edge for the same Plan and Section (026 §5)." ;
-        sh:select """
-            PREFIX wl: <https://worklode.io/ns/ontology#>
-            SELECT $this WHERE {
-                $this wl:coveringPlan ?plan ; wl:coveredSection ?section .
-                FILTER NOT EXISTS { ?plan wl:covers ?section . }
-            }
-        """ ;
-    ] .
-
 wl:defersShape a sh:NodeShape ;
     sh:targetSubjectsOf wl:defers ;
     sh:class wl:Plan ;

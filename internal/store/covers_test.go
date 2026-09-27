@@ -51,9 +51,8 @@ func externalCovers(t *testing.T, s *Store, planID int64) []string {
 // plan to rules, resolved when the plan is written (WL-SPEC-77 §4). A rule
 // ref, in either spelling, names that rule; a section ref names the rule at
 // that anchor and every rule under it; a whole-document ref names every rule
-// the document contains; an entry naming no rule is kept verbatim. Where a
-// nested section has its own entry, that entry sets the nested rule's level.
-// A plan has no doc_rules rows.
+// the document contains; an entry naming no rule is kept verbatim. Nested
+// entries overlap. A plan has no doc_rules rows.
 func TestCoversResolveToRules(t *testing.T) {
 	s := openDocStore(t)
 	// ruleDocV1: sec-1 is rule 1, sec-1.1 rule 2, sec-2 rule 3.
@@ -71,19 +70,9 @@ func TestCoversResolveToRules(t *testing.T) {
 	}
 
 	nested := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "nested", CreatedBy: "stig",
-		Body: coversPlanBody("{spec: P1-SPEC-1#sec-1, coverage: none}", "P1-SPEC-1#sec-1.1")})
-	rows, err := s.db.QueryContext(t.Context(),
-		`SELECT r.number || '=' || e.coverage FROM doc_edges e JOIN rules r ON r.id = e.to_rule
-		  WHERE e.from_doc = $1 AND e.type = 'covers' ORDER BY r.number`, nested.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	levels, err := scanColumn[string](rows, "nested covers")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(levels, []string{"1=none", "2=full"}) {
-		t.Errorf("nested covers = %v, want [1=none 2=full]: the nested entry sets its own rule's level", levels)
+		Body: coversPlanBody("P1-SPEC-1#sec-1", "P1-SPEC-1#sec-1.1")})
+	if got := coveredRuleNumbers(t, s, nested.ID); !slices.Equal(got, []int64{1, 2}) {
+		t.Errorf("nested covers = %v, want [1 2]: nested entries overlap", got)
 	}
 	if got := externalCovers(t, s, mixed.ID); !slices.Equal(got, []string{"P1-RULE-99", "P1-SPEC-1#sec-9"}) {
 		t.Errorf("unresolved covers = %v, want the unknown rule and the missing anchor verbatim", got)
@@ -153,7 +142,7 @@ func TestCoverageFollowsSupersession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []model.RulePlan{{Doc: plan.ID, DocRef: "P1-PLAN-1", Status: "accepted", Coverage: "full"}}
+	want := []model.RulePlan{{Doc: plan.ID, DocRef: "P1-PLAN-1", Status: "accepted"}}
 	if !slices.Equal(r.CoveredBy, want) {
 		t.Errorf("P1-RULE-4 covered by %+v, want %+v", r.CoveredBy, want)
 	}
@@ -368,4 +357,100 @@ func TestCoversSubtreeMigration(t *testing.T) {
 	if want := []string{"1=partial:x.md", "2=none", "3=none", "4=full"}; !slices.Equal(got, want) {
 		t.Errorf("plan covers = %v, want %v", got, want)
 	}
+}
+
+// TestRetireCoverageLevelsMigration: the coverage-level retirement deletes
+// the WL-928 N1 and N2 edges, every classified entry naming no rule, and the
+// N3 `none` parents; keeps partial, unsure and unclassified edges as plain
+// covers edges; moves a defers owner onto the edge row; and round-trips.
+func TestRetireCoverageLevelsMigration(t *testing.T) {
+	t.Parallel()
+	s := OpenUnmigratedTestStore(t)
+	if err := s.Migrate(migrationsThrough(t, 97)); err != nil {
+		t.Fatalf("migrate through 0097: %v", err)
+	}
+	db := s.DBForTests()
+	id := func(q string, args ...any) int64 {
+		t.Helper()
+		var v int64
+		if err := db.QueryRow(q, args...).Scan(&v); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+		return v
+	}
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := db.Exec(q, args...); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	exec(`INSERT INTO projects (id, name, key) VALUES ('wl', 'WL', 'WL'), ('dp', 'DP', 'DP')`)
+	doc := func(project, kind string, number int) int64 {
+		return id(`INSERT INTO docs (project_id, kind, number, slug, title, body, status, created_at, updated_at)
+		           VALUES ($1, $2, $3, $4, 't', 'body', 'accepted', now(), now()) RETURNING id`,
+			project, kind, number, project+"-"+kind+strconv.Itoa(number))
+	}
+	spec := doc("wl", "spec", 38)
+	pos := 0
+	rule := func(number, depth int) int64 {
+		r := id(`INSERT INTO rules (project_id, number, status) VALUES ('wl', $1, 'accepted') RETURNING id`, number)
+		exec(`INSERT INTO rule_versions (rule_id, version, heading, body) VALUES ($1, 1, 'h', 'b')`, r)
+		exec(`INSERT INTO doc_rules (doc_id, position, rule_id, rule_version, depth, anchor) VALUES ($1, $2, $3, 1, $4, $5)`,
+			spec, pos, r, depth, "sec-"+strconv.Itoa(number))
+		pos++
+		return r
+	}
+	n1, n2, unsure := rule(825, 2), rule(829, 2), rule(821, 2)
+	parent, child, plain := rule(900, 2), rule(901, 3), rule(902, 2)
+	plan1, plan106, plan7 := doc("wl", "plan", 1), doc("wl", "plan", 106), doc("wl", "plan", 7)
+	dpPlan := doc("dp", "plan", 1)
+	cover := func(plan, rule int64, level string) {
+		exec(`INSERT INTO doc_edges (from_doc, type, to_rule, coverage) VALUES ($1, 'covers', $2, $3)`, plan, rule, level)
+	}
+	cover(plan1, n1, "none")
+	cover(plan1, n2, "none")
+	cover(plan1, plain, "none") // standalone, unclassified
+	cover(plan106, unsure, "none")
+	cover(plan7, parent, "none") // N3: its child is covered
+	cover(plan7, child, "partial")
+	for _, ext := range []string{"DP-SPEC-1#sec-0", "DP-SPEC-1#sec-14"} { // F3: N1 and unsure
+		exec(`INSERT INTO doc_edges (from_doc, type, to_external, coverage) VALUES ($1, 'covers', $2, 'none')`, dpPlan, ext)
+	}
+	deferral := id(`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor) VALUES ($1, 'defers', $2, 'sec-1') RETURNING id`, plan7, spec)
+	exec(`INSERT INTO doc_coverage_completed_with (edge_id, position, to_doc) VALUES ($1, 0, $2)`, deferral, spec)
+
+	migrateSteps(t, s, 1)
+
+	rows, err := db.Query(
+		`SELECT d.slug || ':' || coalesce(r.number::text, e.to_external)
+		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc LEFT JOIN rules r ON r.id = e.to_rule
+		  WHERE e.type = 'covers'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := scanColumn[string](rows, "covers after")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(got)
+	if want := []string{"wl-plan106:821", "wl-plan1:902", "wl-plan7:901"}; !slices.Equal(got, want) {
+		t.Errorf("covers after = %v, want %v", got, want)
+	}
+	if owner := id(`SELECT owner_doc FROM doc_edges WHERE id = $1`, deferral); owner != spec {
+		t.Errorf("defers owner = %d, want %d", owner, spec)
+	}
+	if n := id(`SELECT count(*) FROM information_schema.columns
+	             WHERE table_name IN ('doc_edges', 'doc_edge_versions', 'doc_revision_edges')
+	               AND column_name IN ('coverage', 'completed_with')`); n != 0 {
+		t.Errorf("%d level columns remain, want none", n)
+	}
+
+	migrateSteps(t, s, -1)
+	if n := id(`SELECT count(*) FROM doc_coverage_completed_with WHERE edge_id = $1 AND to_doc = $2`, deferral, spec); n != 1 {
+		t.Errorf("after down, defers owner rows = %d, want 1", n)
+	}
+	if n := id(`SELECT count(*) FROM doc_edges WHERE type = 'covers' AND coverage = 'full'`); n != 3 {
+		t.Errorf("after down, full covers edges = %d, want 3", n)
+	}
+	migrateSteps(t, s, 1)
 }

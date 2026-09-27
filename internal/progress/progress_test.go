@@ -55,80 +55,59 @@ func TestTaskClassPartitionsTaskStates(t *testing.T) {
 	}
 }
 
-// TestSectionState covers §1.2's table, plus the three extra rules the
-// table's rows don't spell out on their own.
+// TestSectionState covers §1.2's table, plus the rule the table's rows
+// do not spell out on their own.
 func TestSectionState(t *testing.T) {
 	cases := []struct {
-		name        string
-		covers      []CoverState
-		wantState   string
-		wantPartial bool
+		name      string
+		covers    []CoverState
+		wantState string
 	}{
 		{
 			"built: best covering plan is built",
-			[]CoverState{{Cover: Cover{Level: "full"}, State: "built"}},
-			"built", false,
+			[]CoverState{{Cover: Cover{}, State: "built"}},
+			"built",
 		},
 		{
 			"in_progress: best covering plan is in_progress",
-			[]CoverState{{Cover: Cover{Level: "full"}, State: "in_progress"}},
-			"in_progress", false,
+			[]CoverState{{Cover: Cover{}, State: "in_progress"}},
+			"in_progress",
 		},
 		{
 			"not_started: best covering plan is not_started",
-			[]CoverState{{Cover: Cover{Level: "full"}, State: "not_started"}},
-			"not_started", false,
+			[]CoverState{{Cover: Cover{}, State: "not_started"}},
+			"not_started",
 		},
 		{
 			"no_record: best covering plan is no_record",
-			[]CoverState{{Cover: Cover{Level: "full"}, State: "no_record"}},
-			"no_record", false,
+			[]CoverState{{Cover: Cover{}, State: "no_record"}},
+			"no_record",
 		},
 		{
 			"draft: every covering plan is draft",
 			[]CoverState{
-				{Cover: Cover{Level: "full"}, State: "draft"},
-				{Cover: Cover{Level: "full"}, State: "draft"},
+				{Cover: Cover{}, State: "draft"},
+				{Cover: Cover{}, State: "draft"},
 			},
-			"draft", false,
+			"draft",
 		},
 		{
 			"unplanned: no plan covers the section",
 			nil,
-			"unplanned", false,
-		},
-		{
-			"bound: every cover is at coverage none",
-			[]CoverState{{Cover: Cover{Level: "none"}, State: "built"}},
-			"bound", false,
-		},
-		{
-			"partial-only covers set the flag",
-			[]CoverState{{Cover: Cover{Level: "partial"}, State: "in_progress"}},
-			"in_progress", true,
-		},
-		{
-			"a none cover beside a full one is ignored",
-			[]CoverState{
-				{Cover: Cover{Level: "none"}, State: "built"},
-				{Cover: Cover{Level: "full"}, State: "in_progress"},
-			},
-			"in_progress", false,
+			"unplanned",
 		},
 		{
 			"draft beside built is built",
 			[]CoverState{
-				{Cover: Cover{Level: "full"}, State: "draft"},
-				{Cover: Cover{Level: "full"}, State: "built"},
+				{Cover: Cover{}, State: "draft"},
+				{Cover: Cover{}, State: "built"},
 			},
-			"built", false,
+			"built",
 		},
 	}
 	for _, c := range cases {
-		state, partial := SectionState(c.covers)
-		if state != c.wantState || partial != c.wantPartial {
-			t.Errorf("%s: SectionState = (%q, %v), want (%q, %v)",
-				c.name, state, partial, c.wantState, c.wantPartial)
+		if state := SectionState(c.covers); state != c.wantState {
+			t.Errorf("%s: SectionState = %q, want %q", c.name, state, c.wantState)
 		}
 	}
 }
@@ -165,7 +144,7 @@ func TestGroupAndNextAct(t *testing.T) {
 				Specs: []Spec{{Doc: 1, Ref: "WL-SPEC-1", Sections: []Section{{Anchor: "sec-1"}}}},
 				Plans: []Plan{{
 					Doc: 1, Ref: "WL-PLAN-1", Status: "accepted",
-					Covers: []Cover{{Spec: 1, Anchor: "sec-1", Level: "full"}},
+					Covers: []Cover{{Spec: 1, Anchor: "sec-1"}},
 					Tasks:  []Task{{State: "merged"}, {State: "ready"}},
 				}},
 			},
@@ -179,11 +158,11 @@ func TestGroupAndNextAct(t *testing.T) {
 					{Anchor: "sec-1"}, {Anchor: "sec-2"}, {Anchor: "sec-3"}, {Anchor: "sec-4"}, {Anchor: "sec-5"},
 				}}},
 				Plans: []Plan{
-					{Doc: 10, Ref: "WL-PLAN-10", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-1", Level: "full"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
-					{Doc: 11, Ref: "WL-PLAN-11", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-2", Level: "full"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
-					{Doc: 12, Ref: "WL-PLAN-12", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-3", Level: "full"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
-					{Doc: 13, Ref: "WL-PLAN-13", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-4", Level: "full"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
-					{Doc: 14, Ref: "WL-PLAN-14", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-5", Level: "full"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
+					{Doc: 10, Ref: "WL-PLAN-10", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-1"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
+					{Doc: 11, Ref: "WL-PLAN-11", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-2"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
+					{Doc: 12, Ref: "WL-PLAN-12", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-3"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
+					{Doc: 13, Ref: "WL-PLAN-13", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-4"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
+					{Doc: 14, Ref: "WL-PLAN-14", Status: "accepted", Covers: []Cover{{Spec: 2, Anchor: "sec-5"}}, Tasks: []Task{{State: "ready"}, {State: "ready"}}},
 				},
 			},
 			wantGroup: "active", wantKind: "in_progress",
@@ -195,8 +174,8 @@ func TestGroupAndNextAct(t *testing.T) {
 			in: Input{
 				Specs: []Spec{{Doc: 3, Ref: "WL-SPEC-3", Sections: []Section{{Anchor: "sec-1"}, {Anchor: "sec-2"}}}},
 				Plans: []Plan{
-					{Doc: 20, Ref: "WL-PLAN-20", Status: "draft", Covers: []Cover{{Spec: 3, Anchor: "sec-1", Level: "full"}}},
-					{Doc: 21, Ref: "WL-PLAN-21", Status: "draft", Covers: []Cover{{Spec: 3, Anchor: "sec-2", Level: "full"}}},
+					{Doc: 20, Ref: "WL-PLAN-20", Status: "draft", Covers: []Cover{{Spec: 3, Anchor: "sec-1"}}},
+					{Doc: 21, Ref: "WL-PLAN-21", Status: "draft", Covers: []Cover{{Spec: 3, Anchor: "sec-2"}}},
 				},
 			},
 			wantGroup: "planning", wantKind: "draft",
@@ -216,7 +195,7 @@ func TestGroupAndNextAct(t *testing.T) {
 				Specs: []Spec{{Doc: 5, Ref: "WL-SPEC-5", Sections: []Section{{Anchor: "sec-1"}}}},
 				Plans: []Plan{{
 					Doc: 30, Ref: "WL-PLAN-30", Status: "accepted",
-					Covers: []Cover{{Spec: 5, Anchor: "sec-1", Level: "full"}},
+					Covers: []Cover{{Spec: 5, Anchor: "sec-1"}},
 				}},
 			},
 			wantGroup: "no_record", wantKind: "no_record",
@@ -228,7 +207,7 @@ func TestGroupAndNextAct(t *testing.T) {
 				Specs: []Spec{{Doc: 6, Ref: "WL-SPEC-6", Sections: []Section{{Anchor: "sec-1"}}}},
 				Plans: []Plan{{
 					Doc: 40, Ref: "WL-PLAN-40", Status: "accepted",
-					Covers: []Cover{{Spec: 6, Anchor: "sec-1", Level: "full"}},
+					Covers: []Cover{{Spec: 6, Anchor: "sec-1"}},
 					Tasks:  []Task{{State: "merged"}},
 				}},
 			},
@@ -260,9 +239,8 @@ func plansOrNil(s []string) []string {
 	return s
 }
 
-// TestDeriveBar checks the section bar: fixed state order, bound sections
-// excluded entirely, and a state with no owed sections omitted rather than
-// rendered as a zero-count slice.
+// TestDeriveBar checks the section bar: fixed state order, and a state with
+// no sections omitted rather than rendered as a zero-count slice.
 func TestDeriveBar(t *testing.T) {
 	in := Input{
 		Specs: []Spec{{
@@ -270,25 +248,22 @@ func TestDeriveBar(t *testing.T) {
 			Sections: []Section{
 				{Anchor: "built-1"}, {Anchor: "built-2"},
 				{Anchor: "in-progress-1"}, {Anchor: "not-started-1"},
-				{Anchor: "no-record-1"}, {Anchor: "bound-1"}, {Anchor: "unplanned-1"},
+				{Anchor: "no-record-1"}, {Anchor: "unplanned-1"},
 			},
 		}},
 		Plans: []Plan{
 			{Doc: 1, Ref: "WL-PLAN-1", Status: "accepted", Tasks: []Task{{State: "merged"}}, Covers: []Cover{
-				{Spec: 1, Anchor: "built-1", Level: "full"},
-				{Spec: 1, Anchor: "built-2", Level: "full"},
+				{Spec: 1, Anchor: "built-1"},
+				{Spec: 1, Anchor: "built-2"},
 			}},
 			{Doc: 2, Ref: "WL-PLAN-2", Status: "accepted", Tasks: []Task{{State: "merged"}, {State: "ready"}}, Covers: []Cover{
-				{Spec: 1, Anchor: "in-progress-1", Level: "full"},
+				{Spec: 1, Anchor: "in-progress-1"},
 			}},
 			{Doc: 3, Ref: "WL-PLAN-3", Status: "accepted", Tasks: []Task{{State: "ready"}}, Covers: []Cover{
-				{Spec: 1, Anchor: "not-started-1", Level: "full"},
+				{Spec: 1, Anchor: "not-started-1"},
 			}},
 			{Doc: 4, Ref: "WL-PLAN-4", Status: "accepted", Covers: []Cover{
-				{Spec: 1, Anchor: "no-record-1", Level: "full"},
-			}},
-			{Doc: 5, Ref: "WL-PLAN-5", Status: "accepted", Tasks: []Task{{State: "merged"}}, Covers: []Cover{
-				{Spec: 1, Anchor: "bound-1", Level: "none"},
+				{Spec: 1, Anchor: "no-record-1"},
 			}},
 		},
 	}

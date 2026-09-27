@@ -45,8 +45,7 @@ Body.
 const todoPlanOpen = `---
 status: accepted
 covers:
-  - spec: docs/specs/001-example.md#sec-1
-    coverage: full
+  - docs/specs/001-example.md#sec-1
 ---
 # Plan 1-1 — Build the first section
 
@@ -198,8 +197,8 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 
 // testDocDetail simulates the Sections and Edges a real GET /api/v1/docs/{id}
 // serves, which the backbone derives from the header when the document is
-// written: anchored sections, and covers/defers/requires edges carrying
-// coverage and completed_with the way store.ListDocEdges returns them. A
+// written: anchored sections, and covers/defers/requires edges, a defers
+// edge carrying its owner the way store.ListDocEdges returns it. A
 // reference names a fixture document only by its exact corpus path; anything
 // else is kept verbatim in ToExternal. A fixture pinning a headerless body
 // states its edges through todoServer.edgeOverrides instead.
@@ -246,16 +245,8 @@ func testDocDetail(t *testing.T, d model.Doc, docs []model.Doc) ([]model.DocSect
 		} else {
 			de.ToExternal = r.Ref
 		}
-		if r.Coverage != nil {
-			de.Coverage = r.Coverage.Coverage
-			if de.Coverage == "partial" {
-				for _, w := range r.Coverage.FullCoverageWith {
-					de.CompletedWith = append(de.CompletedWith, slugOr(w))
-				}
-			}
-		}
 		if r.Deferral != nil {
-			de.CompletedWith = []string{slugOr(r.Deferral.To)}
+			de.Owner = slugOr(r.Deferral.To)
 		}
 		edges = append(edges, de)
 	}
@@ -298,10 +289,6 @@ func TestDocTodoTable(t *testing.T) {
 	if strings.Contains(out, ".md") {
 		t.Errorf("output still names a corpus path:\n%s", out)
 	}
-	// The gap detail must not leak a frontmatter key into prose.
-	if strings.Contains(out, "fullCoverageWith") {
-		t.Errorf("output leaks the fullCoverageWith frontmatter key:\n%s", out)
-	}
 }
 
 // TestDocTodoPlanTasksCostOneRequest covers the online path: one list call
@@ -312,8 +299,7 @@ func TestDocTodoPlanTasksCostOneRequest(t *testing.T) {
 	const plans = `---
 status: accepted
 covers:
-  - spec: docs/specs/001-example.md#sec-1
-    coverage: full
+  - docs/specs/001-example.md#sec-1
 ---
 # Plan 1-1 — First
 
@@ -322,8 +308,7 @@ Body.
 	const secondPlan = `---
 status: accepted
 covers:
-  - spec: docs/specs/001-example.md#sec-2
-    coverage: full
+  - docs/specs/001-example.md#sec-2
 ---
 # Plan 1-2 — Second
 
@@ -378,8 +363,7 @@ Body.
 const todoPlanStaleDraftBody = `---
 status: draft
 covers:
-  - spec: docs/specs/001-example.md#sec-1
-    coverage: full
+  - docs/specs/001-example.md#sec-1
 ---
 # Plan 1-1 — Build the first section
 
@@ -697,8 +681,7 @@ Body.
 	const donePlan = `---
 status: accepted
 covers:
-  - spec: docs/specs/004-done.md#sec-1
-    coverage: full
+  - docs/specs/004-done.md#sec-1
 ---
 # Plan 4-1 — Done
 
@@ -830,8 +813,7 @@ func TestDocTodoThinBodyDegrades(t *testing.T) {
 const todoPlanShorthandCovers = `---
 status: accepted
 covers:
-  - spec: WL-SPEC-1#sec-1
-    coverage: full
+  - WL-SPEC-1#sec-1
 ---
 # Plan 1-1 — Build the first section
 
@@ -891,8 +873,7 @@ func TestDocTodoUnresolvableCoversIsStated(t *testing.T) {
 	const plan = `---
 status: accepted
 covers:
-  - spec: WL-SPEC-404#sec-1
-    coverage: full
+  - WL-SPEC-404#sec-1
 ---
 # Plan 1-1 — Build the first section
 
@@ -921,8 +902,8 @@ Body.
 	}
 }
 
-// todoStoredSpec requires spec 2 and has four sections, one per outcome the
-// plans below give it: full, closed partial, partial, deferred.
+// todoStoredSpec requires spec 2 and has four sections: covered by one plan,
+// by two, by one, and deferred.
 const todoStoredSpec = `---
 status: accepted
 requires: docs/specs/002-other.md
@@ -950,8 +931,7 @@ var todoStoredPlans = map[string]string{
 	"001-1-first.md": `---
 status: accepted
 covers:
-  - spec: docs/specs/001-example.md#sec-1
-    coverage: full
+  - docs/specs/001-example.md#sec-1
 defers:
   - spec: docs/specs/001-example.md#sec-4
     to: docs/specs/002-other.md
@@ -961,20 +941,15 @@ defers:
 	"001-2-second.md": `---
 status: accepted
 covers:
-  - spec: docs/specs/001-example.md#sec-2
-    coverage: partial
-    fullCoverageWith: docs/plans/001-3-third.md
+  - docs/specs/001-example.md#sec-2
 ---
 # Plan 1-2 — Second
 `,
 	"001-3-third.md": `---
 status: accepted
 covers:
-  - spec: docs/specs/001-example.md#sec-2
-    coverage: partial
-    fullCoverageWith: docs/plans/001-2-second.md
-  - spec: docs/specs/001-example.md#sec-3
-    coverage: partial
+  - docs/specs/001-example.md#sec-2
+  - docs/specs/001-example.md#sec-3
 ---
 # Plan 1-3 — Third
 `,
@@ -985,15 +960,15 @@ covers:
 var todoStoredEdges = map[string][]model.DocEdge{
 	"001-example": {{Type: "requires", ToDoc: 2, ToKind: "spec", ToSlug: "002-other", ToNumber: 2, ToStatus: "accepted", ToProject: "proj"}},
 	"001-1-first": {
-		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-1", Coverage: "full"},
-		{Type: "defers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-4", CompletedWith: []string{"002-other"}},
+		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-1"},
+		{Type: "defers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-4", Owner: "002-other"},
 	},
 	"001-2-second": {
-		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-2", Coverage: "partial", CompletedWith: []string{"001-3-third"}},
+		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-2"},
 	},
 	"001-3-third": {
-		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-2", Coverage: "partial", CompletedWith: []string{"001-2-second"}},
-		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-3", Coverage: "partial"},
+		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-2"},
+		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-3"},
 	},
 }
 
@@ -1009,8 +984,7 @@ func stripHeader(body string) string {
 }
 
 // TestDocTodoReadsStoredEdges pins WL-913 end to end: bodies with no header,
-// whose detail edges carry the covers (full, closed partial, open partial),
-// defers and requires claims, print the same `lode doc todo` report, text and
+// whose detail edges carry the covers, defers and requires claims, print the same `lode doc todo` report, text and
 // --json, as the header-carrying fixture.
 func TestDocTodoReadsStoredEdges(t *testing.T) {
 	report := func(t *testing.T, stored bool) (text, js string) {
@@ -1043,20 +1017,20 @@ func TestDocTodoReadsStoredEdges(t *testing.T) {
 	t.Run("header", func(t *testing.T) { headerText, headerJSON = report(t, false) })
 	t.Run("stored", func(t *testing.T) { storedText, storedJSON = report(t, true) })
 
-	// The header report is the baseline, so pin what it classifies: sec-2's
-	// partials close each other, sec-3's stays partial, sec-4 is deferred.
+	// The header report is the baseline, so pin what it classifies: every
+	// covered section's plan is unexecuted, and sec-4 is deferred.
 	rows := map[string]bool{}
 	for line := range strings.SplitSeq(headerText, "\n") {
 		if f := strings.Fields(line); len(f) >= 2 {
 			rows[f[0]+" "+f[1]] = true
 		}
 	}
-	for _, want := range []string{"partial sec-3", "unexecuted sec-1", "unexecuted sec-2"} {
+	for _, want := range []string{"unexecuted sec-1", "unexecuted sec-2"} {
 		if !rows[want] {
 			t.Errorf("header report has no %q row:\n%s", want, headerText)
 		}
 	}
-	for _, unwanted := range []string{"partial sec-2", "unplanned sec-4"} {
+	for _, unwanted := range []string{"unplanned sec-3", "unplanned sec-4"} {
 		if rows[unwanted] {
 			t.Errorf("header report has a %q row:\n%s", unwanted, headerText)
 		}
