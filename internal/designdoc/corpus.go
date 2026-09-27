@@ -29,10 +29,7 @@ type EdgeMeta struct {
 	Rel          string // covers | defers | requires
 	Target       string // the raw reference with any fragment stripped; "NO-SPEC" allowed
 	TargetAnchor string // "sec-2" when the reference carried #sec-2, else ""
-	Coverage     string // covers only: full | partial | none
-	// CompletedWith is a partial covers entry's fullCoverageWith, or a
-	// defers entry's single owner; nil otherwise (026 §5.1, §5.3).
-	CompletedWith []string
+	Owner        string // defers only: the document the section is handed to
 }
 
 // CorpusDoc is one design document loaded for sync, with its file-derived
@@ -223,8 +220,7 @@ func planEdges(fm *Frontmatter) []EdgeMeta {
 }
 
 // edgeMetas turns frontmatter references into corpus edges, splitting each
-// ref's "#sec-…" fragment off as the target anchor. Like the backbone
-// (store.frontmatterEdges), it keeps fullCoverageWith only on a partial entry.
+// ref's "#sec-…" fragment off as the target anchor.
 func edgeMetas(refs []Ref) []EdgeMeta {
 	var edges []EdgeMeta
 	for _, r := range refs {
@@ -233,14 +229,8 @@ func edgeMetas(refs []Ref) []EdgeMeta {
 			SrcAnchor: r.SrcAnchor, Rel: r.Rel,
 			Target: target, TargetAnchor: targetAnchor,
 		}
-		if r.Coverage != nil {
-			e.Coverage = strings.TrimSpace(r.Coverage.Coverage)
-			if e.Coverage == "partial" {
-				e.CompletedWith = slices.Clone([]string(r.Coverage.FullCoverageWith))
-			}
-		}
 		if r.Deferral != nil {
-			e.CompletedWith = []string{r.Deferral.To}
+			e.Owner = r.Deferral.To
 		}
 		edges = append(edges, e)
 	}

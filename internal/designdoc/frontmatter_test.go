@@ -162,7 +162,7 @@ func TestFrontmatterCoverage(t *testing.T) {
 				"    coverage: partial\n    fullCoverageWith:\n      - docs/plans/sibling.md\n---\n\n## 1. X {#sec-1}\n",
 			want: CoverageList{
 				{Spec: "docs/specs/033-plan-section-coverage.md#sec-2", Coverage: "full"},
-				{Spec: section, Coverage: "partial", FullCoverageWith: RefList{"docs/plans/sibling.md"}},
+				{Spec: section, Coverage: "partial", FullCoverageWith: RefList{"docs/plans/sibling.md"}, levelKey: true},
 			},
 			sections: RefList{"docs/specs/033-plan-section-coverage.md#sec-2", section},
 		},
@@ -170,7 +170,7 @@ func TestFrontmatterCoverage(t *testing.T) {
 			name: "retired implements accepts objects",
 			src: "---\nimplements:\n  - spec: " + section + "\n" +
 				"    coverage: partial\n    fullCoverageWith: [docs/plans/sibling.md]\n---\n\n## 1. X {#sec-1}\n",
-			want:     CoverageList{{Spec: section, Coverage: "partial", FullCoverageWith: RefList{"docs/plans/sibling.md"}}},
+			want:     CoverageList{{Spec: section, Coverage: "partial", FullCoverageWith: RefList{"docs/plans/sibling.md"}, levelKey: true}},
 			sections: RefList{section},
 		},
 		{
@@ -247,6 +247,7 @@ func TestFrontmatterCoverageRerendersEditedMappings(t *testing.T) {
 		Spec:             "docs/specs/033-plan-section-coverage.md#sec-3",
 		Coverage:         "partial",
 		FullCoverageWith: RefList{"docs/plans/sibling.md", "docs/plans/other.md"},
+		levelKey:         true,
 	}}
 	if got := roundTripped.Frontmatter.CoverageEntries(); !reflect.DeepEqual(got, want) {
 		t.Errorf("round-tripped CoverageEntries() = %#v, want %#v", got, want)

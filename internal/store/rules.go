@@ -294,18 +294,18 @@ func (s *Store) GetRule(ctx context.Context, projectKey string, number int64) (*
 	c.ArrangedIn = nonNil(arr[c.ID])
 
 	prows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT d.id, p.key || '-PLAN-' || coalesce(d.number::text, d.slug), d.status, c.coverage
+		`SELECT DISTINCT d.id, p.key || '-PLAN-' || coalesce(d.number::text, d.slug), d.status
 		   FROM covered_rules c
 		   JOIN docs d ON d.id = c.plan_id AND d.deleted_at IS NULL
 		   JOIN projects p ON p.id = d.project_id
 		  WHERE c.rule_id = $1
-		  ORDER BY d.id, c.coverage`, c.ID)
+		  ORDER BY d.id`, c.ID)
 	if err != nil {
 		return nil, fmt.Errorf("read plans covering rule %d: %w", c.ID, err)
 	}
 	cov, err := collectRows(prows, "plans covering rule", func(r rowScanner) (model.RulePlan, error) {
 		var rp model.RulePlan
-		err := r.Scan(&rp.Doc, &rp.DocRef, &rp.Status, &rp.Coverage)
+		err := r.Scan(&rp.Doc, &rp.DocRef, &rp.Status)
 		return rp, err
 	})
 	if err != nil {

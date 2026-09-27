@@ -7,8 +7,7 @@
 # also mirror a CHECK constraint in the schema, and internal/store's
 # TestConceptSchemesMatchCheckConstraints holds each one to its column.
 # Sources: spec 006 §4/§1.5, spec 025 §7/§8 (status enum and task kinds),
-# spec 006 §6 (the four runtime enums), spec 025 §7 (document lifecycle), and
-# spec 026 §5 (plan coverage levels).
+# spec 006 §6 (the four runtime enums) and spec 025 §7 (document lifecycle).
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -48,18 +47,6 @@ wlc:spent a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "s
 # legal transitions; those rules live with the authoring skill (spec 008).
 wlc:DesignDocStatusOrder a skos:OrderedCollection ;
     skos:memberList ( wlc:draft wlc:accepted wlc:stale wlc:superseded wlc:withdrawn wlc:spent ) .
-
-
-# How completely one plan covers one spec section (026 §5). Only wlc:full — or a
-# wlc:partial whose wl:completedWith set closes — discharges the section.
-wlc:CoverageLevel a skos:ConceptScheme ; skos:prefLabel "Plan coverage level" .
-
-wlc:full a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "full" ;
-    skos:definition "After this plan executes the section is satisfied; nothing further is owed." .
-wlc:partial a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "partial" ;
-    skos:definition "This plan covers part of the section." .
-wlc:none a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "none" ;
-    skos:definition "The plan is bound by the section but covers nothing in it — a standing rule it obeys, recorded so it is not read as an oversight." .
 
 
 # ---------------------------------------------------------------------------

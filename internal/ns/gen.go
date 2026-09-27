@@ -14,7 +14,6 @@ package ns
 // nothing else checks.
 var Schemes = map[string][]string{
 	"ArtifactKind":     {"binary", "docker_image", "git_tag", "pypi"},
-	"CoverageLevel":    {"full", "none", "partial"},
 	"DeployTargetKind": {"flux_kustomization", "manual", "pypi_target"},
 	"DeploymentStatus": {"deployed", "failed", "pending", "reconciling"},
 	"DesignDocStatus":  {"accepted", "draft", "spent", "stale", "superseded", "withdrawn"},

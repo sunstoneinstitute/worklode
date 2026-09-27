@@ -121,7 +121,7 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 	// The fixture uses the retired `implements:` spelling; the projected edge
 	// is still the canonical wl:covers (026 §6.2).
 	if len(plan.Edges) != 1 || !reflect.DeepEqual(plan.Edges[0], designdoc.EdgeMeta{
-		Rel: "covers", Target: "docs/specs/034-design-doc-sync.md", Coverage: "full",
+		Rel: "covers", Target: "docs/specs/034-design-doc-sync.md",
 	}) {
 		t.Errorf("plan edges = %+v", plan.Edges)
 	}
@@ -131,12 +131,12 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 	}
 
 	// A plan's defers entry projects to a covers-sibling edge: covers first,
-	// then defers (026 §5.3), whose owner rides in CompletedWith.
+	// then defers (026 §5.3), with its owner.
 	deferring := byFile["2026-08-10-sync-2-store.md"]
 	wantDeferring := []designdoc.EdgeMeta{
-		{Rel: "covers", Target: "docs/specs/034-design-doc-sync.md", Coverage: "full"},
+		{Rel: "covers", Target: "docs/specs/034-design-doc-sync.md"},
 		{Rel: "defers", Target: "docs/specs/034-design-doc-sync.md", TargetAnchor: "sec-1",
-			CompletedWith: []string{"docs/specs/025-documents-in-the-backbone.md"}},
+			Owner: "docs/specs/025-documents-in-the-backbone.md"},
 	}
 	if len(deferring.Edges) != len(wantDeferring) {
 		t.Fatalf("deferring plan edges = %+v, want %+v", deferring.Edges, wantDeferring)

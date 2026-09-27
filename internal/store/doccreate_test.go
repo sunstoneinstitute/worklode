@@ -1,7 +1,6 @@
 package store
 
 import (
-	"cmp"
 	"errors"
 	"reflect"
 	"slices"
@@ -555,107 +554,35 @@ func TestDocCreateRepointIsProjectScoped(t *testing.T) {
 	}
 }
 
-// TestDocCreateRepointsCoverageClosure: an unresolvable fullCoverageWith entry
-// closes nothing (026 §2.1), so it is re-pointed the same way, in place — the
-// (edge_id, position) key does not move.
-func TestDocCreateRepointsCoverageClosure(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 25,
-		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
-	})
-	body := `---
-status: draft
-covers:
-  - spec: 025-documents-in-the-backbone.md#sec-1
-    coverage: partial
-    fullCoverageWith:
-      - nowhere-plan.md
-      - later-plan.md
----
-
-# Main plan
-`
-	plan := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
-	})
-	edges := docCoverageEdges(t, s, plan.ID)
-	if len(edges) != 1 {
-		t.Fatalf("covers edges = %+v, want 1", edges)
-	}
-	wantBefore := []docCompletedWithRow{
-		{position: 0, toExternal: "nowhere-plan.md"},
-		{position: 1, toExternal: "later-plan.md"},
-	}
-	if cw := docCompletedWith(t, s, edges[0].id); !slices.Equal(cw, wantBefore) {
-		t.Fatalf("completedWith before = %+v, want %+v", cw, wantBefore)
-	}
-
-	later := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "later-plan",
-		Body: "---\nstatus: draft\n---\n\n# Later plan\n", CreatedBy: "stig",
-	})
-	want := []docCompletedWithRow{
-		{position: 0, toExternal: "nowhere-plan.md"},
-		{position: 1, toDoc: later.ID},
-	}
-	if cw := docCompletedWith(t, s, edges[0].id); !slices.Equal(cw, want) {
-		t.Fatalf("completedWith = %+v, want %+v", cw, want)
-	}
-}
-
-// TestDocCreateRepointCollapsesDisagreeingCoverage: two unresolvable spellings
-// of one section at *different* coverage levels both store, then collapse when
-// the target arrives. rebuildEdges would call that a contradiction (026 §5.1),
-// but here it lives in another document's frontmatter, so the lower-id row's
-// level and closure win and this create succeeds rather than wedging an import
-// on an unrelated defect. The survivor is a new edge to the section's rule.
-func TestDocCreateRepointCollapsesDisagreeingCoverage(t *testing.T) {
+// TestDocCreateRepointCollapsesTwoSpellings: two unresolvable spellings of
+// one section both store, then collapse to one edge to the section's rule
+// when the target arrives.
+func TestDocCreateRepointCollapsesTwoSpellings(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	body := `---
 status: draft
 covers:
-  - spec: 025-documents-in-the-backbone.md#sec-1
-    coverage: partial
-    fullCoverageWith:
-      - nowhere-plan.md
-  - spec: 025#sec-1
-    coverage: full
+  - 025-documents-in-the-backbone.md#sec-1
+  - 025#sec-1
 ---
 
-# Contradicting plan
+# Two-spelling plan
 `
 	plan := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "contradicting-plan", Body: body, CreatedBy: "stig",
+		Project: "p1", Kind: "plan", Slug: "two-spelling-plan", Body: body, CreatedBy: "stig",
 	})
-	before := docCoverageEdges(t, s, plan.ID)
-	if len(before) != 2 {
+	if before := docCoverageEdges(t, s, plan.ID); len(before) != 2 {
 		t.Fatalf("covers edges before = %+v, want 2 unresolved rows", before)
 	}
-	// Both are unresolved, so docCoverageEdges' target order does not separate
-	// them; the id order is what repointExternalEdges walks.
-	slices.SortFunc(before, func(a, b docCoverageEdge) int { return cmp.Compare(a.id, b.id) })
 
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
 		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
 	})
 	got := docCoverageEdges(t, s, plan.ID)
-	want := []docCoverageEdge{{id: got[0].id, toDoc: spec.ID, toAnchor: "sec-1", coverage: "partial"}}
+	want := []docCoverageEdge{{id: got[0].id, toDoc: spec.ID, toAnchor: "sec-1"}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("covers edges = %+v, want %+v", got, want)
-	}
-	// The lower-id row — the partial one, written first — sets the survivor's
-	// level and closure; both unresolved rows are gone with their closures.
-	wantCW := []docCompletedWithRow{{position: 0, toExternal: "nowhere-plan.md"}}
-	if cw := docCompletedWith(t, s, got[0].id); !slices.Equal(cw, wantCW) {
-		t.Fatalf("completedWith = %+v, want %+v", cw, wantCW)
-	}
-	for _, b := range before {
-		if cw := docCompletedWith(t, s, b.id); len(cw) != 0 {
-			t.Fatalf("collapsed edge %d kept closure rows %+v", b.id, cw)
-		}
 	}
 }

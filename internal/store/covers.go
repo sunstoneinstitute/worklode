@@ -4,23 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
-
-// coveredRule is one rule a covers entry resolves to. Depth is how specific
-// the entry is: the heading depth of its anchor for a <doc>#sec-N entry, 0 for
-// a whole-document entry and ruleRefDepth for a rule ref. When two entries of
-// one plan reach the same rule, the deeper one sets its level, so a nested
-// section's own entry overrides the level its ancestor's entry implies.
-type coveredRule struct {
-	ID    int64
-	Depth int
-}
-
-// ruleRefDepth ranks a rule-ref entry above any section entry.
-const ruleRefDepth = math.MaxInt32
 
 // coversRules resolves one covers entry to the rules it names, when the plan
 // is written (WL-SPEC-77 §4, WL-SPEC-78 §4.1): a rule ref (WL-RULE-<n>, or its
@@ -30,7 +16,7 @@ const ruleRefDepth = math.MaxInt32
 // contain rules, so an entry naming a plan, an unknown rule, a missing anchor
 // or nothing resolves to none and the caller keeps the reference in
 // to_external.
-func coversRules(tx *sql.Tx, project, ref string) ([]coveredRule, error) {
+func coversRules(tx *sql.Tx, project, ref string) ([]int64, error) {
 	base, fragment := designdoc.SplitFragment(ref)
 	if r, ok := designdoc.ParseRuleRef(base); ok && fragment == "" {
 		id, err := RuleIDByRef(tx, r.Key, r.Number)
@@ -40,7 +26,7 @@ func coversRules(tx *sql.Tx, project, ref string) ([]coveredRule, error) {
 		if err != nil {
 			return nil, err
 		}
-		return []coveredRule{{id, ruleRefDepth}}, nil
+		return []int64{id}, nil
 	}
 	docID, resolved, err := resolveDocRef(tx, project, base)
 	if err != nil || !resolved {
@@ -52,7 +38,7 @@ func coversRules(tx *sql.Tx, project, ref string) ([]coveredRule, error) {
 	// A section's subtree is its own rule and every later rule in position
 	// order until the next heading at its depth or shallower.
 	rows, err := tx.Query(
-		`SELECT s.rule_id, coalesce(a.depth, 0)
+		`SELECT s.rule_id
 		   FROM docs d
 		   LEFT JOIN doc_rules a ON a.doc_id = d.id AND a.anchor = $2
 		   JOIN doc_rules s ON s.doc_id = d.id
@@ -65,11 +51,7 @@ func coversRules(tx *sql.Tx, project, ref string) ([]coveredRule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("rules of %s: %w", ref, err)
 	}
-	return collectRows(rows, "rules of "+ref, func(r rowScanner) (coveredRule, error) {
-		var c coveredRule
-		err := r.Scan(&c.ID, &c.Depth)
-		return c, err
-	})
+	return scanColumn[int64](rows, "rules of "+ref)
 }
 
 // planRules is the rules a plan's covers edges point at, in edge order: the

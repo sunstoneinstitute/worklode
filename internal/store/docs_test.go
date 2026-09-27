@@ -240,23 +240,19 @@ const ruleArrangementJoin = `
 		                       WHERE dr.rule_id = e.to_rule
 		                       ORDER BY dr.doc_id, dr.position LIMIT 1) ra ON true`
 
-// docCoverageEdge is one covers edge id and level, for tests exercising
-// 026 §2.1's three-valued coverage that model.DocEdge's plain columns do not
-// carry.
+// docCoverageEdge is one covers edge id and the section it reaches.
 type docCoverageEdge struct {
 	id       int64
 	toDoc    int64
 	toAnchor string
-	coverage string
 }
 
-// docCoverageEdges reads a document's outbound covers edges with their
-// ids and levels, ordered by target so tests can address them positionally.
+// docCoverageEdges reads a document's outbound covers edges with their ids,
+// ordered by target so tests can address them positionally.
 func docCoverageEdges(t *testing.T, s *Store, docID int64) []docCoverageEdge {
 	t.Helper()
 	rows, err := s.db.QueryContext(t.Context(),
-		`SELECT id, coalesce(to_doc, ra.doc_id, 0) AS td, coalesce(to_anchor, ra.anchor, '') AS ta,
-		        coalesce(coverage,'')
+		`SELECT id, coalesce(to_doc, ra.doc_id, 0) AS td, coalesce(to_anchor, ra.anchor, '') AS ta
 		   FROM doc_edges e`+ruleArrangementJoin+`
 		  WHERE from_doc = $1 AND type = 'covers'
 		  ORDER BY td, ta`, docID)
@@ -267,45 +263,13 @@ func docCoverageEdges(t *testing.T, s *Store, docID int64) []docCoverageEdge {
 	var out []docCoverageEdge
 	for rows.Next() {
 		var e docCoverageEdge
-		if err := rows.Scan(&e.id, &e.toDoc, &e.toAnchor, &e.coverage); err != nil {
+		if err := rows.Scan(&e.id, &e.toDoc, &e.toAnchor); err != nil {
 			t.Fatalf("scan covers edge: %v", err)
 		}
 		out = append(out, e)
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("read covers edges: %v", err)
-	}
-	return out
-}
-
-// docCompletedWithRow is one doc_coverage_completed_with row.
-type docCompletedWithRow struct {
-	position   int
-	toDoc      int64
-	toExternal string
-}
-
-// docCompletedWith reads a covers edge's fullCoverageWith closure in
-// authored order.
-func docCompletedWith(t *testing.T, s *Store, edgeID int64) []docCompletedWithRow {
-	t.Helper()
-	rows, err := s.db.QueryContext(t.Context(),
-		`SELECT position, coalesce(to_doc,0), coalesce(to_external,'')
-		   FROM doc_coverage_completed_with WHERE edge_id = $1 ORDER BY position`, edgeID)
-	if err != nil {
-		t.Fatalf("read doc_coverage_completed_with: %v", err)
-	}
-	defer rows.Close()
-	var out []docCompletedWithRow
-	for rows.Next() {
-		var r docCompletedWithRow
-		if err := rows.Scan(&r.position, &r.toDoc, &r.toExternal); err != nil {
-			t.Fatalf("scan doc_coverage_completed_with: %v", err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("read doc_coverage_completed_with: %v", err)
 	}
 	return out
 }
@@ -1353,62 +1317,6 @@ func coveringPlan(t *testing.T, s *Store, slug string, accept bool, refs ...stri
 	return accepted
 }
 
-// coverageRef is one `covers` entry for a levelled test plan body: a target
-// reference, its authored level ("" renders the bare-string full-coverage
-// form), and — for a partial entry — the fullCoverageWith closure.
-type coverageRef struct {
-	ref              string
-	level            string
-	fullCoverageWith []string
-}
-
-// levelledPlanBody renders a plan whose frontmatter covers refs with
-// explicit coverage levels and fullCoverageWith closures (026 §2.1, §5), and
-// whose ## Tasks section holds one definition so the plan can be accepted.
-func levelledPlanBody(refs ...coverageRef) string {
-	var b strings.Builder
-	b.WriteString("---\nstatus: draft\n")
-	if len(refs) > 0 {
-		b.WriteString("covers:\n")
-		for _, r := range refs {
-			if r.level == "" && len(r.fullCoverageWith) == 0 {
-				b.WriteString("  - " + r.ref + "\n")
-				continue
-			}
-			b.WriteString("  - spec: " + r.ref + "\n")
-			if r.level != "" {
-				b.WriteString("    coverage: " + r.level + "\n")
-			}
-			if len(r.fullCoverageWith) > 0 {
-				b.WriteString("    fullCoverageWith:\n")
-				for _, cw := range r.fullCoverageWith {
-					b.WriteString("      - " + cw + "\n")
-				}
-			}
-		}
-	}
-	b.WriteString("---\n\n# A covering plan\n\n## Tasks\n\n### Task 1 — Only task\n\n")
-	b.WriteString("```yaml\nkind: chore\n```\n\nDo it.\n")
-	return b.String()
-}
-
-// levelledPlan creates a plan covering refs at explicit levels, accepting it
-// when accept is set.
-func levelledPlan(t *testing.T, s *Store, slug string, accept bool, refs ...coverageRef) *model.Doc {
-	t.Helper()
-	doc := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: slug, Body: levelledPlanBody(refs...), CreatedBy: "stig",
-	})
-	if !accept {
-		return doc
-	}
-	accepted, _, err := acceptDoc(t, s, doc.ID, "stig")
-	if err != nil {
-		t.Fatalf("accept plan %s: %v", slug, err)
-	}
-	return accepted
-}
-
 // deferralRef is one `defers` entry for a test plan body: the deferred
 // section and its named owner (026 §5.3).
 type deferralRef struct {
@@ -1417,29 +1325,14 @@ type deferralRef struct {
 }
 
 // deferringPlanBody renders a mintable plan whose frontmatter defers each ref
-// to its named owner (026 §5.3), and optionally covers others at explicit
-// levels alongside it — the NeedsPlanning precedence tests need both keys on
-// one plan.
-func deferringPlanBody(defers []deferralRef, covers ...coverageRef) string {
+// to its named owner (026 §5.3), and optionally covers others alongside it.
+func deferringPlanBody(defers []deferralRef, covers ...string) string {
 	var b strings.Builder
 	b.WriteString("---\nstatus: draft\n")
 	if len(covers) > 0 {
 		b.WriteString("covers:\n")
 		for _, r := range covers {
-			if r.level == "" && len(r.fullCoverageWith) == 0 {
-				b.WriteString("  - " + r.ref + "\n")
-				continue
-			}
-			b.WriteString("  - spec: " + r.ref + "\n")
-			if r.level != "" {
-				b.WriteString("    coverage: " + r.level + "\n")
-			}
-			if len(r.fullCoverageWith) > 0 {
-				b.WriteString("    fullCoverageWith:\n")
-				for _, cw := range r.fullCoverageWith {
-					b.WriteString("      - " + cw + "\n")
-				}
-			}
+			b.WriteString("  - " + r + "\n")
 		}
 	}
 	if len(defers) > 0 {
@@ -1456,7 +1349,7 @@ func deferringPlanBody(defers []deferralRef, covers ...coverageRef) string {
 
 // deferringPlan creates a plan deferring refs to their owners (and optionally
 // covering others), accepting it when accept is set.
-func deferringPlan(t *testing.T, s *Store, slug string, accept bool, defers []deferralRef, covers ...coverageRef) *model.Doc {
+func deferringPlan(t *testing.T, s *Store, slug string, accept bool, defers []deferralRef, covers ...string) *model.Doc {
 	t.Helper()
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: slug, Body: deferringPlanBody(defers, covers...), CreatedBy: "stig",

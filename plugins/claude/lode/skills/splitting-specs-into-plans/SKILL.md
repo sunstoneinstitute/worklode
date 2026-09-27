@@ -25,85 +25,62 @@ frontmatter and gap queries still address their document sections.
 
 ## 1. Section coverage frontmatter
 
-A plan's `covers:` is a list of objects, one per spec section the plan touches.
-Keep document/section refs in `spec`, not rule refs. The key is `covers`, not
-`implements`: a plan writes no code, so it claims nothing. `wl:implements` is a component's claim that its code meets a section
-(025 §11); a plan undertakes, and its minted tasks discharge that (026 §5).
+A plan's `covers:` is a list of plain references — a rule ref (`WL-RULE-<n>`),
+a `<doc>#sec-N` reference, or a whole-document reference. The key is
+`covers`, not `implements`: a plan writes no code, so it claims nothing.
+`wl:implements` is a component's claim that its code meets a section
+(025 §11); a plan undertakes, and its minted tasks discharge that
+(WL-SPEC-78 §4.1). A `covers` entry always means the plan builds the whole
+rule: there are no coverage levels, and `coverage:`/`fullCoverageWith:` are
+refused on write.
 
 ```yaml
 ---
 status: draft
 covers:
-  - spec: WL-SPEC-32#sec-2
-    coverage: full
-  - spec: WL-SPEC-32#sec-3
-    coverage: partial
-    fullCoverageWith:
-      - 2026-08-10-project-cockpit-2-intake-and-launch
-  - spec: WL-SPEC-32#sec-11
-    coverage: none
+  - WL-SPEC-32#sec-2
+  - WL-SPEC-32#sec-4
 ---
 ```
 
-| Key | Required | Meaning |
-|---|---|---|
-| `spec` | yes | Document reference with a `#sec-N` fragment — `WL-SPEC-<N>` shorthand, or the document's slug. |
-| `coverage` | yes | `full`, `partial`, or `none` |
-| `fullCoverageWith` | no | Plans that, together with this one, make the section `full`. Plan slugs; a plan's `WL-PLAN-7` shorthand names it too (029 §4). |
+Three cases that look like partial coverage are expressed another way:
 
-**`full`** — after this plan executes, the section is satisfied. Nothing else
-is owed.
+| Case | Expression |
+|---|---|
+| the plan builds part of a rule | split the rule (`lode rule link WL-RULE-B --derived-from WL-RULE-A`, see §2 below) so each plan covers whole rules |
+| the plan must obey a rule but builds nothing in it | the rule is an **invariant** and governs the plan's tasks already; no `covers` entry |
+| the rule has nothing to build (rationale, context) | the rule is **informative**; no `covers` entry |
 
-**`partial`** — this plan covers part of the section. Name the rest in
-`fullCoverageWith:` when you know which parts finish it. Without that key the
-aggregate stays `partial`, which is a declared gap rather than an oversight —
-that is the point of writing it down.
+Use it for a standing rule such as 032 §11's "end-to-end tests drive the HTTP
+UI and API surfaces and do not write directly to the store": an invariant
+governs every part while being built by none of them, and it needs no
+`covers` entry to do so.
 
-**`none`** — the plan is bound by the section but covers nothing in it.
-Use it for standing rules: 032 §11's "end-to-end tests drive the HTTP UI and
-API surfaces and do not write directly to the store" governs every part while
-being implemented by none of them. Without `none`, a reader cannot tell a
-governing constraint from a forgotten section. The rule still governs the
-plan and its minted tasks.
+### Planning gaps are a query
 
-### Aggregate coverage is a query
+For a spec section `S`, over accepted-or-superseded plans covering its rule
+(a superseded plan is spent, and discharges what it covered — WL-SPEC-78
+§1.3):
 
-For a spec section `S`, over accepted-or-superseded plans naming it (a
-superseded plan is spent, and discharges what it covered — 026 §2.1):
-
-- any plan claims `full` → **fully planned**;
-- a plan claims `partial` with `fullCoverageWith: [P…]`, every `P` exists and
-  is accepted or superseded and contributes `full` or `partial` to `S` →
-  **fully planned**;
-- otherwise, any `partial` claim → **partially planned** (report the gap);
-- only `none` claims, no deferral → **bound only**;
-- a plan `defers` `S` to a named owner and nothing claims `partial` →
-  **deferred**, owner named (026 §5.3);
-- no plan names `S` → **unplanned**.
+- some such plan covers it, and no draft plan also covers it →
+  **planned**;
+- a draft plan covers it → **plan-draft**, reported as a gap until the plan
+  is accepted;
+- no plan covers it, and a plan `defers` it to a named owner → **deferred**,
+  owner named (WL-SPEC-78 §1.3);
+- no plan names it at all → **unplanned**.
 
 The backbone runs that query — `lode doc list --needs-planning --json` returns
-each accepted spec's uncovered anchors already classified `unplanned`,
-`partial`, `bound-only` or `deferred` (with the deferral's `owner`; 026 §2.1),
-so "which sections has nobody planned" needs no reading of plans at all.
+each accepted spec's uncovered anchors already classified `plan-draft`,
+`deferred` or `unplanned` (with the deferral's `owner`; WL-SPEC-78 §1.3), so
+"which sections has nobody planned" needs no reading of plans at all.
 
 ### Validator contract
 
-A bare `covers` reference means `full`; `NO-SPEC` stays bare. The object form
-requires `spec` with a section fragment and one of the three levels.
-`fullCoverageWith` is valid only beside `partial`, must be non-empty, and names
-accepted plans contributing `full` or `partial` to the same section. `none`
-contributes nothing. `implements` remains readable only as a retired spelling
-and is reported; new output always writes `covers`.
-
-**`fullCoverageWith` is on its way out, but is still what runs.** Draft spec
-026 §5.4 replaces the forward pointer with a decomposition stamp: a `partial`
-claim is legal only inside a complete sibling set, `lode decompose <ref>`
-validates and stamps it, and a covered section in a decomposed spec counts as
-fully planned whatever its level says. None of that is built — no
-`wl:decomposedAt`, no `lode decompose` for documents — and the validator, the
-`doc_edges` completion side-table, and `lode doc list --needs-planning` all
-still read `fullCoverageWith`. Keep writing it. When §5.4 ships, the key
-disappears and the completeness rule replaces this subsection.
+A `covers` entry must be a plain reference; `NO-SPEC` stays bare.
+`coverage:` and `fullCoverageWith:` are refused, on a plan and by `lode doc
+import`. `implements` remains readable only as a retired spelling and is
+reported; new output always writes `covers`.
 
 `lode doc lint <file>` lints a draft locally before `lode doc add` — anchors,
 and a plan's `## Tasks` definitions. Creating the document is what turns
@@ -121,9 +98,10 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
    and `lode rule list --doc <spec-ref> --json`. Use
    `lode doc show <spec-ref> --json` for the section anchors used by `covers`.
    Run `lode show <rule-ref> --json` for each rule to inspect its existing
-   plans, governed tasks and relationships before declaring new work. Account for every anchored rule across the series: one
-   or more parts claim `full` or `partial`, or the section is deliberately unplanned. A standing constraint
-   may repeat as `coverage: none` in every part it governs.
+   plans, governed tasks and relationships before declaring new work. Account
+   for every anchored rule across the series: some part covers it, or the
+   section is deliberately unplanned. A standing invariant governs every part
+   it applies to without a `covers` entry in any of them.
 2. **Check what the spec's `requires:` actually delivers.** Read the schema
    (`ls deploy/base/migrations/`) and the packages (`ls internal/`), not the
    specs' `status:`. A spec can be `accepted` with nothing built. A section
@@ -134,12 +112,11 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
 4. **Part 1 earns its keep alone.** It must produce something demonstrable over
    real data. If part 1 cannot be demonstrated, the split is wrong.
 5. **Write every part's `covers:` block now**, including parts whose bodies
-   come later. The blocks are the contract between parts; `fullCoverageWith:`
-   only works if the later parts' slugs are fixed.
+   come later. The blocks are the contract between parts.
 6. **Claim honestly.** A part that claims `#sec-11` and cannot demonstrate any
-   of §11's acceptance bullets should claim `coverage: none` or drop the
-   section. Claiming a section you cannot prove is the failure this format
-   exists to catch.
+   of §11's acceptance bullets should drop the section, or split the rule so
+   the part covering it is the one that can. Claiming a section you cannot
+   prove is the failure this format exists to catch.
 7. A plan is bounded by a token budget the server enforces (12 S19): about
    32,000 tokens is the soft budget, past which `lode doc add` and `lode doc
    edit` print a warning, and 64,000 is the hard ceiling, past which the

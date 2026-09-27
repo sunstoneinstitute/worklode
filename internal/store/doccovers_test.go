@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// TestDocCoversRejections covers the three 026 §5.1 defects a single header
-// settles on its own, which nothing enforced after scripts/secmeta.py went
-// with the file corpus (055 §4): the key on a document that is not a plan,
-// both spellings of it at once, and a qualified entry missing a required key.
+// TestDocCoversRejections covers the covers defects a single header settles
+// on its own (026 §5.1, WL-SPEC-78 §4.5): the key on a document that is not a
+// plan, both spellings of it at once, an entry naming no spec, and the
+// retired `coverage` and `fullCoverageWith` keys.
 func TestDocCoversRejections(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -36,15 +36,34 @@ implements: 025-documents-in-the-backbone.md#sec-5
 		{"entry without spec", "plan", `---
 status: draft
 covers:
-  - coverage: full
+  - fullCoverageWith: [x.md]
 ---
 
 # A plan
 `},
-		{"entry without coverage", "plan", `---
+		{"retired coverage key", "plan", `---
 status: draft
 covers:
   - spec: 025-documents-in-the-backbone.md#sec-5
+    coverage: full
+---
+
+# A plan
+`},
+		{"retired level", "plan", `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-5
+    coverage: partial
+---
+
+# A plan
+`},
+		{"retired fullCoverageWith key", "plan", `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-5
+    fullCoverageWith: [x.md]
 ---
 
 # A plan
@@ -69,10 +88,9 @@ covers:
 	}
 }
 
-// TestDocCoversBareFormStillFull pins what the missing-coverage rejection
-// above must not catch: the bare form is the qualified entry with
-// `coverage: full` (026 §5.1), not an entry that omitted the key.
-func TestDocCoversBareFormStillFull(t *testing.T) {
+// TestDocCoversPlainEntries pins what the rejections above must not catch:
+// a bare reference and a mapping naming only `spec` both write a covers edge.
+func TestDocCoversPlainEntries(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
@@ -80,17 +98,18 @@ func TestDocCoversBareFormStillFull(t *testing.T) {
 		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
 	})
 	plan := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Number: 1, Slug: "plan-1",
-		Body: planBody, CreatedBy: "stig",
+		Project: "p1", Kind: "plan", Number: 1, Slug: "plan-1", CreatedBy: "stig",
+		Body: "---\nstatus: draft\ncovers:\n  - 025-documents-in-the-backbone.md#sec-1\n" +
+			"  - spec: 025-documents-in-the-backbone.md#sec-2\n---\n\n# A plan\n",
 	})
-	var level string
+	var n int
 	if err := s.db.QueryRow(
-		`SELECT e.coverage FROM doc_edges e JOIN doc_rules dr ON dr.rule_id = e.to_rule
-		  WHERE e.from_doc = $1 AND e.type = 'covers' AND dr.doc_id = $2`,
-		plan.ID, spec.ID).Scan(&level); err != nil {
-		t.Fatalf("read covers edge: %v", err)
+		`SELECT count(DISTINCT dr.anchor) FROM doc_edges e JOIN doc_rules dr ON dr.rule_id = e.to_rule
+		  WHERE e.from_doc = $1 AND e.type = 'covers' AND dr.doc_id = $2 AND dr.anchor IN ('sec-1', 'sec-2')`,
+		plan.ID, spec.ID).Scan(&n); err != nil {
+		t.Fatalf("read covers edges: %v", err)
 	}
-	if level != "full" {
-		t.Errorf("coverage = %q, want full", level)
+	if n != 2 {
+		t.Errorf("covered sections = %d, want 2", n)
 	}
 }

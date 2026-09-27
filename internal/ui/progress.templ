@@ -12,8 +12,7 @@ package ui
 // Nothing here derives anything: model.ProjectProgress arrives already
 // derived (internal/progress), and every label, class and hover string comes
 // from the helpers in views.go. Two rules the page holds by construction: no
-// count carries a percentage (§2.5), and a bound-only section is not drawn at
-// all — no cell, no slice, no legend entry, no count (§1.4).
+// count carries a percentage (§2.5).
 //
 // Every row is followed by its detail block (§2.3), rendered server-side and
 // hidden by the stylesheet until progress.js puts the "open" class on the row.
@@ -175,8 +174,7 @@ templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled, mergeEn
 // (§3.2), Plan (§3.4), Rally (§3.5) and Review (§3.3), the last disabled
 // until hasReviewSurface (internal/api) says spec 059's routes exist. A spec
 // whose planning task is already open shows it as a link there instead of the
-// Plan button (§3.4). The reference is the row's only link. A bound-only
-// section gets no cell. Clicking the row anywhere but a link expands the
+// Plan button (§3.4). The reference is the row's only link. Clicking the row anywhere but a link expands the
 // detail block that follows it; the row is focusable so a keyboard can do the
 // same.
 templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) {
@@ -185,15 +183,13 @@ templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabl
 		<div class="t">{ s.Title }</div>
 		<div class="strip">
 			for _, sec := range s.Sections {
-				if sec.State != "bound" {
-					<i class={ progressCellClass(sec) } data-anchor={ sec.Anchor } data-tip={ progressCellTip(sec) }></i>
-					if len(sec.Plans) > 0 {
-						<span class="tip-act" hidden>
-							for _, pr := range sec.Plans {
-								<a class="tip-go" href={ "#" + progressPlanAnchorID(s.Ref, pr) }>Go to { pr }</a>
-							}
-						</span>
-					}
+				<i class={ progressCellClass(sec) } data-anchor={ sec.Anchor } data-tip={ progressCellTip(sec) }></i>
+				if len(sec.Plans) > 0 {
+					<span class="tip-act" hidden>
+						for _, pr := range sec.Plans {
+							<a class="tip-go" href={ "#" + progressPlanAnchorID(s.Ref, pr) }>Go to { pr }</a>
+						}
+					</span>
 				}
 			}
 		</div>
@@ -232,18 +228,11 @@ templ progressDetail(s model.ProgressSpec, viewer string, reviewEnabled, mergeEn
 				</thead>
 				<tbody>
 					for _, sec := range s.Sections {
-						<tr class={ templ.KV("muted", sec.State == "bound") }>
+						<tr>
 							<td class="mono">{ progressSectionNumber(sec.Anchor) }</td>
 							<td class={ templ.KV("sub", sec.Depth > 2) }>{ sec.Heading }</td>
 							<td>
-								if sec.State == "bound" {
-									bound only
-								} else {
-									@progressPill(sec.State)
-									if sec.Partial {
-										<span class="muted small">partial</span>
-									}
-								}
+								@progressPill(sec.State)
 							</td>
 							<td class="muted small">{ strings.Join(sec.Plans, ", ") }</td>
 						</tr>
