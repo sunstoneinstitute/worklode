@@ -21,7 +21,7 @@ func ruleEdgeReq(w http.ResponseWriter, r *http.Request) (from designdoc.RuleRef
 	}
 	to, ok = designdoc.ParseRuleRef(req.To)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "to must look like WL-RULE-12")
+		writeErr(w, http.StatusBadRequest, "to must look like WL-REQ-12")
 		return from, to, req, false
 	}
 	return from, to, req, true

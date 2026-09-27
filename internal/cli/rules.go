@@ -49,6 +49,7 @@ func (c *Client) ListRules(ctx context.Context, f RuleListFilter) ([]model.Rule,
 func RulesTable(w io.Writer, rules []model.Rule) {
 	tbl := newTable(
 		column{header: "REF"},
+		column{header: "KIND"},
 		column{header: "STATUS"},
 		column{header: "VER"},
 		column{header: "ARRANGED"},
@@ -59,7 +60,7 @@ func RulesTable(w io.Writer, rules []model.Rule) {
 		for i, a := range c.ArrangedIn {
 			placed[i] = a.DocRef + "#" + a.Anchor
 		}
-		tbl.add(c.Ref, c.Status, strconv.Itoa(c.Version), strings.Join(placed, ", "), c.Heading)
+		tbl.add(c.Ref, c.Kind, c.Status, strconv.Itoa(c.Version), strings.Join(placed, ", "), c.Heading)
 	}
 	tbl.flush(w)
 }
@@ -72,6 +73,7 @@ var ruleEdgeInverse = map[string]string{"amends": "amendedBy", "supersedes": "su
 // and version, where it is arranged, then its text.
 func RuleRender(w io.Writer, c model.Rule) {
 	fmt.Fprintf(w, "%s  %s\n", c.Ref, c.Heading)
+	fmt.Fprintf(w, "  kind:     %s\n", c.Kind)
 	fmt.Fprintf(w, "  status:   %s\n", c.Status)
 	fmt.Fprintf(w, "  version:  %d\n", c.Version)
 	if c.Owner != "" {

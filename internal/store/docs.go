@@ -1076,7 +1076,7 @@ func (s *Store) BareSupersededRules(ctx context.Context, project, kind string) (
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT rule, doc, anchor, heading FROM (
 		     SELECT DISTINCT ON (r.id) p.key AS key, r.number AS number,
-		            p.key || '-RULE-' || r.number AS rule,
+		            `+ruleRefSQL("p", "r")+` AS rule,
 		            coalesce(dp.key || '-' || upper(d.kind) || '-' || d.number, '') AS doc,
 		            CASE WHEN d.id IS NULL THEN '' ELSE dr.anchor END AS anchor,
 		            v.heading AS heading
@@ -1121,15 +1121,19 @@ func (a appendScan) Scan(dest ...any) error {
 // carries none (025 §9), which is an empty result rather than an error.
 func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSection, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT anchor, coalesce(number,''), heading, depth, position, last_revised_in, published, patched
-		   FROM doc_sections WHERE doc_id = $1 ORDER BY position`, docID)
+		`SELECT s.anchor, coalesce(s.number,''), s.heading, s.depth, s.position, s.last_revised_in,
+		        s.published, s.patched, coalesce(r.kind, '')
+		   FROM doc_sections s
+		   LEFT JOIN doc_rules dr ON dr.doc_id = s.doc_id AND dr.anchor = s.anchor
+		   LEFT JOIN rules r ON r.id = dr.rule_id
+		  WHERE s.doc_id = $1 ORDER BY s.position`, docID)
 	if err != nil {
 		return nil, fmt.Errorf("list sections of doc %d: %w", docID, err)
 	}
 	return collectRows(rows, fmt.Sprintf("list sections of doc %d", docID), func(r rowScanner) (model.DocSection, error) {
 		var sec model.DocSection
 		if err := r.Scan(&sec.Anchor, &sec.Number, &sec.Heading, &sec.Depth,
-			&sec.Position, &sec.LastRevisedIn, &sec.Published, &sec.Patched); err != nil {
+			&sec.Position, &sec.LastRevisedIn, &sec.Published, &sec.Patched, &sec.Kind); err != nil {
 			return model.DocSection{}, err
 		}
 		return sec, nil
@@ -1311,7 +1315,7 @@ func docSectionReferrers(ctx context.Context, q rowQueryer, docID int64, anchor 
 		    AND e.type IN ('requires','covers')
 		    AND d.kind <> 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL
 		  UNION ALL
-		 SELECT 'rule', p.key || '-RULE-' || r.number, e.type, v.heading
+		 SELECT 'rule', `+ruleRefSQL("p", "r")+`, e.type, v.heading
 		   FROM doc_rules dr
 		   JOIN rule_edges e ON e.to_rule = dr.rule_id AND e.type IN ('amends','supersedes')
 		   JOIN rules r ON r.id = e.from_rule

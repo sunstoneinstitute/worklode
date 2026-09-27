@@ -359,7 +359,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this parent")
 	cmd.Flags().StringVar(&followUpTo, "follow-up-to", "",
 		"record that this task was spun out of the work on that task")
-	cmd.Flags().StringArrayVar(&governedBy, "governed-by", nil, "rule that governs the task, e.g. WL-RULE-12 (repeatable)")
+	cmd.Flags().StringArrayVar(&governedBy, "governed-by", nil, "rule that governs the task, e.g. WL-REQ-12 (repeatable)")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
 		"org-catalog secret names this task needs, comma-separated (see `lode secret catalog`)")
 	cmd.MarkFlagRequired("title")
@@ -1340,7 +1340,7 @@ func newTaskRuleCmd(use, short, msg string, call taskEdge) *cobra.Command {
 			return runTaskEdge(cmd, c, id, by, msg, call)
 		},
 	}
-	cmd.Flags().StringVar(&by, "by", "", "rule ref, e.g. WL-RULE-12 (required)")
+	cmd.Flags().StringVar(&by, "by", "", "rule ref, e.g. WL-REQ-12 (required)")
 	cmd.MarkFlagRequired("by")
 	return cmd
 }
@@ -1381,7 +1381,7 @@ func newTaskGovernCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&by, "by", "", "rule ref, e.g. WL-RULE-12 (required)")
+	cmd.Flags().StringVar(&by, "by", "", "rule ref, e.g. WL-REQ-12 (required)")
 	cmd.MarkFlagRequired("by")
 	cmd.Flags().BoolVar(&pin, "pin", false, "pin the link to the rule version current now, instead of following its newest")
 	return cmd

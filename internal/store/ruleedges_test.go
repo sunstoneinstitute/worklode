@@ -58,10 +58,10 @@ func TestLinkRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(from.Edges) != 1 || from.Edges[0].Type != "refines" || from.Edges[0].To != "P1-RULE-3" || from.Edges[0].Source != "manual" || from.Edges[0].ToHeading != "Two" {
+	if len(from.Edges) != 1 || from.Edges[0].Type != "refines" || from.Edges[0].To != "P1-REQ-3" || from.Edges[0].Source != "manual" || from.Edges[0].ToHeading != "Two" {
 		t.Errorf("from side: %+v", from.Edges)
 	}
-	if len(to.Edges) != 1 || to.Edges[0].From != "P1-RULE-1" || to.Edges[0].FromHeading != "One" {
+	if len(to.Edges) != 1 || to.Edges[0].From != "P1-REQ-1" || to.Edges[0].FromHeading != "One" {
 		t.Errorf("to side: %+v", to.Edges)
 	}
 	if err := s.Tx(ctx, func(tx *sql.Tx) error { return UnlinkRules(tx, a, b, "refines") }); err != nil {
@@ -117,7 +117,7 @@ func TestLinkRulesLineage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(from.Edges) != 1 || from.Edges[0].Type != "wasDerivedFrom" || from.Edges[0].To != "P1-RULE-1" || from.Edges[0].Source != "manual" {
+	if len(from.Edges) != 1 || from.Edges[0].Type != "wasDerivedFrom" || from.Edges[0].To != "P1-REQ-1" || from.Edges[0].Source != "manual" {
 		t.Errorf("wasDerivedFrom edge: %+v", from.Edges)
 	}
 	err = link(a, b, "supersedes")
@@ -150,7 +150,7 @@ func TestLinkRulesAmends(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(amended.Edges) != 1 || amended.Edges[0].Type != "amends" || amended.Edges[0].From != "P1-RULE-3" || amended.Edges[0].Source != "manual" {
+	if len(amended.Edges) != 1 || amended.Edges[0].Type != "amends" || amended.Edges[0].From != "P1-REQ-3" || amended.Edges[0].Source != "manual" {
 		t.Errorf("amended side: %+v", amended.Edges)
 	}
 	if err := s.Tx(ctx, func(tx *sql.Tx) error { return UnlinkRules(tx, a, b, "amends") }); err != nil {
@@ -257,34 +257,34 @@ func TestUnlinkRulesDerived(t *testing.T) {
 // itself, to a whole document, or to nothing yield no edge (S26).
 func TestDerivedReferences(t *testing.T) {
 	s := openDocStore(t)
-	// P1-RULE-1..3 from ruleDocV1 (sec-1, sec-1.1, sec-2), doc P1-SPEC-1.
+	// P1-REQ-1..3 from ruleDocV1 (sec-1, sec-1.1, sec-2), doc P1-SPEC-1.
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
-	body := "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nSee P1-RULE-1, P1-SPEC-1#sec-2, P1-SPEC-1 (whole), P1-RULE-999, P1-RULE-4 (itself), P1-SPEC-99#sec-1 (no such doc), and P1-SPEC-1#sec-9 (no such rule at that anchor).\n"
+	body := "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nSee P1-REQ-1, P1-SPEC-1#sec-2, P1-SPEC-1 (whole), P1-REQ-999, P1-REQ-4 (itself), P1-SPEC-99#sec-1 (no such doc), and P1-SPEC-1#sec-9 (no such rule at that anchor).\n"
 	u := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: body, CreatedBy: "stig"})
 	ctx := context.Background()
 	got, err := s.GetRule(ctx, "P1", 4)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]bool{"P1-RULE-1": true, "P1-RULE-3": true}
+	want := map[string]bool{"P1-REQ-1": true, "P1-REQ-3": true}
 	if len(got.Edges) != 2 {
 		t.Fatalf("edges: %+v", got.Edges)
 	}
 	for _, e := range got.Edges {
-		if e.Type != "references" || e.Source != "derived" || e.From != "P1-RULE-4" || !want[e.To] {
+		if e.Type != "references" || e.Source != "derived" || e.From != "P1-REQ-4" || !want[e.To] {
 			t.Errorf("unexpected edge %+v", e)
 		}
 	}
 
-	// A manual references edge to P1-RULE-2, then a rewrite that drops P1-RULE-1
-	// and cites P1-RULE-2 itself: the derived write now collides with the
+	// A manual references edge to P1-REQ-2, then a rewrite that drops P1-REQ-1
+	// and cites P1-REQ-2 itself: the derived write now collides with the
 	// manual row on (from, to, type), so ON CONFLICT DO NOTHING must fire and
 	// leave the manual row's source alone rather than erroring the write.
 	self, two := ruleID(t, s, "P1", 4), ruleID(t, s, "P1", 2)
 	if err := s.Tx(ctx, func(tx *sql.Tx) error { return LinkRules(tx, self, two, "references") }); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := updateDocBody(t, s, u.ID, "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nSee P1-SPEC-1#sec-2 and P1-RULE-2.\n"); err != nil {
+	if _, err := updateDocBody(t, s, u.ID, "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nSee P1-SPEC-1#sec-2 and P1-REQ-2.\n"); err != nil {
 		t.Fatal(err)
 	}
 	got, err = s.GetRule(ctx, "P1", 4)
@@ -295,7 +295,7 @@ func TestDerivedReferences(t *testing.T) {
 	for _, e := range got.Edges {
 		sources[e.To] = e.Source
 	}
-	if len(sources) != 2 || sources["P1-RULE-3"] != "derived" || sources["P1-RULE-2"] != "manual" {
+	if len(sources) != 2 || sources["P1-REQ-3"] != "derived" || sources["P1-REQ-2"] != "manual" {
 		t.Errorf("after rewrite: %+v", got.Edges)
 	}
 }
@@ -305,15 +305,15 @@ func TestDerivedReferences(t *testing.T) {
 // the same references edge as P1-RULE-<n> (S64).
 func TestDerivedReferencesFromOldRefSpelling(t *testing.T) {
 	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"}) // P1-RULE-1..3
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"}) // P1-REQ-1..3
 	body := "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nSee P1-CL-1.\n"
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: body, CreatedBy: "stig"})
 	got, err := s.GetRule(context.Background(), "P1", 4)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Edges) != 1 || got.Edges[0].Type != "references" || got.Edges[0].Source != "derived" || got.Edges[0].To != "P1-RULE-1" {
-		t.Errorf("edges: %+v, want one derived references edge to P1-RULE-1", got.Edges)
+	if len(got.Edges) != 1 || got.Edges[0].Type != "references" || got.Edges[0].Source != "derived" || got.Edges[0].To != "P1-REQ-1" {
+		t.Errorf("edges: %+v, want one derived references edge to P1-REQ-1", got.Edges)
 	}
 }
 
@@ -344,14 +344,14 @@ func TestDerivedReferencesSameDocument(t *testing.T) {
 		}
 		return false
 	}
-	if len(one.Edges) != 2 || !hasEdge(one.Edges, "P1-RULE-1", "P1-RULE-2") {
+	if len(one.Edges) != 2 || !hasEdge(one.Edges, "P1-REQ-1", "P1-REQ-2") {
 		t.Errorf("sec-1 edges: %+v", one.Edges)
 	}
 	two, err := s.GetRule(ctx, "P1", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(two.Edges) != 2 || !hasEdge(two.Edges, "P1-RULE-2", "P1-RULE-1") {
+	if len(two.Edges) != 2 || !hasEdge(two.Edges, "P1-REQ-2", "P1-REQ-1") {
 		t.Errorf("sec-2 edges: %+v", two.Edges)
 	}
 }
@@ -363,7 +363,7 @@ func TestDerivedReferencesSameDocument(t *testing.T) {
 func TestDerivedReferencesSkipPlanArrangement(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
-	// P1-PLAN-1 arranges P1-RULE-1 at sec-1, borrowed from the spec.
+	// P1-PLAN-1 arranges P1-REQ-1 at sec-1, borrowed from the spec.
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
 	body := "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nSee P1-PLAN-1#sec-1.\n"
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: body, CreatedBy: "stig"})

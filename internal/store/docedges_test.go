@@ -805,8 +805,8 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	}
 	wantOut := []model.DocEdge{
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
-		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2", ToRule: "P1-RULE-2"}),
-		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2.1", ToRule: "P1-RULE-3"}),
+		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2", ToRule: "P1-REQ-2"}),
+		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-2.1", ToRule: "P1-REQ-3"}),
 		specFar(model.DocEdge{Type: "wasDerivedFrom"}),
 	}
 	if len(out) != len(wantOut) {

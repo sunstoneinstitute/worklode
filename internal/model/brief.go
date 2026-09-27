@@ -41,4 +41,7 @@ type Brief struct {
 	// plan is stale (025 §8.6), "" otherwise: the task text may predate an
 	// amendment to the spec the plan covers.
 	StalePlan string `json:"stale_plan,omitempty"`
+	// GovernedBy is the task's governing rules: its links plus its project's
+	// accepted invariants (WL-SPEC-77 §4), as TaskDetail carries them.
+	GovernedBy []TaskGovernance `json:"governed_by,omitempty"`
 }

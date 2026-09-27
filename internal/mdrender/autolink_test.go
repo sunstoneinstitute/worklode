@@ -27,9 +27,14 @@ func TestDocRefAutolink(t *testing.T) {
 // redirect /rules/<ref>, the counterpart of the document shorthand's
 // /docs/ref/.
 func TestRuleRefAutolink(t *testing.T) {
-	got := string(Body(ProjectKeys{}, "see WL-RULE-12."))
-	if !strings.Contains(got, `<a href="/rules/WL-RULE-12" rel="nofollow">WL-RULE-12</a>`) {
-		t.Errorf("missing rule ref link in:\n%s", got)
+	got := string(Body(ProjectKeys{}, "see WL-RULE-12 and WL-REQ-13."))
+	for _, want := range []string{
+		`<a href="/rules/WL-RULE-12" rel="nofollow">WL-RULE-12</a>`,
+		`<a href="/rules/WL-REQ-13" rel="nofollow">WL-REQ-13</a>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
 	}
 }
 

@@ -180,7 +180,7 @@ func TestGovernAndUngovern(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || list[0].Rule != "P1-RULE-3" || list[0].Heading != "Two" || list[0].Source != "manual" ||
+	if len(list) != 1 || list[0].Rule != "P1-REQ-3" || list[0].Heading != "Two" || list[0].Source != "manual" ||
 		list[0].RuleVersion != 1 || list[0].Current != 1 {
 		t.Errorf("GovernedBy = %+v", list)
 	}
@@ -276,8 +276,8 @@ func TestGovernedByResolvesTo(t *testing.T) {
 	govern(t, s, task.ID, 1)
 	govern(t, s, task.ID, 5)
 
-	mustSupersede(t, s, entry("P1-RULE-1", "P1-RULE-2", "P1-RULE-3")) // B -> A1, A2
-	mustSupersede(t, s, entry("P1-RULE-2", "P1-RULE-4"))              // A1 -> D
+	mustSupersede(t, s, entry("P1-REQ-1", "P1-REQ-2", "P1-REQ-3")) // B -> A1, A2
+	mustSupersede(t, s, entry("P1-REQ-2", "P1-REQ-4"))             // A1 -> D
 
 	list, err := s.GovernedBy(context.Background(), task.ID)
 	if err != nil {
@@ -287,10 +287,10 @@ func TestGovernedByResolvesTo(t *testing.T) {
 		t.Fatalf("GovernedBy = %+v, want 2 entries", list)
 	}
 	b, c := list[0], list[1]
-	if b.Rule != "P1-RULE-1" || b.Status != "withdrawn" || !equalStrings(b.ResolvesTo, []string{"P1-RULE-3", "P1-RULE-4"}) {
-		t.Errorf("B = %+v, want withdrawn with ResolvesTo [P1-RULE-3 P1-RULE-4]", b)
+	if b.Rule != "P1-REQ-1" || b.Status != "withdrawn" || !equalStrings(b.ResolvesTo, []string{"P1-REQ-3", "P1-REQ-4"}) {
+		t.Errorf("B = %+v, want withdrawn with ResolvesTo [P1-REQ-3 P1-REQ-4]", b)
 	}
-	if c.Rule != "P1-RULE-5" || len(c.ResolvesTo) != 0 {
+	if c.Rule != "P1-REQ-5" || len(c.ResolvesTo) != 0 {
 		t.Errorf("C = %+v, want live with empty ResolvesTo", c)
 	}
 }
@@ -327,8 +327,8 @@ func TestGovernedByResolvesToCycleTerminates(t *testing.T) {
 }
 
 // TestGovernedByResolvesToOrdersAcrossProjects: a withdrawn rule's
-// successors span two projects, P1-RULE-3 (number 3) and P2-RULE-1 (number 1).
-// ResolvesTo orders by project key first, so P1-RULE-3 sorts before P2-RULE-1
+// successors span two projects, P1-REQ-3 (number 3) and P2-REQ-1 (number 1).
+// ResolvesTo orders by project key first, so P1-REQ-3 sorts before P2-REQ-1
 // even though its rule number is larger (M7).
 func TestGovernedByResolvesToOrdersAcrossProjects(t *testing.T) {
 	s := openDocStore(t)
@@ -341,14 +341,14 @@ func TestGovernedByResolvesToOrdersAcrossProjects(t *testing.T) {
 	task := createTask(t, s, time.Now(), TaskInput{ProjectID: "p1", Title: "a task", Body: "b", Priority: "medium", Kind: "bug", CreatedBy: "stig"})
 	govern(t, s, task.ID, 1)
 
-	mustSupersede(t, s, entry("P1-RULE-1", "P1-RULE-3", "P2-RULE-1"))
+	mustSupersede(t, s, entry("P1-REQ-1", "P1-REQ-3", "P2-REQ-1"))
 
 	list, err := s.GovernedBy(context.Background(), task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || !equalStrings(list[0].ResolvesTo, []string{"P1-RULE-3", "P2-RULE-1"}) {
-		t.Errorf("GovernedBy = %+v, want ResolvesTo [P1-RULE-3 P2-RULE-1]", list)
+	if len(list) != 1 || !equalStrings(list[0].ResolvesTo, []string{"P1-REQ-3", "P2-REQ-1"}) {
+		t.Errorf("GovernedBy = %+v, want ResolvesTo [P1-REQ-3 P2-REQ-1]", list)
 	}
 }
 

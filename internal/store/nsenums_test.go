@@ -22,6 +22,7 @@ var schemeChecks = map[string]struct {
 	rename map[string]string
 }{
 	"TaskKind":         {table: "tasks", column: "kind"},
+	"RuleKind":         {table: "rules", column: "kind"},
 	"DesignDocStatus":  {table: "docs", column: "status"},
 	"ArtifactKind":     {table: "artifacts", column: "kind"},
 	"DeploymentStatus": {table: "deployments", column: "status"},
