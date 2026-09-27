@@ -356,6 +356,40 @@ func checkLabel(runs []store.CIRun) string {
 	return newest.Status
 }
 
+// prCIState rolls up every CI run recorded for a PR's head SHA into one
+// state for the task page header dot (WL-933): take the newest run per
+// workflow name, then any not yet "completed" makes the PR "running";
+// otherwise any conclusion outside "success", "skipped" and "neutral" makes
+// it "failed"; otherwise "passed". "" when no run is recorded.
+func prCIState(runs []store.CIRun) string {
+	newest := make(map[string]store.CIRun, len(runs))
+	for _, r := range runs {
+		if cur, ok := newest[r.Workflow]; !ok || r.StartedAt.After(cur.StartedAt) {
+			newest[r.Workflow] = r
+		}
+	}
+	if len(newest) == 0 {
+		return ""
+	}
+	failed := false
+	for _, r := range newest {
+		if r.Status != "completed" {
+			return "running"
+		}
+		conclusion := ""
+		if r.Conclusion != nil {
+			conclusion = *r.Conclusion
+		}
+		if conclusion != "success" && conclusion != "skipped" && conclusion != "neutral" {
+			failed = true
+		}
+	}
+	if failed {
+		return "failed"
+	}
+	return "passed"
+}
+
 // openSessionByTask indexes a project's open agent sessions by task id,
 // keeping the first (most-recently-seen, per OpenAgentSessionsForProject's
 // ordering) session for each task — a row shows one delegate, not a list.

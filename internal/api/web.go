@@ -681,7 +681,33 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 		refs[i].URL = blobURL(refs[i].Hash, refs[i].Filename)
 	}
 
+	// The header's PR chips (WL-933): only the task's open PRs, each rolled
+	// up to one CI state from the runs recorded on its head SHA — merged and
+	// closed PRs stay in the timeline (assembleTimeline/prEntries) rather
+	// than the header.
+	prs, err := s.st.PRsForTask(ctx, id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	var openPRs []store.PullRequest
+	for _, pr := range prs {
+		if pr.State == "open" {
+			openPRs = append(openPRs, pr)
+		}
+	}
+	shas := make([]store.RepoSHA, 0, len(openPRs))
+	for _, pr := range openPRs {
+		shas = append(shas, store.RepoSHA{Repo: pr.Repo, SHA: pr.HeadSHA})
+	}
+	ci, err := s.st.CIRunsForSHAs(ctx, shas)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
 	view := taskView(s.mdcache, s.projectKeys(ctx, t.Project), t, project, blocked, entries, out, in)
+	view.PRs = taskPRRows(openPRs, ci)
 	view.Attachments = refs
 	view.Viewer = actorIDFrom(r)
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {

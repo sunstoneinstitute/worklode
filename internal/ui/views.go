@@ -349,6 +349,23 @@ type TaskView struct {
 	// Prerequisites is the open work still holding the task (WL-877). Nil
 	// when nothing holds it, and the page then omits the section.
 	Prerequisites *Prerequisites
+	// PRs is the task's open pull requests (WL-933), in repo/number order —
+	// merged and closed PRs stay in Timeline only. internal/api rolls each
+	// one's CI up from its head SHA's runs (prCIState, runboard.go).
+	PRs []TaskPR
+}
+
+// TaskPR is one open pull request linked from the task page header. Label is
+// "#<number>", prefixed with the PR's repo name when the task has open PRs
+// in more than one repo. CI is "running", "failed", "passed", or "" when no
+// run is recorded for the PR's head SHA. Queued marks a PR in GitHub's merge
+// queue (WL-SPEC-66 §6.1) — its head SHA's CI still reflects its own commit,
+// not the merge-queue SHA the queue actually runs (out of scope, WL-933).
+type TaskPR struct {
+	Label  string
+	URL    string
+	CI     string
+	Queued bool
 }
 
 // Prerequisites is the task page's prerequisite tree: every open task the

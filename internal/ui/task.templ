@@ -41,6 +41,16 @@ templ Task(v TaskView) {
 						if v.Task.Milestone != "" {
 							<span class="muted">&nbsp;milestone: <a href={ "/projects/" + v.Task.Project + "/milestones" }>{ v.Task.Milestone }</a></span>
 						}
+						for _, pr := range v.PRs {
+							<span class="muted">&nbsp;</span>
+							<a href={ pr.URL }>{ pr.Label }</a>
+							if pr.CI != "" {
+								<span class={ "dot ci-" + pr.CI } title={ "CI " + pr.CI } aria-label={ "CI " + pr.CI }></span>
+							}
+							if pr.Queued {
+								<span class="muted">&nbsp;in merge queue</span>
+							}
+						}
 					</p>
 					<p class="muted small">Created { fmtTime(v.Task.CreatedAt) } by { v.Task.CreatedBy } &mdash; updated { fmtTime(v.Task.UpdatedAt) }</p>
 					if v.Task.Assignee != "" {
