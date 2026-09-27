@@ -46,15 +46,16 @@ type ruleRow struct {
 // candidates are claimed in document order, one per section: the first
 // unclaimed rule with that heading wins. Only after every section has its
 // match (or none) does the second walk, in document order, bump/keep rules
-// and write doc_rules positions.
-func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) error {
+// and write doc_rules positions. minted reports whether a new rule was
+// inserted.
+func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, err error) {
 	var project string
 	if err := tx.QueryRow(`SELECT project_id FROM docs WHERE id = $1`, docID).Scan(&project); err != nil {
-		return fmt.Errorf("project of doc %d: %w", docID, err)
+		return false, fmt.Errorf("project of doc %d: %w", docID, err)
 	}
 	prior, err := arrangedRules(tx, docID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	byAnchor := map[string]*ruleRow{}
 	byHeading := map[string][]*ruleRow{}
@@ -97,7 +98,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) error {
 	}
 
 	if _, err := tx.Exec(`DELETE FROM doc_rules WHERE doc_id = $1`, docID); err != nil {
-		return fmt.Errorf("clear arrangement of doc %d: %w", docID, err)
+		return false, fmt.Errorf("clear arrangement of doc %d: %w", docID, err)
 	}
 	// changed collects the rules this write inserted or revised, so their
 	// references can be derived once every doc_rules row below has been
@@ -121,13 +122,14 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) error {
 		switch {
 		case m == nil:
 			id, version, err = insertRule(tx, project, sec.Title, sec.Body)
+			minted = true
 		case m.heading != sec.Title || m.body != sec.Body:
 			id, version, err = reviseRule(tx, m.id, sec.Title, sec.Body)
 		default:
 			id, version = m.id, m.version
 		}
 		if err != nil {
-			return err
+			return false, err
 		}
 		if m == nil || m.heading != sec.Title || m.body != sec.Body {
 			changed = append(changed, changedRule{id, sec.Title + "\n" + sec.Body})
@@ -136,16 +138,16 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) error {
 			`INSERT INTO doc_rules (doc_id, position, rule_id, rule_version, depth, anchor)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
 			docID, position, id, version, sec.Level, sec.Anchor); err != nil {
-			return fmt.Errorf("arrange rule %d in doc %d: %w", id, docID, err)
+			return false, fmt.Errorf("arrange rule %d in doc %d: %w", id, docID, err)
 		}
 		position++
 	}
 	for _, c := range changed {
 		if err := deriveReferences(tx, project, c.id, c.text); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return minted, nil
 }
 
 // arrangedRules reads a document's current arrangement with each rule's

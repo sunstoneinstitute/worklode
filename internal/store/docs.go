@@ -221,7 +221,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, fmt.Errorf("insert doc %s/%s: %w", in.Project, in.Slug, err)
 	}
 
-	if err := rebuildSections(tx, id, in.Kind, parsed.doc, 1); err != nil {
+	if err := rebuildSections(tx, id, in.Kind, parsed.doc, 1, eventID); err != nil {
 		return nil, err
 	}
 	if acceptedAtCreate {
@@ -314,7 +314,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 	); err != nil {
 		return nil, fmt.Errorf("update doc %d body: %w", id, err)
 	}
-	if err := rebuildSections(tx, id, kind, parsed.doc, version); err != nil {
+	if err := rebuildSections(tx, id, kind, parsed.doc, version, eventID); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -770,7 +770,7 @@ type priorSection struct {
 // reading the prior state itself. Callers that already hold that map — the
 // accept path reads it to gate the revision — call rebuildSectionsFrom instead
 // and skip the reread.
-func rebuildSections(tx *sql.Tx, docID int64, kind string, doc *designdoc.Document, version int) error {
+func rebuildSections(tx *sql.Tx, docID int64, kind string, doc *designdoc.Document, version int, eventID int64) error {
 	if kind == "plan" {
 		return nil
 	}
@@ -778,7 +778,7 @@ func rebuildSections(tx *sql.Tx, docID int64, kind string, doc *designdoc.Docume
 	if err != nil {
 		return err
 	}
-	_, err = rebuildSectionsFrom(tx, docID, kind, doc, version, prior)
+	_, err = rebuildSectionsFrom(tx, docID, kind, doc, version, prior, eventID)
 	return err
 }
 
@@ -789,15 +789,24 @@ func rebuildSections(tx *sql.Tx, docID int64, kind string, doc *designdoc.Docume
 // current version. Plans have no sections (025 §9), so nothing is written for
 // one. The returned map is the state the rebuilt rows carry, so a caller
 // needing to compare before against after does not have to read them back.
+//
+// When the rewrite mints a rule, plans' to_external covers entries naming
+// this document are re-resolved in the same transaction (WL-903).
 func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Document, version int,
-	prior map[string]priorSection) (map[string]priorSection, error) {
+	prior map[string]priorSection, eventID int64) (map[string]priorSection, error) {
 
 	after := map[string]priorSection{}
 	if kind == "plan" {
 		return after, nil
 	}
-	if err := syncRules(tx, docID, doc); err != nil {
+	minted, err := syncRules(tx, docID, doc)
+	if err != nil {
 		return nil, err
+	}
+	if minted {
+		if _, err := resolveExternalCovers(tx, docID, eventID); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := tx.Exec(`DELETE FROM doc_sections WHERE doc_id = $1`, docID); err != nil {
 		return nil, fmt.Errorf("clear sections of doc %d: %w", docID, err)
@@ -1142,7 +1151,7 @@ func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSe
 
 // RecordDocEvent wraps RecordEvent for a document mutation, recording
 // worklode_doc_operations_total{op,outcome}. op is one of
-// create|update|accept|revise|discard|edges|transfer.
+// create|update|accept|revise|discard|edges|transfer|resolve.
 //
 // The write functions themselves take a *sql.Tx rather than owning one, so a
 // single transaction can host a document mutation and its consequences —

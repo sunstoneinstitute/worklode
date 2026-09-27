@@ -1901,3 +1901,29 @@ func noHeader(t *testing.T, body string) string {
 	d.Frontmatter = nil
 	return strings.TrimLeft(string(d.Bytes()), "\n")
 }
+
+// TestResolveExternalCoversAPI: POST /api/v1/docs/covers/resolve is
+// admin-only and reports each still-unresolved covers entry (WL-903).
+func TestResolveExternalCoversAPI(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "stranded", Body: docPlanBody,
+	})
+
+	user := seedActor(t, st, "bob", "human", "Bob", false)
+	if rr := doReq(t, h, "POST", "/api/v1/docs/covers/resolve", user, nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("non-admin status = %d, want 403", rr.Code)
+	}
+
+	rr := doReq(t, h, "POST", "/api/v1/docs/covers/resolve", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got model.CoversResolveResponse
+	decodeInto(t, rr, &got)
+	if len(got.Resolved) != 0 || len(got.Unresolved) != 1 || got.Unresolved[0].Reason != "names no rule" {
+		t.Errorf("response = %+v, want the plan's one covers entry unresolved, naming no rule", got)
+	}
+}

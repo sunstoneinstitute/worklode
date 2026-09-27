@@ -1183,3 +1183,46 @@ func TestParseDayDuration(t *testing.T) {
 		}
 	}
 }
+
+// TestDocResolve covers `lode doc resolve` (WL-903): a plan's covers entry
+// naming a spec with no rules is reported unresolved; once an edit mints the
+// spec's rules, that write has already resolved it and the command finds
+// nothing left.
+func TestDocResolve(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	if out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
+		"--slug", "my-spec", "--file", writeDocFile(t, docOwnerSpec)); err != nil {
+		t.Fatalf("doc add spec: %v\n%s", err, out)
+	}
+	if out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "plan",
+		"--slug", "part-one", "--file", writeDocFile(t, docPlanCoveringSec1)); err != nil {
+		t.Fatalf("doc add plan: %v\n%s", err, out)
+	}
+
+	out, err := runLode(t, "doc", "resolve")
+	if err != nil {
+		t.Fatalf("doc resolve: %v\n%s", err, out)
+	}
+	for _, want := range []string{"0 covers entr(ies) resolved, 1 still cover no requirement",
+		"my-spec#sec-1", "unresolved: names no rule"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("doc resolve output missing %q:\n%s", want, out)
+		}
+	}
+
+	if out, err := runLode(t, "doc", "edit", "my-spec", "--file", writeDocFile(t, strings.SplitN(docSpecTwoSections, "---\n", 3)[2])); err != nil {
+		t.Fatalf("doc edit: %v\n%s", err, out)
+	}
+	out, err = runLode(t, "doc", "resolve", "--json")
+	if err != nil {
+		t.Fatalf("doc resolve --json: %v\n%s", err, out)
+	}
+	var got model.CoversResolveResponse
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if len(got.Resolved)+len(got.Unresolved) != 0 {
+		t.Errorf("after the edit minted rules: %+v, want nothing left to resolve", got)
+	}
+}

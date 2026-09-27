@@ -85,6 +85,7 @@ func newDocCmd() *cobra.Command {
 		newDocWithdrawCmd(),
 		newDocNoteCmd(),
 		newDocLintCmd(),
+		newDocResolveCmd(),
 		newDocImportCmd(),
 		newDocTodoCmd(),
 		newDocProgressCmd(),
@@ -429,6 +430,39 @@ func newDocLintCmd() *cobra.Command {
 	}
 	addScopeFlags(cmd, &scope, "filter by project id")
 	return cmd
+}
+
+// newDocResolveCmd is `lode doc resolve`: the admin repair for plan covers
+// entries stored in to_external before their target had rules (WL-903).
+func newDocResolveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "resolve",
+		Short: "Re-resolve every plan's unresolved covers entries to rules",
+		Long: `Re-resolve every plan's covers entries that are stored unresolved
+(to_external) because their target had no rules when the plan was written.
+An entry that now names requirements is replaced by its plan -> rule edges;
+the rest stay as they are and are listed with the reason. Running it again
+changes nothing. A write that mints a document's rules already does this
+for entries naming that document, so this is for rows stranded before that.
+Admin only.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			resp, raw, err := c.ResolveExternalCovers(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.CoversResolveTable(cmd.OutOrStdout(), resp)
+			return nil
+		},
+	}
 }
 
 // runDocLintFile is `lode doc lint <file>`, the local pre-accept lint newDocLintCmd

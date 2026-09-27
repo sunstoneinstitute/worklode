@@ -325,6 +325,33 @@ func (s *server) lintDocs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, findings)
 }
 
+// resolveExternalCovers handles POST /api/v1/docs/covers/resolve: re-resolve
+// every plan's to_external covers entries to rules (WL-903), recorded as one
+// corpus-wide event.
+func (s *server) resolveExternalCovers(w http.ResponseWriter, r *http.Request) {
+	extID, err := randomExternalID()
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	payload, err := json.Marshal(map[string]any{"actor": actorIDFrom(r)})
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	var out model.CoversResolveResponse
+	if _, _, err := s.st.RecordDocEvent(r.Context(), "resolve", docSource, extID, "doc.covers_resolved", payload,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			out, err = store.ResolveExternalCovers(tx, eventID)
+			return err
+		}); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // listCorpusSections handles GET /api/v1/docs/sections?project=&number=: the
 // cross-corpus section listing (055 §4). ?project= narrows to one project
 // the way every other doc list route does; ?number= narrows to one section
