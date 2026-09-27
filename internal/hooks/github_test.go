@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -1106,6 +1107,7 @@ func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 		"issues": true, "push": true, "pull_request": true, "deployment_status": true,
 		"pull_request_review": true, "workflow_run": true, "release": true,
 		"registry_package": true, "merge_group": true, "repository_ruleset": true,
+		"check_run": true, "check_suite": true,
 	}
 	got := hooks.HandledEvents()
 	if len(got) != len(want) {
@@ -1431,6 +1433,57 @@ func TestDeliveryNamesResolvedTask(t *testing.T) {
 	}
 	if got := e.eventPayloadTask(t, "d-ci"); got != taskID {
 		t.Fatalf("workflow_run event names task %q, want %q", got, taskID)
+	}
+}
+
+// TestCheckEventsNameTask: check_run and check_suite deliveries name their
+// task from the head branch, a listed PR, a merge-queue branch, or, failing
+// all of those, the head sha.
+func TestCheckEventsNameTask(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t) // WL-1
+	other := e.seedTaskNamed(t, "other")
+	deliverOK(t, e, "pull_request", "d-pr", "pull_request_opened.json") // PR 42 -> WL-1
+	deliverPushOK(t, e, "d-push", "push_branch.json")                   // attributes 2222… to WL-1
+
+	checkSuite := func(branch, sha, prs string) []byte {
+		return []byte(`{"action": "completed", "repository": {"full_name": "sunstoneinstitute/demo"},
+			"check_suite": {"head_branch": "` + branch + `", "head_sha": "` + sha + `", "pull_requests": [` + prs + `]}}`)
+	}
+	checkRun := func(branch, sha, prs string) []byte {
+		return []byte(`{"action": "completed", "repository": {"full_name": "sunstoneinstitute/demo"},
+			"check_run": {"head_sha": "` + sha + `", "pull_requests": [` + prs + `],
+				"check_suite": {"head_branch": "` + branch + `"}}}`)
+	}
+	const unknownSHA = "9999999999999999999999999999999999999999"
+	for _, tc := range []struct {
+		name, event string
+		body        []byte
+		task        string
+		tasks       []string
+	}{
+		{"suite by branch", "check_suite", checkSuite("WL-1-x", unknownSHA, ""), taskID, nil},
+		{"run by branch", "check_run", checkRun("WL-1-x", unknownSHA, ""), taskID, nil},
+		{"run by PR", "check_run", checkRun("feature", unknownSHA, `{"number": 42}`), taskID, nil},
+		{"suite by queue branch", "check_suite",
+			checkSuite("gh-readonly-queue/main/pr-42-abc123", unknownSHA, ""), taskID, nil},
+		{"run by sha", "check_run", checkRun("", "2222222222222222222222222222222222222222", ""), taskID, nil},
+		{"branch and PR disagree", "check_suite", checkSuite(other+"-y", unknownSHA, `{"number": 42}`),
+			"", []string{taskID, other}},
+		{"uncorrelated", "check_run", checkRun("feature", unknownSHA, `{"number": 7}`), "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := "d-" + tc.name
+			if rr := deliverBody(t, e.h, tc.event, id, tc.body); rr.Code != http.StatusOK {
+				t.Fatalf("%s: code=%d body=%s", tc.event, rr.Code, rr.Body.String())
+			}
+			if got := e.eventPayloadTask(t, id); got != tc.task {
+				t.Errorf("task = %q, want %q", got, tc.task)
+			}
+			if got := e.eventPayloadTasks(t, id); !slices.Equal(got, tc.tasks) {
+				t.Errorf("tasks = %v, want %v", got, tc.tasks)
+			}
+		})
 	}
 }
 

@@ -407,6 +407,17 @@ func PRTaskID(tx *sql.Tx, repo string, number int64) (string, error) {
 	return taskID.String, nil
 }
 
+// TaskIDForRef returns the existing task a branch name is rendered from, ""
+// when the ref names none (LODE_BRANCH_TEMPLATE, TaskIDFromRef).
+func TaskIDForRef(tx *sql.Tx, ref string) (string, error) {
+	id := TaskIDFromRef(ref)
+	ok, err := taskExists(tx, id)
+	if err != nil || !ok {
+		return "", err
+	}
+	return id, nil
+}
+
 // SetPRQueued sets or clears pull_requests.queued_at (WL-SPEC-66 §6.1): a
 // non-nil at marks the PR as entering the merge queue, nil marks it as
 // having left (merged, or removed from the queue). Unlike UpsertPR this

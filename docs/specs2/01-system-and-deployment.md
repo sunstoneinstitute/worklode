@@ -253,7 +253,7 @@ Rules for every metric:
 | `worklode_embed_requests_total` | counter | `result` = `ok`, `error`; one per `Embed` call | `internal/embed` |
 | `worklode_embed_request_duration_seconds` | histogram | 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 | `internal/embed` |
 
-Webhook `event` values: for GitHub, the `X-GitHub-Event` value when the handler switches on it (`issues`, `push`, `pull_request`, `pull_request_review`, `deployment_status`, `workflow_run`, `release`), else `other`. For Flux, `flux`. For the data catalog, the artifact state `published`, `updated`, `deprecated`, `removed`, `failed`, or `invalid` when rejected before a state could be read. `unrouted` is catalog-only: the delivery was authentic and stored but no open entity had declared the artifact. A partial skill sync records its items and an `error` run.
+Webhook `event` values: for GitHub, the `X-GitHub-Event` value when the handler switches on it (`issues`, `push`, `pull_request`, `pull_request_review`, `deployment_status`, `workflow_run`, `check_run`, `check_suite`, `release`, `registry_package`, `merge_group`, `repository_ruleset`), else `other`. For Flux, `flux`. For the data catalog, the artifact state `published`, `updated`, `deprecated`, `removed`, `failed`, or `invalid` when rejected before a state could be read. `unrouted` is catalog-only: the delivery was authentic and stored but no open entity had declared the artifact. A partial skill sync records its items and an `error` run.
 
 ## 7. Agent usage accounting
 
