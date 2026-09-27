@@ -943,6 +943,38 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 	return view
 }
 
+// taskPRRows renders a task's open pull requests for its header chip
+// (WL-933). prs must already be filtered to State == "open" — merged and
+// closed PRs stay in the timeline only. Label is "#<number>", prefixed with
+// the PR's repo name when prs spans more than one repo, so a task worked
+// across repos can still tell its PRs apart. ci is keyed the same way
+// store.CIRunsForSHAs returns it; prCIState (runboard.go) rolls each PR's
+// runs up to one state.
+func taskPRRows(prs []store.PullRequest, ci map[store.RepoSHA][]store.CIRun) []ui.TaskPR {
+	multiRepo := false
+	for _, pr := range prs {
+		if pr.Repo != prs[0].Repo {
+			multiRepo = true
+			break
+		}
+	}
+	rows := make([]ui.TaskPR, 0, len(prs))
+	for _, pr := range prs {
+		label := fmt.Sprintf("#%d", pr.Number)
+		if multiRepo {
+			_, name, _ := strings.Cut(pr.Repo, "/")
+			label = name + label
+		}
+		rows = append(rows, ui.TaskPR{
+			Label:  label,
+			URL:    pr.URL,
+			CI:     prCIState(ci[store.RepoSHA{Repo: pr.Repo, SHA: pr.HeadSHA}]),
+			Queued: pr.QueuedAt != nil,
+		})
+	}
+	return rows
+}
+
 // ruleView maps one rule into its cockpit page (S20). projectID is the
 // rule's owning project's id, off which CanonicalURL is built.
 func ruleView(md *mdrender.Cache, keys mdrender.ProjectKeys, c *model.Rule, versions []model.RuleVersion, projectID string) ui.RuleView {
