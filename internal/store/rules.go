@@ -13,6 +13,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // ruleRow is one rule as a document's current arrangement holds it.
@@ -172,7 +173,7 @@ func arrangedRules(tx *sql.Tx, docID int64) ([]ruleRow, error) {
 }
 
 // ruleSeqKind is the rule's row key in project_entity_seq — the counter
-// behind its WL-RULE-<n> number.
+// behind its number, shared by every kind (WL-SPEC-77 §4).
 const ruleSeqKind = "RULE"
 
 // insertRule mints a rule at version 1 with the project's next RULE number.
@@ -265,19 +266,19 @@ func (s *Store) GetRule(ctx context.Context, projectKey string, number int64) (*
 	var owner sql.NullString
 	var tagsRaw string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT c.id, c.project_id, p.key, c.number, c.status, c.version,
+		`SELECT c.id, c.project_id, p.key, c.number, c.kind, c.status, c.version,
 		        cv.heading, cv.body, c.owner, c.tags, c.created_at, c.updated_at
 		   FROM rules c
 		   JOIN projects p ON p.id = c.project_id
 		   JOIN rule_versions cv ON cv.rule_id = c.id AND cv.version = c.version
 		  WHERE p.key = $1 AND c.number = $2`, projectKey, number,
-	).Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Status, &c.Version,
+	).Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Kind, &c.Status, &c.Version,
 		&c.Heading, &c.Body, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read rule %s-RULE-%d: %w", projectKey, number, err)
+		return nil, fmt.Errorf("read rule %s: %w", designdoc.FormatRuleRef(projectKey, number, ""), err)
 	}
 	c.Owner = owner.String
 	tags, err := scanTextArray(tagsRaw)
@@ -285,7 +286,7 @@ func (s *Store) GetRule(ctx context.Context, projectKey string, number int64) (*
 		return nil, fmt.Errorf("scan tags of rule %d: %w", c.ID, err)
 	}
 	c.Tags = nonNil(tags)
-	c.Ref = fmt.Sprintf("%s-RULE-%d", c.ProjectKey, c.Number)
+	c.Ref = designdoc.FormatRuleRef(c.ProjectKey, c.Number, c.Kind)
 
 	arr, err := s.ruleArrangements(ctx, []int64{c.ID})
 	if err != nil {
@@ -361,7 +362,7 @@ func (s *Store) ListRules(ctx context.Context, f RuleFilter) ([]model.Rule, erro
 	if f.Status != "" && !ruleStatuses[f.Status] {
 		return nil, fmt.Errorf("rule status %q: must be draft, accepted, superseded or withdrawn: %w", f.Status, ErrInvalidInput)
 	}
-	q := `SELECT c.id, c.project_id, p.key, c.number, c.status, c.version,
+	q := `SELECT c.id, c.project_id, p.key, c.number, c.kind, c.status, c.version,
 	             cv.heading, c.owner, c.tags, c.created_at, c.updated_at
 	        FROM rules c
 	        JOIN projects p ON p.id = c.project_id
@@ -385,7 +386,7 @@ func (s *Store) ListRules(ctx context.Context, f RuleFilter) ([]model.Rule, erro
 		var c model.Rule
 		var owner sql.NullString
 		var tagsRaw string
-		if err := rows.Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Status, &c.Version,
+		if err := rows.Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Kind, &c.Status, &c.Version,
 			&c.Heading, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan rule: %w", err)
 		}
@@ -394,7 +395,7 @@ func (s *Store) ListRules(ctx context.Context, f RuleFilter) ([]model.Rule, erro
 			return nil, fmt.Errorf("scan tags of rule %d: %w", c.ID, err)
 		}
 		c.Owner, c.Tags = owner.String, nonNil(tags)
-		c.Ref = fmt.Sprintf("%s-RULE-%d", c.ProjectKey, c.Number)
+		c.Ref = designdoc.FormatRuleRef(c.ProjectKey, c.Number, c.Kind)
 		c.GovernedTasks, c.Edges, c.CoveredBy = []model.RuleTask{}, []model.RuleEdge{}, []model.RulePlan{}
 		out = append(out, c)
 		ids = append(ids, c.ID)
@@ -454,14 +455,14 @@ func (s *Store) ListRuleVersions(ctx context.Context, projectKey string, number 
 		  WHERE p.key = $1 AND c.number = $2
 		  ORDER BY cv.version DESC`, projectKey, number)
 	if err != nil {
-		return nil, fmt.Errorf("list versions of rule %s-RULE-%d: %w", projectKey, number, err)
+		return nil, fmt.Errorf("list versions of rule %s: %w", designdoc.FormatRuleRef(projectKey, number, ""), err)
 	}
 	defer rows.Close()
 	out := []model.RuleVersion{}
 	for rows.Next() {
 		var v model.RuleVersion
 		if err := rows.Scan(&v.Version, &v.Heading, &v.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scan version of rule %s-RULE-%d: %w", projectKey, number, err)
+			return nil, fmt.Errorf("scan version of rule %s: %w", designdoc.FormatRuleRef(projectKey, number, ""), err)
 		}
 		out = append(out, v)
 	}
@@ -469,7 +470,7 @@ func (s *Store) ListRuleVersions(ctx context.Context, projectKey string, number 
 		return nil, err
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("rule %s-RULE-%d: %w", projectKey, number, ErrNotFound)
+		return nil, fmt.Errorf("rule %s: %w", designdoc.FormatRuleRef(projectKey, number, ""), ErrNotFound)
 	}
 	return out, nil
 }
@@ -553,10 +554,10 @@ func EditRule(tx *sql.Tx, now time.Time, projectKey string, number int64, in mod
 	}
 	switch len(docIDs) {
 	case 0:
-		return 0, fmt.Errorf("rule %s-RULE-%d is arranged in no spec or ADR; edit the document instead: %w", projectKey, number, ErrInvalidInput)
+		return 0, fmt.Errorf("rule %s is arranged in no spec or ADR; edit the document instead: %w", ruleRefOf(tx, ruleID), ErrInvalidInput)
 	case 1:
 	default:
-		return 0, fmt.Errorf("rule %s-RULE-%d is arranged in %d specs or ADRs; editing a rule shared between them is not supported: %w", projectKey, number, len(docIDs), ErrInvalidInput)
+		return 0, fmt.Errorf("rule %s is arranged in %d specs or ADRs; editing a rule shared between them is not supported: %w", ruleRefOf(tx, ruleID), len(docIDs), ErrInvalidInput)
 	}
 	docID, anchor := docIDs[0], anchors[0]
 
@@ -583,7 +584,7 @@ func EditRule(tx *sql.Tx, now time.Time, projectKey string, number int64, in mod
 	}
 	sec := parsed.SectionByAnchor(anchor)
 	if sec == nil {
-		return 0, fmt.Errorf("rule %s-RULE-%d: its section %s is not in the editable body of doc %d: %w", projectKey, number, anchor, docID, ErrInvalidInput)
+		return 0, fmt.Errorf("rule %s: its section %s is not in the editable body of doc %d: %w", ruleRefOf(tx, ruleID), anchor, docID, ErrInvalidInput)
 	}
 	sec.Title = in.Heading
 	sec.Body = sectionBody(in.Body, sec.Index == len(parsed.Sections)-1)
@@ -645,23 +646,47 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-// SetRuleMeta sets a rule's owner and tags (S15). A nil field is left
-// alone. Dates never live on a rule; they reach it through its tasks.
+// SetRuleMeta sets a rule's owner, tags and kind (S15, WL-SPEC-77 §4). A
+// nil field is left alone. Dates never live on a rule; they reach it
+// through its tasks.
 func SetRuleMeta(tx *sql.Tx, ruleID int64, in model.RuleMetaInput) error {
-	if in.Owner == nil && in.Tags == nil {
+	if in.Owner == nil && in.Tags == nil && in.Kind == nil {
 		return fmt.Errorf("nothing to set: %w", ErrInvalidInput)
+	}
+	if in.Kind != nil && !slices.Contains(ns.Schemes["RuleKind"], *in.Kind) {
+		return fmt.Errorf("rule kind %q: must be one of %s: %w",
+			*in.Kind, strings.Join(ns.Schemes["RuleKind"], ", "), ErrInvalidInput)
 	}
 	res, err := tx.Exec(
 		`UPDATE rules
 		    SET owner = CASE WHEN $2::boolean THEN nullif($3, '') ELSE owner END,
 		        tags  = CASE WHEN $4::boolean THEN $5::text[] ELSE tags END,
+		        kind  = CASE WHEN $6::boolean THEN $7 ELSE kind END,
 		        updated_at = now()
 		  WHERE id = $1`,
-		ruleID, in.Owner != nil, deref(in.Owner), in.Tags != nil, deref(in.Tags))
+		ruleID, in.Owner != nil, deref(in.Owner), in.Tags != nil, deref(in.Tags), in.Kind != nil, deref(in.Kind))
 	if err != nil {
 		return fmt.Errorf("set meta of rule %d: %w", ruleID, err)
 	}
 	return requireOneAffected(res, fmt.Sprintf("rule %d", ruleID), ErrNotFound)
+}
+
+// ruleRefSQL is designdoc.FormatRuleRef as a SQL expression over a projects
+// alias p and a rules alias r, for queries that build the ref in the row.
+func ruleRefSQL(p, r string) string {
+	return p + `.key || CASE ` + r + `.kind WHEN '` + designdoc.RuleKindRequirement +
+		`' THEN '-REQ-' ELSE '-RULE-' END || ` + r + `.number`
+}
+
+// ruleRefOf is a rule's printed ref by row id, for an error message; the
+// bare id when the read fails.
+func ruleRefOf(tx *sql.Tx, ruleID int64) string {
+	var ref string
+	if err := tx.QueryRow(`SELECT `+ruleRefSQL("p", "r")+`
+		   FROM rules r JOIN projects p ON p.id = r.project_id WHERE r.id = $1`, ruleID).Scan(&ref); err != nil {
+		return fmt.Sprintf("%d", ruleID)
+	}
+	return ref
 }
 
 // RuleIDByRef resolves a rule's project key and number to its row id
@@ -672,10 +697,10 @@ func RuleIDByRef(tx *sql.Tx, projectKey string, number int64) (int64, error) {
 		`SELECT c.id FROM rules c JOIN projects p ON p.id = c.project_id
 		  WHERE p.key = $1 AND c.number = $2`, projectKey, number).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("rule %s-RULE-%d: %w", projectKey, number, ErrNotFound)
+		return 0, fmt.Errorf("rule %s: %w", designdoc.FormatRuleRef(projectKey, number, ""), ErrNotFound)
 	}
 	if err != nil {
-		return 0, fmt.Errorf("resolve rule %s-RULE-%d: %w", projectKey, number, err)
+		return 0, fmt.Errorf("resolve rule %s: %w", designdoc.FormatRuleRef(projectKey, number, ""), err)
 	}
 	return id, nil
 }
@@ -693,11 +718,11 @@ func SetRuleStatus(tx *sql.Tx, now time.Time, ruleID int64, status string, event
 	if !ruleStatuses[status] {
 		return fmt.Errorf("rule status %q: %w", status, ErrInvalidInput)
 	}
-	var old, key string
+	var old, key, kind string
 	var number int64
 	err := tx.QueryRow(
-		`SELECT c.status, p.key, c.number FROM rules c JOIN projects p ON p.id = c.project_id
-		  WHERE c.id = $1 FOR NO KEY UPDATE OF c`, ruleID).Scan(&old, &key, &number)
+		`SELECT c.status, p.key, c.number, c.kind FROM rules c JOIN projects p ON p.id = c.project_id
+		  WHERE c.id = $1 FOR NO KEY UPDATE OF c`, ruleID).Scan(&old, &key, &number, &kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("rule %d: %w", ruleID, ErrNotFound)
 	}
@@ -717,7 +742,7 @@ func SetRuleStatus(tx *sql.Tx, now time.Time, ruleID int64, status string, event
 	if err != nil {
 		return err
 	}
-	ref := fmt.Sprintf("%s-RULE-%d", key, number)
+	ref := designdoc.FormatRuleRef(key, number, kind)
 	_, err = MarkPlansStale(tx, now, plans, "rule_withdrawn", ref, nil, eventID)
 	return err
 }

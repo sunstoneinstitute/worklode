@@ -13,6 +13,7 @@ templ Rule(v RuleView) {
 				<h1>{ v.Rule.Ref }: { v.Rule.Heading }</h1>
 				<p>
 					<span class={ "chip " + docStatusChip(v.Rule.Status) }>{ v.Rule.Status }</span>
+					<span class="chip plain">{ v.Rule.Kind }</span>
 					<span class="chip plain">version { v.Rule.Version }</span>
 					if v.Rule.Owner != "" {
 						<span class="chip plain">owner { v.Rule.Owner }</span>

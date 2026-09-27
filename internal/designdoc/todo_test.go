@@ -122,6 +122,18 @@ func TestTodoUnplannedSectionsCollapse(t *testing.T) {
 	}
 }
 
+// A section whose rule is not a requirement is owed no plan and yields no
+// item (WL-SPEC-78 §1.7).
+func TestTodoSkipsNonRequirements(t *testing.T) {
+	docs := buildTodoCorpus(t, map[string]string{"001-example.md": twoSectionSpec}, nil)
+	docs[0].Sections[1].Kind = "invariant"
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
+	if err != nil {
+		t.Fatalf("Todo: %v", err)
+	}
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1 plan= tasks="})
+}
+
 // A deferred section (026 §5.3, §2.1) emits no item: the item types are each
 // discharged by an act this document's own plans can perform, and the next
 // act on a deferred section belongs to its named owner, not to writing a

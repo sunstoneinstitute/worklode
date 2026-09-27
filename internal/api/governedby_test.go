@@ -21,7 +21,7 @@ func TestGovernedBy(t *testing.T) {
 
 	created := createTaskViaAPI(t, h, token, map[string]any{
 		"project": projID, "title": "t", "kind": "bug", "priority": "medium",
-		"governed_by": []string{"WL-RULE-3"},
+		"governed_by": []string{"WL-REQ-3"},
 	})
 	id := created["id"].(string)
 
@@ -34,40 +34,40 @@ func TestGovernedBy(t *testing.T) {
 		decodeInto(t, rr, &d)
 		return d
 	}
-	if d := detail(); len(d.GovernedBy) != 1 || d.GovernedBy[0].Rule != "WL-RULE-3" || d.GovernedBy[0].Source != "manual" {
+	if d := detail(); len(d.GovernedBy) != 1 || d.GovernedBy[0].Rule != "WL-REQ-3" || d.GovernedBy[0].Source != "manual" {
 		t.Fatalf("governed_by after create = %+v", d.GovernedBy)
 	}
 
-	rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-RULE-1"})
+	rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-REQ-1"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("govern: %d %s", rr.Code, rr.Body.String())
 	}
-	if d := detail(); len(d.GovernedBy) != 2 || d.GovernedBy[0].Rule != "WL-RULE-1" {
+	if d := detail(); len(d.GovernedBy) != 2 || d.GovernedBy[0].Rule != "WL-REQ-1" {
 		t.Errorf("governed_by after govern = %+v", d.GovernedBy)
 	}
-	if rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-RULE-999"}); rr.Code != http.StatusNotFound {
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-REQ-999"}); rr.Code != http.StatusNotFound {
 		t.Errorf("unknown rule: %d", rr.Code)
 	}
 	if rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "junk"}); rr.Code != http.StatusBadRequest {
 		t.Errorf("malformed rule: %d", rr.Code)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-RULE-1", "pin": true})
+	rr = doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-REQ-1", "pin": true})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("govern pin: %d %s", rr.Code, rr.Body.String())
 	}
-	if d := detail(); len(d.GovernedBy) != 2 || d.GovernedBy[0].Rule != "WL-RULE-1" ||
+	if d := detail(); len(d.GovernedBy) != 2 || d.GovernedBy[0].Rule != "WL-REQ-1" ||
 		d.GovernedBy[0].Pinned != 1 || !strings.HasSuffix(d.GovernedBy[0].URL, "/1") {
 		t.Errorf("governed_by after pin = %+v", d.GovernedBy)
 	}
 
-	rr = doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-RULE-3"})
+	rr = doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-REQ-3"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("ungovern: %d %s", rr.Code, rr.Body.String())
 	}
-	if d := detail(); len(d.GovernedBy) != 1 || d.GovernedBy[0].Rule != "WL-RULE-1" {
+	if d := detail(); len(d.GovernedBy) != 1 || d.GovernedBy[0].Rule != "WL-REQ-1" {
 		t.Errorf("governed_by after ungovern = %+v", d.GovernedBy)
 	}
-	if rr := doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-RULE-3"}); rr.Code != http.StatusNotFound {
+	if rr := doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"rule": "WL-REQ-3"}); rr.Code != http.StatusNotFound {
 		t.Errorf("ungovern absent link: %d", rr.Code)
 	}
 }
@@ -82,7 +82,7 @@ func TestCreateTaskBadGovernedByRefIs422(t *testing.T) {
 
 	rr := doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
 		"project": projID, "title": "t", "kind": "bug", "priority": "medium",
-		"governed_by": []string{"WL-RULE-999"},
+		"governed_by": []string{"WL-REQ-999"},
 	})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Errorf("bad governed_by ref: %d %s, want 422", rr.Code, rr.Body.String())

@@ -770,7 +770,7 @@ func TestShowUnknownTypeErrors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("lode show XX-FOO-3 succeeded\noutput: %s", out)
 	}
-	want := `unknown entity type "FOO" in XX-FOO-3; known types: SPEC, ADR, PLAN, MILE, DEL, RULE (a task id has no type segment: WL-12)`
+	want := `unknown entity type "FOO" in XX-FOO-3; known types: SPEC, ADR, PLAN, MILE, DEL, REQ, RULE (a task id has no type segment: WL-12)`
 	if err.Error() != want {
 		t.Fatalf("err = %q; want %q", err.Error(), want)
 	}

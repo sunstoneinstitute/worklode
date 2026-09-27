@@ -20,6 +20,9 @@ type SectionMeta struct {
 	Heading  string
 	Depth    int // 2..6
 	Position int // 0-based document order over the anchored sections
+	// Kind is the section's rule kind (WL-SPEC-77 §4); "" when unknown,
+	// which reads as a requirement.
+	Kind string
 }
 
 // EdgeMeta is one edge the todo walk reads: a plan's covers, defers and

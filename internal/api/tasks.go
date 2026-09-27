@@ -123,7 +123,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	for _, ref := range req.GovernedBy {
 		cr, ok := designdoc.ParseRuleRef(ref)
 		if !ok {
-			writeErr(w, http.StatusBadRequest, "governed_by entries must look like WL-RULE-12, got "+ref)
+			writeErr(w, http.StatusBadRequest, "governed_by entries must look like WL-REQ-12, got "+ref)
 			return
 		}
 		governing = append(governing, ruleKey{cr.Key, cr.Number})
@@ -164,7 +164,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 					// bare ErrNotFound would otherwise map to the same 404 as
 					// the task itself being missing (internal/store/AGENTS.md).
 					if errors.Is(err, store.ErrNotFound) {
-						return fmt.Errorf("governed_by names no rule %s-RULE-%d: %w", g.key, g.number, store.ErrInvalidInput)
+						return fmt.Errorf("governed_by names no rule %s: %w", designdoc.FormatRuleRef(g.key, g.number, ""), store.ErrInvalidInput)
 					}
 					return err
 				}

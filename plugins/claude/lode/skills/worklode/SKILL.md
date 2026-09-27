@@ -17,7 +17,7 @@ those on demand, not up front.
 | Entity | Id | For |
 |---|---|---|
 | Task | `WL-217` | Claimable work |
-| Rule | `WL-RULE-12` | A design requirement with its own identity, status and version history |
+| Rule | `WL-REQ-12` (requirement), `WL-RULE-12` (invariant, informative) | A design rule with its own identity, kind, status and version history |
 | Doc | `WL-SPEC-25`, `WL-PLAN-7`, or slug | A spec arranges rules for reading; a plan is governed by the rules its work undertakes |
 | Project | slug | Umbrella over 1..n repos |
 | Deliverable | `WL-DEL-3` | A shipped thing — state derived from reported facts, never a status a human sets |
@@ -159,13 +159,26 @@ regenerated from the CLI itself so it can't drift: `references/commands.md`.
 
 ## Docs, briefly
 
-A **spec is an arrangement of rules**. A rule has a stable ref such as
-`WL-RULE-12`, its own text, status and version history. The arrangement puts
-that rule at a position, depth and anchor in the spec. A section reference
-names its place in a document; the rule ref names the requirement itself.
-Accepting a spec accepts the draft rule versions it arranges.
+A **spec is an arrangement of rules**. A rule has a stable number, a kind,
+its own text, status and version history. The arrangement puts that rule at
+a position, depth and anchor in the spec. A section reference names its
+place in a document; the rule ref names the rule itself. Accepting a spec
+accepts the draft rule versions it arranges.
 
-A **plan is governed by the rules reached by its `covers` entries**. Its task prose
+Every rule has one kind (`lode rule set <ref> --kind <kind>`):
+
+| Kind | Ref | Means |
+|---|---|---|
+| `requirement` | `WL-REQ-12` | a plan builds it once; a planning gap until an accepted plan covers it |
+| `invariant` | `WL-RULE-12` | binds every task in its project and is never finished |
+| `informative` | `WL-RULE-12` | rationale or context, nothing to build or obey |
+
+All kinds share one counter, so `WL-REQ-12`, `WL-RULE-12` and the old
+`WL-CL-12` name the same rule. Output prints the infix of the rule's current
+kind. A task is governed by its `governedBy` links plus every accepted
+invariant in its project.
+
+A **plan is governed by the requirements reached by its `covers` entries**. Its task prose
 mints no rules. Acceptance mints tasks governed by those rules. Governance
 follows the newest rule text unless pinned; reorganising a document does not
 complete or rewrite those tasks. Coverage remains a query over plans and work.

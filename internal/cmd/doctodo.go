@@ -283,7 +283,7 @@ func docTodoSectionMetas(secs []model.DocSection) []designdoc.SectionMeta {
 	out := make([]designdoc.SectionMeta, len(secs))
 	for i, s := range secs {
 		out[i] = designdoc.SectionMeta{
-			Anchor: s.Anchor, Heading: s.Heading, Depth: s.Depth, Position: s.Position,
+			Anchor: s.Anchor, Heading: s.Heading, Depth: s.Depth, Position: s.Position, Kind: s.Kind,
 		}
 	}
 	return out

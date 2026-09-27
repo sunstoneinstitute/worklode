@@ -131,19 +131,19 @@ func resolveSupersede(tx *sql.Tx, project string, entries []model.SupersedeEntry
 	status := map[int64]string{}
 	ref := map[int64]string{}
 	rows, err := tx.Query(
-		`SELECT c.id, c.status, p.key, c.number FROM rules c JOIN projects p ON p.id = c.project_id
+		`SELECT c.id, c.status, `+ruleRefSQL("p", "c")+` FROM rules c JOIN projects p ON p.id = c.project_id
 		  WHERE c.id = ANY($1) ORDER BY c.id FOR NO KEY UPDATE OF c`, ids)
 	if err != nil {
 		return nil, res, fmt.Errorf("lock rules: %w", err)
 	}
 	for rows.Next() {
-		var id, number int64
-		var st, key string
-		if err := rows.Scan(&id, &st, &key, &number); err != nil {
+		var id int64
+		var st, r string
+		if err := rows.Scan(&id, &st, &r); err != nil {
 			rows.Close()
 			return nil, res, err
 		}
-		status[id], ref[id] = st, key+"-RULE-"+strconv.FormatInt(number, 10)
+		status[id], ref[id] = st, r
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

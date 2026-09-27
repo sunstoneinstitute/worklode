@@ -140,17 +140,17 @@ func TestSpecReconcilerGovernsAPlanlessTask(t *testing.T) {
 	task := f.createTask(t)
 	ctx := context.Background()
 
-	out, err := f.srv.handleSpecReconcile(ctx, prEvent(1001, task.Branch, "Adds it.\n\nSpec: WL-RULE-1\n"))
+	out, err := f.srv.handleSpecReconcile(ctx, prEvent(1001, task.Branch, "Adds it.\n\nSpec: WL-REQ-1\n"))
 	if err != nil || out != eventbus.OutcomeApplied {
 		t.Fatalf("first delivery: %v %v", out, err)
 	}
 	gov := f.governedBy(t, task.ID)
-	if len(gov) != 1 || gov[0].Rule != "WL-RULE-1" || gov[0].Source != "gate" {
+	if len(gov) != 1 || gov[0].Rule != "WL-REQ-1" || gov[0].Source != "gate" {
 		t.Fatalf("governed_by = %+v", gov)
 	}
 
 	// Redelivery of the same event is absorbed.
-	out, err = f.srv.handleSpecReconcile(ctx, prEvent(1001, task.Branch, "Spec: WL-RULE-1\n"))
+	out, err = f.srv.handleSpecReconcile(ctx, prEvent(1001, task.Branch, "Spec: WL-REQ-1\n"))
 	if err != nil || out != eventbus.OutcomeSuppressed {
 		t.Fatalf("redelivery: %v %v", out, err)
 	}
@@ -178,18 +178,18 @@ func TestSpecReconcilerLinksOncePerTrailer(t *testing.T) {
 	task := f.createTask(t)
 	ctx := context.Background()
 
-	out, err := f.srv.handleSpecReconcile(ctx, prEvent(7001, task.Branch, "Adds it.\n\nSpec: WL-RULE-1\n"))
+	out, err := f.srv.handleSpecReconcile(ctx, prEvent(7001, task.Branch, "Adds it.\n\nSpec: WL-REQ-1\n"))
 	if err != nil || out != eventbus.OutcomeApplied {
 		t.Fatalf("pull request: %v %v", out, err)
 	}
-	out, err = f.srv.handleSpecReconcile(ctx, pushEvent(7002, task.Branch, "more\n\nSpec: WL-RULE-1\n"))
+	out, err = f.srv.handleSpecReconcile(ctx, pushEvent(7002, task.Branch, "more\n\nSpec: WL-REQ-1\n"))
 	if err != nil || out != eventbus.OutcomeSuppressed {
 		t.Fatalf("later push with the same trailer: %v %v", out, err)
 	}
 	if got := testutil.ToFloat64(f.srv.reconcilerMetrics.outcomes.WithLabelValues("already")); got != 1 {
 		t.Errorf("already metric = %v, want 1", got)
 	}
-	if gov := f.governedBy(t, task.ID); len(gov) != 1 || gov[0].Rule != "WL-RULE-1" {
+	if gov := f.governedBy(t, task.ID); len(gov) != 1 || gov[0].Rule != "WL-REQ-1" {
 		t.Fatalf("governed_by = %+v", gov)
 	}
 	if n := f.governedEvents(t, task.ID); n != 1 {
@@ -210,11 +210,11 @@ func TestSpecReconcilerLeavesPlannedAndNoneAlone(t *testing.T) {
 	if out != eventbus.OutcomeSuppressed {
 		t.Errorf("no trailer: %v", out)
 	}
-	out, _ = f.srv.handleSpecReconcile(ctx, prEvent(2003, "feature/no-task", "Spec: WL-RULE-1\n"))
+	out, _ = f.srv.handleSpecReconcile(ctx, prEvent(2003, "feature/no-task", "Spec: WL-REQ-1\n"))
 	if out != eventbus.OutcomeSuppressed {
 		t.Errorf("no task: %v", out)
 	}
-	out, _ = f.srv.handleSpecReconcile(ctx, prEvent(2004, task.Branch, "Spec: WL-RULE-999\n"))
+	out, _ = f.srv.handleSpecReconcile(ctx, prEvent(2004, task.Branch, "Spec: WL-REQ-999\n"))
 	if out != eventbus.OutcomeSuppressed {
 		t.Errorf("unknown rule: %v", out)
 	}
@@ -224,7 +224,7 @@ func TestSpecReconcilerLeavesPlannedAndNoneAlone(t *testing.T) {
 
 	// A plan link blocks the gate.
 	f.govern(t, task.ID, 1, "plan")
-	out, _ = f.srv.handleSpecReconcile(ctx, prEvent(2005, task.Branch, "Spec: WL-RULE-2\n"))
+	out, _ = f.srv.handleSpecReconcile(ctx, prEvent(2005, task.Branch, "Spec: WL-REQ-2\n"))
 	if out != eventbus.OutcomeSuppressed {
 		t.Errorf("planned task: %v", out)
 	}
@@ -245,12 +245,12 @@ func TestSpecReconcilerReadsPushCommits(t *testing.T) {
 	ctx := context.Background()
 
 	out, err := f.srv.handleSpecReconcile(ctx, pushEvent(3001, task.Branch,
-		"first\n\nSpec: WL-RULE-1\n", "second\n\nSpec: WL-RULE-2\n"))
+		"first\n\nSpec: WL-REQ-1\n", "second\n\nSpec: WL-REQ-2\n"))
 	if err != nil || out != eventbus.OutcomeApplied {
 		t.Fatalf("push: %v %v", out, err)
 	}
 	gov := f.governedBy(t, task.ID)
-	if len(gov) != 1 || gov[0].Rule != "WL-RULE-2" {
+	if len(gov) != 1 || gov[0].Rule != "WL-REQ-2" {
 		t.Fatalf("the final commit's trailer wins: %+v", gov)
 	}
 }
@@ -292,7 +292,7 @@ func TestSpecReconcilerIgnoresUnmappedRepo(t *testing.T) {
 	task := f.createTask(t)
 	ctx := context.Background()
 
-	ev := prEvent(6001, task.Branch, "Spec: WL-RULE-1\n")
+	ev := prEvent(6001, task.Branch, "Spec: WL-REQ-1\n")
 	ev.Type = "pull_request.opened.ignored"
 	out, err := f.srv.handleSpecReconcile(ctx, ev)
 	if err != nil || out != eventbus.OutcomeSuppressed {

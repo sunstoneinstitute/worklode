@@ -523,20 +523,7 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	if t.Milestone != "" {
 		fmt.Fprintf(w, "  milestone: %s\n", t.Milestone)
 	}
-	for _, g := range t.GovernedBy {
-		pin := ""
-		if g.Pinned > 0 {
-			pin = fmt.Sprintf(", pinned v%d", g.Pinned)
-		}
-		if g.Current != g.RuleVersion {
-			fmt.Fprintf(w, "  governed by: %s  %s (v%d, rule now v%d%s)\n", g.Rule, g.Heading, g.RuleVersion, g.Current, pin)
-		} else {
-			fmt.Fprintf(w, "  governed by: %s  %s (v%d%s)\n", g.Rule, g.Heading, g.RuleVersion, pin)
-		}
-		if len(g.ResolvesTo) > 0 {
-			fmt.Fprintf(w, "    -> %s\n", strings.Join(g.ResolvesTo, ", "))
-		}
-	}
+	GovernanceRender(w, "  ", t.GovernedBy)
 	if t.NeedsDecomposition {
 		fmt.Fprintf(w, "  needs decomposition: yes\n")
 	}
@@ -608,6 +595,7 @@ func BriefRender(w io.Writer, b model.Brief) {
 		fmt.Fprintf(w, "lease: %s (expires %s)\n", b.Lease.Worktree, LocalTime(b.Lease.ExpiresAt))
 	}
 	BlockersRender(w, b.OpenBlockers, b.BlockingPlans)
+	GovernanceRender(w, "", b.GovernedBy)
 	if b.Body != "" {
 		fmt.Fprintln(w)
 		Markdown(w, b.Body)
@@ -625,6 +613,30 @@ func BriefRender(w io.Writer, b model.Brief) {
 		}
 		for _, warn := range b.Skills.Warnings {
 			fmt.Fprintf(w, "  warning: %s\n", warn)
+		}
+	}
+}
+
+// GovernanceRender prints a task's governing rules, one "governed by:" line
+// each, shared by `lode show <task>` and `lode task brief`. An invariant the
+// task inherits from its project is marked as such (WL-SPEC-77 §4).
+func GovernanceRender(w io.Writer, indent string, gov []model.TaskGovernance) {
+	for _, g := range gov {
+		if g.Source == "invariant" {
+			fmt.Fprintf(w, "%sgoverned by: %s  %s (project invariant)\n", indent, g.Rule, g.Heading)
+			continue
+		}
+		pin := ""
+		if g.Pinned > 0 {
+			pin = fmt.Sprintf(", pinned v%d", g.Pinned)
+		}
+		if g.Current != g.RuleVersion {
+			fmt.Fprintf(w, "%sgoverned by: %s  %s (v%d, rule now v%d%s)\n", indent, g.Rule, g.Heading, g.RuleVersion, g.Current, pin)
+		} else {
+			fmt.Fprintf(w, "%sgoverned by: %s  %s (v%d%s)\n", indent, g.Rule, g.Heading, g.RuleVersion, pin)
+		}
+		if len(g.ResolvesTo) > 0 {
+			fmt.Fprintf(w, "%s  -> %s\n", indent, strings.Join(g.ResolvesTo, ", "))
 		}
 	}
 }

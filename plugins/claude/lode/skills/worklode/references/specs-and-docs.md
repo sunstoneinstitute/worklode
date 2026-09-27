@@ -6,11 +6,26 @@ rules. Scratch files are editor buffers.
 
 ## Kinds and lifecycle
 
-A **rule** is a design requirement with its own identity (`WL-RULE-12`),
-heading, body, status and version history. A **spec** arranges rules into a
-readable document. Each placement records the rule and version, position,
-depth and section anchor. A rule ref names the requirement; a ref such as
-`WL-SPEC-25#sec-9` names a place in that spec's arrangement.
+A **rule** is a design rule with its own identity, kind, heading, body,
+status and version history. A **spec** arranges rules into a readable
+document. Each placement records the rule and version, position, depth and
+section anchor. A rule ref names the rule; a ref such as `WL-SPEC-25#sec-9`
+names a place in that spec's arrangement.
+
+A rule's kind is one of three, and sets the infix its ref prints with:
+
+- **requirement** (`WL-REQ-12`) — a plan builds it once. It is a planning
+  gap until an accepted plan covers it. New rules are requirements.
+- **invariant** (`WL-RULE-12`) — binds every task in its project and is
+  never finished. Never covered, never a gap.
+- **informative** (`WL-RULE-12`) — rationale or context. Never covered,
+  never a gap.
+
+The number alone identifies a rule: `WL-REQ-12`, `WL-RULE-12` and the old
+`WL-CL-12` resolve to the same rule wherever a ref is read. Change a kind
+with `lode rule set <ref> --kind <kind>`. A rule
+that both builds something and binds later work holds two obligations:
+split it into a requirement and an invariant.
 
 - **Spec** — a standing description, revised as the design changes. Each
   anchored section becomes a rule; content under deeper, unanchored headings
@@ -54,11 +69,13 @@ one rule across several specs is not yet supported by this edit path.
 
 ## Rules govern plans and their tasks
 
-A `covers` entry is a plain reference: a rule ref (`WL-RULE-<n>`), a
+A `covers` entry is a plain reference: a requirement ref (`WL-REQ-<n>`), a
 document/section reference such as `WL-SPEC-25#sec-9`, or a whole-document
-reference. A rule ref resolves to that rule; a section reference reaches the
-rule at that anchor and its descendant rules; a whole-document reference
-reaches all its rules. Unresolved refs reach none. Each entry is resolved
+reference. A requirement ref resolves to that rule; a section reference
+reaches the requirements at that anchor and under it; a whole-document
+reference reaches all its requirements. Invariants and informative rules in
+scope are skipped, and a direct ref to one is refused. Unresolved refs
+reach none. Each entry is resolved
 when the plan is written and stored as a `covers` edge from the plan to the
 rule; the governing rules are re-resolved on each plan write and again at
 acceptance. A `covers` edge always means the plan builds the whole rule:
@@ -66,10 +83,10 @@ there are no coverage levels. `coverage:` and `fullCoverageWith:` are refused
 on write.
 
 A rule the plan must obey but builds nothing in is an invariant, and governs
-the plan's tasks without a `covers` entry; a rule with nothing to build
+every task in its project without a `covers` entry once accepted; a rule with nothing to build
 (rationale, context) is informative and also carries no `covers` entry. A
 plan that builds only part of a rule is a sign the rule should split
-(`lode rule link WL-RULE-B --derived-from WL-RULE-A`) so each plan covers
+(`lode rule link WL-REQ-B --derived-from WL-REQ-A`) so each plan covers
 whole rules.
 
 Tasks minted from a plan receive `governedBy` links to its governing rules.
@@ -149,7 +166,7 @@ amendment → supersession:
 |---|---|---|
 | `status` | `draft` \| `accepted` \| `superseded` | all |
 | `issued` | `YYYY-MM-DD` | specs, ADRs |
-| `covers` | rule ref(s) (`WL-RULE-<n>`), spec section reference(s), or whole-document reference(s) — plain references only, no coverage level — or `NO-SPEC` | **plans**, mandatory |
+| `covers` | requirement ref(s) (`WL-REQ-<n>`), spec section reference(s), or whole-document reference(s) — plain references only, no coverage level — or `NO-SPEC` | **plans**, mandatory |
 | `defers` | list of `{spec, to}`: a section this plan hands off (`spec`, with `#sec-N`) and the document that owns it (`to`, no fragment) — reported `deferred` with its owner by `--needs-planning` until some plan covers it (026 §5.3) | **plans** |
 | `requires` | reference list (`isRequiredBy` is refused) | all |
 | `blockedBy` | plan references — the named plans run first; both ends must be plans in the same project (`blocks` is refused) | **plans** |

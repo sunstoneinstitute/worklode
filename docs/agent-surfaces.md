@@ -144,6 +144,14 @@ merely mentions a command in passing gets nothing.
 The current surface is `lode --help`, the generated command catalog, and 061
 §2.5. No spec is a substitute for any of the three.
 
+Rule refs follow the same rule. A rule is a `requirement` (a plan builds it),
+an `invariant` (it binds every task in its project) or `informative` (context
+only), and its ref prints with its kind's infix: `WL-REQ-<n>` for a
+requirement, `WL-RULE-<n>` otherwise (WL-SPEC-77 §4). Agent-facing examples
+show `WL-REQ-<n>` where the rule is a requirement. Stored text keeps
+`WL-RULE-<n>` and `WL-CL-<n>`, which still resolve by number. The kinds are
+explained in the `lode:writing-docs` skill.
+
 An invocation that is deliberately unresolvable — documenting a command before
 it ships — goes in `internal/cmd/testdata/agent-surface-exempt.txt` with a
 comment saying why and when it comes out.

@@ -97,7 +97,7 @@ func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
 		        coalesce(d.number,0), coalesce(d.status,''), coalesce(od.slug, e.owner_external, ''),
-		        coalesce(rp.key || '-RULE-' || r.number, '')
+		        coalesce(`+ruleRefSQL("rp", "r")+`, '')
 		   FROM `+table+` e
 		   LEFT JOIN rules r ON r.id = e.to_rule
 		   LEFT JOIN projects rp ON rp.id = r.project_id
@@ -129,7 +129,7 @@ func (s *Store) docVersionRules(ctx context.Context, id int64, version int, snap
 		table, where, args = "doc_rule_versions", "x.doc_id = $1 AND x.version = $2", []any{id, version}
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT x.position, p.key || '-RULE-' || r.number, x.rule_version, x.depth, x.anchor
+		`SELECT x.position, `+ruleRefSQL("p", "r")+`, x.rule_version, x.depth, x.anchor
 		   FROM `+table+` x
 		   JOIN rules r ON r.id = x.rule_id
 		   JOIN projects p ON p.id = r.project_id
@@ -149,8 +149,8 @@ func (s *Store) docVersionRules(ctx context.Context, id int64, version int, snap
 // version, in ruleEdgesSQL's column order. A snapshot has no creation time.
 const ruleEdgeSnapshotSQL = `
 SELECT e.type, e.source, '0001-01-01T00:00:00Z'::timestamptz,
-       pf.key, cf.number, vf.heading,
-       pt.key, ct.number, vt.heading
+       pf.key, cf.number, cf.kind, vf.heading,
+       pt.key, ct.number, ct.kind, vt.heading
   FROM rule_edge_versions e
   JOIN rules cf ON cf.id = e.rule_id
   JOIN projects pf ON pf.id = cf.project_id

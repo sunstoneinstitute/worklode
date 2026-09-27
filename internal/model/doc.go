@@ -98,6 +98,9 @@ type DocSection struct {
 	// the document was last approved as a whole (025 §8.4). It survives every
 	// later section rebuild until the reviewers settle the document again.
 	Patched bool `json:"patched"`
+	// Kind is the kind of the rule arranged at the section's anchor
+	// (WL-SPEC-77 §4), "" when no rule is arranged there.
+	Kind string `json:"kind,omitempty"`
 }
 
 // DocSectionRow is one section of one document as the cross-corpus listing

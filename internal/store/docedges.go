@@ -235,9 +235,9 @@ func resolveOwner(tx *sql.Tx, project, ref string) (ownerRef, error) {
 // `coverage:` and `fullCoverageWith:` keys are refused. It is stored as one
 // edge per rule it resolves to (coversRules, WL-SPEC-77 §4), so a section
 // entry writes an edge for the rule at its anchor and each rule under it, and
-// a whole-document entry one for each rule the document contains. Nested
-// entries overlap: the plan's covered set is their union. An entry naming no
-// rule keeps its reference in to_external.
+// a whole-document entry one for each rule the document contains, requirements
+// only. Nested entries overlap: the plan's covered set is their union. An
+// entry naming no rule keeps its reference in to_external.
 //
 // A defers edge (026 §5.3) is checked, not merely written: the from end must
 // be a plan, the `spec` reference must carry a `#sec-N` fragment (a
@@ -361,9 +361,12 @@ func resolveCoversRefs(tx *sql.Tx, kind, project string, edges []docEdgeRef) (ma
 		if _, ok := resolvedCovers[e.ref]; ok {
 			continue
 		}
-		rules, err := coversRules(tx, project, e.ref)
+		rules, named, err := coversRules(tx, project, e.ref)
 		if err != nil {
 			return nil, err
+		}
+		if named && rules == nil {
+			rules = []int64{} // names only rules a plan does not cover: no edge
 		}
 		resolvedCovers[e.ref] = rules
 	}
@@ -438,7 +441,7 @@ func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
 			rr.toRule = r
 			rows = append(rows, rr)
 		}
-		if len(rules) == 0 {
+		if rules == nil {
 			row.toExternal = e.ref
 			rows = append(rows, row)
 		}
@@ -650,10 +653,11 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 // repointCovers resolves an unresolved covers edge whose document has just
 // arrived: it is replaced by one edge per rule the reference now names. An
 // edge the plan already holds is kept as it is. A reference that still names no
-// rule is left in place and reports false.
+// rule is left in place and reports false; one naming no requirement is
+// dropped.
 func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string) (bool, error) {
-	rules, err := coversRules(tx, project, ref)
-	if err != nil || len(rules) == 0 {
+	rules, named, err := coversRules(tx, project, ref)
+	if err != nil || !named {
 		return false, err
 	}
 	for _, r := range rules {
@@ -990,7 +994,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
 		        coalesce(d.number,0), coalesce(d.status,''), coalesce(od.slug, e.owner_external, ''),
-		        coalesce(rp.key || '-RULE-' || r.number, '')
+		        coalesce(`+ruleRefSQL("rp", "r")+`, '')
 		   FROM doc_edges e
 		   LEFT JOIN rules r ON r.id = e.to_rule
 		   LEFT JOIN projects rp ON rp.id = r.project_id

@@ -1296,9 +1296,9 @@ func TestListDocsBareSuperseded(t *testing.T) {
 	seedDoc(t, st, store.DocInput{
 		Project: "proj", Kind: "spec", Number: 6, Slug: "006-old", Body: docSpecBody,
 		CreatedBy: "alice",
-	}) // WL-RULE-1 (sec-1), WL-RULE-2 (sec-2)
+	}) // WL-REQ-1 (sec-1), WL-REQ-2 (sec-2)
 	if _, err := st.SupersedeRules(t.Context(), "proj", "alice", model.SupersedeInput{
-		Entries: []model.SupersedeEntry{{Old: "WL-RULE-2"}},
+		Entries: []model.SupersedeEntry{{Old: "WL-REQ-2"}},
 	}); err != nil {
 		t.Fatalf("SupersedeRules: %v", err)
 	}
@@ -1310,8 +1310,8 @@ func TestListDocsBareSuperseded(t *testing.T) {
 	if len(resp.BareRules) != 1 {
 		t.Fatalf("bare_rules = %+v, want one entry", resp.BareRules)
 	}
-	if b := resp.BareRules[0]; b.Rule != "WL-RULE-2" || b.Doc != "WL-SPEC-6" || b.Anchor != "sec-2" {
-		t.Fatalf("bare rule = %+v, want WL-RULE-2 at WL-SPEC-6#sec-2", b)
+	if b := resp.BareRules[0]; b.Rule != "WL-REQ-2" || b.Doc != "WL-SPEC-6" || b.Anchor != "sec-2" {
+		t.Fatalf("bare rule = %+v, want WL-REQ-2 at WL-SPEC-6#sec-2", b)
 	}
 	if resp.PlanningGaps != nil {
 		t.Errorf("planning_gaps = %+v, want it omitted for bare_superseded", resp.PlanningGaps)

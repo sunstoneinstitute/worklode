@@ -263,16 +263,16 @@ func TestDocPageFoldsRuleAmendments(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25) // WL-RULE-1, WL-RULE-2 (§2)
+	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25) // WL-REQ-1, WL-REQ-2 (§2)
 	amender := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "spec", Number: 46, Slug: "046-tighter",
 		Body: "---\nstatus: draft\n---\n\n# Tighter\n\n## 1. Tighter model {#sec-1}\n\nThe model now says ten.\n",
-	}) // WL-RULE-3
+	}) // WL-REQ-3
 	if rr := doReq(t, h, "POST", docPath(amender.ID, "/accept"), token, nil); rr.Code != http.StatusOK {
 		t.Fatalf("accept amender: status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	if rr := doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-3/edges", token,
-		model.RuleEdgeInput{Type: "amends", To: "WL-RULE-2"}); rr.Code != http.StatusCreated {
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-3/edges", token,
+		model.RuleEdgeInput{Type: "amends", To: "WL-REQ-2"}); rr.Code != http.StatusCreated {
 		t.Fatalf("link amends: %d %s", rr.Code, rr.Body)
 	}
 
@@ -281,7 +281,7 @@ func TestDocPageFoldsRuleAmendments(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	bodyContains(t, body, "Model body.", "The model now says ten.", "WL-RULE-3", "Tighter model")
+	bodyContains(t, body, "Model body.", "The model now says ten.", "WL-REQ-3", "Tighter model")
 	if i, j := strings.Index(body, "Model body."), strings.Index(body, "The model now says ten."); j < i {
 		t.Errorf("amendment rendered above the section it amends")
 	}

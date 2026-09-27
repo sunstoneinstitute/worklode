@@ -1046,11 +1046,11 @@ func TestDocAcceptSupersedesRetiredDoc(t *testing.T) {
 	d := spec("d", "draft", supersedeDocU)                                                        // rules 9-10
 	m := spec("m", "accepted", "# M\n\n## 1. Em {#sec-1}\n\nM.\n\n## 2. Emm {#sec-2}\n\nM2.\n")   // rules 11-12
 	mustSupersede(t, s,
-		entry("P1-RULE-11", "P1-RULE-9"), entry("P1-RULE-12", "P1-RULE-8"),
-		entry("P1-RULE-1", "P1-RULE-9"), entry("P1-RULE-2", "P1-RULE-9"), entry("P1-RULE-3", "P1-RULE-10"),
-		entry("P1-RULE-4", "P1-RULE-10"),
-		entry("P1-RULE-5", "P1-RULE-9"), entry("P1-RULE-6"),
-		entry("P1-RULE-7", "P1-RULE-8"))
+		entry("P1-REQ-11", "P1-REQ-9"), entry("P1-REQ-12", "P1-REQ-8"),
+		entry("P1-REQ-1", "P1-REQ-9"), entry("P1-REQ-2", "P1-REQ-9"), entry("P1-REQ-3", "P1-REQ-10"),
+		entry("P1-REQ-4", "P1-REQ-10"),
+		entry("P1-REQ-5", "P1-REQ-9"), entry("P1-REQ-6"),
+		entry("P1-REQ-7", "P1-REQ-8"))
 
 	if _, _, err := acceptDoc(t, s, d.ID, "stig"); err != nil {
 		t.Fatalf("AcceptDoc: %v", err)
@@ -1262,9 +1262,9 @@ func TestDocListSections(t *testing.T) {
 		t.Fatalf("ListDocSections: %v", err)
 	}
 	want := []model.DocSection{
-		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1},
-		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 1},
-		{Anchor: "sec-2.1", Number: "2.1", Heading: "Detail", Depth: 3, Position: 2, LastRevisedIn: 1},
+		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1, Kind: "requirement"},
+		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 1, Kind: "requirement"},
+		{Anchor: "sec-2.1", Number: "2.1", Heading: "Detail", Depth: 3, Position: 2, LastRevisedIn: 1, Kind: "requirement"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("sections = %+v, want %+v", got, want)
@@ -1662,8 +1662,8 @@ func TestDocSectionReferrers(t *testing.T) {
 	}
 	want := []model.DocReferrer{
 		{Kind: "doc", Ref: "026-b", Rel: "requires", Title: "Referring spec"},
-		{Kind: "rule", Ref: "P1-RULE-4", Rel: "amends", Title: "Scope"},
-		{Kind: "rule", Ref: "P1-RULE-5", Rel: "supersedes", Title: "Scope"},
+		{Kind: "rule", Ref: "P1-REQ-4", Rel: "amends", Title: "Scope"},
+		{Kind: "rule", Ref: "P1-REQ-5", Rel: "supersedes", Title: "Scope"},
 		{Kind: "task", Ref: claimed.ID, Rel: "covers", Title: "the claimed one"},
 	}
 	if !reflect.DeepEqual(got, want) {

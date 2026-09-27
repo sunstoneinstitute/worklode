@@ -25,13 +25,16 @@ frontmatter and gap queries still address their document sections.
 
 ## 1. Section coverage frontmatter
 
-A plan's `covers:` is a list of plain references — a rule ref (`WL-RULE-<n>`),
-a `<doc>#sec-N` reference, or a whole-document reference. The key is
+A plan's `covers:` is a list of plain references — a requirement ref
+(`WL-REQ-<n>`), a `<doc>#sec-N` reference, or a whole-document reference.
+Only requirements are covered: a section or whole-document entry resolves to
+the requirements in its scope and skips invariants and informative rules,
+and a direct ref to an invariant or informative rule is refused. The key is
 `covers`, not `implements`: a plan writes no code, so it claims nothing.
 `wl:implements` is a component's claim that its code meets a section
 (025 §11); a plan undertakes, and its minted tasks discharge that
 (WL-SPEC-78 §4.1). A `covers` entry always means the plan builds the whole
-rule: there are no coverage levels, and `coverage:`/`fullCoverageWith:` are
+requirement: there are no coverage levels, and `coverage:`/`fullCoverageWith:` are
 refused on write.
 
 ```yaml
@@ -47,9 +50,13 @@ Three cases that look like partial coverage are expressed another way:
 
 | Case | Expression |
 |---|---|
-| the plan builds part of a rule | split the rule (`lode rule link WL-RULE-B --derived-from WL-RULE-A`, see §2 below) so each plan covers whole rules |
-| the plan must obey a rule but builds nothing in it | the rule is an **invariant** and governs the plan's tasks already; no `covers` entry |
-| the rule has nothing to build (rationale, context) | the rule is **informative**; no `covers` entry |
+| the plan builds part of a requirement | split it (`lode rule link WL-REQ-B --derived-from WL-REQ-A`, see §2 below) so each plan covers whole requirements |
+| the plan must obey a rule but builds nothing in it | the rule is an **invariant** (`WL-RULE-<n>`) and, once accepted, governs every task in its project; no `covers` entry |
+| the rule has nothing to build (rationale, context) | the rule is **informative** (`WL-RULE-<n>`); no `covers` entry |
+
+A rule's kind is set with `lode rule set <rule-ref> --kind <kind>`.
+If a rule is still a requirement but only states a constraint, reclassify it
+before planning rather than leaving it as a gap no plan will close.
 
 Use it for a standing rule such as 032 §11's "end-to-end tests drive the HTTP
 UI and API surfaces and do not write directly to the store": an invariant
@@ -58,7 +65,8 @@ governs every part while being built by none of them, and it needs no
 
 ### Planning gaps are a query
 
-For a spec section `S`, over accepted-or-superseded plans covering its rule
+For a spec section `S` whose rule is a requirement (an invariant or
+informative rule is never a gap), over accepted-or-superseded plans covering its rule
 (a superseded plan is spent, and discharges what it covered — WL-SPEC-78
 §1.3):
 
@@ -99,7 +107,7 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
    `lode doc show <spec-ref> --json` for the section anchors used by `covers`.
    Run `lode show <rule-ref> --json` for each rule to inspect its existing
    plans, governed tasks and relationships before declaring new work. Account
-   for every anchored rule across the series: some part covers it, or the
+   for every requirement across the series: some part covers it, or the
    section is deliberately unplanned. A standing invariant governs every part
    it applies to without a `covers` entry in any of them.
 2. **Check what the spec's `requires:` actually delivers.** Read the schema

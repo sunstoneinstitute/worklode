@@ -50,6 +50,21 @@ wlc:DesignDocStatusOrder a skos:OrderedCollection ;
 
 
 # ---------------------------------------------------------------------------
+# Rule kind — the rules.kind CHECK (WL-SPEC-77 §4). The kind sets the ref's
+# infix: WL-REQ-<n> for a requirement, WL-RULE-<n> otherwise.
+# ---------------------------------------------------------------------------
+
+wlc:RuleKind a skos:ConceptScheme ; skos:prefLabel "Rule kind" .
+
+wlc:requirement a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "requirement" ;
+    skos:definition "A plan builds it once; a gap until an accepted plan covers it." .
+wlc:invariant a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "invariant" ;
+    skos:definition "Binds every task in its project and is never finished; never covered, never a gap." .
+wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "informative" ;
+    skos:definition "Rationale or context, nothing to build or obey; never covered, never a gap." .
+
+
+# ---------------------------------------------------------------------------
 # Task kind — the union matching the tasks.kind CHECK constraint. Every kind
 # describes a nature of work, not the artifact produced and not a structural
 # role: container-ness is inferred from child_of edges (004 §6.1), never

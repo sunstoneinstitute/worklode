@@ -19,70 +19,70 @@ func TestRuleEdgesAPI(t *testing.T) {
 	projID := seedProjectWithKey(t, st, "WL")
 	doc := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: projID, Kind: "spec", Slug: "t", Body: ruleDocV1,
-	}) // WL-RULE-1..3
+	}) // WL-REQ-1..3
 
-	body := model.RuleEdgeInput{Type: "constrains", To: "WL-RULE-3"}
-	rr := doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, body)
+	body := model.RuleEdgeInput{Type: "constrains", To: "WL-REQ-3"}
+	rr := doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-1/edges", token, body)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("link: %d %s", rr.Code, rr.Body)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, body)
+	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-1/edges", token, body)
 	if rr.Code != http.StatusConflict {
 		t.Errorf("repeat link: %d", rr.Code)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, model.RuleEdgeInput{Type: "bogus", To: "WL-RULE-3"})
+	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-1/edges", token, model.RuleEdgeInput{Type: "bogus", To: "WL-REQ-3"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Errorf("bad type: %d", rr.Code)
 	}
 	// supersedes has one writer, lode rule supersede; its inverse is never stored.
 	for _, typ := range []string{"supersedes", "supersededBy"} {
-		rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, model.RuleEdgeInput{Type: typ, To: "WL-RULE-3"})
+		rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-1/edges", token, model.RuleEdgeInput{Type: typ, To: "WL-REQ-3"})
 		if rr.Code != http.StatusUnprocessableEntity {
 			t.Errorf("%s over the edges API: %d, want 422", typ, rr.Code)
 		}
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, model.RuleEdgeInput{Type: "refines", To: "WL-RULE-999"})
+	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-1/edges", token, model.RuleEdgeInput{Type: "refines", To: "WL-REQ-999"})
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("unknown target: %d", rr.Code)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/edges", token, model.RuleEdgeInput{Type: "refines", To: "nope"})
+	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-1/edges", token, model.RuleEdgeInput{Type: "refines", To: "nope"})
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("malformed target: %d", rr.Code)
 	}
 
 	var c model.Rule
-	rr = doReq(t, h, http.MethodGet, "/api/v1/rules/WL-RULE-3", token, nil)
+	rr = doReq(t, h, http.MethodGet, "/api/v1/rules/WL-REQ-3", token, nil)
 	decodeInto(t, rr, &c)
-	if len(c.Edges) != 1 || c.Edges[0].From != "WL-RULE-1" || c.Edges[0].Type != "constrains" {
+	if len(c.Edges) != 1 || c.Edges[0].From != "WL-REQ-1" || c.Edges[0].Type != "constrains" {
 		t.Errorf("edges on target: %+v", c.Edges)
 	}
 
 	events := pollEvents(t, h, token, "?type=rule.linked", 1)
 	checkPayloadProps(t, eventPayload(t, events[0].(map[string]any)), map[string]string{
-		"from": "WL-RULE-1", "to": "WL-RULE-3", "type": "constrains",
+		"from": "WL-REQ-1", "to": "WL-REQ-3", "type": "constrains",
 	})
 
-	rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-RULE-1/edges", token, body)
+	rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-REQ-1/edges", token, body)
 	if rr.Code != http.StatusNoContent {
 		t.Errorf("unlink: %d %s", rr.Code, rr.Body)
 	}
-	rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-RULE-1/edges", token, body)
+	rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-REQ-1/edges", token, body)
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("unlink absent: %d", rr.Code)
 	}
 
 	// amends is a manual edge: written and removed over the same path.
-	amends := model.RuleEdgeInput{Type: "amends", To: "WL-RULE-1"}
-	if rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-3/edges", token, amends); rr.Code != http.StatusCreated {
+	amends := model.RuleEdgeInput{Type: "amends", To: "WL-REQ-1"}
+	if rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-3/edges", token, amends); rr.Code != http.StatusCreated {
 		t.Errorf("link amends: %d %s", rr.Code, rr.Body)
 	}
 	// The document detail carries it for lode show --inline to fold.
 	var detail model.DocDetail
 	decodeInto(t, doReq(t, h, http.MethodGet, fmt.Sprintf("/api/v1/docs/%d", doc.ID), token, nil), &detail)
-	if want := []model.DocAmendment{{Anchor: "sec-1", Rule: "WL-RULE-1", By: "WL-RULE-3"}}; !slices.Equal(detail.Amendments, want) {
+	if want := []model.DocAmendment{{Anchor: "sec-1", Rule: "WL-REQ-1", By: "WL-REQ-3"}}; !slices.Equal(detail.Amendments, want) {
 		t.Errorf("doc amendments = %+v, want %+v", detail.Amendments, want)
 	}
-	if rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-RULE-3/edges", token, amends); rr.Code != http.StatusNoContent {
+	if rr = doReq(t, h, http.MethodDelete, "/api/v1/rules/WL-REQ-3/edges", token, amends); rr.Code != http.StatusNoContent {
 		t.Errorf("unlink amends: %d %s", rr.Code, rr.Body)
 	}
 }

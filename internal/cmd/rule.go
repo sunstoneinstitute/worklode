@@ -9,10 +9,11 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // newRuleCmd is the design-rule entity group (12-spec-refactoring-design-tree.md
-// S14, S35). `lode rule show` and `lode show WL-RULE-<n>` read one rule.
+// S14, S35). `lode rule show` and `lode show WL-REQ-<n>` read one rule.
 func newRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rule",
@@ -241,12 +242,37 @@ func newRuleUnlinkCmd() *cobra.Command {
 // newRuleSetCmd is `lode rule set`: owner and tags (S15). Each field
 // takes its own positional shape (owner one actor, tags any number), so the
 // field is a subcommand rather than a leading argument the way `project set`
-// groups its fields (WL-489).
+// groups its fields (WL-489). The kind is `lode rule set <ref> --kind <kind>`
+// (WL-SPEC-77 §4): a ref never collides with a subcommand name.
 func newRuleSetCmd() *cobra.Command {
+	var kind string
 	cmd := &cobra.Command{
-		Use:   "set",
-		Short: "Set a rule's owner or tags",
+		Use:               "set <ref> --kind <kind>",
+		Short:             "Set a rule's kind, owner or tags",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: ruleRefAt(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !cmd.Flags().Changed("kind") {
+				return errors.New("name a field: --kind <kind>, or the owner or tags subcommand")
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			rule, raw, err := c.SetRuleMeta(cmd.Context(), args[0], model.RuleMetaInput{Kind: &kind})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.RuleRender(cmd.OutOrStdout(), rule)
+			return nil
+		},
 	}
+	cmd.Flags().StringVar(&kind, "kind", "", "the rule's kind: "+strings.Join(ns.Schemes["RuleKind"], ", "))
+	completeFlagValues(cmd, "kind", ns.Schemes["RuleKind"])
 	cmd.AddCommand(newRuleSetOwnerCmd(), newRuleSetTagsCmd())
 	return cmd
 }

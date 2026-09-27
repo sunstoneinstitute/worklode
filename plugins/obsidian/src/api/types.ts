@@ -99,6 +99,9 @@ export interface DocSection {
   /** Changed by a substantive in-place amendment since the document was
    *  last approved as a whole (025 §8.4). */
   patched: boolean;
+  /** Kind of the rule arranged at the anchor (WL-SPEC-77 §4): requirement,
+   *  invariant or informative. Absent when no rule is arranged there. */
+  kind?: string;
 }
 
 /**

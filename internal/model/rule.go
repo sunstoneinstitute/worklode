@@ -10,9 +10,12 @@ type Rule struct {
 	ID         int64  `json:"id"`
 	Project    string `json:"project"`
 	ProjectKey string `json:"project_key"`
-	// Ref is the citable id, "WL-RULE-12" (025 §14.3 grammar, type RULE).
-	Ref     string `json:"ref"`
-	Number  int64  `json:"number"`
+	// Ref is the citable id with its kind's infix: "WL-REQ-12" for a
+	// requirement, "WL-RULE-12" otherwise (WL-SPEC-77 §4).
+	Ref    string `json:"ref"`
+	Number int64  `json:"number"`
+	// Kind is requirement, invariant or informative (WL-SPEC-77 §4).
+	Kind    string `json:"kind"`
 	Status  string `json:"status"` // draft | accepted | superseded | withdrawn
 	Version int    `json:"version"`
 	Heading string `json:"heading"`
@@ -83,6 +86,7 @@ type EditRuleInput struct {
 type RuleMetaInput struct {
 	Owner *string   `json:"owner,omitempty"`
 	Tags  *[]string `json:"tags,omitempty"`
+	Kind  *string   `json:"kind,omitempty"` // requirement | invariant | informative
 }
 
 // SupersedeEntry is one line of a refactor map (S24, R7): an old rule and

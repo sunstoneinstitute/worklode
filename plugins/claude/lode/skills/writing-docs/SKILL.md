@@ -77,6 +77,21 @@ lode show <rule-ref>                         # requirement and where it is arran
 lode rule edit <rule-ref> --file <body-file> # body under its heading, optional --heading
 ```
 
+Every rule has a kind, and the kind sets its ref's infix:
+
+| Kind | Ref | Use for |
+|---|---|---|
+| `requirement` | `WL-REQ-<n>` | behavior a plan builds once; a planning gap until an accepted plan covers it |
+| `invariant` | `WL-RULE-<n>` | a constraint that binds every task in its project and is never finished |
+| `informative` | `WL-RULE-<n>` | rationale or context, nothing to build or obey |
+
+New rules are requirements. Set another kind with
+`lode rule set <rule-ref> --kind invariant` (or `informative`). The number
+alone names the rule: `WL-REQ-12`, `WL-RULE-12` and the old `WL-CL-12` all
+resolve, and output prints the current kind's infix. A rule that both builds
+something and binds later work is two rules: split it into a requirement and
+an invariant.
+
 The store assigns rule refs when new anchored sections are written. Existing
 rules match by anchor and heading, then heading alone, then anchor alone.
 Check the arrangement after moving or renaming sections; copying text into a
@@ -94,9 +109,10 @@ removing prose alone does not redirect task governance.
 
 **Every document you create starts with YAML frontmatter — no exceptions.**
 A spec needs `status` and, once accepted, `issued`. A plan needs `status`
-and `covers` — rule refs, document/section references, or whole-document
-references selecting its governing rules, each a plain reference: a
-`covers` edge always means the plan builds the whole rule, no levels — or
+and `covers` — requirement refs, document/section references, or
+whole-document references selecting the requirements it builds, each a
+plain reference: a `covers` edge always means the plan builds the whole
+requirement, no levels — or
 `covers: NO-SPEC` (026 §4.3, valid only here) when nothing governs
 it, never omitted, since an absent `covers` reads as a forgotten one. See
 `lode:splitting-specs-into-plans` for the cases that used to be expressed
@@ -112,7 +128,7 @@ dependency → amendment → supersession:
 |---|---|---|
 | `status` | spec, ADR | `draft`, `accepted`, or `superseded` (`proposed` is retired — a document under review stays `draft`) |
 | `issued` | spec, ADR | `YYYY-MM-DD` of first publication |
-| `covers` | plan | scalar or list of rule refs (`WL-RULE-<n>`), spec-section references, or whole-document references this plan undertakes to build in full; `coverage:`/`fullCoverageWith:` are refused |
+| `covers` | plan | scalar or list of requirement refs (`WL-REQ-<n>`), spec-section references, or whole-document references this plan undertakes to build in full; a section or document entry skips invariants and informative rules, a direct ref to one is refused; `coverage:`/`fullCoverageWith:` are refused |
 | `implements` | plan | retired spelling of `covers`; still parses, reported as retired. A document carrying both is an error |
 | `defers` | plan | list of `{spec, to}`: a section this plan hands off, and the document expected to cover it (026 §5.3) |
 | `requires` | any | list of references; plain dependency, no ordering semantics |
@@ -181,7 +197,7 @@ requirement. Documents do not amend or replace each other: rules do
 `isReplacedBy` is refused.
 
 **Amending** changes how a rule is read without replacing its text.
-`lode rule link WL-RULE-A --amends WL-RULE-B` records that rule A amends rule
+`lode rule link WL-REQ-A --amends WL-REQ-B` records that rule A amends rule
 B, and `lode rule unlink` removes it. `lode show <ref> --inline` reads the
 result: a section's own text plus every in-force amendment of its rule,
 attributed to the amending rule.
@@ -195,10 +211,11 @@ with no successor.
 
 ## Declaring a plan's tasks
 
-A plan's `covers` names rule refs, spec sections, or whole documents. The
-store resolves each entry to rules when the plan is written and stores a
-`covers` edge from the plan to each one, then gives every minted task
-`governedBy` links to that set. Verify the result with
+A plan's `covers` names requirement refs, spec sections, or whole documents.
+The store resolves each entry to requirements when the plan is written and
+stores a `covers` edge from the plan to each one, then gives every minted
+task `governedBy` links to that set. The project's accepted invariants govern
+every task as well, derived when the task is read. Verify the result with
 `lode rule list --doc <plan-ref>` and `lode show <task-id> --json`.
 
 A plan body carries exactly one `## Tasks` section, holding nothing but one

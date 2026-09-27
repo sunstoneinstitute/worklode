@@ -11,7 +11,7 @@ command to run (that's `commands.md`) or how documents version (that's
 |---|---|---|
 | Project | slug (`worklode`) | An umbrella over 1..n repos (`project_repos`). Unbounded — there is no "milestone" class; a project is inherently ongoing. |
 | Task | `<PROJECT_KEY>-<n>` (`WL-217`) | The unit of claimable work. Global sequence per project. |
-| Rule | `<PROJECT_KEY>-RULE-<n>` | An independently versioned design requirement, arranged into specs and governing plans and tasks. |
+| Rule | `<PROJECT_KEY>-REQ-<n>` for a requirement, `<PROJECT_KEY>-RULE-<n>` for an invariant or informative rule; any infix resolves by number | An independently versioned design rule, arranged into specs and governing plans and tasks. Its kind is `requirement` (a plan builds it), `invariant` (binds every task in its project) or `informative` (context only). |
 | Doc | numbered per (project, kind), also addressable by slug | A spec arranges rules for reading; a plan is governed by the rules its work undertakes. |
 | Deliverable | `<PROJECT_KEY>-DEL-<n>` | A thing the project ships (a service, a package) — never claimed or worked; state is derived from reported facts, not a status a human sets. |
 | Actor | free text id | A human, agent, or service account. Carries `admin`, and since spec 029 the Keycloak identity claims (`groups`, `email`) recorded at login. |
@@ -78,8 +78,8 @@ end only via release, done, block, abandon, reopen, or the expiry sweep.
 | From → to | Meaning |
 |---|---|
 | Spec → rule | An arrangement records a rule version, position, depth and section anchor. |
-| Plan → rule (`covers`) | The rules governing the plan. Each `covers` entry (a rule ref, a `<doc>#sec-N` ref, or a whole-document ref) is resolved to rules when the plan is written and stored as a `covers` edge from the plan to each rule. A `covers` edge always means the plan builds the whole rule; there are no coverage levels. |
-| Task → rule (`governedBy`) | Governing requirement, linked by plan acceptance, by hand, or by the `Spec:` trailer gate. The link records the version at link time and follows the newest text unless pinned. |
+| Plan → rule (`covers`) | The requirements the plan builds. Each `covers` entry (a requirement ref, a `<doc>#sec-N` ref, or a whole-document ref) is resolved to requirements when the plan is written, skipping invariants and informative rules, and stored as a `covers` edge from the plan to each. A direct ref to a non-requirement is refused. A `covers` edge always means the plan builds the whole requirement; there are no coverage levels. |
+| Task → rule (`governedBy`) | Governing rule, linked by plan acceptance, by hand, or by the `Spec:` trailer gate. The link records the version at link time and follows the newest text unless pinned. Every accepted invariant in the task's project also governs it; that is derived when the task is read, never stored. |
 | Rule → rule (`refines`, `constrains`, `conflictsWith`, `references`) | Design relationships. Text references also produce derived `references` edges. |
 | Rule → rule (`amends`) | The subject changes how the object is read without replacing it; `lode show --inline` folds it in. Documents do not amend or replace each other. |
 | Rule → rule (`wasDerivedFrom`) | Lineage recorded after a split. |

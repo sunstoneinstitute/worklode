@@ -558,7 +558,7 @@ func refLinkHint(dir string) string {
 	}
 	return fmt.Sprintf("This terminal renders OSC 8 hyperlinks. In what you print to the "+
 		"terminal — never in files, commit messages or code — write every Worklode task "+
-		"id (WL-7), document ref (WL-SPEC-4) and rule ref (WL-RULE-12) as a markdown link "+
+		"id (WL-7), document ref (WL-SPEC-4) and rule ref (WL-REQ-12, WL-RULE-12) as a markdown link "+
 		"to %s/<id>, "+
 		"e.g. [WL-7](%s/WL-7).", server, server)
 }

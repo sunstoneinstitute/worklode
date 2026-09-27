@@ -190,7 +190,8 @@ Flags: --server
   Flags: --amends, --conflicts-with, --constrains, --derived-from, --references, --refines
 - `lode rule list` — List rules, or one document's rules in arrangement order
   Flags: --doc, --project, --repo, --status
-- `lode rule set` — Set a rule's owner or tags
+- `lode rule set` — Set a rule's kind, owner or tags
+  Flags: --kind
 - `lode rule set owner` — Set a rule's owner; "" clears it
 - `lode rule set tags` — Replace a rule's tags; naming none clears them
 - `lode rule show` — Show a rule: its status, version, placements and text

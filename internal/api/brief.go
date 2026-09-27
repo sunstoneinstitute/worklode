@@ -68,6 +68,10 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := toBriefJSON(b)
+	if out.GovernedBy, err = s.st.GovernedBy(r.Context(), id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
 	// Absolute, not root-relative: an agent fetching a brief is not
 	// same-origin with the server and has nothing to resolve /blob/ against.
 	base := strings.TrimRight(s.cfg.PublicURL, "/")

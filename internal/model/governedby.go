@@ -5,12 +5,12 @@ package model
 // version the link was made against, and the rule's current version so a
 // reader can see when the governing text has moved on.
 type TaskGovernance struct {
-	Rule        string `json:"rule"`         // "WL-RULE-12"
+	Rule        string `json:"rule"`         // "WL-REQ-12", or "WL-RULE-12" for an invariant
 	RuleVersion int    `json:"rule_version"` // version current when the link was made
 	Current     int    `json:"current"`      // the rule's current version
 	Heading     string `json:"heading"`
 	Status      string `json:"status"`
-	Source      string `json:"source"`           // plan | manual
+	Source      string `json:"source"`           // plan | manual | gate, or invariant when derived from the project (WL-SPEC-77 §4)
 	Pinned      int    `json:"pinned,omitempty"` // the version the link is pinned to, 0 when it follows the newest
 	URL         string `json:"url"`              // canonical rule page, with /<ver> when pinned (S10, S20)
 
@@ -24,6 +24,6 @@ type TaskGovernance struct {
 // set: the body of POST and DELETE /api/v1/tasks/{id}/governed-by. Pin is
 // read only by POST; DELETE ignores it.
 type GovernInput struct {
-	Rule string `json:"rule"`          // "WL-RULE-12"
+	Rule string `json:"rule"`          // "WL-REQ-12"; any rule infix resolves
 	Pin  bool   `json:"pin,omitempty"` // pin the link to the version current when it is made (S10)
 }

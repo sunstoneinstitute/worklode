@@ -94,8 +94,8 @@ func TestBumpDocVersionSnapshotsEdgesAndRules(t *testing.T) {
 	if len(v1.Edges) != len(edges) || len(v1.Rules) != len(rules) {
 		t.Errorf("GetDocVersion(1) edges %+v rules %+v, want %d and %d", v1.Edges, v1.Rules, len(edges), len(rules))
 	}
-	if len(v1.Rules) > 0 && !strings.HasPrefix(v1.Rules[0].Rule, "P1-RULE-") {
-		t.Errorf("GetDocVersion(1).Rules[0].Rule = %q, want a P1-RULE-<n> ref", v1.Rules[0].Rule)
+	if len(v1.Rules) > 0 && !strings.HasPrefix(v1.Rules[0].Rule, "P1-REQ-") {
+		t.Errorf("GetDocVersion(1).Rules[0].Rule = %q, want a P1-REQ-<n> ref", v1.Rules[0].Rule)
 	}
 }
 
@@ -174,7 +174,7 @@ func TestBumpRuleVersionSnapshotsEdges(t *testing.T) {
 	}
 	found := false
 	for _, e := range r.Edges {
-		if e.Type == "refines" && e.From == "P1-RULE-1" && e.To == "P1-RULE-3" {
+		if e.Type == "refines" && e.From == "P1-REQ-1" && e.To == "P1-REQ-3" {
 			found = true
 		}
 	}

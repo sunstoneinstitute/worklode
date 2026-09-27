@@ -91,7 +91,7 @@ func UnlinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 // plan contains no rules, so a plan has none.
 func (s *Store) ListDocAmendments(ctx context.Context, docID int64) ([]model.DocAmendment, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT dr.anchor, p.key || '-RULE-' || r.number, ap.key || '-RULE-' || ar.number
+		`SELECT dr.anchor, `+ruleRefSQL("p", "r")+`, `+ruleRefSQL("ap", "ar")+`
 		   FROM doc_rules dr
 		   JOIN docs d ON d.id = dr.doc_id
 		   JOIN rules r ON r.id = dr.rule_id
@@ -115,8 +115,8 @@ func (s *Store) ListDocAmendments(ctx context.Context, docID int64) ([]model.Doc
 // headings, outgoing first, then by type and the other rule's number.
 const ruleEdgesSQL = `
 SELECT e.type, e.source, e.created_at,
-       pf.key, cf.number, vf.heading,
-       pt.key, ct.number, vt.heading
+       pf.key, cf.number, cf.kind, vf.heading,
+       pt.key, ct.number, ct.kind, vt.heading
   FROM rule_edges e
   JOIN rules cf ON cf.id = e.from_rule
   JOIN projects pf ON pf.id = cf.project_id
@@ -132,20 +132,20 @@ func scanRuleEdges(rows *sql.Rows) ([]model.RuleEdge, error) {
 	out := []model.RuleEdge{}
 	for rows.Next() {
 		var e model.RuleEdge
-		var fk, tk string
+		var fk, tk, fkind, tkind string
 		var fn, tn int64
-		if err := rows.Scan(&e.Type, &e.Source, &e.CreatedAt, &fk, &fn, &e.FromHeading, &tk, &tn, &e.ToHeading); err != nil {
+		if err := rows.Scan(&e.Type, &e.Source, &e.CreatedAt, &fk, &fn, &fkind, &e.FromHeading, &tk, &tn, &tkind, &e.ToHeading); err != nil {
 			return nil, fmt.Errorf("scan rule edge: %w", err)
 		}
-		e.From = fmt.Sprintf("%s-RULE-%d", fk, fn)
-		e.To = fmt.Sprintf("%s-RULE-%d", tk, tn)
+		e.From = designdoc.FormatRuleRef(fk, fn, fkind)
+		e.To = designdoc.FormatRuleRef(tk, tn, tkind)
 		out = append(out, e)
 	}
 	return out, rows.Err()
 }
 
 // deriveReferences replaces a rule's derived references edges with the
-// rules its text names (S26): every WL-RULE-<n> ref, and every
+// rules its text names (S26): every rule ref (WL-REQ-<n>, WL-RULE-<n>), and every
 // WL-SPEC-<n>#sec-<a> ref resolved to the rule arranged at that anchor. A
 // ref to the rule itself, to a whole document, or to nothing contributes
 // no edge. Manual edges are untouched; a derived edge that would duplicate a
@@ -166,7 +166,7 @@ func deriveReferences(tx *sql.Tx, project string, ruleID int64, text string) err
 			continue
 		}
 		if err != nil {
-			return fmt.Errorf("resolve %s-RULE-%d: %w", r.Key, r.Number, err)
+			return fmt.Errorf("resolve %s: %w", designdoc.FormatRuleRef(r.Key, r.Number, ""), err)
 		}
 		targets = append(targets, id)
 	}
