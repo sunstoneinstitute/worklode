@@ -4,8 +4,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // coversRules resolves one covers entry to the requirements it names, when
@@ -136,11 +139,114 @@ func ensureRules(tx *sql.Tx, docID int64) error {
 	if err != nil {
 		return fmt.Errorf("parse doc %d: %w", docID, err)
 	}
-	if err := syncRules(tx, docID, parsed); err != nil {
+	if _, err := syncRules(tx, docID, parsed); err != nil {
 		return err
 	}
 	if status == "accepted" {
 		return acceptDocRules(tx, docID)
+	}
+	return nil
+}
+
+// ResolveExternalCovers re-resolves every live plan's to_external covers
+// entries: the rows stranded before their target had rules (WL-903).
+func ResolveExternalCovers(tx *sql.Tx, eventID int64) (model.CoversResolveResponse, error) {
+	return resolveExternalCovers(tx, 0, eventID)
+}
+
+// resolveExternalCovers re-resolves live plans' to_external covers edges
+// through coversRules, the resolver every edge write uses. target limits it
+// to entries whose document part resolves to that document; 0 takes every
+// entry. An entry that now names requirements is replaced by its plan -> rule
+// edges. One naming none stays as it is and is reported with the reason.
+// Each plan whose edges moved gets one state_log row.
+func resolveExternalCovers(tx *sql.Tx, target, eventID int64) (model.CoversResolveResponse, error) {
+	out := model.CoversResolveResponse{Resolved: []model.CoversResolution{}, Unresolved: []model.CoversResolution{}}
+	type stranded struct {
+		id, plan              int64
+		project, planRef, ref string
+	}
+	rows, err := tx.Query(
+		`SELECT e.id, d.id, d.project_id, p.key || '-PLAN-' || coalesce(d.number::text, d.slug), e.to_external
+		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc JOIN projects p ON p.id = d.project_id
+		  WHERE e.type = 'covers' AND e.to_external IS NOT NULL
+		    AND d.kind = 'plan' AND d.deleted_at IS NULL
+		    AND ($1 = 0 OR EXISTS (SELECT 1 FROM docs t WHERE t.id = $1
+		         AND (strpos(e.to_external, t.slug) > 0
+		              OR e.to_external ~ ('(^|[^0-9])0*' || t.number || '([^0-9]|$)'))))
+		  ORDER BY e.id`, target)
+	if err != nil {
+		return out, fmt.Errorf("read unresolved covers: %w", err)
+	}
+	all, err := collectRows(rows, "read unresolved covers", func(r rowScanner) (stranded, error) {
+		var c stranded
+		err := r.Scan(&c.id, &c.plan, &c.project, &c.planRef, &c.ref)
+		return c, err
+	})
+	if err != nil {
+		return out, err
+	}
+	touched := map[int64]bool{}
+	for _, c := range all {
+		// The query's slug-or-number match only narrows; resolveDocRef decides.
+		if target != 0 {
+			base, _ := designdoc.SplitFragment(c.ref)
+			id, ok, err := resolveDocRef(tx, c.project, base)
+			if err != nil {
+				return out, err
+			}
+			if !ok || id != target {
+				continue
+			}
+		}
+		entry := model.CoversResolution{Plan: c.planRef, Ref: c.ref}
+		rules, named, err := coversRules(tx, c.project, c.ref)
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			entry.Reason = "names a rule that is not a requirement"
+		case err != nil:
+			return out, err
+		case !named:
+			entry.Reason = "names no rule"
+		case len(rules) == 0:
+			entry.Reason = "names no requirement"
+		}
+		if entry.Reason != "" {
+			out.Unresolved = append(out.Unresolved, entry)
+			continue
+		}
+		if err := replaceExternalCover(tx, c.id, c.plan, rules); err != nil {
+			return out, err
+		}
+		for _, r := range rules {
+			entry.Rules = append(entry.Rules, ruleRefOf(tx, r))
+		}
+		out.Resolved = append(out.Resolved, entry)
+		touched[c.plan] = true
+	}
+	for _, id := range slices.Sorted(maps.Keys(touched)) {
+		if err := logDocChange(tx, id, eventID, map[string]string{"field": "edges"}); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// replaceExternalCover replaces the to_external covers edge edgeID of plan
+// fromDoc with one edge per rule. An edge the plan already holds is kept.
+func replaceExternalCover(tx *sql.Tx, edgeID, fromDoc int64, rules []int64) error {
+	for _, r := range rules {
+		if _, err := tx.Exec(
+			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_rule)
+			 SELECT from_doc, from_anchor, type, $2 FROM doc_edges WHERE id = $1
+			 ON CONFLICT (from_doc, coalesce(from_anchor,''), type, coalesce(to_doc, 0),
+			              coalesce(to_rule, 0), coalesce(to_anchor,''), coalesce(to_external,''))
+			 DO NOTHING`, edgeID, r); err != nil {
+			return fmt.Errorf("re-point covers edge %d of doc %d to rule %d: %w", edgeID, fromDoc, r, err)
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE id = $1`, edgeID); err != nil {
+		return fmt.Errorf("drop re-pointed covers edge %d of doc %d: %w", edgeID, fromDoc, err)
 	}
 	return nil
 }

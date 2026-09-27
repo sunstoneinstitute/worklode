@@ -110,6 +110,12 @@ func (c *Client) LintDocs(ctx context.Context, project string) ([]model.DocLintF
 	return doJSON[[]model.DocLintFinding](ctx, c, http.MethodGet, withQuery("/api/v1/docs/lint", q), nil, "doc lint")
 }
 
+// ResolveExternalCovers calls POST /api/v1/docs/covers/resolve: re-resolve
+// every plan's to_external covers entries to rules (WL-903).
+func (c *Client) ResolveExternalCovers(ctx context.Context) (model.CoversResolveResponse, []byte, error) {
+	return doJSON[model.CoversResolveResponse](ctx, c, http.MethodPost, "/api/v1/docs/covers/resolve", nil, "doc resolve")
+}
+
 // ListCorpusSections calls GET /api/v1/docs/sections: every section of every
 // spec and ADR in scope, in document order (055 §4). project narrows to one
 // project, "" to all of them; number narrows to one section number ("8.2")
@@ -503,6 +509,25 @@ func DocLintTable(w io.Writer, findings []model.DocLintFinding) {
 			detail = fmt.Sprintf("%s#%s: no such section", f.ToSlug, f.ToAnchor)
 		}
 		tbl.add(f.Slug, f.Kind, dash(f.FromAnchor), f.Type, detail)
+	}
+	tbl.flush(w)
+}
+
+// CoversResolveTable prints `lode doc resolve`: a count line, then one row
+// per re-resolved covers entry with the rules it now covers, or why it still
+// covers none.
+func CoversResolveTable(w io.Writer, resp model.CoversResolveResponse) {
+	fmt.Fprintf(w, "%d covers entr(ies) resolved, %d still cover no requirement\n",
+		len(resp.Resolved), len(resp.Unresolved))
+	if len(resp.Resolved)+len(resp.Unresolved) == 0 {
+		return
+	}
+	tbl := newTable(column{header: "PLAN"}, column{header: "REF"}, column{header: "RESULT"})
+	for _, e := range resp.Resolved {
+		tbl.add(e.Plan, e.Ref, strings.Join(e.Rules, ", "))
+	}
+	for _, e := range resp.Unresolved {
+		tbl.add(e.Plan, e.Ref, "unresolved: "+e.Reason)
 	}
 	tbl.flush(w)
 }

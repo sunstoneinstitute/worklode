@@ -1,6 +1,8 @@
 package store
 
 import (
+	"database/sql"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -453,4 +455,98 @@ func TestRetireCoverageLevelsMigration(t *testing.T) {
 		t.Errorf("after down, full covers edges = %d, want 3", n)
 	}
 	migrateSteps(t, s, 1)
+}
+
+// TestCoversResolveWhenRulesMinted: a plan's covers entries naming a spec
+// with no rules stay in to_external until an edit mints the spec's rules;
+// that write re-resolves them in its own transaction (WL-903).
+func TestCoversResolveWhenRulesMinted(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n# T\n\nNo sections yet.\n"})
+	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "stranded", CreatedBy: "stig",
+		Body: coversPlanBody("P1-SPEC-1", "P1-SPEC-1#sec-2", "P1-SPEC-9")})
+	if got := externalCovers(t, s, plan.ID); len(got) != 3 {
+		t.Fatalf("before rules: to_external = %v, want all three entries", got)
+	}
+
+	if _, err := updateDocBody(t, s, spec.ID, ruleDocV1); err != nil {
+		t.Fatal(err)
+	}
+	if got := coveredRuleNumbers(t, s, plan.ID); !slices.Equal(got, []int64{1, 2, 3}) {
+		t.Errorf("after rules: covered %v, want [1 2 3]", got)
+	}
+	if got := externalCovers(t, s, plan.ID); !slices.Equal(got, []string{"P1-SPEC-9"}) {
+		t.Errorf("after rules: to_external = %v, want only the unknown spec", got)
+	}
+	var logged int
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM state_log WHERE entity_kind = 'doc' AND entity_id = $1
+		    AND change->>'field' = 'edges'`, strconv.FormatInt(plan.ID, 10)).Scan(&logged); err != nil {
+		t.Fatal(err)
+	}
+	if logged != 1 {
+		t.Errorf("plan has %d edges state_log rows, want 1", logged)
+	}
+}
+
+// TestResolveExternalCovers: the repair for rows stranded before WL-903
+// resolves each to_external covers entry that now names requirements,
+// reports the rest with the reason, and changes nothing on a second run.
+func TestResolveExternalCovers(t *testing.T) {
+	s := openDocStore(t)
+	// ruleDocV1: sec-1 is rule 1, sec-1.1 rule 2, sec-2 rule 3.
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "stranded", CreatedBy: "stig",
+		Body: coversPlanBody("P1-SPEC-9")})
+	for _, q := range []string{
+		`UPDATE rules SET kind = 'invariant' WHERE number = 3`,
+		`INSERT INTO doc_edges (from_doc, type, to_external) VALUES ($1, 'covers', 'P1-SPEC-1#sec-1')`,
+		`INSERT INTO doc_edges (from_doc, type, to_external) VALUES ($1, 'covers', 'P1-SPEC-1#sec-2')`,
+	} {
+		args := []any{plan.ID}
+		if !strings.Contains(q, "$1") {
+			args = nil
+		}
+		if _, err := s.db.ExecContext(t.Context(), q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run := func() model.CoversResolveResponse {
+		t.Helper()
+		var out model.CoversResolveResponse
+		if _, _, err := s.RecordDocEvent(t.Context(), "resolve", "cli", "covers-resolve-"+strconv.FormatInt(docEventSeq.Add(1), 10),
+			"doc.covers_resolved", nil, func(tx *sql.Tx, eventID int64) error {
+				var err error
+				out, err = ResolveExternalCovers(tx, eventID)
+				return err
+			}); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	first := run()
+	wantResolved := []model.CoversResolution{{Plan: "P1-PLAN-1", Ref: "P1-SPEC-1#sec-1", Rules: []string{"P1-REQ-1", "P1-REQ-2"}}}
+	wantUnresolved := []model.CoversResolution{
+		{Plan: "P1-PLAN-1", Ref: "P1-SPEC-9", Reason: "names no rule"},
+		{Plan: "P1-PLAN-1", Ref: "P1-SPEC-1#sec-2", Reason: "names no requirement"},
+	}
+	if !reflect.DeepEqual(first.Resolved, wantResolved) || !reflect.DeepEqual(first.Unresolved, wantUnresolved) {
+		t.Errorf("first run = %+v, want resolved %+v, unresolved %+v", first, wantResolved, wantUnresolved)
+	}
+	if got := coveredRuleNumbers(t, s, plan.ID); !slices.Equal(got, []int64{1, 2}) {
+		t.Errorf("covered %v, want [1 2]", got)
+	}
+	if got := externalCovers(t, s, plan.ID); !slices.Equal(got, []string{"P1-SPEC-1#sec-2", "P1-SPEC-9"}) {
+		t.Errorf("to_external = %v, want the two unresolved entries kept", got)
+	}
+
+	second := run()
+	if len(second.Resolved) != 0 || !reflect.DeepEqual(second.Unresolved, wantUnresolved) {
+		t.Errorf("second run = %+v, want nothing resolved and the same unresolved", second)
+	}
+	if got := coveredRuleNumbers(t, s, plan.ID); !slices.Equal(got, []int64{1, 2}) {
+		t.Errorf("second run: covered %v, want [1 2]", got)
+	}
 }

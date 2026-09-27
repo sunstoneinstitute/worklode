@@ -514,6 +514,24 @@ type DocLintFinding struct {
 	ToAnchor   string `json:"to_anchor,omitempty"`
 }
 
+// CoversResolution is one plan covers entry stored unresolved
+// (doc_edges.to_external) that POST /api/v1/docs/covers/resolve re-resolved
+// (WL-903). Rules is the requirement refs it now covers. An entry that still
+// covers nothing keeps its to_external row and says why in Reason.
+type CoversResolution struct {
+	Plan   string   `json:"plan"`
+	Ref    string   `json:"ref"`
+	Rules  []string `json:"rules,omitempty"`
+	Reason string   `json:"reason,omitempty"`
+}
+
+// CoversResolveResponse is the response body of POST
+// /api/v1/docs/covers/resolve.
+type CoversResolveResponse struct {
+	Resolved   []CoversResolution `json:"resolved"`
+	Unresolved []CoversResolution `json:"unresolved"`
+}
+
 // DocListResponse is the response body of GET /api/v1/docs. PlanningGaps is
 // populated only for ?needs_planning=true, one entry per document in Docs;
 // BareRules only for ?bare_superseded=true, which leaves Docs empty.
