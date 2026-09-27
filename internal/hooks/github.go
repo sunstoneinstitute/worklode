@@ -285,7 +285,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var handledEvents = []string{
 	"issues", "push", "pull_request", "deployment_status",
 	"pull_request_review", "workflow_run", "release", "registry_package",
-	"merge_group", "repository_ruleset",
+	"merge_group", "repository_ruleset", "check_run", "check_suite",
 }
 
 // HandledEvents returns the event names this handler routes.
@@ -726,6 +726,8 @@ func (a *applier) applyWorkflowRun(tx *sql.Tx, eventID int64, repo string, body 
 		WorkflowRun struct {
 			Name         string    `json:"name"`
 			HeadSHA      string    `json:"head_sha"`
+			HeadBranch   string    `json:"head_branch"`
+			PullRequests []ghPRRef `json:"pull_requests"`
 			Status       string    `json:"status"`
 			Conclusion   *string   `json:"conclusion"`
 			HTMLURL      string    `json:"html_url"`
@@ -758,18 +760,91 @@ func (a *applier) applyWorkflowRun(tx *sql.Tx, eventID int64, repo string, body 
 	}); err != nil {
 		return err
 	}
-	// Same reason as applyPullRequest: name the task on the event so a
-	// reader does not re-join (WL-SPEC-66 §5.1). The head sha is the only
-	// handle a run carries, and it is attributed to one task or to none —
-	// several means the correlation is ambiguous, so record nothing.
-	tasks, err := store.TaskIDsForSHA(tx, repo, run.HeadSHA)
-	if err != nil {
-		return err
+	return nameCITasks(tx, eventID, repo, run.HeadBranch, run.HeadSHA, run.PullRequests)
+}
+
+// ghPRRef is the {number} stub GitHub lists in a CI payload's pull_requests.
+type ghPRRef struct {
+	Number int64 `json:"number"`
+}
+
+// applyCheck names the task(s) a check_run or check_suite delivery is about
+// on its event (WL-SPEC-66 §5.1). There is no typed table: workflow_run
+// already carries the run-level facts.
+func (a *applier) applyCheck(tx *sql.Tx, eventID int64, repo, event string, body []byte) error {
+	type check struct {
+		HeadSHA      string    `json:"head_sha"`
+		HeadBranch   string    `json:"head_branch"`
+		PullRequests []ghPRRef `json:"pull_requests"`
+		CheckSuite   struct {
+			HeadBranch string `json:"head_branch"`
+		} `json:"check_suite"`
 	}
-	if len(tasks) != 1 {
+	var p struct {
+		CheckRun   check `json:"check_run"`
+		CheckSuite check `json:"check_suite"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		return fmt.Errorf("parse %s payload: %w", event, err)
+	}
+	c := p.CheckSuite
+	if event == "check_run" {
+		c = p.CheckRun
+		c.HeadBranch = c.CheckSuite.HeadBranch
+	}
+	return nameCITasks(tx, eventID, repo, c.HeadBranch, c.HeadSHA, c.PullRequests)
+}
+
+// nameCITasks records on a CI event the tasks its PRs and head branch
+// correlate to. A merge-queue branch names its PR; any other branch is read
+// with the task branch template. Only when neither names a task does the head
+// sha decide, and there one attributed task is required — several means the
+// correlation is ambiguous. One task is written as "task", several as "tasks".
+func nameCITasks(tx *sql.Tx, eventID int64, repo, branch, sha string, prs []ghPRRef) error {
+	numbers := make([]int64, 0, len(prs)+1)
+	for _, pr := range prs {
+		numbers = append(numbers, pr.Number)
+	}
+	var tasks []string
+	if m := mergeGroupHeadRef.FindStringSubmatch(branch); m != nil {
+		if n, err := strconv.ParseInt(m[1], 10, 64); err == nil {
+			numbers = append(numbers, n)
+		}
+	} else if branch != "" {
+		id, err := store.TaskIDForRef(tx, branch)
+		if err != nil {
+			return err
+		}
+		if id != "" {
+			tasks = append(tasks, id)
+		}
+	}
+	for _, n := range numbers {
+		id, err := store.PRTaskID(tx, repo, n)
+		if err != nil {
+			return err
+		}
+		if id != "" && !slices.Contains(tasks, id) {
+			tasks = append(tasks, id)
+		}
+	}
+	if len(tasks) == 0 && sha != "" {
+		bySHA, err := store.TaskIDsForSHA(tx, repo, sha)
+		if err != nil {
+			return err
+		}
+		if len(bySHA) == 1 {
+			tasks = bySHA
+		}
+	}
+	switch len(tasks) {
+	case 0:
 		return nil
+	case 1:
+		return store.MergeEventPayload(tx, eventID, map[string]any{"task": tasks[0]})
 	}
-	return store.MergeEventPayload(tx, eventID, map[string]any{"task": tasks[0]})
+	slices.Sort(tasks)
+	return store.MergeEventPayload(tx, eventID, map[string]any{"tasks": tasks})
 }
 
 func (a *applier) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte, resolvedCommitish string) error {
