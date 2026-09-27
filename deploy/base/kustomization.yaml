@@ -206,3 +206,5 @@ configMapGenerator:
       - migrations/0096_doc_revision_edges.down.sql
       - migrations/0097_strip_headers.up.sql
       - migrations/0097_strip_headers.down.sql
+      - migrations/NEW-retire-coverage-levels.up.sql
+      - migrations/NEW-retire-coverage-levels.down.sql

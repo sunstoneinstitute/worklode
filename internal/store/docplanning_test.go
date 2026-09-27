@@ -37,8 +37,7 @@ func TestDocAcceptPlanRejected(t *testing.T) {
 const planCoverageOnlyBody = `---
 status: draft
 covers:
-  - spec: 025-documents-in-the-backbone.md#sec-5
-    coverage: full
+  - 025-documents-in-the-backbone.md#sec-5
 ---
 
 # Retroactive coverage backfill
@@ -753,8 +752,9 @@ func TestDocNeedsPlanningDraftSpecNotOwedPlanning(t *testing.T) {
 	}
 }
 
-// TestDocNeedsPlanningDraftPlanDoesNotCover: 026 §2.1 — a draft plan has not
-// yet undertaken work, so its covers edges discharge nothing.
+// TestDocNeedsPlanningDraftPlanDoesNotCover: a draft plan has not yet
+// undertaken work, so its covers edges discharge nothing and each section it
+// covers is plan-draft (WL-SPEC-78 §1.3).
 func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -763,8 +763,24 @@ func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(unplanned)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want every anchor unplanned", gaps)
+		[]string{"sec-1(plan-draft)", "sec-2(plan-draft)", "sec-2.1(plan-draft)"}) {
+		t.Fatalf("gaps = %v, want every anchor plan-draft", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDraftBesideAcceptedIsPlanDraft: a section covered by
+// more than one plan is planned only once every covering plan is accepted
+// (WL-SPEC-78 §1.3).
+func TestDocNeedsPlanningDraftBesideAcceptedIsPlanDraft(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "025-x")
+	coveringPlan(t, s, "plan-b", false, "025-x#sec-2.1")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]), []string{"sec-2.1(plan-draft)"}) {
+		t.Fatalf("gaps = %v, want sec-2.1 plan-draft", gaps)
 	}
 }
 
@@ -830,236 +846,14 @@ func TestDocNeedsPlanningScopesToProject(t *testing.T) {
 	}
 }
 
-// --- NeedsPlanning three-valued coverage (026 §2.1's outcome table) --------
-
-// TestDocNeedsPlanningFullCoverageDischarges: an accepted plan claiming a
-// section `full` discharges it; the sections no plan names stay unplanned.
-func TestDocNeedsPlanningFullCoverageDischarges(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "full"})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 discharged, sec-2/sec-2.1 unplanned", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialWithNoClosureIsPartialGap: a `partial` claim
-// with no fullCoverageWith set closes nothing, so the section stays a
-// "partial" gap (026 §2.1).
-func TestDocNeedsPlanningPartialWithNoClosureIsPartialGap(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialClosedByFullSiblingDischarges: fullCoverageWith
-// naming an accepted plan that itself covers the same section `full` closes
-// the claim, discharging the section (026 §2.1).
-func TestDocNeedsPlanningPartialClosedByFullSiblingDischarges(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	sibling := levelledPlan(t, s, "plan-sibling", true, coverageRef{ref: "025-x#sec-1", level: "full"})
-	levelledPlan(t, s, "plan-main", true, coverageRef{
-		ref: "025-x#sec-1", level: "partial", fullCoverageWith: []string{sibling.Slug},
-	})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 discharged via fullCoverageWith", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialClosedByPartialSiblingDischarges: a
-// fullCoverageWith sibling that itself only contributes `partial` still
-// closes the claim (026 §2.1 asks only that it "contribute full or partial",
-// not that its own claim be closed).
-func TestDocNeedsPlanningPartialClosedByPartialSiblingDischarges(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	sibling := levelledPlan(t, s, "plan-sibling", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
-	levelledPlan(t, s, "plan-main", true, coverageRef{
-		ref: "025-x#sec-1", level: "partial", fullCoverageWith: []string{sibling.Slug},
-	})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 discharged even though the sibling is only partial", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialClosureIgnoresDraftSibling: fullCoverageWith is
-// checked, never taken on trust — a draft sibling closes nothing (026 §2.1).
-func TestDocNeedsPlanningPartialClosureIgnoresDraftSibling(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	sibling := levelledPlan(t, s, "plan-sibling", false, coverageRef{ref: "025-x#sec-1", level: "full"})
-	levelledPlan(t, s, "plan-main", true, coverageRef{
-		ref: "025-x#sec-1", level: "partial", fullCoverageWith: []string{sibling.Slug},
-	})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial: a draft sibling closes nothing", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialClosureRequiresEveryNamedSibling: 026 §2.1's
-// closure test is universal over the named plans, not existential — one
-// qualifying sibling does not close the claim when a second sibling, named
-// alongside it, is still a draft.
-func TestDocNeedsPlanningPartialClosureRequiresEveryNamedSibling(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	accepted := levelledPlan(t, s, "plan-sibling-accepted", true,
-		coverageRef{ref: "025-x#sec-1", level: "partial"})
-	draft := levelledPlan(t, s, "plan-sibling-draft", false,
-		coverageRef{ref: "025-x#sec-1", level: "partial"})
-	levelledPlan(t, s, "plan-main", true, coverageRef{
-		ref: "025-x#sec-1", level: "partial",
-		fullCoverageWith: []string{accepted.Slug, draft.Slug},
-	})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial: a draft among two named siblings blocks closure", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialClosureIgnoresNoneSibling: a fullCoverageWith
-// sibling that itself claims `none` contributes nothing to the closure (026
-// §2.1).
-func TestDocNeedsPlanningPartialClosureIgnoresNoneSibling(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	sibling := levelledPlan(t, s, "plan-sibling", true, coverageRef{ref: "025-x#sec-1", level: "none"})
-	levelledPlan(t, s, "plan-main", true, coverageRef{
-		ref: "025-x#sec-1", level: "partial", fullCoverageWith: []string{sibling.Slug},
-	})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial: a none sibling closes nothing", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialClosureIgnoresSiblingCoveringDifferentSection:
-// fullCoverageWith is scoped to the same section — a sibling that covers a
-// different one of the spec's sections closes nothing for this one, even
-// though it discharges its own (026 §2.1).
-func TestDocNeedsPlanningPartialClosureIgnoresSiblingCoveringDifferentSection(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	sibling := levelledPlan(t, s, "plan-sibling", true, coverageRef{ref: "025-x#sec-2", level: "full"})
-	levelledPlan(t, s, "plan-main", true, coverageRef{
-		ref: "025-x#sec-1", level: "partial", fullCoverageWith: []string{sibling.Slug},
-	})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial and sec-2 with sec-2.1 under it discharged on their own merits", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialClosureIgnoresUnresolvableReference: a
-// fullCoverageWith entry this project cannot resolve is, by definition,
-// unresolvable and closes nothing (026 §2.1).
-func TestDocNeedsPlanningPartialClosureIgnoresUnresolvableReference(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	levelledPlan(t, s, "plan-main", true, coverageRef{
-		ref: "025-x#sec-1", level: "partial", fullCoverageWith: []string{"nowhere-plan"},
-	})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial: an unresolvable reference closes nothing", gaps)
-	}
-}
-
-// TestDocNeedsPlanningNoneOnlyIsBoundOnlyGap: a section every accepted plan
-// naming it claims `none` for is "bound-only" — acknowledged but not planned
-// (026 §2.1).
-func TestDocNeedsPlanningNoneOnlyIsBoundOnlyGap(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "none"})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(bound-only)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 bound-only", gaps)
-	}
-}
-
-// TestDocNeedsPlanningPartialByOneFullByAnotherDischarges: one plan's
-// `partial` claim and another's `full` claim on the same section together
-// discharge it (026 §2.1's outcome table).
-func TestDocNeedsPlanningPartialByOneFullByAnotherDischarges(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
-	levelledPlan(t, s, "plan-b", true, coverageRef{ref: "025-x#sec-1", level: "full"})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 discharged by the full claim", gaps)
-	}
-}
-
-// TestDocNeedsPlanningNoneByOneAndPartialByAnotherIsPartialGap: `partial`
-// dominates `none` — one plan claiming `none` does not demote a section
-// another plan claims `partial` down to "bound-only" (026 §2.1).
-func TestDocNeedsPlanningNoneByOneAndPartialByAnotherIsPartialGap(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "none"})
-	levelledPlan(t, s, "plan-b", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial: partial dominates bound-only", gaps)
-	}
-}
-
-// TestDocNeedsPlanningSupersededPlanDischarges: 026 §2.1's amended discharging
-// set is "accepted or superseded" — a superseded plan is one that was
-// accepted and then carried out (025 §9), so its full claim still discharges
-// the section it covered.
+// TestDocNeedsPlanningSupersededPlanDischarges: the discharging set is
+// accepted or superseded — a superseded plan is one that was accepted and
+// then carried out (025 §9), so it still discharges the section it covered.
 func TestDocNeedsPlanningSupersededPlanDischarges(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
-	plan := levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "full"})
+	plan := coveringPlan(t, s, "plan-a", true, "025-x#sec-1")
 	setDocStatus(t, s, plan.ID, "superseded")
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
@@ -1090,27 +884,6 @@ func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
 	}
 }
 
-// TestDocNeedsPlanningDeferredOutranksBoundOnly: with one plan bound by a
-// section (`none`) and another deferring it, the section reports deferred —
-// a deferral says who is owed the rest, not merely that the section was read
-// (026 §2.1's precedence: partial > deferred > bound-only > unplanned).
-func TestDocNeedsPlanningDeferredOutranksBoundOnly(t *testing.T) {
-	t.Parallel()
-	s := openDocStore(t)
-	mustAcceptedSpec(t, s, "025-x")
-	mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
-	})
-	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "none"})
-	deferringPlan(t, s, "plan-b", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
-
-	_, gaps := needsPlanningSlugs(t, s, "p1")
-	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 deferred: deferred outranks bound-only", gaps)
-	}
-}
-
 // TestDocNeedsPlanningTwoDeferralOwnersAggregated: §5.3's one-owner rule is
 // per plan, so two plans may defer one section to two owners. The report
 // aggregates them deterministically, comma-joined without a space — the CLI
@@ -1137,7 +910,7 @@ func TestDocNeedsPlanningTwoDeferralOwnersAggregated(t *testing.T) {
 
 // TestDocNeedsPlanningDeferralDeliveredByCoveringPlan: a deferral is
 // delivered by any plan discharging the section, not only by the named owner
-// — once a second accepted plan covers the section `full`, it disappears
+// — once a second accepted plan covers the section, it disappears
 // from the gaps the same as any other discharged section (026 §2.1).
 func TestDocNeedsPlanningDeferralDeliveredByCoveringPlan(t *testing.T) {
 	t.Parallel()
@@ -1147,7 +920,7 @@ func TestDocNeedsPlanningDeferralDeliveredByCoveringPlan(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
 	})
 	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
-	levelledPlan(t, s, "plan-b", true, coverageRef{ref: "025-x#sec-1", level: "full"})
+	coveringPlan(t, s, "plan-b", true, "025-x#sec-1")
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
@@ -1156,10 +929,9 @@ func TestDocNeedsPlanningDeferralDeliveredByCoveringPlan(t *testing.T) {
 	}
 }
 
-// TestDocNeedsPlanningPartialWithDeferralReportsPartial: a section claimed
-// `partial` by one plan and deferred by another reports "partial" — partial
-// outranks deferred in 026 §2.1's precedence.
-func TestDocNeedsPlanningPartialWithDeferralReportsPartial(t *testing.T) {
+// TestDocNeedsPlanningPlanDraftOutranksDeferred: a section deferred by one
+// plan and covered by a draft one reports "plan-draft".
+func TestDocNeedsPlanningPlanDraftOutranksDeferred(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
@@ -1167,12 +939,12 @@ func TestDocNeedsPlanningPartialWithDeferralReportsPartial(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
 	})
 	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
-	levelledPlan(t, s, "plan-b", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
+	coveringPlan(t, s, "plan-b", false, "025-x#sec-1")
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 partial: partial outranks deferred", gaps)
+		[]string{"sec-1(plan-draft)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 plan-draft: plan-draft outranks deferred", gaps)
 	}
 }
 
@@ -1216,8 +988,7 @@ func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
 }
 
 // TestDocNeedsPlanningDeferralOwnerExternalVerbatim: an owner reference this
-// project cannot resolve is reported verbatim, the same fallback
-// fullCoverageWith uses (026 §2.1, §5.3).
+// project cannot resolve is reported verbatim (026 §5.3).
 func TestDocNeedsPlanningDeferralOwnerExternalVerbatim(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)

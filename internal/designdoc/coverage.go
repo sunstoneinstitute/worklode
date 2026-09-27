@@ -11,15 +11,13 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// PlanningOutcome is where one spec section sits, per 026 §2.1, relative to
-// the corpus's discharging-plan coverage.
+// PlanningOutcome is where one spec section sits (WL-SPEC-78 §1.3).
 type PlanningOutcome string
 
 const (
-	Full      PlanningOutcome = "full"
-	Partial   PlanningOutcome = "partial"
+	Planned   PlanningOutcome = "planned"
+	PlanDraft PlanningOutcome = "plan-draft"
 	Deferred  PlanningOutcome = "deferred"
-	BoundOnly PlanningOutcome = "boundOnly"
 	Unplanned PlanningOutcome = "unplanned"
 )
 
@@ -86,22 +84,17 @@ func canonDir(dir, fallback string) string {
 	return filepath.ToSlash(rel)
 }
 
-// CoveringPlan is one plan's claim on a section. A `none` claim never
-// appears here: it discharges nothing and is owed no work (026 §2.1, §2.4).
+// CoveringPlan is one plan covering a section.
 type CoveringPlan struct {
 	Path   string // repo-relative
 	Status string // "accepted" | "superseded" | "draft"
-	Level  string // "full" | "partial"
 }
 
-// claim is one plan's coverage assertion against one spec section, resolved
-// once at index build time so Section need not re-parse frontmatter per
-// query.
+// claim is one plan's covers edge onto one spec section, resolved once at
+// index build time so Section need not re-parse frontmatter per query.
 type claim struct {
-	plan             string // repo-relative
-	status           string // the plan's frontmatter status
-	level            string // "full" | "partial" | "none"
-	fullCoverageWith []string
+	plan   string // repo-relative
+	status string // the plan's frontmatter status
 }
 
 // deferral is one plan's explicit handoff of a section to a named owner
@@ -113,10 +106,9 @@ type deferral struct {
 	owner  string // repo-relative reference to the document the section is handed to
 }
 
-// discharges reports whether status is in 026 §2.1's discharging set for
-// coverage purposes: not draft. A superseded plan is spent (025 §9: accepted,
-// then executed) and discharges what it covered exactly as an accepted plan
-// does; the two statuses differ only in what §2.4 still owes afterwards.
+// discharges reports whether status is in WL-SPEC-78 §1.3's discharging set:
+// accepted or superseded. A superseded plan is spent (accepted, then
+// executed) and discharges what it covered exactly as an accepted plan does.
 func discharges(status string) bool {
 	return status == "accepted" || status == "superseded"
 }
@@ -134,7 +126,6 @@ type sectionKey struct {
 type PlanIndex struct {
 	claims map[sectionKey][]claim
 	defers map[sectionKey][]deferral
-	status map[string]string // repo-relative plan path -> frontmatter status
 
 	// specDir and planDir are the two corpus directories exactly as loaded
 	// (CorpusDoc.Path's directory for any doc of that kind) — absolute when
@@ -193,7 +184,6 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 	ix := &PlanIndex{
 		claims:     make(map[sectionKey][]claim),
 		defers:     make(map[sectionKey][]deferral),
-		status:     make(map[string]string),
 		projectKey: projectKey,
 	}
 	ix.specDir, ix.planDir = corpusDirs(docs)
@@ -219,7 +209,6 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 			continue
 		}
 		plan := resolveDoc(d.Path, ix.planCanon, ix.planDir)
-		ix.status[plan] = d.Status
 		home := path.Dir(plan)
 		for _, e := range d.Edges {
 			if e.Rel != "covers" && e.Rel != "defers" {
@@ -235,22 +224,14 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 			target := resolveNumberedAlias(ix.normalizeRef(e.Target, home), knownSpecs)
 			key := sectionKey{spec: target, anchor: e.TargetAnchor}
 			if e.Rel == "defers" {
-				owner := ""
-				if len(e.CompletedWith) > 0 {
-					owner = ix.normalizeRef(e.CompletedWith[0], home)
-				}
+				owner := ix.normalizeRef(e.Owner, home)
 				ix.defers[key] = append(ix.defers[key], deferral{plan: plan, status: d.Status, owner: owner})
 				continue
 			}
 			if !knownSpecs[target] {
 				unresolved[plan+" covers "+e.Target] = true
 			}
-			ix.claims[key] = append(ix.claims[key], claim{
-				plan:             plan,
-				status:           d.Status,
-				level:            e.Coverage,
-				fullCoverageWith: ix.normalizeList(e.CompletedWith, home),
-			})
+			ix.claims[key] = append(ix.claims[key], claim{plan: plan, status: d.Status})
 		}
 	}
 	for s := range unresolved {
@@ -381,18 +362,6 @@ func (ix *PlanIndex) normalizeRef(ref, home string) string {
 	return ref
 }
 
-// normalizeList applies normalizeRef to every entry.
-func (ix *PlanIndex) normalizeList(refs []string, home string) []string {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]string, len(refs))
-	for i, r := range refs {
-		out[i] = ix.normalizeRef(r, home)
-	}
-	return out
-}
-
 // buildResolver indexes every document in the corpus — of every kind, not
 // only plans — by its own number, slug and kind, so normalizeRef's fallback
 // can call ResolveRef against them the same way `lode show` resolves a
@@ -477,95 +446,50 @@ func resolveNumberedAlias(ref string, known map[string]bool) string {
 	return ref
 }
 
-// Section returns the 026 §2.1 outcome for one spec section, addressed by a
-// §4 spec reference — a bare filename, a repo-relative path, or an absolute
-// CorpusDoc.Path, from either form the corpus was loaded in — and its bare
-// anchor, e.g. "docs/specs/026-design-doc-queries.md", "sec-2.1". It also
-// returns every plan whose claim on the section is `full` or `partial` — at
-// any status, since a caller needs to tell an accepted plan that may still
-// need executing from a superseded one that is done, and from a draft one
-// still awaiting acceptance (026 §2.4) — deduplicated and sorted ascending
-// by Path.
+// Section returns the WL-SPEC-78 §1.3 outcome for one spec section,
+// addressed by a §4 spec reference — a bare filename, a repo-relative path,
+// or an absolute CorpusDoc.Path, from either form the corpus was loaded in —
+// and its bare anchor, e.g. "docs/specs/026-design-doc-queries.md", "sec-2.1".
+// It also returns every plan covering the section, at any status, since a
+// caller needs to tell an accepted plan that may still need executing from a
+// superseded one that is done and from a draft one awaiting acceptance —
+// deduplicated and sorted ascending by Path.
+//
+// A covers edge means the plan builds the whole rule, so one accepted or
+// superseded plan plans the section, but only once no draft plan also
+// covers it: until then it is PlanDraft. With no covering plan, a deferral
+// makes it Deferred.
 //
 // The third return is the deferred-to owner: non-empty only when the outcome
 // is Deferred, in which case it is every distinct owner an accepted-or-
-// superseded plan's `defers` names for this section (026 §5.3), sorted and
-// comma-joined — the same join spelling internal/store/docs.go's
-// NeedsPlanning uses, so the two consumers agree on both the outcome and its
-// detail for the same section.
+// superseded plan's `defers` names for this section, sorted and comma-joined
+// — the same join spelling the store's NeedsPlanning uses.
 func (ix *PlanIndex) Section(specPath, anchor string) (PlanningOutcome, []CoveringPlan, string) {
 	key := sectionKey{spec: resolveDoc(specPath, ix.specCanon, ix.specDir), anchor: anchor}
 
-	var hasFull, hasPartial, hasNone, hasClosedPartial bool
+	var discharged, draft bool
 	var covering []CoveringPlan
 	seen := map[string]bool{} // a plan claiming one section twice reports once
-
 	for _, c := range ix.claims[key] {
-		if (c.level == "full" || c.level == "partial") && !seen[c.plan] {
+		if !seen[c.plan] {
 			seen[c.plan] = true
-			covering = append(covering, CoveringPlan{Path: c.plan, Status: c.status, Level: c.level})
+			covering = append(covering, CoveringPlan{Path: c.plan, Status: c.status})
 		}
-		if !discharges(c.status) {
-			continue // draft: not yet owed nor owing planning (026 §2.1)
-		}
-		switch c.level {
-		case "full":
-			hasFull = true
-		case "partial":
-			hasPartial = true
-			if ix.closes(c.fullCoverageWith, key, c.plan) {
-				hasClosedPartial = true
-			}
-		case "none":
-			hasNone = true
-		default:
-			// Not full, partial, or none: scripts/secmeta.py's
-			// check_coverage_entry already rejects a missing or unknown
-			// coverage level, so a committed corpus cannot reach this.
-			// The claim simply decides nothing about the outcome.
-		}
+		discharged = discharged || discharges(c.status)
+		draft = draft || c.status == "draft"
 	}
 	sort.Slice(covering, func(i, j int) bool { return covering[i].Path < covering[j].Path })
 
-	owner := ix.deferredOwner(key)
-
-	// 026 §2.1's precedence over the undischarged readings: partial, then
-	// deferred, then bound-only, then unplanned. Full (and a closed partial)
-	// discharges the section outright and is decided first, exactly as
-	// before defers was indexed.
-	outcome := Unplanned
 	switch {
-	case hasFull || hasClosedPartial:
-		outcome = Full
-	case hasPartial:
-		outcome = Partial
-	case owner != "":
-		outcome = Deferred
-	case hasNone:
-		outcome = BoundOnly
+	case draft:
+		return PlanDraft, covering, ""
+	case discharged:
+		return Planned, covering, ""
 	}
-	if outcome != Deferred {
-		owner = ""
+	if owner := ix.deferredOwner(key); owner != "" {
+		return Deferred, covering, owner
 	}
-	return outcome, covering, owner
-}
-
-// Bound reports whether any plan's `covers` claims this section at `none`,
-// at any status. It is deliberately wider than the discharging set Section
-// applies: §2.1 asks which plans have *undertaken* work, where a draft one
-// has not, while §2.5 asks whether writing a plan is the act the section
-// waits for — and there a `none` claim "contributes no item, at any plan
-// status", because accepting the claiming plan would discharge nothing about
-// the section either. Without this a bound-only section reads as forgotten,
-// which is the whole distinction `none` exists to make (026 §5).
-func (ix *PlanIndex) Bound(specPath, anchor string) bool {
-	key := sectionKey{spec: resolveDoc(specPath, ix.specCanon, ix.specDir), anchor: anchor}
-	for _, c := range ix.claims[key] {
-		if c.level == "none" {
-			return true
-		}
-	}
-	return false
+	return Unplanned, covering, ""
 }
 
 // deferredOwner returns the comma-joined, sorted, deduplicated set of owners
@@ -585,42 +509,4 @@ func (ix *PlanIndex) deferredOwner(key sectionKey) string {
 	}
 	sort.Strings(owners)
 	return strings.Join(owners, ",")
-}
-
-// closes reports whether a partial claim's fullCoverageWith discharges the
-// section: non-empty, and every named plan is not the claiming plan itself,
-// discharges (accepted or superseded), and itself contributes full or
-// partial coverage to the same section (026 §2.1; scripts/secmeta.py's
-// cross_check enforces the same three refusals plus the self-reference
-// one). fullCoverageWith is checked, never trusted — an empty list, a draft
-// target, the claiming plan itself, a target contributing none, or a target
-// that does not cover this section at all all fail this check and leave the
-// claim merely partial.
-func (ix *PlanIndex) closes(with []string, key sectionKey, self string) bool {
-	if len(with) == 0 {
-		return false
-	}
-	for _, sibling := range with {
-		if sibling == self {
-			return false
-		}
-		if !discharges(ix.status[sibling]) {
-			return false
-		}
-		if !ix.contributes(sibling, key) {
-			return false
-		}
-	}
-	return true
-}
-
-// contributes reports whether plan has a discharging claim of level full or
-// partial against key.
-func (ix *PlanIndex) contributes(plan string, key sectionKey) bool {
-	for _, c := range ix.claims[key] {
-		if c.plan == plan && discharges(c.status) && (c.level == "full" || c.level == "partial") {
-			return true
-		}
-	}
-	return false
 }

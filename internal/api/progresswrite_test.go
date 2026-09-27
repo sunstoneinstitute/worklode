@@ -463,8 +463,7 @@ Scope body.
 const probeCoveringPlan = `---
 status: draft
 covers:
-  - spec: probe-spec.md#sec-1
-    coverage: full
+  - probe-spec.md#sec-1
 ---
 
 # Covering plan
@@ -621,8 +620,7 @@ Covered by nothing.
 const probeRallyPlanA = `---
 status: draft
 covers:
-  - spec: rally-spec.md#sec-1
-    coverage: full
+  - rally-spec.md#sec-1
 ---
 
 # Rally plan A
@@ -652,8 +650,7 @@ Do the second thing.
 const probeRallyPlanB = `---
 status: draft
 covers:
-  - spec: rally-spec.md#sec-2
-    coverage: full
+  - rally-spec.md#sec-2
 ---
 
 # Rally plan B

@@ -133,12 +133,9 @@ export interface DocSection {
  * a reference to a stale or withdrawn document can be flagged where it is
  * named (025 §8.7). Empty on an unresolved to_external edge.
  *
- * completed_with carries the doc_coverage_completed_with side-table (026
- * §5, §5.3) that only a covers or defers edge ever populates: a partial
- * covers entry's fullCoverageWith closure, in authored order, or a defers
- * entry's single-element owner. Each element is a slug when the reference
- * resolved to a live document, or the reference verbatim when it did not.
- * Absent for every other edge, and for a full/none covers entry.
+ * owner is a defers edge's owner (WL-SPEC-78 §4.2): a slug when it resolved
+ * to a document, the reference verbatim when it did not. Absent on every
+ * other edge.
  */
 export interface DocEdge {
   type: string;
@@ -151,7 +148,7 @@ export interface DocEdge {
   to_kind: string;
   to_number: number;
   to_status: string;
-  completed_with?: string[];
+  owner?: string;
 }
 
 /** A document's open candidate revision (025 §7.2), matching

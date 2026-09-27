@@ -42,10 +42,8 @@ Model body.
 const progressPlanBodyE2E = `---
 status: draft
 covers:
-  - spec: 001-widget.md#sec-1
-    coverage: full
-  - spec: 001-widget.md#sec-2
-    coverage: full
+  - 001-widget.md#sec-1
+  - 001-widget.md#sec-2
 ---
 
 # Widget plan
