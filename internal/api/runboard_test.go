@@ -52,6 +52,67 @@ func TestRunGroupOf(t *testing.T) {
 	}
 }
 
+// ciRunAt builds a CIRun for one workflow, started at the given time, with
+// no conclusion (still running).
+func ciRunAt(workflow string, started time.Time) store.CIRun {
+	return store.CIRun{Workflow: workflow, Status: "in_progress", StartedAt: started}
+}
+
+// ciRunDone builds a completed CIRun for one workflow with the given
+// conclusion, started at the given time.
+func ciRunDone(workflow, conclusion string, started time.Time) store.CIRun {
+	return store.CIRun{Workflow: workflow, Status: "completed", Conclusion: strPtr(conclusion), StartedAt: started}
+}
+
+func TestPRCIState(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name string
+		runs []store.CIRun
+		want string
+	}{
+		{"no runs", nil, ""},
+		{"single run still queued", []store.CIRun{ciRunAt("ci", t0)}, "running"},
+		{"single run completed success", []store.CIRun{ciRunDone("ci", "success", t0)}, "passed"},
+		{"single run completed skipped", []store.CIRun{ciRunDone("ci", "skipped", t0)}, "passed"},
+		{"single run completed neutral", []store.CIRun{ciRunDone("ci", "neutral", t0)}, "passed"},
+		{"single run completed failure", []store.CIRun{ciRunDone("ci", "failure", t0)}, "failed"},
+		{
+			"two workflows both passed",
+			[]store.CIRun{ciRunDone("build", "success", t0), ciRunDone("lint", "success", t0)},
+			"passed",
+		},
+		{
+			"two workflows, one still running beats the other's failure",
+			[]store.CIRun{ciRunDone("build", "failure", t0), ciRunAt("lint", t0)},
+			"running",
+		},
+		{
+			"two workflows, one failed beats the other's success",
+			[]store.CIRun{ciRunDone("build", "failure", t0), ciRunDone("lint", "success", t0)},
+			"failed",
+		},
+		{
+			// checkLabel/prCIState both roll up the newest run per workflow;
+			// an older failure on the same workflow that has since passed
+			// must not resurrect a "failed" verdict.
+			"a rerun on the same workflow supersedes its earlier failure",
+			[]store.CIRun{
+				ciRunDone("build", "failure", t0),
+				ciRunDone("build", "success", t0.Add(time.Hour)),
+			},
+			"passed",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := prCIState(tc.runs); got != tc.want {
+				t.Errorf("prCIState(%v) = %q, want %q", tc.runs, got, tc.want)
+			}
+		})
+	}
+}
+
 // rbTask is a small builder for a fact whose task carries an id, title and
 // state; the tests below set whatever else each case needs directly on the
 // returned struct.
