@@ -850,3 +850,41 @@ dct:hasPart wl:edgeOrigin wlc:inferred ;
 #                              prov:SoftwareAgent already carries the split.
 #                              concept.ttl's closing block has the reasoning.
 # ---------------------------------------------------------------------------
+
+# Task-kind behavior properties. Instance values live in task-kinds.ttl.
+# Subjects are concepts in wlc:TaskKind, not individual tasks.
+
+wl:claimable a owl:DatatypeProperty ;
+    rdfs:domain skos:Concept ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Tasks of this kind may be leased. State, hierarchy and other eligibility checks still apply." .
+
+wl:allowsChildren a owl:DatatypeProperty ;
+    rdfs:domain skos:Concept ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Tasks of this kind may be hierarchy parents." .
+
+wl:planMintable a owl:DatatypeProperty ;
+    rdfs:domain skos:Concept ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "A plan may declare tasks of this kind for creation on acceptance." .
+
+wl:allowsDecisions a owl:DatatypeProperty ;
+    rdfs:domain skos:Concept ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Tasks of this kind may carry decision questions." .
+
+wl:canBlock a owl:DatatypeProperty ;
+    rdfs:domain skos:Concept ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Tasks of this kind may be the source of a blocks edge to another task." .
+
+wl:kindMutable a owl:DatatypeProperty ;
+    rdfs:domain skos:Concept ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "The public API permits changing into or out of this kind, subject to the target kind requirements. Both kinds must permit the change." .
+
+wl:closesOnAnswers a owl:DatatypeProperty ;
+    rdfs:domain skos:Concept ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Recording the final outstanding answer closes a task of this kind." .
