@@ -568,8 +568,7 @@ func TestIsCoverageOnlyPlan(t *testing.T) {
 	const coversFront = `---
 status: draft
 covers:
-  - spec: docs/specs/004-execution-backbone.md#sec-6.3
-    coverage: full
+  - docs/specs/004-execution-backbone.md#sec-6.3
 ---
 `
 	const defersFront = `---

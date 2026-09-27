@@ -4,7 +4,7 @@
 # vocabulary and the runtime layer, spec 016 asks 006 to mint two
 # skill-registry terms, spec 025 amends the vocabulary (prefix rename,
 # wl:Section, versioning, status enum) and restores Plan as a sibling document
-# class, and spec 026 adds qualified plan-section coverage. Where a spec
+# class, and spec 026 adds plan coverage. Where a spec
 # section is cited below, that section is the reason the term exists.
 #
 # This file is a reference, not a deployment: the graph is not implemented, and
@@ -378,31 +378,6 @@ wl:covers a owl:ObjectProperty ;
         two indistinguishable (026 §5). The frontmatter key is `covers`; `implements` on a plan is
         its retired spelling.""" .
 
-wl:Coverage a owl:Class ;
-    wl:layer wlc:execution ;
-    rdfs:comment """A qualified wl:covers: how completely one Plan covers one Section. Reified
-        beside the direct edge, never in place of it, so 025 §11's coverage queries are untouched
-        and no wl:fullyImplements is minted (026 §5). The node names both ends itself
-        (wl:coveringPlan, wl:coveredSection) rather than hanging off a Plan→Coverage predicate:
-        PROV needs prov:qualifiedAssociation because an Association has no other route back to
-        its Activity, whereas here the pair is the node's whole identity, and a predicate whose
-        object is a reification node cannot be read aloud as a sentence (026 §6).""" .
-
-wl:coveringPlan a owl:ObjectProperty, owl:FunctionalProperty ;
-    wl:layer wlc:execution ;
-    rdfs:domain wl:Coverage ;
-    rdfs:range wl:Plan .
-
-wl:coveredSection a owl:ObjectProperty, owl:FunctionalProperty ;
-    wl:layer wlc:execution ;
-    rdfs:domain wl:Coverage ;
-    rdfs:range wl:Section .
-
-wl:coverageLevel a owl:ObjectProperty, owl:FunctionalProperty ;
-    wl:layer wlc:execution ;
-    rdfs:domain wl:Coverage ;
-    rdfs:range skos:Concept .
-
 # --- Rules (docs/specs2/12-spec-refactoring-design-tree.md S8 to S12, S26; 07 §2) ---
 
 wl:Rule a owl:Class ;
@@ -442,14 +417,6 @@ wl:references a owl:ObjectProperty ;
     rdfs:range wl:Rule ;
     rdfs:comment "A textual pointer from the rule to another rule, derived from the rule text on every version and replaced with it (S26)." .
 
-wl:completedWith a owl:ObjectProperty ;
-    wl:layer wlc:execution ;
-    rdfs:domain wl:Coverage ;
-    rdfs:range wl:Plan ;
-    rdfs:comment """The plans that, with this one, discharge the section. Checked, never trusted:
-        a named plan that does not itself cover the section leaves it partially planned
-        (026 §2.1).""" .
-
 wl:defers a owl:ObjectProperty ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "doc_edges.defers" ;
@@ -459,8 +426,8 @@ wl:defers a owl:ObjectProperty ;
     rdfs:comment """A Plan's explicit handoff of a Section it will not build (026 §5.3). The
         deferring plan contributes no coverage; the section stays a planning gap, named rather
         than silent, until some plan covers it. The owner hangs off the qualified wl:Deferral
-        node, never off this edge. Frontmatter key `defers`, entries {spec, to}; projected as a
-        doc_edges 'defers' row with the owner in the completion side-table.""" .
+        node, never off this edge. Frontmatter key `defers`, entries {spec, to}; stored as a
+        doc_edges 'defers' row with the owner on the row (owner_doc or owner_external).""" .
 
 wl:amends a owl:ObjectProperty ;
     wl:edgeOrigin wlc:declared ;
@@ -475,8 +442,10 @@ wl:amends a owl:ObjectProperty ;
 wl:Deferral a owl:Class ;
     wl:layer wlc:execution ;
     rdfs:comment """A qualified wl:defers: which document owns the handed-off Section. Reified
-        beside the direct edge, never in place of it, mirroring wl:Coverage — the node names both
-        ends itself for 026 §6.3's reasons.""" .
+        beside the direct edge, never in place of it. The node names both ends itself
+        (wl:deferringPlan, wl:deferredSection) rather than hanging off a Plan→Deferral predicate,
+        because a predicate whose object is a reification node cannot be read aloud as a
+        sentence (026 §6.3).""" .
 
 wl:deferringPlan a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
@@ -833,6 +802,10 @@ dct:hasPart wl:edgeOrigin wlc:inferred ;
 #                              ontology.1-2.ttl companion (cf. 006 §0).
 #   wl:fullyImplements,        never minted (025 §3): declared coverage is a
 #   wl:partiallyImplements     second source of truth that goes stale.
+#   wl:Coverage,               retired (WL-SPEC-78 §4.6): a covers edge means
+#   wl:coverageLevel,          the plan builds the whole rule, so there is no
+#   wl:completedWith,          level to qualify it with.
+#   wlc:CoverageLevel
 #   wl:Release                 never minted (006 §2.1): a release is a wl:Artifact
 #                              of kind wlc:git_tag plus a wl:cutFrom edge.
 #   wl:Milestone               v2 (006 §1).

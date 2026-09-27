@@ -64,45 +64,8 @@ func TestSectionFull_DirectClaim(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
-}
-
-func TestSectionFull_ClosedPartial(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"    fullCoverageWith:\n" +
-			"      - docs/plans/b.md\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"},
-		{Path: "docs/plans/b.md", Status: "accepted", Level: "full"},
-	})
-}
-
-// A partial sibling still closes fullCoverageWith: the rule only requires
-// "full or partial", not that the sibling is itself discharged (026 §2.1).
-func TestSectionFull_ClosedByPartialSibling(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"    fullCoverageWith:\n" +
-			"      - docs/plans/b.md\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"},
-		{Path: "docs/plans/b.md", Status: "accepted", Level: "partial"},
-	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // A superseded plan discharges exactly like an accepted one (026 §2.1,
@@ -111,124 +74,8 @@ func TestSectionSuperseded_DischargesFull(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: superseded\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "superseded", Level: "full"}})
-}
-
-// A superseded plan's fullCoverageWith target may itself be superseded, not
-// only accepted.
-func TestSectionSuperseded_ClosesFullCoverageWith(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: superseded\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"    fullCoverageWith:\n" +
-			"      - docs/plans/b.md\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: superseded\ncovers: " + specSec1 + "#sec-1\n---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "superseded", Level: "partial"},
-		{Path: "docs/plans/b.md", Status: "superseded", Level: "full"},
-	})
-}
-
-func TestSectionPartial_NoFullCoverageWith(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"---\n# A\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Partial,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"}})
-}
-
-// The fullCoverageWith refusals (026 §2.1): each leaves the section partial
-// rather than trusting the claim.
-func TestSectionPartial_FullCoverageWithRefusals(t *testing.T) {
-	cases := map[string]map[string]string{
-		"empty list": {
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + specSec1 + "#sec-1\n" +
-				"    coverage: partial\n" +
-				"    fullCoverageWith: []\n" +
-				"---\n# A\n\nBody.\n",
-		},
-		"draft target": {
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + specSec1 + "#sec-1\n" +
-				"    coverage: partial\n" +
-				"    fullCoverageWith:\n" +
-				"      - docs/plans/b.md\n" +
-				"---\n# A\n\nBody.\n",
-			"b.md": "---\nstatus: draft\ncovers: " + specSec1 + "#sec-1\n---\n# B\n\nBody.\n",
-		},
-		"target contributes none": {
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + specSec1 + "#sec-1\n" +
-				"    coverage: partial\n" +
-				"    fullCoverageWith:\n" +
-				"      - docs/plans/b.md\n" +
-				"---\n# A\n\nBody.\n",
-			"b.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + specSec1 + "#sec-1\n" +
-				"    coverage: none\n" +
-				"---\n# B\n\nBody.\n",
-		},
-		"target does not cover this section at all": {
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + specSec1 + "#sec-1\n" +
-				"    coverage: partial\n" +
-				"    fullCoverageWith:\n" +
-				"      - docs/plans/b.md\n" +
-				"---\n# A\n\nBody.\n",
-			"b.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-2\n---\n# B\n\nBody.\n",
-		},
-		"names itself": {
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + specSec1 + "#sec-1\n" +
-				"    coverage: partial\n" +
-				"    fullCoverageWith:\n" +
-				"      - docs/plans/a.md\n" +
-				"---\n# A\n\nBody.\n",
-		},
-	}
-	// "b.md" (when present) also shows up in the covering list at whatever
-	// level it claimed; a `none` claim (case "target contributes none") is
-	// the one that never does.
-	wantExtra := map[string][]designdoc.CoveringPlan{
-		"draft target": {{Path: "docs/plans/b.md", Status: "draft", Level: "full"}},
-	}
-	for name, planFiles := range cases {
-		t.Run(name, func(t *testing.T) {
-			ix := buildIndex(t, planFiles)
-			want := append([]designdoc.CoveringPlan{
-				{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"},
-			}, wantExtra[name]...)
-			checkSection(t, ix, specSec1, "sec-1", designdoc.Partial, want)
-		})
-	}
-}
-
-func TestSectionBoundOnly(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: none\n" +
-			"---\n# A\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.BoundOnly, nil)
-}
-
-func TestSectionBoundOnly_SupersededNoneDischarges(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: superseded\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: none\n" +
-			"---\n# A\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.BoundOnly, nil)
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "superseded"}})
 }
 
 func TestSectionUnplanned_EmptyCorpus(t *testing.T) {
@@ -245,43 +92,39 @@ func TestSectionUnplanned_NoSpecPlanContributesNothing(t *testing.T) {
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
 }
 
-// A draft plan does not discharge, but a full/partial claim from one still
-// appears in the covering list (026 §2.4 needs it to emit `plan-draft`).
-func TestSectionUnplanned_OnlyDraftCovers(t *testing.T) {
+// A draft plan does not discharge: the section is plan-draft, and the plan
+// appears in the covering list (WL-SPEC-78 §1.3).
+func TestSectionPlanDraft_OnlyDraftCovers(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: draft\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "draft", Level: "full"}})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.PlanDraft,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "draft"}})
 }
 
-// A draft plan claiming `none` raises no plan-draft item (026 §2.4): it
-// never appears in the covering list, and alone leaves the section
-// unplanned rather than bound-only.
-func TestSectionUnplanned_DraftNoneAlone(t *testing.T) {
+// A section covered by more than one plan is planned only once every
+// covering plan is accepted (WL-SPEC-78 §1.3).
+func TestSectionPlanDraft_AcceptedBesideDraft(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: draft\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: none\n" +
-			"---\n# A\n\nBody.\n",
+		"a.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
+		"b.md": "---\nstatus: draft\ncovers: " + specSec1 + "#sec-1\n---\n# B\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
+	checkSection(t, ix, specSec1, "sec-1", designdoc.PlanDraft, []designdoc.CoveringPlan{
+		{Path: "docs/plans/a.md", Status: "accepted"},
+		{Path: "docs/plans/b.md", Status: "draft"},
+	})
 }
 
-// A draft `none` claim alongside an accepted `none` claim: the draft claim
-// still never appears, and the accepted one alone decides bound-only.
-func TestSectionBoundOnly_DraftNoneAlongsideAcceptedNone(t *testing.T) {
+// Overlap is legal: two accepted plans on one section plan it.
+func TestSectionOverlapIsLegal(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: draft\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: none\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: none\n" +
-			"---\n# B\n\nBody.\n",
+		"a.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
+		"b.md": "---\nstatus: superseded\ncovers: " + specSec1 + "#sec-1\n---\n# B\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.BoundOnly, nil)
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned, []designdoc.CoveringPlan{
+		{Path: "docs/plans/a.md", Status: "accepted"},
+		{Path: "docs/plans/b.md", Status: "superseded"},
+	})
 }
 
 // A whole-document covers (no #sec-N fragment) contributes to nothing: the
@@ -298,84 +141,20 @@ func TestSectionRetiredImplementsSpelling(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: accepted\nimplements: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
-}
-
-// Overlap is legal and unremarked: two discharging plans on one section both
-// contribute, and the stronger claim decides the outcome.
-func TestSectionOverlapIsLegal(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "accepted", Level: "full"},
-		{Path: "docs/plans/b.md", Status: "accepted", Level: "partial"},
-	})
-}
-
-// A fullCoverageWith target named by bare filename (026 §4's legal
-// shorthand, in live use across the corpus for plan references) still
-// closes — resolved relative to the claiming plan's own directory, exactly
-// scripts/secmeta.py's resolve_ref.
-func TestSectionFullCoverageWithBareFilenameCloses(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"    fullCoverageWith:\n" +
-			"      - b.md\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"},
-		{Path: "docs/plans/b.md", Status: "accepted", Level: "full"},
-	})
-}
-
-// Mutual fullCoverageWith (a names b, b names a, both accepted partial) is
-// not recursively re-verified — each only has to see the other contribute
-// full or partial, not itself be closed — so both close, and the covering
-// list still reports each plan's own raw claimed level (partial), not the
-// resolved outcome.
-func TestSectionMutualFullCoverageWith(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"    fullCoverageWith:\n" +
-			"      - docs/plans/b.md\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"    fullCoverageWith:\n" +
-			"      - docs/plans/a.md\n" +
-			"---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"},
-		{Path: "docs/plans/b.md", Status: "accepted", Level: "partial"},
-	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // A plan claiming the same section twice reports once in the covering list.
 func TestSectionDuplicateClaimDeduplicates(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: full\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: full\n" +
+			"  - " + specSec1 + "#sec-1\n" +
+			"  - " + specSec1 + "#sec-1\n" +
 			"---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // NewPlanIndex ignores non-plan documents entirely, even one whose
@@ -386,7 +165,7 @@ func TestNewPlanIndexIgnoresNonPlanDocs(t *testing.T) {
 		Kind:   "spec",
 		Path:   "docs/specs/001-example.md",
 		Status: "accepted",
-		Edges:  []designdoc.EdgeMeta{{Rel: "covers", Target: specSec1, TargetAnchor: "sec-1", Coverage: "full"}},
+		Edges:  []designdoc.EdgeMeta{{Rel: "covers", Target: specSec1, TargetAnchor: "sec-1"}},
 	}
 	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{specDoc}, "")
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
@@ -403,15 +182,15 @@ func TestSectionCoveringSortedByPath(t *testing.T) {
 			Kind:   "plan",
 			Path:   "docs/plans/" + name,
 			Status: "accepted",
-			Edges:  []designdoc.EdgeMeta{{Rel: "covers", Target: specSec1, TargetAnchor: "sec-1", Coverage: "full"}},
+			Edges:  []designdoc.EdgeMeta{{Rel: "covers", Target: specSec1, TargetAnchor: "sec-1"}},
 		}
 	}
 	docs := []designdoc.CorpusDoc{mk("z.md"), mk("a.md"), mk("m.md")}
 	ix := designdoc.NewPlanIndex(docs, "")
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "accepted", Level: "full"},
-		{Path: "docs/plans/m.md", Status: "accepted", Level: "full"},
-		{Path: "docs/plans/z.md", Status: "accepted", Level: "full"},
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned, []designdoc.CoveringPlan{
+		{Path: "docs/plans/a.md", Status: "accepted"},
+		{Path: "docs/plans/m.md", Status: "accepted"},
+		{Path: "docs/plans/z.md", Status: "accepted"},
 	})
 }
 
@@ -425,11 +204,11 @@ func TestSectionNumberedAliasResolvesToKnownSlug(t *testing.T) {
 	spec := designdoc.CorpusDoc{Kind: "spec", Path: "docs/specs/per-project-workflows.md"}
 	plan := designdoc.CorpusDoc{
 		Kind: "plan", Path: "docs/plans/a.md", Status: "accepted",
-		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "docs/specs/045-per-project-workflows.md", TargetAnchor: "sec-1", Coverage: "full"}},
+		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "docs/specs/045-per-project-workflows.md", TargetAnchor: "sec-1"}},
 	}
 	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{spec, plan}, "")
-	checkSection(t, ix, "docs/specs/per-project-workflows.md", "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+	checkSection(t, ix, "docs/specs/per-project-workflows.md", "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // TestSectionNumberedAliasRequiresAKnownDocument (WL-404): the numbered form
@@ -439,7 +218,7 @@ func TestSectionNumberedAliasResolvesToKnownSlug(t *testing.T) {
 func TestSectionNumberedAliasRequiresAKnownDocument(t *testing.T) {
 	plan := designdoc.CorpusDoc{
 		Kind: "plan", Path: "docs/plans/a.md", Status: "accepted",
-		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "docs/specs/045-per-project-workflows.md", TargetAnchor: "sec-1", Coverage: "full"}},
+		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "docs/specs/045-per-project-workflows.md", TargetAnchor: "sec-1"}},
 	}
 	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{plan}, "")
 	checkSection(t, ix, "docs/specs/per-project-workflows.md", "sec-1", designdoc.Unplanned, nil)
@@ -485,8 +264,8 @@ func TestSectionAbsoluteCorpusRoot(t *testing.T) {
 	}
 
 	ix := designdoc.NewPlanIndex(docs, "")
-	checkSection(t, ix, spec.Path, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+	checkSection(t, ix, spec.Path, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // shorthandFixture builds the spec+plan pair WL-409's tests share: a spec
@@ -499,7 +278,7 @@ func shorthandFixture(t *testing.T) []designdoc.CorpusDoc {
 	}
 	plan := designdoc.CorpusDoc{
 		Kind: "plan", Path: designdoc.CorpusPath("plan", "a"), Number: 1, Status: "accepted",
-		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "WL-SPEC-25", TargetAnchor: "sec-1", Coverage: "full"}},
+		Edges: []designdoc.EdgeMeta{{Rel: "covers", Target: "WL-SPEC-25", TargetAnchor: "sec-1"}},
 	}
 	return []designdoc.CorpusDoc{spec, plan}
 }
@@ -512,8 +291,8 @@ func shorthandFixture(t *testing.T) []designdoc.CorpusDoc {
 // `lode show`, and the section reports covered rather than unplanned.
 func TestSectionShorthandCoversResolves(t *testing.T) {
 	ix := designdoc.NewPlanIndex(shorthandFixture(t), "WL")
-	checkSection(t, ix, "docs/specs/example.md", "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+	checkSection(t, ix, "docs/specs/example.md", "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // Without a project key (every caller before WL-409, and every offline
@@ -531,8 +310,8 @@ func TestSectionBareFilenameSpecPath(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, "001-example.md", "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+	checkSection(t, ix, "001-example.md", "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // A `covers` entry written relative to the plan's own directory (§4's
@@ -542,26 +321,8 @@ func TestSectionCoversDotDotResolves(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: accepted\ncovers: ../specs/001-example.md#sec-1\n---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
-}
-
-// A "./"-prefixed sibling reference in fullCoverageWith closes correctly
-// (026 review round 2, R2-2).
-func TestSectionFullCoverageWithDotSlashCloses(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"    fullCoverageWith:\n" +
-			"      - ./b.md\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"},
-		{Path: "docs/plans/b.md", Status: "accepted", Level: "full"},
-	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // A plan corpus rooted somewhere whose own absolute path coincidentally
@@ -582,8 +343,8 @@ func TestSectionPlanDirContainingSpecsSubstringDoesNotMisnormalise(t *testing.T)
 		t.Fatalf("LoadSyncCorpus: %v", err)
 	}
 	ix := designdoc.NewPlanIndex(docs, "")
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // A `covers` entry with the optional leading "/" (026 §4: "docs/specs/x.md"
@@ -595,25 +356,8 @@ func TestSectionCoversLeadingSlashResolves(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: accepted\ncovers: /" + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
-}
-
-// A leading "/" on a fullCoverageWith target closes correctly too.
-func TestSectionFullCoverageWithLeadingSlashCloses(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"    fullCoverageWith:\n" +
-			"      - /docs/plans/b.md\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
-		{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"},
-		{Path: "docs/plans/b.md", Status: "accepted", Level: "full"},
-	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // A specPath written with §4's optional leading "/" reaches the same claims
@@ -625,8 +369,8 @@ func TestSectionLeadingSlashSpecPathResolves(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
 	})
-	checkSection(t, ix, "/"+specSec1, "sec-1", designdoc.Full,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+	checkSection(t, ix, "/"+specSec1, "sec-1", designdoc.Planned,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
 // Both meanings of a leading "/" are live at once against an absolute-rooted
@@ -663,9 +407,9 @@ func TestSectionAbsolutePathAndLeadingSlashRefBothResolve(t *testing.T) {
 	}
 
 	ix := designdoc.NewPlanIndex(docs, "")
-	want := []designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}}
-	checkSection(t, ix, specPath, "sec-1", designdoc.Full, want)
-	checkSection(t, ix, "/"+specSec1, "sec-1", designdoc.Full, want)
+	want := []designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}}
+	checkSection(t, ix, specPath, "sec-1", designdoc.Planned, want)
+	checkSection(t, ix, "/"+specSec1, "sec-1", designdoc.Planned, want)
 }
 
 // A plan may defer a section it does not cover at all — `covers` and
@@ -710,43 +454,6 @@ func TestSectionUnplanned_DraftDefersDoesNotDefer(t *testing.T) {
 			"---\n# A\n\nBody.\n",
 	})
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
-}
-
-// Precedence (026 §2.1): partial outranks deferred. Plan a partially covers
-// the section; plan b (a different plan, so the combination is unambiguous)
-// defers the same section. The outcome is partial, not deferred, and the
-// owner is not reported.
-func TestSectionPartial_OutranksDeferred(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: partial\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ndefers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    to: docs/specs/006-knowledge-graph.md\n" +
-			"---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Partial,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"}})
-}
-
-// Precedence (026 §2.1): deferred outranks bound-only. Plan a claims `none`
-// on the section (bound-only material on its own); plan b defers it. The
-// outcome is deferred, with the owner, not bound-only.
-func TestSectionDeferred_OutranksBoundOnly(t *testing.T) {
-	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    coverage: none\n" +
-			"---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ndefers:\n" +
-			"  - spec: " + specSec1 + "#sec-1\n" +
-			"    to: docs/specs/006-knowledge-graph.md\n" +
-			"---\n# B\n\nBody.\n",
-	})
-	checkSection(t, ix, specSec1, "sec-1", designdoc.Deferred, nil,
-		"docs/specs/006-knowledge-graph.md")
 }
 
 // Two plans deferring the same section to two different owners report both,

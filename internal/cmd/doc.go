@@ -875,9 +875,6 @@ func newDocEdgeCmd(use, short string,
 	}
 	cmd.MarkFlagsMutuallyExclusive(names...)
 	cmd.Flags().StringVar(&in.FromAnchor, "from-anchor", "", "the section of this document the edge leaves from (sec-N)")
-	cmd.Flags().StringVar(&in.Coverage, "coverage", "", "with --covers: full (the default), partial or none")
-	cmd.Flags().StringArrayVar(&in.CompletedWith, "full-coverage-with", nil,
-		"with --covers --coverage partial: a plan that completes the coverage (repeatable)")
 	cmd.Flags().StringVar(&in.Owner, "owner", "", "with --defers: the document the section is deferred to")
 	return cmd
 }

@@ -54,20 +54,26 @@ one rule across several specs is not yet supported by this edit path.
 
 ## Rules govern plans and their tasks
 
-A `covers` entry is a rule ref (`WL-RULE-<n>`), a document/section reference
-such as `WL-SPEC-25#sec-9`, or a whole-document reference, plus the existing
-`coverage` and `fullCoverageWith` keys. A rule ref resolves to that rule; a
-section reference reaches the rule at that anchor and its descendant rules;
-a whole-document reference reaches all its rules. Unresolved refs reach none.
-Each entry is resolved when the plan is written and stored as a `covers`
-edge from the plan to the rule; the governing rules are re-resolved on each
-plan write and again at acceptance.
-Governance and section coverage are different questions: a whole-doc edge
-can identify governing rules without discharging section planning gaps.
+A `covers` entry is a plain reference: a rule ref (`WL-RULE-<n>`), a
+document/section reference such as `WL-SPEC-25#sec-9`, or a whole-document
+reference. A rule ref resolves to that rule; a section reference reaches the
+rule at that anchor and its descendant rules; a whole-document reference
+reaches all its rules. Unresolved refs reach none. Each entry is resolved
+when the plan is written and stored as a `covers` edge from the plan to the
+rule; the governing rules are re-resolved on each plan write and again at
+acceptance. A `covers` edge always means the plan builds the whole rule:
+there are no coverage levels. `coverage:` and `fullCoverageWith:` are refused
+on write.
 
-Tasks minted from a plan receive `governedBy` links to its governing rules,
-including standing constraints declared with `coverage: none`. For work
-filed outside a plan, name the governing rules explicitly:
+A rule the plan must obey but builds nothing in is an invariant, and governs
+the plan's tasks without a `covers` entry; a rule with nothing to build
+(rationale, context) is informative and also carries no `covers` entry. A
+plan that builds only part of a rule is a sign the rule should split
+(`lode rule link WL-RULE-B --derived-from WL-RULE-A`) so each plan covers
+whole rules.
+
+Tasks minted from a plan receive `governedBy` links to its governing rules.
+For work filed outside a plan, name the governing rules explicitly:
 
 ```bash
 lode task add --title "..." --kind feature --governed-by <rule-ref>
@@ -143,7 +149,7 @@ amendment → supersession:
 |---|---|---|
 | `status` | `draft` \| `accepted` \| `superseded` | all |
 | `issued` | `YYYY-MM-DD` | specs, ADRs |
-| `covers` | rule ref(s) (`WL-RULE-<n>`), spec section reference(s), or whole-document reference(s), optionally `coverage: full\|partial\|none` (with `fullCoverageWith` for partial) — or `NO-SPEC` | **plans**, mandatory |
+| `covers` | rule ref(s) (`WL-RULE-<n>`), spec section reference(s), or whole-document reference(s) — plain references only, no coverage level — or `NO-SPEC` | **plans**, mandatory |
 | `defers` | list of `{spec, to}`: a section this plan hands off (`spec`, with `#sec-N`) and the document that owns it (`to`, no fragment) — reported `deferred` with its owner by `--needs-planning` until some plan covers it (026 §5.3) | **plans** |
 | `requires` | reference list (`isRequiredBy` is refused) | all |
 | `blockedBy` | plan references — the named plans run first; both ends must be plans in the same project (`blocks` is refused) | **plans** |

@@ -95,12 +95,13 @@ removing prose alone does not redirect task governance.
 **Every document you create starts with YAML frontmatter — no exceptions.**
 A spec needs `status` and, once accepted, `issued`. A plan needs `status`
 and `covers` — rule refs, document/section references, or whole-document
-references selecting its governing rules, optionally qualified by a
-`coverage:` level (`full`/`partial`/`none`) and, for
-`partial`, a `fullCoverageWith` list of the plans that complete it (see
-`lode:splitting-specs-into-plans` for that mechanism in full) — or
-`covers: NO-SPEC` (026 §4.3, valid only here) when nothing governs it, never
-omitted, since an absent `covers` reads as a forgotten one.
+references selecting its governing rules, each a plain reference: a
+`covers` edge always means the plan builds the whole rule, no levels — or
+`covers: NO-SPEC` (026 §4.3, valid only here) when nothing governs
+it, never omitted, since an absent `covers` reads as a forgotten one. See
+`lode:splitting-specs-into-plans` for the cases that used to be expressed
+with a coverage level: splitting a rule the plan only partly builds,
+invariants, and informative rules.
 
 Keys are ontology property local names (specs 006/025/026), not a second
 vocabulary — a key with no term behind it means the ontology is missing one,
@@ -111,7 +112,7 @@ dependency → amendment → supersession:
 |---|---|---|
 | `status` | spec, ADR | `draft`, `accepted`, or `superseded` (`proposed` is retired — a document under review stays `draft`) |
 | `issued` | spec, ADR | `YYYY-MM-DD` of first publication |
-| `covers` | plan | scalar or list of rule refs (`WL-RULE-<n>`), spec-section references, or whole-document references this plan undertakes to build; qualifiable with `coverage:`/`fullCoverageWith:` |
+| `covers` | plan | scalar or list of rule refs (`WL-RULE-<n>`), spec-section references, or whole-document references this plan undertakes to build in full; `coverage:`/`fullCoverageWith:` are refused |
 | `implements` | plan | retired spelling of `covers`; still parses, reported as retired. A document carrying both is an error |
 | `defers` | plan | list of `{spec, to}`: a section this plan hands off, and the document expected to cover it (026 §5.3) |
 | `requires` | any | list of references; plain dependency, no ordering semantics |
@@ -194,13 +195,11 @@ with no successor.
 
 ## Declaring a plan's tasks
 
-A plan's `covers` names rule refs, spec sections, or whole documents, with
-`coverage` and `fullCoverageWith` where needed. The store resolves each entry
-to rules when the plan is written and stores a `covers` edge from the plan to
-each one, then gives every minted task `governedBy` links to that set.
-Standing constraints with `coverage: none` still govern those tasks. Verify
-the result with `lode rule list --doc <plan-ref>` and
-`lode show <task-id> --json`.
+A plan's `covers` names rule refs, spec sections, or whole documents. The
+store resolves each entry to rules when the plan is written and stores a
+`covers` edge from the plan to each one, then gives every minted task
+`governedBy` links to that set. Verify the result with
+`lode rule list --doc <plan-ref>` and `lode show <task-id> --json`.
 
 A plan body carries exactly one `## Tasks` section, holding nothing but one
 `### Task <N> — <title>` subsection per task (em dash; the text after it is

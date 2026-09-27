@@ -144,18 +144,10 @@ class LoadTest(unittest.TestCase):
 
     def test_gap_row_supplies_both_the_total_and_the_gaps(self):
         fake = FakeLode(specs=[spec_doc(1, "001-a")],
-                        gaps=[gap(1, 4, "unplanned", "partial")])
+                        gaps=[gap(1, 4, "unplanned", "plan-draft")])
         specs, _, _, _ = collect(fake)
         self.assertEqual((specs[1]["sections"], specs[1]["unplanned"]), (4, 2))
-        self.assertEqual(dict(specs[1]["reasons"]), {"unplanned": 1, "partial": 1})
-
-    def test_bound_only_is_a_gap_not_coverage(self):
-        """The backbone's replacement for parsing `coverage: none`: a plan that
-        declared it does not discharge the section leaves the section open."""
-        fake = FakeLode(specs=[spec_doc(1, "001-a")], gaps=[gap(1, 2, "bound-only")])
-        specs, _, _, _ = collect(fake)
-        self.assertEqual(specs[1]["unplanned"], 1)
-        self.assertEqual(dict(specs[1]["reasons"]), {"bound-only": 1})
+        self.assertEqual(dict(specs[1]["reasons"]), {"unplanned": 1, "plan-draft": 1})
 
     def test_a_gap_row_spares_the_doc_get(self):
         fake = FakeLode(specs=[spec_doc(1, "001-a"), spec_doc(2, "002-b")],

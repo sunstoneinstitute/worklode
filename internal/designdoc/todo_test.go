@@ -122,49 +122,12 @@ func TestTodoUnplannedSectionsCollapse(t *testing.T) {
 	}
 }
 
-func TestTodoPartialSection(t *testing.T) {
-	docs := buildTodoCorpus(t,
-		map[string]string{"001-example.md": twoSectionSpec},
-		map[string]string{
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
-				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: none\n" +
-				"---\n# A\n\nBody.\n",
-		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": closed("WL-1")})})
-	if err != nil {
-		t.Fatalf("Todo: %v", err)
-	}
-	// sec-2 is bound only: no item at any plan status. The accepted plan's
-	// task is closed, so it owes no execution item either.
-	checkItems(t, items, []string{"partial " + todoSpecRef + "#sec-1 plan= tasks="})
-}
-
-// A bound-only section is not owed work (026 §2.4): the accepted plan read
-// it and undertook nothing.
-func TestTodoBoundOnlyEmitsNothing(t *testing.T) {
-	docs := buildTodoCorpus(t,
-		map[string]string{"001-example.md": twoSectionSpec},
-		map[string]string{
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: none\n" +
-				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: none\n" +
-				"---\n# A\n\nBody.\n",
-		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": closed("WL-1")})})
-	if err != nil {
-		t.Fatalf("Todo: %v", err)
-	}
-	checkItems(t, items, nil)
-}
-
-// A deferred section (026 §5.3, §2.1) emits no item, the same as a
-// bound-only one: §2.5's five types are each discharged by an act this
-// document's own plans can perform, and the next act on a deferred section
-// belongs to its named owner, not to writing a plan here. This is the WL-290
-// regression case: before defers was indexed by NewPlanIndex, this section
-// read as `unplanned` and produced a (wrong) unplanned item; it must not now
-// silently produce a mis-typed one either.
+// A deferred section (026 §5.3, §2.1) emits no item: the item types are each
+// discharged by an act this document's own plans can perform, and the next
+// act on a deferred section belongs to its named owner, not to writing a
+// plan here. This is the WL-290 regression case: before defers was indexed by
+// NewPlanIndex, this section read as `unplanned` and produced a (wrong)
+// unplanned item; it must not now silently produce a mis-typed one either.
 func TestTodoDeferredEmitsNothing(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
@@ -183,8 +146,7 @@ func TestTodoDeferredEmitsNothing(t *testing.T) {
 	checkItems(t, items, nil)
 }
 
-// A *draft* plan's `defers` claim binds nothing yet, the same as a draft
-// plan's `none` claim (026 §2.1's not-draft rule): the section is still
+// A *draft* plan's `defers` claim binds nothing yet: the section is still
 // unplanned.
 func TestTodoDraftDefersIsStillUnplanned(t *testing.T) {
 	docs := buildTodoCorpus(t,
@@ -202,27 +164,6 @@ func TestTodoDraftDefersIsStillUnplanned(t *testing.T) {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="})
-}
-
-// A *draft* plan's `none` claim emits no item either: 026 §2.4 suppresses a
-// bound-only section "at any plan status", and accepting the plan would
-// discharge nothing about it, so there is no plan-draft item either. sec-2,
-// which no plan names at all, still reports — the distinction between a
-// governing constraint and a forgotten section is the whole reason `none`
-// exists (WL-469).
-func TestTodoDraftBoundOnlyEmitsNothing(t *testing.T) {
-	docs := buildTodoCorpus(t,
-		map[string]string{"001-example.md": twoSectionSpec},
-		map[string]string{
-			"a.md": "---\nstatus: draft\ncovers:\n" +
-				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: none\n" +
-				"---\n# A\n\nBody.\n",
-		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
-	if err != nil {
-		t.Fatalf("Todo: %v", err)
-	}
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-2 plan= tasks="})
 }
 
 func TestTodoPlanDraftReplacesTheSectionGap(t *testing.T) {
@@ -489,7 +430,7 @@ func TestTodoOutputIsStableAcrossRuns(t *testing.T) {
 	minted := taskSet{}
 	for _, name := range []string{"a", "b", "c", "d", "e"} {
 		plans[name+".md"] = "---\nstatus: accepted\ncovers:\n" +
-			"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
+			"  - " + todoSpecRef + "#sec-1\n" +
 			"---\n# Plan " + name + "\n\nBody.\n"
 		minted[name+".md"] = open("WL-" + name)
 	}
@@ -804,67 +745,33 @@ func TestTodoDraftPlanRequiresCycle(t *testing.T) {
 	}
 }
 
-// An accepted plan covering a section only `partial` still has to be
-// executed: 026 §2.4's unexecuted row keys on the plan's status, not on the
-// section's outcome, so the descent must not be gated on `full`.
-func TestTodoAcceptedPartialPlanStillNeedsExecuting(t *testing.T) {
+// The collapsed gap's Detail reads correctly at one section: the CLI prints
+// it verbatim.
+func TestTodoUnplannedDetail(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
-				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: partial\n" +
-				"---\n# A\n\nBody.\n",
-		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1")})})
-	if err != nil {
-		t.Fatalf("Todo: %v", err)
-	}
-	checkItems(t, items, []string{
-		"partial " + todoSpecRef + "#sec-1,sec-2 plan= tasks=",
-		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1",
-	})
-	if items[0].Detail != "2 sections are only partly covered, and no plan completes them" {
-		t.Errorf("collapsed partial Detail = %q; want the plural form", items[0].Detail)
-	}
-}
-
-// The two collapsed gaps order unplanned before partial.
-func TestTodoUnplannedPrecedesPartial(t *testing.T) {
-	docs := buildTodoCorpus(t,
-		map[string]string{"001-example.md": twoSectionSpec},
-		map[string]string{
-			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
-				"---\n# A\n\nBody.\n",
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n---\n# A\n\nBody.\n",
 		})
 	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": closed("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{
-		"unplanned " + todoSpecRef + "#sec-2 plan= tasks=",
-		"partial " + todoSpecRef + "#sec-1 plan= tasks=",
-	})
-	// The CLI prints Detail verbatim, so it has to read correctly at one
-	// section as well as at fifty.
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-2 plan= tasks="})
 	if items[0].Detail != "1 section has no covering plan" {
 		t.Errorf("unplanned Detail = %q", items[0].Detail)
 	}
-	if items[1].Detail != "1 section is only partly covered, and no plan completes it" {
-		t.Errorf("partial Detail = %q", items[1].Detail)
-	}
 }
 
-// A draft plan claiming `full` suppresses the section's partial item as well
-// as its unplanned one (026 §2.4): the pending act is accepting that plan.
-func TestTodoDraftFullPlanSuppressesPartial(t *testing.T) {
+// A draft plan beside an accepted, executed one leaves the section
+// plan-draft (WL-SPEC-78 §1.3): the pending act is accepting it.
+func TestTodoDraftBesideExecutedPlan(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
 			"a.md": "---\nstatus: accepted\ncovers:\n" +
-				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
-				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: partial\n" +
+				"  - " + todoSpecRef + "#sec-1\n" +
+				"  - " + todoSpecRef + "#sec-2\n" +
 				"---\n# A\n\nBody.\n",
 			"b.md": "---\nstatus: draft\ncovers: " + todoSpecRef + "#sec-1\n---\n# B\n\nBody.\n",
 		})
@@ -872,9 +779,7 @@ func TestTodoDraftFullPlanSuppressesPartial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	// sec-1's partial item is gone; only sec-2 remains in the collapsed gap.
 	checkItems(t, items, []string{
-		"partial " + todoSpecRef + "#sec-2 plan= tasks=",
 		"plan-draft " + todoSpecRef + "#sec-1 plan=docs/plans/b.md tasks=",
 	})
 }

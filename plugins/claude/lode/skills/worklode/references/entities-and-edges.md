@@ -78,7 +78,7 @@ end only via release, done, block, abandon, reopen, or the expiry sweep.
 | From → to | Meaning |
 |---|---|
 | Spec → rule | An arrangement records a rule version, position, depth and section anchor. |
-| Plan → rule (`covers`) | The rules governing the plan. Each `covers` entry (a rule ref, a `<doc>#sec-N` ref, or a whole-document ref) is resolved to rules when the plan is written and stored as a `covers` edge from the plan to each rule, carrying its `full`\|`partial`\|`none` coverage level. |
+| Plan → rule (`covers`) | The rules governing the plan. Each `covers` entry (a rule ref, a `<doc>#sec-N` ref, or a whole-document ref) is resolved to rules when the plan is written and stored as a `covers` edge from the plan to each rule. A `covers` edge always means the plan builds the whole rule; there are no coverage levels. |
 | Task → rule (`governedBy`) | Governing requirement, linked by plan acceptance, by hand, or by the `Spec:` trailer gate. The link records the version at link time and follows the newest text unless pinned. |
 | Rule → rule (`refines`, `constrains`, `conflictsWith`, `references`) | Design relationships. Text references also produce derived `references` edges. |
 | Rule → rule (`amends`) | The subject changes how the object is read without replacing it; `lode show --inline` folds it in. Documents do not amend or replace each other. |
@@ -114,8 +114,7 @@ resolve):
 
 `covers` is a row in the same `doc_edges` table, but points at a rule
 (`to_rule`) rather than a document: see plan → rule in the rule-relationships
-table above. A `partial` may name the other plans that jointly close the
-coverage (`fullCoverageWith`, in `doc_coverage_completed_with`).
+table above.
 
 `lode doc list --needs-planning` / `--needs-execution` are standing queries
 over the edges above, not stored flags. `--bare-superseded` reads rule edges

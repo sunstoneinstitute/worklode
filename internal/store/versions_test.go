@@ -39,15 +39,13 @@ func collectRowsT(t *testing.T, rows *sql.Rows) []string {
 
 const (
 	liveEdgesSQL = `SELECT json_build_object('from_anchor', e.from_anchor, 'type', e.type, 'to_doc', e.to_doc,
-	        'to_anchor', e.to_anchor, 'to_external', e.to_external, 'coverage', e.coverage, 'to_rule', e.to_rule,
-	        'completed_with', (SELECT jsonb_agg(CASE WHEN w.to_doc IS NOT NULL THEN jsonb_build_object('to_doc', w.to_doc)
-	                                               ELSE jsonb_build_object('to_external', w.to_external) END ORDER BY w.position)
-	                             FROM doc_coverage_completed_with w WHERE w.edge_id = e.id))::text
+	        'to_anchor', e.to_anchor, 'to_external', e.to_external, 'to_rule', e.to_rule,
+	        'owner_doc', e.owner_doc, 'owner_external', e.owner_external)::text
 	   FROM doc_edges e WHERE e.from_doc = $1
 	  ORDER BY e.type, coalesce(e.to_rule, 0), coalesce(e.to_doc, 0), coalesce(e.to_external, '')`
 	snapEdgesSQL = `SELECT json_build_object('from_anchor', e.from_anchor, 'type', e.type, 'to_doc', e.to_doc,
-	        'to_anchor', e.to_anchor, 'to_external', e.to_external, 'coverage', e.coverage, 'to_rule', e.to_rule,
-	        'completed_with', e.completed_with)::text
+	        'to_anchor', e.to_anchor, 'to_external', e.to_external, 'to_rule', e.to_rule,
+	        'owner_doc', e.owner_doc, 'owner_external', e.owner_external)::text
 	   FROM doc_edge_versions e WHERE e.doc_id = $1 AND e.version = $2
 	  ORDER BY e.type, coalesce(e.to_rule, 0), coalesce(e.to_doc, 0), coalesce(e.to_external, '')`
 	liveRulesSQL = `SELECT json_build_object('position', position, 'rule_id', rule_id, 'rule_version', rule_version,
