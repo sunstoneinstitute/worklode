@@ -32,12 +32,10 @@ type PlanTask struct {
 // hyphens and en dashes are near misses, not accepted alternatives.
 var planTaskHeadingRE = regexp.MustCompile(`^Task\s+(\d+)\s+—\s+(.+)$`)
 
-// planMintableKinds is the subset of task kinds a plan may mint (025 §9.1):
-// review tasks are created by the review lifecycle, spikes are inputs to
-// planning, and rally is hand-assembled by a person, so none of the three is
-// plan-declarable. Membership is tested with slices.Contains, so the list is
-// also the lookup — there is nothing to drift.
-var planMintableKinds = []string{"feature", "bug", "chore", "design", "decision"}
+// planMintableKinds follows the generated task-kind policy.
+func planMintableKinds() []string {
+	return ns.TaskKindsMatching(func(d ns.TaskKindDescriptor) bool { return d.PlanMintable })
+}
 
 // planPriorities is the priority values a task definition may declare
 // (docs/authoring-design-docs.md's key table); "medium" is the default when
@@ -146,10 +144,10 @@ func parsePlanTask(sec *Section) (PlanTask, error) {
 	// discoverable by querying the documents themselves, unlike a request
 	// (see kindAliasUses in internal/api/server.go).
 	meta.Kind, _ = ns.NormalizeTaskKind(meta.Kind)
-	if !slices.Contains(planMintableKinds, meta.Kind) {
+	if policy, ok := ns.TaskKindDescriptors[meta.Kind]; !ok || !policy.PlanMintable {
 		return PlanTask{}, fmt.Errorf(
 			"task %d: kind %q is not plan-mintable; want one of %s",
-			number, meta.Kind, strings.Join(planMintableKinds, ", "))
+			number, meta.Kind, strings.Join(planMintableKinds(), ", "))
 	}
 
 	priority := meta.Priority
