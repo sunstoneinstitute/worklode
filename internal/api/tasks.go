@@ -887,4 +887,135 @@ func (s *server) publishTasksFromPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // taskRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
-var taskRouteDocs = map[string]routeDoc{}
+var taskRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks": {
+		summary:   "Create a task",
+		request:   model.CreateTaskInput{},
+		responses: map[int]any{http.StatusCreated: model.Task{}},
+	},
+	// listTasks also answers tree=true with model.TaskTreeResponse (via
+	// listTaskTree) and detail=true with model.TaskListDetailResponse; this
+	// documents the flat, non-detail default response.
+	"GET /api/v1/tasks": {
+		summary:   "List tasks, optionally as a hierarchy or with detail",
+		responses: map[int]any{http.StatusOK: model.TaskListResponse{}},
+		query: []string{
+			"kind", "state", "tree", "project", "root", "repo", "updated_since",
+			"plan_doc", "about_doc", "deleted", "priority", "parent", "assignee",
+			"has_children", "detail",
+		},
+	},
+	"GET /api/v1/tasks/{id}": {
+		summary:   "Get a task's full detail",
+		responses: map[int]any{http.StatusOK: model.TaskDetail{}},
+	},
+	"GET /api/v1/tasks/{id}/cost": {
+		summary:   "Get a task's accounted usage and cost",
+		responses: map[int]any{http.StatusOK: model.TaskCost{}},
+		query:     []string{"from", "to", "children"},
+	},
+	"PATCH /api/v1/tasks/{id}": {
+		summary:   "Update a task's fields",
+		request:   model.EditTaskInput{},
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"PUT /api/v1/tasks/{id}/skills": {
+		summary:   "Set a task's pinned skills",
+		request:   model.SetSkillsInput{},
+		responses: map[int]any{http.StatusOK: model.TaskSkills{}},
+	},
+	"POST /api/v1/tasks/{id}/edges": {
+		summary:   "Add an edge from or to a task",
+		request:   model.EdgeInput{},
+		responses: map[int]any{http.StatusCreated: model.Edge{}},
+	},
+	"DELETE /api/v1/tasks/{id}/edges": {
+		summary:   "Remove an edge from or to a task",
+		request:   model.EdgeInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"GET /api/v1/blockers": {
+		summary:   "List blocked tasks and their blocker trees",
+		responses: map[int]any{http.StatusOK: model.BlockerForest{}},
+		query:     []string{"project"},
+	},
+	"GET /api/v1/tasks/{id}/blockers": {
+		summary:   "Get a task's full transitive blocker tree",
+		responses: map[int]any{http.StatusOK: model.BlockerTree{}},
+	},
+	"GET /api/v1/tasks/{id}/brief": {
+		summary:   "Get a task's bounded start-of-work brief",
+		responses: map[int]any{http.StatusOK: model.Brief{}},
+		query:     []string{"skills"},
+	},
+	"POST /api/v1/tasks/{id}/lease/worktree": {
+		summary:   "Move the caller's active lease to a new worktree",
+		request:   model.RebindWorktreeInput{},
+		responses: map[int]any{http.StatusOK: model.Lease{}},
+	},
+	"GET /api/v1/tasks/{id}/timeline": {
+		summary:   "Get a task's merged delivery timeline",
+		responses: map[int]any{http.StatusOK: model.TimelineResponse{}},
+	},
+	"GET /api/v1/tasks/{id}/checklist": {
+		summary:   "Get the checklist items parsed from a task's body",
+		responses: map[int]any{http.StatusOK: []model.ChecklistItem{}},
+	},
+	"POST /api/v1/tasks/{id}/checklist": {
+		summary:   "Check or uncheck one task checklist item",
+		request:   model.SetChecklistItemInput{},
+		responses: map[int]any{http.StatusOK: model.ChecklistItem{}},
+	},
+	"POST /api/v1/tasks/{id}/governed-by": {
+		summary:   "Add a governing rule to a task",
+		request:   model.GovernInput{},
+		responses: map[int]any{http.StatusCreated: model.GovernInput{}},
+	},
+	"DELETE /api/v1/tasks/{id}/governed-by": {
+		summary:   "Remove a governing rule from a task",
+		request:   model.GovernInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/tasks/{id}/decompose": {
+		summary:   "Create draft child tasks under a task",
+		request:   model.DecomposeInput{},
+		responses: map[int]any{http.StatusCreated: model.DecomposeResponse{}},
+	},
+	"DELETE /api/v1/tasks/{id}": {
+		summary:   "Tombstone a task",
+		request:   model.DeleteInput{},
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"POST /api/v1/tasks/{id}/undelete": {
+		summary:   "Restore a tombstoned task",
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"GET /api/v1/tasks/{id}/blobs": {
+		summary:   "List a task's blob references",
+		responses: map[int]any{http.StatusOK: model.TaskBlobsResponse{}},
+	},
+	"POST /api/v1/tasks/{id}/blobs": {
+		summary:   "Attach an uploaded blob to a task",
+		request:   model.AttachBlobInput{},
+		responses: map[int]any{http.StatusOK: model.AttachBlobResponse{}},
+	},
+	"DELETE /api/v1/tasks/{id}/blobs/{hash}": {
+		summary:   "Detach a blob reference from a task",
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/blobs": {
+		summary:            "Upload a content-addressed blob",
+		requestContentType: "application/octet-stream",
+		responses:          map[int]any{http.StatusOK: model.BlobResponse{}},
+	},
+	"POST /api/v1/blobs/gc": {
+		summary:   "Sweep unreferenced blobs and orphan objects",
+		request:   model.BlobGCRequest{},
+		responses: map[int]any{http.StatusOK: model.BlobGCResponse{}},
+	},
+	"POST /api/v1/tasks/{id}/tokens": {
+		summary:   "Mint a task-scoped token",
+		request:   model.TaskTokenInput{},
+		responses: map[int]any{http.StatusCreated: model.TaskTokenResponse{}},
+	},
+}
