@@ -387,82 +387,75 @@ func secretsJSON(names []string) ([]byte, error) {
 	return json.Marshal(names)
 }
 
-// checkKindRetag refuses a retag into a kind whose invariants the task's
-// current state already violates. Each rule below is checked against the kind
-// the task had when the state was created, and nothing re-checks it after, so
-// a retag is the one door into a decision or a rally holding state its own
-// kind refuses to be given.
-//
-// decision and rally are the only restricted kinds; every other kind accepts
-// any state, so a retag into one needs no check. Where each rule comes from:
-//   - children: checkHierarchy and Decompose refuse both kinds as a parent.
-//   - active lease: Claim refuses both kinds.
-//   - decision rows: requireLiveTask/requireOpenTask refuse a rally only — a
-//     decision task is the one that is meant to carry them.
-//   - outbound 'blocks' edge: AddEdge refuses a rally only.
-//   - plan_doc: planMintableKinds excludes rally, so no plan mints one. A
-//     plan-minted task carries plan-ordering blockers that are not 'blocks'
-//     edges (blockerRelation's second arm), and a rally's membership is its
-//     'blocks' edges alone — the cockpit card counts on that.
-//
-// The project's one-active-rally rule is not checked here. It is a partial
-// unique index, so the UPDATE below is what enforces it, reported through
-// rallyUniqueConflict.
+// checkKindRetag checks both kinds' mutability and the target kind's
+// permissions against the task's existing state. The row lock serializes
+// retags with claims, decomposition, and other retags.
 func checkKindRetag(tx *sql.Tx, id, kind string) error {
-	if kind != "decision" && kind != "rally" {
-		return nil
-	}
-	// Lock the row before reading the state the rules below check: Claim takes
-	// FOR UPDATE, so without this a claim landing between the lease check and
-	// the kind UPDATE leaves a leased rally. A missing row falls through to
-	// the UPDATE, which reports ErrNotFound. Decompose locks the parent row
-	// too (hierarchy.go), so this closes the child race as well; AddEdge and
-	// requireLiveTask take no row lock, so a concurrent edge or decision can
-	// still slip past their checks.
-	if err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = $1 FOR UPDATE`, id).
-		Scan(new(int)); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("lock task %s: %w", id, err)
-	}
-	container, err := hasChildren(tx, id)
+	policy, err := taskKindPolicy(kind)
 	if err != nil {
 		return err
 	}
-	if container {
-		return fmt.Errorf("task %s has children, which a %s cannot: %w", id, kind, ErrInvalidInput)
+	var current string
+	if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1 FOR UPDATE`, id).Scan(&current); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("task %s: %w", id, ErrNotFound)
+		}
+		return fmt.Errorf("lock task %s: %w", id, err)
 	}
-	// activeLeaseTx answers "is it leased" and "by whom" at once; ErrNotFound
-	// is the pass case.
-	lease, err := activeLeaseTx(tx, id)
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	previous, err := taskKindPolicy(current)
+	if err != nil {
 		return err
 	}
-	if err == nil {
-		return fmt.Errorf("task %s is held by %s in %s and a %s is never claimed; release it first: %w",
-			id, lease.ActorID, lease.Worktree, kind, ErrInvalidInput)
+	if current == kind {
+		return nil
 	}
-	if kind != "rally" {
+	if !previous.KindMutable || !policy.KindMutable {
+		fixed := current
+		if !policy.KindMutable {
+			fixed = kind
+		}
+		return fmt.Errorf("kind %s is fixed when the task is created: create a new task instead of retyping this one: %w", fixed, ErrInvalidInput)
+	}
+	if !policy.AllowsChildren {
+		container, err := hasChildren(tx, id)
+		if err != nil {
+			return err
+		}
+		if container {
+			return fmt.Errorf("task %s has children, which a %s cannot: %w", id, kind, ErrInvalidInput)
+		}
+	}
+	if !policy.Claimable {
+		lease, err := activeLeaseTx(tx, id)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		if err == nil {
+			return fmt.Errorf("task %s is held by %s in %s and a %s is never claimed; release it first: %w", id, lease.ActorID, lease.Worktree, kind, ErrInvalidInput)
+		}
+	}
+	// Rally membership comes only from blocks edges; plan ordering must not
+	// introduce a second set. PlanMintable governs creation, not retagging.
+	if policy.AllowsDecisions && policy.CanBlock && kind != "rally" {
 		return nil
 	}
 	var decisions, blocks int
 	var planned bool
 	if err := tx.QueryRow(
 		`SELECT (SELECT count(*) FROM decisions WHERE task_id = $1),
-		        (SELECT count(*) FROM task_edges WHERE from_task = $1 AND type = 'blocks'),
-		        COALESCE((SELECT plan_doc IS NOT NULL FROM tasks WHERE id = $1), false)`,
+          (SELECT count(*) FROM task_edges WHERE from_task = $1 AND type = 'blocks'),
+          COALESCE((SELECT plan_doc IS NOT NULL FROM tasks WHERE id = $1), false)`,
 		id).Scan(&decisions, &blocks, &planned); err != nil {
-		return fmt.Errorf("rally retag checks for %s: %w", id, err)
+		return fmt.Errorf("kind retag checks for %s: %w", id, err)
 	}
-	if planned {
-		return fmt.Errorf("task %s was minted from a plan, which a rally cannot be (a plan orders its blockers, and a rally's members are its 'blocks' edges): %w",
-			id, ErrInvalidInput)
+	if kind == "rally" && planned {
+		return fmt.Errorf("task %s was minted from a plan, which a rally cannot be (a plan orders its blockers, and a rally's members are its 'blocks' edges): %w", id, ErrInvalidInput)
 	}
-	if decisions > 0 {
-		return fmt.Errorf("task %s carries %d decision row(s), which a rally cannot: %w",
-			id, decisions, ErrInvalidInput)
+	if !policy.AllowsDecisions && decisions > 0 {
+		return fmt.Errorf("task %s carries %d decision row(s), which a %s cannot: %w", id, decisions, kind, ErrInvalidInput)
 	}
-	if blocks > 0 {
-		return fmt.Errorf("task %s blocks %d task(s), which a rally cannot: %w",
-			id, blocks, ErrInvalidInput)
+	if !policy.CanBlock && blocks > 0 {
+		return fmt.Errorf("task %s blocks %d task(s), which a %s cannot: %w", id, blocks, kind, ErrInvalidInput)
 	}
 	return nil
 }
@@ -999,9 +992,12 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 		if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, fromTask).Scan(&fromKind); err != nil {
 			return fmt.Errorf("kind of %s: %w", fromTask, err)
 		}
-		if fromKind == "rally" {
-			return fmt.Errorf("task %s is a rally and cannot block another task: %w",
-				fromTask, ErrInvalidInput)
+		policy, err := taskKindPolicy(fromKind)
+		if err != nil {
+			return err
+		}
+		if !policy.CanBlock {
+			return fmt.Errorf("task %s is a %s and cannot block another task: %w", fromTask, fromKind, ErrInvalidInput)
 		}
 		// A 'blocks' loop is a deadlock: every task on it waits for the next
 		// one and none can ever be worked. The readers already survive a
