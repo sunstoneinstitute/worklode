@@ -14,7 +14,7 @@ An actor is an accountable principal with credentials. An actor row does four th
 | `admin` | Boolean. Humans: re-synced from the Keycloak `admin` role on every login. Agents: never admin. |
 | `groups` | Humans: the full `groups` claim from the last login, stored as JSON. Gates check group membership by name at request time. Stored groups go stale between logins. |
 | `email` | Humans: the `email` claim from the last login. Used to invite crew members to a project's chat space (03-tasks-and-execution.md §13). |
-| `expected_github_login` | Humans: the Keycloak `github_username` attribute, re-synced on every login. Used only to link a GitHub account (section 9). |
+| `expected_github_login` | Humans: the Keycloak `github_username` attribute, re-synced on every login. Used only to link a GitHub account at login (section 9). |
 
 Actor ids are foreign keys from `tasks.created_by`, `tasks.assignee`, `tokens.actor_id`, `tokens.minted_by`, `leases.actor_id` and `project_participants.actor_id`. An id is therefore permanent.
 
@@ -76,7 +76,7 @@ Open routes, in the sense above: `/healthz`, `/metrics`, `/hooks/*`, `/.well-kno
 
 ## 4. Keycloak login
 
-Keycloak (`https://auth.sunstoneinstitute.ai`, realm `sunstone`) is the sole interactive login for web and CLI. GitHub is link-only (section 9).
+Keycloak (`https://auth.sunstoneinstitute.ai`, realm `sunstone`) is the sole interactive login for web and CLI. GitHub is linked at login, never a login provider (section 9).
 
 ### 4.1 Server configuration
 
@@ -177,21 +177,21 @@ The `tokenStore` abstraction (`Get/Set/Delete(server)`) has keychain, file and m
 
 ## 9. GitHub account linking
 
-Keycloak proves identity; it cannot act on GitHub. An authenticated actor links a GitHub account once, and Worklode stores a user-to-server token so it can call GitHub attributed as "SunstoneWork on behalf of `<user>`".
+Keycloak proves identity; it cannot act on GitHub. Worklode links each human's GitHub account at login and stores a user-to-server token, so it and the actor's agent sessions can call GitHub attributed as "WorklodeBot on behalf of `<user>`".
 
 ### 9.1 The GitHub App
 
-One App per environment (`worklode-dev`, `worklode-prod`), because an App has one webhook URL and one callback set.
+One App per environment, because an App has one webhook URL and one callback set. The production App is named `WorklodeBot`, the name GitHub shows in the attribution.
 
 | Setting | Value |
 |---|---|
 | User authorization | Enabled, expiring user tokens (8 h access, about 6-month refresh) |
 | Callback URL | `{LODE_PUBLIC_URL}/auth/github/callback` |
 | Webhook URL | `{LODE_PUBLIC_URL}/hooks/github`, HMAC via `LODE_GITHUB_WEBHOOK_SECRET` |
-| Permission ceiling | Repository Contents: read, Actions: read, Deployments: read, Pull requests: read. Never `contents: write`. |
+| Permissions | Write: Contents, Pull requests, Issues, Commit statuses. Read: Actions, Checks, Deployments, Environments, Merge queues, Members, Metadata, Packages, Repository advisories, Vulnerability alerts. Contents and Pull requests write let agent sessions push and open pull requests as their human (section 9.5). |
 | Installation | `sunstoneinstitute` org, selected repositories only. The provisioning and admin-cluster repos are excluded. |
 
-A stored user token is bounded by the intersection of the App's permissions, its installation scope and the user's own access, so a compromised server holding both the database and `LODE_TOKEN_ENC_KEY` still cannot push code. A feature that needs repo writes gets its own narrowly installed App. No-bypass rulesets on the provisioning and admin repos guard independently.
+A stored user token is bounded by the intersection of the App's permissions, its installation scope and the user's own access. Because the App holds Contents: write, a compromised server holding both the database and `LODE_TOKEN_ENC_KEY` can push as any linked user to any installed repository that user can write. Three things bound that: the installation excludes the provisioning and admin-cluster repos, `main` accepts changes only through the merge queue, and no-bypass rulesets on the provisioning and admin repos guard independently.
 
 | Var | Kind |
 |---|---|
@@ -202,17 +202,21 @@ A stored user token is bounded by the intersection of the App's permissions, its
 
 ### 9.2 Link flow
 
-1. `GET /auth/github/link` (authenticated session) redirects to GitHub's authorize endpoint with signed state, as a confidential client without PKCE.
-2. `GET /auth/github/callback` exchanges the code, fetches `GET /user` (`id`, `login`), and strict-checks `login` against the session actor's `expected_github_login`, case-insensitively. A missing attribute or a mismatch refuses the link with an error naming the fix and writes no row.
-3. On success, upsert the row in `github_user_tokens` keyed by the Worklode actor id.
+Linking happens during login. After provisioning (section 4.3) and before `finishLogin` (section 5), the web callback checks the actor: when `expected_github_login` is set and the actor has no `active` row in `github_user_tokens`, it redirects through GitHub instead of finishing. A GitHub username alone yields no token; only the user's authorization of the App does. GitHub asks for consent the first time and skips it afterwards, so a returning user sees only a redirect.
 
-Linking is lazy. Nothing prompts at login. A feature that needs GitHub shows a "Connect GitHub" redirect at the point of need. Re-linking after `broken` repeats the flow; GitHub skips consent for an already-authorized App.
+1. The server redirects to GitHub's authorize endpoint as a confidential client without PKCE. `state` is signed with `LODE_SESSION_SECRET`, binds the actor id and expires in 10 minutes. The CLI-intent cookie (section 7) is untouched, so the login resumes in the branch it started in.
+2. `GET /auth/github/callback` exchanges the code, fetches `GET /user` (`id`, `login`), and strict-checks `login` against the actor's `expected_github_login`, case-insensitively.
+3. On a match, it upserts the row in `github_user_tokens` keyed by the Worklode actor id.
+4. It calls `finishLogin` for the actor in `state`, whatever steps 2 and 3 returned.
+
+A failed link never fails a login. A mismatch, a denied consent or a GitHub error writes no row, logs the reason server-side, and the login completes. The next login tries again, which also repairs a `broken` row. The attempt runs at most once per login. The direct token exchange (section 6) cannot redirect a browser and never links.
+
+`GET /auth/github/link` (authenticated session) starts the same flow from the web UI, for a user who wants to reconnect without logging in again.
 
 | Command | Behaviour |
 |---|---|
-| `lode login` | Section 7 |
-| `lode actor link github` | Calls a bearer-authed endpoint that mints a short-lived signed nonce bound to the calling actor and returns a link URL. Opens the browser and polls link status until linked, refused, or expired. |
-| `lode actor show` | Logged-in identity, token expiry, link state: unlinked, linked as `<login>`, or broken (reconnect). |
+| `lode login` | Section 7. Links GitHub on the way through. |
+| `lode actor show` | Logged-in identity, token expiry, expected GitHub login, link state: unlinked, linked as `<login>`, or broken (log in again). |
 
 ### 9.3 Stored GitHub tokens
 
@@ -227,18 +231,34 @@ The row is the link: a link exists exactly when a row exists, and unlinking dele
 | `status` | `active` or `broken` |
 | `created_at`, `updated_at` | |
 
-`store.UserToken(ctx, actorID)` returns a valid access token, refreshing lazily when expired or within a skew window. GitHub refresh tokens are single-use, so the row is locked `FOR UPDATE` during a refresh; concurrent callers wait and reuse the new pair. A failed refresh sets `status = broken`, and callers translate that into "reconnect GitHub" guidance. There is no background refresher.
+`store.UserToken(ctx, actorID)` returns a valid access token, refreshing lazily when expired or within a skew window. GitHub refresh tokens are single-use, so the row is locked `FOR UPDATE` during a refresh; concurrent callers wait and reuse the new pair. A failed refresh sets `status = broken`, and callers translate that into "log in again" guidance. There is no background refresher.
 
 ### 9.4 Errors
 
 | Condition | Response |
 |---|---|
-| Link with no `expected_github_login` | Refused: "no GitHub username on your Keycloak account" |
-| Link with mismatched login | Refused, naming both logins |
-| Code exchange or `GET /user` failure | 502, retriable, no row written |
-| Refresh failure | Row `broken`; `lode actor show` and the web UI say "reconnect GitHub"; the caller gets a typed error |
-| CLI link nonce expired or consumed | Terminal error; re-run to retry |
+| Login with no `expected_github_login` | No link attempt; the login completes |
+| Link with mismatched login | No row; login completes; the server log names both logins |
+| Consent denied, code exchange or `GET /user` failure | No row; login completes; retried at the next login |
+| Expired or forged link `state` | 400; no row |
+| Refresh failure | Row `broken`; `lode actor show` and the web UI say "log in again"; the caller gets a typed error |
+| Token requested by an unlinked or broken actor | 409 naming the fix: log in again |
+| Token requested with a task-scoped token | 403 |
 | Actor id conflict with a non-human actor | 409 (`errActorKindConflict`) |
+
+### 9.5 Acting on GitHub from agent sessions
+
+Agent sessions run `gh` and `git` as the human who started them, through the human's stored token, so their GitHub actions carry the App attribution. Commit authorship still comes from `git config`; the attribution covers API actions such as pull requests, comments, reviews and merges, and pushes over HTTPS.
+
+| Surface | Behaviour |
+|---|---|
+| `GET /api/v1/actor/github-token` | Bearer-authed. Returns `{token, expires_at, login}` from `store.UserToken` for the calling human actor. |
+| `lode github token` | Prints the access token. Caches it in the OS keychain until 5 minutes before `expires_at`. |
+| `lode github credential` | A git credential helper: answers `get` for `github.com` with `x-access-token` and the access token. |
+| `lode-hook` SessionStart | Appends `export GH_TOKEN="$(lode github token)"` to `$CLAUDE_ENV_FILE`. The file is sourced before every Bash command, so `gh` picks up a refreshed token after the 8-hour expiry. |
+| `lode install` | Sets `credential.https://github.com.helper` to `!lode github credential` in the repo's local git config. |
+
+When the actor has no usable link, `lode github token` fails with the 409's guidance and `GH_TOKEN` stays unset, so `gh` falls back to the operator's own login.
 
 ## 10. Task-declared secrets
 
@@ -364,4 +384,3 @@ WL-SPEC-1 (identity and authentication), WL-SPEC-54 (agent actors), WL-SPEC-17 (
 - Staleness: whether to force re-materialization after N days for long-lived worktrees (Q17.2).
 - Catalog visibility: the full catalog is served to any authenticated actor; whether to narrow per role or project (Q17.3).
 - Catalog home: whether to promote the 1Password item to a backbone table plus admin CLI if churn grows (Q17.4).
-- The first feature that writes to GitHub as a user, and the exact repository write permissions it needs, are unspecified.
