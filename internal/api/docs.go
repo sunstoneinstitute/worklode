@@ -1282,4 +1282,137 @@ func (s *server) writeDocRevision(w http.ResponseWriter, r *http.Request, id int
 }
 
 // docRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
-var docRouteDocs = map[string]routeDoc{}
+var docRouteDocs = map[string]routeDoc{
+	"POST /api/v1/docs": {
+		summary:   "Create a design document",
+		request:   model.CreateDocInput{},
+		responses: map[int]any{http.StatusCreated: model.Doc{}},
+	},
+	"GET /api/v1/docs": {
+		summary:   "List design documents",
+		responses: map[int]any{http.StatusOK: model.DocListResponse{}},
+		query: []string{
+			"project", "kind", "status", "owner", "needs_planning", "needs_execution",
+			"bare_superseded", "unresolved", "older_than_days", "deleted", "has_notes", "hide_terminal",
+		},
+	},
+	"GET /api/v1/docs/resolve": {
+		summary:   "Resolve a document reference to its document",
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+		query:     []string{"ref"},
+	},
+	"GET /api/v1/docs/lint": {
+		summary:   "List dangling frontmatter references across the corpus",
+		responses: map[int]any{http.StatusOK: []model.DocLintFinding{}},
+		query:     []string{"project"},
+	},
+	"POST /api/v1/docs/covers/resolve": {
+		summary:   "Re-resolve every plan's unresolved covers references",
+		responses: map[int]any{http.StatusOK: model.CoversResolveResponse{}},
+	},
+	"GET /api/v1/docs/sections": {
+		summary:   "List sections across the document corpus",
+		responses: map[int]any{http.StatusOK: []model.DocSectionRow{}},
+		query:     []string{"project", "number"},
+	},
+	"GET /api/v1/docs/{id}": {
+		summary:   "Get a document with its sections, edges and notes",
+		responses: map[int]any{http.StatusOK: model.DocDetail{}},
+	},
+	"GET /api/v1/docs/{id}/versions": {
+		summary:   "List a document's versions",
+		responses: map[int]any{http.StatusOK: []model.DocVersionSummary{}},
+	},
+	"GET /api/v1/docs/{id}/referrers": {
+		summary:   "List open work pointing at a document section",
+		responses: map[int]any{http.StatusOK: model.DocReferrersResponse{}},
+		query:     []string{"anchor"},
+	},
+	"GET /api/v1/docs/{id}/versions/{n}": {
+		summary:   "Get one version of a document",
+		responses: map[int]any{http.StatusOK: model.DocVersion{}},
+	},
+	"PUT /api/v1/docs/{id}/body": {
+		summary:   "Replace a document's body",
+		request:   model.UpdateDocBodyInput{},
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"POST /api/v1/docs/{id}/patch": {
+		summary:   "Amend an accepted document in place",
+		request:   model.PatchDocInput{},
+		responses: map[int]any{http.StatusOK: model.DocPatchResponse{}},
+	},
+	"PUT /api/v1/docs/{id}/edges": {
+		summary:   "Replace a document's whole edge set",
+		request:   model.ReplaceDocEdgesInput{},
+		responses: map[int]any{http.StatusOK: model.DocDetail{}},
+	},
+	"POST /api/v1/docs/{id}/edges": {
+		summary:   "Add one edge to a document",
+		request:   model.DocEdgeInput{},
+		responses: map[int]any{http.StatusOK: model.DocDetail{}},
+	},
+	"DELETE /api/v1/docs/{id}/edges": {
+		summary:   "Remove one edge from a document",
+		request:   model.DocEdgeInput{},
+		responses: map[int]any{http.StatusOK: model.DocDetail{}},
+	},
+	"PATCH /api/v1/docs/{id}": {
+		summary:   "Set a document's title or issued date",
+		request:   model.DocColumnsInput{},
+		responses: map[int]any{http.StatusOK: model.DocDetail{}},
+	},
+	"POST /api/v1/docs/{id}/submit": {
+		summary:   "Submit a document for review",
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"POST /api/v1/docs/{id}/accept": {
+		summary:   "Accept a document, minting a plan's tasks",
+		responses: map[int]any{http.StatusOK: model.AcceptDocResponse{}},
+	},
+	"POST /api/v1/docs/{id}/revise": {
+		summary:   "Open a candidate revision of an accepted document",
+		responses: map[int]any{http.StatusOK: model.DocRevision{}},
+	},
+	"POST /api/v1/docs/{id}/withdraw": {
+		summary:   "Withdraw a document from the corpus",
+		request:   model.WithdrawDocInput{},
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"POST /api/v1/docs/{id}/owner": {
+		summary:   "Transfer a document to another owner",
+		request:   model.TransferDocOwnerInput{},
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"POST /api/v1/docs/{id}/notes": {
+		summary:   "Add an anchored note to a document",
+		request:   model.AddDocNoteInput{},
+		responses: map[int]any{http.StatusOK: model.DocNote{}},
+	},
+	"GET /api/v1/docs/{id}/notes": {
+		summary:   "List a document's anchored notes",
+		responses: map[int]any{http.StatusOK: []model.DocNote{}},
+	},
+	"PUT /api/v1/docs/{id}/revision": {
+		summary:   "Replace the open candidate revision's body",
+		request:   model.UpdateDocBodyInput{},
+		responses: map[int]any{http.StatusOK: model.DocRevision{}},
+	},
+	"DELETE /api/v1/docs/{id}/revision": {
+		summary:   "Discard the open candidate revision",
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"POST /api/v1/docs/{id}/revision/accept": {
+		summary:   "Land the candidate revision as the next version",
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"DELETE /api/v1/docs/{id}": {
+		summary:   "Delete (tombstone) a document",
+		request:   model.DeleteInput{},
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"POST /api/v1/docs/{id}/undelete": {
+		summary:   "Restore a deleted document",
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+}
