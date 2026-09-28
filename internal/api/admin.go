@@ -913,4 +913,112 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*mode
 }
 
 // adminRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
-var adminRouteDocs = map[string]routeDoc{}
+var adminRouteDocs = map[string]routeDoc{
+	"POST /api/v1/projects": {
+		summary:   "Create a project",
+		request:   model.CreateProjectInput{},
+		responses: map[int]any{http.StatusCreated: model.Project{}},
+	},
+	"GET /api/v1/projects": {
+		summary:   "List every project with its mapped repos",
+		responses: map[int]any{http.StatusOK: model.ProjectListResponse{}},
+	},
+	"GET /api/v1/projects/resolve": {
+		summary:   "Resolve the project mapped to a repo remote URL",
+		responses: map[int]any{http.StatusOK: model.Project{}},
+		query:     []string{"remote"},
+	},
+	"GET /api/v1/projects/{id}": {
+		summary:   "Get a project with its repos and accounted cost",
+		responses: map[int]any{http.StatusOK: model.ProjectDetail{}},
+		query:     []string{"from", "to"},
+	},
+	"PATCH /api/v1/projects/{id}": {
+		summary:   "Update a project's focus, pinned note, or next decision",
+		request:   model.PatchProjectInput{},
+		responses: map[int]any{http.StatusOK: model.Project{}},
+	},
+	"POST /api/v1/projects/{id}/repos": {
+		summary:   "Map a repo to a project",
+		request:   model.AddRepoInput{},
+		responses: map[int]any{http.StatusCreated: model.AddRepoResult{}},
+	},
+	"PATCH /api/v1/repos/{owner}/{name}": {
+		summary:   "Set a mapped repo's done state",
+		request:   model.SetRepoDoneStateInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"DELETE /api/v1/repos/{owner}/{name}": {
+		summary:   "Unmap a repo from its project",
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/actors": {
+		summary:   "Create an actor",
+		request:   model.CreateActorInput{},
+		responses: map[int]any{http.StatusCreated: model.Actor{}},
+	},
+	"POST /api/v1/actors/{id}/tokens": {
+		summary:   "Mint a token for an actor",
+		request:   model.CreateTokenInput{},
+		responses: map[int]any{http.StatusCreated: model.TokenResponse{}},
+	},
+	"DELETE /api/v1/tokens": {
+		summary:   "Revoke a token by plaintext or hash",
+		request:   model.RevokeTokenInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"GET /api/v1/board": {
+		summary:   "Get the board: each project's tasks bucketed by state",
+		responses: map[int]any{http.StatusOK: model.BoardResponse{}},
+		query:     []string{"project"},
+	},
+	"GET /api/v1/inbox": {
+		summary:   "List inbox issues",
+		responses: map[int]any{http.StatusOK: model.IssueListResponse{}},
+		query:     []string{"state", "project"},
+	},
+	"POST /api/v1/inbox/promote": {
+		summary:   "Promote an inbox issue into a task",
+		request:   model.PromoteInput{},
+		responses: map[int]any{http.StatusCreated: model.Task{}},
+	},
+	"POST /api/v1/inbox/dismiss": {
+		summary:   "Dismiss an inbox issue",
+		request:   model.DismissInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/inbox/link": {
+		summary:   "Link an inbox issue to an existing task",
+		request:   model.LinkInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"PATCH /api/v1/projects/{id}/settings": {
+		summary:   "Update a project's settings overrides",
+		request:   model.ProjectSettingsInput{},
+		responses: map[int]any{http.StatusOK: model.Project{}},
+	},
+	"POST /api/v1/projects/{id}/approval-flow": {
+		summary:   "Apply an approval flow to a project",
+		request:   model.ApplyApprovalFlowInput{},
+		responses: map[int]any{http.StatusOK: model.ApplyApprovalFlowResponse{}},
+	},
+	"POST /api/v1/inbox/import": {
+		summary:   "Backfill a repo's GitHub issues and pull requests",
+		request:   model.ImportInput{},
+		responses: map[int]any{http.StatusOK: model.ImportResult{}},
+	},
+	"GET /api/v1/whoami": {
+		summary:   "Get the calling actor's identity",
+		responses: map[int]any{http.StatusOK: model.WhoAmI{}},
+	},
+	"GET /api/v1/repos/doctor": {
+		summary:   "Report per-repo GitHub ingestion health",
+		responses: map[int]any{http.StatusOK: model.ReposDoctorResponse{}},
+		query:     []string{"repo"},
+	},
+	"POST /api/v1/reconcile": {
+		summary:   "Replay stored events and poll GitHub to reconcile state",
+		request:   model.ReconcileInput{},
+		responses: map[int]any{http.StatusOK: model.ReconcileResponse{}},
+	},
+}
