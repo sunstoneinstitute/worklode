@@ -1,0 +1,10 @@
+**/*_test.go
+e2e/
+docs/
+www/
+internal/ui/assets/
+graphify-out/
+
+**/*.md
+plugins/
+scripts/
