@@ -885,3 +885,6 @@ func (s *server) publishTasksFromPage(w http.ResponseWriter, r *http.Request) {
 	s.observeProgressWrite("publish", "ok")
 	writeJSON(w, http.StatusOK, model.TaskPublishResponse{Published: ids})
 }
+
+// taskRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var taskRouteDocs = map[string]routeDoc{}

@@ -911,3 +911,6 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*mode
 
 	return resp, nil
 }
+
+// adminRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var adminRouteDocs = map[string]routeDoc{}

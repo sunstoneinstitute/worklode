@@ -210,3 +210,6 @@ func (s *server) runServerDerivers(ctx context.Context) ([]model.DeriveResult, e
 	}
 	return append(out, res), nil
 }
+
+// overviewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var overviewRouteDocs = map[string]routeDoc{}

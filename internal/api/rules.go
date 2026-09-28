@@ -191,3 +191,6 @@ func (s *server) docIDByRef(ctx context.Context, ref string) (int64, error) {
 	}
 	return 0, err
 }
+
+// ruleRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var ruleRouteDocs = map[string]routeDoc{}

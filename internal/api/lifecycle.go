@@ -351,3 +351,6 @@ func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 			return store.ClearTaskCommits(tx, taskID)
 		})
 }
+
+// leaseRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var leaseRouteDocs = map[string]routeDoc{}

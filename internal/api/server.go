@@ -284,6 +284,10 @@ type server struct {
 	cfg Config
 	log *slog.Logger
 
+	// openapiJSON is the OpenAPI document registerRoutes builds at boot and
+	// GET /api/v1/openapi.json serves.
+	openapiJSON []byte
+
 	// oidc is nil unless OIDC is configured (issuer + client id set). All SSO
 	// routes 404 when it is nil.
 	oidc *oidc.Verifier
@@ -1058,6 +1062,13 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/frontier", s.getFrontier)
 	r.api("GET /api/v1/critical-path", s.getCriticalPath)
 	r.api("POST /api/v1/derive", s.postDerive)
+
+	r.publicFunc("GET /api/v1/openapi.json", s.serveOpenAPI)
+	b, err := buildOpenAPI(r.guards, routeDocs)
+	if err != nil {
+		return nil, err
+	}
+	s.openapiJSON = b
 
 	// The table describes exactly the routes above: an entry nothing
 	// registered is dead policy that reads like a guard, so it fails the boot
