@@ -352,7 +352,7 @@ func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 		})
 }
 
-// leaseRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+// leaseRouteDocs documents the lease routes; see routeDoc in openapi.go.
 var leaseRouteDocs = map[string]routeDoc{
 	"POST /api/v1/tasks/claim-next": {
 		summary:   "Claim the top-ranked ready task",

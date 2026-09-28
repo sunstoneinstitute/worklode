@@ -211,7 +211,7 @@ func (s *server) runServerDerivers(ctx context.Context) ([]model.DeriveResult, e
 	return append(out, res), nil
 }
 
-// overviewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+// overviewRouteDocs documents the overview routes; see routeDoc in openapi.go.
 var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/overview": {
 		summary:   "Roll up a project's spec, plan and task status",

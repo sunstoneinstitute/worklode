@@ -420,7 +420,7 @@ func (s *server) projectCockpit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, proj)
 }
 
-// projectRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+// projectRouteDocs documents the project routes; see routeDoc in openapi.go.
 var projectRouteDocs = map[string]routeDoc{
 	"GET /api/v1/projects/{id}/cockpit": {
 		summary:   "Get a project's cockpit projection",

@@ -25,14 +25,16 @@ type routeDoc struct {
 	// summary is one imperative line: "List the tasks of a project".
 	summary string
 	// request is the zero value of the JSON body type the handler passes to
-	// readJSON (model.CreateTaskInput{}); nil when the route takes no body.
+	// readJSON or readOptionalJSON (model.CreateTaskInput{}); nil when the
+	// route takes no body.
 	request any
 	// requestContentType overrides application/json for a raw body
 	// (uploadBlob: application/octet-stream). request is nil then.
 	requestContentType string
-	// responses maps each 2xx status the handler writes to the zero value it
-	// passes to writeJSON (model.Task{}, []model.Task{}); nil for an empty
-	// body (204).
+	// responses maps each status the handler writes to the zero value it
+	// passes to writeJSON: the success status (model.Task{}, []model.Task{})
+	// and any error status that has its own body type (409
+	// ClaimConflictResponse on POST .../claim); nil for an empty body (204).
 	responses map[int]any
 	// responseContentType overrides application/json for every response
 	// (text/event-stream, application/gzip); the structure is nil then.

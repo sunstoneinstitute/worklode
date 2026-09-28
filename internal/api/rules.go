@@ -192,7 +192,7 @@ func (s *server) docIDByRef(ctx context.Context, ref string) (int64, error) {
 	return 0, err
 }
 
-// ruleRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+// ruleRouteDocs documents the rule routes; see routeDoc in openapi.go.
 var ruleRouteDocs = map[string]routeDoc{
 	"GET /api/v1/rules": {
 		summary:   "List rules, optionally filtered by project, status or document",

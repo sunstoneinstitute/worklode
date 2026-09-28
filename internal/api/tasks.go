@@ -886,7 +886,7 @@ func (s *server) publishTasksFromPage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.TaskPublishResponse{Published: ids})
 }
 
-// taskRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+// taskRouteDocs documents the task routes; see routeDoc in openapi.go.
 var taskRouteDocs = map[string]routeDoc{
 	"POST /api/v1/tasks": {
 		summary:   "Create a task",

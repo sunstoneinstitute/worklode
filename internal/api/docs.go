@@ -1281,7 +1281,7 @@ func (s *server) writeDocRevision(w http.ResponseWriter, r *http.Request, id int
 	writeJSON(w, http.StatusOK, rev)
 }
 
-// docRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+// docRouteDocs documents the doc routes; see routeDoc in openapi.go.
 var docRouteDocs = map[string]routeDoc{
 	"POST /api/v1/docs": {
 		summary:   "Create a design document",
