@@ -487,12 +487,10 @@ func retag(t *testing.T, s *Store, id, kind string) error {
 }
 
 // TestRetagRefusesStateTheKindForbids checks that changing a task's kind
-// cannot sneak in a state that kind does not allow. A rally or decision task
-// may not have children or be leased, and a rally also may not carry decision
-// rows or block other tasks. Those rules are enforced when the child, lease,
-// row or edge is added, so each case starts from a plain feature task, adds
-// the forbidden state first, then retags. The retag must fail and the kind
-// must stay feature.
+// cannot leave it with state that kind does not allow. A rally may not have
+// children, leases, decision rows, or outgoing blocks edges. Each case adds
+// that state to a feature task, then tries to retag it. Decision retags are
+// always refused. Every refusal must leave the task's kind unchanged.
 func TestRetagRefusesStateTheKindForbids(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -510,7 +508,7 @@ func TestRetagRefusesStateTheKindForbids(t *testing.T) {
 			if _, err := decompose(t, s, id, []string{"A", "B"}); err != nil {
 				t.Fatalf("decompose: %v", err)
 			}
-		}, "has children"},
+		}, "fixed when the task is created"},
 		{"rally under lease", "rally", func(t *testing.T, s *Store, id string) {
 			if _, err := s.Claim(t.Context(), id, "stig", "host:/wt", 0); err != nil {
 				t.Fatalf("claim: %v", err)
@@ -520,7 +518,7 @@ func TestRetagRefusesStateTheKindForbids(t *testing.T) {
 			if _, err := s.Claim(t.Context(), id, "stig", "host:/wt", 0); err != nil {
 				t.Fatalf("claim: %v", err)
 			}
-		}, "is held by"},
+		}, "fixed when the task is created"},
 		{"rally carrying a decision row", "rally", func(t *testing.T, s *Store, id string) {
 			if _, err := s.AddDecision(t.Context(), id, "stig", model.DecisionInput{
 				Key: "ship-it", Question: "Do we ship?", ResponseType: "yes_no"}); err != nil {

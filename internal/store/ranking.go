@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // BlockingFanOut returns, for every task that blocks at least one other task,
@@ -94,7 +95,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 		  AND NOT EXISTS (SELECT 1 FROM task_edges c
 		                  JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
 		                  WHERE c.to_task = t.id AND c.type = 'child_of')
-		  AND t.kind NOT IN ('decision', 'rally')
+		  AND t.kind = ANY($3)
 		  AND NOT t.needs_decomposition
 		  AND NOT t.human_only
 		  AND ($1 = '' OR t.project_id = $1)
@@ -103,7 +104,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 		                  WHERE l.task_id = t.id AND l.released_at IS NULL)
 		  AND NOT EXISTS (SELECT 1 FROM task_edges e
 		                  WHERE e.to_task = t.id AND `+blockedCondition+`)
-		  AND NOT (`+planBlockedCondition+`)`, projectID, kind)
+		  AND NOT (`+planBlockedCondition+`)`, projectID, kind, ns.TaskKindsMatching(func(d ns.TaskKindDescriptor) bool { return d.Claimable }))
 	if err != nil {
 		return nil, fmt.Errorf("ready candidates: %w", err)
 	}

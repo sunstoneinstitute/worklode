@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -33,13 +32,9 @@ func warnDeprecatedTaskKinds(cmd *cobra.Command, kinds []string) {
 	}
 }
 
-// claimableTaskKinds are the kinds a ranked claim can actually hand out:
-// ns.TaskKinds minus the two that store.readyCandidates filters out of the
-// ready set. A decision and a rally have nothing to check out, so offering
-// them in a claim surface's --kind help would name a value that never
-// matches.
-var claimableTaskKinds = slices.DeleteFunc(slices.Clone(ns.TaskKinds), func(k string) bool {
-	return k == "decision" || k == "rally"
+// claimableTaskKinds matches the policy used by the store's ready candidates.
+var claimableTaskKinds = ns.TaskKindsMatching(func(d ns.TaskKindDescriptor) bool {
+	return d.Claimable
 })
 
 // claimKindEnum is the value list both claim surfaces spell out in their

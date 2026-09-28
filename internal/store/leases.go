@@ -209,17 +209,19 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			if container {
 				return fmt.Errorf("task %s has children and cannot be claimed: %w", taskID, ErrBadTransition)
 			}
-			// A decision has nothing to check out either, and is never leased
-			// (004 §6.3 as amended); it moves via `lode task assign` instead.
-			if kind == "decision" {
-				return fmt.Errorf("task %s is a decision and cannot be claimed; use 'lode task assign' instead: %w",
-					taskID, ErrBadTransition)
+			policy, err := taskKindPolicy(kind)
+			if err != nil {
+				return err
 			}
-			// A rally is a goal, not work: its 'blocks' edges name the tasks
-			// to finish, and those are what get claimed.
-			if kind == "rally" {
-				return fmt.Errorf("task %s is a rally and cannot be claimed; claim one of its members instead: %w",
-					taskID, ErrBadTransition)
+			if !policy.Claimable {
+				hint := ""
+				switch kind {
+				case "decision":
+					hint = "; use 'lode task assign' instead"
+				case "rally":
+					hint = "; claim one of its members instead"
+				}
+				return fmt.Errorf("task %s is a %s and cannot be claimed%s: %w", taskID, kind, hint, ErrBadTransition)
 			}
 
 			if err := requireActor(tx, actorID); err != nil {

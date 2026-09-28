@@ -1,8 +1,6 @@
 # Instance configuration for the task kinds declared in concept.ttl.
 # Every kind supplies every property; missing values are errors, not defaults.
-# These descriptors record current policy. Runtime checks are not yet driven
-# by them. kindMutable records the public API policy; the store currently
-# permits some decision retags which the API rejects.
+# These descriptors drive runtime permission checks and completion behavior.
 
 @prefix wl:  <https://worklode.io/ns/ontology#> .
 @prefix wlc: <https://worklode.io/ns/concept/> .

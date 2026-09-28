@@ -557,20 +557,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 			return
 		}
-		// The decision kind is fixed when the task is created: it closes by
-		// answering rather than by landing a diff (025 §10), and its rows
-		// gate that closing, so retyping either way would change what the
-		// rows already on the task mean.
-		cur, err := s.st.GetTask(r.Context(), id)
-		if err != nil {
-			s.mapStoreErr(w, err)
-			return
-		}
-		if (normalized == "decision") != (cur.Kind == "decision") {
-			writeErr(w, http.StatusUnprocessableEntity,
-				"kind decision is fixed when the task is created: create a new task instead of retyping this one")
-			return
-		}
+		// The store checks kind mutability under the task row lock.
 		req.Kind = &normalized
 	}
 	if req.Priority != nil && !validPriorities[*req.Priority] {

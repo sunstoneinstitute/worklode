@@ -558,7 +558,11 @@ func (s *Store) RecordDecision(ctx context.Context, taskID, key, actorID string,
 			}
 			recorded = &d
 
-			if kind != "decision" {
+			policy, err := taskKindPolicy(kind)
+			if err != nil {
+				return err
+			}
+			if !policy.ClosesOnAnswers {
 				return nil
 			}
 			var open int
@@ -666,7 +670,7 @@ func updateDecision(tx *sql.Tx, id int64, taskID string, d model.Decision, repos
 }
 
 // requireLiveTask refuses an unknown or soft-deleted task, the same
-// tombstone rule Claim uses (044 §4), and a rally (rejectRallyDecision).
+// tombstone rule Claim uses (044 §4), and a rally (requireDecisionKind).
 func requireLiveTask(tx *sql.Tx, taskID string) error {
 	var kind string
 	err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&kind)
@@ -676,15 +680,17 @@ func requireLiveTask(tx *sql.Tx, taskID string) error {
 	if err != nil {
 		return fmt.Errorf("check task %s: %w", taskID, err)
 	}
-	return rejectRallyDecision(taskID, kind)
+	return requireDecisionKind(taskID, kind)
 }
 
-// rejectRallyDecision refuses a decision row on a rally. A rally carries no
-// content of its own — its 'blocks' edges are the whole of it — so a question
-// posed there is a question nobody reads. Pose it on the member it is about.
-func rejectRallyDecision(taskID, kind string) error {
-	if kind == "rally" {
-		return fmt.Errorf("task %s is a rally and cannot carry decisions: %w", taskID, ErrInvalidInput)
+// requireDecisionKind checks whether this kind may carry decision rows.
+func requireDecisionKind(taskID, kind string) error {
+	policy, err := taskKindPolicy(kind)
+	if err != nil {
+		return err
+	}
+	if !policy.AllowsDecisions {
+		return fmt.Errorf("task %s is a %s and cannot carry decisions: %w", taskID, kind, ErrInvalidInput)
 	}
 	return nil
 }
@@ -705,5 +711,5 @@ func requireOpenTask(tx *sql.Tx, taskID string) error {
 	if deliveredStateSet[state] {
 		return fmt.Errorf("task %s is %s: cannot pose a decision on it: %w", taskID, state, ErrInvalidInput)
 	}
-	return rejectRallyDecision(taskID, kind)
+	return requireDecisionKind(taskID, kind)
 }
