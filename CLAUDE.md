@@ -180,6 +180,13 @@ as the Progress page's goes through one more gate on top of that table's
 permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-SPEC-66
 §4.2), which enforces same-origin, the page's `X-Requested-With` header, a
 JSON body, and an actor taken from the session rather than the request.
+Every `/api/v1` row also has a `routeDoc` (request body, 2xx responses,
+query parameters) in the feature file that serves it, merged into
+`routeDocs` in `internal/api/openapi.go`, which reflects the
+`internal/model` types into the OpenAPI 3.1 document served at
+`GET /api/v1/openapi.json`. `registerRoutes` refuses to boot on a route
+without a descriptor or a descriptor without a route; `make openapi`
+writes the document to `bin/openapi.json`.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks — including `merge_group` and `repository_ruleset` for the merge
