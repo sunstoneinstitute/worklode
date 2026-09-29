@@ -352,8 +352,8 @@ func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 		})
 }
 
-// leaseRouteDocs documents the lease routes; see routeDoc in openapi.go.
-var leaseRouteDocs = map[string]routeDoc{
+// lifecycleRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var lifecycleRouteDocs = map[string]routeDoc{
 	"POST /api/v1/tasks/claim-next": {
 		summary:   "Claim the top-ranked ready task",
 		request:   model.ClaimNextInput{},
@@ -388,103 +388,5 @@ var leaseRouteDocs = map[string]routeDoc{
 	"POST /api/v1/tasks/{id}/reopen": {
 		summary:   "Reopen a delivered or abandoned task back to ready",
 		responses: map[int]any{http.StatusOK: model.Task{}},
-	},
-	"POST /api/v1/tasks/{id}/assign": {
-		summary:   "Assign a task to an actor",
-		request:   model.AssignInput{},
-		responses: map[int]any{http.StatusOK: model.Task{}},
-	},
-	"POST /api/v1/tasks/{id}/unassign": {
-		summary:   "Clear a task's assignee",
-		responses: map[int]any{http.StatusOK: model.Task{}},
-	},
-	"POST /api/v1/tasks/{id}/start": {
-		summary:   "Start a ready task without taking a lease",
-		responses: map[int]any{http.StatusOK: model.Task{}},
-	},
-	"POST /api/v1/tasks/{id}/stop": {
-		summary:   "Stop an in-progress task back to ready",
-		responses: map[int]any{http.StatusOK: model.Task{}},
-	},
-	"POST /api/v1/tasks/{id}/agent-session": {
-		summary:   "Report or heartbeat the lease holder's agent session",
-		request:   model.AgentSessionInput{},
-		responses: map[int]any{http.StatusOK: model.AgentSession{}},
-	},
-	"POST /api/v1/tasks/{id}/agent-session/end": {
-		summary:   "Close the caller's agent session on a task",
-		request:   model.EndAgentSessionInput{},
-		responses: map[int]any{http.StatusNoContent: nil},
-	},
-	"POST /api/v1/projects/{id}/session-usage": {
-		summary:   "Record one agent session's usage across a project",
-		request:   model.ProjectSessionUsageInput{},
-		responses: map[int]any{http.StatusNoContent: nil},
-	},
-	"POST /api/v1/tasks/{id}/instructions": {
-		summary:   "Queue a steering instruction against a task",
-		request:   model.InstructionInput{},
-		responses: map[int]any{http.StatusCreated: model.Instruction{}},
-	},
-	"POST /api/v1/instructions/claim": {
-		summary:   "Deliver the caller's pending instructions across every leased task",
-		responses: map[int]any{http.StatusOK: model.InstructionsResponse{}},
-	},
-	"POST /api/v1/work/replan": {
-		summary:   "Claim a stale plan as a design task",
-		request:   model.ReplanInput{},
-		responses: map[int]any{http.StatusOK: model.ClaimNextResponse{}},
-	},
-	"POST /api/v1/tasks/{id}/gap": {
-		summary:   "Report a plan or spec gap found while executing a task",
-		request:   model.GapTaskInput{},
-		responses: map[int]any{http.StatusOK: model.LadderEventResult{}},
-	},
-	"POST /api/v1/tasks/{id}/fix": {
-		summary:   "Report the start or finish of a design fix",
-		request:   model.FixTaskInput{},
-		responses: map[int]any{http.StatusOK: model.LadderEventResult{}},
-	},
-	"POST /api/v1/tasks/{id}/escalate": {
-		summary:   "Escalate a task to a design fix, releasing its lease",
-		request:   model.EscalateTaskInput{},
-		responses: map[int]any{http.StatusOK: model.EscalateTaskResult{}},
-	},
-	"GET /api/v1/tasks/{id}/decisions": {
-		summary:   "List the questions a task poses",
-		responses: map[int]any{http.StatusOK: []model.Decision{}},
-	},
-	"GET /api/v1/tasks/{id}/decisions/{key}": {
-		summary:   "Get one posed question and its answer",
-		responses: map[int]any{http.StatusOK: model.Decision{}},
-	},
-	"POST /api/v1/tasks/{id}/decisions": {
-		summary:   "Pose a question against a task",
-		request:   model.DecisionInput{},
-		responses: map[int]any{http.StatusCreated: model.Decision{}},
-	},
-	"PATCH /api/v1/tasks/{id}/decisions/{key}": {
-		summary:   "Edit an unanswered posed question",
-		request:   model.DecisionInput{},
-		responses: map[int]any{http.StatusOK: model.Decision{}},
-	},
-	"POST /api/v1/tasks/{id}/decisions/{key}/decide": {
-		summary:   "Answer a posed question",
-		request:   model.DecisionAnswer{},
-		responses: map[int]any{http.StatusOK: model.Decision{}},
-	},
-	"GET /api/v1/secrets/catalog": {
-		summary:   "List the secrets catalog's name to vault-reference map",
-		responses: map[int]any{http.StatusOK: model.SecretCatalogResponse{}},
-	},
-	"POST /api/v1/tasks/{id}/secrets-materialized": {
-		summary:   "Report which secret names the claim ceremony materialized locally",
-		request:   model.SecretsMaterializedInput{},
-		responses: map[int]any{http.StatusNoContent: nil},
-	},
-	"POST /api/v1/merges": {
-		summary:   "Report a merge landing on the default branch from a local clone",
-		request:   model.MergeReportRequest{},
-		responses: map[int]any{http.StatusOK: model.MergeReport{}},
 	},
 }

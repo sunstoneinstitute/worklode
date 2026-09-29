@@ -420,86 +420,10 @@ func (s *server) projectCockpit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, proj)
 }
 
-// projectRouteDocs documents the project routes; see routeDoc in openapi.go.
-var projectRouteDocs = map[string]routeDoc{
+// cockpitRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var cockpitRouteDocs = map[string]routeDoc{
 	"GET /api/v1/projects/{id}/cockpit": {
 		summary:   "Get a project's cockpit projection",
 		responses: map[int]any{http.StatusOK: model.CockpitProjection{}},
-	},
-	"GET /api/v1/projects/{id}/rally": {
-		summary:   "Get a project's active rally and its blocker tree",
-		responses: map[int]any{http.StatusOK: model.Rally{}},
-	},
-	"GET /api/v1/projects/{id}/progress": {
-		summary:   "Get a project's spec and plan progress",
-		responses: map[int]any{http.StatusOK: model.ProjectProgress{}},
-	},
-	"GET /api/v1/projects/{id}/graph": {
-		summary:   "Get a project's work graph",
-		responses: map[int]any{http.StatusOK: model.ProjectGraph{}},
-	},
-	"GET /api/v1/projects/{id}/participants": {
-		summary:   "List a project's Crew roster",
-		responses: map[int]any{http.StatusOK: model.ParticipantListResponse{}},
-	},
-	"POST /api/v1/projects/{id}/participants": {
-		summary:   "Add a member to a project's Crew",
-		request:   model.AddCrewMemberInput{},
-		responses: map[int]any{http.StatusCreated: model.CrewMember{}},
-	},
-	"DELETE /api/v1/projects/{id}/participants/{actor}": {
-		summary:   "Remove a member from a project's Crew",
-		responses: map[int]any{http.StatusNoContent: nil},
-	},
-	"GET /api/v1/projects/{id}/deliverables": {
-		summary:   "List a project's deliverables",
-		responses: map[int]any{http.StatusOK: model.DeliverableListResponse{}},
-	},
-	"POST /api/v1/projects/{id}/deliverables": {
-		summary:   "Declare a deliverable on a project",
-		request:   model.CreateDeliverableInput{},
-		responses: map[int]any{http.StatusCreated: model.Deliverable{}},
-	},
-	"PATCH /api/v1/deliverables/{id}": {
-		summary:   "Reparent a deliverable to another milestone",
-		request:   model.EditDeliverableInput{},
-		responses: map[int]any{http.StatusOK: model.Deliverable{}},
-	},
-	"POST /api/v1/deliverables/{id}/report": {
-		summary:   "Report a deliverable's observed state",
-		request:   model.ReportDeliverableInput{},
-		responses: map[int]any{http.StatusOK: model.Deliverable{}},
-	},
-	"GET /api/v1/deliverables/{id}": {
-		summary:   "Get a deliverable",
-		responses: map[int]any{http.StatusOK: model.Deliverable{}},
-	},
-	"GET /api/v1/projects/{id}/milestones": {
-		summary:   "List a project's milestones",
-		responses: map[int]any{http.StatusOK: model.MilestoneListResponse{}},
-	},
-	"POST /api/v1/projects/{id}/milestones": {
-		summary:   "Create a milestone on a project",
-		request:   model.CreateMilestoneInput{},
-		responses: map[int]any{http.StatusCreated: model.Milestone{}},
-	},
-	"GET /api/v1/milestones/{id}": {
-		summary:   "Get a milestone and its children",
-		responses: map[int]any{http.StatusOK: model.MilestoneDetail{}},
-	},
-	"DELETE /api/v1/milestones/{id}": {
-		summary:   "Delete a milestone",
-		responses: map[int]any{http.StatusOK: model.MilestoneDeletion{}},
-		params:    model.MilestoneDeleteParams{},
-	},
-	"POST /api/v1/references": {
-		summary:   "Create a reference between two entities",
-		request:   model.EntityEdge{},
-		responses: map[int]any{http.StatusCreated: model.EntityEdge{}},
-	},
-	"GET /api/v1/references": {
-		summary:   "List the references touching an entity",
-		responses: map[int]any{http.StatusOK: model.ReferenceListResponse{}},
-		params:    model.ReferenceListParams{},
 	},
 }

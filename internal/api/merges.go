@@ -79,3 +79,12 @@ func (s *server) reportMerge(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.MergeReport{Repo: repo, SHA: sha, Results: results})
 }
+
+// mergesRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var mergesRouteDocs = map[string]routeDoc{
+	"POST /api/v1/merges": {
+		summary:   "Report a merge landing on the default branch from a local clone",
+		request:   model.MergeReportRequest{},
+		responses: map[int]any{http.StatusOK: model.MergeReport{}},
+	},
+}

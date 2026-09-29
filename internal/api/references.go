@@ -90,3 +90,17 @@ func (s *server) listReferences(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.ReferenceListResponse{References: items})
 }
+
+// referenceRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var referenceRouteDocs = map[string]routeDoc{
+	"POST /api/v1/references": {
+		summary:   "Create a reference between two entities",
+		request:   model.EntityEdge{},
+		responses: map[int]any{http.StatusCreated: model.EntityEdge{}},
+	},
+	"GET /api/v1/references": {
+		summary:   "List the references touching an entity",
+		responses: map[int]any{http.StatusOK: model.ReferenceListResponse{}},
+		params:    model.ReferenceListParams{},
+	},
+}

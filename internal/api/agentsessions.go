@@ -132,3 +132,22 @@ func (s *server) endAgentSession(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// agentsessionRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var agentsessionRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/{id}/agent-session": {
+		summary:   "Report or heartbeat the lease holder's agent session",
+		request:   model.AgentSessionInput{},
+		responses: map[int]any{http.StatusOK: model.AgentSession{}},
+	},
+	"POST /api/v1/tasks/{id}/agent-session/end": {
+		summary:   "Close the caller's agent session on a task",
+		request:   model.EndAgentSessionInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/projects/{id}/session-usage": {
+		summary:   "Record one agent session's usage across a project",
+		request:   model.ProjectSessionUsageInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+}

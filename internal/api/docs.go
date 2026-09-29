@@ -1279,7 +1279,7 @@ func (s *server) writeDocRevision(w http.ResponseWriter, r *http.Request, id int
 	writeJSON(w, http.StatusOK, rev)
 }
 
-// docRouteDocs documents the doc routes; see routeDoc in openapi.go.
+// docRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var docRouteDocs = map[string]routeDoc{
 	"POST /api/v1/docs": {
 		summary:   "Create a design document",
@@ -1399,15 +1399,6 @@ var docRouteDocs = map[string]routeDoc{
 	},
 	"POST /api/v1/docs/{id}/revision/accept": {
 		summary:   "Land the candidate revision as the next version",
-		responses: map[int]any{http.StatusOK: model.Doc{}},
-	},
-	"DELETE /api/v1/docs/{id}": {
-		summary:   "Delete (tombstone) a document",
-		request:   model.DeleteInput{},
-		responses: map[int]any{http.StatusOK: model.Doc{}},
-	},
-	"POST /api/v1/docs/{id}/undelete": {
-		summary:   "Restore a deleted document",
 		responses: map[int]any{http.StatusOK: model.Doc{}},
 	},
 }

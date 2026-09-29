@@ -181,3 +181,25 @@ func deleteOutcome(err error) string {
 		return deleteError
 	}
 }
+
+// softdeleteRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var softdeleteRouteDocs = map[string]routeDoc{
+	"DELETE /api/v1/tasks/{id}": {
+		summary:   "Tombstone a task",
+		request:   model.DeleteInput{},
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"POST /api/v1/tasks/{id}/undelete": {
+		summary:   "Restore a tombstoned task",
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"DELETE /api/v1/docs/{id}": {
+		summary:   "Delete (tombstone) a document",
+		request:   model.DeleteInput{},
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"POST /api/v1/docs/{id}/undelete": {
+		summary:   "Restore a deleted document",
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+}

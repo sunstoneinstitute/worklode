@@ -124,3 +124,21 @@ func (s *server) seekEventSubscriber(w http.ResponseWriter, r *http.Request) {
 	// deleted between the two calls, which nothing in this codebase does.
 	s.mapStoreErr(w, store.ErrNotFound)
 }
+
+// eventRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var eventRouteDocs = map[string]routeDoc{
+	"GET /api/v1/events": {
+		summary:   "List recorded events",
+		responses: map[int]any{http.StatusOK: model.EventListResponse{}},
+		params:    model.EventListParams{},
+	},
+	"GET /api/v1/event-subscribers": {
+		summary:   "List event subscriber consumer offsets",
+		responses: map[int]any{http.StatusOK: model.EventSubscriberListResponse{}},
+	},
+	"POST /api/v1/event-subscribers/{name}/seek": {
+		summary:   "Move an event subscriber's offsets to a given position",
+		request:   model.EventSubscriberSeekRequest{},
+		responses: map[int]any{http.StatusOK: model.EventSubscriberStatus{}},
+	},
+}

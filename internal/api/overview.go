@@ -210,7 +210,7 @@ func (s *server) runServerDerivers(ctx context.Context) ([]model.DeriveResult, e
 	return append(out, res), nil
 }
 
-// overviewRouteDocs documents the overview routes; see routeDoc in openapi.go.
+// overviewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/overview": {
 		summary:   "Roll up a project's spec, plan and task status",
@@ -238,74 +238,5 @@ var overviewRouteDocs = map[string]routeDoc{
 	"POST /api/v1/derive": {
 		summary:   "Run the server-side deploy and pr-affects derivers on demand",
 		responses: map[int]any{http.StatusOK: model.DeriveResponse{}},
-	},
-	"GET /api/v1/events": {
-		summary:   "List recorded events",
-		responses: map[int]any{http.StatusOK: model.EventListResponse{}},
-		params:    model.EventListParams{},
-	},
-	"GET /api/v1/event-subscribers": {
-		summary:   "List event subscriber consumer offsets",
-		responses: map[int]any{http.StatusOK: model.EventSubscriberListResponse{}},
-	},
-	"POST /api/v1/event-subscribers/{name}/seek": {
-		summary:   "Move an event subscriber's offsets to a given position",
-		request:   model.EventSubscriberSeekRequest{},
-		responses: map[int]any{http.StatusOK: model.EventSubscriberStatus{}},
-	},
-	"GET /api/v1/events/stream": {
-		summary:             "Follow the event log live over server-sent events",
-		responseContentType: "text/event-stream",
-		responses:           map[int]any{http.StatusOK: nil},
-		params:              model.EventStreamParams{},
-	},
-	"GET /api/v1/graph/projection/failures": {
-		summary:   "List projects the knowledge-graph projector has quarantined",
-		responses: map[int]any{http.StatusOK: model.ProjectionFailureListResponse{}},
-	},
-	"GET /api/v1/skills": {
-		summary:   "List skills in the registry",
-		responses: map[int]any{http.StatusOK: model.SkillsListResponse{}},
-		params:    model.SkillListParams{},
-	},
-	"GET /api/v1/skills/{name}": {
-		summary:   "Get one skill",
-		responses: map[int]any{http.StatusOK: model.Skill{}},
-	},
-	"GET /api/v1/skills/{name}/archive/{hash}": {
-		summary:             "Download a skill's content-addressed archive",
-		responseContentType: "application/gzip",
-		responses:           map[int]any{http.StatusOK: nil},
-	},
-	"POST /api/v1/skills/recommend": {
-		summary:   "Recommend skills for a task or a piece of text",
-		request:   model.RecommendInput{},
-		responses: map[int]any{http.StatusOK: model.SkillRecommendation{}},
-	},
-	"POST /api/v1/skills/sync": {
-		summary:   "Sync the skill registry from its configured sources",
-		responses: map[int]any{http.StatusOK: model.SkillSyncReport{}},
-	},
-	"GET /api/v1/search": {
-		summary:   "Search the corpus of documents, tasks and skills",
-		responses: map[int]any{http.StatusOK: model.SearchResponse{}},
-		params:    model.SearchParams{},
-	},
-	"POST /api/v1/runtime-events": {
-		summary: "Record a crash-loop or OOM event from the runtime watcher",
-		request: model.RuntimeEventInput{},
-		responses: map[int]any{
-			http.StatusOK:      model.RuntimeEventAck{}, // duplicate: a redelivered dedupe_key
-			http.StatusCreated: model.RuntimeEventAck{},
-		},
-	},
-	"GET /api/v1/probe-targets": {
-		summary:   "List artifact addresses for the prober to poll",
-		responses: map[int]any{http.StatusOK: model.ProbeTargetsResponse{}},
-	},
-	"POST /api/v1/artifact-reports": {
-		summary:   "Record a probed artifact state as evidence against declaring entities",
-		request:   model.ArtifactReportInput{},
-		responses: map[int]any{http.StatusOK: model.WebhookAck{}},
 	},
 }

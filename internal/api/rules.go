@@ -196,7 +196,7 @@ func (s *server) docIDByRef(ctx context.Context, ref string) (int64, error) {
 	return 0, err
 }
 
-// ruleRouteDocs documents the rule routes; see routeDoc in openapi.go.
+// ruleRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var ruleRouteDocs = map[string]routeDoc{
 	"GET /api/v1/rules": {
 		summary:   "List rules, optionally filtered by project, status or document",
@@ -224,42 +224,5 @@ var ruleRouteDocs = map[string]routeDoc{
 	"GET /api/v1/rules/{id}/versions/{n}": {
 		summary:   "Get a rule at one of its past versions",
 		responses: map[int]any{http.StatusOK: model.Rule{}},
-	},
-	"POST /api/v1/rules/{id}/edges": {
-		summary:   "Relate two rules with a typed edge",
-		request:   model.RuleEdgeInput{},
-		responses: map[int]any{http.StatusCreated: model.RuleEdgeInput{}},
-	},
-	"DELETE /api/v1/rules/{id}/edges": {
-		summary:   "Remove a typed edge between two rules",
-		request:   model.RuleEdgeInput{},
-		responses: map[int]any{http.StatusNoContent: nil},
-	},
-	"POST /api/v1/projects/{id}/rules/supersede": {
-		summary:   "Apply a refactor map, withdrawing rules and linking them to their successors",
-		request:   model.SupersedeInput{},
-		responses: map[int]any{http.StatusOK: model.SupersedeResult{}},
-	},
-	"GET /api/v1/approvals": {
-		summary:   "List the awaiting approval queue",
-		responses: map[int]any{http.StatusOK: model.ApprovalListResponse{}},
-	},
-	"POST /api/v1/approvals": {
-		summary: "File an ad-hoc approval requirement on a governed target",
-		request: model.RequireApprovalInput{},
-		// 200 when the requirement already existed, 201 on a fresh insert.
-		responses: map[int]any{
-			http.StatusOK:      model.Approval{},
-			http.StatusCreated: model.Approval{},
-		},
-	},
-	"POST /api/v1/docs/{id}/reviewers": {
-		summary:   "Replace a document's durable reviewer set",
-		request:   model.SetDocReviewersInput{},
-		responses: map[int]any{http.StatusOK: model.Doc{}},
-	},
-	"POST /api/v1/docs/{id}/request-approval": {
-		summary:   "Open approval lanes for a document's assigned reviewers",
-		responses: map[int]any{http.StatusOK: model.Doc{}},
 	},
 }

@@ -338,3 +338,25 @@ func referenceFormMessage(err error) string {
 	}
 	return formMessage(strings.TrimSuffix(err.Error(), ": "+store.ErrInvalidInput.Error()))
 }
+
+// milestoneRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var milestoneRouteDocs = map[string]routeDoc{
+	"GET /api/v1/projects/{id}/milestones": {
+		summary:   "List a project's milestones",
+		responses: map[int]any{http.StatusOK: model.MilestoneListResponse{}},
+	},
+	"POST /api/v1/projects/{id}/milestones": {
+		summary:   "Create a milestone on a project",
+		request:   model.CreateMilestoneInput{},
+		responses: map[int]any{http.StatusCreated: model.Milestone{}},
+	},
+	"GET /api/v1/milestones/{id}": {
+		summary:   "Get a milestone and its children",
+		responses: map[int]any{http.StatusOK: model.MilestoneDetail{}},
+	},
+	"DELETE /api/v1/milestones/{id}": {
+		summary:   "Delete a milestone",
+		responses: map[int]any{http.StatusOK: model.MilestoneDeletion{}},
+		params:    model.MilestoneDeleteParams{},
+	},
+}

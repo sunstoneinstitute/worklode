@@ -938,7 +938,7 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*mode
 	return resp, nil
 }
 
-// adminRouteDocs documents the admin routes; see routeDoc in openapi.go.
+// adminRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var adminRouteDocs = map[string]routeDoc{
 	"POST /api/v1/projects": {
 		summary:   "Create a project",
@@ -1017,34 +1017,5 @@ var adminRouteDocs = map[string]routeDoc{
 		summary:   "Link an inbox issue to an existing task",
 		request:   model.LinkInput{},
 		responses: map[int]any{http.StatusNoContent: nil},
-	},
-	"PATCH /api/v1/projects/{id}/settings": {
-		summary:   "Update a project's settings overrides",
-		request:   model.ProjectSettingsInput{},
-		responses: map[int]any{http.StatusOK: model.Project{}},
-	},
-	"POST /api/v1/projects/{id}/approval-flow": {
-		summary:   "Apply an approval flow to a project",
-		request:   model.ApplyApprovalFlowInput{},
-		responses: map[int]any{http.StatusOK: model.ApplyApprovalFlowResponse{}},
-	},
-	"POST /api/v1/inbox/import": {
-		summary:   "Backfill a repo's GitHub issues and pull requests",
-		request:   model.ImportInput{},
-		responses: map[int]any{http.StatusOK: model.ImportResult{}},
-	},
-	"GET /api/v1/whoami": {
-		summary:   "Get the calling actor's identity",
-		responses: map[int]any{http.StatusOK: model.WhoAmI{}},
-	},
-	"GET /api/v1/repos/doctor": {
-		summary:   "Report per-repo GitHub ingestion health",
-		responses: map[int]any{http.StatusOK: model.ReposDoctorResponse{}},
-		params:    model.ReposDoctorParams{},
-	},
-	"POST /api/v1/reconcile": {
-		summary:   "Replay stored events and poll GitHub to reconcile state",
-		request:   model.ReconcileInput{},
-		responses: map[int]any{http.StatusOK: model.ReconcileResponse{}},
 	},
 }

@@ -299,3 +299,13 @@ func writeEventFrame(w io.Writer, e store.Event) error {
 	_, err = fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", e.ID, eventLineBreaks.Replace(e.Type), data)
 	return err
 }
+
+// eventstreamRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var eventstreamRouteDocs = map[string]routeDoc{
+	"GET /api/v1/events/stream": {
+		summary:             "Follow the event log live over server-sent events",
+		responseContentType: "text/event-stream",
+		responses:           map[int]any{http.StatusOK: nil},
+		params:              model.EventStreamParams{},
+	},
+}

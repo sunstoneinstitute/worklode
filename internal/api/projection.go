@@ -26,3 +26,11 @@ func (s *server) listProjectionFailures(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, model.ProjectionFailureListResponse{Failures: failures})
 }
+
+// projectionRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var projectionRouteDocs = map[string]routeDoc{
+	"GET /api/v1/graph/projection/failures": {
+		summary:   "List projects the knowledge-graph projector has quarantined",
+		responses: map[int]any{http.StatusOK: model.ProjectionFailureListResponse{}},
+	},
+}

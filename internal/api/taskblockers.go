@@ -38,3 +38,16 @@ func (s *server) getBlockers(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.BlockerForest{Trees: trees})
 }
+
+// taskblockerRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var taskblockerRouteDocs = map[string]routeDoc{
+	"GET /api/v1/blockers": {
+		summary:   "List blocked tasks and their blocker trees",
+		responses: map[int]any{http.StatusOK: model.BlockerForest{}},
+		params:    model.BlockersParams{},
+	},
+	"GET /api/v1/tasks/{id}/blockers": {
+		summary:   "Get a task's full transitive blocker tree",
+		responses: map[int]any{http.StatusOK: model.BlockerTree{}},
+	},
+}

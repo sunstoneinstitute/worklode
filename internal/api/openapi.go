@@ -45,18 +45,33 @@ type routeDoc struct {
 	params any
 }
 
-// routeDocs is every /api/v1 route's descriptor, merged from the feature
-// files. mergeRouteDocs panics on a pattern two maps both claim.
+// routeDocs is every /api/v1 route's descriptor, merged from the files
+// whose handlers serve them. mergeRouteDocs panics on a pattern two maps both
+// claim.
 var routeDocs = mergeRouteDocs(
-	taskRouteDocs, leaseRouteDocs, docRouteDocs, ruleRouteDocs,
-	adminRouteDocs, projectRouteDocs, overviewRouteDocs,
-	map[string]routeDoc{
-		"GET /api/v1/openapi.json": {
-			summary:   "Describe this API as an OpenAPI 3.1 document",
-			responses: map[int]any{http.StatusOK: map[string]any{}},
-		},
-	},
+	adminRouteDocs, agentsessionRouteDocs, approvalRouteDocs,
+	approvalflowRouteDocs, assignRouteDocs, blobRouteDocs, blobgcRouteDocs,
+	briefRouteDocs, checklistRouteDocs, cockpitRouteDocs, crewRouteDocs,
+	decisionRouteDocs, deliverableRouteDocs, docRouteDocs, escalateRouteDocs,
+	eventRouteDocs, eventstreamRouteDocs, governedbyRouteDocs, graphRouteDocs,
+	hierarchyRouteDocs, inboxImportRouteDocs, instructionRouteDocs,
+	ladderRouteDocs, lifecycleRouteDocs, mergesRouteDocs, milestoneRouteDocs,
+	openapiRouteDocs, overviewRouteDocs, probeRouteDocs, progressRouteDocs,
+	projectionRouteDocs, projectsettingRouteDocs, rallyRouteDocs,
+	reconcileRouteDocs, referenceRouteDocs, replanRouteDocs, ruleRouteDocs,
+	ruleedgeRouteDocs, rulesupersedeRouteDocs, runtimeRouteDocs,
+	searchRouteDocs, secretRouteDocs, skillRouteDocs, softdeleteRouteDocs,
+	taskRouteDocs, taskblockerRouteDocs, tasktokenRouteDocs,
+	timelineRouteDocs,
 )
+
+// openapiRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var openapiRouteDocs = map[string]routeDoc{
+	"GET /api/v1/openapi.json": {
+		summary:   "Describe this API as an OpenAPI 3.1 document",
+		responses: map[int]any{http.StatusOK: map[string]any{}},
+	},
+}
 
 func mergeRouteDocs(parts ...map[string]routeDoc) map[string]routeDoc {
 	out := map[string]routeDoc{}

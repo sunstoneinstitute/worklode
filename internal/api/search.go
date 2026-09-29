@@ -87,3 +87,12 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.SearchResponse{Provider: provider, Mode: mode, Hits: hits})
 }
+
+// searchRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var searchRouteDocs = map[string]routeDoc{
+	"GET /api/v1/search": {
+		summary:   "Search the corpus of documents, tasks and skills",
+		responses: map[int]any{http.StatusOK: model.SearchResponse{}},
+		params:    model.SearchParams{},
+	},
+}

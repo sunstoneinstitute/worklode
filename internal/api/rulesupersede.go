@@ -28,3 +28,12 @@ func (s *server) supersedeRules(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+// rulesupersedeRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var rulesupersedeRouteDocs = map[string]routeDoc{
+	"POST /api/v1/projects/{id}/rules/supersede": {
+		summary:   "Apply a refactor map, withdrawing rules and linking them to their successors",
+		request:   model.SupersedeInput{},
+		responses: map[int]any{http.StatusOK: model.SupersedeResult{}},
+	},
+}

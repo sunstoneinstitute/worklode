@@ -318,3 +318,30 @@ func joinedMessages(err error) []string {
 	}
 	return []string{err.Error()}
 }
+
+// skillRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var skillRouteDocs = map[string]routeDoc{
+	"GET /api/v1/skills": {
+		summary:   "List skills in the registry",
+		responses: map[int]any{http.StatusOK: model.SkillsListResponse{}},
+		params:    model.SkillListParams{},
+	},
+	"GET /api/v1/skills/{name}": {
+		summary:   "Get one skill",
+		responses: map[int]any{http.StatusOK: model.Skill{}},
+	},
+	"GET /api/v1/skills/{name}/archive/{hash}": {
+		summary:             "Download a skill's content-addressed archive",
+		responseContentType: "application/gzip",
+		responses:           map[int]any{http.StatusOK: nil},
+	},
+	"POST /api/v1/skills/recommend": {
+		summary:   "Recommend skills for a task or a piece of text",
+		request:   model.RecommendInput{},
+		responses: map[int]any{http.StatusOK: model.SkillRecommendation{}},
+	},
+	"POST /api/v1/skills/sync": {
+		summary:   "Sync the skill registry from its configured sources",
+		responses: map[int]any{http.StatusOK: model.SkillSyncReport{}},
+	},
+}

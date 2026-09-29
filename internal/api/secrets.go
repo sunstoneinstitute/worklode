@@ -94,3 +94,16 @@ func (s *server) secretsMaterialized(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// secretRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var secretRouteDocs = map[string]routeDoc{
+	"GET /api/v1/secrets/catalog": {
+		summary:   "List the secrets catalog's name to vault-reference map",
+		responses: map[int]any{http.StatusOK: model.SecretCatalogResponse{}},
+	},
+	"POST /api/v1/tasks/{id}/secrets-materialized": {
+		summary:   "Report which secret names the claim ceremony materialized locally",
+		request:   model.SecretsMaterializedInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+}
