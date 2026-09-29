@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,9 +18,11 @@ import (
 // two sides cannot disagree. For every /api/v1 route registered in
 // server.go with r.api, this walks the handler's own body (not functions it
 // calls) and fails if the body reads the query string any other way
-// (URL.Query, queryBool, queryFlag, FormValue), if a readQuery call's
-// struct type disagrees with routeDocs' params, or if routeDocs documents
-// params the handler never reads.
+// (URL.Query, RawQuery, ParseForm, Form, FormValue, queryBool, queryFlag),
+// if a readQuery call's struct type disagrees with routeDocs' params, or if
+// routeDocs documents params the handler never reads. It also fails when a
+// guarded /api/v1 route is not registered with r.api, since the walk would
+// never see it.
 //
 // It is a tripwire, not a proof: a handler that delegates its whole body to
 // a shared helper is outside what this test can see — beginEventStream's
@@ -35,6 +38,26 @@ func TestQueryParamsStayTyped(t *testing.T) {
 	routes := apiRoutes(t, server)
 	if len(routes) == 0 {
 		t.Fatal("no /api/v1 routes found in server.go; the parse is wrong, not the router")
+	}
+
+	// Every guarded /api/v1 route must be one this walk saw; a route
+	// registered some other way would escape the check.
+	var missing, extra []string
+	for pattern, g := range routeGuards {
+		if _, ok := routes[pattern]; isAPIPattern(pattern) && g.perm != permPublic && !ok {
+			missing = append(missing, pattern)
+		}
+	}
+	for pattern := range routes {
+		if g, ok := routeGuards[pattern]; !ok || g.perm == permPublic {
+			extra = append(extra, pattern)
+		}
+	}
+	if len(missing) > 0 || len(extra) > 0 {
+		slices.Sort(missing)
+		slices.Sort(extra)
+		t.Errorf("r.api routes and guarded /api/v1 routeGuards differ: guarded but not registered with r.api: %v; registered with r.api but not a guarded route: %v",
+			missing, extra)
 	}
 
 	handlers := handlerFuncs(t, fset)
@@ -60,9 +83,10 @@ func TestQueryParamsStayTyped(t *testing.T) {
 					violations++
 				}
 			case *ast.SelectorExpr:
-				if x.Sel.Name == "FormValue" {
-					t.Errorf("%s:%d %s reads the query string with FormValue; use readQuery so the params struct documents it",
-						name, fset.Position(x.Pos()).Line, name)
+				switch x.Sel.Name {
+				case "FormValue", "RawQuery", "ParseForm", "Form":
+					t.Errorf("%s:%d %s reads the query string with %s; use readQuery so the params struct documents it",
+						name, fset.Position(x.Pos()).Line, name, x.Sel.Name)
 					violations++
 				}
 				if x.Sel.Name == "Query" {
