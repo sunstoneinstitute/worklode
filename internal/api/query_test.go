@@ -32,6 +32,14 @@ func TestReadQuery(t *testing.T) {
 		}
 	}
 
+	// swaggest/form reads a bare or empty flag as false and accepts yes/on.
+	for q, want := range map[string]bool{"tree": false, "tree=": false, "tree=yes": true} {
+		var p queryProbe
+		if err := readQuery(httptest.NewRequest("GET", "/x?"+q, nil), &p); err != nil || p.Tree != want {
+			t.Errorf("?%s: tree = %v, err = %v, want %v and no error", q, p.Tree, err, want)
+		}
+	}
+
 	err := readQuery(httptest.NewRequest("GET", "/x?tree=maybe&limit=x", nil), &queryProbe{})
 	if err == nil || !strings.HasPrefix(err.Error(), "limit:") || !strings.Contains(err.Error(), "; tree:") {
 		t.Errorf("two bad values: err = %v, want limit then tree", err)

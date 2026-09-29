@@ -250,11 +250,9 @@ type TaskPublishResponse struct {
 // TaskListParams is the query string of
 // GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&deleted=&detail=&tree=&root=.
 // State is repeatable and/or comma-separated; the handler splits each value
-// on commas after decoding. Tree, Deleted, Detail and HasChildren are now
-// strict booleans: a bare flag or a value strconv.ParseBool refuses is a 400
-// naming the parameter, rather than being read as true (Tree/Deleted, which
-// used to accept a bare flag) or false (Detail/HasChildren, which used to
-// accept any non-"true" value silently).
+// on commas after decoding. Tree, Deleted, Detail and HasChildren are
+// booleans: a bare flag is false; a value that is not a boolean is a 400
+// naming the parameter.
 type TaskListParams struct {
 	Project  string `query:"project,omitempty"`
 	Priority string `query:"priority,omitempty"`
