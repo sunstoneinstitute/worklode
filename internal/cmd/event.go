@@ -41,7 +41,10 @@ func newEventTailCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			f := model.EventListParams{Type: typ, Limit: limit}
+			f := model.EventListParams{Type: typ}
+			if limit != 0 {
+				f.Limit = &limit
+			}
 			if since > 0 {
 				f.Since = time.Now().Add(-since).UTC().Format(time.RFC3339)
 			}

@@ -21,7 +21,9 @@ type EventListResponse struct {
 }
 
 // EventListParams is the query string of GET /api/v1/events. Zero-valued
-// fields do not filter.
+// string/After fields do not filter. Limit is a pointer so an absent limit
+// (server default/cap applies) can be told apart from an explicit zero,
+// which the handler rejects.
 type EventListParams struct {
 	// Type narrows to one event type; empty matches every type.
 	Type string `query:"type,omitempty"`
@@ -29,8 +31,9 @@ type EventListParams struct {
 	Since string `query:"since,omitempty"`
 	// After is an exclusive id cursor.
 	After int64 `query:"after,omitempty"`
-	// Limit caps the page returned (server default/cap applies when absent).
-	Limit int `query:"limit,omitempty"`
+	// Limit caps the page returned; nil means the server default/cap. A
+	// present value must be positive.
+	Limit *int `query:"limit,omitempty"`
 }
 
 // EventStreamParams is the query string of GET /api/v1/events/stream. After

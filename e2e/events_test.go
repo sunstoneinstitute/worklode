@@ -43,6 +43,10 @@ func pollEventListE2E(t *testing.T, ctx context.Context, c *cli.Client, f model.
 	}
 }
 
+// intPtr is the *int equivalent of milestones_test.go's strPtr, for
+// EventListParams.Limit.
+func intPtr(n int) *int { return &n }
+
 // TestEventLog proves the ordered event log (spec 025 §15) end to end
 // through public surfaces only: a real signed GitHub webhook delivery
 // becomes a row a real API client can read back with its vendor type and

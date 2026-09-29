@@ -32,7 +32,7 @@ const docLifecycleSubscriberName = "doc-lifecycle"
 // the client's own filter fields. An empty kind does not filter.
 func tasksAboutDoc(t *testing.T, ctx context.Context, c *cli.Client, docID int64, kind string) []model.Task {
 	t.Helper()
-	resp, _, err := c.ListTasks(ctx, model.TaskListParams{AboutDoc: docID, Kind: kind})
+	resp, _, err := c.ListTasks(ctx, model.TaskListParams{AboutDoc: &docID, Kind: kind})
 	if err != nil {
 		t.Fatalf("list tasks about doc %d (kind %q): %v", docID, kind, err)
 	}
@@ -145,7 +145,7 @@ func pollDocLifecycleCaughtUp(t *testing.T, ctx context.Context, c *cli.Client, 
 // read once.
 func eventByID(t *testing.T, ctx context.Context, c *cli.Client, id int64) model.Event {
 	t.Helper()
-	events := pollEventListE2E(t, ctx, c, model.EventListParams{After: id - 1, Limit: 1}, 1)
+	events := pollEventListE2E(t, ctx, c, model.EventListParams{After: id - 1, Limit: intPtr(1)}, 1)
 	if events[0].ID != id {
 		t.Fatalf("GET /api/v1/events after %d = %+v, want exactly event %d", id-1, events, id)
 	}

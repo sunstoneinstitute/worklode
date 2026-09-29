@@ -48,16 +48,15 @@ func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		f.Since = t
 	}
-	// Limit is validated only when the caller actually supplied one: absent
-	// and explicit-zero both decode to the struct's zero value, and only the
-	// explicit case must be rejected — a bare GET must keep meaning "no
-	// limit", not "invalid limit".
-	if r.URL.Query().Has("limit") {
-		if p.Limit < 1 {
+	// Limit is validated only when the caller actually supplied one: nil
+	// means absent (server default/cap applies), so a bare GET keeps
+	// meaning "no limit", not "invalid limit".
+	if p.Limit != nil {
+		if *p.Limit < 1 {
 			writeErr(w, http.StatusUnprocessableEntity, "invalid limit: must be a positive integer")
 			return
 		}
-		f.Limit = p.Limit
+		f.Limit = *p.Limit
 	}
 
 	events, err := s.st.ListEvents(r.Context(), f)
