@@ -166,8 +166,34 @@ func buildOpenAPI(guards map[string]routeGuard, docs map[string]routeDoc) ([]byt
 		if err := r.AddOperation(oc); err != nil {
 			return nil, fmt.Errorf("openapi: %s: %w", pattern, err)
 		}
+		if method == http.MethodDelete && doc.request != nil {
+			body, err := requestBody(r, doc.request)
+			if err != nil {
+				return nil, fmt.Errorf("openapi: %s: %w", pattern, err)
+			}
+			r.Spec.Paths.MapOfPathItemValues[path].Delete.RequestBody = body
+		}
 	}
 	return r.Spec.MarshalJSON()
+}
+
+// requestBody reflects request as a POST body on a scratch path and returns
+// it. swaggest drops the body of a DELETE, and forcing it through
+// openapi.RequestBodyEnforcer would need a wrapper type whose name leaks into
+// the schema $ref.
+func requestBody(r *openapi31.Reflector, request any) (*openapi31.RequestBodyOrReference, error) {
+	const scratch = "/__request_body"
+	oc, err := r.NewOperationContext(http.MethodPost, scratch)
+	if err != nil {
+		return nil, err
+	}
+	oc.AddReqStructure(request)
+	if err := r.AddOperation(oc); err != nil {
+		return nil, err
+	}
+	body := r.Spec.Paths.MapOfPathItemValues[scratch].Post.RequestBody
+	delete(r.Spec.Paths.MapOfPathItemValues, scratch)
+	return body, nil
 }
 
 // pathStruct builds the struct swaggest reads path parameters from: one

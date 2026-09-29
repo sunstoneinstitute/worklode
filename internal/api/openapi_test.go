@@ -52,6 +52,13 @@ type openAPIOp struct {
 			} `json:"schema"`
 		} `json:"content"`
 	} `json:"responses"`
+	RequestBody *struct {
+		Content map[string]struct {
+			Schema struct {
+				Ref string `json:"$ref"`
+			} `json:"schema"`
+		} `json:"content"`
+	} `json:"requestBody"`
 	Security *[]map[string][]string `json:"security"`
 }
 
@@ -123,6 +130,29 @@ func TestOpenAPIDocument(t *testing.T) {
 	}
 	if s := d.Components.SecuritySchemes["bearerToken"].Scheme; s != "bearer" {
 		t.Errorf("bearerToken scheme = %q, want bearer", s)
+	}
+}
+
+// swaggest drops a DELETE body unless forced; buildOpenAPI must still emit
+// it, with the model type's own component $ref.
+func TestOpenAPIDeleteBody(t *testing.T) {
+	t.Parallel()
+	d := renderOpenAPI(t,
+		map[string]routeGuard{"DELETE /api/v1/things/{id}": guarded(permTaskRead)},
+		map[string]routeDoc{"DELETE /api/v1/things/{id}": {
+			summary:   "Remove a thing",
+			request:   model.ErrorResponse{},
+			responses: map[int]any{http.StatusNoContent: nil},
+		}})
+	op := d.Paths["/api/v1/things/{id}"]["delete"]
+	if op.RequestBody == nil {
+		t.Fatal("DELETE has no requestBody")
+	}
+	if ref := op.RequestBody.Content["application/json"].Schema.Ref; ref != "#/components/schemas/ErrorResponse" {
+		t.Errorf("requestBody $ref = %q, want #/components/schemas/ErrorResponse", ref)
+	}
+	if len(d.Paths) != 1 {
+		t.Errorf("paths = %v, want only /api/v1/things/{id}", d.Paths)
 	}
 }
 
