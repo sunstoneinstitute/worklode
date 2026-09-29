@@ -36,13 +36,14 @@ type EventListParams struct {
 	Limit *int `query:"limit,omitempty"`
 }
 
-// EventStreamParams is the query string of GET /api/v1/events/stream. After
-// is where the stream resumes (exclusive); zero means the server picks the
-// current head, so a bare follow shows only what happens next.
+// EventStreamParams is the query string of GET /api/v1/events/stream. The
+// client's omitempty sends no after for a zero field, so a bare follow
+// starts at the head and shows only what happens next.
 type EventStreamParams struct {
 	// Type narrows the stream to one event type; empty matches every type.
 	Type string `query:"type,omitempty"`
-	// After is the exclusive resume cursor.
+	// After is the exclusive resume cursor: absent means the current head; 0
+	// replays from the first event.
 	After int64 `query:"after,omitempty"`
 }
 

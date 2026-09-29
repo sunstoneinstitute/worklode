@@ -40,7 +40,12 @@ func TestReadQuery(t *testing.T) {
 		}
 	}
 
-	err := readQuery(httptest.NewRequest("GET", "/x?tree=maybe&limit=x", nil), &queryProbe{})
+	err := readQuery(httptest.NewRequest("GET", "/x?limit=x", nil), &queryProbe{})
+	if want := "limit: invalid integer value 'x' type 'int' namespace 'limit'"; err == nil || err.Error() != want {
+		t.Errorf("?limit=x: err = %v, want %q", err, want)
+	}
+
+	err = readQuery(httptest.NewRequest("GET", "/x?tree=maybe&limit=x", nil), &queryProbe{})
 	if err == nil || !strings.HasPrefix(err.Error(), "limit:") || !strings.Contains(err.Error(), "; tree:") {
 		t.Errorf("two bad values: err = %v, want limit then tree", err)
 	}

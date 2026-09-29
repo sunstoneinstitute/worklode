@@ -1631,7 +1631,11 @@ func readQuery(r *http.Request, v any) error {
 		names := slices.Sorted(maps.Keys(de))
 		parts := make([]string, 0, len(names))
 		for _, n := range names {
-			parts = append(parts, n+": "+de[n].Error())
+			msg := de[n].Error()
+			if _, after, ok := strings.Cut(msg, "ERROR:"); ok {
+				msg = after
+			}
+			parts = append(parts, n+": "+msg)
 		}
 		return errors.New(strings.Join(parts, "; "))
 	}

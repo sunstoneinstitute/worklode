@@ -13,9 +13,9 @@ import (
 
 // --- skills -----------------------------------------------------------
 
-// Skills calls GET /api/v1/skills.
-func (c *Client) Skills(ctx context.Context) ([]model.Skill, []byte, error) {
-	p := model.SkillListParams{}
+// Skills calls GET /api/v1/skills; deleted also lists soft-deleted skills.
+func (c *Client) Skills(ctx context.Context, deleted bool) ([]model.Skill, []byte, error) {
+	p := model.SkillListParams{Deleted: deleted}
 	resp, raw, err := doJSON[model.SkillsListResponse](ctx, c, http.MethodGet, withParams("/api/v1/skills", p), nil, "skills")
 	if err != nil {
 		return nil, nil, err
