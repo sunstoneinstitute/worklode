@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -35,31 +34,30 @@ func toEventSubscriberJSON(st store.EventSubscriberStatus) model.EventSubscriber
 // listEvents handles GET /api/v1/events?type=&since=&after=&limit=. Any
 // authenticated actor may read it (permEventRead).
 func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	f := store.EventFilter{Type: q.Get("type")}
-	if v := q.Get("since"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
+	var p model.EventListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	f := store.EventFilter{Type: p.Type, After: p.After}
+	if p.Since != "" {
+		t, err := time.Parse(time.RFC3339, p.Since)
 		if err != nil {
 			writeErr(w, http.StatusUnprocessableEntity, "invalid since: must be RFC3339")
 			return
 		}
 		f.Since = t
 	}
-	if v := q.Get("after"); v != "" {
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			writeErr(w, http.StatusUnprocessableEntity, "invalid after: must be an integer event id")
-			return
-		}
-		f.After = n
-	}
-	if v := q.Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 {
+	// Limit is validated only when the caller actually supplied one: absent
+	// and explicit-zero both decode to the struct's zero value, and only the
+	// explicit case must be rejected — a bare GET must keep meaning "no
+	// limit", not "invalid limit".
+	if r.URL.Query().Has("limit") {
+		if p.Limit < 1 {
 			writeErr(w, http.StatusUnprocessableEntity, "invalid limit: must be a positive integer")
 			return
 		}
-		f.Limit = n
+		f.Limit = p.Limit
 	}
 
 	events, err := s.st.ListEvents(r.Context(), f)

@@ -15,7 +15,8 @@ import (
 
 // Skills calls GET /api/v1/skills.
 func (c *Client) Skills(ctx context.Context) ([]model.Skill, []byte, error) {
-	resp, raw, err := doJSON[model.SkillsListResponse](ctx, c, http.MethodGet, "/api/v1/skills", nil, "skills")
+	p := model.SkillListParams{}
+	resp, raw, err := doJSON[model.SkillsListResponse](ctx, c, http.MethodGet, withParams("/api/v1/skills", p), nil, "skills")
 	if err != nil {
 		return nil, nil, err
 	}

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // searchKinds are the subject kinds GET /api/v1/search indexes (040 §9).
@@ -48,9 +49,9 @@ func newSearchCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, raw, err := c.Search(cmd.Context(), cli.SearchFilter{
-				Query:   strings.Join(args, " "),
-				Kinds:   kinds,
+			resp, raw, err := c.Search(cmd.Context(), model.SearchParams{
+				Q:       strings.Join(args, " "),
+				Kind:    kinds,
 				Mode:    mode,
 				Limit:   limit,
 				Project: sc.Project,

@@ -39,32 +39,26 @@ func (s *server) failedOverviewRead(w http.ResponseWriter, read string, err erro
 
 // getOverview handles GET /api/v1/overview?project=<id>.
 func (s *server) getOverview(w http.ResponseWriter, r *http.Request) {
-	o, err := s.overview.Roll(r.Context(), r.URL.Query().Get("project"))
+	var p model.OverviewParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	o, err := s.overview.Roll(r.Context(), p.Project)
 	if s.failedOverviewRead(w, readOverview, err) {
 		return
 	}
 	writeJSON(w, http.StatusOK, o)
 }
 
-// queryFlag reads a boolean query parameter the way a caller writes one: an
-// absent parameter is false, a bare `?flag` is true, and only an explicit
-// false value turns it off. Get alone reads `?flag` as false and `?flag=0` as
-// true, which is backwards on both.
-func queryFlag(r *http.Request, name string) bool {
-	q := r.URL.Query()
-	if !q.Has(name) {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(q.Get(name))) {
-	case "0", "false", "no", "off":
-		return false
-	}
-	return true
-}
-
 // getDrift handles GET /api/v1/drift?acknowledged=1.
 func (s *server) getDrift(w http.ResponseWriter, r *http.Request) {
-	d, err := s.overview.DriftReport(r.Context(), queryFlag(r, "acknowledged"))
+	var p model.DriftParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	d, err := s.overview.DriftReport(r.Context(), p.Acknowledged)
 	if s.failedOverviewRead(w, readDrift, err) {
 		return
 	}
@@ -83,7 +77,12 @@ func (s *server) getGaps(w http.ResponseWriter, r *http.Request) {
 // getFrontier handles GET /api/v1/frontier?project=<id> — the read-only
 // mirror of the backbone frontier, pre-sorted by the D9 key.
 func (s *server) getFrontier(w http.ResponseWriter, r *http.Request) {
-	tasks, err := s.overview.Frontier(r.Context(), r.URL.Query().Get("project"))
+	var p model.FrontierParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	tasks, err := s.overview.Frontier(r.Context(), p.Project)
 	if s.failedOverviewRead(w, readFrontier, err) {
 		return
 	}
@@ -216,10 +215,12 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/overview": {
 		summary:   "Roll up a project's spec, plan and task status",
 		responses: map[int]any{http.StatusOK: model.Overview{}},
+		params:    model.OverviewParams{},
 	},
 	"GET /api/v1/drift": {
 		summary:   "List drift between the backbone and observed reality",
 		responses: map[int]any{http.StatusOK: model.Drift{}},
+		params:    model.DriftParams{},
 	},
 	"GET /api/v1/gaps": {
 		summary:   "List backbone gaps",
@@ -228,6 +229,7 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/frontier": {
 		summary:   "List the frontier of claimable tasks for a project",
 		responses: map[int]any{http.StatusOK: model.FrontierList{}},
+		params:    model.FrontierParams{},
 	},
 	"GET /api/v1/critical-path": {
 		summary:   "Get the critical path across open tasks",
@@ -240,6 +242,7 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/events": {
 		summary:   "List recorded events",
 		responses: map[int]any{http.StatusOK: model.EventListResponse{}},
+		params:    model.EventListParams{},
 	},
 	"GET /api/v1/event-subscribers": {
 		summary:   "List event subscriber consumer offsets",
@@ -254,6 +257,7 @@ var overviewRouteDocs = map[string]routeDoc{
 		summary:             "Follow the event log live over server-sent events",
 		responseContentType: "text/event-stream",
 		responses:           map[int]any{http.StatusOK: nil},
+		params:              model.EventStreamParams{},
 	},
 	"GET /api/v1/graph/projection/failures": {
 		summary:   "List projects the knowledge-graph projector has quarantined",
@@ -262,6 +266,7 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/skills": {
 		summary:   "List skills in the registry",
 		responses: map[int]any{http.StatusOK: model.SkillsListResponse{}},
+		params:    model.SkillListParams{},
 	},
 	"GET /api/v1/skills/{name}": {
 		summary:   "Get one skill",
@@ -284,6 +289,7 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/search": {
 		summary:   "Search the corpus of documents, tasks and skills",
 		responses: map[int]any{http.StatusOK: model.SearchResponse{}},
+		params:    model.SearchParams{},
 	},
 	"POST /api/v1/runtime-events": {
 		summary: "Record a crash-loop or OOM event from the runtime watcher",

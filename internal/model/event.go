@@ -20,6 +20,29 @@ type EventListResponse struct {
 	Events []Event `json:"events"`
 }
 
+// EventListParams is the query string of GET /api/v1/events. Zero-valued
+// fields do not filter.
+type EventListParams struct {
+	// Type narrows to one event type; empty matches every type.
+	Type string `query:"type,omitempty"`
+	// Since narrows to events received at or after this RFC3339 timestamp.
+	Since string `query:"since,omitempty"`
+	// After is an exclusive id cursor.
+	After int64 `query:"after,omitempty"`
+	// Limit caps the page returned (server default/cap applies when absent).
+	Limit int `query:"limit,omitempty"`
+}
+
+// EventStreamParams is the query string of GET /api/v1/events/stream. After
+// is where the stream resumes (exclusive); zero means the server picks the
+// current head, so a bare follow shows only what happens next.
+type EventStreamParams struct {
+	// Type narrows the stream to one event type; empty matches every type.
+	Type string `query:"type,omitempty"`
+	// After is the exclusive resume cursor.
+	After int64 `query:"after,omitempty"`
+}
+
 // EventSubscriberStatus is the wire form of one event_subscribers row plus
 // its derived lag and lock holder (spec 025 §18).
 type EventSubscriberStatus struct {

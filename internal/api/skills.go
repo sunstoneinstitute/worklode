@@ -50,7 +50,12 @@ func toPinnedSkillJSON(sk store.Skill) model.PinnedSkill {
 }
 
 func (s *server) listSkills(w http.ResponseWriter, r *http.Request) {
-	skills, err := s.st.ListSkills(r.Context(), r.URL.Query().Get("deleted") == "true")
+	var p model.SkillListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	skills, err := s.st.ListSkills(r.Context(), p.Deleted)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

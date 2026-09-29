@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -147,8 +148,16 @@ func (s *server) beginEventStream(w http.ResponseWriter, r *http.Request, name, 
 // cursor so the gap between the one-shot page and the stream is closed by the
 // client that knows where it stopped.
 func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
-	typ := r.URL.Query().Get("type")
+	var p model.EventStreamParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	typ := p.Type
 
+	// p.After is decoded above only to catch a malformed value early; the
+	// real cursor (including the Last-Event-ID header's precedence over it)
+	// is beginEventStream's own concern, shared with the other SSE routes.
 	ctx, rc, cursor, stop, ok := s.beginEventStream(w, r, "event stream", "event id")
 	if !ok {
 		return

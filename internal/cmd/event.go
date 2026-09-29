@@ -41,9 +41,9 @@ func newEventTailCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			f := cli.EventListFilter{Type: typ, Limit: limit}
+			f := model.EventListParams{Type: typ, Limit: limit}
 			if since > 0 {
-				f.Since = time.Now().Add(-since)
+				f.Since = time.Now().Add(-since).UTC().Format(time.RFC3339)
 			}
 			resp, raw, err := c.ListEvents(cmd.Context(), f)
 			if err != nil {
@@ -98,7 +98,7 @@ func followEvents(cmd *cobra.Command, c *cli.Client, typ string, backlog []model
 		after = e.ID
 	}
 
-	err := c.StreamEvents(ctx, cli.EventStreamFilter{Type: typ, After: after}, emit)
+	err := c.StreamEvents(ctx, model.EventStreamParams{Type: typ, After: after}, emit)
 	switch {
 	// Ctrl-C is how a follow ends, so it is a success.
 	case errors.Is(err, context.Canceled) && ctx.Err() != nil:

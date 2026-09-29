@@ -315,9 +315,9 @@ func TestEscalationLadder(t *testing.T) {
 	// The funnel, in order. Each type is polled on its own because the events
 	// API filters by type and nothing else; the ids are what say they landed
 	// in the order the ladder climbs.
-	gapEvent := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: typeGapFound}, 1)[0]
-	startedEvent := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: typeFixStarted}, 1)[0]
-	finishedEvent := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: typeFixFinished}, 1)[0]
+	gapEvent := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: typeGapFound}, 1)[0]
+	startedEvent := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: typeFixStarted}, 1)[0]
+	finishedEvent := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: typeFixFinished}, 1)[0]
 	if !(gapEvent.ID < startedEvent.ID && startedEvent.ID < finishedEvent.ID) {
 		t.Fatalf("ladder events landed out of order: %s=%d %s=%d %s=%d",
 			typeGapFound, gapEvent.ID, typeFixStarted, startedEvent.ID,

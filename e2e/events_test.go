@@ -23,7 +23,7 @@ import (
 // in another package's test binary sharing this Postgres instance can hold a
 // read back to fewer events than were actually committed, so "nothing yet"
 // must never be read as success.
-func pollEventListE2E(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []model.Event {
+func pollEventListE2E(t *testing.T, ctx context.Context, c *cli.Client, f model.EventListParams, want int) []model.Event {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -97,7 +97,7 @@ func TestEventLog(t *testing.T) {
 		},
 		"head_commit": map[string]any{"id": headSHA, "message": "e2e events: first push"},
 	})
-	events := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: "push"}, 1)
+	events := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: "push"}, 1)
 	if events[0].ExternalID != "e2e-events-push-1" || events[0].Source != "github" || events[0].Type != "push" {
 		t.Fatalf("first event = %+v, want external_id e2e-events-push-1, source github, type push", events[0])
 	}
@@ -138,7 +138,7 @@ func TestEventLog(t *testing.T) {
 	resultCh := make(chan streamResult, 1)
 	go func() {
 		var got model.Event
-		err := admin.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "push", After: firstID},
+		err := admin.StreamEvents(streamCtx, model.EventStreamParams{Type: "push", After: firstID},
 			func(e model.Event) error {
 				got = e
 				return errGotIt
@@ -172,7 +172,7 @@ func TestEventLog(t *testing.T) {
 	// even if the refusal never came (which would itself be the bug).
 	refuseCtx, cancelRefuse := context.WithTimeout(ctx, 10*time.Second)
 	defer cancelRefuse()
-	err = agent.StreamEvents(refuseCtx, cli.EventStreamFilter{Type: "push"}, func(model.Event) error {
+	err = agent.StreamEvents(refuseCtx, model.EventStreamParams{Type: "push"}, func(model.Event) error {
 		return errors.New("callback must not run for a non-admin token")
 	})
 	if !isClientStatus(err, http.StatusForbidden) {
