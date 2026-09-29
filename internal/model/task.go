@@ -275,12 +275,15 @@ type TaskListParams struct {
 	// or after it (the incremental fetch a polling mirror makes).
 	UpdatedSince string `query:"updated_since,omitempty"`
 	// PlanDoc narrows to the tasks minted from this plan document id (025
-	// §9.2). 0 does not filter.
-	PlanDoc int64 `query:"plan_doc,omitempty"`
+	// §9.2). nil (the parameter absent) does not filter; a non-positive
+	// value is refused, so a caller cannot distinguish "0" from "absent" on
+	// the wire.
+	PlanDoc *int64 `query:"plan_doc,omitempty"`
 	// AboutDoc narrows to the tasks that reference this document id — the
 	// review and planning tasks the doc-lifecycle watcher mints (025 §15.4).
-	// 0 does not filter.
-	AboutDoc int64 `query:"about_doc,omitempty"`
+	// nil (the parameter absent) does not filter; a non-positive value is
+	// refused, the same stance PlanDoc takes.
+	AboutDoc *int64 `query:"about_doc,omitempty"`
 	// Deleted switches the list from live tasks to tombstoned ones (044 §5)
 	// instead of joining the two.
 	Deleted bool `query:"deleted,omitempty"`

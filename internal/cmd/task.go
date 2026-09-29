@@ -392,16 +392,20 @@ func newTaskListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var planDoc, aboutDoc int64
+			var planDoc, aboutDoc *int64
 			if plan != "" {
-				if planDoc, err = resolveDocID(cmd.Context(), c, plan); err != nil {
+				id, err := resolveDocID(cmd.Context(), c, plan)
+				if err != nil {
 					return err
 				}
+				planDoc = &id
 			}
 			if about != "" {
-				if aboutDoc, err = resolveDocID(cmd.Context(), c, about); err != nil {
+				id, err := resolveDocID(cmd.Context(), c, about)
+				if err != nil {
 					return err
 				}
+				aboutDoc = &id
 			}
 			resp, raw, err := c.ListTasks(cmd.Context(), model.TaskListParams{
 				Project: sc.Project, States: states, Priority: priority, Kind: kind, Parent: parent,

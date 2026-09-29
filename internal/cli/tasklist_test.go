@@ -31,15 +31,16 @@ func tasklistStub(t *testing.T) (*cli.Client, *string) {
 func TestListTasksDocFilters(t *testing.T) {
 	c, uri := tasklistStub(t)
 	ctx := context.Background()
+	about, plan := int64(12), int64(7)
 
-	if _, _, err := c.ListTasks(ctx, model.TaskListParams{AboutDoc: 12}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{AboutDoc: &about}); err != nil {
 		t.Fatalf("ListTasks about_doc: %v", err)
 	}
 	if *uri != "/api/v1/tasks?about_doc=12" {
 		t.Fatalf("ListTasks AboutDoc URI = %q, want /api/v1/tasks?about_doc=12", *uri)
 	}
 
-	if _, _, err := c.ListTasks(ctx, model.TaskListParams{PlanDoc: 7, AboutDoc: 12}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{PlanDoc: &plan, AboutDoc: &about}); err != nil {
 		t.Fatalf("ListTasks both doc filters: %v", err)
 	}
 	if *uri != "/api/v1/tasks?about_doc=12&plan_doc=7" {

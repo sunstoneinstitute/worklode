@@ -412,17 +412,26 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	// A plan_doc that does not parse is refused rather than ignored, the same
 	// stance updated_since takes: silently dropping it would read as "no
-	// tasks minted" instead of "the query was malformed". A non-numeric value
-	// is already a 400 from readQuery above; this only catches a negative
-	// one, since 0 (absent) never reaches the store filter.
-	if p.PlanDoc < 0 {
-		writeErr(w, http.StatusBadRequest, "plan_doc must be a positive integer")
-		return
+	// tasks minted" instead of "the query was malformed". PlanDoc is a
+	// pointer so an explicit non-positive value (including 0) can be told
+	// apart from the parameter being absent and refused the same way it was
+	// before the params struct existed.
+	var planDoc int64
+	if p.PlanDoc != nil {
+		if *p.PlanDoc <= 0 {
+			writeErr(w, http.StatusBadRequest, "plan_doc must be a positive integer")
+			return
+		}
+		planDoc = *p.PlanDoc
 	}
 	// Same stance as plan_doc.
-	if p.AboutDoc < 0 {
-		writeErr(w, http.StatusBadRequest, "about_doc must be a positive integer")
-		return
+	var aboutDoc int64
+	if p.AboutDoc != nil {
+		if *p.AboutDoc <= 0 {
+			writeErr(w, http.StatusBadRequest, "about_doc must be a positive integer")
+			return
+		}
+		aboutDoc = *p.AboutDoc
 	}
 	tasks, err := s.st.ListTasks(r.Context(), store.TaskFilter{
 		Project:  p.Project,
@@ -435,8 +444,8 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 
 		HasChildren:  p.HasChildren,
 		UpdatedSince: updatedSince,
-		PlanDoc:      p.PlanDoc,
-		AboutDoc:     p.AboutDoc,
+		PlanDoc:      planDoc,
+		AboutDoc:     aboutDoc,
 		Deleted:      p.Deleted,
 	})
 	if err != nil {
