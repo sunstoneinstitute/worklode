@@ -55,7 +55,7 @@ func (c *Client) Search(ctx context.Context, f SearchFilter) (model.SearchRespon
 // document hits. An unreachable or unreadable corpus yields a nil map rather
 // than an error: a missing reference degrades one column of one line.
 func (c *Client) DocRefs(ctx context.Context, project string) map[int64]string {
-	resp, _, err := c.ListDocs(ctx, DocListFilter{Project: project})
+	resp, _, err := c.ListDocs(ctx, model.DocListParams{Project: project})
 	if err != nil {
 		return nil
 	}

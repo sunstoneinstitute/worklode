@@ -216,7 +216,12 @@ func (s *server) withProjectKey(ctx context.Context, d model.Doc) model.Doc {
 }
 
 func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
-	sel, err := docSelectorFrom(r)
+	var p model.DocListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	sel, err := docSelectorFrom(p)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -283,7 +288,12 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 // status code on http_requests_total's {route, code}: 200 resolved, 404 no
 // such document, 422 an ambiguous ref.
 func (s *server) resolveDocRef(w http.ResponseWriter, r *http.Request) {
-	ref := strings.TrimSpace(r.URL.Query().Get("ref"))
+	var p model.DocResolveParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ref := strings.TrimSpace(p.Ref)
 	if ref == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "ref is required")
 		return
@@ -314,7 +324,12 @@ func (s *server) resolveDocRef(w http.ResponseWriter, r *http.Request) {
 // same way every other doc list route does (?project= narrows, "" answers
 // over every project).
 func (s *server) lintDocs(w http.ResponseWriter, r *http.Request) {
-	findings, err := s.st.LintDocs(r.Context(), r.URL.Query().Get("project"))
+	var p model.DocLintParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	findings, err := s.st.LintDocs(r.Context(), p.Project)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -357,8 +372,12 @@ func (s *server) resolveExternalCovers(w http.ResponseWriter, r *http.Request) {
 // the way every other doc list route does; ?number= narrows to one section
 // number or anchor across the corpus. Both empty answers over everything.
 func (s *server) listCorpusSections(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	rows, err := s.st.ListCorpusSections(r.Context(), q.Get("project"), q.Get("number"))
+	var p model.DocSectionsParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	rows, err := s.st.ListCorpusSections(r.Context(), p.Project, p.Number)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -500,49 +519,43 @@ type docDerivedSelector struct {
 //
 // The CLI refuses the same combinations locally so the error needs no round
 // trip; this is the authority, for the clients that are not the CLI.
-func docSelectorFrom(r *http.Request) (docListSelector, error) {
-	q := r.URL.Query()
-	sel := docListSelector{filter: docFilterFrom(r)}
-	var err error
-	if sel.needsPlanning, err = queryBool(q, "needs_planning"); err != nil {
-		return docListSelector{}, err
+//
+// p is already decoded (readQuery, at the top of listDocs) rather than a
+// *http.Request: the derived-selector logic below is what makes this its
+// own function, not the query decoding, which model.DocListParams's tags
+// now say once for the server, the CLI and the OpenAPI document alike.
+func docSelectorFrom(p model.DocListParams) (docListSelector, error) {
+	status := p.Status
+	// status=all is not a status: it means "every status, terminal
+	// documents included", which is what an absent status already means
+	// here. It exists so `lode doc list --status all` can opt out of the
+	// terminal-status hiding its own default asks for (12 S5).
+	if status == "all" {
+		status = ""
 	}
-	if sel.needsExecution, err = queryBool(q, "needs_execution"); err != nil {
-		return docListSelector{}, err
-	}
-	if sel.bareSuperseded, err = queryBool(q, "bare_superseded"); err != nil {
-		return docListSelector{}, err
-	}
-	if sel.unresolved, err = queryBool(q, "unresolved"); err != nil {
-		return docListSelector{}, err
+	sel := docListSelector{
+		filter: store.DocFilter{
+			Project: p.Project, Kind: p.Kind, Status: status, Owner: p.Owner,
+			Deleted: p.Deleted, HasNotes: p.HasNotes, HideTerminal: p.HideTerminal,
+		},
+		needsPlanning:  p.NeedsPlanning,
+		needsExecution: p.NeedsExecution,
+		bareSuperseded: p.BareSuperseded,
+		unresolved:     p.Unresolved,
+		olderThanDays:  p.OlderThanDays,
 	}
 	// A day count, not a duration: the CLI's "30d" is parsed there, so what
 	// crosses the wire is already the number 025 §8.7's clock counts in.
-	if raw := q.Get("older_than_days"); raw != "" {
-		if sel.olderThanDays, err = strconv.Atoi(raw); err != nil || sel.olderThanDays < 0 {
-			return docListSelector{}, fmt.Errorf("older_than_days must be a non-negative integer, got %q", raw)
+	// OlderThanDays is a plain int (not a pointer), so an explicit 0 reads
+	// the same as absent; that only changes behavior for older_than_days=0
+	// combined with unresolved=false, which no longer errors.
+	if p.OlderThanDays != 0 {
+		if p.OlderThanDays < 0 {
+			return docListSelector{}, fmt.Errorf("older_than_days must be a non-negative integer, got %d", p.OlderThanDays)
 		}
 		if !sel.unresolved {
 			return docListSelector{}, errors.New("older_than_days applies to unresolved=true only (025 §8.7)")
 		}
-	}
-	// A switch, not an addition (044 §5): deleted=true lists the tombstoned
-	// documents instead of the live ones. Read here rather than in
-	// docFilterFrom, which the cockpit's read-only /docs page also calls and
-	// which has no tombstone surface.
-	if sel.filter.Deleted, err = queryBool(q, "deleted"); err != nil {
-		return docListSelector{}, err
-	}
-	// A plain filter, but boolean, so it is read here beside deleted rather
-	// than in docFilterFrom's string loop.
-	if sel.filter.HasNotes, err = queryBool(q, "has_notes"); err != nil {
-		return docListSelector{}, err
-	}
-	// Opt-in, so every caller that needs the whole corpus (the importer's
-	// slug lookup, completion, search) gets it without asking. Only `lode doc
-	// list` with no --status sends it (12 S5).
-	if sel.filter.HideTerminal, err = queryBool(q, "hide_terminal"); err != nil {
-		return docListSelector{}, err
 	}
 
 	derived := []docDerivedSelector{
@@ -709,12 +722,16 @@ func (s *server) listDocReferrers(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	anchor := r.URL.Query().Get("anchor")
-	if anchor == "" {
+	var p model.DocReferrersParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if p.Anchor == "" {
 		writeErr(w, http.StatusBadRequest, "anchor is required: a referrer names one section (025 §8.2)")
 		return
 	}
-	refs, err := s.st.DocSectionReferrers(r.Context(), id, anchor)
+	refs, err := s.st.DocSectionReferrers(r.Context(), id, p.Anchor)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -1291,14 +1308,17 @@ var docRouteDocs = map[string]routeDoc{
 	"GET /api/v1/docs": {
 		summary:   "List design documents",
 		responses: map[int]any{http.StatusOK: model.DocListResponse{}},
+		params:    model.DocListParams{},
 	},
 	"GET /api/v1/docs/resolve": {
 		summary:   "Resolve a document reference to its document",
 		responses: map[int]any{http.StatusOK: model.Doc{}},
+		params:    model.DocResolveParams{},
 	},
 	"GET /api/v1/docs/lint": {
 		summary:   "List dangling frontmatter references across the corpus",
 		responses: map[int]any{http.StatusOK: []model.DocLintFinding{}},
+		params:    model.DocLintParams{},
 	},
 	"POST /api/v1/docs/covers/resolve": {
 		summary:   "Re-resolve every plan's unresolved covers references",
@@ -1307,6 +1327,7 @@ var docRouteDocs = map[string]routeDoc{
 	"GET /api/v1/docs/sections": {
 		summary:   "List sections across the document corpus",
 		responses: map[int]any{http.StatusOK: []model.DocSectionRow{}},
+		params:    model.DocSectionsParams{},
 	},
 	"GET /api/v1/docs/{id}": {
 		summary:   "Get a document with its sections, edges and notes",
@@ -1319,6 +1340,7 @@ var docRouteDocs = map[string]routeDoc{
 	"GET /api/v1/docs/{id}/referrers": {
 		summary:   "List open work pointing at a document section",
 		responses: map[int]any{http.StatusOK: model.DocReferrersResponse{}},
+		params:    model.DocReferrersParams{},
 	},
 	"GET /api/v1/docs/{id}/versions/{n}": {
 		summary:   "Get one version of a document",

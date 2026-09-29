@@ -259,14 +259,14 @@ func TestDeleteDocument(t *testing.T) {
 		t.Fatalf("doc tombstone = %+v, want the delete record", deleted.Tombstone)
 	}
 
-	live, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "del"})
+	live, _, err := c.ListDocs(ctx, model.DocListParams{Project: "del"})
 	if err != nil {
 		t.Fatalf("list docs: %v", err)
 	}
 	if len(live.Docs) != 0 {
 		t.Fatalf("live doc list has %d docs, want 0", len(live.Docs))
 	}
-	tombstoned, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "del", Deleted: true})
+	tombstoned, _, err := c.ListDocs(ctx, model.DocListParams{Project: "del", Deleted: true})
 	if err != nil {
 		t.Fatalf("list deleted docs: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestDeleteDocument(t *testing.T) {
 	if _, _, err := c.UndeleteDoc(ctx, doc.ID); err != nil {
 		t.Fatalf("undelete doc: %v", err)
 	}
-	live, _, err = c.ListDocs(ctx, cli.DocListFilter{Project: "del"})
+	live, _, err = c.ListDocs(ctx, model.DocListParams{Project: "del"})
 	if err != nil {
 		t.Fatalf("list docs after undelete: %v", err)
 	}

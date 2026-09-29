@@ -298,7 +298,7 @@ func TestDocImport(t *testing.T) {
 		if _, err := resolveDocID(ctx, c, "900-generated-view"); err == nil {
 			t.Error("specs/inlined/ was walked; the generated view must never be imported")
 		}
-		resp, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "proj"})
+		resp, _, err := c.ListDocs(ctx, model.DocListParams{Project: "proj"})
 		if err != nil {
 			t.Fatalf("list docs: %v", err)
 		}
@@ -309,7 +309,7 @@ func TestDocImport(t *testing.T) {
 
 	// Last: this one runs the import a second time.
 	t.Run("re-running changes nothing", func(t *testing.T) {
-		before, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "proj"})
+		before, _, err := c.ListDocs(ctx, model.DocListParams{Project: "proj"})
 		if err != nil {
 			t.Fatalf("list docs: %v", err)
 		}
@@ -320,7 +320,7 @@ func TestDocImport(t *testing.T) {
 		if !strings.Contains(out, "0 created") || !strings.Contains(out, "7 already present") {
 			t.Fatalf("second import summary = %q, want it to create nothing", out)
 		}
-		after, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "proj"})
+		after, _, err := c.ListDocs(ctx, model.DocListParams{Project: "proj"})
 		if err != nil {
 			t.Fatalf("list docs: %v", err)
 		}
@@ -348,7 +348,7 @@ func TestDocImportDryRun(t *testing.T) {
 			t.Errorf("dry-run output = %q, want it to contain %q", out, want)
 		}
 	}
-	resp, _, err := c.ListDocs(context.Background(), cli.DocListFilter{Project: "proj"})
+	resp, _, err := c.ListDocs(context.Background(), model.DocListParams{Project: "proj"})
 	if err != nil {
 		t.Fatalf("list docs: %v", err)
 	}
@@ -521,7 +521,7 @@ Now also declaring a dependency on spec 002.
 	})
 
 	t.Run("a further unchanged re-run updates nothing", func(t *testing.T) {
-		before, _, err := c.ListDocs(context.Background(), cli.DocListFilter{Project: "proj"})
+		before, _, err := c.ListDocs(context.Background(), model.DocListParams{Project: "proj"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -532,7 +532,7 @@ Now also declaring a dependency on spec 002.
 		if !strings.Contains(out, "0 updated") {
 			t.Errorf("summary = %q, want 0 updated", out)
 		}
-		after, _, err := c.ListDocs(context.Background(), cli.DocListFilter{Project: "proj"})
+		after, _, err := c.ListDocs(context.Background(), model.DocListParams{Project: "proj"})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -429,7 +429,7 @@ func TestEscalationLadder(t *testing.T) {
 	if staleDoc.Status != "stale" {
 		t.Fatalf("plan two status = %q, want stale", staleDoc.Status)
 	}
-	plans, _, err := admin.ListDocs(ctx, cli.DocListFilter{Project: "ladder", Kind: "plan"})
+	plans, _, err := admin.ListDocs(ctx, model.DocListParams{Project: "ladder", Kind: "plan"})
 	if err != nil {
 		t.Fatalf("list plans: %v", err)
 	}
@@ -486,7 +486,7 @@ func TestEscalationLadder(t *testing.T) {
 	if _, _, err := alice.AcceptDoc(ctx, planThree.ID); err != nil {
 		t.Fatalf("accept plan three: %v", err)
 	}
-	unresolved, _, err := admin.ListDocs(ctx, cli.DocListFilter{Project: "ladder", Unresolved: true})
+	unresolved, _, err := admin.ListDocs(ctx, model.DocListParams{Project: "ladder", Unresolved: true})
 	if err != nil {
 		t.Fatalf("list unresolved docs: %v", err)
 	}
@@ -500,7 +500,7 @@ func TestEscalationLadder(t *testing.T) {
 	if withdrawn.Status != "withdrawn" {
 		t.Fatalf("plan three status = %q, want withdrawn", withdrawn.Status)
 	}
-	unresolved, _, err = admin.ListDocs(ctx, cli.DocListFilter{Project: "ladder", Unresolved: true})
+	unresolved, _, err = admin.ListDocs(ctx, model.DocListParams{Project: "ladder", Unresolved: true})
 	if err != nil {
 		t.Fatalf("list unresolved docs after the withdrawal: %v", err)
 	}

@@ -56,7 +56,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 	ctx := cmd.Context()
 	scope := currentScope(ctx, c, cfg)
 
-	list, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: scope.Project})
+	list, _, err := c.ListDocs(ctx, model.DocListParams{Project: scope.Project})
 	if err != nil {
 		return err
 	}
@@ -187,7 +187,7 @@ func resolveForeignDocRef(ctx context.Context, c *cli.Client, key, ref string) (
 		if p.Key != key {
 			continue
 		}
-		list, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: p.ID})
+		list, _, err := c.ListDocs(ctx, model.DocListParams{Project: p.ID})
 		if err != nil {
 			return model.Doc{}, "", fmt.Errorf("list %s docs: %w", p.ID, err)
 		}

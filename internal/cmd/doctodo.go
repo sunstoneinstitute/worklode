@@ -89,7 +89,7 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
-	resp, _, err := c.ListDocs(cmd.Context(), cli.DocListFilter{})
+	resp, _, err := c.ListDocs(cmd.Context(), model.DocListParams{})
 	if err != nil {
 		return err
 	}

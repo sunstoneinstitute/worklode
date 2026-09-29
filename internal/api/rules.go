@@ -153,9 +153,13 @@ func (s *server) getRuleVersion(w http.ResponseWriter, r *http.Request) {
 // No dedicated metric: 200, 404 on an unknown doc and 422 on a bad status or
 // an ambiguous doc ref are http_requests_total's {route, code}.
 func (s *server) listRules(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	f := store.RuleFilter{Project: q.Get("project"), Status: q.Get("status")}
-	if ref := strings.TrimSpace(q.Get("doc")); ref != "" {
+	var p model.RuleListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	f := store.RuleFilter{Project: p.Project, Status: p.Status}
+	if ref := strings.TrimSpace(p.Doc); ref != "" {
 		id, err := s.docIDByRef(r.Context(), ref)
 		if err != nil {
 			s.mapStoreErr(w, err)
@@ -197,6 +201,7 @@ var ruleRouteDocs = map[string]routeDoc{
 	"GET /api/v1/rules": {
 		summary:   "List rules, optionally filtered by project, status or document",
 		responses: map[int]any{http.StatusOK: []model.Rule{}},
+		params:    model.RuleListParams{},
 	},
 	"GET /api/v1/rules/{id}": {
 		summary:   "Get a rule by ref",
