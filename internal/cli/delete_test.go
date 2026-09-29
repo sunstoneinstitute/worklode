@@ -137,13 +137,13 @@ func TestListFiltersDeletedSwitch(t *testing.T) {
 	c, got := deleteStub(t)
 	ctx := context.Background()
 
-	if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "wl", Deleted: true}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "wl", Deleted: true}); err != nil {
 		t.Fatalf("ListTasks --deleted: %v", err)
 	}
 	if got.URI != "/api/v1/tasks?deleted=true&project=wl" {
 		t.Fatalf("ListTasks --deleted URI = %q", got.URI)
 	}
-	if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "wl"}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "wl"}); err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
 	if got.URI != "/api/v1/tasks?project=wl" {

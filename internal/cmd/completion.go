@@ -90,7 +90,7 @@ func taskIDs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Comp
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	defer cancel()
-	resp, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: scope.Project})
+	resp, _, err := c.ListTasks(ctx, model.TaskListParams{Project: scope.Project})
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

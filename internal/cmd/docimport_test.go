@@ -242,7 +242,7 @@ func TestDocImport(t *testing.T) {
 	})
 
 	t.Run("an accepted plan mints nothing", func(t *testing.T) {
-		resp, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "proj"})
+		resp, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "proj"})
 		if err != nil {
 			t.Fatalf("list tasks: %v", err)
 		}

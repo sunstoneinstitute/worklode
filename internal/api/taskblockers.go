@@ -26,7 +26,12 @@ func (s *server) getTaskBlockers(w http.ResponseWriter, r *http.Request) {
 // getTaskBlockers with no task named, rooted at every blocked task in scope.
 // An absent project spans every project, the way the board's own scope does.
 func (s *server) getBlockers(w http.ResponseWriter, r *http.Request) {
-	trees, err := s.st.BlockerForest(r.Context(), r.URL.Query().Get("project"))
+	var p model.BlockersParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	trees, err := s.st.BlockerForest(r.Context(), p.Project)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

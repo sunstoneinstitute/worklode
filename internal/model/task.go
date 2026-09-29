@@ -246,3 +246,52 @@ type TaskPublishInput struct {
 type TaskPublishResponse struct {
 	Published []string `json:"published"`
 }
+
+// TaskListParams is the query string of
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&deleted=&detail=&tree=&root=.
+// State is repeatable and/or comma-separated; the handler splits each value
+// on commas after decoding. Tree, Deleted, Detail and HasChildren are now
+// strict booleans: a bare flag or a value strconv.ParseBool refuses is a 400
+// naming the parameter, rather than being read as true (Tree/Deleted, which
+// used to accept a bare flag) or false (Detail/HasChildren, which used to
+// accept any non-"true" value silently).
+type TaskListParams struct {
+	Project  string `query:"project,omitempty"`
+	Priority string `query:"priority,omitempty"`
+	Kind     string `query:"kind,omitempty"`
+	// States is repeatable (state=a&state=b) and/or comma-separated
+	// (state=a,b); either form narrows to tasks in one of these states.
+	States []string `query:"state,omitempty"`
+	// Parent narrows to the direct children of this task id.
+	Parent string `query:"parent,omitempty"`
+	// Assignee narrows to tasks assigned to this actor id.
+	Assignee string `query:"assignee,omitempty"`
+	// HasChildren narrows to containers — tasks with at least one child.
+	HasChildren bool `query:"has_children,omitempty"`
+	// Repo narrows to the project owning this repo. Any git remote URL form
+	// works as well as owner/name; the server normalizes it.
+	Repo string `query:"repo,omitempty"`
+	// UpdatedSince is an RFC3339 instant that narrows to the tasks touched at
+	// or after it (the incremental fetch a polling mirror makes).
+	UpdatedSince string `query:"updated_since,omitempty"`
+	// PlanDoc narrows to the tasks minted from this plan document id (025
+	// §9.2). 0 does not filter.
+	PlanDoc int64 `query:"plan_doc,omitempty"`
+	// AboutDoc narrows to the tasks that reference this document id — the
+	// review and planning tasks the doc-lifecycle watcher mints (025 §15.4).
+	// 0 does not filter.
+	AboutDoc int64 `query:"about_doc,omitempty"`
+	// Deleted switches the list from live tasks to tombstoned ones (044 §5)
+	// instead of joining the two.
+	Deleted bool `query:"deleted,omitempty"`
+	// Detail adds "blocked" and "edges" to each row (see TaskListDetail) at
+	// the cost of two extra bulk queries.
+	Detail bool `query:"detail,omitempty"`
+	// Tree answers with the hierarchy instead of a flat list (see
+	// TaskTreeResponse); Project, States and Root still narrow it, every
+	// other field is ignored.
+	Tree bool `query:"tree,omitempty"`
+	// Root, with Tree, names the single container to report instead of every
+	// container in scope.
+	Root string `query:"root,omitempty"`
+}

@@ -43,3 +43,9 @@ type BlockerTree struct {
 type BlockerForest struct {
 	Trees []BlockerTree `json:"trees"`
 }
+
+// BlockersParams is the query string of GET /api/v1/blockers?project=<id>.
+// An absent Project spans every project, the way the board's own scope does.
+type BlockersParams struct {
+	Project string `query:"project,omitempty"`
+}

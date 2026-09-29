@@ -5,8 +5,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -90,7 +90,7 @@ func handleLocalMerge(ctx context.Context, opts Options, dir string) {
 		return
 	}
 	lctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-	resp, _, err := c.ListTasks(lctx, cli.TaskListFilter{Repo: remote, States: mergeCandidateStates})
+	resp, _, err := c.ListTasks(lctx, model.TaskListParams{Repo: remote, States: mergeCandidateStates})
 	cancel()
 	if err != nil {
 		warn(opts, "list merge candidates for %s: %v", remote, err)

@@ -403,7 +403,7 @@ func newTaskListCmd() *cobra.Command {
 					return err
 				}
 			}
-			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
+			resp, raw, err := c.ListTasks(cmd.Context(), model.TaskListParams{
 				Project: sc.Project, States: states, Priority: priority, Kind: kind, Parent: parent,
 				Assignee: assignee, PlanDoc: planDoc, AboutDoc: aboutDoc, Deleted: deleted,
 			})
@@ -1484,7 +1484,7 @@ func newTaskTreeCmd() *cobra.Command {
 			// One request for the whole tree: the server picks the containers,
 			// rolls up their progress, and returns their children with them
 			// (WL-169). An id narrows it to that container's subtree.
-			f := cli.TaskTreeFilter{Project: sc.Project, States: resolveStatusFilter(nil)}
+			f := model.TaskListParams{Project: sc.Project, States: resolveStatusFilter(nil)}
 			if len(args) == 1 {
 				id, err := resolveTaskIDInScope(cmd.Context(), args[0], c, sc)
 				if err != nil {

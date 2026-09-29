@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // tasklistStub records the request URI of the last call and answers with an
@@ -31,21 +32,21 @@ func TestListTasksDocFilters(t *testing.T) {
 	c, uri := tasklistStub(t)
 	ctx := context.Background()
 
-	if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{AboutDoc: 12}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{AboutDoc: 12}); err != nil {
 		t.Fatalf("ListTasks about_doc: %v", err)
 	}
 	if *uri != "/api/v1/tasks?about_doc=12" {
 		t.Fatalf("ListTasks AboutDoc URI = %q, want /api/v1/tasks?about_doc=12", *uri)
 	}
 
-	if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{PlanDoc: 7, AboutDoc: 12}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{PlanDoc: 7, AboutDoc: 12}); err != nil {
 		t.Fatalf("ListTasks both doc filters: %v", err)
 	}
 	if *uri != "/api/v1/tasks?about_doc=12&plan_doc=7" {
 		t.Fatalf("ListTasks both doc filters URI = %q", *uri)
 	}
 
-	if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "wl"}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "wl"}); err != nil {
 		t.Fatalf("ListTasks unfiltered: %v", err)
 	}
 	if *uri != "/api/v1/tasks?project=wl" {
@@ -60,14 +61,14 @@ func TestTaskTreeURI(t *testing.T) {
 	c, uri := tasklistStub(t)
 	ctx := context.Background()
 
-	if _, _, err := c.TaskTree(ctx, cli.TaskTreeFilter{Project: "wl", States: []string{"ready", "in_progress"}}); err != nil {
+	if _, _, err := c.TaskTree(ctx, model.TaskListParams{Project: "wl", States: []string{"ready", "in_progress"}}); err != nil {
 		t.Fatalf("TaskTree: %v", err)
 	}
 	if *uri != "/api/v1/tasks?project=wl&state=ready&state=in_progress&tree=true" {
 		t.Fatalf("TaskTree URI = %q", *uri)
 	}
 
-	if _, _, err := c.TaskTree(ctx, cli.TaskTreeFilter{Project: "wl", Root: "WL-1"}); err != nil {
+	if _, _, err := c.TaskTree(ctx, model.TaskListParams{Project: "wl", Root: "WL-1"}); err != nil {
 		t.Fatalf("TaskTree root: %v", err)
 	}
 	if *uri != "/api/v1/tasks?project=wl&root=WL-1&tree=true" {

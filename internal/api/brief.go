@@ -57,11 +57,16 @@ func toBriefJSON(b *store.Brief) model.Brief {
 // recommendation, which would re-resolve the same pins.
 func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	var p model.BriefParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	// skills=false is for callers that want the task row or the lease and
 	// nothing else (lode work status, the pre-renew fetch in lode work
 	// resume). It skips pin resolution, the inlined bodies, and the embedding
 	// round trip.
-	withSkills := r.URL.Query().Get("skills") != "false"
+	withSkills := p.Skills == nil || *p.Skills
 	b, err := s.st.Brief(r.Context(), id, store.BriefOptions{Skills: withSkills})
 	if err != nil {
 		s.mapStoreErr(w, err)

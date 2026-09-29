@@ -32,7 +32,7 @@ const docLifecycleSubscriberName = "doc-lifecycle"
 // the client's own filter fields. An empty kind does not filter.
 func tasksAboutDoc(t *testing.T, ctx context.Context, c *cli.Client, docID int64, kind string) []model.Task {
 	t.Helper()
-	resp, _, err := c.ListTasks(ctx, cli.TaskListFilter{AboutDoc: docID, Kind: kind})
+	resp, _, err := c.ListTasks(ctx, model.TaskListParams{AboutDoc: docID, Kind: kind})
 	if err != nil {
 		t.Fatalf("list tasks about doc %d (kind %q): %v", docID, kind, err)
 	}
