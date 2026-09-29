@@ -187,16 +187,9 @@ func toCostReportJSON(pc *store.CostReport) model.CostReport {
 	return out
 }
 
-// dayParam reads an optional YYYY-MM-DD query parameter. An absent one yields
-// the zero time, which ProjectCost reads as unbounded on that side.
-func dayParam(r *http.Request, name string) (time.Time, error) {
-	return parseDay(name, r.URL.Query().Get(name))
-}
-
-// parseDay parses one YYYY-MM-DD query value already read from a params
-// struct's field (getProject) or straight off the request (dayParam, shared
-// with tasks.go's cost handler). An empty value yields the zero time, which
-// ProjectCost reads as unbounded on that side.
+// parseDay parses one optional YYYY-MM-DD value from a params struct, for
+// project detail (getProject) and task cost (getTaskCost). An empty value
+// yields the zero time, which ProjectCost reads as unbounded on that side.
 func parseDay(name, v string) (time.Time, error) {
 	if v == "" {
 		return time.Time{}, nil

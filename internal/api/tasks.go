@@ -313,12 +313,12 @@ func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	from, err := parseCostDay("from", p.From)
+	from, err := parseDay("from", p.From)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	to, err := parseCostDay("to", p.To)
+	to, err := parseDay("to", p.To)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -335,21 +335,6 @@ func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 		Sessions:         tc.Sessions,
 		Cost:             toCostReportJSON(&tc.CostReport),
 	})
-}
-
-// parseCostDay parses an optional YYYY-MM-DD query value already decoded by
-// readQuery, the same way dayParam (admin.go) parses one read straight off
-// the request; kept local since TaskCostParams carries the raw string rather
-// than a *http.Request to re-read.
-func parseCostDay(name, v string) (time.Time, error) {
-	if v == "" {
-		return time.Time{}, nil
-	}
-	day, err := time.Parse(time.DateOnly, v)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid %s %q: want YYYY-MM-DD", name, v)
-	}
-	return day, nil
 }
 
 // listTasks handles
