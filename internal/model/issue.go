@@ -18,6 +18,14 @@ type IssueListResponse struct {
 	Issues []Issue `json:"issues"`
 }
 
+// InboxListParams is the query string of GET /api/v1/inbox.
+type InboxListParams struct {
+	// State narrows to one triage state; omitted lists every state.
+	State string `query:"state,omitempty"`
+	// Project narrows to one project's issues; omitted lists every project.
+	Project string `query:"project,omitempty"`
+}
+
 // PromoteInput is the request body for PromoteIssue (POST
 // /api/v1/inbox/promote). Title is optional — the server defaults it to the
 // issue's own title.

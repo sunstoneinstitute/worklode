@@ -74,13 +74,16 @@ func (s *server) createReference(w http.ResponseWriter, r *http.Request) {
 // reference touching the named entity, from either end. Both query
 // parameters are required.
 func (s *server) listReferences(w http.ResponseWriter, r *http.Request) {
-	kind := r.URL.Query().Get("kind")
-	id := r.URL.Query().Get("id")
-	if kind == "" || id == "" {
+	var p model.ReferenceListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if p.Kind == "" || p.ID == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "kind and id are required")
 		return
 	}
-	items, err := s.st.ReferencesFor(r.Context(), kind, id)
+	items, err := s.st.ReferencesFor(r.Context(), p.Kind, p.ID)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

@@ -490,6 +490,7 @@ var projectRouteDocs = map[string]routeDoc{
 	"DELETE /api/v1/milestones/{id}": {
 		summary:   "Delete a milestone",
 		responses: map[int]any{http.StatusOK: model.MilestoneDeletion{}},
+		params:    model.MilestoneDeleteParams{},
 	},
 	"POST /api/v1/references": {
 		summary:   "Create a reference between two entities",
@@ -499,5 +500,6 @@ var projectRouteDocs = map[string]routeDoc{
 	"GET /api/v1/references": {
 		summary:   "List the references touching an entity",
 		responses: map[int]any{http.StatusOK: model.ReferenceListResponse{}},
+		params:    model.ReferenceListParams{},
 	},
 }

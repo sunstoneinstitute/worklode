@@ -141,13 +141,13 @@ func (s *server) recordMilestoneDelete(ctx context.Context, source, id string, c
 // cascade, and a cascade refused by a deliverable's approvals, both come back
 // as 422 naming what to do about it, and nothing is committed.
 func (s *server) deleteMilestone(w http.ResponseWriter, r *http.Request) {
-	cascade, err := queryBool(r.URL.Query(), "cascade")
-	if err != nil {
-		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+	var p model.MilestoneDeleteParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	deleted, err := s.recordMilestoneDelete(r.Context(), "cli", r.PathValue("id"), cascade, actorIDFrom(r))
-	s.observeMilestoneChange(milestoneDeleteAction(cascade), err)
+	deleted, err := s.recordMilestoneDelete(r.Context(), "cli", r.PathValue("id"), p.Cascade, actorIDFrom(r))
+	s.observeMilestoneChange(milestoneDeleteAction(p.Cascade), err)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

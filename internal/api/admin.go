@@ -190,7 +190,14 @@ func toCostReportJSON(pc *store.CostReport) model.CostReport {
 // dayParam reads an optional YYYY-MM-DD query parameter. An absent one yields
 // the zero time, which ProjectCost reads as unbounded on that side.
 func dayParam(r *http.Request, name string) (time.Time, error) {
-	v := r.URL.Query().Get(name)
+	return parseDay(name, r.URL.Query().Get(name))
+}
+
+// parseDay parses one YYYY-MM-DD query value already read from a params
+// struct's field (getProject) or straight off the request (dayParam, shared
+// with tasks.go's cost handler). An empty value yields the zero time, which
+// ProjectCost reads as unbounded on that side.
+func parseDay(name, v string) (time.Time, error) {
 	if v == "" {
 		return time.Time{}, nil
 	}
@@ -207,12 +214,17 @@ func dayParam(r *http.Request, name string) (time.Time, error) {
 // inclusive on both ends; either may be omitted for unbounded.
 func (s *server) getProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	from, err := dayParam(r, "from")
+	var params model.ProjectDetailParams
+	if err := readQuery(r, &params); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	from, err := parseDay("from", params.From)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	to, err := dayParam(r, "to")
+	to, err := parseDay("to", params.To)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -244,7 +256,12 @@ func (s *server) getProject(w http.ResponseWriter, r *http.Request) {
 // is run from. The URL is normalized here rather than in the CLI so a
 // normalization fix ships without a client upgrade.
 func (s *server) resolveProjectByRemote(w http.ResponseWriter, r *http.Request) {
-	repo, err := repourl.Normalize(r.URL.Query().Get("remote"))
+	var params model.ProjectResolveParams
+	if err := readQuery(r, &params); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	repo, err := repourl.Normalize(params.Remote)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -562,8 +579,12 @@ func (s *server) revokeToken(w http.ResponseWriter, r *http.Request) {
 
 // listInbox handles GET /api/v1/inbox?state=new&project=worklode.
 func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
-	issues, err := s.st.ListIssues(r.Context(),
-		r.URL.Query().Get("state"), r.URL.Query().Get("project"))
+	var p model.InboxListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	issues, err := s.st.ListIssues(r.Context(), p.State, p.Project)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -744,7 +765,12 @@ func toRuntimeEventJSON(re *store.RuntimeEvent) model.RuntimeEvent {
 // board handles GET /api/v1/board?project=: a read-only summary of each
 // project's tasks bucketed by state, for the CLI's `lode board` command.
 func (s *server) board(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.assembleBoard(r.Context(), r.URL.Query().Get("project"))
+	var p model.BoardParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	resp, err := s.assembleBoard(r.Context(), p.Project)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -926,10 +952,12 @@ var adminRouteDocs = map[string]routeDoc{
 	"GET /api/v1/projects/resolve": {
 		summary:   "Resolve the project mapped to a repo remote URL",
 		responses: map[int]any{http.StatusOK: model.Project{}},
+		params:    model.ProjectResolveParams{},
 	},
 	"GET /api/v1/projects/{id}": {
 		summary:   "Get a project with its repos and accounted cost",
 		responses: map[int]any{http.StatusOK: model.ProjectDetail{}},
+		params:    model.ProjectDetailParams{},
 	},
 	"PATCH /api/v1/projects/{id}": {
 		summary:   "Update a project's focus, pinned note, or next decision",
@@ -968,10 +996,12 @@ var adminRouteDocs = map[string]routeDoc{
 	"GET /api/v1/board": {
 		summary:   "Get the board: each project's tasks bucketed by state",
 		responses: map[int]any{http.StatusOK: model.BoardResponse{}},
+		params:    model.BoardParams{},
 	},
 	"GET /api/v1/inbox": {
 		summary:   "List inbox issues",
 		responses: map[int]any{http.StatusOK: model.IssueListResponse{}},
+		params:    model.InboxListParams{},
 	},
 	"POST /api/v1/inbox/promote": {
 		summary:   "Promote an inbox issue into a task",
@@ -1010,6 +1040,7 @@ var adminRouteDocs = map[string]routeDoc{
 	"GET /api/v1/repos/doctor": {
 		summary:   "Report per-repo GitHub ingestion health",
 		responses: map[int]any{http.StatusOK: model.ReposDoctorResponse{}},
+		params:    model.ReposDoctorParams{},
 	},
 	"POST /api/v1/reconcile": {
 		summary:   "Replay stored events and poll GitHub to reconcile state",
