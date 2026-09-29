@@ -59,15 +59,12 @@ and carries a procedure that spans files or has no single path. The skills:
   `wl:` ontology and its camelCase term naming, and the spec/plan/task model
   (what is a claimable task vs a document status). See
   the `lode:writing-docs` skill.
-- **Touching `plugins/obsidian/`** — the TypeScript Obsidian plugin, its pnpm
-  toolchain, and its hand-kept wire types. See the
-  `worklode-obsidian-mirror` skill.
 - **Touching `plugins/claude/lode/` or its marketplace mirrors** — the
   `/lode:*` slash commands, the `lode-worker` agent, the marketplace, and the
   generated Codex mirror. See
   the `worklode-lode-plugin` skill.
 - **Changing CI, workflows, or `www/`** — the docs-only skip, the
-  `can-be-tested` label, the subtree-scoped `obsidian` job. See
+  `can-be-tested` label, the code-scope gate on the Go jobs. See
   the `worklode-ci` skill. Editing the site's own copy is a separate
   concern from its CI: see "`www/` copy style" below for the language
   rules, and `www/CLAUDE.md` for the accuracy bar its content is held to.

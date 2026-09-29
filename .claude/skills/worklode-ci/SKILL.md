@@ -1,6 +1,6 @@
 ---
 name: worklode-ci
-description: Use when changing CI workflows or asking why a check did or did not run — "CI skipped my PR", "docs-only PR", "can-be-tested label", "the obsidian job did not run", "add a CI check", "the workflow", "paths filter", "www/ deploy", "e2e suite". Covers the docs-only skip and its plugins and agent-surface exemptions, and the subtree-scoped obsidian gate.
+description: Use when changing CI workflows or asking why a check did or did not run — "CI skipped my PR", "docs-only PR", "can-be-tested label", "lint/test did not run", "add a CI check", "the workflow", "paths filter", "www/ deploy", "e2e suite". Covers the docs-only skip and its plugins and agent-surface exemptions, and the code-scope gate on the Go jobs.
 ---
 
 # CI, workflows, and repo layout
@@ -21,14 +21,16 @@ touching only these still runs CI:
 The skip is a correctness gate, not a review one: nothing CI runs reads prose
 for injected instructions, so do not add paths to the exemption on that basis.
 
-## The subtree-scoped job
+## The code-scope gate
 
-The `obsidian` job is the one check scoped to a subtree: it runs only when a PR
-touches `plugins/obsidian/` or `_obsidian.yml`, decided by a `gate` output rather than
-a `paths:` filter, because a reusable workflow cannot take one.
+The Go jobs (lint, test, build-image) run only when a PR touches something
+that can change their result, decided by the `gate` job's `code` output rather
+than a `paths:` filter, because a reusable workflow cannot take one. The
+patterns are `CODE_INERT` and `CODE_ANYWAY` in `pr-checks.yml`, tested by
+`scripts/ci-code-scope_test.sh`.
 
 `can-be-tested` does **not** force it — that label authorises CI, it does not
-make an untouched subtree worth rebuilding.
+make untouched Go worth rebuilding.
 
 ## `www/`
 
