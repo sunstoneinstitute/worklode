@@ -189,7 +189,11 @@ handler defined in a neighboring file), and merged into `routeDocs` in
 the OpenAPI 3.1 document served at `GET /api/v1/openapi.json`.
 `registerRoutes` refuses to boot on a route without a descriptor or a
 descriptor without a route; `make openapi` writes the document to
-`bin/openapi.json`.
+`bin/openapi.json`. A route's query parameters are one `internal/model`
+`*Params` struct with `query` tags, decoded by `readQuery` in
+`internal/api` and encoded by `withParams` in `internal/cli`, so the two
+sides share one declaration and `queryrule_test.go` fails a handler that
+reads the query string any other way.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks — including `merge_group` and `repository_ruleset` for the merge

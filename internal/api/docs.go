@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -596,24 +595,6 @@ func docSelectorFrom(p model.DocListParams) (docListSelector, error) {
 		}
 	}
 	return sel, nil
-}
-
-// queryBool reads a boolean query parameter. Absent is false; present with an
-// empty value ("?needs_planning") is true; anything ParseBool refuses is named
-// rather than silently read as off.
-func queryBool(q url.Values, name string) (bool, error) {
-	if !q.Has(name) {
-		return false, nil
-	}
-	raw := q.Get(name)
-	if raw == "" {
-		return true, nil
-	}
-	v, err := strconv.ParseBool(raw)
-	if err != nil {
-		return false, fmt.Errorf("%s must be a boolean, got %q", name, raw)
-	}
-	return v, nil
 }
 
 // getDoc handles GET /api/v1/docs/{id}: the document with the rows derived
