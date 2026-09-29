@@ -899,11 +899,6 @@ var taskRouteDocs = map[string]routeDoc{
 	"GET /api/v1/tasks": {
 		summary:   "List tasks, optionally as a hierarchy or with detail",
 		responses: map[int]any{http.StatusOK: model.TaskListResponse{}},
-		query: []string{
-			"kind", "state", "tree", "project", "root", "repo", "updated_since",
-			"plan_doc", "about_doc", "deleted", "priority", "parent", "assignee",
-			"has_children", "detail",
-		},
 	},
 	"GET /api/v1/tasks/{id}": {
 		summary:   "Get a task's full detail",
@@ -912,7 +907,6 @@ var taskRouteDocs = map[string]routeDoc{
 	"GET /api/v1/tasks/{id}/cost": {
 		summary:   "Get a task's accounted usage and cost",
 		responses: map[int]any{http.StatusOK: model.TaskCost{}},
-		query:     []string{"from", "to", "children"},
 	},
 	"PATCH /api/v1/tasks/{id}": {
 		summary:   "Update a task's fields",
@@ -937,7 +931,6 @@ var taskRouteDocs = map[string]routeDoc{
 	"GET /api/v1/blockers": {
 		summary:   "List blocked tasks and their blocker trees",
 		responses: map[int]any{http.StatusOK: model.BlockerForest{}},
-		query:     []string{"project"},
 	},
 	"GET /api/v1/tasks/{id}/blockers": {
 		summary:   "Get a task's full transitive blocker tree",
@@ -946,7 +939,6 @@ var taskRouteDocs = map[string]routeDoc{
 	"GET /api/v1/tasks/{id}/brief": {
 		summary:   "Get a task's bounded start-of-work brief",
 		responses: map[int]any{http.StatusOK: model.Brief{}},
-		query:     []string{"skills"},
 	},
 	"POST /api/v1/tasks/{id}/lease/worktree": {
 		summary:   "Move the caller's active lease to a new worktree",

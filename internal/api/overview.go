@@ -216,12 +216,10 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/overview": {
 		summary:   "Roll up a project's spec, plan and task status",
 		responses: map[int]any{http.StatusOK: model.Overview{}},
-		query:     []string{"project"},
 	},
 	"GET /api/v1/drift": {
 		summary:   "List drift between the backbone and observed reality",
 		responses: map[int]any{http.StatusOK: model.Drift{}},
-		query:     []string{"acknowledged"},
 	},
 	"GET /api/v1/gaps": {
 		summary:   "List backbone gaps",
@@ -230,7 +228,6 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/frontier": {
 		summary:   "List the frontier of claimable tasks for a project",
 		responses: map[int]any{http.StatusOK: model.FrontierList{}},
-		query:     []string{"project"},
 	},
 	"GET /api/v1/critical-path": {
 		summary:   "Get the critical path across open tasks",
@@ -243,7 +240,6 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/events": {
 		summary:   "List recorded events",
 		responses: map[int]any{http.StatusOK: model.EventListResponse{}},
-		query:     []string{"type", "since", "after", "limit"},
 	},
 	"GET /api/v1/event-subscribers": {
 		summary:   "List event subscriber consumer offsets",
@@ -258,7 +254,6 @@ var overviewRouteDocs = map[string]routeDoc{
 		summary:             "Follow the event log live over server-sent events",
 		responseContentType: "text/event-stream",
 		responses:           map[int]any{http.StatusOK: nil},
-		query:               []string{"type", "after"},
 	},
 	"GET /api/v1/graph/projection/failures": {
 		summary:   "List projects the knowledge-graph projector has quarantined",
@@ -267,7 +262,6 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/skills": {
 		summary:   "List skills in the registry",
 		responses: map[int]any{http.StatusOK: model.SkillsListResponse{}},
-		query:     []string{"deleted"},
 	},
 	"GET /api/v1/skills/{name}": {
 		summary:   "Get one skill",
@@ -290,7 +284,6 @@ var overviewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/search": {
 		summary:   "Search the corpus of documents, tasks and skills",
 		responses: map[int]any{http.StatusOK: model.SearchResponse{}},
-		query:     []string{"q", "limit", "mode", "kind", "project"},
 	},
 	"POST /api/v1/runtime-events": {
 		summary: "Record a crash-loop or OOM event from the runtime watcher",

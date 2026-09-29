@@ -39,9 +39,10 @@ type routeDoc struct {
 	// responseContentType overrides application/json for every response
 	// (text/event-stream, application/gzip); the structure is nil then.
 	responseContentType string
-	// query lists the query parameter names the handler reads, in the order
-	// it reads them. Every parameter is documented as an optional string.
-	query []string
+	// params is the zero value of the route's internal/model params struct —
+	// the query parameters the handler decodes with readQuery and the client
+	// encodes with withParams. nil for a route that reads none.
+	params any
 }
 
 // routeDocs is every /api/v1 route's descriptor, merged from the feature
@@ -119,8 +120,14 @@ func buildOpenAPI(guards map[string]routeGuard, docs map[string]routeDoc) ([]byt
 			return nil, fmt.Errorf("openapi: %s: %w", pattern, err)
 		}
 		oc.SetSummary(doc.summary)
-		if p := paramStruct(path, doc.query); p != nil {
+		if p := pathStruct(path); p != nil {
 			oc.AddReqStructure(p)
+		}
+		if doc.params != nil {
+			if f, ok := pathTagged(doc.params); ok {
+				return nil, fmt.Errorf("openapi: %s: params field %s has a path tag; path parameters come from the pattern", pattern, f)
+			}
+			oc.AddReqStructure(doc.params)
 		}
 		if doc.request != nil {
 			oc.AddReqStructure(doc.request)
@@ -148,11 +155,10 @@ func buildOpenAPI(guards map[string]routeGuard, docs map[string]routeDoc) ([]byt
 	return r.Spec.MarshalJSON()
 }
 
-// paramStruct builds the struct swaggest reads path and query parameters
-// from: one exported string field per {segment} of path (tag path:"name")
-// and per query name (tag query:"name"). The fields are named P0.. and Q0..;
-// only the tags matter. It returns nil when there are no parameters.
-func paramStruct(path string, query []string) any {
+// pathStruct builds the struct swaggest reads path parameters from: one
+// exported string field per {segment} of path (tag path:"name"), named P0..;
+// only the tags matter. It returns nil when path has no parameters.
+func pathStruct(path string) any {
 	var fields []reflect.StructField
 	str := reflect.TypeFor[string]()
 	for _, seg := range strings.Split(path, "/") {
@@ -164,16 +170,22 @@ func paramStruct(path string, query []string) any {
 			})
 		}
 	}
-	for i, name := range query {
-		fields = append(fields, reflect.StructField{
-			Name: fmt.Sprintf("Q%d", i), Type: str,
-			Tag: reflect.StructTag(fmt.Sprintf(`query:%q`, name)),
-		})
-	}
 	if len(fields) == 0 {
 		return nil
 	}
 	return reflect.New(reflect.StructOf(fields)).Elem().Interface()
+}
+
+// pathTagged returns the name of the first field of params that carries a
+// path tag.
+func pathTagged(params any) (string, bool) {
+	t := reflect.TypeOf(params)
+	for i := range t.NumField() {
+		if _, ok := t.Field(i).Tag.Lookup("path"); ok {
+			return t.Field(i).Name, true
+		}
+	}
+	return "", false
 }
 
 // isAPIPattern reports whether pattern is a /api/v1 route: method, space,

@@ -197,7 +197,6 @@ var ruleRouteDocs = map[string]routeDoc{
 	"GET /api/v1/rules": {
 		summary:   "List rules, optionally filtered by project, status or document",
 		responses: map[int]any{http.StatusOK: []model.Rule{}},
-		query:     []string{"project", "status", "doc"},
 	},
 	"GET /api/v1/rules/{id}": {
 		summary:   "Get a rule by ref",

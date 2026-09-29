@@ -926,12 +926,10 @@ var adminRouteDocs = map[string]routeDoc{
 	"GET /api/v1/projects/resolve": {
 		summary:   "Resolve the project mapped to a repo remote URL",
 		responses: map[int]any{http.StatusOK: model.Project{}},
-		query:     []string{"remote"},
 	},
 	"GET /api/v1/projects/{id}": {
 		summary:   "Get a project with its repos and accounted cost",
 		responses: map[int]any{http.StatusOK: model.ProjectDetail{}},
-		query:     []string{"from", "to"},
 	},
 	"PATCH /api/v1/projects/{id}": {
 		summary:   "Update a project's focus, pinned note, or next decision",
@@ -970,12 +968,10 @@ var adminRouteDocs = map[string]routeDoc{
 	"GET /api/v1/board": {
 		summary:   "Get the board: each project's tasks bucketed by state",
 		responses: map[int]any{http.StatusOK: model.BoardResponse{}},
-		query:     []string{"project"},
 	},
 	"GET /api/v1/inbox": {
 		summary:   "List inbox issues",
 		responses: map[int]any{http.StatusOK: model.IssueListResponse{}},
-		query:     []string{"state", "project"},
 	},
 	"POST /api/v1/inbox/promote": {
 		summary:   "Promote an inbox issue into a task",
@@ -1014,7 +1010,6 @@ var adminRouteDocs = map[string]routeDoc{
 	"GET /api/v1/repos/doctor": {
 		summary:   "Report per-repo GitHub ingestion health",
 		responses: map[int]any{http.StatusOK: model.ReposDoctorResponse{}},
-		query:     []string{"repo"},
 	},
 	"POST /api/v1/reconcile": {
 		summary:   "Replay stored events and poll GitHub to reconcile state",

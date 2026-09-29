@@ -1291,20 +1291,14 @@ var docRouteDocs = map[string]routeDoc{
 	"GET /api/v1/docs": {
 		summary:   "List design documents",
 		responses: map[int]any{http.StatusOK: model.DocListResponse{}},
-		query: []string{
-			"project", "kind", "status", "owner", "needs_planning", "needs_execution",
-			"bare_superseded", "unresolved", "older_than_days", "deleted", "has_notes", "hide_terminal",
-		},
 	},
 	"GET /api/v1/docs/resolve": {
 		summary:   "Resolve a document reference to its document",
 		responses: map[int]any{http.StatusOK: model.Doc{}},
-		query:     []string{"ref"},
 	},
 	"GET /api/v1/docs/lint": {
 		summary:   "List dangling frontmatter references across the corpus",
 		responses: map[int]any{http.StatusOK: []model.DocLintFinding{}},
-		query:     []string{"project"},
 	},
 	"POST /api/v1/docs/covers/resolve": {
 		summary:   "Re-resolve every plan's unresolved covers references",
@@ -1313,7 +1307,6 @@ var docRouteDocs = map[string]routeDoc{
 	"GET /api/v1/docs/sections": {
 		summary:   "List sections across the document corpus",
 		responses: map[int]any{http.StatusOK: []model.DocSectionRow{}},
-		query:     []string{"project", "number"},
 	},
 	"GET /api/v1/docs/{id}": {
 		summary:   "Get a document with its sections, edges and notes",
@@ -1326,7 +1319,6 @@ var docRouteDocs = map[string]routeDoc{
 	"GET /api/v1/docs/{id}/referrers": {
 		summary:   "List open work pointing at a document section",
 		responses: map[int]any{http.StatusOK: model.DocReferrersResponse{}},
-		query:     []string{"anchor"},
 	},
 	"GET /api/v1/docs/{id}/versions/{n}": {
 		summary:   "Get one version of a document",

@@ -41,6 +41,9 @@ type openAPIOp struct {
 		Name     string `json:"name"`
 		In       string `json:"in"`
 		Required bool   `json:"required"`
+		Schema   struct {
+			Type string `json:"type"`
+		} `json:"schema"`
 	} `json:"parameters"`
 	Responses map[string]struct {
 		Content map[string]struct {
@@ -65,6 +68,11 @@ func renderOpenAPI(t *testing.T, guards map[string]routeGuard, docs map[string]r
 	return d
 }
 
+// probeParams stands in for an internal/model params struct.
+type probeParams struct {
+	Deleted bool `query:"deleted,omitempty"`
+}
+
 func TestOpenAPIDocument(t *testing.T) {
 	t.Parallel()
 	d := renderOpenAPI(t,
@@ -76,7 +84,7 @@ func TestOpenAPIDocument(t *testing.T) {
 			"GET /api/v1/things/{id}": {
 				summary:   "Show a thing",
 				responses: map[int]any{http.StatusOK: model.Task{}},
-				query:     []string{"deleted"},
+				params:    probeParams{},
 			},
 			"GET /api/v1/openapi.json": {
 				summary:   "Describe",
@@ -93,6 +101,9 @@ func TestOpenAPIDocument(t *testing.T) {
 		params[p.Name] = p.In
 		if p.Name == "id" && !p.Required {
 			t.Error("path parameter id is not required")
+		}
+		if p.Name == "deleted" && p.Schema.Type != "boolean" {
+			t.Errorf("deleted schema type = %q, want boolean", p.Schema.Type)
 		}
 	}
 	if params["id"] != "path" || params["deleted"] != "query" {
@@ -112,6 +123,19 @@ func TestOpenAPIDocument(t *testing.T) {
 	}
 	if s := d.Components.SecuritySchemes["bearerToken"].Scheme; s != "bearer" {
 		t.Errorf("bearerToken scheme = %q, want bearer", s)
+	}
+}
+
+func TestOpenAPIRejectsPathTagInParams(t *testing.T) {
+	t.Parallel()
+	type badParams struct {
+		ID string `path:"id"`
+	}
+	_, err := buildOpenAPI(
+		map[string]routeGuard{"GET /api/v1/things/{id}": guarded(permTaskRead)},
+		map[string]routeDoc{"GET /api/v1/things/{id}": {summary: "x", params: badParams{}}})
+	if err == nil || !strings.Contains(err.Error(), "GET /api/v1/things/{id}") {
+		t.Fatalf("err = %v, want one naming GET /api/v1/things/{id}", err)
 	}
 }
 

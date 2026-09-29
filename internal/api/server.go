@@ -12,9 +12,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/pprof"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +25,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/swaggest/form/v5"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
 	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
@@ -1606,6 +1609,33 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 		return
 	}
 	writeErr(w, http.StatusBadRequest, err.Error())
+}
+
+// queryDecoder reads a model params struct's query tags. One instance:
+// the decoder caches struct layouts and is safe for concurrent use.
+var queryDecoder = func() *form.Decoder {
+	d := form.NewDecoder()
+	d.SetTagName("query")
+	d.SetMode(form.ModeExplicit)
+	return d
+}()
+
+// readQuery decodes r's query string into v, a pointer to one of
+// internal/model's params structs. A value that does not parse as the
+// field's type is an error naming the parameter; the caller answers 400.
+// Unknown parameters are ignored, as they were before.
+func readQuery(r *http.Request, v any) error {
+	err := queryDecoder.Decode(v, r.URL.Query())
+	var de form.DecodeErrors
+	if errors.As(err, &de) {
+		names := slices.Sorted(maps.Keys(de))
+		parts := make([]string, 0, len(names))
+		for _, n := range names {
+			parts = append(parts, n+": "+de[n].Error())
+		}
+		return errors.New(strings.Join(parts, "; "))
+	}
+	return err
 }
 
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,

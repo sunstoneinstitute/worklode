@@ -19,6 +19,7 @@ require (
 	github.com/prometheus/client_model v0.6.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
+	github.com/swaggest/form/v5 v5.1.1
 	github.com/swaggest/jsonschema-go v0.3.78
 	github.com/swaggest/openapi-go v0.2.61
 	github.com/yuin/goldmark v1.8.6
