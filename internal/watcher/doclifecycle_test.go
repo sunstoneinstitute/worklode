@@ -25,6 +25,7 @@ func TestEvaluate(t *testing.T) {
 				EventID:   42,
 				EventType: eventbus.TypeDocumentSubmitted,
 				DocIRI:    "wlid:doc/spec-025",
+				DocRef:    "WL-SPEC-25",
 				DocKind:   "spec",
 				DocTitle:  "Documents in the backbone",
 				Version:   2,
@@ -275,6 +276,11 @@ func TestEvaluate(t *testing.T) {
 				// that lost its doc reference or its provenance line.
 				if !strings.Contains(gotAction.Body, tc.in.DocIRI) {
 					t.Fatalf("Evaluate()[%d].Body = %q, want it to contain doc IRI %q", i, gotAction.Body, tc.in.DocIRI)
+				}
+				// A review body names the ref, which the cockpit links to the
+				// document under review.
+				if wantAction.TaskKind == "review" && !strings.Contains(gotAction.Body, tc.in.DocRef) {
+					t.Fatalf("Evaluate()[%d].Body = %q, want it to contain doc ref %q", i, gotAction.Body, tc.in.DocRef)
 				}
 				wantProvenance := "wlid:event/" + strconv.FormatInt(tc.in.EventID, 10)
 				if !strings.Contains(gotAction.Body, wantProvenance) {
