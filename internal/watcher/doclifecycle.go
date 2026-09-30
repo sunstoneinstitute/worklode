@@ -39,7 +39,7 @@ type Input struct {
 	DocIRI    string
 	DocKind   string // spec | adr | plan
 	DocTitle  string
-	DocRef    string // the citable id ("WL-SPEC-25"), which task titles name
+	DocRef    string // the citable id ("WL-SPEC-25"); review titles and bodies name it so the cockpit links it
 	Version   int    // document version the event concerns; the review task body names it
 	Project   string
 	// Open task of the relevant kind already referencing the doc; "" = none.
@@ -164,13 +164,13 @@ func evaluatePatched(in Input) []Action {
 }
 
 func reviewBody(in Input) string {
-	return fmt.Sprintf(`Review %s (version %d).
+	return fmt.Sprintf(`Review %s (%s, version %d).
 
 prov:wasInformedBy wlid:event/%d
 
 Closing this task is the review outcome. Accepting the document is a
 separate, deliberate act — %s — which this task does not perform.`,
-		in.DocIRI, in.Version, in.EventID, "`lode doc accept`")
+		in.DocRef, in.DocIRI, in.Version, in.EventID, "`lode doc accept`")
 }
 
 // PlanningTitle is the title of the planning task 025 §15.4 mints when a
@@ -202,7 +202,7 @@ func patchBody(in Input) string {
 	if len(in.ChangedAnchors) > 0 {
 		sections = strings.Join(in.ChangedAnchors, ", ")
 	}
-	return fmt.Sprintf(`%s (version %d) was amended in place: %s.
+	return fmt.Sprintf(`%s (%s, version %d) was amended in place: %s.
 
 The document stays accepted — only the patched sections are approved text
 that has changed since (025 §7.3). Review them, and decide each approval
@@ -212,5 +212,5 @@ prov:wasInformedBy wlid:event/%d
 
 The marks clear when the last reopened lane is approved; nothing here
 accepts the document again.`,
-		in.DocIRI, in.Version, sections, in.EventID)
+		in.DocRef, in.DocIRI, in.Version, sections, in.EventID)
 }

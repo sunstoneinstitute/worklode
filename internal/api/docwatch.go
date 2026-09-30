@@ -99,6 +99,7 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 	// every event.
 	switch ev.Type {
 	case eventbus.TypeDocumentSubmitted:
+		in.DocRef = s.withProjectKey(ctx, *doc).FormatRef()
 		if in.OpenReviewTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "review"); err == nil {
 			in.OpenApprovalBound, err = s.st.OpenApprovalBound(ctx, "doc",
 				store.DocEntityID(doc.ID), strconv.Itoa(doc.Version))
@@ -106,9 +107,8 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 	case eventbus.TypeDocumentAccepted:
 		in.OpenDesignTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "design")
 	case watcher.TypeDocPatched:
-		// Only this rule's title cites the document by ref, and the key
-		// FormatRef needs is a second read — so it is paid here rather
-		// than on every lifecycle event.
+		// The review rules cite the document by ref, and the key FormatRef
+		// needs is a second read — so it is paid only where they run.
 		in.DocRef = s.withProjectKey(ctx, *doc).FormatRef()
 		in.Classification, _ = payload["classification"].(string)
 		in.ChangedAnchors = payloadStrings(payload["anchors"])
