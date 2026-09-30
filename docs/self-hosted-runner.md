@@ -81,8 +81,8 @@ grant, home permissions) for no security benefit, since both processes
 already run at the same privilege. What has to differ is the **cache
 state** Go resolves from `$HOME`: while Go's own build/module cache format
 tolerates concurrent access, there's no reason to make `test`/`lint` share
-one. `build-image`'s cache is a Docker volume behind a shared named builder,
-which both runners use by design — BuildKit handles concurrent builds itself.
+one. `build-image`'s cache lives in a shared named builder that stays up
+permanently, which both runners use by design (see *Caches* below).
 
 `hel01-2`'s systemd unit sets `Environment=HOME=/home/ghrunner/runner2-home`
 (everything else — `User=ghrunner`, working directory under
@@ -236,21 +236,21 @@ different places:
   in `runs-on`.
 - **`build-image`** relies on a **persistent BuildKit state volume**. On a
   `gha-buildcache` runner it passes `docker/setup-buildx-action` a fixed
-  `name: worklode-ci` plus `keep-state: true`, which turns the job's teardown
-  into `buildx rm --keep-state`: the builder record goes, the Docker volume
-  behind it (`buildx_buildkit_worklode-ci0_state`) stays. The next run
-  recreates that builder by name, re-attaches the volume, and finds both the
-  layer cache and the Dockerfile's `RUN --mount=type=cache` contents
-  (`/go/pkg/mod`, `/root/.cache/go-build`) already warm. Nothing needs
+  `name: worklode-ci` plus `cleanup: false`, so the job never removes the
+  builder. The next run reuses it by name and finds both the layer cache and
+  the Dockerfile's `RUN --mount=type=cache` contents (`/go/pkg/mod`,
+  `/root/.cache/go-build`) already warm in its state volume
+  (`buildx_buildkit_worklode-ci0_state`). Nothing needs
   exporting, so the job skips `buildkit-cache-dance` and passes empty
   `cache-from`/`cache-to` instead of `type=gha`. Hosted runners get an
   anonymous throwaway builder and both round trips, since their VM is gone
   after the job.
 
   Both hel01 runners share the one `worklode-ci` builder rather than getting
-  one each: they already share the Docker daemon, and BuildKit serializes
-  concurrent builds itself — the reason `$HOME` separation is still needed for
-  Go's caches (see *Two executors* above) does not apply here.
+  one each: they already share the Docker daemon, and BuildKit runs
+  concurrent builds itself. That only holds while no job tears the builder
+  down: `keep-state: true` still runs `buildx rm --keep-state` at job end,
+  which kills every other build on the builder mid-run.
 
 ```
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-buildcache"
