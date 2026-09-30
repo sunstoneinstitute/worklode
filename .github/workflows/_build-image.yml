@@ -80,20 +80,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # A `gha-buildcache` runner keeps one named builder across runs:
-      # `keep-state` makes the teardown `buildx rm --keep-state`, so the state
-      # volume survives and the next run re-attaches it with its layer cache
-      # and the Dockerfile's `RUN --mount=type=cache` contents already warm.
+      # A `gha-buildcache` runner keeps one named builder up permanently:
+      # `cleanup: false` skips the post-job `buildx rm`, and the next run reuses
+      # the builder by name with its layer cache and the Dockerfile's
+      # `RUN --mount=type=cache` contents already warm.
       # Nothing then has to be exported anywhere, which is why the two cache
       # steps and `type=gha` below are hosted-only. A hosted runner is a fresh
       # VM, so it gets an anonymous throwaway builder and pays for both.
-      # Both hel01 runners share this one builder — they share the daemon
-      # anyway, and BuildKit handles concurrent builds itself.
+      # Both hel01 runners share this one builder. Never tear it down at job
+      # end (not even `keep-state`): `buildx rm` kills every other job still
+      # building on it.
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
         id: buildx
         with:
           name: ${{ contains(inputs.runs-on, 'gha-buildcache') && 'worklode-ci' || '' }}
-          keep-state: ${{ contains(inputs.runs-on, 'gha-buildcache') }}
+          cleanup: ${{ !contains(inputs.runs-on, 'gha-buildcache') }}
 
       # Hosted only. `go-cache-mount` is workspace-relative, which is safe here
       # and only here: actions/checkout's clean step would erase it on a runner
