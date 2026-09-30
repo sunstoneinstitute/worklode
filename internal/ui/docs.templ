@@ -398,9 +398,6 @@ templ docEdges(heading string, edges []DocEdgeRow) {
 						<span class="mono">{ "#" + e.Anchor }</span>{ " " }
 					}
 					<span class="chip plain">{ e.Type }</span>{ " " }
-					if e.Ref != "" {
-						<span class="chip plain">{ e.Ref }</span>{ " " }
-					}
 					if e.URL != "" {
 						<a href={ e.URL }>{ e.Label }</a>
 					} else {
