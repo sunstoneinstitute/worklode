@@ -64,7 +64,7 @@ gh api -X PATCH repos/sunstoneinstitute/worklode -F allow_auto_merge=true
 - The `concurrency.group` falls back to `github.ref` when there is no PR
   number, so queued entries do not cancel each other.
 - The `gate` job's first branch: on a `merge_group` event it sets
-  `trusted=true`, `run=true`, `obsidian=true` and exits. There is no PR
+  `trusted=true`, `code=true`, `run=true` and exits. There is no PR
   payload to read file lists or author association from, and every PR in
   the group already passed the gate on its own.
 - The `checks` job at the end: `if: always()`, needs every other job, and
@@ -80,7 +80,7 @@ whole rule list, so the file below carries the existing `deletion` and
 The only required check is the `checks` job at the end of the workflow. It
 has `if: always()`, needs every other job, and passes when each of them
 either succeeded or was skipped by its own `if:`. Requiring the conditional
-jobs directly (the docs-only skip, the subtree-scoped `obsidian` job) leaves
+jobs directly (the docs-only skip, the code-scoped Go jobs) leaves
 a PR blocked whenever one of them never reports.
 
 The bypass entry lets repository admins push to `main` directly, which
