@@ -33,14 +33,21 @@ patches:
   - target:
       kind: Ingress
       name: worklode-ingress
+    # Mesh-only: internal ingress and the internal CA.
     patch: |-
+      - op: replace
+        path: /spec/ingressClassName
+        value: nginx-internal
+      - op: replace
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: sunstone-internal-ca
       - op: replace
         path: /spec/tls/0/hosts
         value:
-          - worklode.hzprod.sunstoneinstitute.ai
+          - worklode.sunstone.internal
       - op: replace
         path: /spec/rules/0/host
-        value: worklode.hzprod.sunstoneinstitute.ai
+        value: worklode.sunstone.internal
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
     newTag: latest
