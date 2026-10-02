@@ -225,7 +225,7 @@ func newDocListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, raw, err := c.ListDocs(cmd.Context(), cli.DocListFilter{
+			resp, raw, err := c.ListDocs(cmd.Context(), model.DocListParams{
 				Project: sc.Project, Kind: kind, Status: status, Owner: owner,
 				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution, BareSuperseded: bareSuperseded,
 				Unresolved: unresolved, OlderThanDays: olderThanDays,

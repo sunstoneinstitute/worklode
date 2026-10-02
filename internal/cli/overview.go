@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -17,21 +16,15 @@ import (
 // Overview calls GET /api/v1/overview: the one-screen roll-up. An empty
 // project rolls up every project.
 func (c *Client) Overview(ctx context.Context, project string) (model.Overview, []byte, error) {
-	q := url.Values{}
-	if project != "" {
-		q.Set("project", project)
-	}
-	return doJSON[model.Overview](ctx, c, http.MethodGet, withQuery("/api/v1/overview", q), nil, "overview")
+	p := model.OverviewParams{Project: project}
+	return doJSON[model.Overview](ctx, c, http.MethodGet, withParams("/api/v1/overview", p), nil, "overview")
 }
 
 // Drift calls GET /api/v1/drift. With acknowledged the response also carries
 // the accepted deviations, active and expired.
 func (c *Client) Drift(ctx context.Context, acknowledged bool) (model.Drift, []byte, error) {
-	q := url.Values{}
-	if acknowledged {
-		q.Set("acknowledged", "1")
-	}
-	return doJSON[model.Drift](ctx, c, http.MethodGet, withQuery("/api/v1/drift", q), nil, "drift")
+	p := model.DriftParams{Acknowledged: acknowledged}
+	return doJSON[model.Drift](ctx, c, http.MethodGet, withParams("/api/v1/drift", p), nil, "drift")
 }
 
 // Gaps calls GET /api/v1/gaps: components with no governing doc, and repo
@@ -43,11 +36,8 @@ func (c *Client) Gaps(ctx context.Context) (model.GapList, []byte, error) {
 // Frontier calls GET /api/v1/frontier: the ready set in pickup order,
 // annotated with the overview-only criticality measures.
 func (c *Client) Frontier(ctx context.Context, project string) (model.FrontierList, []byte, error) {
-	q := url.Values{}
-	if project != "" {
-		q.Set("project", project)
-	}
-	return doJSON[model.FrontierList](ctx, c, http.MethodGet, withQuery("/api/v1/frontier", q), nil, "frontier")
+	p := model.FrontierParams{Project: project}
+	return doJSON[model.FrontierList](ctx, c, http.MethodGet, withParams("/api/v1/frontier", p), nil, "frontier")
 }
 
 // CriticalPath calls GET /api/v1/critical-path: the estimate-free critical

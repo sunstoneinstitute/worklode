@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -15,14 +14,8 @@ import (
 // ListIssues calls GET /api/v1/inbox. An empty state lists every triage
 // state; an empty project lists every project's issues.
 func (c *Client) ListIssues(ctx context.Context, state, project string) (model.IssueListResponse, []byte, error) {
-	q := url.Values{}
-	if state != "" {
-		q.Set("state", state)
-	}
-	if project != "" {
-		q.Set("project", project)
-	}
-	return doJSON[model.IssueListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/inbox", q), nil, "issue list")
+	p := model.InboxListParams{State: state, Project: project}
+	return doJSON[model.IssueListResponse](ctx, c, http.MethodGet, withParams("/api/v1/inbox", p), nil, "issue list")
 }
 
 // PromoteIssue calls POST /api/v1/inbox/promote.

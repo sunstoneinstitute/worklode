@@ -370,8 +370,11 @@ func TestListDeletedRejectsNonBoolean(t *testing.T) {
 	if rr := doReq(t, f.h, "GET", "/api/v1/tasks?deleted=maybe", f.token, nil); rr.Code != http.StatusBadRequest {
 		t.Fatalf("tasks?deleted=maybe = %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
-	if rr := doReq(t, f.h, "GET", "/api/v1/docs?deleted=maybe", f.token, nil); rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("docs?deleted=maybe = %d, want 422, body %s", rr.Code, rr.Body.String())
+	// readQuery decodes deleted before docSelectorFrom's own checks run
+	// (WL-939), so an unparseable value is readQuery's 400, not the old
+	// queryBool-inside-docSelectorFrom 422.
+	if rr := doReq(t, f.h, "GET", "/api/v1/docs?deleted=maybe", f.token, nil); rr.Code != http.StatusBadRequest {
+		t.Fatalf("docs?deleted=maybe = %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
 }
 

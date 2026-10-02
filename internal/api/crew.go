@@ -391,3 +391,20 @@ func crewRemovalMessage(err error) string {
 	r, size := utf8.DecodeRuneInString(msg)
 	return string(unicode.ToUpper(r)) + msg[size:] + "."
 }
+
+// crewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var crewRouteDocs = map[string]routeDoc{
+	"GET /api/v1/projects/{id}/participants": {
+		summary:   "List a project's Crew roster",
+		responses: map[int]any{http.StatusOK: model.ParticipantListResponse{}},
+	},
+	"POST /api/v1/projects/{id}/participants": {
+		summary:   "Add a member to a project's Crew",
+		request:   model.AddCrewMemberInput{},
+		responses: map[int]any{http.StatusCreated: model.CrewMember{}},
+	},
+	"DELETE /api/v1/projects/{id}/participants/{actor}": {
+		summary:   "Remove a member from a project's Crew",
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+}

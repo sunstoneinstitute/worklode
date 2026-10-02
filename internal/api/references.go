@@ -74,16 +74,33 @@ func (s *server) createReference(w http.ResponseWriter, r *http.Request) {
 // reference touching the named entity, from either end. Both query
 // parameters are required.
 func (s *server) listReferences(w http.ResponseWriter, r *http.Request) {
-	kind := r.URL.Query().Get("kind")
-	id := r.URL.Query().Get("id")
-	if kind == "" || id == "" {
+	var p model.ReferenceListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if p.Kind == "" || p.ID == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "kind and id are required")
 		return
 	}
-	items, err := s.st.ReferencesFor(r.Context(), kind, id)
+	items, err := s.st.ReferencesFor(r.Context(), p.Kind, p.ID)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, model.ReferenceListResponse{References: items})
+}
+
+// referenceRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var referenceRouteDocs = map[string]routeDoc{
+	"POST /api/v1/references": {
+		summary:   "Create a reference between two entities",
+		request:   model.EntityEdge{},
+		responses: map[int]any{http.StatusCreated: model.EntityEdge{}},
+	},
+	"GET /api/v1/references": {
+		summary:   "List the references touching an entity",
+		responses: map[int]any{http.StatusOK: model.ReferenceListResponse{}},
+		params:    model.ReferenceListParams{},
+	},
 }

@@ -237,3 +237,12 @@ func newestIssueUpdatedAt(issues []githubauth.Issue) time.Time {
 	}
 	return newest
 }
+
+// inboxImportRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var inboxImportRouteDocs = map[string]routeDoc{
+	"POST /api/v1/inbox/import": {
+		summary:   "Backfill a repo's GitHub issues and pull requests",
+		request:   model.ImportInput{},
+		responses: map[int]any{http.StatusOK: model.ImportResult{}},
+	},
+}

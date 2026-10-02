@@ -33,7 +33,7 @@ func newSkillsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			skills, raw, err := c.Skills(cmd.Context())
+			skills, raw, err := c.Skills(cmd.Context(), false)
 			if err != nil {
 				return err
 			}

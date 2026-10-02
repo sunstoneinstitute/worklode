@@ -58,3 +58,12 @@ func (s *server) patchProjectSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, toProjectJSON(p, repos))
 }
+
+// projectsettingRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var projectsettingRouteDocs = map[string]routeDoc{
+	"PATCH /api/v1/projects/{id}/settings": {
+		summary:   "Update a project's settings overrides",
+		request:   model.ProjectSettingsInput{},
+		responses: map[int]any{http.StatusOK: model.Project{}},
+	},
+}

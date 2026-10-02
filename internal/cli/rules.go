@@ -18,30 +18,10 @@ func (c *Client) GetRule(ctx context.Context, ref string) (model.Rule, []byte, e
 	return doJSON[model.Rule](ctx, c, http.MethodGet, "/api/v1/rules/"+url.PathEscape(ref), nil, "rule")
 }
 
-// RuleListFilter narrows ListRules. Doc is any document ref
-// (WL-SPEC-73, a slug, an id). Zero-valued fields do not filter.
-type RuleListFilter struct {
-	Project, Doc, Status string
-}
-
 // ListRules calls GET /api/v1/rules: rules without their text, in
 // arrangement order when Doc is set, by number otherwise.
-func (c *Client) ListRules(ctx context.Context, f RuleListFilter) ([]model.Rule, []byte, error) {
-	q := url.Values{}
-	if f.Project != "" {
-		q.Set("project", f.Project)
-	}
-	if f.Doc != "" {
-		q.Set("doc", f.Doc)
-	}
-	if f.Status != "" {
-		q.Set("status", f.Status)
-	}
-	path := "/api/v1/rules"
-	if len(q) > 0 {
-		path += "?" + q.Encode()
-	}
-	return doJSON[[]model.Rule](ctx, c, http.MethodGet, path, nil, "rules")
+func (c *Client) ListRules(ctx context.Context, p model.RuleListParams) ([]model.Rule, []byte, error) {
+	return doJSON[[]model.Rule](ctx, c, http.MethodGet, withParams("/api/v1/rules", p), nil, "rules")
 }
 
 // RulesTable prints `lode rule list`: one row per rule with every

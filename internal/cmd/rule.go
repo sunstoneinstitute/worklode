@@ -65,7 +65,7 @@ func newRuleListCmd() *cobra.Command {
 				}
 				project = sc.Project
 			}
-			rules, raw, err := c.ListRules(cmd.Context(), cli.RuleListFilter{
+			rules, raw, err := c.ListRules(cmd.Context(), model.RuleListParams{
 				Project: project, Doc: doc, Status: status,
 			})
 			if err != nil {

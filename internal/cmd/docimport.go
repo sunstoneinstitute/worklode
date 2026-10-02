@@ -149,7 +149,7 @@ Stating a status needs the admin-only doc.import permission.`,
 				return errNoProject
 			}
 
-			resp, _, err := c.ListDocs(cmd.Context(), cli.DocListFilter{Project: sc.Project})
+			resp, _, err := c.ListDocs(cmd.Context(), model.DocListParams{Project: sc.Project})
 			if err != nil {
 				return fmt.Errorf("list the project's documents: %w", err)
 			}

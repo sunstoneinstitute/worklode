@@ -90,3 +90,24 @@ func (s *server) stopTask(w http.ResponseWriter, r *http.Request) {
 			return store.StopTask(tx, s.st.Now(), id, actorID, eventID)
 		})
 }
+
+// assignRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var assignRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/{id}/assign": {
+		summary:   "Assign a task to an actor",
+		request:   model.AssignInput{},
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"POST /api/v1/tasks/{id}/unassign": {
+		summary:   "Clear a task's assignee",
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"POST /api/v1/tasks/{id}/start": {
+		summary:   "Start a ready task without taking a lease",
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"POST /api/v1/tasks/{id}/stop": {
+		summary:   "Stop an in-progress task back to ready",
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+}

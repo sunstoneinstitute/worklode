@@ -43,3 +43,16 @@ func (s *server) setChecklistItem(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, item)
 }
+
+// checklistRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var checklistRouteDocs = map[string]routeDoc{
+	"GET /api/v1/tasks/{id}/checklist": {
+		summary:   "Get the checklist items parsed from a task's body",
+		responses: map[int]any{http.StatusOK: []model.ChecklistItem{}},
+	},
+	"POST /api/v1/tasks/{id}/checklist": {
+		summary:   "Check or uncheck one task checklist item",
+		request:   model.SetChecklistItemInput{},
+		responses: map[int]any{http.StatusOK: model.ChecklistItem{}},
+	},
+}

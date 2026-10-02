@@ -211,6 +211,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /.well-known/lode-login": open("login-endpoint discovery, by definition pre-login"),
 	"GET /auth/cli/login":         open("starts the server-mediated CLI login flow"),
 	"POST /auth/cli/token":        open("redeems a one-time CLI login code"),
+	"GET /api/v1/openapi.json":    open("the API's own description; carries no project data"),
 
 	// --- tasks ---------------------------------------------------------------
 	"POST /api/v1/tasks":              guardedAny(permTaskWrite),

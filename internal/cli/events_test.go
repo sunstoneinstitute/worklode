@@ -25,7 +25,7 @@ import (
 // test itself committed. Once a query has observed an id the horizon can
 // only advance, so callers only need this for the first read against a
 // freshly recorded id.
-func pollClientEvents(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []model.Event {
+func pollClientEvents(t *testing.T, ctx context.Context, c *cli.Client, f model.EventListParams, want int) []model.Event {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -66,14 +66,14 @@ func TestClientEvents(t *testing.T) {
 		}
 	}
 
-	if events := pollClientEvents(t, ctx, c, cli.EventListFilter{Type: "test.event"}, 2); len(events) != 2 ||
+	if events := pollClientEvents(t, ctx, c, model.EventListParams{Type: "test.event"}, 2); len(events) != 2 ||
 		events[0].ExternalID != "ce-1" || events[1].ExternalID != "ce-2" {
 		t.Fatalf("ListEvents = %+v, want [ce-1 ce-2] in id order", events)
 	}
 
 	// Both ids are now known visible past the commit horizon, so a single
 	// unpolled read is safe here and for the raw-body check below.
-	resp, raw, err := c.ListEvents(ctx, cli.EventListFilter{Type: "test.event"})
+	resp, raw, err := c.ListEvents(ctx, model.EventListParams{Type: "test.event"})
 	if err != nil {
 		t.Fatalf("ListEvents: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestClientEvents(t *testing.T) {
 		t.Fatalf("ListEvents = %+v, want [ce-1 ce-2] in id order", resp.Events)
 	}
 
-	resp, _, err = c.ListEvents(ctx, cli.EventListFilter{Type: "test.event", After: firstID})
+	resp, _, err = c.ListEvents(ctx, model.EventListParams{Type: "test.event", After: firstID})
 	if err != nil {
 		t.Fatalf("ListEvents after: %v", err)
 	}
@@ -148,14 +148,14 @@ func TestClientStreamEvents(t *testing.T) {
 	}
 	// The commit horizon is cluster-wide; wait until all three are readable
 	// before asserting on which of them a resume replays.
-	pollClientEvents(t, ctx, c, cli.EventListFilter{Type: "cli.stream"}, 3)
+	pollClientEvents(t, ctx, c, model.EventListParams{Type: "cli.stream"}, 3)
 
 	streamCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	errEnough := errors.New("enough")
 	var got []model.Event
-	err := c.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "cli.stream", After: ids[0]},
+	err := c.StreamEvents(streamCtx, model.EventStreamParams{Type: "cli.stream", After: ids[0]},
 		func(e model.Event) error {
 			got = append(got, e)
 			if len(got) == 2 {
@@ -185,7 +185,7 @@ func TestClientStreamEvents(t *testing.T) {
 		t.Fatalf("create worker token: %v", err)
 	}
 	wc := cli.NewClient(cli.Config{ServerURL: serverURL, Token: workerToken})
-	err = wc.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "cli.stream"},
+	err = wc.StreamEvents(streamCtx, model.EventStreamParams{Type: "cli.stream"},
 		func(model.Event) error { return errors.New("callback must not run") })
 	var ce *cli.ClientError
 	if !errors.As(err, &ce) || ce.Status != http.StatusForbidden {
@@ -214,7 +214,7 @@ func TestClientStreamEventsFraming(t *testing.T) {
 
 	c := cli.NewClient(cli.Config{ServerURL: ts.URL, Token: "wl_" + strings.Repeat("a", 40)})
 	var got []model.Event
-	err := c.StreamEvents(context.Background(), cli.EventStreamFilter{}, func(e model.Event) error {
+	err := c.StreamEvents(context.Background(), model.EventStreamParams{}, func(e model.Event) error {
 		got = append(got, e)
 		return nil
 	})

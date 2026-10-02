@@ -204,7 +204,7 @@ func TestCreateFromCockpitPublicSurface(t *testing.T) {
 	}
 
 	// Exactly the one task and the one deliverable that were meant to land.
-	list, _, err := admin.ListTasks(ctx, cli.TaskListFilter{Project: "proj"})
+	list, _, err := admin.ListTasks(ctx, model.TaskListParams{Project: "proj"})
 	if err != nil {
 		t.Fatalf("list tasks: %v", err)
 	}

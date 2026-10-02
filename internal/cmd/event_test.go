@@ -46,7 +46,7 @@ func pollTailBacklog(t *testing.T, c *cli.Client, typ string, want int) []model.
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		resp, _, err := c.ListEvents(context.Background(), cli.EventListFilter{Type: typ})
+		resp, _, err := c.ListEvents(context.Background(), model.EventListParams{Type: typ})
 		if err != nil {
 			t.Fatalf("ListEvents: %v", err)
 		}

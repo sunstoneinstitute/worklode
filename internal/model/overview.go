@@ -75,6 +75,13 @@ type FrontierList struct {
 	Tasks []FrontierTask `json:"tasks"`
 }
 
+// FrontierParams is the query string of GET /api/v1/frontier.
+type FrontierParams struct {
+	// Project narrows the frontier to one project; empty returns every
+	// project's ready set.
+	Project string `query:"project,omitempty"`
+}
+
 // CriticalPath is the `lode task critical-path` payload.
 type CriticalPath struct {
 	MaxDepth int `json:"max_depth"`
@@ -91,6 +98,12 @@ type Drift struct {
 	Violations   []DriftEdge `json:"violations"`
 	StaleIntent  []DriftEdge `json:"stale_intent"`
 	Acknowledged []Deviation `json:"acknowledged,omitempty"`
+}
+
+// DriftParams is the query string of GET /api/v1/drift.
+type DriftParams struct {
+	// Acknowledged also returns the accepted deviations, active and expired.
+	Acknowledged bool `query:"acknowledged,omitempty"`
 }
 
 // Overview is the one-screen roll-up. The 025 §11.5 coverage reads land here
@@ -115,6 +128,12 @@ type Overview struct {
 	Cycles          [][]string    `json:"cycles,omitempty"`
 	CriticalHead    *FrontierTask `json:"critical_head,omitempty"`
 	GraphEnabled    bool          `json:"graph_enabled"`
+}
+
+// OverviewParams is the query string of GET /api/v1/overview.
+type OverviewParams struct {
+	// Project narrows the roll-up to one project; empty rolls up every project.
+	Project string `query:"project,omitempty"`
 }
 
 // DeriveResult reports one deriver run (spec 007). internal/derive aliases

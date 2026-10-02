@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,114 +20,26 @@ func (c *Client) CreateTask(ctx context.Context, in model.CreateTaskInput) (mode
 	return doJSON[model.Task](ctx, c, http.MethodPost, "/api/v1/tasks", in, "task")
 }
 
-// TaskListFilter narrows ListTasks. Zero-valued fields do not filter.
-type TaskListFilter struct {
-	Project  string
-	States   []string
-	Priority string
-	Kind     string
-	// Parent narrows to the direct children of this task id.
-	Parent string
-	// Assignee narrows to tasks assigned to this actor id.
-	Assignee string
-	// HasChildren narrows to containers — tasks with at least one child.
-	HasChildren bool
-	// Repo narrows to the project owning this repo. Any git remote URL form
-	// works as well as owner/name; the server normalizes it.
-	Repo string
-	// PlanDoc narrows to the tasks minted from this plan document id (025
-	// §9.2). 0 does not filter.
-	PlanDoc int64
-	// AboutDoc narrows to the tasks that reference this document id — the
-	// review and planning tasks the doc-lifecycle watcher mints (025 §15.4).
-	// 0 does not filter.
-	AboutDoc int64
-	// Deleted switches the list to tombstoned tasks (044 §5): they replace
-	// the live ones rather than joining them, so a list never mixes the two.
-	Deleted bool
-	// Detail asks the server for each task's edges alongside its row
-	// (GET /api/v1/tasks?detail=true). Set it, or call ListTasksDetail, which
-	// forces it regardless of this field.
-	Detail bool
-}
-
-// query renders f as the query string ListTasks and ListTasksDetail send.
-func (f TaskListFilter) query() url.Values {
-	q := url.Values{}
-	if f.Project != "" {
-		q.Set("project", f.Project)
-	}
-	for _, s := range f.States {
-		q.Add("state", s)
-	}
-	if f.Priority != "" {
-		q.Set("priority", f.Priority)
-	}
-	if f.Kind != "" {
-		q.Set("kind", f.Kind)
-	}
-	if f.Parent != "" {
-		q.Set("parent", f.Parent)
-	}
-	if f.Assignee != "" {
-		q.Set("assignee", f.Assignee)
-	}
-	if f.HasChildren {
-		q.Set("has_children", "true")
-	}
-	if f.Repo != "" {
-		q.Set("repo", f.Repo)
-	}
-	if f.PlanDoc != 0 {
-		q.Set("plan_doc", strconv.FormatInt(f.PlanDoc, 10))
-	}
-	if f.AboutDoc != 0 {
-		q.Set("about_doc", strconv.FormatInt(f.AboutDoc, 10))
-	}
-	if f.Deleted {
-		q.Set("deleted", "true")
-	}
-	if f.Detail {
-		q.Set("detail", "true")
-	}
-	return q
-}
-
 // ListTasks calls GET /api/v1/tasks.
-func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskListResponse, []byte, error) {
-	return doJSON[model.TaskListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", f.query()), nil, "task list")
+func (c *Client) ListTasks(ctx context.Context, p model.TaskListParams) (model.TaskListResponse, []byte, error) {
+	return doJSON[model.TaskListResponse](ctx, c, http.MethodGet, withParams("/api/v1/tasks", p), nil, "task list")
 }
 
 // ListTasksDetail calls GET /api/v1/tasks?detail=true: every task in scope
-// with its in/out edges, in one response. Forces Detail regardless of f.
-func (c *Client) ListTasksDetail(ctx context.Context, f TaskListFilter) (model.TaskListDetailResponse, []byte, error) {
-	f.Detail = true
-	return doJSON[model.TaskListDetailResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", f.query()), nil, "task list detail")
-}
-
-// TaskTreeFilter selects the hierarchy TaskTree returns. Root names a single
-// container to report; Project and States narrow the whole-project form.
-type TaskTreeFilter struct {
-	Project string
-	States  []string
-	Root    string
+// with its in/out edges, in one response. Forces Detail regardless of p.
+func (c *Client) ListTasksDetail(ctx context.Context, p model.TaskListParams) (model.TaskListDetailResponse, []byte, error) {
+	p.Detail = true
+	return doJSON[model.TaskListDetailResponse](ctx, c, http.MethodGet, withParams("/api/v1/tasks", p), nil, "task list detail")
 }
 
 // TaskTree calls GET /api/v1/tasks?tree=true: every container in scope with
 // its progress and its direct children, in one request. The server assembles
-// the tree so a client never fetches children per container.
-func (c *Client) TaskTree(ctx context.Context, f TaskTreeFilter) (model.TaskTreeResponse, []byte, error) {
-	q := url.Values{"tree": {"true"}}
-	if f.Project != "" {
-		q.Set("project", f.Project)
-	}
-	for _, s := range f.States {
-		q.Add("state", s)
-	}
-	if f.Root != "" {
-		q.Set("root", f.Root)
-	}
-	return doJSON[model.TaskTreeResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", q), nil, "task tree")
+// the tree so a client never fetches children per container. Forces Tree
+// regardless of p; Project, States and Root narrow it, as they do the flat
+// list.
+func (c *Client) TaskTree(ctx context.Context, p model.TaskListParams) (model.TaskTreeResponse, []byte, error) {
+	p.Tree = true
+	return doJSON[model.TaskTreeResponse](ctx, c, http.MethodGet, withParams("/api/v1/tasks", p), nil, "task tree")
 }
 
 // GetTask calls GET /api/v1/tasks/{id}.
@@ -164,7 +75,7 @@ func (c *Client) ClaimNext(ctx context.Context, in model.ClaimNextInput) (model.
 
 // Brief calls GET /api/v1/tasks/{id}/brief.
 func (c *Client) Brief(ctx context.Context, id string) (model.Brief, []byte, error) {
-	return c.brief(ctx, id, nil)
+	return c.brief(ctx, id, model.BriefParams{})
 }
 
 // BriefWithoutSkills is Brief with skills=false: the server skips pin
@@ -172,12 +83,13 @@ func (c *Client) Brief(ctx context.Context, id string) (model.Brief, []byte, err
 // that only read the task row or the lease, where a pinned brief is hundreds
 // of kilobytes and up to a 2s round trip nobody reads.
 func (c *Client) BriefWithoutSkills(ctx context.Context, id string) (model.Brief, []byte, error) {
-	return c.brief(ctx, id, url.Values{"skills": {"false"}})
+	skip := false
+	return c.brief(ctx, id, model.BriefParams{Skills: &skip})
 }
 
-func (c *Client) brief(ctx context.Context, id string, q url.Values) (model.Brief, []byte, error) {
+func (c *Client) brief(ctx context.Context, id string, p model.BriefParams) (model.Brief, []byte, error) {
 	return doJSON[model.Brief](ctx, c, http.MethodGet,
-		withQuery("/api/v1/tasks/"+url.PathEscape(id)+"/brief", q), nil, "brief")
+		withParams("/api/v1/tasks/"+url.PathEscape(id)+"/brief", p), nil, "brief")
 }
 
 // RebindWorktree calls POST /api/v1/tasks/{id}/lease/worktree: move the
@@ -416,17 +328,14 @@ func (c *Client) Decompose(ctx context.Context, id string, titles []string) (mod
 func (c *Client) TaskCost(ctx context.Context, id string, children bool,
 	from, to time.Time) (model.TaskCost, []byte, error) {
 
-	q := url.Values{}
-	if children {
-		q.Set("children", "true")
-	}
+	p := model.TaskCostParams{Children: children}
 	if !from.IsZero() {
-		q.Set("from", from.Format(time.DateOnly))
+		p.From = from.Format(time.DateOnly)
 	}
 	if !to.IsZero() {
-		q.Set("to", to.Format(time.DateOnly))
+		p.To = to.Format(time.DateOnly)
 	}
-	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks/"+url.PathEscape(id)+"/cost", q), nil)
+	raw, err := c.do(ctx, http.MethodGet, withParams("/api/v1/tasks/"+url.PathEscape(id)+"/cost", p), nil)
 	if err != nil {
 		return model.TaskCost{}, nil, err
 	}

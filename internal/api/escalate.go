@@ -119,3 +119,12 @@ func (s *server) escalationTarget(r *http.Request, taskID string, req model.Esca
 			strings.Join(names, ", ") + ": say which with --doc"}
 	}
 }
+
+// escalateRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var escalateRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/{id}/escalate": {
+		summary:   "Escalate a task to a design fix, releasing its lease",
+		request:   model.EscalateTaskInput{},
+		responses: map[int]any{http.StatusOK: model.EscalateTaskResult{}},
+	},
+}

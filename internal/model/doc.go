@@ -551,3 +551,66 @@ type AcceptDocResponse struct {
 	Doc
 	Tasks []Task `json:"tasks,omitempty"`
 }
+
+// DocListParams is the query string of GET /api/v1/docs. NeedsPlanning,
+// NeedsExecution, BareSuperseded (026 §2) and Unresolved (025 §8.7) are
+// derived selectors, not plain filters: each implies a kind and a status,
+// and the server refuses a Kind or Status that contradicts it, or more than
+// one selector at once.
+type DocListParams struct {
+	Project        string `query:"project,omitempty"`
+	Kind           string `query:"kind,omitempty"`   // spec | adr | plan
+	Status         string `query:"status,omitempty"` // draft | accepted | superseded
+	Owner          string `query:"owner,omitempty"`
+	NeedsPlanning  bool   `query:"needs_planning,omitempty"`
+	NeedsExecution bool   `query:"needs_execution,omitempty"`
+	BareSuperseded bool   `query:"bare_superseded,omitempty"`
+	// Unresolved selects the accepted specs and plans nothing has executed
+	// (025 §8.7). OlderThanDays narrows it to those untouched for at least
+	// that many days and is meaningless without it — the server refuses the
+	// pair rather than ignoring it.
+	Unresolved    bool `query:"unresolved,omitempty"`
+	OlderThanDays int  `query:"older_than_days,omitempty"`
+	// Deleted switches the list to tombstoned documents (044 §5): they
+	// replace the live ones rather than joining them, so a list never mixes
+	// the two.
+	Deleted bool `query:"deleted,omitempty"`
+	// HasNotes narrows to documents carrying at least one anchored note
+	// (025 §8.5). The server answers it with one EXISTS; nothing here
+	// filters a listing client-side.
+	HasNotes bool `query:"has_notes,omitempty"`
+	// HideTerminal hides withdrawn, superseded and spent documents (12 S5).
+	// Only `lode doc list` with no --status sets it; every other caller
+	// needs the whole corpus.
+	HideTerminal bool `query:"hide_terminal,omitempty"`
+}
+
+// DocResolveParams is the query string of GET /api/v1/docs/resolve.
+type DocResolveParams struct {
+	// Ref is the document reference to resolve (025 §14.3): an id, an exact
+	// slug, or the <KEY>-<TYPE>-<n> grammar. Required.
+	Ref string `query:"ref,omitempty"`
+}
+
+// DocLintParams is the query string of GET /api/v1/docs/lint.
+type DocLintParams struct {
+	// Project narrows the corpus-wide dangling-reference report to one
+	// project; "" answers over every project the caller may read.
+	Project string `query:"project,omitempty"`
+}
+
+// DocSectionsParams is the query string of GET /api/v1/docs/sections.
+type DocSectionsParams struct {
+	// Project narrows to one project; "" answers over the whole corpus.
+	Project string `query:"project,omitempty"`
+	// Number narrows to one section number ("8.2") or anchor ("sec-8.2")
+	// across the corpus; "" answers over every section.
+	Number string `query:"number,omitempty"`
+}
+
+// DocReferrersParams is the query string of GET /api/v1/docs/{id}/referrers.
+type DocReferrersParams struct {
+	// Anchor names the one section a referrer points at (025 §8.2).
+	// Required.
+	Anchor string `query:"anchor,omitempty"`
+}

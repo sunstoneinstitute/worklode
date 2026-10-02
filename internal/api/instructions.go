@@ -46,3 +46,16 @@ func (s *server) claimInstructions(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.InstructionsResponse{Instructions: instructions})
 }
+
+// instructionRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var instructionRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/{id}/instructions": {
+		summary:   "Queue a steering instruction against a task",
+		request:   model.InstructionInput{},
+		responses: map[int]any{http.StatusCreated: model.Instruction{}},
+	},
+	"POST /api/v1/instructions/claim": {
+		summary:   "Deliver the caller's pending instructions across every leased task",
+		responses: map[int]any{http.StatusOK: model.InstructionsResponse{}},
+	},
+}

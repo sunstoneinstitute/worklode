@@ -2,7 +2,11 @@
 // API behind lode graph triples.
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
+)
 
 // getProjectGraph handles GET /api/v1/projects/{id}/graph. The project is
 // read first so an unknown id 404s rather than answering with an empty graph.
@@ -20,4 +24,12 @@ func (s *server) getProjectGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	g.Docs = s.withProjectKeys(ctx, g.Docs)
 	writeJSON(w, http.StatusOK, g)
+}
+
+// graphRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var graphRouteDocs = map[string]routeDoc{
+	"GET /api/v1/projects/{id}/graph": {
+		summary:   "Get a project's work graph",
+		responses: map[int]any{http.StatusOK: model.ProjectGraph{}},
+	},
 }

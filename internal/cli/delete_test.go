@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // deleteStub records the method, request URI and body of the last request and
@@ -136,26 +137,26 @@ func TestListFiltersDeletedSwitch(t *testing.T) {
 	c, got := deleteStub(t)
 	ctx := context.Background()
 
-	if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "wl", Deleted: true}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "wl", Deleted: true}); err != nil {
 		t.Fatalf("ListTasks --deleted: %v", err)
 	}
 	if got.URI != "/api/v1/tasks?deleted=true&project=wl" {
 		t.Fatalf("ListTasks --deleted URI = %q", got.URI)
 	}
-	if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "wl"}); err != nil {
+	if _, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "wl"}); err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
 	if got.URI != "/api/v1/tasks?project=wl" {
 		t.Fatalf("ListTasks URI = %q, want no deleted parameter", got.URI)
 	}
 
-	if _, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "wl", Deleted: true}); err != nil {
+	if _, _, err := c.ListDocs(ctx, model.DocListParams{Project: "wl", Deleted: true}); err != nil {
 		t.Fatalf("ListDocs --deleted: %v", err)
 	}
 	if got.URI != "/api/v1/docs?deleted=true&project=wl" {
 		t.Fatalf("ListDocs --deleted URI = %q", got.URI)
 	}
-	if _, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "wl"}); err != nil {
+	if _, _, err := c.ListDocs(ctx, model.DocListParams{Project: "wl"}); err != nil {
 		t.Fatalf("ListDocs: %v", err)
 	}
 	if got.URI != "/api/v1/docs?project=wl" {

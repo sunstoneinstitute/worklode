@@ -302,3 +302,11 @@ func (s *server) runtimeEntries(ctx context.Context, artifacts []store.Artifact)
 	}
 	return out, nil
 }
+
+// timelineRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var timelineRouteDocs = map[string]routeDoc{
+	"GET /api/v1/tasks/{id}/timeline": {
+		summary:   "Get a task's merged delivery timeline",
+		responses: map[int]any{http.StatusOK: model.TimelineResponse{}},
+	},
+}

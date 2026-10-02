@@ -123,3 +123,12 @@ type SupersedeResult struct {
 	StalePlans int                 `json:"stale_plans"`
 	DryRun     bool                `json:"dry_run,omitempty"`
 }
+
+// RuleListParams is the query string of GET /api/v1/rules. Doc is any
+// document ref (WL-SPEC-73, a slug, an id); when set, the response is that
+// document's arrangement in order instead of every rule by number.
+type RuleListParams struct {
+	Project string `query:"project,omitempty"`
+	Status  string `query:"status,omitempty"`
+	Doc     string `query:"doc,omitempty"`
+}

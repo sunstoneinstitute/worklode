@@ -67,14 +67,14 @@ func (c *Client) patchProject(ctx context.Context, id string, in model.PatchProj
 // ProjectDetail calls GET /api/v1/projects/{id}. A zero from or to leaves
 // that end of the cost window unbounded.
 func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Time) (model.ProjectDetail, []byte, error) {
-	q := url.Values{}
+	var p model.ProjectDetailParams
 	if !from.IsZero() {
-		q.Set("from", from.Format(time.DateOnly))
+		p.From = from.Format(time.DateOnly)
 	}
 	if !to.IsZero() {
-		q.Set("to", to.Format(time.DateOnly))
+		p.To = to.Format(time.DateOnly)
 	}
-	return doJSON[model.ProjectDetail](ctx, c, http.MethodGet, withQuery("/api/v1/projects/"+url.PathEscape(id), q), nil, "project detail")
+	return doJSON[model.ProjectDetail](ctx, c, http.MethodGet, withParams("/api/v1/projects/"+url.PathEscape(id), p), nil, "project detail")
 }
 
 // ReportProjectSessionUsage calls POST /api/v1/projects/{id}/session-usage:
@@ -107,9 +107,8 @@ func (c *Client) GetProject(ctx context.Context, id string) (model.Project, erro
 // the server owns normalization — and a *ClientError with Status 404 means
 // the repo is not mapped to any project.
 func (c *Client) ResolveRemote(ctx context.Context, remote string) (model.Project, error) {
-	q := url.Values{}
-	q.Set("remote", remote)
-	p, _, err := doJSON[model.Project](ctx, c, http.MethodGet, withQuery("/api/v1/projects/resolve", q), nil, "project")
+	p, _, err := doJSON[model.Project](ctx, c, http.MethodGet,
+		withParams("/api/v1/projects/resolve", model.ProjectResolveParams{Remote: remote}), nil, "project")
 	return p, err
 }
 
@@ -122,11 +121,8 @@ func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string)
 // ReposDoctor calls GET /api/v1/repos/doctor. An empty repo reports every
 // mapped repo. Admin-only on the server.
 func (c *Client) ReposDoctor(ctx context.Context, repo string) (model.ReposDoctorResponse, []byte, error) {
-	q := url.Values{}
-	if repo != "" {
-		q.Set("repo", repo)
-	}
-	return doJSON[model.ReposDoctorResponse](ctx, c, http.MethodGet, withQuery("/api/v1/repos/doctor", q), nil, "repos doctor")
+	return doJSON[model.ReposDoctorResponse](ctx, c, http.MethodGet,
+		withParams("/api/v1/repos/doctor", model.ReposDoctorParams{Repo: repo}), nil, "repos doctor")
 }
 
 // Reconcile calls POST /api/v1/reconcile and returns the run report.

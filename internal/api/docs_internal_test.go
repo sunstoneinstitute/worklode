@@ -36,7 +36,11 @@ func TestDocSelectorFromValid(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "/api/v1/docs?"+query, nil)
-			if _, err := docSelectorFrom(r); err != nil {
+			var p model.DocListParams
+			if err := readQuery(r, &p); err != nil {
+				t.Fatalf("readQuery(%q) = %v, want no error", query, err)
+			}
+			if _, err := docSelectorFrom(p); err != nil {
 				t.Fatalf("docSelectorFrom(%q) = %v, want no error", query, err)
 			}
 		})
@@ -63,7 +67,11 @@ func TestDocSelectorFromConflicts(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "/api/v1/docs?"+c.query, nil)
-			_, err := docSelectorFrom(r)
+			var p model.DocListParams
+			err := readQuery(r, &p)
+			if err == nil {
+				_, err = docSelectorFrom(p)
+			}
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("docSelectorFrom(%q) = %v, want it to mention %q", c.query, err, c.want)
 			}

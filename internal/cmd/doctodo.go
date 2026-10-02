@@ -89,7 +89,7 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
-	resp, _, err := c.ListDocs(cmd.Context(), cli.DocListFilter{})
+	resp, _, err := c.ListDocs(cmd.Context(), model.DocListParams{})
 	if err != nil {
 		return err
 	}
@@ -331,7 +331,7 @@ func docTodoPlanTasks(cmd *cobra.Command, c *cli.Client, cfg cli.Config, docs []
 	// to narrow a list this command wants wide anyway. Unscoped returns every
 	// project's tasks, which resolves strictly more of the plans' tasks.
 	scope := cli.ResolveScope(cmd.Context(), c, cfg, "")
-	resp, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{Project: scope.Project})
+	resp, _, err := c.ListTasks(cmd.Context(), model.TaskListParams{Project: scope.Project})
 	if err != nil {
 		return nil, err
 	}

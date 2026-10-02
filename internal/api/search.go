@@ -8,7 +8,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"strconv"
 
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -24,29 +23,26 @@ const (
 )
 
 func (s *server) search(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	text := q.Get("q")
+	var p model.SearchParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	text := p.Q
 	if text == "" {
 		writeErr(w, http.StatusBadRequest, "q is required")
 		return
 	}
 
 	limit := defaultSearchLimit
-	if raw := q.Get("limit"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, "limit must be an integer")
-			return
-		}
-		if n > 0 {
-			limit = n
-		}
+	if p.Limit > 0 {
+		limit = p.Limit
 	}
 	if limit > maxSearchLimit {
 		limit = maxSearchLimit
 	}
 
-	mode := q.Get("mode")
+	mode := p.Mode
 	if mode == "" {
 		mode = model.SearchHybrid
 	}
@@ -79,7 +75,7 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hits, err := s.st.Search(r.Context(), store.SearchQuery{
-		Text: text, Vector: vec, Kinds: q["kind"], Project: q.Get("project"),
+		Text: text, Vector: vec, Kinds: p.Kind, Project: p.Project,
 		Limit: limit, Mode: mode,
 	})
 	if err != nil {
@@ -90,4 +86,13 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		hits = []model.SearchHit{}
 	}
 	writeJSON(w, http.StatusOK, model.SearchResponse{Provider: provider, Mode: mode, Hits: hits})
+}
+
+// searchRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var searchRouteDocs = map[string]routeDoc{
+	"GET /api/v1/search": {
+		summary:   "Search the corpus of documents, tasks and skills",
+		responses: map[int]any{http.StatusOK: model.SearchResponse{}},
+		params:    model.SearchParams{},
+	},
 }

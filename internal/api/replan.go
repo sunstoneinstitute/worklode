@@ -45,3 +45,12 @@ func (s *server) replan(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeClaimNextResult(w, r, res, false, "no stale plan")
 }
+
+// replanRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var replanRouteDocs = map[string]routeDoc{
+	"POST /api/v1/work/replan": {
+		summary:   "Claim a stale plan as a design task",
+		request:   model.ReplanInput{},
+		responses: map[int]any{http.StatusOK: model.ClaimNextResponse{}},
+	},
+}

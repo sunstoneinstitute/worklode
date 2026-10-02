@@ -130,8 +130,17 @@ func TestListEventsFilters(t *testing.T) {
 	// invalid query values are rejected, not silently ignored — including a
 	// negative or zero limit, which strconv.Atoi parses without error but
 	// which ListEvents' default/cap logic would otherwise silently clamp to
-	// a full page instead of signalling the mistake.
-	for _, q := range []string{"since=not-a-time", "after=not-an-int", "limit=not-an-int", "limit=0", "limit=-1"} {
+	// a full page instead of signalling the mistake. A value readQuery
+	// itself cannot parse as the field's Go type (after, limit) is a 400;
+	// a value that parses fine but fails the handler's own post-decode
+	// check (since as RFC3339, limit's positive-int rule) stays 422.
+	for _, q := range []string{"after=not-an-int", "limit=not-an-int"} {
+		rr = doReq(t, h, "GET", "/api/v1/events?"+q, token, nil)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("GET /api/v1/events?%s status = %d, want 400; body %s", q, rr.Code, rr.Body.String())
+		}
+	}
+	for _, q := range []string{"since=not-a-time", "limit=0", "limit=-1"} {
 		rr = doReq(t, h, "GET", "/api/v1/events?"+q, token, nil)
 		if rr.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("GET /api/v1/events?%s status = %d, want 422; body %s", q, rr.Code, rr.Body.String())

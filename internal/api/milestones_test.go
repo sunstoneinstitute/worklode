@@ -397,8 +397,8 @@ func TestDeleteMilestoneAPI(t *testing.T) {
 	createProject(t, st, "proj")
 	milestoneID, deliverableID := seedMilestoneWithChildren(t, h, token)
 
-	if rr := doReq(t, h, "DELETE", "/api/v1/milestones/"+milestoneID+"?cascade=maybe", token, nil); rr.Code != http.StatusUnprocessableEntity {
-		t.Errorf("unparseable cascade = %d, want 422", rr.Code)
+	if rr := doReq(t, h, "DELETE", "/api/v1/milestones/"+milestoneID+"?cascade=maybe", token, nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("unparseable cascade = %d, want 400", rr.Code)
 	}
 	if rr := doReq(t, h, "DELETE", "/api/v1/milestones/"+milestoneID, token, nil); rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("delete with children = %d, want 422; body %s", rr.Code, rr.Body.String())

@@ -135,14 +135,14 @@ func TestDeleteOnProdInstanceRequiresJustification(t *testing.T) {
 
 	// 4. It is out of the default list and is the whole of the deleted list
 	// (044 §4, §5 — --deleted is a switch, not an addition).
-	live, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "del"})
+	live, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "del"})
 	if err != nil {
 		t.Fatalf("list tasks: %v", err)
 	}
 	if ids := taskIDs(live); len(ids) != 0 {
 		t.Fatalf("live task list = %v, want empty", ids)
 	}
-	tombstoned, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "del", Deleted: true})
+	tombstoned, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "del", Deleted: true})
 	if err != nil {
 		t.Fatalf("list deleted tasks: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestDeleteOnProdInstanceRequiresJustification(t *testing.T) {
 	if restored.Tombstone != nil {
 		t.Fatalf("undeleted task still carries a tombstone: %+v", restored.Tombstone)
 	}
-	live, _, err = c.ListTasks(ctx, cli.TaskListFilter{Project: "del"})
+	live, _, err = c.ListTasks(ctx, model.TaskListParams{Project: "del"})
 	if err != nil {
 		t.Fatalf("list tasks after undelete: %v", err)
 	}
@@ -259,14 +259,14 @@ func TestDeleteDocument(t *testing.T) {
 		t.Fatalf("doc tombstone = %+v, want the delete record", deleted.Tombstone)
 	}
 
-	live, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "del"})
+	live, _, err := c.ListDocs(ctx, model.DocListParams{Project: "del"})
 	if err != nil {
 		t.Fatalf("list docs: %v", err)
 	}
 	if len(live.Docs) != 0 {
 		t.Fatalf("live doc list has %d docs, want 0", len(live.Docs))
 	}
-	tombstoned, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: "del", Deleted: true})
+	tombstoned, _, err := c.ListDocs(ctx, model.DocListParams{Project: "del", Deleted: true})
 	if err != nil {
 		t.Fatalf("list deleted docs: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestDeleteDocument(t *testing.T) {
 	if _, _, err := c.UndeleteDoc(ctx, doc.ID); err != nil {
 		t.Fatalf("undelete doc: %v", err)
 	}
-	live, _, err = c.ListDocs(ctx, cli.DocListFilter{Project: "del"})
+	live, _, err = c.ListDocs(ctx, model.DocListParams{Project: "del"})
 	if err != nil {
 		t.Fatalf("list docs after undelete: %v", err)
 	}

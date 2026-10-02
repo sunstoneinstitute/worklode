@@ -75,3 +75,12 @@ func (s *server) mintTaskToken(w http.ResponseWriter, r *http.Request) {
 		Token: plaintext, Actor: actor, Task: taskID, ExpiresAt: expiresAt.UTC(),
 	})
 }
+
+// tasktokenRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var tasktokenRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/{id}/tokens": {
+		summary:   "Mint a task-scoped token",
+		request:   model.TaskTokenInput{},
+		responses: map[int]any{http.StatusCreated: model.TaskTokenResponse{}},
+	},
+}

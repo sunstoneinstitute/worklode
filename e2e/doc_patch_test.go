@@ -648,7 +648,7 @@ func TestDocPatch(t *testing.T) {
 	// amendment by: two doc.patched events, one of each classification, each
 	// carrying the rule that decided it. The refused patch in step 4 wrote
 	// none — its transaction rolled back with the refusal.
-	events := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: watcher.TypeDocPatched}, 2)
+	events := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: watcher.TypeDocPatched}, 2)
 	if len(events) != 2 {
 		t.Fatalf("%s events = %d, want 2 (the refused patch logs nothing)",
 			watcher.TypeDocPatched, len(events))

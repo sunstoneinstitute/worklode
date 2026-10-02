@@ -43,3 +43,9 @@ type BoardResponse struct {
 	Projects       []BoardProject `json:"projects"`
 	RecentFailures []RuntimeEvent `json:"recent_failures"`
 }
+
+// BoardParams is the query string of GET /api/v1/board.
+type BoardParams struct {
+	// Project narrows the board to one project; omitted for every project.
+	Project string `query:"project,omitempty"`
+}

@@ -597,7 +597,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 
 	// 6. Nothing else was created: exactly the three declared tasks, no
 	// container above them, no child_of anywhere.
-	all, _, err := planner.ListTasks(ctx, cli.TaskListFilter{Project: "plans"})
+	all, _, err := planner.ListTasks(ctx, model.TaskListParams{Project: "plans"})
 	if err != nil {
 		t.Fatalf("list tasks: %v", err)
 	}
@@ -611,7 +611,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	if !slices.Equal(gotIDs, wantIDs) {
 		t.Fatalf("project tasks = %v, want exactly the minted set %v", gotIDs, wantIDs)
 	}
-	containers, _, err := planner.ListTasks(ctx, cli.TaskListFilter{Project: "plans", HasChildren: true})
+	containers, _, err := planner.ListTasks(ctx, model.TaskListParams{Project: "plans", HasChildren: true})
 	if err != nil {
 		t.Fatalf("list container tasks: %v", err)
 	}

@@ -191,3 +191,29 @@ func (s *server) listApprovals(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.ApprovalListResponse{Approvals: rows})
 }
+
+// approvalRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var approvalRouteDocs = map[string]routeDoc{
+	"GET /api/v1/approvals": {
+		summary:   "List the awaiting approval queue",
+		responses: map[int]any{http.StatusOK: model.ApprovalListResponse{}},
+	},
+	"POST /api/v1/approvals": {
+		summary: "File an ad-hoc approval requirement on a governed target",
+		request: model.RequireApprovalInput{},
+		// 200 when the requirement already existed, 201 on a fresh insert.
+		responses: map[int]any{
+			http.StatusOK:      model.Approval{},
+			http.StatusCreated: model.Approval{},
+		},
+	},
+	"POST /api/v1/docs/{id}/reviewers": {
+		summary:   "Replace a document's durable reviewer set",
+		request:   model.SetDocReviewersInput{},
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+	"POST /api/v1/docs/{id}/request-approval": {
+		summary:   "Open approval lanes for a document's assigned reviewers",
+		responses: map[int]any{http.StatusOK: model.Doc{}},
+	},
+}

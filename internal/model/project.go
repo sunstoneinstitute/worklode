@@ -52,6 +52,22 @@ type ProjectListResponse struct {
 	Projects []Project `json:"projects"`
 }
 
+// ProjectResolveParams is the query string of GET /api/v1/projects/resolve.
+type ProjectResolveParams struct {
+	// Remote is the git remote URL to resolve to its mapped project.
+	Remote string `query:"remote,omitempty"`
+}
+
+// ProjectDetailParams is the query string of GET /api/v1/projects/{id}.
+type ProjectDetailParams struct {
+	// From bounds the cost window's start (YYYY-MM-DD), inclusive; omitted
+	// leaves that end unbounded.
+	From string `query:"from,omitempty"`
+	// To bounds the cost window's end (YYYY-MM-DD), inclusive; omitted
+	// leaves that end unbounded.
+	To string `query:"to,omitempty"`
+}
+
 // CreateProjectInput is the request body for CreateProject (POST
 // /api/v1/projects).
 type CreateProjectInput struct {

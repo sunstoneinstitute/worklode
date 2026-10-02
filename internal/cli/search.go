@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -14,36 +13,11 @@ import (
 
 // --- search -------------------------------------------------------------
 
-// SearchFilter is one hybrid-search request (040 §9). Zero-valued fields let
-// the server pick: no kinds means all three, an empty mode means hybrid, and
-// a zero limit means the server's default page.
-type SearchFilter struct {
-	Query   string
-	Kinds   []string // doc | task | skill, repeatable
-	Mode    string   // hybrid | dense | lexical
-	Limit   int
-	Project string
-}
-
 // Search calls GET /api/v1/search. The response reports how it was actually
 // answered: an instance with no embedding provider answers provider "none"
 // and real lexical hits rather than an error (040 §11).
-func (c *Client) Search(ctx context.Context, f SearchFilter) (model.SearchResponse, []byte, error) {
-	q := url.Values{}
-	q.Set("q", f.Query)
-	for _, k := range f.Kinds {
-		q.Add("kind", k)
-	}
-	if f.Mode != "" {
-		q.Set("mode", f.Mode)
-	}
-	if f.Limit > 0 {
-		q.Set("limit", strconv.Itoa(f.Limit))
-	}
-	if f.Project != "" {
-		q.Set("project", f.Project)
-	}
-	return doJSON[model.SearchResponse](ctx, c, http.MethodGet, withQuery("/api/v1/search", q), nil, "search results")
+func (c *Client) Search(ctx context.Context, p model.SearchParams) (model.SearchResponse, []byte, error) {
+	return doJSON[model.SearchResponse](ctx, c, http.MethodGet, withParams("/api/v1/search", p), nil, "search results")
 }
 
 // DocRefs maps document id to the reference a reader cites — "WL-SPEC-40" —
@@ -55,7 +29,7 @@ func (c *Client) Search(ctx context.Context, f SearchFilter) (model.SearchRespon
 // document hits. An unreachable or unreadable corpus yields a nil map rather
 // than an error: a missing reference degrades one column of one line.
 func (c *Client) DocRefs(ctx context.Context, project string) map[int64]string {
-	resp, _, err := c.ListDocs(ctx, DocListFilter{Project: project})
+	resp, _, err := c.ListDocs(ctx, model.DocListParams{Project: project})
 	if err != nil {
 		return nil
 	}

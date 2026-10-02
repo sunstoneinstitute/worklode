@@ -70,3 +70,13 @@ type TaskCost struct {
 	Sessions         int        `json:"sessions"`
 	Cost             CostReport `json:"cost"`
 }
+
+// TaskCostParams is the query string of GET /api/v1/tasks/{id}/cost?from=&to=&children=.
+// From and To are YYYY-MM-DD, inclusive on both ends; either may be omitted
+// for unbounded. Children widens the scope to the task's child_of
+// descendants (spec 025 §15.6, AC31).
+type TaskCostParams struct {
+	From     string `query:"from,omitempty"`
+	To       string `query:"to,omitempty"`
+	Children bool   `query:"children,omitempty"`
+}

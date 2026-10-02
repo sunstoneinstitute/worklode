@@ -493,3 +493,25 @@ func (s *server) detachTaskBlob(w http.ResponseWriter, r *http.Request) {
 	s.observeTaskBlobRef("detached")
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// blobRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var blobRouteDocs = map[string]routeDoc{
+	"GET /api/v1/tasks/{id}/blobs": {
+		summary:   "List a task's blob references",
+		responses: map[int]any{http.StatusOK: model.TaskBlobsResponse{}},
+	},
+	"POST /api/v1/tasks/{id}/blobs": {
+		summary:   "Attach an uploaded blob to a task",
+		request:   model.AttachBlobInput{},
+		responses: map[int]any{http.StatusOK: model.AttachBlobResponse{}},
+	},
+	"DELETE /api/v1/tasks/{id}/blobs/{hash}": {
+		summary:   "Detach a blob reference from a task",
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/blobs": {
+		summary:            "Upload a content-addressed blob",
+		requestContentType: "application/octet-stream",
+		responses:          map[int]any{http.StatusOK: model.BlobResponse{}},
+	},
+}

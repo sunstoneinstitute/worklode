@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -23,91 +22,17 @@ func (c *Client) CreateDoc(ctx context.Context, in model.CreateDocInput) (model.
 	return doJSON[model.Doc](ctx, c, http.MethodPost, "/api/v1/docs", in, "doc")
 }
 
-// DocListFilter narrows ListDocs. Zero-valued fields do not filter.
-//
-// NeedsPlanning, NeedsExecution, BareSuperseded (026 §2) and Unresolved
-// (025 §8.7) are derived selectors, not plain filters: each implies a kind
-// and a status, and the server refuses a Kind or Status that contradicts it,
-// or more than one selector at once.
-type DocListFilter struct {
-	Project        string
-	Kind           string // spec | adr | plan
-	Status         string // draft | accepted | superseded
-	Owner          string
-	NeedsPlanning  bool
-	NeedsExecution bool
-	BareSuperseded bool
-	// Unresolved selects the accepted specs and plans nothing has executed
-	// (025 §8.7). OlderThanDays narrows it to those untouched for at least
-	// that many days and is meaningless without it — the server refuses the
-	// pair rather than ignoring it.
-	Unresolved    bool
-	OlderThanDays int
-	// Deleted switches the list to tombstoned documents (044 §5): they
-	// replace the live ones rather than joining them, so a list never mixes
-	// the two.
-	Deleted bool
-	// HasNotes narrows to documents carrying at least one anchored note
-	// (025 §8.5). The server answers it with one EXISTS; nothing here filters
-	// a listing client-side.
-	HasNotes bool
-	// HideTerminal hides withdrawn, superseded and spent documents (12 S5). Only `lode doc
-	// list` with no --status sets it; every other caller needs the whole
-	// corpus.
-	HideTerminal bool
-}
-
 // ListDocs calls GET /api/v1/docs.
-func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListResponse, []byte, error) {
-	q := url.Values{}
-	if f.Project != "" {
-		q.Set("project", f.Project)
-	}
-	if f.Kind != "" {
-		q.Set("kind", f.Kind)
-	}
-	if f.Status != "" {
-		q.Set("status", f.Status)
-	}
-	if f.Owner != "" {
-		q.Set("owner", f.Owner)
-	}
-	if f.NeedsPlanning {
-		q.Set("needs_planning", "true")
-	}
-	if f.NeedsExecution {
-		q.Set("needs_execution", "true")
-	}
-	if f.BareSuperseded {
-		q.Set("bare_superseded", "true")
-	}
-	if f.Unresolved {
-		q.Set("unresolved", "true")
-	}
-	if f.OlderThanDays > 0 {
-		q.Set("older_than_days", strconv.Itoa(f.OlderThanDays))
-	}
-	if f.Deleted {
-		q.Set("deleted", "true")
-	}
-	if f.HasNotes {
-		q.Set("has_notes", "true")
-	}
-	if f.HideTerminal {
-		q.Set("hide_terminal", "true")
-	}
-	return doJSON[model.DocListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/docs", q), nil, "doc list")
+func (c *Client) ListDocs(ctx context.Context, p model.DocListParams) (model.DocListResponse, []byte, error) {
+	return doJSON[model.DocListResponse](ctx, c, http.MethodGet, withParams("/api/v1/docs", p), nil, "doc list")
 }
 
 // LintDocs calls GET /api/v1/docs/lint?project=: the corpus-wide report of
 // dangling frontmatter references (055 §4.1). project narrows the answer;
 // "" answers over every project the caller may read.
 func (c *Client) LintDocs(ctx context.Context, project string) ([]model.DocLintFinding, []byte, error) {
-	q := url.Values{}
-	if project != "" {
-		q.Set("project", project)
-	}
-	return doJSON[[]model.DocLintFinding](ctx, c, http.MethodGet, withQuery("/api/v1/docs/lint", q), nil, "doc lint")
+	p := model.DocLintParams{Project: project}
+	return doJSON[[]model.DocLintFinding](ctx, c, http.MethodGet, withParams("/api/v1/docs/lint", p), nil, "doc lint")
 }
 
 // ResolveExternalCovers calls POST /api/v1/docs/covers/resolve: re-resolve
@@ -121,14 +46,8 @@ func (c *Client) ResolveExternalCovers(ctx context.Context) (model.CoversResolve
 // project, "" to all of them; number narrows to one section number ("8.2")
 // or anchor ("sec-8.2") across the corpus, "" to every section.
 func (c *Client) ListCorpusSections(ctx context.Context, project, number string) ([]model.DocSectionRow, []byte, error) {
-	q := url.Values{}
-	if project != "" {
-		q.Set("project", project)
-	}
-	if number != "" {
-		q.Set("number", number)
-	}
-	return doJSON[[]model.DocSectionRow](ctx, c, http.MethodGet, withQuery("/api/v1/docs/sections", q), nil, "doc sections")
+	p := model.DocSectionsParams{Project: project, Number: number}
+	return doJSON[[]model.DocSectionRow](ctx, c, http.MethodGet, withParams("/api/v1/docs/sections", p), nil, "doc sections")
 }
 
 // ResolveDoc calls GET /api/v1/docs/resolve?ref=, returning the document a
@@ -139,9 +58,8 @@ func (c *Client) ListCorpusSections(ctx context.Context, project, number string)
 // 422 means a slug that names more than one. The response carries no body
 // text — fetch the document with GetDoc when the text is wanted.
 func (c *Client) ResolveDoc(ctx context.Context, ref string) (model.Doc, error) {
-	q := url.Values{}
-	q.Set("ref", ref)
-	d, _, err := doJSON[model.Doc](ctx, c, http.MethodGet, withQuery("/api/v1/docs/resolve", q), nil, "doc")
+	p := model.DocResolveParams{Ref: ref}
+	d, _, err := doJSON[model.Doc](ctx, c, http.MethodGet, withParams("/api/v1/docs/resolve", p), nil, "doc")
 	return d, err
 }
 
@@ -167,10 +85,9 @@ func (c *Client) GetDocVersion(ctx context.Context, id int64, version int) (mode
 // open work pointing at one section of a document (025 §8.2). The anchor is
 // required by the server — a referrer is a section-level fact.
 func (c *Client) DocSectionReferrers(ctx context.Context, id int64, anchor string) (model.DocReferrersResponse, []byte, error) {
-	q := url.Values{}
-	q.Set("anchor", anchor)
+	p := model.DocReferrersParams{Anchor: anchor}
 	return doJSON[model.DocReferrersResponse](ctx, c, http.MethodGet,
-		withQuery(docPath(id, "/referrers"), q), nil, "doc referrers")
+		withParams(docPath(id, "/referrers"), p), nil, "doc referrers")
 }
 
 // UpdateDocBody calls PUT /api/v1/docs/{id}/body: an in-place edit, which the

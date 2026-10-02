@@ -51,3 +51,21 @@ type SearchResponse struct {
 	Mode string      `json:"mode"`
 	Hits []SearchHit `json:"hits"`
 }
+
+// SearchParams is the query string of GET /api/v1/search. Zero-valued
+// fields let the server pick: no kinds means all three, an empty mode means
+// hybrid, and a zero limit means the server's default page.
+type SearchParams struct {
+	// Q is the search text; required.
+	Q string `query:"q,omitempty"`
+	// Mode selects hybrid, dense or lexical retrieval; empty means hybrid.
+	Mode string `query:"mode,omitempty"`
+	// Project narrows hits to one project; empty searches every project.
+	Project string `query:"project,omitempty"`
+	// Kind narrows to doc, task and/or skill hits (repeatable); empty means
+	// all three.
+	Kind []string `query:"kind,omitempty"`
+	// Limit caps the number of hits returned (server default/cap applies
+	// when zero or negative).
+	Limit int `query:"limit,omitempty"`
+}
