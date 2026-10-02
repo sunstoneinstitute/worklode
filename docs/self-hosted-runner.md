@@ -2,7 +2,7 @@
 
 `gate`, `test`, `lint`, `build-image` and `checks` in `pr-checks.yml` run on a self-hosted
 GitHub Actions runner on `hel01` when the triggering PR is trustworthy;
-`validate-kustomize`, `obsidian`, and every PR the gate doesn't trust stay on
+`validate-kustomize` and every PR the gate doesn't trust stay on
 `ubuntu-latest`. `deploy-dev.yml`'s `build-image` targets hel01
 unconditionally — a push to `main` has no fork head, so it is trusted by
 construction and never needs the gate. The payoff is a warm, persistent

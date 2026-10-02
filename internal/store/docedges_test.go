@@ -857,8 +857,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 // 025 §14.3 shorthand resolves on a project *key*, not within the declaring
 // document's project — so the resolved far end names the project it landed in
 // and not the one it left. Both directions, since a client that addresses a
-// document by project and slug (the Obsidian mirror's doc wikilinks, WL-284)
-// would otherwise silently assume the near end's project for either.
+// document by project and slug would otherwise silently assume the near end's project for either.
 func TestDocListEdgesResolvesFarProject(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)

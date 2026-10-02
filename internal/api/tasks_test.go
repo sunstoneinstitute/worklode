@@ -1344,8 +1344,8 @@ func TestListTasksByRepoAndBranch(t *testing.T) {
 	}
 }
 
-// TestListTasksUpdatedSince covers the incremental sync path the Obsidian
-// mirror polls with: a watermark narrows the list, and a watermark that is
+// TestListTasksUpdatedSince covers the incremental sync path a client
+// polls with: a watermark narrows the list, and a watermark that is
 // not a timestamp is refused rather than silently ignored — an ignored one
 // would look like a working incremental sync while returning everything.
 func TestListTasksUpdatedSince(t *testing.T) {

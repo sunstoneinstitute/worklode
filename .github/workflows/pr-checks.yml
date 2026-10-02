@@ -40,7 +40,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       run: ${{ steps.decide.outputs.run }}
-      obsidian: ${{ steps.decide.outputs.obsidian }}
       code: ${{ steps.decide.outputs.code }}
       trusted: ${{ steps.decide.outputs.trusted }}
     steps:
@@ -60,7 +59,7 @@ jobs:
           # their own, so it is trusted, runs everything, and skips nothing.
           if [ "${{ github.event_name }}" = "merge_group" ]; then
             echo "Merge-queue build — running every check on the trusted runners."
-            printf 'trusted=true\nobsidian=true\ncode=true\nrun=true\n' >> "$GITHUB_OUTPUT"
+            printf 'trusted=true\ncode=true\nrun=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -84,25 +83,10 @@ jobs:
             "repos/${{ github.repository }}/pulls/$PR_NUMBER/files?per_page=100" \
             --jq '.[].filename' 2>/dev/null || true)
 
-          # The obsidian job is the only one scoped to a subtree: the plugin is
-          # the repo's sole Node package, nothing in the Go build imports it,
-          # and it ships separately — so a PR that touches neither
-          # plugins/obsidian/
-          # nor its own workflow cannot change its result. Decided here rather
-          # than with a `paths:` filter because a reusable workflow cannot take
-          # one. Deliberately independent of `run` below: `can-be-tested`
-          # authorises CI on an untrusted PR, it does not make an untouched
-          # subtree worth rebuilding.
-          if [ -z "$CHANGED" ] \
-             || echo "$CHANGED" | grep -qE '^plugins/obsidian/|^\.github/workflows/_obsidian\.yml$'; then
-            echo "obsidian=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "obsidian=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          # The Go jobs (lint, test, build-image) are scoped the same way, and
-          # for the same reason: a change confined to deploy/ cannot alter what
-          # they report. validate-kustomize is deliberately NOT scoped by this
+          # The Go jobs (lint, test, build-image) are scoped to what can change
+          # their result: a change confined to deploy/ cannot alter what they
+          # report. Decided here rather than with a `paths:` filter because a
+          # reusable workflow cannot take one. validate-kustomize is deliberately NOT scoped by this
           # — it is the one check such a change needs, and it keys on `run`.
           #
           # deploy/base/migrations/ is excluded because it is the one thing
@@ -114,8 +98,7 @@ jobs:
           # The agent-surface paths carry the same exemption they have in the
           # docs skip below: TestAgentSurfaces reads them.
           #
-          # Independent of `can-be-tested`, exactly as obsidian is: the label
-          # authorises CI on an untrusted PR, it does not make untouched Go
+          # Independent of `can-be-tested`: the label authorises CI on an untrusted PR, it does not make untouched Go
           # worth rebuilding.
           # These two patterns are the whole decision, named so
           # scripts/ci-code-scope_test.sh can read them straight out of this
@@ -214,11 +197,6 @@ jobs:
       # one exports TEST_SPARQL_URL itself.
       sparql-url: ${{ needs.gate.outputs.trusted == 'true' && 'http://localhost:17878' || '' }}
 
-  obsidian:
-    needs: gate
-    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.obsidian == 'true'
-    uses: ./.github/workflows/_obsidian.yml
-
   build-image:
     needs: gate
     if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
@@ -290,7 +268,7 @@ jobs:
   # one of them never reports; this job always runs, and passes when every
   # job it needs either succeeded or was skipped by its own `if:`.
   checks:
-    needs: [gate, lint, test, obsidian, build-image, validate-kustomize, spec-gate]
+    needs: [gate, lint, test, build-image, validate-kustomize, spec-gate]
     if: always()
     # Needs only jq. An untrusted or failed gate leaves `trusted` unset, which
     # falls back to ubuntu-latest.

@@ -1,6 +1,5 @@
 # pnpm settings for the editor island, and the file that makes web/editor/ its
-# own pnpm root — it shares no dependency tree with plugins/obsidian or the Go
-# build above it.
+# own pnpm root — it shares no dependency tree with the Go build above it.
 #
 # esbuild's build script resolves the platform-specific bundler binary, so it
 # has to be allowed here.

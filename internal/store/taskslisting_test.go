@@ -264,7 +264,7 @@ func TestListTasksFilterByAboutDoc(t *testing.T) {
 }
 
 // TestListTasksFilterByUpdatedSince covers the incremental sync path: a
-// client (the Obsidian mirror) re-asks for what changed since the highest
+// client re-asks for what changed since the highest
 // updated_at it has seen, and gets that boundary row back with it.
 func TestListTasksFilterByUpdatedSince(t *testing.T) {
 	t.Parallel()
