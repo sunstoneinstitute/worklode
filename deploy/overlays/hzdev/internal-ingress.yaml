@@ -1,0 +1,28 @@
+# Mesh-only twin of worklode-ingress: internal ingress and the internal CA.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: worklode-internal-ingress
+  namespace: worklode
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "sunstone-internal-ca"
+spec:
+  ingressClassName: nginx-internal
+  tls:
+    - hosts:
+        - worklode.dev.sunstone.internal
+      secretName: worklode-internal-tls
+  rules:
+    - host: worklode.dev.sunstone.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: worklode
+                port:
+                  number: 80
