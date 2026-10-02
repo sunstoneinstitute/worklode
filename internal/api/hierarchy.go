@@ -46,3 +46,12 @@ func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 	resp := model.DecomposeResponse{Parent: *parent, Children: children}
 	writeJSON(w, http.StatusCreated, resp)
 }
+
+// hierarchyRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var hierarchyRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/{id}/decompose": {
+		summary:   "Create draft child tasks under a task",
+		request:   model.DecomposeInput{},
+		responses: map[int]any{http.StatusCreated: model.DecomposeResponse{}},
+	},
+}

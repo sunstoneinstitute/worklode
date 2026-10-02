@@ -376,6 +376,14 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("non-numeric plan_doc status = %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
+
+	// An explicit 0 is refused rather than silently read as "unfiltered": a
+	// caller that sent it meant something, and PlanDoc's *int64 lets the
+	// handler tell "0 was sent" apart from "the parameter was absent".
+	rr = doReq(t, h, "GET", "/api/v1/tasks?plan_doc=0", token, nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("plan_doc=0 status = %d, want 400, body %s", rr.Code, rr.Body.String())
+	}
 }
 
 // TestGetTaskShowsAboutDoc: a task referencing a document carries
@@ -451,6 +459,13 @@ func TestListTasksFilterByAboutDoc(t *testing.T) {
 	rr = doReq(t, h, "GET", "/api/v1/tasks?about_doc=not-a-number", token, nil)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("non-numeric about_doc status = %d, want 400, body %s", rr.Code, rr.Body.String())
+	}
+
+	// Same stance as plan_doc=0 (TestListTasksFilterByPlanDoc): refused, not
+	// silently read as unfiltered.
+	rr = doReq(t, h, "GET", "/api/v1/tasks?about_doc=0", token, nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("about_doc=0 status = %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
 }
 

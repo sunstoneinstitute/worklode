@@ -116,3 +116,12 @@ func (s *server) blobGC(w http.ResponseWriter, r *http.Request) {
 		"orphans", len(out.OrphanObjects), "deleted", out.Deleted, "errors", len(out.Errors))
 	writeJSON(w, http.StatusOK, out)
 }
+
+// blobgcRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var blobgcRouteDocs = map[string]routeDoc{
+	"POST /api/v1/blobs/gc": {
+		summary:   "Sweep unreferenced blobs and orphan objects",
+		request:   model.BlobGCRequest{},
+		responses: map[int]any{http.StatusOK: model.BlobGCResponse{}},
+	},
+}

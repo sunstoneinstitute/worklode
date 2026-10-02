@@ -83,11 +83,17 @@ func TestListDocsUnresolved(t *testing.T) {
 		"?unresolved=true&kind=adr",            // an ADR is executed by nothing
 		"?unresolved=true&status=draft",        // the selector implies accepted
 		"?unresolved=true&needs_planning=true", // two selectors at once
-		"?unresolved=true&older_than_days=x",
 	} {
 		if rr := doReq(t, h, "GET", "/api/v1/docs"+q, token, nil); rr.Code != http.StatusUnprocessableEntity {
 			t.Errorf("GET /api/v1/docs%s status = %d, want 422, body %s", q, rr.Code, rr.Body.String())
 		}
+	}
+
+	// A value that does not parse as an int is now readQuery's job (WL-939):
+	// it fails decoding the query string before docSelectorFrom's own checks
+	// run, so this is 400, not 422.
+	if rr := doReq(t, h, "GET", "/api/v1/docs?unresolved=true&older_than_days=x", token, nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("GET /api/v1/docs?unresolved=true&older_than_days=x status = %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
 }
 

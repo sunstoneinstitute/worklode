@@ -1254,7 +1254,6 @@ func TestListDocsSelectorConflicts(t *testing.T) {
 		"planning with plan kind":      {"needs_planning=true&kind=plan", "spec"},
 		"execution with draft":         {"needs_execution=true&status=draft", "accepted"},
 		"execution with spec kind":     {"needs_execution=true&kind=spec", "plan"},
-		"unparseable selector":         {"needs_planning=maybe", "needs_planning"},
 		"bare superseded with draft":   {"bare_superseded=true&status=draft", "superseded"},
 		"bare superseded with plan":    {"bare_superseded=true&kind=plan", "spec or adr"},
 		"bare superseded and planning": {"bare_superseded=true&needs_planning=true", "mutually exclusive"},
@@ -1270,6 +1269,19 @@ func TestListDocsSelectorConflicts(t *testing.T) {
 			}
 		})
 	}
+
+	// A boolean that does not parse (WL-939) is readQuery's decode failure,
+	// so it is 400 rather than docSelectorFrom's 422.
+	t.Run("unparseable selector", func(t *testing.T) {
+		rr := doReq(t, h, "GET", "/api/v1/docs?needs_planning=maybe", token, nil)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+		}
+		msg, _ := decodeMap(t, rr)["error"].(string)
+		if !strings.Contains(msg, "needs_planning") {
+			t.Errorf("error = %q, want it to mention %q", msg, "needs_planning")
+		}
+	})
 }
 
 // TestListDocsSelectorRedundantFiltersAllowed: the implied kind and status may

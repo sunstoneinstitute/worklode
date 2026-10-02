@@ -30,7 +30,12 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 // ingestion health. Admin-gated (permReconcile) — it reads across the whole
 // org.
 func (s *server) reposDoctor(w http.ResponseWriter, r *http.Request) {
-	health, err := s.st.RepoIngestionHealth(r.Context(), r.URL.Query().Get("repo"))
+	var p model.ReposDoctorParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	health, err := s.st.RepoIngestionHealth(r.Context(), p.Repo)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -230,4 +235,22 @@ func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// reconcileRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var reconcileRouteDocs = map[string]routeDoc{
+	"GET /api/v1/whoami": {
+		summary:   "Get the calling actor's identity",
+		responses: map[int]any{http.StatusOK: model.WhoAmI{}},
+	},
+	"GET /api/v1/repos/doctor": {
+		summary:   "Report per-repo GitHub ingestion health",
+		responses: map[int]any{http.StatusOK: model.ReposDoctorResponse{}},
+		params:    model.ReposDoctorParams{},
+	},
+	"POST /api/v1/reconcile": {
+		summary:   "Replay stored events and poll GitHub to reconcile state",
+		request:   model.ReconcileInput{},
+		responses: map[int]any{http.StatusOK: model.ReconcileResponse{}},
+	},
 }

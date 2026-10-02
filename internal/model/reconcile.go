@@ -64,6 +64,12 @@ type ReposDoctorResponse struct {
 	UnmappedSenders []UnmappedSender `json:"unmapped_senders"`
 }
 
+// ReposDoctorParams is the query string of GET /api/v1/repos/doctor.
+type ReposDoctorParams struct {
+	// Repo narrows the report to one mapped repo; omitted reports every repo.
+	Repo string `query:"repo,omitempty"`
+}
+
 // ReconcileInput is the request body of POST /api/v1/reconcile, and what
 // the CLI (`lode task reconcile`) sends. Repo and Task are mutually exclusive
 // bounds; Since accepts RFC 3339 or a Go duration, resolved against the

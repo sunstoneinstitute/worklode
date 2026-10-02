@@ -315,9 +315,9 @@ func TestEscalationLadder(t *testing.T) {
 	// The funnel, in order. Each type is polled on its own because the events
 	// API filters by type and nothing else; the ids are what say they landed
 	// in the order the ladder climbs.
-	gapEvent := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: typeGapFound}, 1)[0]
-	startedEvent := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: typeFixStarted}, 1)[0]
-	finishedEvent := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: typeFixFinished}, 1)[0]
+	gapEvent := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: typeGapFound}, 1)[0]
+	startedEvent := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: typeFixStarted}, 1)[0]
+	finishedEvent := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: typeFixFinished}, 1)[0]
 	if !(gapEvent.ID < startedEvent.ID && startedEvent.ID < finishedEvent.ID) {
 		t.Fatalf("ladder events landed out of order: %s=%d %s=%d %s=%d",
 			typeGapFound, gapEvent.ID, typeFixStarted, startedEvent.ID,
@@ -429,7 +429,7 @@ func TestEscalationLadder(t *testing.T) {
 	if staleDoc.Status != "stale" {
 		t.Fatalf("plan two status = %q, want stale", staleDoc.Status)
 	}
-	plans, _, err := admin.ListDocs(ctx, cli.DocListFilter{Project: "ladder", Kind: "plan"})
+	plans, _, err := admin.ListDocs(ctx, model.DocListParams{Project: "ladder", Kind: "plan"})
 	if err != nil {
 		t.Fatalf("list plans: %v", err)
 	}
@@ -486,7 +486,7 @@ func TestEscalationLadder(t *testing.T) {
 	if _, _, err := alice.AcceptDoc(ctx, planThree.ID); err != nil {
 		t.Fatalf("accept plan three: %v", err)
 	}
-	unresolved, _, err := admin.ListDocs(ctx, cli.DocListFilter{Project: "ladder", Unresolved: true})
+	unresolved, _, err := admin.ListDocs(ctx, model.DocListParams{Project: "ladder", Unresolved: true})
 	if err != nil {
 		t.Fatalf("list unresolved docs: %v", err)
 	}
@@ -500,7 +500,7 @@ func TestEscalationLadder(t *testing.T) {
 	if withdrawn.Status != "withdrawn" {
 		t.Fatalf("plan three status = %q, want withdrawn", withdrawn.Status)
 	}
-	unresolved, _, err = admin.ListDocs(ctx, cli.DocListFilter{Project: "ladder", Unresolved: true})
+	unresolved, _, err = admin.ListDocs(ctx, model.DocListParams{Project: "ladder", Unresolved: true})
 	if err != nil {
 		t.Fatalf("list unresolved docs after the withdrawal: %v", err)
 	}

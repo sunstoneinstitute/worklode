@@ -30,7 +30,7 @@ func TestClientActorsAndTokens(t *testing.T) {
 	}
 	// The freshly minted token actually authenticates.
 	bobClient := cli.NewClient(cli.Config{ServerURL: baseURL, Token: tok.Token})
-	if _, _, err := bobClient.ListTasks(ctx, cli.TaskListFilter{}); err != nil {
+	if _, _, err := bobClient.ListTasks(ctx, model.TaskListParams{}); err != nil {
 		t.Fatalf("list tasks as bob: %v", err)
 	}
 
@@ -44,7 +44,7 @@ func TestClientActorsAndTokens(t *testing.T) {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 	revokedClient := cli.NewClient(cli.Config{ServerURL: baseURL, Token: tok2})
-	if _, _, err := revokedClient.ListTasks(ctx, cli.TaskListFilter{}); err == nil {
+	if _, _, err := revokedClient.ListTasks(ctx, model.TaskListParams{}); err == nil {
 		t.Fatalf("list tasks with revoked token succeeded, want error")
 	}
 }

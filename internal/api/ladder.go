@@ -112,3 +112,17 @@ func (s *server) reportFix(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.LadderEventResult{Recorded: inserted})
 }
+
+// ladderRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var ladderRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/{id}/gap": {
+		summary:   "Report a plan or spec gap found while executing a task",
+		request:   model.GapTaskInput{},
+		responses: map[int]any{http.StatusOK: model.LadderEventResult{}},
+	},
+	"POST /api/v1/tasks/{id}/fix": {
+		summary:   "Report the start or finish of a design fix",
+		request:   model.FixTaskInput{},
+		responses: map[int]any{http.StatusOK: model.LadderEventResult{}},
+	},
+}

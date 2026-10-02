@@ -839,3 +839,11 @@ func writeProgressFrame(w io.Writer, f progressFrame) error {
 	_, err = fmt.Fprintf(w, "id: %d\nevent: progress\ndata: %s\n\n", f.id, data)
 	return err
 }
+
+// progressRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var progressRouteDocs = map[string]routeDoc{
+	"GET /api/v1/projects/{id}/progress": {
+		summary:   "Get a project's spec and plan progress",
+		responses: map[int]any{http.StatusOK: model.ProjectProgress{}},
+	},
+}

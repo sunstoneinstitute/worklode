@@ -32,7 +32,7 @@ const docLifecycleSubscriberName = "doc-lifecycle"
 // the client's own filter fields. An empty kind does not filter.
 func tasksAboutDoc(t *testing.T, ctx context.Context, c *cli.Client, docID int64, kind string) []model.Task {
 	t.Helper()
-	resp, _, err := c.ListTasks(ctx, cli.TaskListFilter{AboutDoc: docID, Kind: kind})
+	resp, _, err := c.ListTasks(ctx, model.TaskListParams{AboutDoc: &docID, Kind: kind})
 	if err != nil {
 		t.Fatalf("list tasks about doc %d (kind %q): %v", docID, kind, err)
 	}
@@ -145,7 +145,7 @@ func pollDocLifecycleCaughtUp(t *testing.T, ctx context.Context, c *cli.Client, 
 // read once.
 func eventByID(t *testing.T, ctx context.Context, c *cli.Client, id int64) model.Event {
 	t.Helper()
-	events := pollEventListE2E(t, ctx, c, cli.EventListFilter{After: id - 1, Limit: 1}, 1)
+	events := pollEventListE2E(t, ctx, c, model.EventListParams{After: id - 1, Limit: intPtr(1)}, 1)
 	if events[0].ID != id {
 		t.Fatalf("GET /api/v1/events after %d = %+v, want exactly event %d", id-1, events, id)
 	}
@@ -326,7 +326,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 	if _, _, err := submitter.SubmitDoc(ctx, doc.ID); err != nil {
 		t.Fatalf("second submit: %v", err)
 	}
-	submits := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: eventbus.TypeDocumentSubmitted}, 1)
+	submits := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: eventbus.TypeDocumentSubmitted}, 1)
 	if len(submits) != 1 {
 		t.Fatalf("%s events = %d, want 1 (the resubmit is absorbed by the deterministic external id)",
 			eventbus.TypeDocumentSubmitted, len(submits))
@@ -413,7 +413,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 		t.Fatalf("timeline state entry of %s carries no event_id: %+v", design.ID, *mintEntry)
 	}
 
-	accepts := pollEventListE2E(t, ctx, admin, cli.EventListFilter{Type: eventbus.TypeDocumentAccepted}, 1)
+	accepts := pollEventListE2E(t, ctx, admin, model.EventListParams{Type: eventbus.TypeDocumentAccepted}, 1)
 	if len(accepts) != 1 {
 		t.Fatalf("%s events = %d, want exactly 1", eventbus.TypeDocumentAccepted, len(accepts))
 	}

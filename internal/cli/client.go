@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/swaggest/form/v5"
+
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -642,4 +644,24 @@ func withQuery(path string, q url.Values) string {
 		return path
 	}
 	return path + "?" + q.Encode()
+}
+
+// queryEncoder writes a model params struct's query tags; the same tags
+// readQuery on the server reads, so the two cannot disagree.
+var queryEncoder = func() *form.Encoder {
+	e := form.NewEncoder()
+	e.SetTagName("query")
+	e.SetMode(form.ModeExplicit)
+	return e
+}()
+
+// withParams is withQuery over a params struct: zero fields are omitted,
+// slices repeat the key. p is always one of internal/model's params
+// structs, so an encode error is a programming mistake and panics.
+func withParams(path string, p any) string {
+	q, err := queryEncoder.Encode(p)
+	if err != nil {
+		panic(fmt.Sprintf("encode %T: %v", p, err))
+	}
+	return withQuery(path, q)
 }

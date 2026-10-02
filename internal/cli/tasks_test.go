@@ -32,7 +32,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 		t.Fatalf("CreateTask result = %+v", created)
 	}
 
-	list, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "proj"})
+	list, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "proj"})
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
@@ -855,7 +855,7 @@ func TestClientAssignmentCalls(t *testing.T) {
 	})
 
 	t.Run("ListTasks with Assignee sets the assignee query param", func(t *testing.T) {
-		if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{Assignee: "bob"}); err != nil {
+		if _, _, err := c.ListTasks(ctx, model.TaskListParams{Assignee: "bob"}); err != nil {
 			t.Fatalf("ListTasks: %v", err)
 		}
 		if gotMethod != http.MethodGet {
@@ -899,14 +899,14 @@ func TestClientAssignmentFlow(t *testing.T) {
 		t.Fatalf("AssignTask result assignee = %q, want bob", assigned.Assignee)
 	}
 
-	list, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "proj", Assignee: "bob"})
+	list, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "proj", Assignee: "bob"})
 	if err != nil {
 		t.Fatalf("ListTasks with Assignee: %v", err)
 	}
 	if len(list.Tasks) != 1 || list.Tasks[0].ID != task.ID {
 		t.Fatalf("ListTasks(Assignee=bob) = %+v, want just %s", list.Tasks, task.ID)
 	}
-	list, _, err = c.ListTasks(ctx, cli.TaskListFilter{Project: "proj", Assignee: "someone-else"})
+	list, _, err = c.ListTasks(ctx, model.TaskListParams{Project: "proj", Assignee: "someone-else"})
 	if err != nil {
 		t.Fatalf("ListTasks with non-matching Assignee: %v", err)
 	}

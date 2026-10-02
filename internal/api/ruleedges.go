@@ -79,3 +79,17 @@ func (s *server) unlinkRule(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// ruleedgeRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var ruleedgeRouteDocs = map[string]routeDoc{
+	"POST /api/v1/rules/{id}/edges": {
+		summary:   "Relate two rules with a typed edge",
+		request:   model.RuleEdgeInput{},
+		responses: map[int]any{http.StatusCreated: model.RuleEdgeInput{}},
+	},
+	"DELETE /api/v1/rules/{id}/edges": {
+		summary:   "Remove a typed edge between two rules",
+		request:   model.RuleEdgeInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+}

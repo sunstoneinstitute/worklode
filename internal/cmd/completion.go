@@ -90,7 +90,7 @@ func taskIDs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Comp
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	defer cancel()
-	resp, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: scope.Project})
+	resp, _, err := c.ListTasks(ctx, model.TaskListParams{Project: scope.Project})
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -214,7 +214,7 @@ func docRefsFiltered(cmd *cobra.Command, toComplete string, deleted bool) ([]cob
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	defer cancel()
-	resp, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: scope.Project, Deleted: deleted})
+	resp, _, err := c.ListDocs(ctx, model.DocListParams{Project: scope.Project, Deleted: deleted})
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -275,7 +275,7 @@ func ruleRefAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 		defer cancel()
-		rules, _, err := c.ListRules(ctx, cli.RuleListFilter{Project: scope.Project})
+		rules, _, err := c.ListRules(ctx, model.RuleListParams{Project: scope.Project})
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}

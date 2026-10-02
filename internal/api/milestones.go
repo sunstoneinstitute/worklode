@@ -141,13 +141,13 @@ func (s *server) recordMilestoneDelete(ctx context.Context, source, id string, c
 // cascade, and a cascade refused by a deliverable's approvals, both come back
 // as 422 naming what to do about it, and nothing is committed.
 func (s *server) deleteMilestone(w http.ResponseWriter, r *http.Request) {
-	cascade, err := queryBool(r.URL.Query(), "cascade")
-	if err != nil {
-		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+	var p model.MilestoneDeleteParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	deleted, err := s.recordMilestoneDelete(r.Context(), "cli", r.PathValue("id"), cascade, actorIDFrom(r))
-	s.observeMilestoneChange(milestoneDeleteAction(cascade), err)
+	deleted, err := s.recordMilestoneDelete(r.Context(), "cli", r.PathValue("id"), p.Cascade, actorIDFrom(r))
+	s.observeMilestoneChange(milestoneDeleteAction(p.Cascade), err)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -337,4 +337,26 @@ func referenceFormMessage(err error) string {
 		return "This milestone already references that deliverable."
 	}
 	return formMessage(strings.TrimSuffix(err.Error(), ": "+store.ErrInvalidInput.Error()))
+}
+
+// milestoneRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var milestoneRouteDocs = map[string]routeDoc{
+	"GET /api/v1/projects/{id}/milestones": {
+		summary:   "List a project's milestones",
+		responses: map[int]any{http.StatusOK: model.MilestoneListResponse{}},
+	},
+	"POST /api/v1/projects/{id}/milestones": {
+		summary:   "Create a milestone on a project",
+		request:   model.CreateMilestoneInput{},
+		responses: map[int]any{http.StatusCreated: model.Milestone{}},
+	},
+	"GET /api/v1/milestones/{id}": {
+		summary:   "Get a milestone and its children",
+		responses: map[int]any{http.StatusOK: model.MilestoneDetail{}},
+	},
+	"DELETE /api/v1/milestones/{id}": {
+		summary:   "Delete a milestone",
+		responses: map[int]any{http.StatusOK: model.MilestoneDeletion{}},
+		params:    model.MilestoneDeleteParams{},
+	},
 }

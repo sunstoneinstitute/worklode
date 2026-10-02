@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-scripts test-e2e vet clean graph-serve graph-query FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query FORCE
 
 # 053 §1: six executables from one module. The three user binaries are what
 # Homebrew and Scoop install; the other three ship in the container images.
@@ -41,6 +41,10 @@ test-e2e: ## Run the e2e suite (requires TEST_POSTGRES_DSN reachable)
 
 vet: ## Run go vet
 	go vet ./...
+
+openapi: ## Write the generated OpenAPI 3.1 document to bin/openapi.json
+	@mkdir -p bin
+	LODE_OPENAPI_OUT=$(CURDIR)/bin/openapi.json go test -trimpath -count=1 ./internal/api -run '^TestOpenAPIWrite$$'
 
 clean: ## Remove build output
 	rm -rf bin
