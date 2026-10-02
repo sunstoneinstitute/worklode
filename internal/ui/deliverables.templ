@@ -35,9 +35,7 @@ templ Deliverables(v DeliverablesView) {
 					<div class="bd">
 						if v.totalRows() == 0 {
 							<p class="muted">
-								No deliverable is declared for this project yet. A deliverable is
-								what the project ships &mdash; a dataset, an analysis, a report,
-								a story &mdash; and declaring one states the intent, not that it exists.
+								No deliverable is declared for this project yet.
 							</p>
 						} else if len(v.Groups) <= 1 {
 							<div class="dod">
@@ -52,15 +50,6 @@ templ Deliverables(v DeliverablesView) {
 						}
 					</div>
 				</section>
-				<p class="muted small">
-					Deliverable state is reported, never declared (spec 029 §3.2), and a row
-					says which of three things it is showing. Emitters and the prober report
-					observed facts: a data catalog files a state against the declared address,
-					the prober checks that address on a schedule. People report the rest with
-					the Report control, and those rows are marked User-reported, because a
-					person saying a thing shipped is a claim, not a check. A row with neither
-					says Declared, which is all a declaration carries on its own.
-				</p>
 			</div>
 		}
 	}
