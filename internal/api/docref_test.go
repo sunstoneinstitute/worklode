@@ -71,7 +71,7 @@ func TestDocPageLinksAndStripsFrontmatter(t *testing.T) {
 	if !strings.Contains(page, `href="/docs/ref/004?p=WL#sec-2"`) {
 		t.Errorf("body reference not autolinked to its project:\n%s", page)
 	}
-	if !strings.Contains(page, "/docs/ref/004-backbone#sec-2") {
+	if !strings.Contains(page, `href="/projects/proj/spec/4#sec-2"`) {
 		t.Errorf("relation link carries no #fragment:\n%s", page)
 	}
 }
