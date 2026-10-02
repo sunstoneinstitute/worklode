@@ -14,7 +14,7 @@ func TestClientSkillsList(t *testing.T) {
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 	seedSkill(t, st, "debugging", "Systematic debugging loop")
 
-	skills, raw, err := c.Skills(context.Background())
+	skills, raw, err := c.Skills(context.Background(), false)
 	if err != nil {
 		t.Fatalf("Skills: %v", err)
 	}

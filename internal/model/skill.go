@@ -14,6 +14,12 @@ type SkillsListResponse struct {
 	Skills []Skill `json:"skills"`
 }
 
+// SkillListParams is the query string of GET /api/v1/skills.
+type SkillListParams struct {
+	// Deleted also lists soft-deleted skills.
+	Deleted bool `query:"deleted,omitempty"`
+}
+
 // SkillMatch is one embedding-recommendation hit.
 type SkillMatch struct {
 	Name        string  `json:"name"`

@@ -23,12 +23,8 @@ func (c *Client) BlockerTree(ctx context.Context, id string) (model.BlockerTree,
 // BlockerForest calls GET /api/v1/blockers?project=<id>: one tree per blocked
 // task in scope. An empty project spans every project.
 func (c *Client) BlockerForest(ctx context.Context, project string) (model.BlockerForest, []byte, error) {
-	q := url.Values{}
-	if project != "" {
-		q.Set("project", project)
-	}
 	return doJSON[model.BlockerForest](ctx, c,
-		http.MethodGet, withQuery("/api/v1/blockers", q), nil, "blocker forest")
+		http.MethodGet, withParams("/api/v1/blockers", model.BlockersParams{Project: project}), nil, "blocker forest")
 }
 
 // BlockerForestRender prints one BlockerTreeRender block per tree, blank-line

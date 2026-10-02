@@ -74,7 +74,7 @@ func newDocTransferCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				resp, _, err := c.ListDocs(cmd.Context(), cli.DocListFilter{Project: sc.Project, Owner: from})
+				resp, _, err := c.ListDocs(cmd.Context(), model.DocListParams{Project: sc.Project, Owner: from})
 				if err != nil {
 					return err
 				}

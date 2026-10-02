@@ -113,3 +113,16 @@ func (s *server) createArtifactReport(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.WebhookAck{Status: status})
 }
+
+// probeRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var probeRouteDocs = map[string]routeDoc{
+	"GET /api/v1/probe-targets": {
+		summary:   "List artifact addresses for the prober to poll",
+		responses: map[int]any{http.StatusOK: model.ProbeTargetsResponse{}},
+	},
+	"POST /api/v1/artifact-reports": {
+		summary:   "Record a probed artifact state as evidence against declaring entities",
+		request:   model.ArtifactReportInput{},
+		responses: map[int]any{http.StatusOK: model.WebhookAck{}},
+	},
+}

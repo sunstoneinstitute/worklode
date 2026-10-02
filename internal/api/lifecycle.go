@@ -351,3 +351,42 @@ func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 			return store.ClearTaskCommits(tx, taskID)
 		})
 }
+
+// lifecycleRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var lifecycleRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/claim-next": {
+		summary:   "Claim the top-ranked ready task",
+		request:   model.ClaimNextInput{},
+		responses: map[int]any{http.StatusOK: model.ClaimNextResponse{}},
+	},
+	"POST /api/v1/tasks/{id}/claim": {
+		summary: "Claim a task by id",
+		request: model.ClaimInput{},
+		responses: map[int]any{
+			http.StatusOK:       model.ClaimResponse{},
+			http.StatusConflict: model.ClaimConflictResponse{},
+		},
+	},
+	"POST /api/v1/tasks/{id}/renew": {
+		summary:   "Renew the caller's lease on a task",
+		request:   model.RenewInput{},
+		responses: map[int]any{http.StatusOK: model.Lease{}},
+	},
+	"POST /api/v1/tasks/{id}/release": {
+		summary:   "Release the caller's lease on a task",
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/tasks/{id}/state": {
+		summary:   "Move a task to one of its manually settable states",
+		request:   model.SetTaskStateInput{},
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"POST /api/v1/tasks/{id}/abandon": {
+		summary:   "Abandon a task",
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"POST /api/v1/tasks/{id}/reopen": {
+		summary:   "Reopen a delivered or abandoned task back to ready",
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+}

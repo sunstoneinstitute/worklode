@@ -399,8 +399,8 @@ func TestDriftAcknowledgedFlag(t *testing.T) {
 	if _, err := runLode(t, "graph", "drift", "--acknowledged", "--json"); err != nil {
 		t.Fatalf("drift --acknowledged: %v", err)
 	}
-	if !strings.Contains(gotQuery, "acknowledged=1") {
-		t.Fatalf("query = %q; want acknowledged=1", gotQuery)
+	if !strings.Contains(gotQuery, "acknowledged=true") {
+		t.Fatalf("query = %q; want acknowledged=true", gotQuery)
 	}
 }
 

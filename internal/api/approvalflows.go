@@ -169,3 +169,12 @@ func mergeFlows(base, override []model.ApprovalFlow) []model.ApprovalFlow {
 	}
 	return out
 }
+
+// approvalflowRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var approvalflowRouteDocs = map[string]routeDoc{
+	"POST /api/v1/projects/{id}/approval-flow": {
+		summary:   "Apply an approval flow to a project",
+		request:   model.ApplyApprovalFlowInput{},
+		responses: map[int]any{http.StatusOK: model.ApplyApprovalFlowResponse{}},
+	},
+}

@@ -45,3 +45,12 @@ type Brief struct {
 	// accepted invariants (WL-SPEC-77 §4), as TaskDetail carries them.
 	GovernedBy []TaskGovernance `json:"governed_by,omitempty"`
 }
+
+// BriefParams is the query string of GET /api/v1/tasks/{id}/brief?skills=.
+// Skills is a pointer so the client can send skills=false explicitly (for
+// callers that want the task row or the lease and nothing else — it skips
+// pin resolution, the inlined bodies, and the embedding round trip); nil (the
+// parameter omitted) behaves as true.
+type BriefParams struct {
+	Skills *bool `query:"skills,omitempty"`
+}

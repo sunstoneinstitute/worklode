@@ -39,32 +39,26 @@ func (s *server) failedOverviewRead(w http.ResponseWriter, read string, err erro
 
 // getOverview handles GET /api/v1/overview?project=<id>.
 func (s *server) getOverview(w http.ResponseWriter, r *http.Request) {
-	o, err := s.overview.Roll(r.Context(), r.URL.Query().Get("project"))
+	var p model.OverviewParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	o, err := s.overview.Roll(r.Context(), p.Project)
 	if s.failedOverviewRead(w, readOverview, err) {
 		return
 	}
 	writeJSON(w, http.StatusOK, o)
 }
 
-// queryFlag reads a boolean query parameter the way a caller writes one: an
-// absent parameter is false, a bare `?flag` is true, and only an explicit
-// false value turns it off. Get alone reads `?flag` as false and `?flag=0` as
-// true, which is backwards on both.
-func queryFlag(r *http.Request, name string) bool {
-	q := r.URL.Query()
-	if !q.Has(name) {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(q.Get(name))) {
-	case "0", "false", "no", "off":
-		return false
-	}
-	return true
-}
-
 // getDrift handles GET /api/v1/drift?acknowledged=1.
 func (s *server) getDrift(w http.ResponseWriter, r *http.Request) {
-	d, err := s.overview.DriftReport(r.Context(), queryFlag(r, "acknowledged"))
+	var p model.DriftParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	d, err := s.overview.DriftReport(r.Context(), p.Acknowledged)
 	if s.failedOverviewRead(w, readDrift, err) {
 		return
 	}
@@ -83,7 +77,12 @@ func (s *server) getGaps(w http.ResponseWriter, r *http.Request) {
 // getFrontier handles GET /api/v1/frontier?project=<id> — the read-only
 // mirror of the backbone frontier, pre-sorted by the D9 key.
 func (s *server) getFrontier(w http.ResponseWriter, r *http.Request) {
-	tasks, err := s.overview.Frontier(r.Context(), r.URL.Query().Get("project"))
+	var p model.FrontierParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	tasks, err := s.overview.Frontier(r.Context(), p.Project)
 	if s.failedOverviewRead(w, readFrontier, err) {
 		return
 	}
@@ -209,4 +208,35 @@ func (s *server) runServerDerivers(ctx context.Context) ([]model.DeriveResult, e
 		return out, err
 	}
 	return append(out, res), nil
+}
+
+// overviewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var overviewRouteDocs = map[string]routeDoc{
+	"GET /api/v1/overview": {
+		summary:   "Roll up a project's spec, plan and task status",
+		responses: map[int]any{http.StatusOK: model.Overview{}},
+		params:    model.OverviewParams{},
+	},
+	"GET /api/v1/drift": {
+		summary:   "List drift between the backbone and observed reality",
+		responses: map[int]any{http.StatusOK: model.Drift{}},
+		params:    model.DriftParams{},
+	},
+	"GET /api/v1/gaps": {
+		summary:   "List backbone gaps",
+		responses: map[int]any{http.StatusOK: model.GapList{}},
+	},
+	"GET /api/v1/frontier": {
+		summary:   "List the frontier of claimable tasks for a project",
+		responses: map[int]any{http.StatusOK: model.FrontierList{}},
+		params:    model.FrontierParams{},
+	},
+	"GET /api/v1/critical-path": {
+		summary:   "Get the critical path across open tasks",
+		responses: map[int]any{http.StatusOK: model.CriticalPath{}},
+	},
+	"POST /api/v1/derive": {
+		summary:   "Run the server-side deploy and pr-affects derivers on demand",
+		responses: map[int]any{http.StatusOK: model.DeriveResponse{}},
+	},
 }

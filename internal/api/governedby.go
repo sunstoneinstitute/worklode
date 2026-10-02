@@ -66,3 +66,17 @@ func (s *server) ungovern(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// governedbyRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var governedbyRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks/{id}/governed-by": {
+		summary:   "Add a governing rule to a task",
+		request:   model.GovernInput{},
+		responses: map[int]any{http.StatusCreated: model.GovernInput{}},
+	},
+	"DELETE /api/v1/tasks/{id}/governed-by": {
+		summary:   "Remove a governing rule from a task",
+		request:   model.GovernInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+}

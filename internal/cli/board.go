@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -15,11 +14,8 @@ import (
 
 // Board calls GET /api/v1/board. An empty project fetches every project.
 func (c *Client) Board(ctx context.Context, project string) (model.BoardResponse, []byte, error) {
-	q := url.Values{}
-	if project != "" {
-		q.Set("project", project)
-	}
-	return doJSON[model.BoardResponse](ctx, c, http.MethodGet, withQuery("/api/v1/board", q), nil, "board")
+	return doJSON[model.BoardResponse](ctx, c, http.MethodGet,
+		withParams("/api/v1/board", model.BoardParams{Project: project}), nil, "board")
 }
 
 // BoardRender prints one section per project, one table per non-empty

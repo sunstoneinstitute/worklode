@@ -18,3 +18,10 @@ type EntityEdge struct {
 type ReferenceListResponse struct {
 	References []EntityEdge `json:"references"`
 }
+
+// ReferenceListParams is the query string of GET /api/v1/references. Both
+// fields are required; the handler answers 422 when either is empty.
+type ReferenceListParams struct {
+	Kind string `query:"kind,omitempty"`
+	ID   string `query:"id,omitempty"`
+}

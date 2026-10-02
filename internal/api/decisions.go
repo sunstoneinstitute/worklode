@@ -106,3 +106,30 @@ func (s *server) mapDecisionErr(w http.ResponseWriter, err error) {
 		s.mapStoreErr(w, err)
 	}
 }
+
+// decisionRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var decisionRouteDocs = map[string]routeDoc{
+	"GET /api/v1/tasks/{id}/decisions": {
+		summary:   "List the questions a task poses",
+		responses: map[int]any{http.StatusOK: []model.Decision{}},
+	},
+	"GET /api/v1/tasks/{id}/decisions/{key}": {
+		summary:   "Get one posed question and its answer",
+		responses: map[int]any{http.StatusOK: model.Decision{}},
+	},
+	"POST /api/v1/tasks/{id}/decisions": {
+		summary:   "Pose a question against a task",
+		request:   model.DecisionInput{},
+		responses: map[int]any{http.StatusCreated: model.Decision{}},
+	},
+	"PATCH /api/v1/tasks/{id}/decisions/{key}": {
+		summary:   "Edit an unanswered posed question",
+		request:   model.DecisionInput{},
+		responses: map[int]any{http.StatusOK: model.Decision{}},
+	},
+	"POST /api/v1/tasks/{id}/decisions/{key}/decide": {
+		summary:   "Answer a posed question",
+		request:   model.DecisionAnswer{},
+		responses: map[int]any{http.StatusOK: model.Decision{}},
+	},
+}

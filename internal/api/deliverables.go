@@ -298,3 +298,30 @@ func (s *server) patchDeliverable(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, d)
 }
+
+// deliverableRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var deliverableRouteDocs = map[string]routeDoc{
+	"GET /api/v1/projects/{id}/deliverables": {
+		summary:   "List a project's deliverables",
+		responses: map[int]any{http.StatusOK: model.DeliverableListResponse{}},
+	},
+	"POST /api/v1/projects/{id}/deliverables": {
+		summary:   "Declare a deliverable on a project",
+		request:   model.CreateDeliverableInput{},
+		responses: map[int]any{http.StatusCreated: model.Deliverable{}},
+	},
+	"PATCH /api/v1/deliverables/{id}": {
+		summary:   "Reparent a deliverable to another milestone",
+		request:   model.EditDeliverableInput{},
+		responses: map[int]any{http.StatusOK: model.Deliverable{}},
+	},
+	"POST /api/v1/deliverables/{id}/report": {
+		summary:   "Report a deliverable's observed state",
+		request:   model.ReportDeliverableInput{},
+		responses: map[int]any{http.StatusOK: model.Deliverable{}},
+	},
+	"GET /api/v1/deliverables/{id}": {
+		summary:   "Get a deliverable",
+		responses: map[int]any{http.StatusOK: model.Deliverable{}},
+	},
+}

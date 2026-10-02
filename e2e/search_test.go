@@ -188,7 +188,7 @@ func skillTarball(t *testing.T) []byte {
 // --- helpers --------------------------------------------------------------
 
 // searchOrFail runs one search and fails the test on error.
-func searchOrFail(t *testing.T, c *cli.Client, f cli.SearchFilter) model.SearchResponse {
+func searchOrFail(t *testing.T, c *cli.Client, f model.SearchParams) model.SearchResponse {
 	t.Helper()
 	resp, _, err := c.Search(context.Background(), f)
 	if err != nil {
@@ -370,7 +370,7 @@ func TestSearchJourney(t *testing.T) {
 	semantic := "how do leases interact with worktree pruning"
 	var semanticResp model.SearchResponse
 	eventually(t, "the corpus to index and answer a semantic query across all three kinds", func() bool {
-		semanticResp = searchOrFail(t, admin, cli.SearchFilter{Query: semantic, Limit: 20})
+		semanticResp = searchOrFail(t, admin, model.SearchParams{Q: semantic, Limit: 20})
 		got := kindsOf(semanticResp.Hits)
 		return got["doc"] && got["task"] && got["skill"]
 	})
@@ -385,7 +385,7 @@ func TestSearchJourney(t *testing.T) {
 	// §13.2: the identifier query. The lexical arm ranks the section that
 	// literally contains child_of first; the dense arm does not, and the
 	// fused ranking follows the lexical arm.
-	hybrid := searchOrFail(t, admin, cli.SearchFilter{Query: "child_of", Limit: 20})
+	hybrid := searchOrFail(t, admin, model.SearchParams{Q: "child_of", Limit: 20})
 	if len(hybrid.Hits) == 0 {
 		t.Fatal("hybrid search for child_of returned nothing")
 	}
@@ -399,7 +399,7 @@ func TestSearchJourney(t *testing.T) {
 	// first. This is §0's measured inversion, kept as a regression test: if
 	// someone weakens the lexical arm, hybrid stops being better than dense
 	// and this fails rather than quietly degrading.
-	dense := searchOrFail(t, admin, cli.SearchFilter{Query: "child_of", Mode: model.SearchDense, Limit: 20})
+	dense := searchOrFail(t, admin, model.SearchParams{Q: "child_of", Mode: model.SearchDense, Limit: 20})
 	if len(dense.Hits) == 0 {
 		t.Fatal("dense search for child_of returned nothing: the fixture no longer exercises the inversion")
 	}
@@ -420,7 +420,7 @@ func TestSearchJourney(t *testing.T) {
 	// §13.6, observed from outside: `child_of` must not match the prose in
 	// sec-2, which reads "the child task of a parent". Under `english` it
 	// would; under `simple` the query is the phrase child <-> of.
-	lexical := searchOrFail(t, admin, cli.SearchFilter{Query: "child_of", Mode: model.SearchLexical, Limit: 20})
+	lexical := searchOrFail(t, admin, model.SearchParams{Q: "child_of", Mode: model.SearchLexical, Limit: 20})
 	for _, h := range lexical.Hits {
 		if h.Kind == "doc" && h.DocID == doc.ID && h.Anchor == "sec-2" {
 			t.Fatalf("the lexical arm matched prose about children on the query child_of; the text search configuration is not `simple`:%s",
@@ -558,7 +558,7 @@ func TestSearchWithoutProvider(t *testing.T) {
 	// Real results, from a corpus indexed with no vectors at all.
 	var resp model.SearchResponse
 	eventually(t, "lexical-only search to answer over both subject kinds", func() bool {
-		resp = searchOrFail(t, admin, cli.SearchFilter{Query: "worktree pruning leases", Limit: 20})
+		resp = searchOrFail(t, admin, model.SearchParams{Q: "worktree pruning leases", Limit: 20})
 		got := kindsOf(resp.Hits)
 		return got["doc"] && got["task"]
 	})
@@ -579,8 +579,8 @@ func TestSearchWithoutProvider(t *testing.T) {
 
 	// Asking for hybrid, or even for dense, still answers lexically rather
 	// than erroring: the response reports what it actually did (§11).
-	forced := searchOrFail(t, admin, cli.SearchFilter{
-		Query: "worktree pruning leases", Mode: model.SearchDense, Limit: 20})
+	forced := searchOrFail(t, admin, model.SearchParams{
+		Q: "worktree pruning leases", Mode: model.SearchDense, Limit: 20})
 	if forced.Mode != model.SearchLexical || forced.Provider != "none" || len(forced.Hits) == 0 {
 		t.Fatalf("mode=dense with no provider: mode=%q provider=%q hits=%d, want a lexical answer with real hits",
 			forced.Mode, forced.Provider, len(forced.Hits))

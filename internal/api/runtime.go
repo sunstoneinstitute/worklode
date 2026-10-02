@@ -78,3 +78,15 @@ func (s *server) createRuntimeEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusCreated, model.RuntimeEventAck{ID: id, Status: "ok"})
 }
+
+// runtimeRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var runtimeRouteDocs = map[string]routeDoc{
+	"POST /api/v1/runtime-events": {
+		summary: "Record a crash-loop or OOM event from the runtime watcher",
+		request: model.RuntimeEventInput{},
+		responses: map[int]any{
+			http.StatusOK:      model.RuntimeEventAck{}, // duplicate: a redelivered dedupe_key
+			http.StatusCreated: model.RuntimeEventAck{},
+		},
+	},
+}

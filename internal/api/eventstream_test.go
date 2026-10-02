@@ -314,12 +314,19 @@ func TestEventStreamRejectsBadCursor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	for _, q := range []string{"?after=not-an-int", "?after=-1"} {
-		resp := streamRequest(t, ctx, f, q, f.adminToken, "")
-		if resp.StatusCode != http.StatusUnprocessableEntity {
-			resp.Body.Close()
-			t.Fatalf("GET /api/v1/events/stream%s status = %d, want 422", q, resp.StatusCode)
-		}
+	// A value readQuery itself cannot parse as int64 is a 400, caught before
+	// beginEventStream ever runs; a value that parses fine but fails
+	// beginEventStream's own non-negative check is still 422.
+	if resp := streamRequest(t, ctx, f, "?after=not-an-int", f.adminToken, ""); resp.StatusCode != http.StatusBadRequest {
+		resp.Body.Close()
+		t.Fatalf("GET /api/v1/events/stream?after=not-an-int status = %d, want 400", resp.StatusCode)
+	} else {
+		resp.Body.Close()
+	}
+	if resp := streamRequest(t, ctx, f, "?after=-1", f.adminToken, ""); resp.StatusCode != http.StatusUnprocessableEntity {
+		resp.Body.Close()
+		t.Fatalf("GET /api/v1/events/stream?after=-1 status = %d, want 422", resp.StatusCode)
+	} else {
 		resp.Body.Close()
 	}
 

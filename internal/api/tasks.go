@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -310,33 +308,30 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 // deliberately not triggered.
 func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	from, err := dayParam(r, "from")
+	var p model.TaskCostParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	from, err := parseDay("from", p.From)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	to, err := dayParam(r, "to")
+	to, err := parseDay("to", p.To)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
-	}
-	var children bool
-	if raw := r.URL.Query().Get("children"); raw != "" {
-		children, err = strconv.ParseBool(raw)
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, "invalid children: want true or false")
-			return
-		}
 	}
 
-	tc, err := s.st.TaskCost(r.Context(), id, children, from, to)
+	tc, err := s.st.TaskCost(r.Context(), id, p.Children, from, to)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, model.TaskCost{
 		Task:             id,
-		IncludesChildren: children,
+		IncludesChildren: p.Children,
 		Sessions:         tc.Sessions,
 		Cost:             toCostReportJSON(&tc.CostReport),
 	})
@@ -355,37 +350,36 @@ func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 // bulk queries; tree=true answers with the hierarchy instead of a flat list
 // (see listTaskTree), and root names the single container it covers.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+	var p model.TaskListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	// Normalised so `lode task list --kind spec` keeps returning the rows
 	// migration 0025 rewrote to design, rather than an empty set.
-	kind := s.normalizeTaskKind(q.Get("kind"), "list")
+	kind := s.normalizeTaskKind(p.Kind, "list")
 	var states []string
-	for _, v := range q["state"] {
+	for _, v := range p.States {
 		for _, part := range strings.Split(v, ",") {
-			if p := strings.TrimSpace(part); p != "" {
-				states = append(states, p)
+			if pp := strings.TrimSpace(part); pp != "" {
+				states = append(states, pp)
 			}
 		}
 	}
 	// tree=true answers with the hierarchy instead of a flat list, and is
 	// checked before the remaining filters because it reads only project and
 	// state (plus root); see listTaskTree.
-	tree, err := queryBool(q, "tree")
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if tree {
-		s.listTaskTree(w, r, q, states)
+	if p.Tree {
+		s.listTaskTree(w, r, p, states)
 		return
 	}
 	// The repo filter takes any remote URL form as well as owner/name, and is
 	// normalized here rather than in the client for resolveProjectByRemote's
 	// reason: a normalization fix must ship without a client upgrade.
 	var repo string
-	if raw := q.Get("repo"); raw != "" {
+	if p.Repo != "" {
 		var err error
-		if repo, err = repourl.Normalize(raw); err != nil {
+		if repo, err = repourl.Normalize(p.Repo); err != nil {
 			writeErr(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
@@ -394,63 +388,56 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	// ignored one looks like a working incremental sync while returning
 	// everything, which the client would then take as "all of this changed".
 	var updatedSince time.Time
-	if raw := q.Get("updated_since"); raw != "" {
+	if p.UpdatedSince != "" {
 		var err error
-		if updatedSince, err = time.Parse(time.RFC3339, raw); err != nil {
+		if updatedSince, err = time.Parse(time.RFC3339, p.UpdatedSince); err != nil {
 			writeErr(w, http.StatusUnprocessableEntity, "updated_since must be an RFC3339 timestamp, e.g. 2026-08-18T09:30:00Z")
 			return
 		}
 	}
 	// A plan_doc that does not parse is refused rather than ignored, the same
 	// stance updated_since takes: silently dropping it would read as "no
-	// tasks minted" instead of "the query was malformed".
+	// tasks minted" instead of "the query was malformed". PlanDoc is a
+	// pointer so an explicit non-positive value (including 0) can be told
+	// apart from the parameter being absent and refused the same way it was
+	// before the params struct existed.
 	var planDoc int64
-	if raw := q.Get("plan_doc"); raw != "" {
-		var err error
-		if planDoc, err = strconv.ParseInt(raw, 10, 64); err != nil || planDoc <= 0 {
+	if p.PlanDoc != nil {
+		if *p.PlanDoc <= 0 {
 			writeErr(w, http.StatusBadRequest, "plan_doc must be a positive integer")
 			return
 		}
+		planDoc = *p.PlanDoc
 	}
-	// Same stance as plan_doc: a non-numeric about_doc is refused rather than
-	// silently ignored.
+	// Same stance as plan_doc.
 	var aboutDoc int64
-	if raw := q.Get("about_doc"); raw != "" {
-		var err error
-		if aboutDoc, err = strconv.ParseInt(raw, 10, 64); err != nil || aboutDoc <= 0 {
+	if p.AboutDoc != nil {
+		if *p.AboutDoc <= 0 {
 			writeErr(w, http.StatusBadRequest, "about_doc must be a positive integer")
 			return
 		}
-	}
-	// A switch, not an addition (044 §5): ?deleted=true lists the tombstoned
-	// rows instead of the live ones, because a list mixing the two invites
-	// acting on a row that is not there. A non-boolean value is named rather
-	// than read as off, the same stance queryBool takes everywhere else.
-	deleted, err := queryBool(q, "deleted")
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
+		aboutDoc = *p.AboutDoc
 	}
 	tasks, err := s.st.ListTasks(r.Context(), store.TaskFilter{
-		Project:  q.Get("project"),
+		Project:  p.Project,
 		States:   states,
-		Priority: q.Get("priority"),
+		Priority: p.Priority,
 		Kind:     kind,
-		Parent:   q.Get("parent"),
-		Assignee: q.Get("assignee"),
+		Parent:   p.Parent,
+		Assignee: p.Assignee,
 		Repo:     repo,
 
-		HasChildren:  q.Get("has_children") == "true",
+		HasChildren:  p.HasChildren,
 		UpdatedSince: updatedSince,
 		PlanDoc:      planDoc,
 		AboutDoc:     aboutDoc,
-		Deleted:      deleted,
+		Deleted:      p.Deleted,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
-	if q.Get("detail") != "true" {
+	if !p.Detail {
 		resp := model.TaskListResponse{Tasks: make([]model.Task, 0, len(tasks))}
 		resp.Tasks = append(resp.Tasks, tasks...)
 		writeJSON(w, http.StatusOK, resp)
@@ -493,12 +480,12 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 // counts and the listed children describe the same set. root reports that one
 // task and its children instead, whatever its own parentage. The other list
 // filters do not apply and are ignored.
-func (s *server) listTaskTree(w http.ResponseWriter, r *http.Request, q url.Values, states []string) {
+func (s *server) listTaskTree(w http.ResponseWriter, r *http.Request, p model.TaskListParams, states []string) {
 	s.observeListExpansion("tasks", "tree")
 	nodes, err := s.st.TaskTree(r.Context(), store.TaskTreeFilter{
-		Project: q.Get("project"),
+		Project: p.Project,
 		States:  states,
-		Root:    q.Get("root"),
+		Root:    p.Root,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -884,4 +871,50 @@ func (s *server) publishTasksFromPage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.observeProgressWrite("publish", "ok")
 	writeJSON(w, http.StatusOK, model.TaskPublishResponse{Published: ids})
+}
+
+// taskRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var taskRouteDocs = map[string]routeDoc{
+	"POST /api/v1/tasks": {
+		summary:   "Create a task",
+		request:   model.CreateTaskInput{},
+		responses: map[int]any{http.StatusCreated: model.Task{}},
+	},
+	// listTasks also answers tree=true with model.TaskTreeResponse (via
+	// listTaskTree) and detail=true with model.TaskListDetailResponse; this
+	// documents the flat, non-detail default response.
+	"GET /api/v1/tasks": {
+		summary:   "List tasks, optionally as a hierarchy or with detail",
+		responses: map[int]any{http.StatusOK: model.TaskListResponse{}},
+		params:    model.TaskListParams{},
+	},
+	"GET /api/v1/tasks/{id}": {
+		summary:   "Get a task's full detail",
+		responses: map[int]any{http.StatusOK: model.TaskDetail{}},
+	},
+	"GET /api/v1/tasks/{id}/cost": {
+		summary:   "Get a task's accounted usage and cost",
+		responses: map[int]any{http.StatusOK: model.TaskCost{}},
+		params:    model.TaskCostParams{},
+	},
+	"PATCH /api/v1/tasks/{id}": {
+		summary:   "Update a task's fields",
+		request:   model.EditTaskInput{},
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
+	"PUT /api/v1/tasks/{id}/skills": {
+		summary:   "Set a task's pinned skills",
+		request:   model.SetSkillsInput{},
+		responses: map[int]any{http.StatusOK: model.TaskSkills{}},
+	},
+	"POST /api/v1/tasks/{id}/edges": {
+		summary:   "Add an edge from or to a task",
+		request:   model.EdgeInput{},
+		responses: map[int]any{http.StatusCreated: model.Edge{}},
+	},
+	"DELETE /api/v1/tasks/{id}/edges": {
+		summary:   "Remove an edge from or to a task",
+		request:   model.EdgeInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
 }

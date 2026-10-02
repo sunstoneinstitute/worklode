@@ -38,10 +38,7 @@ func (c *Client) GetMilestone(ctx context.Context, id string) (model.MilestoneDe
 // a deliverable carrying approvals — is a *ClientError naming it, and nothing
 // was deleted.
 func (c *Client) DeleteMilestone(ctx context.Context, id string, cascade bool) (model.MilestoneDeletion, []byte, error) {
-	path := "/api/v1/milestones/" + url.PathEscape(id)
-	if cascade {
-		path += "?cascade=true"
-	}
+	path := withParams("/api/v1/milestones/"+url.PathEscape(id), model.MilestoneDeleteParams{Cascade: cascade})
 	return doJSON[model.MilestoneDeletion](ctx, c, http.MethodDelete, path, nil, "milestone")
 }
 

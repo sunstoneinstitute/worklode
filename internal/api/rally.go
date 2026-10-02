@@ -26,3 +26,11 @@ func (s *server) getProjectRally(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, model.Rally{Task: *rally, Blockers: tree})
 }
+
+// rallyRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var rallyRouteDocs = map[string]routeDoc{
+	"GET /api/v1/projects/{id}/rally": {
+		summary:   "Get a project's active rally and its blocker tree",
+		responses: map[int]any{http.StatusOK: model.Rally{}},
+	},
+}

@@ -62,3 +62,11 @@ type CreateMilestoneInput struct {
 	Title    string `json:"title"`
 	Position int    `json:"position,omitempty"`
 }
+
+// MilestoneDeleteParams is the query string of DELETE /api/v1/milestones/{id}.
+type MilestoneDeleteParams struct {
+	// Cascade, when true, deletes the milestone's deliverables and detaches
+	// its tasks instead of refusing a delete on a milestone that still holds
+	// children.
+	Cascade bool `query:"cascade,omitempty"`
+}

@@ -11,43 +11,13 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// EventListFilter narrows ListEvents. Zero-valued fields do not filter.
-type EventListFilter struct {
-	Type  string
-	Since time.Time
-	After int64 // exclusive id cursor
-	Limit int
-}
-
 // ListEvents calls GET /api/v1/events.
-func (c *Client) ListEvents(ctx context.Context, f EventListFilter) (model.EventListResponse, []byte, error) {
-	q := url.Values{}
-	if f.Type != "" {
-		q.Set("type", f.Type)
-	}
-	if !f.Since.IsZero() {
-		q.Set("since", f.Since.UTC().Format(time.RFC3339))
-	}
-	if f.After != 0 {
-		q.Set("after", strconv.FormatInt(f.After, 10))
-	}
-	if f.Limit != 0 {
-		q.Set("limit", strconv.Itoa(f.Limit))
-	}
-	return doJSON[model.EventListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/events", q), nil, "event list")
-}
-
-// EventStreamFilter narrows StreamEvents. After is where the stream resumes
-// (exclusive); zero means the server picks the current head, so a bare follow
-// shows only what happens next.
-type EventStreamFilter struct {
-	Type  string
-	After int64
+func (c *Client) ListEvents(ctx context.Context, p model.EventListParams) (model.EventListResponse, []byte, error) {
+	return doJSON[model.EventListResponse](ctx, c, http.MethodGet, withParams("/api/v1/events", p), nil, "event list")
 }
 
 // maxSSELine caps one line of the stream. An event's payload is a webhook
@@ -76,16 +46,9 @@ var ErrStreamEnded = errors.New("event stream closed by the server")
 // A dropped connection is returned, not retried: reconnecting means deciding
 // what to do about the gap, and the server already has the mechanism for that
 // (Last-Event-ID). docs/follow-ups.md records it.
-func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(model.Event) error) error {
-	q := url.Values{}
-	if f.Type != "" {
-		q.Set("type", f.Type)
-	}
-	if f.After != 0 {
-		q.Set("after", strconv.FormatInt(f.After, 10))
-	}
+func (c *Client) StreamEvents(ctx context.Context, p model.EventStreamParams, fn func(model.Event) error) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		c.baseURL+withQuery("/api/v1/events/stream", q), nil)
+		c.baseURL+withParams("/api/v1/events/stream", p), nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}

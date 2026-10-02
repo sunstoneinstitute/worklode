@@ -187,10 +187,10 @@ func toCostReportJSON(pc *store.CostReport) model.CostReport {
 	return out
 }
 
-// dayParam reads an optional YYYY-MM-DD query parameter. An absent one yields
-// the zero time, which ProjectCost reads as unbounded on that side.
-func dayParam(r *http.Request, name string) (time.Time, error) {
-	v := r.URL.Query().Get(name)
+// parseDay parses one optional YYYY-MM-DD value from a params struct, for
+// project detail (getProject) and task cost (getTaskCost). An empty value
+// yields the zero time, which ProjectCost reads as unbounded on that side.
+func parseDay(name, v string) (time.Time, error) {
 	if v == "" {
 		return time.Time{}, nil
 	}
@@ -207,12 +207,17 @@ func dayParam(r *http.Request, name string) (time.Time, error) {
 // inclusive on both ends; either may be omitted for unbounded.
 func (s *server) getProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	from, err := dayParam(r, "from")
+	var params model.ProjectDetailParams
+	if err := readQuery(r, &params); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	from, err := parseDay("from", params.From)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	to, err := dayParam(r, "to")
+	to, err := parseDay("to", params.To)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -244,7 +249,12 @@ func (s *server) getProject(w http.ResponseWriter, r *http.Request) {
 // is run from. The URL is normalized here rather than in the CLI so a
 // normalization fix ships without a client upgrade.
 func (s *server) resolveProjectByRemote(w http.ResponseWriter, r *http.Request) {
-	repo, err := repourl.Normalize(r.URL.Query().Get("remote"))
+	var params model.ProjectResolveParams
+	if err := readQuery(r, &params); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	repo, err := repourl.Normalize(params.Remote)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -562,8 +572,12 @@ func (s *server) revokeToken(w http.ResponseWriter, r *http.Request) {
 
 // listInbox handles GET /api/v1/inbox?state=new&project=worklode.
 func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
-	issues, err := s.st.ListIssues(r.Context(),
-		r.URL.Query().Get("state"), r.URL.Query().Get("project"))
+	var p model.InboxListParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	issues, err := s.st.ListIssues(r.Context(), p.State, p.Project)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -744,7 +758,12 @@ func toRuntimeEventJSON(re *store.RuntimeEvent) model.RuntimeEvent {
 // board handles GET /api/v1/board?project=: a read-only summary of each
 // project's tasks bucketed by state, for the CLI's `lode board` command.
 func (s *server) board(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.assembleBoard(r.Context(), r.URL.Query().Get("project"))
+	var p model.BoardParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	resp, err := s.assembleBoard(r.Context(), p.Project)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -910,4 +929,86 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*mode
 	}
 
 	return resp, nil
+}
+
+// adminRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var adminRouteDocs = map[string]routeDoc{
+	"POST /api/v1/projects": {
+		summary:   "Create a project",
+		request:   model.CreateProjectInput{},
+		responses: map[int]any{http.StatusCreated: model.Project{}},
+	},
+	"GET /api/v1/projects": {
+		summary:   "List every project with its mapped repos",
+		responses: map[int]any{http.StatusOK: model.ProjectListResponse{}},
+	},
+	"GET /api/v1/projects/resolve": {
+		summary:   "Resolve the project mapped to a repo remote URL",
+		responses: map[int]any{http.StatusOK: model.Project{}},
+		params:    model.ProjectResolveParams{},
+	},
+	"GET /api/v1/projects/{id}": {
+		summary:   "Get a project with its repos and accounted cost",
+		responses: map[int]any{http.StatusOK: model.ProjectDetail{}},
+		params:    model.ProjectDetailParams{},
+	},
+	"PATCH /api/v1/projects/{id}": {
+		summary:   "Update a project's focus, pinned note, or next decision",
+		request:   model.PatchProjectInput{},
+		responses: map[int]any{http.StatusOK: model.Project{}},
+	},
+	"POST /api/v1/projects/{id}/repos": {
+		summary:   "Map a repo to a project",
+		request:   model.AddRepoInput{},
+		responses: map[int]any{http.StatusCreated: model.AddRepoResult{}},
+	},
+	"PATCH /api/v1/repos/{owner}/{name}": {
+		summary:   "Set a mapped repo's done state",
+		request:   model.SetRepoDoneStateInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"DELETE /api/v1/repos/{owner}/{name}": {
+		summary:   "Unmap a repo from its project",
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/actors": {
+		summary:   "Create an actor",
+		request:   model.CreateActorInput{},
+		responses: map[int]any{http.StatusCreated: model.Actor{}},
+	},
+	"POST /api/v1/actors/{id}/tokens": {
+		summary:   "Mint a token for an actor",
+		request:   model.CreateTokenInput{},
+		responses: map[int]any{http.StatusCreated: model.TokenResponse{}},
+	},
+	"DELETE /api/v1/tokens": {
+		summary:   "Revoke a token by plaintext or hash",
+		request:   model.RevokeTokenInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"GET /api/v1/board": {
+		summary:   "Get the board: each project's tasks bucketed by state",
+		responses: map[int]any{http.StatusOK: model.BoardResponse{}},
+		params:    model.BoardParams{},
+	},
+	"GET /api/v1/inbox": {
+		summary:   "List inbox issues",
+		responses: map[int]any{http.StatusOK: model.IssueListResponse{}},
+		params:    model.InboxListParams{},
+	},
+	"POST /api/v1/inbox/promote": {
+		summary:   "Promote an inbox issue into a task",
+		request:   model.PromoteInput{},
+		responses: map[int]any{http.StatusCreated: model.Task{}},
+	},
+	"POST /api/v1/inbox/dismiss": {
+		summary:   "Dismiss an inbox issue",
+		request:   model.DismissInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/inbox/link": {
+		summary:   "Link an inbox issue to an existing task",
+		request:   model.LinkInput{},
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
 }
