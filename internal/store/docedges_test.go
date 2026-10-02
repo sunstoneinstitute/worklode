@@ -800,7 +800,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	// unresolvable reference (to_doc NULL -> 0) sorts ahead of a resolved one.
 	specFar := func(e model.DocEdge) model.DocEdge {
 		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind, e.ToNumber = spec.ID, "p1", spec.Slug, "spec", 25
-		e.ToStatus = spec.Status
+		e.ToStatus, e.ToTitle, e.ToKey = spec.Status, spec.Title, "P1"
 		return e
 	}
 	wantOut := []model.DocEdge{
@@ -835,7 +835,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		// far end names one too.
 		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind = plan.ID, "p1", plan.Slug, "plan"
 		e.ToNumber = plan.Number
-		e.ToStatus = plan.Status
+		e.ToStatus, e.ToTitle, e.ToKey = plan.Status, plan.Title, "P1"
 		return e
 	}
 	wantIn := []model.DocEdge{
@@ -884,7 +884,7 @@ func TestDocListEdgesResolvesFarProject(t *testing.T) {
 	want := []model.DocEdge{{
 		Type: "wasDerivedFrom", ToDoc: far.ID,
 		ToProject: "p2", ToSlug: "007-far-spec", ToKind: "spec", ToNumber: 7,
-		ToStatus: far.Status,
+		ToStatus: far.Status, ToTitle: far.Title, ToKey: "P2",
 	}}
 	if !reflect.DeepEqual(out, want) {
 		t.Fatalf("edges out of the near plan = %+v, want %+v", out, want)
@@ -897,6 +897,7 @@ func TestDocListEdgesResolvesFarProject(t *testing.T) {
 	wantIn := []model.DocEdge{{
 		Type: "hadDerivation", ToDoc: near.ID, ToNumber: near.Number,
 		ToProject: "p1", ToSlug: "plan-across", ToKind: "plan", ToStatus: near.Status,
+		ToTitle: near.Title, ToKey: "P1",
 	}}
 	if !reflect.DeepEqual(in, wantIn) {
 		t.Fatalf("edges into the far spec = %+v, want %+v", in, wantIn)

@@ -981,7 +981,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
 		        coalesce(d.number,0), coalesce(d.status,''), coalesce(od.slug, e.owner_external, ''),
-		        coalesce(`+ruleRefSQL("rp", "r")+`, '')
+		        coalesce(`+ruleRefSQL("rp", "r")+`, ''), coalesce(d.title,''), coalesce(dp.key,'')
 		   FROM doc_edges e
 		   LEFT JOIN rules r ON r.id = e.to_rule
 		   LEFT JOIN projects rp ON rp.id = r.project_id
@@ -991,6 +991,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		             ORDER BY dr.doc_id, dr.position LIMIT 1
 		        ) ra ON true
 		   LEFT JOIN docs d ON d.id = coalesce(e.to_doc, ra.doc_id)
+		   LEFT JOIN projects dp ON dp.id = d.project_id
 		   LEFT JOIN docs od ON od.id = e.owner_doc
 		  WHERE e.from_doc = $1
 		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
@@ -1014,13 +1015,14 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	inRows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
 		        d.project_id, d.slug, d.kind, coalesce(d.number,0), d.status,
-		        coalesce(od.slug, e.owner_external, ''), ''
+		        coalesce(od.slug, e.owner_external, ''), '', d.title, dp.key
 		   FROM (SELECT type, from_doc, from_anchor, to_anchor, owner_doc, owner_external
 		           FROM doc_edges WHERE to_doc = $1
 		         UNION ALL
 		         SELECT 'covers', plan_id, NULL, anchor, NULL::bigint, NULL::text
 		           FROM covered_sections WHERE doc_id = $1) e
 		   JOIN docs d ON d.id = e.from_doc
+		   JOIN projects dp ON dp.id = d.project_id
 		   LEFT JOIN docs od ON od.id = e.owner_doc
 		  WHERE d.deleted_at IS NULL
 		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
@@ -1044,7 +1046,8 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 
 // scanDocEdges drains a query selecting the DocEdge columns in order: the
 // five stored ones, the joined far end's project, slug, kind, number and
-// status, the defers owner, then the rule ref.
+// status, the defers owner, the rule ref, then the far end's title and
+// project key.
 func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 	defer rows.Close()
 	var out []model.DocEdge
@@ -1052,7 +1055,7 @@ func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 		var e model.DocEdge
 		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal,
 			&e.ToProject, &e.ToSlug, &e.ToKind, &e.ToNumber, &e.ToStatus,
-			&e.Owner, &e.ToRule); err != nil {
+			&e.Owner, &e.ToRule, &e.ToTitle, &e.ToKey); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

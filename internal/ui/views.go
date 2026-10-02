@@ -1145,7 +1145,6 @@ func docVersionURL(docID int64, version int) string {
 type DocEdgeRow struct {
 	Type   string
 	Anchor string
-	Ref    string
 	Label  string
 	URL    string
 }

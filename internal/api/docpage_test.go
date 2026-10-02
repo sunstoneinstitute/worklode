@@ -65,23 +65,22 @@ func TestDocPage(t *testing.T) {
 		"sec-1",                     // section table
 		"Scope",
 		"isCoveredBy", // the plan's covers, read backward
-		"plan 1",      // the far end's corpus reference
-		"025-part-2",  // named by slug, not as "document 42"
+		// the far end, by citable id and title at its canonical URL
+		`href="/projects/proj/plan/1">WL-PLAN-1 Documents in the backbone, part 2</a>`,
 		"Model body.", // the body, rendered verbatim in a <pre>
 	)
 	if strings.Contains(body, "document "+strconv.FormatInt(plan.ID, 10)) {
-		t.Errorf("relation names the far end by id rather than by slug:\n%s", body)
+		t.Errorf("relation names the far end by id rather than by its ref:\n%s", body)
 	}
 
-	// The far end's corpus reference tells a plan from the spec it covers.
-	// The plan's own page is at its shorthand now that it carries a number.
+	// The far end's citable id tells a plan from the spec it covers. The
+	// plan's own page is at its shorthand now that it carries a number.
 	rr = getCanonical(t, h, "/docs/WL-PLAN-1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("plan page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	bodyContains(t, rr.Body.String(),
-		"025-documents-in-the-backbone#sec-1", // the covered section, by slug
-		">spec 25<",                           // and what kind of document that is
+		`href="/projects/proj/spec/25#sec-1">WL-SPEC-25#sec-1 Documents in the backbone</a>`,
 	)
 
 	if rr := doReq(t, h, "GET", "/docs/"+strconv.FormatInt(spec.ID, 10), "", nil); rr.Code != http.StatusNotFound {

@@ -257,6 +257,8 @@ type DocEdge struct {
 	ToStatus   string `json:"to_status"`
 	Owner      string `json:"owner,omitempty"`
 	ToRule     string `json:"to_rule,omitempty"`
+	ToTitle    string `json:"to_title,omitempty"`
+	ToKey      string `json:"to_key,omitempty"` // the far end's project key
 }
 
 // DocReferrer is one piece of open work pointing at a document section
