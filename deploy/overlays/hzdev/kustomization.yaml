@@ -6,6 +6,7 @@ resources:
   - ../../base
   - externalsecret-worklode-secrets.yaml
   - externalsecret-worklode-secrets-catalog.yaml
+  - internal-ingress.yaml
 patches:
   - patch: |-
       apiVersion: v1
