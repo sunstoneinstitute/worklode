@@ -37,10 +37,10 @@ patches:
       - op: replace
         path: /spec/tls/0/hosts
         value:
-          - worklode.hzprod.sunstoneinstitute.ai
+          - worklode.prod.sunstoneinstitute.ai
       - op: replace
         path: /spec/rules/0/host
-        value: worklode.hzprod.sunstoneinstitute.ai
+        value: worklode.prod.sunstoneinstitute.ai
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
     newTag: latest
