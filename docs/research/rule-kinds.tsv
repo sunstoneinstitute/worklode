@@ -1,0 +1,424 @@
+rule	spec#anchor	kind	source	reason
+DP-RULE-1	DP-SPEC-24#sec-1	informative	text	Goal statement summarising what the spec adds; the decisions and later sections specify it.
+DP-RULE-2	DP-SPEC-24#sec-2	informative	text	Non-goals list.
+DP-RULE-3	DP-SPEC-24#sec-3	requirement	text	Decision table choosing the rule-matching and layout design that gets built.
+DP-RULE-4	DP-SPEC-24#sec-4	requirement	derived	predecessor covered full/partial: DP-RULE-4=R
+DP-RULE-5	DP-SPEC-24#sec-5	requirement	derived	predecessor covered full/partial: DP-RULE-5=R
+DP-RULE-6	DP-SPEC-24#sec-6	requirement	derived	predecessor covered full/partial: DP-RULE-6=R
+DP-RULE-7	DP-SPEC-24#sec-6.1	requirement	derived	predecessor covered full/partial: DP-RULE-7=R
+DP-RULE-8	DP-SPEC-24#sec-6.2	requirement	derived	predecessor covered full/partial: DP-RULE-8=R
+DP-RULE-9	DP-SPEC-24#sec-6.3	requirement	derived	predecessor covered full/partial: DP-RULE-9=R
+DP-RULE-10	DP-SPEC-24#sec-6.4	requirement	derived	predecessor covered full/partial: DP-RULE-10=R
+DP-RULE-11	DP-SPEC-24#sec-7	requirement	derived	predecessor covered full/partial: DP-RULE-11=R
+DP-RULE-12	DP-SPEC-24#sec-7.1	requirement	derived	predecessor covered full/partial: DP-RULE-12=R
+DP-RULE-13	DP-SPEC-24#sec-7.2	requirement	derived	predecessor covered full/partial: DP-RULE-13=R
+DP-RULE-14	DP-SPEC-24#sec-7.3	requirement	derived	predecessor covered full/partial: DP-RULE-14=R
+DP-RULE-15	DP-SPEC-24#sec-7.4	requirement	derived	predecessor covered full/partial: DP-RULE-15=R
+DP-RULE-16	DP-SPEC-24#sec-7.5	requirement	derived	predecessor covered full/partial: DP-RULE-16=R
+DP-RULE-17	DP-SPEC-24#sec-8	requirement	derived	predecessor covered full/partial: DP-RULE-17=R
+DP-RULE-18	DP-SPEC-24#sec-9	requirement	derived	predecessor covered full/partial: DP-RULE-18=R
+DP-RULE-19	DP-SPEC-24#sec-10	informative	text	Follow-ups list of possible later work.
+WL-RULE-1	WL-SPEC-72#sec-1	informative	text	Problem statement explaining why the gate exists.
+WL-RULE-2	WL-SPEC-72#sec-2	invariant	text	The citation test applies to every later change: a change to the what amends the spec first or in the same change.
+WL-RULE-3	WL-SPEC-72#sec-2.1	invariant	text	Defines which changes count as what-changes for the citation test that every later change is judged by.
+WL-RULE-4	WL-SPEC-72#sec-2.2	invariant	text	Defines which changes never need a spec change, applied to every later change.
+WL-RULE-5	WL-SPEC-72#sec-2.3	split	text	Builds recording the classification on the task once, and binds every later author to classify grey-zone changes.
+WL-RULE-6	WL-SPEC-72#sec-3	requirement	text	Specifies the [gate] config table, the guarded path list and the lode gate check command.
+WL-RULE-7	WL-SPEC-72#sec-4	split	text	Builds the trailer grammar and reconciler reading once, and binds every later unplanned change to declare a Spec: trailer.
+WL-RULE-8	WL-SPEC-72#sec-5	requirement	text	Specifies the spec-gate CI job and the conditions it checks.
+WL-RULE-9	WL-SPEC-72#sec-6	invariant	text	A plan with a minted task is read-only, binding all later plan edits.
+WL-RULE-10	WL-SPEC-72#sec-7	informative	text	States what the gate does not do.
+WL-RULE-11	WL-SPEC-72#sec-open-questions	informative	text	Open questions.
+WL-RULE-12	WL-SPEC-73#sec-1	requirement	derived	predecessor covered full/partial: WL-RULE-505=R
+WL-RULE-13	WL-SPEC-73#sec-2	informative	text	Glossary of terms.
+WL-RULE-14	WL-SPEC-73#sec-3	informative	text	Heading only with an empty body; the obligations sit in its subsections.
+WL-RULE-15	WL-SPEC-73#sec-3.1	requirement	derived	predecessor covered full/partial: WL-RULE-967=R
+WL-RULE-16	WL-SPEC-73#sec-3.2	requirement	derived	predecessor covered full/partial: WL-RULE-968=R
+WL-RULE-17	WL-SPEC-73#sec-3.3	requirement	derived	predecessor covered full/partial: WL-RULE-969=R
+WL-RULE-18	WL-SPEC-73#sec-3.4	requirement	derived	predecessor covered full/partial: WL-RULE-970=R
+WL-RULE-19	WL-SPEC-73#sec-3.5	requirement	derived	predecessor covered full/partial: WL-RULE-971=R
+WL-RULE-20	WL-SPEC-73#sec-4	informative	text	Heading only with an empty body; the obligations sit in its subsections.
+WL-RULE-21	WL-SPEC-73#sec-4.1	requirement	derived	predecessor covered full/partial: WL-RULE-846=N1; WL-RULE-847=N1; WL-RULE-848=R
+WL-RULE-22	WL-SPEC-73#sec-4.2	requirement	derived	predecessor covered full/partial: WL-RULE-846=N1; WL-RULE-849=R
+WL-RULE-23	WL-SPEC-73#sec-4.3	requirement	derived	predecessor covered full/partial: WL-RULE-850=R; WL-RULE-853=N1
+WL-RULE-24	WL-SPEC-73#sec-4.4	requirement	derived	predecessor covered full/partial: WL-RULE-647=R
+WL-RULE-25	WL-SPEC-73#sec-5	informative	text-mixed	Section intro saying a sandbox agent is an ordinary CLI client and existing mechanisms apply, with the build in 5.5; predecessor built by WL-PLAN-106, held N1 by WL-PLAN-1.
+WL-RULE-26	WL-SPEC-73#sec-5.1	split	derived	predecessors disagree (requirement and invariant): WL-RULE-827=R; WL-RULE-828=N1; WL-RULE-829=N2
+WL-RULE-27	WL-SPEC-73#sec-5.2	requirement	derived	predecessor covered full/partial: WL-RULE-830=R; WL-RULE-831=R
+WL-RULE-28	WL-SPEC-73#sec-5.3	requirement	derived	predecessor covered full/partial: WL-RULE-832=R
+WL-RULE-29	WL-SPEC-73#sec-5.4	requirement	derived	predecessor covered full/partial: WL-RULE-833=R
+WL-RULE-30	WL-SPEC-73#sec-5.5	requirement	text-mixed	Concrete sandbox session setup (CLI entry point, hooks baked at image build, task-scoped token env, MCP relay via .mcp.json) built once; built by WL-PLAN-106, WL-PLAN-1 held it N2 as a dependency only.
+WL-RULE-31	WL-SPEC-73#sec-5.6	invariant	derived	predecessors N2 (N1 context alongside): WL-RULE-840=N2; WL-RULE-841=N1
+WL-RULE-32	WL-SPEC-73#sec-6	requirement	derived	predecessor covered full/partial: WL-RULE-638=R; WL-RULE-639=R; WL-RULE-640=R; WL-RULE-641=R; WL-RULE-642=R; WL-RULE-643=R; WL-RULE-644=R; WL-RULE-646=R
+WL-RULE-33	WL-SPEC-73#sec-7	informative	derived	all predecessors N1: WL-RULE-1114=N1
+WL-RULE-34	WL-SPEC-73#sec-7.1	requirement	derived	predecessor covered full/partial: WL-RULE-1115=R
+WL-RULE-35	WL-SPEC-73#sec-7.2	requirement	derived	predecessor covered full/partial: WL-RULE-1116=R
+WL-RULE-36	WL-SPEC-73#sec-7.3	requirement	derived	predecessor covered full/partial: WL-RULE-1117=R
+WL-RULE-37	WL-SPEC-73#sec-7.4	requirement	derived	predecessor covered full/partial: WL-RULE-962=R; WL-RULE-1119=R
+WL-RULE-38	WL-SPEC-73#sec-8	requirement	derived	predecessor covered full/partial: WL-RULE-959=R; WL-RULE-962=R
+WL-RULE-39	WL-SPEC-73#sec-8.1	requirement	derived	predecessor covered full/partial: WL-RULE-960=R
+WL-RULE-40	WL-SPEC-73#sec-8.2	requirement	derived	predecessor covered full/partial: WL-RULE-961=R
+WL-RULE-41	WL-SPEC-73#sec-8.3	requirement	derived	predecessor covered full/partial: WL-RULE-963=R; WL-RULE-965=R
+WL-RULE-42	WL-SPEC-73#sec-8.4	requirement	derived	predecessor covered full/partial: WL-RULE-963=R
+WL-RULE-43	WL-SPEC-73#sec-9	requirement	derived	predecessor covered full/partial: WL-RULE-645=R; WL-RULE-842=R; WL-RULE-845=R; WL-RULE-964=R; WL-RULE-972=R; WL-RULE-1118=R
+WL-RULE-44	WL-SPEC-73#sec-open-questions	informative	derived	all predecessors N1: WL-RULE-844=N1
+WL-RULE-45	WL-SPEC-74#sec-1	requirement	text	Specifies the actors table columns and their meaning.
+WL-RULE-46	WL-SPEC-74#sec-1.1	requirement	derived	predecessor covered full/partial: WL-RULE-377=R
+WL-RULE-47	WL-SPEC-74#sec-1.2	requirement	derived	predecessor covered full/partial: WL-RULE-974=?; WL-RULE-976=?; WL-RULE-977=?; WL-RULE-978=?; WL-RULE-979=?; WL-RULE-980=?; WL-RULE-981=R; WL-RULE-982=R; WL-RULE-983=R; WL-RULE-985=?; WL-RULE-986=?
+WL-RULE-48	WL-SPEC-74#sec-2	requirement	derived	predecessor covered full/partial: WL-RULE-376=R; WL-RULE-984=R
+WL-RULE-49	WL-SPEC-74#sec-3	split	text	Builds the grants table, routeGuards and boot refusal once, and binds every later role or route to go through those tables, never a handler check.
+WL-RULE-50	WL-SPEC-74#sec-4	requirement	derived	predecessor covered full/partial: WL-RULE-373=R; WL-RULE-375=R
+WL-RULE-51	WL-SPEC-74#sec-4.1	requirement	derived	predecessor covered full/partial: WL-RULE-379=R
+WL-RULE-52	WL-SPEC-74#sec-4.2	requirement	derived	predecessor covered full/partial: WL-RULE-378=R
+WL-RULE-53	WL-SPEC-74#sec-4.3	requirement	text-mixed	Specific login provisioning steps (ID token checks, group gate, actor upsert, unique github_username) built once and held by tests; built by seven plans, held none by WL-PLAN-143 (unclassified).
+WL-RULE-54	WL-SPEC-74#sec-5	requirement	derived	predecessor covered full/partial: WL-RULE-380=R; WL-RULE-384=R
+WL-RULE-55	WL-SPEC-74#sec-6	requirement	derived	predecessor covered full/partial: WL-RULE-381=R
+WL-RULE-56	WL-SPEC-74#sec-7	requirement	derived	predecessor covered full/partial: WL-RULE-383=R
+WL-RULE-57	WL-SPEC-74#sec-7.1	requirement	derived	predecessor covered full/partial: WL-RULE-382=R; WL-RULE-386=R
+WL-RULE-58	WL-SPEC-74#sec-7.2	requirement	derived	predecessor covered full/partial: WL-RULE-386=R; WL-RULE-389=R
+WL-RULE-59	WL-SPEC-74#sec-7.3	requirement	derived	predecessor covered full/partial: WL-RULE-385=R
+WL-RULE-60	WL-SPEC-74#sec-7.4	requirement	derived	predecessor covered full/partial: WL-RULE-388=R
+WL-RULE-61	WL-SPEC-74#sec-8	requirement	derived	predecessor covered full/partial: WL-RULE-387=R
+WL-RULE-62	WL-SPEC-74#sec-9	requirement	text-mixed	States the feature to build, linking each human's GitHub account at login and storing a user-to-server token; built by six plans, held none by WL-PLAN-143 (unclassified).
+WL-RULE-63	WL-SPEC-74#sec-9.1	requirement	derived	predecessor covered full/partial: WL-RULE-391=R
+WL-RULE-64	WL-SPEC-74#sec-9.2	requirement	text-mixed	Concrete link flow (redirect, signed state, strict login check, upsert, finishLogin, /auth/github/link, actor show) built once; built by seven plans each, held none by WL-PLAN-143 (unclassified).
+WL-RULE-65	WL-SPEC-74#sec-9.3	requirement	text-mixed	Concrete table schema, AES-GCM sealing and locked lazy refresh built once; built by seven plans, held none by WL-PLAN-143 (unclassified).
+WL-RULE-66	WL-SPEC-74#sec-9.4	requirement	derived	predecessor covered full/partial: WL-RULE-396=R
+WL-RULE-67	WL-SPEC-74#sec-10	split	text-mixed	Requirement is symbolic secret declaration resolved against a catalog and materialized by an operator ceremony; invariant is that Worklode never brokers or stores values and 1Password stays source of truth; built by WL-PLAN-106, held N1 by WL-PLAN-1.
+WL-RULE-68	WL-SPEC-74#sec-10.1	requirement	text	Specifies the secret name grammar and the names it rejects.
+WL-RULE-69	WL-SPEC-74#sec-10.2	requirement	derived	predecessor covered full/partial: WL-RULE-577=R; WL-RULE-889=?; WL-RULE-890=R; WL-RULE-891=R; WL-RULE-1248=?; WL-RULE-1250=?; WL-RULE-1251=?
+WL-RULE-70	WL-SPEC-74#sec-10.3	requirement	derived	predecessor covered full/partial: WL-RULE-578=R
+WL-RULE-71	WL-SPEC-74#sec-10.4	requirement	derived	predecessor covered full/partial: WL-RULE-579=R; WL-RULE-892=R
+WL-RULE-72	WL-SPEC-74#sec-10.5	requirement	derived	predecessor covered full/partial: WL-RULE-580=R; WL-RULE-893=R; WL-RULE-894=R; WL-RULE-1253=?; WL-RULE-1255=?; WL-RULE-1256=?; WL-RULE-1257=?
+WL-RULE-73	WL-SPEC-74#sec-10.6	requirement	derived	predecessor covered full/partial: WL-RULE-1275=?; WL-RULE-1277=?; WL-RULE-73=R
+WL-RULE-74	WL-SPEC-74#sec-10.7	requirement	derived	predecessor covered full/partial: WL-RULE-581=R
+WL-RULE-75	WL-SPEC-74#sec-10.8	requirement	derived	predecessor covered full/partial: WL-RULE-582=R; WL-RULE-895=R; WL-RULE-1278=?; WL-RULE-75=R
+WL-RULE-76	WL-SPEC-74#sec-open-questions	requirement	derived	predecessor covered full/partial: WL-RULE-399=R; WL-RULE-585=R
+WL-RULE-77	WL-SPEC-75#sec-1	requirement	derived	predecessor covered full/partial: WL-RULE-407=R; WL-RULE-413=R; WL-RULE-414=R; WL-RULE-415=R; WL-RULE-416=R; WL-RULE-417=R; WL-RULE-418=R; WL-RULE-445=R; WL-RULE-447=R; WL-RULE-456=R; WL-RULE-775=N1
+WL-RULE-78	WL-SPEC-75#sec-2	requirement	derived	predecessor covered full/partial: WL-RULE-408=R; WL-RULE-409=R; WL-RULE-448=R
+WL-RULE-79	WL-SPEC-75#sec-2.1	split	text	Builds the tasks table once, and binds all later schema to the stated column conventions.
+WL-RULE-80	WL-SPEC-75#sec-2.2	requirement	text	Specifies the task kinds and a test that fails when the three kind lists disagree.
+WL-RULE-81	WL-SPEC-75#sec-2.3	requirement	text	Specifies the priority and concern enums.
+WL-RULE-82	WL-SPEC-75#sec-3	requirement	derived	predecessor covered full/partial: WL-RULE-421=R; WL-RULE-422=R
+WL-RULE-83	WL-SPEC-75#sec-3.1	requirement	text	Specifies the task states table.
+WL-RULE-84	WL-SPEC-75#sec-3.2	requirement	text	Specifies the default transition table and the Transition guard.
+WL-RULE-85	WL-SPEC-75#sec-3.3	requirement	text	Specifies done_state per repo, its discovery and the branch the resolver walks.
+WL-RULE-86	WL-SPEC-75#sec-3.4	requirement	text	Specifies the taskClosed predicate.
+WL-RULE-87	WL-SPEC-75#sec-4	requirement	derived	predecessor covered full/partial: WL-RULE-408=R; WL-RULE-411=R; WL-RULE-87=R
+WL-RULE-88	WL-SPEC-75#sec-5	requirement	derived	predecessor covered full/partial: WL-RULE-429=R; WL-RULE-430=R; WL-RULE-431=R; WL-RULE-433=R; WL-RULE-434=R; WL-RULE-435=R; WL-RULE-436=R; WL-RULE-437=R; WL-RULE-438=R; WL-RULE-439=R
+WL-RULE-89	WL-SPEC-75#sec-5.1	requirement	text	Specifies the lode task decompose command and its transaction.
+WL-RULE-90	WL-SPEC-75#sec-5.2	requirement	text	Specifies the state machine of a task with children.
+WL-RULE-91	WL-SPEC-75#sec-5.3	requirement	text	Specifies ResolveHierarchy roll-up behaviour.
+WL-RULE-92	WL-SPEC-75#sec-5.4	requirement	text	Specifies that Transition resolves the parent in the same transaction.
+WL-RULE-93	WL-SPEC-75#sec-5.5	requirement	text	Specifies the hierarchy fields in the task API, brief and CLI.
+WL-RULE-94	WL-SPEC-75#sec-6	requirement	derived	predecessor covered full/partial: WL-RULE-408=R; WL-RULE-410=R; WL-RULE-419=R; WL-RULE-441=R
+WL-RULE-95	WL-SPEC-75#sec-7	requirement	derived	predecessor covered full/partial: WL-RULE-420=R
+WL-RULE-96	WL-SPEC-75#sec-8	requirement	derived	predecessor covered full/partial: WL-RULE-429=R; WL-RULE-432=R; WL-RULE-449=R; WL-RULE-450=R; WL-RULE-451=R; WL-RULE-452=R; WL-RULE-453=R; WL-RULE-454=R
+WL-RULE-97	WL-SPEC-75#sec-8.1	requirement	text	Specifies project.focus and concern_rank.
+WL-RULE-98	WL-SPEC-75#sec-8.2	requirement	text	Specifies the ready set filter for claim --next.
+WL-RULE-99	WL-SPEC-75#sec-8.3	requirement	text	Specifies the rally task, its commands and the one-active-rally index.
+WL-RULE-100	WL-SPEC-75#sec-8.4	requirement	text	Specifies the ranking sort key.
+WL-RULE-101	WL-SPEC-75#sec-8.5	requirement	text	Specifies claim --next flags and output.
+WL-RULE-102	WL-SPEC-75#sec-8.6	requirement	text	Specifies the needs-decomposition label and its claim exclusion.
+WL-RULE-103	WL-SPEC-75#sec-9	requirement	derived	predecessor covered full/partial: WL-RULE-408=R; WL-RULE-412=R
+WL-RULE-104	WL-SPEC-75#sec-9.1	split	text	Builds the events, state_log and event_subscribers tables once, and binds all later work never to delete or compact events.
+WL-RULE-105	WL-SPEC-75#sec-9.2	split	text	Builds RecordEvent once, and binds every later typed-table mutation to run as its apply callback.
+WL-RULE-106	WL-SPEC-75#sec-9.3	requirement	text	Specifies the commit-horizon read query for subscribers.
+WL-RULE-107	WL-SPEC-75#sec-9.4	split	text	Builds the subscriber read/ack/lock loop once, and binds every later subscriber handler to be idempotent.
+WL-RULE-108	WL-SPEC-75#sec-9.5	split	text	Builds the event type table and ns/ generation once, and binds every later event payload to name its subject.
+WL-RULE-109	WL-SPEC-75#sec-9.6	requirement	text	Specifies the two doc-lifecycle rules and their idempotency.
+WL-RULE-110	WL-SPEC-75#sec-9.6a	requirement	text	Specifies the spec-reconciler subscriber behaviour.
+WL-RULE-111	WL-SPEC-75#sec-9.7	requirement	text	Specifies the event bus metrics table.
+WL-RULE-112	WL-SPEC-75#sec-10	requirement	derived	predecessor covered full/partial: WL-RULE-421=R; WL-RULE-423=R; WL-RULE-424=R; WL-RULE-425=R; WL-RULE-427=R; WL-RULE-428=R
+WL-RULE-113	WL-SPEC-75#sec-10.1	requirement	text	Specifies the delivery fact tables.
+WL-RULE-114	WL-SPEC-75#sec-10.2	requirement	text	Specifies the webhook handlers and the ResolveDelivery resolver.
+WL-RULE-115	WL-SPEC-75#sec-10.3	requirement	text	Specifies correlation error handling and the known limits.
+WL-RULE-116	WL-SPEC-75#sec-11	requirement	text	Specifies decision tasks and the decisions table.
+WL-RULE-117	WL-SPEC-75#sec-12	requirement	derived	predecessor covered full/partial: WL-RULE-897=?; WL-RULE-898=R; WL-RULE-899=R; WL-RULE-900=R; WL-RULE-901=R; WL-RULE-902=R; WL-RULE-903=R
+WL-RULE-118	WL-SPEC-75#sec-13	invariant	text-mixed	Section intro binding all research work to the one backbone and forbidding new entities for Story and Distribution, with the builds in 13.1 onward; predecessors built by WL-PLAN-101,103, held N2 by WL-PLAN-98,105,87.
+WL-RULE-119	WL-SPEC-75#sec-13.1	requirement	text	Specifies an investigation as a project and the derived stage.
+WL-RULE-120	WL-SPEC-75#sec-13.2	requirement	text	Specifies milestone and deliverable entities and the default story shape.
+WL-RULE-121	WL-SPEC-75#sec-13.3	requirement	text	Specifies deliverable verification and reported state.
+WL-RULE-122	WL-SPEC-75#sec-13.4	requirement	text	Specifies per-kind identifiers and cross-project reference edges.
+WL-RULE-123	WL-SPEC-75#sec-13.5	requirement	text	Specifies assignee, participants and crew roles.
+WL-RULE-124	WL-SPEC-75#sec-13.6	requirement	text	Specifies the approvals table and its states.
+WL-RULE-125	WL-SPEC-75#sec-13.7	requirement	text	Specifies the intake project and dossier gates.
+WL-RULE-126	WL-SPEC-75#sec-13.8	split	text	Builds the gchat-crew-space subscriber once, and binds every later producing handler to use a subscriber instead of a hardcoded notifier.
+WL-RULE-127	WL-SPEC-75#sec-14	requirement	derived	predecessor covered full/partial: WL-RULE-440=R
+WL-RULE-128	WL-SPEC-75#sec-15	requirement	text	Specifies the permission each task route requires.
+WL-RULE-129	WL-SPEC-75#sec-open-questions	informative	text	Open questions.
+WL-RULE-130	WL-SPEC-76#sec-1	requirement	derived	predecessor covered full/partial: WL-RULE-1007=R; WL-RULE-1008=R
+WL-RULE-131	WL-SPEC-76#sec-1.1	requirement	derived	predecessor covered full/partial: WL-RULE-1009=R
+WL-RULE-132	WL-SPEC-76#sec-1.2	requirement	derived	predecessor covered full/partial: WL-RULE-1010=R
+WL-RULE-133	WL-SPEC-76#sec-1.3	requirement	derived	predecessor covered full/partial: WL-RULE-1018=R
+WL-RULE-134	WL-SPEC-76#sec-2	requirement	derived	predecessor covered full/partial: WL-RULE-1011=R
+WL-RULE-135	WL-SPEC-76#sec-3	requirement	derived	predecessor covered full/partial: WL-RULE-1012=R; WL-RULE-1013=R; WL-RULE-1014=R; WL-RULE-1015=R; WL-RULE-1022=?
+WL-RULE-136	WL-SPEC-76#sec-4	requirement	derived	predecessor covered full/partial: WL-RULE-1016=R
+WL-RULE-137	WL-SPEC-76#sec-5	informative	derived	all predecessors N1: WL-RULE-1017=N1
+WL-RULE-138	WL-SPEC-76#sec-6	requirement	text	Specifies the observed/asserted state provenance and who writes which.
+WL-RULE-139	WL-SPEC-76#sec-7	requirement	text	Specifies minting a verification task for delivered bugs.
+WL-RULE-140	WL-SPEC-76#sec-7.1	requirement	text	Specifies the verification task body and close/reopen path.
+WL-RULE-141	WL-SPEC-76#sec-8	requirement	text	Defines workflows and states that the built-in default workflow runs until a project opts in.
+WL-RULE-142	WL-SPEC-76#sec-8.1	requirement	derived	predecessor covered full/partial: WL-RULE-905=?; WL-RULE-906=R
+WL-RULE-143	WL-SPEC-76#sec-8.2	requirement	derived	predecessor covered full/partial: WL-RULE-905=?; WL-RULE-907=R
+WL-RULE-144	WL-SPEC-76#sec-8.3	requirement	derived	predecessor covered full/partial: WL-RULE-905=?; WL-RULE-908=R
+WL-RULE-145	WL-SPEC-76#sec-8.4	requirement	derived	predecessor covered full/partial: WL-RULE-905=?; WL-RULE-909=R
+WL-RULE-146	WL-SPEC-76#sec-8.5	requirement	derived	predecessor covered full/partial: WL-RULE-910=R
+WL-RULE-147	WL-SPEC-76#sec-8.6	requirement	derived	predecessor covered full/partial: WL-RULE-911=R
+WL-RULE-148	WL-SPEC-76#sec-8.7	requirement	derived	predecessor covered full/partial: WL-RULE-912=R; WL-RULE-913=R
+WL-RULE-149	WL-SPEC-76#sec-8.8	requirement	derived	predecessor covered full/partial: WL-RULE-912=R; WL-RULE-914=R
+WL-RULE-150	WL-SPEC-76#sec-8.9	requirement	derived	predecessor covered full/partial: WL-RULE-916=?; WL-RULE-917=R; WL-RULE-918=R; WL-RULE-919=R; WL-RULE-920=R; WL-RULE-921=R
+WL-RULE-151	WL-SPEC-76#sec-8.10	requirement	derived	predecessor covered full/partial: WL-RULE-922=?; WL-RULE-923=R; WL-RULE-924=R; WL-RULE-925=R
+WL-RULE-152	WL-SPEC-76#sec-9	requirement	derived	predecessor covered full/partial: WL-RULE-926=R
+WL-RULE-153	WL-SPEC-76#sec-10	requirement	derived	predecessor covered full/partial: WL-RULE-931=?; WL-RULE-932=R; WL-RULE-933=R
+WL-RULE-154	WL-SPEC-76#sec-10.1	requirement	derived	predecessor covered full/partial: WL-RULE-932=R; WL-RULE-934=R; WL-RULE-935=R; WL-RULE-936=R
+WL-RULE-155	WL-SPEC-76#sec-10.2	requirement	derived	predecessor covered full/partial: WL-RULE-937=R; WL-RULE-938=R; WL-RULE-939=R
+WL-RULE-156	WL-SPEC-76#sec-10.3	requirement	derived	predecessor covered full/partial: WL-RULE-940=R; WL-RULE-941=R; WL-RULE-942=R; WL-RULE-943=R; WL-RULE-944=R
+WL-RULE-157	WL-SPEC-76#sec-10.4	requirement	derived	predecessor covered full/partial: WL-RULE-945=R; WL-RULE-946=R; WL-RULE-947=R; WL-RULE-948=R; WL-RULE-949=R
+WL-RULE-158	WL-SPEC-76#sec-10.5	requirement	derived	predecessor covered full/partial: WL-RULE-950=R; WL-RULE-951=R; WL-RULE-952=R; WL-RULE-953=R; WL-RULE-954=R
+WL-RULE-159	WL-SPEC-76#sec-11	requirement	derived	predecessor covered full/partial: WL-RULE-927=R; WL-RULE-955=R; WL-RULE-1018=R
+WL-RULE-160	WL-SPEC-76#sec-12	informative	text	Deferred items list.
+WL-RULE-161	WL-SPEC-76#sec-open-questions	informative	text	Open questions.
+WL-RULE-162	WL-SPEC-77#sec-1	requirement	derived	predecessor covered full/partial: WL-RULE-649=R; WL-RULE-720=R
+WL-RULE-163	WL-SPEC-77#sec-2	requirement	derived	predecessor covered full/partial: WL-RULE-650=R; WL-RULE-651=R; WL-RULE-652=R
+WL-RULE-164	WL-SPEC-77#sec-3	requirement	derived	predecessor covered full/partial: WL-RULE-662=R; WL-RULE-663=R; WL-RULE-164=R
+WL-RULE-165	WL-SPEC-77#sec-4	requirement	derived	predecessor covered full/partial: WL-RULE-653=R; WL-RULE-654=R; WL-RULE-655=R; WL-RULE-656=R; WL-RULE-666=R
+WL-RULE-166	WL-SPEC-77#sec-5	requirement	derived	predecessor covered full/partial: WL-RULE-657=R; WL-RULE-658=R; WL-RULE-659=R; WL-RULE-660=R; WL-RULE-661=R
+WL-RULE-167	WL-SPEC-77#sec-6	requirement	derived	predecessor covered full/partial: WL-RULE-665=R; WL-RULE-667=R; WL-RULE-719=R
+WL-RULE-168	WL-SPEC-77#sec-7	requirement	derived	predecessor covered full/partial: WL-RULE-696=R; WL-RULE-697=R; WL-RULE-698=R; WL-RULE-699=R; WL-RULE-168=R
+WL-RULE-169	WL-SPEC-77#sec-8	requirement	derived	predecessor covered full/partial: WL-RULE-169=R
+WL-RULE-170	WL-SPEC-77#sec-9	requirement	derived	predecessor covered full/partial: WL-RULE-668=R; WL-RULE-669=R; WL-RULE-670=R; WL-RULE-671=R; WL-RULE-679=R; WL-RULE-170=R
+WL-RULE-171	WL-SPEC-77#sec-10	requirement	derived	predecessor covered full/partial: WL-RULE-672=R; WL-RULE-673=R; WL-RULE-674=R; WL-RULE-675=R; WL-RULE-676=R; WL-RULE-677=R; WL-RULE-678=R; WL-RULE-680=R
+WL-RULE-172	WL-SPEC-77#sec-11	requirement	derived	predecessor covered full/partial: WL-RULE-681=R; WL-RULE-682=R; WL-RULE-683=R; WL-RULE-684=R
+WL-RULE-173	WL-SPEC-77#sec-11.1	requirement	derived	predecessor covered full/partial: WL-RULE-173=R
+WL-RULE-174	WL-SPEC-77#sec-11.2	requirement	derived	predecessor covered full/partial: WL-RULE-174=R
+WL-RULE-175	WL-SPEC-77#sec-11.3	invariant	text	Fan-out needs are answered by queries owned elsewhere, and all later work is barred from making spec completion an event.
+WL-RULE-176	WL-SPEC-77#sec-12	requirement	derived	predecessor covered full/partial: WL-RULE-685=R; WL-RULE-686=R
+WL-RULE-177	WL-SPEC-77#sec-13	requirement	derived	predecessor covered full/partial: WL-RULE-687=R; WL-RULE-688=R; WL-RULE-689=R; WL-RULE-690=R; WL-RULE-691=R; WL-RULE-692=R; WL-RULE-694=R; WL-RULE-695=R
+WL-RULE-178	WL-SPEC-77#sec-14	requirement	derived	predecessor covered full/partial: WL-RULE-714=R; WL-RULE-178=R
+WL-RULE-179	WL-SPEC-77#sec-15	requirement	derived	predecessor covered full/partial: WL-RULE-700=R; WL-RULE-701=R; WL-RULE-702=R; WL-RULE-703=R; WL-RULE-704=R; WL-RULE-705=R; WL-RULE-706=R; WL-RULE-707=R
+WL-RULE-180	WL-SPEC-77#sec-16	requirement	text-mixed	Mostly concrete lode doc import and lode doc lint behavior built once and held by tests; predecessor built by WL-PLAN-106, held only N1 (context) by WL-PLAN-6.
+WL-RULE-181	WL-SPEC-77#sec-17	split	derived	predecessors disagree (requirement and invariant): WL-RULE-1183=N1; WL-RULE-1184=N2; WL-RULE-1185=R; WL-RULE-1186=R; WL-RULE-1187=R; WL-RULE-1188=R; WL-RULE-1190=R; WL-RULE-1191=R; WL-RULE-1192=R; WL-RULE-1195=R; WL-RULE-1196=R
+WL-RULE-182	WL-SPEC-77#sec-18	requirement	derived	predecessor covered full/partial: WL-RULE-715=R; WL-RULE-1194=R; WL-RULE-182=R
+WL-RULE-183	WL-SPEC-77#sec-open-questions	informative	text	Open questions.
+WL-RULE-184	WL-SPEC-78#sec-1	informative	text	Heading only with an empty body; the obligations sit in its subsections.
+WL-RULE-185	WL-SPEC-78#sec-1.1	requirement	derived	predecessor covered full/partial: WL-RULE-723=R
+WL-RULE-186	WL-SPEC-78#sec-1.2	requirement	derived	predecessor covered full/partial: WL-RULE-724=R; WL-RULE-725=R; WL-RULE-726=R; WL-RULE-727=R; WL-RULE-728=R; WL-RULE-729=R
+WL-RULE-187	WL-SPEC-78#sec-1.3	requirement	text	Specifies the --needs-planning query and its outcomes.
+WL-RULE-188	WL-SPEC-78#sec-1.4	requirement	text	Specifies the --needs-execution query.
+WL-RULE-189	WL-SPEC-78#sec-1.5	requirement	text	Specifies the lode doc sections command.
+WL-RULE-190	WL-SPEC-78#sec-1.6	requirement	text	Specifies the --bare-superseded report.
+WL-RULE-191	WL-SPEC-78#sec-1.7	requirement	text	Specifies the lode doc todo command and its item types.
+WL-RULE-192	WL-SPEC-78#sec-2	requirement	derived	predecessor covered full/partial: WL-RULE-730=R; WL-RULE-731=R; WL-RULE-732=R
+WL-RULE-193	WL-SPEC-78#sec-2.1	requirement	text	Specifies the accepted ref forms and ambiguity handling.
+WL-RULE-194	WL-SPEC-78#sec-2.2	requirement	text	Specifies --inline folding of amendments and supersessions.
+WL-RULE-195	WL-SPEC-78#sec-2.3	requirement	text	Specifies when an amends edge is in force.
+WL-RULE-196	WL-SPEC-78#sec-2.4	requirement	text	Specifies the consolidation algorithm and its bounding rules.
+WL-RULE-197	WL-SPEC-78#sec-3	requirement	derived	predecessor covered full/partial: WL-RULE-733=R; WL-RULE-734=R; WL-RULE-735=R; WL-RULE-736=R
+WL-RULE-198	WL-SPEC-78#sec-3.1	requirement	text	Specifies reference forms and defect reporting.
+WL-RULE-199	WL-SPEC-78#sec-3.2	requirement	text	Specifies the three shorthand resolution tiers.
+WL-RULE-200	WL-SPEC-78#sec-3.3	requirement	text	Specifies the NO-SPEC covers value and its constraints.
+WL-RULE-201	WL-SPEC-78#sec-3.4	requirement	text	Specifies anchor permanence checks in the accept transaction.
+WL-RULE-202	WL-SPEC-78#sec-4	requirement	text-mixed	Defines the plan document model (no anchors or rules, covers edges vs implements vs produces) built once in the doc store; built by WL-PLAN-72,54,106,123, WL-PLAN-93 held N2 as a dependency on that model.
+WL-RULE-203	WL-SPEC-78#sec-4.1	requirement	text	Specifies covers entry forms and how they resolve to requirements.
+WL-RULE-204	WL-SPEC-78#sec-4.2	requirement	text	Specifies the defers frontmatter and its edge rows.
+WL-RULE-205	WL-SPEC-78#sec-4.3	requirement	text	Specifies plan status values and execution state from task closure.
+WL-RULE-206	WL-SPEC-78#sec-4.4	requirement	text	Specifies lode doc decompose and the decomposed stamp.
+WL-RULE-207	WL-SPEC-78#sec-4.5	requirement	derived	predecessor covered full/partial: WL-RULE-747=R
+WL-RULE-208	WL-SPEC-78#sec-4.6	requirement	derived	predecessor covered full/partial: WL-RULE-742=R; WL-RULE-743=R; WL-RULE-744=R; WL-RULE-745=R; WL-RULE-746=R
+WL-RULE-209	WL-SPEC-78#sec-5	requirement	text	Specifies intents, their fields and the required serves: key on a spec.
+WL-RULE-210	WL-SPEC-78#sec-6	informative	text	Definition introducing the deck subsections that specify what is built.
+WL-RULE-211	WL-SPEC-78#sec-6.1	requirement	text	Specifies the mode front matter key and body_mode column.
+WL-RULE-212	WL-SPEC-78#sec-6.2	requirement	text	Specifies the deck body format and layouts.
+WL-RULE-213	WL-SPEC-78#sec-6.3	requirement	text	Specifies the component registry and its rules.
+WL-RULE-214	WL-SPEC-78#sec-6.4	requirement	text	Specifies decision-row slides and the decide endpoint.
+WL-RULE-215	WL-SPEC-78#sec-6.5	requirement	text	Specifies Slides rendering, vendored reveal.js, theme and CSP.
+WL-RULE-216	WL-SPEC-78#sec-6.6	requirement	text	Specifies deck metrics and the authoring commands.
+WL-RULE-217	WL-SPEC-78#sec-7	informative	text	Heading only with an empty body; the obligations sit in its subsections.
+WL-RULE-218	WL-SPEC-78#sec-7.1	requirement	text	Specifies the meeting, minutes and note entities and their identity.
+WL-RULE-219	WL-SPEC-78#sec-7.2	requirement	text	Specifies the draft and revision lifecycle of minutes and notes.
+WL-RULE-220	WL-SPEC-78#sec-7.3	requirement	text	Specifies minutes access rules.
+WL-RULE-221	WL-SPEC-78#sec-7.4	requirement	text	Specifies delegated Calendar reads and privacy behaviour.
+WL-RULE-222	WL-SPEC-78#sec-7.5	requirement	text	Specifies resolving project context from event text.
+WL-RULE-223	WL-SPEC-78#sec-7.6	requirement	text	Specifies Calendar synchronisation and meeting resources.
+WL-RULE-224	WL-SPEC-78#sec-7.7	requirement	text	Specifies meeting surfaces, API and CLI operations.
+WL-RULE-225	WL-SPEC-78#sec-8	requirement	derived	predecessor covered full/partial: WL-RULE-617=R
+WL-RULE-226	WL-SPEC-78#sec-8.1	requirement	derived	predecessor covered full/partial: WL-RULE-618=R
+WL-RULE-227	WL-SPEC-78#sec-8.2	requirement	derived	predecessor covered full/partial: WL-RULE-619=R
+WL-RULE-228	WL-SPEC-78#sec-8.3	requirement	derived	predecessor covered full/partial: WL-RULE-620=R; WL-RULE-628=R
+WL-RULE-229	WL-SPEC-78#sec-8.4	requirement	derived	predecessor covered full/partial: WL-RULE-621=R
+WL-RULE-230	WL-SPEC-78#sec-8.5	requirement	derived	predecessor covered full/partial: WL-RULE-622=R; WL-RULE-624=R
+WL-RULE-231	WL-SPEC-78#sec-8.6	requirement	derived	predecessor covered full/partial: WL-RULE-623=R; WL-RULE-625=R; WL-RULE-626=R; WL-RULE-627=R; WL-RULE-629=R
+WL-RULE-232	WL-SPEC-78#sec-8.7	requirement	derived	predecessor covered full/partial: WL-RULE-630=R; WL-RULE-631=R; WL-RULE-632=R
+WL-RULE-233	WL-SPEC-78#sec-8.8	requirement	derived	predecessor covered full/partial: WL-RULE-633=R
+WL-RULE-234	WL-SPEC-78#sec-8.9	requirement	derived	predecessor covered full/partial: WL-RULE-634=R
+WL-RULE-235	WL-SPEC-78#sec-open-questions	requirement	derived	predecessor covered full/partial: WL-RULE-635=R; WL-RULE-637=R; WL-RULE-1233=?
+WL-RULE-236	WL-SPEC-79#sec-1	requirement	derived	predecessor covered full/partial: WL-RULE-458=R
+WL-RULE-237	WL-SPEC-79#sec-2	requirement	derived	predecessor covered full/partial: WL-RULE-459=R; WL-RULE-460=R
+WL-RULE-238	WL-SPEC-79#sec-3	requirement	derived	predecessor covered full/partial: WL-RULE-461=R; WL-RULE-462=R
+WL-RULE-239	WL-SPEC-79#sec-4	requirement	derived	predecessor covered full/partial: WL-RULE-463=R; WL-RULE-464=R
+WL-RULE-240	WL-SPEC-79#sec-5	requirement	derived	predecessor covered full/partial: WL-RULE-465=R; WL-RULE-466=R; WL-RULE-467=R
+WL-RULE-241	WL-SPEC-79#sec-6	requirement	derived	predecessor covered full/partial: WL-RULE-468=R; WL-RULE-1203=?; WL-RULE-1281=?; WL-RULE-1284=?
+WL-RULE-242	WL-SPEC-79#sec-7	requirement	derived	predecessor covered full/partial: WL-RULE-469=R; WL-RULE-470=R; WL-RULE-471=R
+WL-RULE-243	WL-SPEC-79#sec-8	requirement	derived	predecessor covered full/partial: WL-RULE-472=R
+WL-RULE-244	WL-SPEC-79#sec-9	requirement	derived	predecessor covered full/partial: WL-RULE-477=R
+WL-RULE-245	WL-SPEC-79#sec-10	requirement	derived	predecessor covered full/partial: WL-RULE-473=R; WL-RULE-474=R; WL-RULE-1200=?; WL-RULE-1201=?; WL-RULE-1202=?; WL-RULE-1204=?; WL-RULE-1205=?; WL-RULE-1207=?; WL-RULE-1208=?
+WL-RULE-246	WL-SPEC-79#sec-10.1	split	text	Builds the prefixes and request-derived base once, and binds all later stored strings never to contain the wlid: expansion.
+WL-RULE-247	WL-SPEC-79#sec-10.2	requirement	text	Specifies the instance IRI path grammar.
+WL-RULE-248	WL-SPEC-79#sec-10.3	invariant	text	No absolute instance IRI is ever stored, binding all later writes.
+WL-RULE-249	WL-SPEC-79#sec-10.4	split	text	Builds internal/kg/iri and its guard test once, and binds all later code to build IRIs only through it.
+WL-RULE-250	WL-SPEC-79#sec-11	requirement	text	Specifies content negotiation on every IRI.
+WL-RULE-251	WL-SPEC-79#sec-12	requirement	derived	predecessor covered full/partial: WL-RULE-475=R; WL-RULE-476=R; WL-RULE-1132=?; WL-RULE-1271=?; WL-RULE-1273=?; WL-RULE-1274=?; WL-RULE-1281=?; WL-RULE-1283=?
+WL-RULE-252	WL-SPEC-79#sec-13	requirement	derived	predecessor covered full/partial: WL-RULE-478=R; WL-RULE-479=R; WL-RULE-480=R; WL-RULE-481=R; WL-RULE-482=R
+WL-RULE-253	WL-SPEC-79#sec-14	requirement	derived	predecessor covered full/partial: WL-RULE-855=R; WL-RULE-856=R; WL-RULE-857=N1; WL-RULE-858=R; WL-RULE-859=R; WL-RULE-860=R; WL-RULE-861=R; WL-RULE-862=R; WL-RULE-863=R; WL-RULE-864=R; WL-RULE-865=R; WL-RULE-866=R; WL-RULE-867=R
+WL-RULE-254	WL-SPEC-79#sec-14.1	requirement	text	Specifies the indexed subject kinds.
+WL-RULE-255	WL-SPEC-79#sec-14.2	requirement	derived	predecessor covered full/partial: WL-RULE-880=R
+WL-RULE-256	WL-SPEC-79#sec-14.3	requirement	text	Specifies the embedding Provider interface and ID shape.
+WL-RULE-257	WL-SPEC-79#sec-14.4	requirement	text	Specifies chunk budget derivation and chunking per subject.
+WL-RULE-258	WL-SPEC-79#sec-14.5	requirement	text	Specifies the index_chunks table.
+WL-RULE-259	WL-SPEC-79#sec-15	requirement	derived	predecessor covered full/partial: WL-RULE-868=R; WL-RULE-869=R; WL-RULE-870=R; WL-RULE-871=R; WL-RULE-872=R; WL-RULE-873=R; WL-RULE-880=R
+WL-RULE-260	WL-SPEC-79#sec-16	requirement	derived	predecessor covered full/partial: WL-RULE-874=R; WL-RULE-875=R; WL-RULE-880=R
+WL-RULE-261	WL-SPEC-79#sec-17	requirement	derived	predecessor covered full/partial: WL-RULE-876=R; WL-RULE-877=R; WL-RULE-878=R; WL-RULE-880=R
+WL-RULE-262	WL-SPEC-79#sec-18	requirement	text	Specifies the bf16 embedding trial stack.
+WL-RULE-263	WL-SPEC-79#sec-open-questions	requirement	derived	predecessor covered full/partial: WL-RULE-484=R; WL-RULE-879=N1
+WL-RULE-264	WL-SPEC-80#sec-1	requirement	derived	predecessor covered full/partial: WL-RULE-504=R; WL-RULE-505=R; WL-RULE-525=R
+WL-RULE-265	WL-SPEC-80#sec-2	requirement	derived	predecessor covered full/partial: WL-RULE-506=R
+WL-RULE-266	WL-SPEC-80#sec-3	informative	text	Heading only with an empty body; the obligations sit in its subsections.
+WL-RULE-267	WL-SPEC-80#sec-3.1	requirement	derived	predecessor covered full/partial: WL-RULE-507=R; WL-RULE-508=R; WL-RULE-509=R
+WL-RULE-268	WL-SPEC-80#sec-3.2	requirement	derived	predecessor covered full/partial: WL-RULE-510=R
+WL-RULE-269	WL-SPEC-80#sec-3.3	requirement	derived	predecessor covered full/partial: WL-RULE-511=R; WL-RULE-512=R; WL-RULE-514=R
+WL-RULE-270	WL-SPEC-80#sec-3.4	requirement	derived	predecessor covered full/partial: WL-RULE-511=R; WL-RULE-513=R
+WL-RULE-271	WL-SPEC-80#sec-3.5	requirement	derived	predecessor covered full/partial: WL-RULE-516=R
+WL-RULE-272	WL-SPEC-80#sec-4	requirement	derived	predecessor covered full/partial: WL-RULE-519=R
+WL-RULE-273	WL-SPEC-80#sec-4.1	requirement	derived	predecessor covered full/partial: WL-RULE-520=R
+WL-RULE-274	WL-SPEC-80#sec-5	requirement	derived	predecessor covered full/partial: WL-RULE-532=R; WL-RULE-533=R
+WL-RULE-275	WL-SPEC-80#sec-5.1	requirement	derived	predecessor covered full/partial: WL-RULE-532=R; WL-RULE-534=R
+WL-RULE-276	WL-SPEC-80#sec-5.2	requirement	derived	predecessor covered full/partial: WL-RULE-527=R; WL-RULE-528=R; WL-RULE-532=R; WL-RULE-535=R
+WL-RULE-277	WL-SPEC-80#sec-5.3	requirement	derived	predecessor covered full/partial: WL-RULE-532=R; WL-RULE-539=R; WL-RULE-1269=?
+WL-RULE-278	WL-SPEC-80#sec-5.4	requirement	derived	predecessor covered full/partial: WL-RULE-529=R; WL-RULE-532=R; WL-RULE-536=R; WL-RULE-1265=?; WL-RULE-1266=?; WL-RULE-1267=?; WL-RULE-1268=?; WL-RULE-1270=?
+WL-RULE-279	WL-SPEC-80#sec-5.5	requirement	derived	predecessor covered full/partial: WL-RULE-530=R; WL-RULE-532=R; WL-RULE-538=R; WL-RULE-1243=?
+WL-RULE-280	WL-SPEC-80#sec-5.6	requirement	derived	predecessor covered full/partial: WL-RULE-540=R
+WL-RULE-281	WL-SPEC-80#sec-6	requirement	derived	predecessor covered full/partial: WL-RULE-530=R; WL-RULE-532=R; WL-RULE-537=R
+WL-RULE-282	WL-SPEC-80#sec-7	informative	text	Heading only with an empty body; the obligations sit in its subsections.
+WL-RULE-283	WL-SPEC-80#sec-7.1	requirement	derived	predecessor covered full/partial: WL-RULE-521=R
+WL-RULE-284	WL-SPEC-80#sec-7.2	requirement	derived	predecessor covered full/partial: WL-RULE-522=R
+WL-RULE-285	WL-SPEC-80#sec-7.3	requirement	derived	predecessor covered full/partial: WL-RULE-523=R
+WL-RULE-286	WL-SPEC-80#sec-7.4	requirement	derived	predecessor covered full/partial: WL-RULE-524=R
+WL-RULE-287	WL-SPEC-80#sec-8	requirement	derived	predecessor covered full/partial: WL-RULE-545=R
+WL-RULE-288	WL-SPEC-80#sec-8.1	requirement	derived	predecessor covered full/partial: WL-RULE-546=R
+WL-RULE-289	WL-SPEC-80#sec-8.2	requirement	derived	predecessor covered full/partial: WL-RULE-547=R
+WL-RULE-290	WL-SPEC-80#sec-8.3	requirement	derived	predecessor covered full/partial: WL-RULE-548=R
+WL-RULE-291	WL-SPEC-80#sec-8.4	requirement	derived	predecessor covered full/partial: WL-RULE-549=R; WL-RULE-552=R
+WL-RULE-292	WL-SPEC-80#sec-8.5	requirement	derived	predecessor covered full/partial: WL-RULE-550=R
+WL-RULE-293	WL-SPEC-80#sec-9	requirement	derived	predecessor covered full/partial: WL-RULE-881=N1; WL-RULE-882=R; WL-RULE-883=R; WL-RULE-884=R; WL-RULE-885=R; WL-RULE-887=R
+WL-RULE-294	WL-SPEC-80#sec-10	requirement	derived	predecessor covered full/partial: WL-RULE-553=R; WL-RULE-554=R
+WL-RULE-295	WL-SPEC-80#sec-10.1	requirement	derived	predecessor covered full/partial: WL-RULE-555=R
+WL-RULE-296	WL-SPEC-80#sec-10.2	requirement	derived	predecessor covered full/partial: WL-RULE-556=R
+WL-RULE-297	WL-SPEC-80#sec-10.3	requirement	derived	predecessor covered full/partial: WL-RULE-557=R; WL-RULE-558=R; WL-RULE-559=R; WL-RULE-560=R
+WL-RULE-298	WL-SPEC-80#sec-10.4	requirement	derived	predecessor covered full/partial: WL-RULE-561=R; WL-RULE-565=R
+WL-RULE-299	WL-SPEC-80#sec-11	requirement	derived	predecessor covered full/partial: WL-RULE-602=R; WL-RULE-604=R; WL-RULE-605=R; WL-RULE-606=R; WL-RULE-607=R
+WL-RULE-300	WL-SPEC-80#sec-11.1	requirement	derived	predecessor covered full/partial: WL-RULE-608=R; WL-RULE-609=R
+WL-RULE-301	WL-SPEC-80#sec-11.2	requirement	derived	predecessor covered full/partial: WL-RULE-608=R; WL-RULE-610=R
+WL-RULE-302	WL-SPEC-80#sec-11.3	requirement	derived	predecessor covered full/partial: WL-RULE-608=R; WL-RULE-611=R; WL-RULE-612=R
+WL-RULE-303	WL-SPEC-80#sec-11.4	requirement	derived	predecessor covered full/partial: WL-RULE-608=R; WL-RULE-613=R; WL-RULE-615=R; WL-RULE-616=R
+WL-RULE-304	WL-SPEC-80#sec-open-questions	requirement	derived	predecessor covered full/partial: WL-RULE-542=R; WL-RULE-563=R
+WL-RULE-305	WL-SPEC-81#sec-1	split	derived	predecessors disagree (requirement and invariant): WL-RULE-505=R; WL-RULE-1078=R; WL-RULE-1079=N2; WL-RULE-1081=R; WL-RULE-1082=R; WL-RULE-1083=R; WL-RULE-1090=N1
+WL-RULE-306	WL-SPEC-81#sec-2	split	text-mixed	Requirement is building the designed-not-built commands (doc fetch, the listed plugin skills); invariant is the naming conventions every later CLI change obeys (remove vs delete, /lode:<name> follows the CLI); predecessors built partially by WL-PLAN-127,128,129, held N2 by WL-PLAN-130 and unclassified by 127,128.
+WL-RULE-307	WL-SPEC-81#sec-3	requirement	derived	predecessor covered full/partial: WL-RULE-1086=R; WL-RULE-1087=R
+WL-RULE-308	WL-SPEC-81#sec-4	split	derived	predecessors disagree (requirement and invariant): WL-RULE-1088=R; WL-RULE-1089=N2
+WL-RULE-309	WL-SPEC-81#sec-5	invariant	text	The cmd-decides, cli-renders seam binds every later command and view.
+WL-RULE-310	WL-SPEC-81#sec-6	requirement	derived	predecessor covered full/partial: WL-RULE-588=R
+WL-RULE-311	WL-SPEC-81#sec-6.1	requirement	derived	predecessor covered full/partial: WL-RULE-589=R
+WL-RULE-312	WL-SPEC-81#sec-6.2	requirement	derived	predecessor covered full/partial: WL-RULE-590=R; WL-RULE-591=R; WL-RULE-592=R; WL-RULE-593=R
+WL-RULE-313	WL-SPEC-81#sec-6.3	requirement	derived	predecessor covered full/partial: WL-RULE-594=R; WL-RULE-595=R; WL-RULE-596=R
+WL-RULE-314	WL-SPEC-81#sec-6.4	requirement	derived	predecessor covered full/partial: WL-RULE-597=R
+WL-RULE-315	WL-SPEC-81#sec-6.5	requirement	derived	predecessor covered full/partial: WL-RULE-598=R
+WL-RULE-316	WL-SPEC-81#sec-6.6	requirement	derived	predecessor covered full/partial: WL-RULE-599=R; WL-RULE-601=R
+WL-RULE-317	WL-SPEC-81#sec-7	requirement	derived	predecessor covered full/partial: WL-RULE-566=R
+WL-RULE-318	WL-SPEC-81#sec-7.1	requirement	derived	predecessor covered full/partial: WL-RULE-567=R
+WL-RULE-319	WL-SPEC-81#sec-7.2	requirement	derived	predecessor covered full/partial: WL-RULE-568=R
+WL-RULE-320	WL-SPEC-81#sec-7.3	requirement	derived	predecessor covered full/partial: WL-RULE-569=R; WL-RULE-570=R; WL-RULE-571=R; WL-RULE-572=R
+WL-RULE-321	WL-SPEC-81#sec-7.4	requirement	derived	predecessor covered full/partial: WL-RULE-802=R; WL-RULE-803=R; WL-RULE-804=R; WL-RULE-805=R
+WL-RULE-322	WL-SPEC-81#sec-8	split	text	Vendors the two skill plugins once, and binds Worklode to merge every later upstream release.
+WL-RULE-323	WL-SPEC-81#sec-8.1	requirement	derived	predecessor covered full/partial: WL-RULE-793=R; WL-RULE-794=R; WL-RULE-795=R; WL-RULE-796=R; WL-RULE-797=R
+WL-RULE-324	WL-SPEC-81#sec-8.2	requirement	derived	predecessor covered full/partial: WL-RULE-798=R; WL-RULE-799=R; WL-RULE-800=R; WL-RULE-801=R
+WL-RULE-325	WL-SPEC-81#sec-8.3	requirement	derived	predecessor covered full/partial: WL-RULE-806=R; WL-RULE-807=R; WL-RULE-808=R; WL-RULE-809=R
+WL-RULE-326	WL-SPEC-81#sec-8.4	requirement	derived	predecessor covered full/partial: WL-RULE-810=R; WL-RULE-811=R; WL-RULE-812=R; WL-RULE-813=R; WL-RULE-814=R
+WL-RULE-327	WL-SPEC-81#sec-8.5	requirement	derived	predecessor covered full/partial: WL-RULE-815=R; WL-RULE-816=R; WL-RULE-817=R; WL-RULE-818=R; WL-RULE-819=R; WL-RULE-820=?
+WL-RULE-328	WL-SPEC-81#sec-open-questions	requirement	derived	predecessor covered full/partial: WL-RULE-574=R; WL-RULE-823=?
+WL-RULE-329	WL-SPEC-82#sec-1	invariant	text-mixed	Prohibits stored parallel status on the cockpit and requires every displayed status to keep its evidence category, which binds every cockpit feature; built by WL-PLAN-73, held N2 by WL-PLAN-85.
+WL-RULE-330	WL-SPEC-82#sec-2	requirement	derived	predecessor covered full/partial: WL-RULE-778=R
+WL-RULE-331	WL-SPEC-82#sec-2.1	requirement	derived	predecessor covered full/partial: WL-RULE-997=R
+WL-RULE-332	WL-SPEC-82#sec-2.2	requirement	derived	predecessor covered full/partial: WL-RULE-998=R
+WL-RULE-333	WL-SPEC-82#sec-2.3	requirement	derived	predecessor covered full/partial: WL-RULE-1004=R
+WL-RULE-334	WL-SPEC-82#sec-3	requirement	derived	predecessor covered full/partial: WL-RULE-789=R
+WL-RULE-335	WL-SPEC-82#sec-4	split	text-mixed	Requirement is narrow-check.sh plus the settled token, focus and layout fixes; invariant is that every page and later UI work meets WCAG 2.2 AA and those settled rules; built partially by WL-PLAN-73,81,83,85, held N2 by nine later plans.
+WL-RULE-336	WL-SPEC-82#sec-5	informative	text	Heading only with an empty body; the obligations sit in its subsections.
+WL-RULE-337	WL-SPEC-82#sec-5.1	split	text-mixed	Requirement is the three-mode selection table and its transitions; invariant is that the shell stays stable and modes are derived from facts and never persisted, which later Overview features must respect; built by WL-PLAN-73 and partly WL-PLAN-101, held N2 by WL-PLAN-140.
+WL-RULE-338	WL-SPEC-82#sec-5.2	requirement	derived	predecessor covered full/partial: WL-RULE-780=R
+WL-RULE-339	WL-SPEC-82#sec-5.3	requirement	derived	predecessor covered full/partial: WL-RULE-781=R
+WL-RULE-340	WL-SPEC-82#sec-5.4	requirement	text	Specifies deriving the definition of done from deliverables and the custom deliverable editor.
+WL-RULE-341	WL-SPEC-82#sec-6	requirement	text	Specifies the four fact-selected Operations panels.
+WL-RULE-342	WL-SPEC-82#sec-7	requirement	derived	predecessor covered full/partial: WL-RULE-782=R
+WL-RULE-343	WL-SPEC-82#sec-8	requirement	derived	predecessor covered full/partial: WL-RULE-783=R
+WL-RULE-344	WL-SPEC-82#sec-9	requirement	derived	predecessor covered full/partial: WL-RULE-784=R
+WL-RULE-345	WL-SPEC-82#sec-10	requirement	derived	predecessor covered full/partial: WL-RULE-785=R
+WL-RULE-346	WL-SPEC-82#sec-11	requirement	derived	predecessor covered full/partial: WL-RULE-786=R
+WL-RULE-347	WL-SPEC-82#sec-12	requirement	derived	predecessor covered full/partial: WL-RULE-999=R; WL-RULE-1000=R; WL-RULE-1001=R; WL-RULE-1002=R; WL-RULE-1003=N1
+WL-RULE-348	WL-SPEC-82#sec-13	informative	derived	all predecessors N1: WL-RULE-1036=N1
+WL-RULE-349	WL-SPEC-82#sec-13.1	split	text-mixed	Requirement is the review object in Postgres over /api/v1 with the crit Comment golden test; invariant is that every review verb must work with no crit and no browser and nothing server-side knows crit; built partially by WL-PLAN-132,133,135, held N2 by WL-PLAN-134.
+WL-RULE-350	WL-SPEC-82#sec-13.2	requirement	derived	predecessor covered full/partial: WL-RULE-1041=R
+WL-RULE-351	WL-SPEC-82#sec-13.3	requirement	derived	predecessor covered full/partial: WL-RULE-1042=R; WL-RULE-1043=R
+WL-RULE-352	WL-SPEC-82#sec-13.4	requirement	derived	predecessor covered full/partial: WL-RULE-1044=R; WL-RULE-1045=R; WL-RULE-1046=R
+WL-RULE-353	WL-SPEC-82#sec-13.5	requirement	derived	predecessor covered full/partial: WL-RULE-1047=R
+WL-RULE-354	WL-SPEC-82#sec-13.6	requirement	derived	predecessor covered full/partial: WL-RULE-1048=R; WL-RULE-1049=R; WL-RULE-1050=R; WL-RULE-1051=R
+WL-RULE-355	WL-SPEC-82#sec-13.7	requirement	derived	predecessor covered full/partial: WL-RULE-1052=R
+WL-RULE-356	WL-SPEC-82#sec-13.8	requirement	derived	predecessor covered full/partial: WL-RULE-1053=R; WL-RULE-1054=R; WL-RULE-1055=R
+WL-RULE-357	WL-SPEC-82#sec-14	split	text	Builds the reading diff and its labelled surfaces once, and binds all later work never to gate or derive anything from it.
+WL-RULE-358	WL-SPEC-82#sec-15	informative	derived	all predecessors N1: WL-RULE-1146=N1
+WL-RULE-359	WL-SPEC-82#sec-15.1	requirement	derived	predecessor covered full/partial: WL-RULE-1147=R; WL-RULE-1148=R; WL-RULE-1149=R; WL-RULE-1150=R; WL-RULE-1151=R
+WL-RULE-360	WL-SPEC-82#sec-15.2	requirement	text-mixed	Concrete Progress page layout, row expansion and hover positions built once, with no-percentage a testable property of that page; predecessor built by WL-PLAN-136, held N2 by WL-PLAN-137,138,139 which extend the same page.
+WL-RULE-361	WL-SPEC-82#sec-15.3	requirement	derived	predecessor covered full/partial: WL-RULE-1158=R; WL-RULE-1159=R; WL-RULE-1160=R; WL-RULE-1161=R; WL-RULE-1162=R; WL-RULE-1163=R; WL-RULE-1164=R
+WL-RULE-362	WL-SPEC-82#sec-15.4	split	text-mixed	Requirement is the JSON write gate, frame-ancestors header and read-only stream; invariant is that every later write route under /progress/ obeys the nine rules and a relaxation must be justified; built by WL-PLAN-137,138,139, held N2 by WL-PLAN-136 and unclassified by 138,139.
+WL-RULE-363	WL-SPEC-82#sec-15.5	requirement	derived	predecessor covered full/partial: WL-RULE-1171=R; WL-RULE-1172=R; WL-RULE-1173=R; WL-RULE-1174=R; WL-RULE-1175=R
+WL-RULE-364	WL-SPEC-82#sec-15.6	requirement	derived	predecessor covered full/partial: WL-RULE-1176=?; WL-RULE-1177=R; WL-RULE-1178=R; WL-RULE-1179=R
+WL-RULE-365	WL-SPEC-82#sec-15.7	requirement	derived	predecessor covered full/partial: WL-RULE-1180=R
+WL-RULE-366	WL-SPEC-82#sec-16	requirement	derived	predecessor covered full/partial: WL-RULE-486=R; WL-RULE-487=R
+WL-RULE-367	WL-SPEC-82#sec-16.1	requirement	derived	predecessor covered full/partial: WL-RULE-488=R; WL-RULE-489=R; WL-RULE-490=R; WL-RULE-491=R; WL-RULE-492=R; WL-RULE-493=R
+WL-RULE-368	WL-SPEC-82#sec-16.2	requirement	derived	predecessor covered full/partial: WL-RULE-494=R; WL-RULE-495=R; WL-RULE-496=R; WL-RULE-497=R; WL-RULE-498=R
+WL-RULE-369	WL-SPEC-82#sec-16.3	requirement	derived	predecessor covered full/partial: WL-RULE-499=R
+WL-RULE-370	WL-SPEC-82#sec-16.4	requirement	derived	predecessor covered full/partial: WL-RULE-500=R
+WL-RULE-371	WL-SPEC-82#sec-17	informative	text	Non-goals list.
+WL-RULE-372	WL-SPEC-82#sec-open-questions	informative	text	Open questions.
+WL-RULE-373	WL-SPEC-1#sec-0	requirement	derived	predecessor covered full/partial: WL-RULE-373=R
+WL-RULE-374	WL-SPEC-1#sec-1	requirement	derived	predecessor covered full/partial: WL-RULE-374=R
+WL-RULE-391	WL-SPEC-1#sec-9.1	requirement	derived	predecessor covered full/partial: WL-RULE-391=R
+WL-RULE-392	WL-SPEC-1#sec-9.2	requirement	text-mixed	Concrete claim mapper, Claims field and expected_github_login sync built once; built by seven plans, held none by WL-PLAN-143 (unclassified).
+WL-RULE-393	WL-SPEC-1#sec-9.3	requirement	text-mixed	Concrete web link flow steps built once and held by tests; built by seven plans, held none by WL-PLAN-143 (unclassified).
+WL-RULE-394	WL-SPEC-1#sec-9.4	requirement	text-mixed	Concrete command changes (auth login, hidden alias, auth status) built once; built by seven plans, held none by WL-PLAN-143 (unclassified).
+WL-RULE-395	WL-SPEC-1#sec-9.5	requirement	text-mixed	Concrete token table, encryption at rest and locked lazy refresh built once; built by seven plans, held none by WL-PLAN-143 (unclassified).
+WL-RULE-396	WL-SPEC-1#sec-10	requirement	derived	predecessor covered full/partial: WL-RULE-396=R
+WL-RULE-397	WL-SPEC-1#sec-11	requirement	derived	predecessor covered full/partial: WL-RULE-397=R
+WL-RULE-399	WL-SPEC-1#sec-13	requirement	derived	predecessor covered full/partial: WL-RULE-399=R
+WL-RULE-1234	WL-SPEC-80#sec-8.6	requirement	text	Specifies the OTLP logs ingest route and attribution.
+WL-RULE-1235	WL-SPEC-80#sec-8.7	requirement	text	Specifies the task_activity table and retention.
+WL-RULE-1236	WL-SPEC-80#sec-8.8	requirement	text	Specifies forwarding OTLP batches to the otel-gateway.
+WL-RULE-1237	WL-SPEC-80#sec-8.9	requirement	text	Specifies the Activity card and its SSE stream.
+WL-RULE-1242	WL-SPEC-71#sec-4	requirement	text	Specifies the Activity card and its SSE stream on the task page.
+WL-RULE-1246	WL-SPEC-82#sec-2.4	requirement	text	Specifies the Cmd+K jump box and its completion order.
+WL-RULE-1247	WL-SPEC-77#sec-16.1	invariant	text	No hook, CI job or script may ever read document status from a file, binding all later work.
+WL-RULE-1287		invariant	text	Every timestamp column, payload and API field is UTC, binding all later work.
+WL-RULE-1288	WL-SPEC-77#sec-8.1	requirement	derived	predecessor covered full/partial: WL-RULE-1288=R
+WL-RULE-1289	WL-SPEC-73#sec-10	invariant	text	Every timestamp column, payload and API field is UTC, binding all later work.
+WL-RULE-1290	WL-SPEC-79#sec-19	requirement	text	Specifies three regression tests to build for hybrid search.
+WL-RULE-1291	WL-SPEC-80#sec-12	requirement	text	Specifies the branch naming and path guard tests to build.
+WL-RULE-1292	WL-SPEC-74#sec-9.5	requirement	text	Specifies the GitHub token route, CLI commands and hook wiring.
+WL-RULE-1293	WL-SPEC-1#sec-9.5a	requirement	text	Specifies the GitHub token route, CLI commands and hook wiring.
+WL-RULE-1294	WL-SPEC-77#sec-19	requirement	derived	predecessor covered full/partial: WL-RULE-1294=R
+WL-RULE-1295	WL-SPEC-77#sec-19.1	requirement	derived	predecessor covered full/partial: WL-RULE-1295=R
+WL-RULE-1296	WL-SPEC-77#sec-19.2	requirement	derived	predecessor covered full/partial: WL-RULE-1296=R
+WL-RULE-1297	WL-SPEC-77#sec-19.3	requirement	derived	predecessor covered full/partial: WL-RULE-1297=R
+WL-RULE-1298	WL-SPEC-77#sec-19.4	requirement	derived	predecessor covered full/partial: WL-RULE-1298=R
+WL-RULE-1299	WL-SPEC-77#sec-19.5	requirement	derived	predecessor covered full/partial: WL-RULE-1299=R
+WL-RULE-1300	WL-SPEC-77#sec-19.6	requirement	derived	predecessor covered full/partial: WL-RULE-1300=R
+WL-RULE-1301	WL-SPEC-77#sec-19.7	requirement	derived	predecessor covered full/partial: WL-RULE-1301=R

@@ -1,0 +1,2266 @@
+plan	plan_status	to_project	to_kind	to_number	to_anchor	to_rule	coverage	to_external
+DP-PLAN-1	accepted			0			none	DP-SPEC-1#sec-0
+DP-PLAN-1	accepted			0			none	DP-SPEC-1#sec-1
+DP-PLAN-1	accepted			0			full	DP-SPEC-1#sec-10
+DP-PLAN-1	accepted			0			full	DP-SPEC-1#sec-11
+DP-PLAN-1	accepted			0			partial	DP-SPEC-1#sec-12
+DP-PLAN-1	accepted			0			none	DP-SPEC-1#sec-14
+DP-PLAN-1	accepted			0			none	DP-SPEC-1#sec-2
+DP-PLAN-10	accepted			0			partial	DP-SPEC-7#sec-13
+DP-PLAN-12	accepted			0			full	DP-SPEC-10#sec-10
+DP-PLAN-12	accepted			0			partial	DP-SPEC-10#sec-11
+DP-PLAN-12	accepted			0			full	DP-SPEC-10#sec-12
+DP-PLAN-12	accepted			0			full	DP-SPEC-10#sec-5
+DP-PLAN-12	accepted			0			full	DP-SPEC-10#sec-5.1
+DP-PLAN-12	accepted			0			full	DP-SPEC-10#sec-5.2
+DP-PLAN-12	accepted			0			partial	DP-SPEC-10#sec-6
+DP-PLAN-13	accepted			0			partial	DP-SPEC-10#sec-11
+DP-PLAN-13	accepted			0			full	DP-SPEC-10#sec-4
+DP-PLAN-13	accepted			0			partial	DP-SPEC-10#sec-6
+DP-PLAN-13	accepted			0			full	DP-SPEC-10#sec-7
+DP-PLAN-13	accepted			0			full	DP-SPEC-10#sec-8
+DP-PLAN-14	accepted			0			partial	DP-SPEC-14#sec-4
+DP-PLAN-16	accepted			0			partial	DP-SPEC-14#sec-4
+DP-PLAN-2	accepted			0			none	DP-SPEC-1#sec-0
+DP-PLAN-2	accepted			0			none	DP-SPEC-1#sec-1
+DP-PLAN-2	accepted			0			partial	DP-SPEC-1#sec-12
+DP-PLAN-2	accepted			0			full	DP-SPEC-1#sec-13
+DP-PLAN-2	accepted			0			none	DP-SPEC-1#sec-14
+DP-PLAN-2	accepted			0			none	DP-SPEC-1#sec-2
+DP-PLAN-2	accepted			0			full	DP-SPEC-1#sec-3
+DP-PLAN-2	accepted			0			full	DP-SPEC-1#sec-4
+DP-PLAN-2	accepted			0			full	DP-SPEC-1#sec-5
+DP-PLAN-2	accepted			0			full	DP-SPEC-1#sec-6
+DP-PLAN-2	accepted			0			full	DP-SPEC-1#sec-7
+DP-PLAN-2	accepted			0			full	DP-SPEC-1#sec-8
+DP-PLAN-23	accepted			0			full	DP-SPEC-17#sec-7
+DP-PLAN-24	accepted			0			partial	DP-SPEC-17#sec-8
+DP-PLAN-25	accepted			0			partial	DP-SPEC-17#sec-5.1
+DP-PLAN-25	accepted			0			partial	DP-SPEC-17#sec-6
+DP-PLAN-25	accepted			0			full	DP-SPEC-17#sec-6.1
+DP-PLAN-27	accepted			0			partial	DP-SPEC-17#sec-5.1
+DP-PLAN-27	accepted			0			partial	DP-SPEC-17#sec-6
+DP-PLAN-27	accepted			0			partial	DP-SPEC-17#sec-8
+DP-PLAN-3	accepted			0			none	DP-SPEC-1#sec-0
+DP-PLAN-3	accepted			0			none	DP-SPEC-1#sec-1
+DP-PLAN-3	accepted			0			partial	DP-SPEC-1#sec-12
+DP-PLAN-3	accepted			0			none	DP-SPEC-1#sec-14
+DP-PLAN-3	accepted			0			none	DP-SPEC-1#sec-2
+DP-PLAN-3	accepted			0			full	DP-SPEC-1#sec-9
+DP-PLAN-32	draft	data-platform	spec	24	sec-4	DP-RULE-4	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-5	DP-RULE-5	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-6	DP-RULE-6	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-6.1	DP-RULE-7	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-6.2	DP-RULE-8	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-6.3	DP-RULE-9	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-6.4	DP-RULE-10	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-7	DP-RULE-11	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-7.1	DP-RULE-12	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-7.2	DP-RULE-13	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-7.3	DP-RULE-14	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-7.4	DP-RULE-15	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-7.5	DP-RULE-16	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-8	DP-RULE-17	full	
+DP-PLAN-32	draft	data-platform	spec	24	sec-9	DP-RULE-18	full	
+EA-PLAN-1	accepted			0			full	EA-SPEC-2#sec-7
+EA-PLAN-10	accepted			0			partial	EA-SPEC-3#sec-10
+EA-PLAN-10	accepted			0			partial	EA-SPEC-3#sec-6
+EA-PLAN-10	accepted			0			partial	EA-SPEC-3#sec-9
+EA-PLAN-11	accepted			0			partial	EA-SPEC-3#sec-10
+EA-PLAN-11	accepted			0			full	EA-SPEC-3#sec-3
+EA-PLAN-11	accepted			0			full	EA-SPEC-3#sec-4
+EA-PLAN-11	accepted			0			partial	EA-SPEC-3#sec-5
+EA-PLAN-11	accepted			0			partial	EA-SPEC-3#sec-5.1
+EA-PLAN-11	accepted			0			partial	EA-SPEC-3#sec-5.2
+EA-PLAN-11	accepted			0			partial	EA-SPEC-3#sec-8
+EA-PLAN-11	accepted			0			partial	EA-SPEC-3#sec-9
+EA-PLAN-12	accepted			0			partial	EA-SPEC-3#sec-10
+EA-PLAN-12	accepted			0			partial	EA-SPEC-3#sec-5
+EA-PLAN-12	accepted			0			partial	EA-SPEC-3#sec-5.1
+EA-PLAN-12	accepted			0			partial	EA-SPEC-3#sec-5.2
+EA-PLAN-12	accepted			0			full	EA-SPEC-3#sec-5.3
+EA-PLAN-12	accepted			0			partial	EA-SPEC-3#sec-6
+EA-PLAN-12	accepted			0			partial	EA-SPEC-3#sec-8
+EA-PLAN-12	accepted			0			partial	EA-SPEC-3#sec-9
+EA-PLAN-13	accepted			0			none	EA-SPEC-3#sec-0
+EA-PLAN-13	accepted			0			none	EA-SPEC-3#sec-1
+EA-PLAN-13	accepted			0			partial	EA-SPEC-3#sec-10
+EA-PLAN-13	accepted			0			none	EA-SPEC-3#sec-11
+EA-PLAN-13	accepted			0			none	EA-SPEC-3#sec-12
+EA-PLAN-13	accepted			0			none	EA-SPEC-3#sec-13
+EA-PLAN-13	accepted			0			none	EA-SPEC-3#sec-2
+EA-PLAN-13	accepted			0			full	EA-SPEC-3#sec-7
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-1
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-10
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-2
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-3
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-4
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-4.1
+EA-PLAN-14	accepted			0			full	EA-SPEC-4#sec-4.2
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-4.3
+EA-PLAN-14	accepted			0			full	EA-SPEC-4#sec-4.4
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-8
+EA-PLAN-14	accepted			0			partial	EA-SPEC-4#sec-9
+EA-PLAN-15	accepted			0			partial	EA-SPEC-4#sec-5
+EA-PLAN-15	accepted			0			full	EA-SPEC-4#sec-5.1
+EA-PLAN-15	accepted			0			full	EA-SPEC-4#sec-5.2
+EA-PLAN-15	accepted			0			partial	EA-SPEC-4#sec-8
+EA-PLAN-15	accepted			0			partial	EA-SPEC-4#sec-9
+EA-PLAN-16	accepted			0			partial	EA-SPEC-4#sec-7
+EA-PLAN-16	accepted			0			full	EA-SPEC-4#sec-7.1
+EA-PLAN-16	accepted			0			partial	EA-SPEC-4#sec-8
+EA-PLAN-16	accepted			0			partial	EA-SPEC-4#sec-9
+EA-PLAN-17	accepted			0			partial	EA-SPEC-4#sec-2
+EA-PLAN-17	accepted			0			full	EA-SPEC-4#sec-4.1
+EA-PLAN-17	accepted			0			partial	EA-SPEC-4#sec-5.1
+EA-PLAN-17	accepted			0			full	EA-SPEC-4#sec-6
+EA-PLAN-17	accepted			0			full	EA-SPEC-4#sec-6.1
+EA-PLAN-17	accepted			0			full	EA-SPEC-4#sec-7
+EA-PLAN-17	accepted			0			full	EA-SPEC-4#sec-8
+EA-PLAN-17	accepted			0			partial	EA-SPEC-4#sec-9
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-1
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-1.1
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-10
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-2
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-3
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-4
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-4.3
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-5
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-5.3
+EA-PLAN-18	accepted			0			full	EA-SPEC-4#sec-9
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-1
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-10
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-11
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-12
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-2
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-3
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-4
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-5
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-6
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-7
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-8
+EA-PLAN-19	accepted			0			full	EA-SPEC-5#sec-9
+EA-PLAN-2	accepted			0			full	EA-SPEC-2#sec-3.1
+EA-PLAN-2	accepted			0			full	EA-SPEC-2#sec-3.3
+EA-PLAN-2	accepted			0			full	EA-SPEC-2#sec-3.4
+EA-PLAN-2	accepted			0			full	EA-SPEC-2#sec-3.5
+EA-PLAN-2	accepted			0			full	EA-SPEC-2#sec-5
+EA-PLAN-2	accepted			0			full	EA-SPEC-2#sec-6
+EA-PLAN-2	accepted			0			full	EA-SPEC-2#sec-9
+EA-PLAN-3	accepted			0			full	EA-SPEC-2#sec-8
+EA-PLAN-4	accepted			0			full	EA-SPEC-2#sec-3.2
+EA-PLAN-4	accepted			0			full	EA-SPEC-2#sec-4.1
+EA-PLAN-5	accepted			0			full	EA-SPEC-2#sec-10
+EA-PLAN-5	accepted			0			full	EA-SPEC-2#sec-3.1
+EA-PLAN-5	accepted			0			full	EA-SPEC-2#sec-4
+EA-PLAN-6	accepted			0			none	EA-SPEC-1#sec-11
+EA-PLAN-6	accepted			0			partial	EA-SPEC-1#sec-4.2
+EA-PLAN-6	accepted			0			partial	EA-SPEC-1#sec-4.3
+EA-PLAN-6	accepted			0			partial	EA-SPEC-1#sec-4.5
+EA-PLAN-6	accepted			0			full	EA-SPEC-1#sec-4.6
+EA-PLAN-6	accepted			0			full	EA-SPEC-1#sec-4.7
+EA-PLAN-6	accepted			0			partial	EA-SPEC-1#sec-5.4
+EA-PLAN-6	accepted			0			full	EA-SPEC-1#sec-5.5
+EA-PLAN-6	accepted			0			partial	EA-SPEC-1#sec-5.9
+EA-PLAN-6	accepted			0			full	EA-SPEC-1#sec-6.3
+EA-PLAN-6	accepted			0			full	EA-SPEC-1#sec-7
+EA-PLAN-7	accepted			0			none	EA-SPEC-1#sec-11
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-12
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-4.1
+EA-PLAN-7	accepted			0			partial	EA-SPEC-1#sec-4.2
+EA-PLAN-7	accepted			0			partial	EA-SPEC-1#sec-4.3
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-4.4
+EA-PLAN-7	accepted			0			partial	EA-SPEC-1#sec-4.5
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-5.1
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-5.3
+EA-PLAN-7	accepted			0			partial	EA-SPEC-1#sec-5.4
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-5.7
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-5.8
+EA-PLAN-7	accepted			0			partial	EA-SPEC-1#sec-5.9
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-6.2
+EA-PLAN-7	accepted			0			full	EA-SPEC-1#sec-6.4
+EA-PLAN-8	accepted			0			none	EA-SPEC-2#sec-0
+EA-PLAN-8	accepted			0			none	EA-SPEC-2#sec-1
+EA-PLAN-8	accepted			0			none	EA-SPEC-2#sec-11
+EA-PLAN-8	accepted			0			partial	EA-SPEC-2#sec-12
+EA-PLAN-8	accepted			0			none	EA-SPEC-2#sec-13
+EA-PLAN-8	accepted			0			none	EA-SPEC-2#sec-14
+EA-PLAN-8	accepted			0			none	EA-SPEC-2#sec-15
+EA-PLAN-8	accepted			0			none	EA-SPEC-2#sec-2
+EA-PLAN-8	accepted			0			partial	EA-SPEC-2#sec-3
+EA-PLAN-8	accepted			0			partial	EA-SPEC-2#sec-4.2
+EA-PLAN-8	accepted			0			partial	EA-SPEC-2#sec-4.3
+EA-PLAN-8	accepted			0			partial	EA-SPEC-2#sec-5.1
+EA-PLAN-8	accepted			0			partial	EA-SPEC-2#sec-5.2
+EA-PLAN-8	accepted			0			partial	EA-SPEC-2#sec-5.3
+EA-PLAN-8	accepted			0			partial	EA-SPEC-2#sec-5.4
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-0
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-1
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-10
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-13
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-14
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-2
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-3
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-4
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-5
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-5.2
+EA-PLAN-9	accepted			0			full	EA-SPEC-1#sec-5.6
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-6
+EA-PLAN-9	accepted			0			none	EA-SPEC-1#sec-6.1
+EA-PLAN-9	accepted			0			partial	EA-SPEC-1#sec-8
+EA-PLAN-9	accepted			0			full	EA-SPEC-1#sec-9
+HDB-PLAN-4	accepted			0			none	HDB-SPEC-2#sec-1
+HDB-PLAN-4	accepted			0			none	HDB-SPEC-2#sec-2
+HDB-PLAN-4	accepted			0			partial	HDB-SPEC-2#sec-3
+HDB-PLAN-4	accepted			0			full	HDB-SPEC-2#sec-4
+HDB-PLAN-4	accepted			0			none	HDB-SPEC-2#sec-5
+HDB-PLAN-4	accepted			0			partial	HDB-SPEC-2#sec-6
+HDB-PLAN-4	accepted			0			none	HDB-SPEC-2#sec-7
+HDB-PLAN-5	accepted			0			partial	HDB-SPEC-2#sec-3
+HDB-PLAN-63	accepted			0			none	HDB-SPEC-25#sec-1
+HDB-PLAN-63	accepted			0			none	HDB-SPEC-25#sec-2
+HDB-PLAN-63	accepted			0			none	HDB-SPEC-25#sec-3
+HDB-PLAN-63	accepted			0			full	HDB-SPEC-25#sec-3.1
+HDB-PLAN-63	accepted			0			none	HDB-SPEC-25#sec-4
+HDB-PLAN-63	accepted			0			partial	HDB-SPEC-25#sec-5
+HDB-PLAN-63	accepted			0			none	HDB-SPEC-25#sec-6
+HDB-PLAN-64	accepted			0			partial	HDB-SPEC-25#sec-3.2
+HDB-PLAN-65	accepted			0			partial	HDB-SPEC-25#sec-3.3
+HDB-PLAN-74	accepted			0			full	HDB-SPEC-25#sec-3.4
+HDB-PLAN-75	accepted			0			partial	HDB-SPEC-25#sec-3.5
+HDB-PLAN-76	accepted			0			partial	HDB-SPEC-2#sec-6
+HDB-PLAN-76	accepted			0			partial	HDB-SPEC-25#sec-3.6
+HDB-PLAN-77	accepted			0			partial	HDB-SPEC-25#sec-3.3
+HDB-PLAN-77	accepted			0			partial	HDB-SPEC-25#sec-3.5
+WL-PLAN-1	draft	worklode	spec	38	sec-0	WL-RULE-825	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-1	WL-RULE-826	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-2	WL-RULE-827	full	
+WL-PLAN-1	draft	worklode	spec	38	sec-2.1	WL-RULE-828	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-2.2	WL-RULE-829	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-3	WL-RULE-830	full	
+WL-PLAN-1	draft	worklode	spec	38	sec-3.1	WL-RULE-831	full	
+WL-PLAN-1	draft	worklode	spec	38	sec-3.2	WL-RULE-832	full	
+WL-PLAN-1	draft	worklode	spec	38	sec-3.3	WL-RULE-833	full	
+WL-PLAN-1	draft	worklode	spec	38	sec-4.1	WL-RULE-835	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-4.2	WL-RULE-836	full	
+WL-PLAN-1	draft	worklode	spec	38	sec-4.3	WL-RULE-837	full	
+WL-PLAN-1	draft	worklode	spec	38	sec-4.4	WL-RULE-838	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-5	WL-RULE-840	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-5.1	WL-RULE-841	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-6	WL-RULE-842	full	
+WL-PLAN-1	draft	worklode	spec	38	sec-7	WL-RULE-843	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-8	WL-RULE-844	none	
+WL-PLAN-1	draft	worklode	spec	38	sec-9	WL-RULE-845	full	
+WL-PLAN-10	accepted	worklode	spec	42	sec-1	WL-RULE-890	full	
+WL-PLAN-10	accepted	worklode	spec	42	sec-2	WL-RULE-891	full	
+WL-PLAN-10	accepted	worklode	spec	42	sec-3	WL-RULE-892	full	
+WL-PLAN-10	accepted	worklode	spec	42	sec-4	WL-RULE-893	full	
+WL-PLAN-10	accepted	worklode	spec	42	sec-4.1	WL-RULE-894	full	
+WL-PLAN-10	accepted	worklode	spec	42	sec-5	WL-RULE-895	full	
+WL-PLAN-10	accepted	worklode	spec	42	sec-6	WL-RULE-896	full	
+WL-PLAN-100	accepted	worklode	spec	29	sec-7.1	WL-RULE-767	partial	
+WL-PLAN-100	accepted	worklode	spec	29	sec-7.3	WL-RULE-769	partial	
+WL-PLAN-100	accepted	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-100	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-100	accepted	worklode	spec	32	sec-7	WL-RULE-784	partial	
+WL-PLAN-101	accepted	worklode	spec	29	sec-1	WL-RULE-755	full	
+WL-PLAN-101	accepted	worklode	spec	29	sec-2	WL-RULE-756	partial	
+WL-PLAN-101	accepted	worklode	spec	29	sec-8	WL-RULE-770	full	
+WL-PLAN-101	accepted	worklode	spec	29	sec-8.1	WL-RULE-771	full	
+WL-PLAN-101	accepted	worklode	spec	29	sec-8.2	WL-RULE-772	full	
+WL-PLAN-101	accepted	worklode	spec	29	sec-8.3	WL-RULE-773	full	
+WL-PLAN-101	accepted	worklode	spec	29	sec-8.4	WL-RULE-774	full	
+WL-PLAN-101	accepted	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-101	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-101	accepted	worklode	spec	32	sec-3	WL-RULE-779	partial	
+WL-PLAN-101	accepted	worklode	spec	32	sec-3.1	WL-RULE-780	partial	
+WL-PLAN-101	accepted	worklode	spec	32	sec-5	WL-RULE-782	full	
+WL-PLAN-102	spent	worklode	spec	29	sec-3	WL-RULE-757	partial	
+WL-PLAN-102	spent	worklode	spec	29	sec-3.1	WL-RULE-758	full	
+WL-PLAN-102	spent	worklode	spec	29	sec-3.2	WL-RULE-759	full	
+WL-PLAN-102	spent	worklode	spec	29	sec-3.3	WL-RULE-760	full	
+WL-PLAN-102	spent	worklode	spec	29	sec-8.3	WL-RULE-773	full	
+WL-PLAN-103	accepted	worklode	spec	29	sec-8.2	WL-RULE-772	full	
+WL-PLAN-103	accepted	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-103	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-103	accepted	worklode	spec	32	sec-9	WL-RULE-786	partial	
+WL-PLAN-104	accepted	worklode	spec	29	sec-6	WL-RULE-763	full	
+WL-PLAN-104	accepted	worklode	spec	29	sec-6.1	WL-RULE-764	partial	
+WL-PLAN-104	accepted	worklode	spec	29	sec-6.2	WL-RULE-765	partial	
+WL-PLAN-104	accepted	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-104	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-104	accepted	worklode	spec	32	sec-6	WL-RULE-783	partial	
+WL-PLAN-105	draft	worklode	spec	29	sec-8.2	WL-RULE-772	none	
+WL-PLAN-105	draft	worklode	spec	29	sec-8.4	WL-RULE-774	partial	
+WL-PLAN-106	accepted	worklode	spec	45	sec-5.1	WL-RULE-917	full	
+WL-PLAN-106	accepted	worklode	spec	45	sec-5.2	WL-RULE-918	full	
+WL-PLAN-106	accepted	worklode	spec	45	sec-5.4	WL-RULE-920	full	
+WL-PLAN-106	accepted	worklode	spec	45	sec-5.5	WL-RULE-921	full	
+WL-PLAN-106	accepted	worklode	spec	52	sec-1	WL-RULE-960	full	
+WL-PLAN-106	accepted	worklode	spec	52	sec-2	WL-RULE-961	full	
+WL-PLAN-106	accepted	worklode	spec	52	sec-3	WL-RULE-962	full	
+WL-PLAN-106	accepted	worklode	spec	52	sec-4	WL-RULE-963	full	
+WL-PLAN-106	accepted	worklode	spec	52	sec-5	WL-RULE-964	full	
+WL-PLAN-106	accepted	worklode	spec	53	sec-1	WL-RULE-967	full	
+WL-PLAN-106	accepted	worklode	spec	53	sec-2	WL-RULE-968	full	
+WL-PLAN-106	accepted	worklode	spec	53	sec-4	WL-RULE-970	full	
+WL-PLAN-106	accepted	worklode	spec	53	sec-5	WL-RULE-971	full	
+WL-PLAN-106	accepted	worklode	spec	53	sec-6	WL-RULE-972	full	
+WL-PLAN-106	accepted	worklode	spec	54	sec-3.1	WL-RULE-981	full	
+WL-PLAN-106	accepted	worklode	spec	54	sec-3.3	WL-RULE-983	full	
+WL-PLAN-106	accepted	worklode	spec	55	sec-1	WL-RULE-988	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-2	WL-RULE-375	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-2.1	WL-RULE-376	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-4	WL-RULE-378	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-5	WL-RULE-379	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-7	WL-RULE-381	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-8	WL-RULE-382	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-8.1	WL-RULE-383	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-8.2	WL-RULE-384	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-8.3	WL-RULE-385	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-8.4	WL-RULE-386	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-8.5	WL-RULE-387	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-8.6	WL-RULE-388	full	
+WL-PLAN-106	accepted	worklode	spec	1	sec-8.7	WL-RULE-389	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-1	WL-RULE-408	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-1.1	WL-RULE-409	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-1.2	WL-RULE-410	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-1.3	WL-RULE-411	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-1.4	WL-RULE-412	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-13	WL-RULE-446	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-2	WL-RULE-413	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-2.1	WL-RULE-414	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-2.2	WL-RULE-415	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-2.3	WL-RULE-416	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-2.4	WL-RULE-417	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-2.5	WL-RULE-418	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-3	WL-RULE-419	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-4	WL-RULE-420	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-5.1	WL-RULE-422	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-5.4	WL-RULE-425	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-5.5	WL-RULE-426	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-5.6	WL-RULE-427	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-5.7	WL-RULE-428	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6	WL-RULE-429	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.1	WL-RULE-430	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.10	WL-RULE-439	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.2	WL-RULE-431	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.3	WL-RULE-432	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.4	WL-RULE-433	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.5	WL-RULE-434	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.6	WL-RULE-435	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.7	WL-RULE-436	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.8	WL-RULE-437	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-6.9	WL-RULE-438	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-7	WL-RULE-440	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-8	WL-RULE-441	full	
+WL-PLAN-106	accepted	worklode	spec	4	sec-9	WL-RULE-442	full	
+WL-PLAN-106	accepted	worklode	spec	5	sec-1	WL-RULE-448	full	
+WL-PLAN-106	accepted	worklode	spec	5	sec-2	WL-RULE-449	full	
+WL-PLAN-106	accepted	worklode	spec	5	sec-3	WL-RULE-451	full	
+WL-PLAN-106	accepted	worklode	spec	5	sec-4	WL-RULE-452	full	
+WL-PLAN-106	accepted	worklode	spec	5	sec-5	WL-RULE-453	full	
+WL-PLAN-106	accepted	worklode	spec	5	sec-6	WL-RULE-454	full	
+WL-PLAN-106	accepted	worklode	spec	5	sec-9	WL-RULE-457	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-1	WL-RULE-459	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-1.1	WL-RULE-460	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-11.1	WL-RULE-476	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-12	WL-RULE-477	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-2	WL-RULE-461	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-2.1	WL-RULE-462	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-3.1	WL-RULE-464	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-4	WL-RULE-465	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-5	WL-RULE-466	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-6	WL-RULE-467	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-8	WL-RULE-469	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-8.1	WL-RULE-470	full	
+WL-PLAN-106	accepted	worklode	spec	6	sec-8.2	WL-RULE-471	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-1	WL-RULE-487	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-1.1	WL-RULE-488	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-2	WL-RULE-489	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-2.1	WL-RULE-490	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-2.2	WL-RULE-491	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-2.3	WL-RULE-492	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-2.4	WL-RULE-493	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-3.1	WL-RULE-495	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-3.2	WL-RULE-496	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-3.4	WL-RULE-498	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-4	WL-RULE-499	full	
+WL-PLAN-106	accepted	worklode	spec	7	sec-8	WL-RULE-503	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-1	WL-RULE-505	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-10	WL-RULE-520	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-11	WL-RULE-521	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-12	WL-RULE-522	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-14	WL-RULE-524	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-15	WL-RULE-525	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-17.1	WL-RULE-533	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-17.2	WL-RULE-534	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-17.3	WL-RULE-535	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-2	WL-RULE-506	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-21	WL-RULE-543	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-3	WL-RULE-507	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-3.1	WL-RULE-508	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-3.2	WL-RULE-509	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-4	WL-RULE-510	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-5.1	WL-RULE-512	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-5.2	WL-RULE-513	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-6	WL-RULE-514	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-7	WL-RULE-515	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-7.1	WL-RULE-516	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-7.2	WL-RULE-517	full	
+WL-PLAN-106	accepted	worklode	spec	8	sec-9	WL-RULE-519	full	
+WL-PLAN-106	accepted	worklode	spec	12	sec-1	WL-RULE-546	full	
+WL-PLAN-106	accepted	worklode	spec	12	sec-2	WL-RULE-547	full	
+WL-PLAN-106	accepted	worklode	spec	12	sec-3	WL-RULE-548	full	
+WL-PLAN-106	accepted	worklode	spec	12	sec-4	WL-RULE-549	full	
+WL-PLAN-106	accepted	worklode	spec	12	sec-5	WL-RULE-550	full	
+WL-PLAN-106	accepted	worklode	spec	12	sec-6	WL-RULE-551	full	
+WL-PLAN-106	accepted	worklode	spec	12	sec-7	WL-RULE-552	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-1	WL-RULE-554	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-1.1	WL-RULE-555	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-1.2	WL-RULE-556	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-2	WL-RULE-557	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-2.1	WL-RULE-558	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-2.2	WL-RULE-559	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-2.3	WL-RULE-560	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-3	WL-RULE-561	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-6	WL-RULE-564	full	
+WL-PLAN-106	accepted	worklode	spec	13	sec-7	WL-RULE-565	full	
+WL-PLAN-106	accepted	worklode	spec	16	sec-1	WL-RULE-567	full	
+WL-PLAN-106	accepted	worklode	spec	16	sec-2	WL-RULE-568	full	
+WL-PLAN-106	accepted	worklode	spec	16	sec-3	WL-RULE-569	full	
+WL-PLAN-106	accepted	worklode	spec	16	sec-4	WL-RULE-570	full	
+WL-PLAN-106	accepted	worklode	spec	16	sec-5	WL-RULE-571	full	
+WL-PLAN-106	accepted	worklode	spec	16	sec-6	WL-RULE-572	full	
+WL-PLAN-106	accepted	worklode	spec	16	sec-9	WL-RULE-575	full	
+WL-PLAN-106	accepted	worklode	spec	17	sec-1	WL-RULE-577	full	
+WL-PLAN-106	accepted	worklode	spec	17	sec-10	WL-RULE-586	full	
+WL-PLAN-106	accepted	worklode	spec	17	sec-2	WL-RULE-578	full	
+WL-PLAN-106	accepted	worklode	spec	17	sec-3	WL-RULE-579	full	
+WL-PLAN-106	accepted	worklode	spec	17	sec-4	WL-RULE-580	full	
+WL-PLAN-106	accepted	worklode	spec	17	sec-5	WL-RULE-581	full	
+WL-PLAN-106	accepted	worklode	spec	17	sec-6	WL-RULE-582	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-1	WL-RULE-588	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-2	WL-RULE-589	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-3.1	WL-RULE-591	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-3.2	WL-RULE-592	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-3.3	WL-RULE-593	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-4.1	WL-RULE-595	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-4.2	WL-RULE-596	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-4.3	WL-RULE-597	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-4.4	WL-RULE-598	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-4.5	WL-RULE-599	full	
+WL-PLAN-106	accepted	worklode	spec	19	sec-5	WL-RULE-600	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-2	WL-RULE-604	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-2.1	WL-RULE-605	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-2.2	WL-RULE-606	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-2.3	WL-RULE-607	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-3.1	WL-RULE-609	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-3.2	WL-RULE-610	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-3.3	WL-RULE-611	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-3.4	WL-RULE-612	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-3.5	WL-RULE-613	full	
+WL-PLAN-106	accepted	worklode	spec	20	sec-4	WL-RULE-614	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-1	WL-RULE-618	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-10	WL-RULE-629	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-11	WL-RULE-630	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-11.1	WL-RULE-631	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-11.2	WL-RULE-632	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-12	WL-RULE-633	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-13	WL-RULE-634	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-15	WL-RULE-636	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-15.1	WL-RULE-637	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-2	WL-RULE-619	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-3	WL-RULE-620	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-5	WL-RULE-622	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-6	WL-RULE-623	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-8	WL-RULE-625	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-8.1	WL-RULE-626	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-8.2	WL-RULE-627	full	
+WL-PLAN-106	accepted	worklode	spec	21	sec-9	WL-RULE-628	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-1	WL-RULE-639	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-2	WL-RULE-640	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-3	WL-RULE-641	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-4	WL-RULE-642	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-5	WL-RULE-643	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-6	WL-RULE-644	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-7	WL-RULE-645	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-8	WL-RULE-646	full	
+WL-PLAN-106	accepted	worklode	spec	22	sec-9	WL-RULE-647	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-11.1	WL-RULE-688	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-11.2	WL-RULE-689	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-11.3	WL-RULE-690	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-11.4	WL-RULE-691	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-11.6	WL-RULE-693	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-14	WL-RULE-696	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-14.1	WL-RULE-697	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-14.2	WL-RULE-698	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-14.3	WL-RULE-699	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-19	WL-RULE-716	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-2	WL-RULE-650	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-2.1	WL-RULE-651	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-2.2	WL-RULE-652	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-20	WL-RULE-717	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-3	WL-RULE-653	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-3.1	WL-RULE-654	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-3.2	WL-RULE-655	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-3.3	WL-RULE-656	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-4.4	WL-RULE-661	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-6.2	WL-RULE-667	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-7.1	WL-RULE-669	full	
+WL-PLAN-106	accepted	worklode	spec	25	sec-7.2	WL-RULE-670	full	
+WL-PLAN-106	accepted	worklode	spec	26	sec-2.4	WL-RULE-728	full	
+WL-PLAN-106	accepted	worklode	spec	26	sec-4.3	WL-RULE-736	full	
+WL-PLAN-106	accepted	worklode	spec	26	sec-5.3	WL-RULE-740	full	
+WL-PLAN-106	accepted	worklode	spec	26	sec-6.4	WL-RULE-746	full	
+WL-PLAN-106	accepted	worklode	spec	26	sec-7.1	WL-RULE-748	full	
+WL-PLAN-106	accepted	worklode	spec	37	sec-4	WL-RULE-802	full	
+WL-PLAN-106	accepted	worklode	spec	37	sec-4.1	WL-RULE-803	full	
+WL-PLAN-106	accepted	worklode	spec	37	sec-4.2	WL-RULE-804	full	
+WL-PLAN-106	accepted	worklode	spec	37	sec-4.3	WL-RULE-805	full	
+WL-PLAN-106	accepted	worklode	spec	38	sec-1	WL-RULE-826	full	
+WL-PLAN-106	accepted	worklode	spec	38	sec-4.1	WL-RULE-835	full	
+WL-PLAN-106	accepted	worklode	spec	38	sec-4.4	WL-RULE-838	full	
+WL-PLAN-106	accepted	worklode	spec	44	sec-1	WL-RULE-898	full	
+WL-PLAN-106	accepted	worklode	spec	44	sec-2	WL-RULE-899	full	
+WL-PLAN-106	accepted	worklode	spec	44	sec-3	WL-RULE-900	full	
+WL-PLAN-106	accepted	worklode	spec	44	sec-4	WL-RULE-901	full	
+WL-PLAN-106	accepted	worklode	spec	44	sec-5	WL-RULE-902	full	
+WL-PLAN-106	accepted	worklode	spec	44	sec-6	WL-RULE-903	full	
+WL-PLAN-107	accepted	worklode	spec	25	sec-10	WL-RULE-685	partial	
+WL-PLAN-107	accepted	worklode	spec	25	sec-10.1	WL-RULE-686	full	
+WL-PLAN-107	accepted	worklode	spec	25	sec-24	WL-RULE-721	partial	
+WL-PLAN-108	accepted	worklode	spec	25	sec-24	WL-RULE-721	partial	
+WL-PLAN-108	accepted	worklode	spec	25	sec-4	WL-RULE-657	full	
+WL-PLAN-108	accepted	worklode	spec	25	sec-4.1	WL-RULE-658	full	
+WL-PLAN-108	accepted	worklode	spec	25	sec-4.2	WL-RULE-659	full	
+WL-PLAN-108	accepted	worklode	spec	25	sec-4.3	WL-RULE-660	full	
+WL-PLAN-108	accepted	worklode	spec	25	sec-4.4	WL-RULE-661	full	
+WL-PLAN-108	accepted	worklode	spec	25	sec-4.5	WL-RULE-662	full	
+WL-PLAN-109	accepted	worklode	spec	25	sec-15.5	WL-RULE-705	partial	
+WL-PLAN-109	accepted	worklode	spec	25	sec-24	WL-RULE-721	partial	
+WL-PLAN-109	accepted	worklode	spec	25	sec-6.1	WL-RULE-666	full	
+WL-PLAN-109	accepted	worklode	spec	25	sec-7.3	WL-RULE-671	full	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8	WL-RULE-672	partial	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8.1	WL-RULE-673	partial	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8.2	WL-RULE-674	full	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8.3	WL-RULE-675	full	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8.4	WL-RULE-676	full	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8.5	WL-RULE-677	full	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8.6	WL-RULE-678	partial	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8.7	WL-RULE-679	partial	
+WL-PLAN-109	accepted	worklode	spec	25	sec-8.8	WL-RULE-680	partial	
+WL-PLAN-11	draft	worklode	spec	46	sec-1	WL-RULE-932	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-1.1	WL-RULE-933	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-1.2	WL-RULE-934	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-1.3	WL-RULE-935	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-1.4	WL-RULE-936	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-2	WL-RULE-937	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-2.1	WL-RULE-938	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-2.2	WL-RULE-939	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-3	WL-RULE-940	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-3.1	WL-RULE-941	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-3.2	WL-RULE-942	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-3.3	WL-RULE-943	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-3.4	WL-RULE-944	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-4	WL-RULE-945	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-4.1	WL-RULE-946	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-4.2	WL-RULE-947	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-4.3	WL-RULE-948	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-4.4	WL-RULE-949	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-5	WL-RULE-950	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-5.1	WL-RULE-951	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-5.2	WL-RULE-952	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-5.3	WL-RULE-953	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-5.4	WL-RULE-954	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-6	WL-RULE-955	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-7	WL-RULE-956	full	
+WL-PLAN-11	draft	worklode	spec	46	sec-9	WL-RULE-958	full	
+WL-PLAN-110	accepted	worklode	spec	25	sec-15.5	WL-RULE-705	partial	
+WL-PLAN-110	accepted	worklode	spec	25	sec-24	WL-RULE-721	partial	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8	WL-RULE-672	partial	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8.1	WL-RULE-673	full	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8.2	WL-RULE-674	partial	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8.3	WL-RULE-675	partial	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8.4	WL-RULE-676	partial	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8.5	WL-RULE-677	partial	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8.6	WL-RULE-678	full	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8.7	WL-RULE-679	full	
+WL-PLAN-110	accepted	worklode	spec	25	sec-8.8	WL-RULE-680	full	
+WL-PLAN-111	accepted			0			full	NO-SPEC
+WL-PLAN-112	accepted	worklode	spec	56	sec-0	WL-RULE-996	none	
+WL-PLAN-112	accepted	worklode	spec	56	sec-1	WL-RULE-997	full	
+WL-PLAN-112	accepted	worklode	spec	56	sec-2	WL-RULE-998	full	
+WL-PLAN-112	accepted	worklode	spec	56	sec-3	WL-RULE-999	full	
+WL-PLAN-112	accepted	worklode	spec	56	sec-3.1	WL-RULE-1000	full	
+WL-PLAN-112	accepted	worklode	spec	56	sec-3.2	WL-RULE-1001	full	
+WL-PLAN-112	accepted	worklode	spec	56	sec-3.3	WL-RULE-1002	full	
+WL-PLAN-112	accepted	worklode	spec	56	sec-3.4	WL-RULE-1003	none	
+WL-PLAN-112	accepted	worklode	spec	56	sec-4	WL-RULE-1004	full	
+WL-PLAN-112	accepted	worklode	spec	56	sec-5	WL-RULE-1005	none	
+WL-PLAN-113	accepted	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-113	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-113	accepted	worklode	spec	32	sec-13	WL-RULE-790	none	
+WL-PLAN-113	accepted	worklode	spec	32	sec-8	WL-RULE-785	partial	
+WL-PLAN-114	accepted			0			full	NO-SPEC
+WL-PLAN-115	draft			0			full	NO-SPEC
+WL-PLAN-116	draft	worklode	spec	54	sec-4	WL-RULE-984	full	
+WL-PLAN-116	draft	worklode	spec	1	sec-2.1	WL-RULE-376	full	
+WL-PLAN-117	draft	worklode	spec	6	sec-16	WL-RULE-485	partial	
+WL-PLAN-117	draft	worklode	spec	6	sec-7	WL-RULE-468	full	
+WL-PLAN-118	draft	worklode	spec	6	sec-9	WL-RULE-472	partial	
+WL-PLAN-119	draft	worklode	spec	37	sec-2	WL-RULE-793	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-2.1	WL-RULE-794	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-2.2	WL-RULE-795	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-2.3	WL-RULE-796	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-2.4	WL-RULE-797	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-3	WL-RULE-798	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-3.1	WL-RULE-799	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-3.2	WL-RULE-800	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-3.3	WL-RULE-801	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-5	WL-RULE-806	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-5.1	WL-RULE-807	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-5.2	WL-RULE-808	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-5.3	WL-RULE-809	full	
+WL-PLAN-119	draft	worklode	spec	37	sec-6	WL-RULE-810	partial	
+WL-PLAN-119	draft	worklode	spec	37	sec-6.1	WL-RULE-811	partial	
+WL-PLAN-119	draft	worklode	spec	37	sec-6.2	WL-RULE-812	partial	
+WL-PLAN-119	draft	worklode	spec	37	sec-6.3	WL-RULE-813	partial	
+WL-PLAN-119	draft	worklode	spec	37	sec-6.4	WL-RULE-814	partial	
+WL-PLAN-12	superseded	worklode	spec	1	sec-0	WL-RULE-373	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-1	WL-RULE-374	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-10	WL-RULE-396	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-11	WL-RULE-397	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-12	WL-RULE-398	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-13	WL-RULE-399	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-2	WL-RULE-375	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-2.1	WL-RULE-376	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-3	WL-RULE-377	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-4	WL-RULE-378	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-5	WL-RULE-379	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-6	WL-RULE-380	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-7	WL-RULE-381	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-8	WL-RULE-382	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-8.1	WL-RULE-383	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-8.2	WL-RULE-384	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-8.3	WL-RULE-385	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-8.4	WL-RULE-386	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-8.5	WL-RULE-387	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-8.6	WL-RULE-388	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-8.7	WL-RULE-389	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-9	WL-RULE-390	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-9.1	WL-RULE-391	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-9.2	WL-RULE-392	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-9.3	WL-RULE-393	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-9.4	WL-RULE-394	full	
+WL-PLAN-12	superseded	worklode	spec	1	sec-9.5	WL-RULE-395	full	
+WL-PLAN-120	draft	worklode	spec	37	sec-7	WL-RULE-815	full	
+WL-PLAN-120	draft	worklode	spec	37	sec-7.1	WL-RULE-816	full	
+WL-PLAN-120	draft	worklode	spec	37	sec-7.2	WL-RULE-817	full	
+WL-PLAN-120	draft	worklode	spec	37	sec-7.3	WL-RULE-818	full	
+WL-PLAN-120	draft	worklode	spec	37	sec-8	WL-RULE-819	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-0	WL-RULE-1006	none	
+WL-PLAN-121	draft	worklode	spec	57	sec-1	WL-RULE-1007	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-2	WL-RULE-1008	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-2.1	WL-RULE-1009	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-2.2	WL-RULE-1010	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-3	WL-RULE-1011	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-4	WL-RULE-1012	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-4.1	WL-RULE-1013	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-4.2	WL-RULE-1014	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-4.3	WL-RULE-1015	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-5	WL-RULE-1016	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-6	WL-RULE-1017	none	
+WL-PLAN-121	draft	worklode	spec	57	sec-7	WL-RULE-1018	full	
+WL-PLAN-121	draft	worklode	spec	57	sec-9	WL-RULE-1020	full	
+WL-PLAN-122	draft	worklode	spec	7	sec-2.2	WL-RULE-491	partial	
+WL-PLAN-122	draft	worklode	spec	7	sec-3.3	WL-RULE-497	partial	
+WL-PLAN-122	draft	worklode	spec	7	sec-5	WL-RULE-500	partial	
+WL-PLAN-123	draft	worklode	spec	26	sec-5.4	WL-RULE-741	full	
+WL-PLAN-124	draft	worklode	spec	38	sec-3.3	WL-RULE-833	full	
+WL-PLAN-125	draft	worklode	spec	41	sec-0	WL-RULE-881	none	
+WL-PLAN-125	draft	worklode	spec	41	sec-1	WL-RULE-882	full	
+WL-PLAN-125	draft	worklode	spec	41	sec-2	WL-RULE-883	full	
+WL-PLAN-125	draft	worklode	spec	41	sec-3	WL-RULE-884	full	
+WL-PLAN-125	draft	worklode	spec	41	sec-4	WL-RULE-885	full	
+WL-PLAN-125	draft	worklode	spec	41	sec-5	WL-RULE-886	full	
+WL-PLAN-125	draft	worklode	spec	41	sec-6	WL-RULE-887	full	
+WL-PLAN-125	draft	worklode	spec	41	sec-7	WL-RULE-888	none	
+WL-PLAN-126	draft	worklode	spec	54	sec-3.2	WL-RULE-982	full	
+WL-PLAN-127	accepted	worklode	spec	61	sec-0	WL-RULE-1077	none	
+WL-PLAN-127	accepted	worklode	spec	61	sec-1	WL-RULE-1078	partial	
+WL-PLAN-127	accepted	worklode	spec	61	sec-1.1	WL-RULE-1079	none	
+WL-PLAN-127	accepted	worklode	spec	61	sec-2	WL-RULE-1080	none	
+WL-PLAN-127	accepted	worklode	spec	61	sec-2.1	WL-RULE-1081	partial	
+WL-PLAN-127	accepted	worklode	spec	61	sec-2.2	WL-RULE-1082	partial	
+WL-PLAN-127	accepted	worklode	spec	61	sec-2.3	WL-RULE-1083	partial	
+WL-PLAN-127	accepted	worklode	spec	61	sec-2.4	WL-RULE-1084	none	
+WL-PLAN-127	accepted	worklode	spec	61	sec-2.5	WL-RULE-1085	partial	
+WL-PLAN-127	accepted	worklode	spec	61	sec-6	WL-RULE-1089	none	
+WL-PLAN-127	accepted	worklode	spec	61	sec-7	WL-RULE-1090	none	
+WL-PLAN-128	accepted	worklode	spec	61	sec-0	WL-RULE-1077	none	
+WL-PLAN-128	accepted	worklode	spec	61	sec-1	WL-RULE-1078	none	
+WL-PLAN-128	accepted	worklode	spec	61	sec-1.1	WL-RULE-1079	none	
+WL-PLAN-128	accepted	worklode	spec	61	sec-2	WL-RULE-1080	none	
+WL-PLAN-128	accepted	worklode	spec	61	sec-2.1	WL-RULE-1081	none	
+WL-PLAN-128	accepted	worklode	spec	61	sec-2.2	WL-RULE-1082	partial	
+WL-PLAN-128	accepted	worklode	spec	61	sec-2.3	WL-RULE-1083	partial	
+WL-PLAN-128	accepted	worklode	spec	61	sec-2.4	WL-RULE-1084	partial	
+WL-PLAN-128	accepted	worklode	spec	61	sec-2.5	WL-RULE-1085	partial	
+WL-PLAN-128	accepted	worklode	spec	61	sec-6	WL-RULE-1089	none	
+WL-PLAN-128	accepted	worklode	spec	61	sec-7	WL-RULE-1090	none	
+WL-PLAN-129	accepted	worklode	spec	61	sec-0	WL-RULE-1077	none	
+WL-PLAN-129	accepted	worklode	spec	61	sec-1	WL-RULE-1078	none	
+WL-PLAN-129	accepted	worklode	spec	61	sec-1.1	WL-RULE-1079	none	
+WL-PLAN-129	accepted	worklode	spec	61	sec-2	WL-RULE-1080	none	
+WL-PLAN-129	accepted	worklode	spec	61	sec-2.1	WL-RULE-1081	partial	
+WL-PLAN-129	accepted	worklode	spec	61	sec-2.2	WL-RULE-1082	partial	
+WL-PLAN-129	accepted	worklode	spec	61	sec-2.3	WL-RULE-1083	partial	
+WL-PLAN-129	accepted	worklode	spec	61	sec-2.4	WL-RULE-1084	partial	
+WL-PLAN-129	accepted	worklode	spec	61	sec-2.5	WL-RULE-1085	partial	
+WL-PLAN-129	accepted	worklode	spec	61	sec-6	WL-RULE-1089	none	
+WL-PLAN-129	accepted	worklode	spec	61	sec-7	WL-RULE-1090	none	
+WL-PLAN-13	superseded	worklode	spec	1	sec-0	WL-RULE-373	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-1	WL-RULE-374	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-10	WL-RULE-396	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-11	WL-RULE-397	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-12	WL-RULE-398	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-13	WL-RULE-399	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-2	WL-RULE-375	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-2.1	WL-RULE-376	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-3	WL-RULE-377	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-4	WL-RULE-378	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-5	WL-RULE-379	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-6	WL-RULE-380	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-7	WL-RULE-381	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-8	WL-RULE-382	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-8.1	WL-RULE-383	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-8.2	WL-RULE-384	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-8.3	WL-RULE-385	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-8.4	WL-RULE-386	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-8.5	WL-RULE-387	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-8.6	WL-RULE-388	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-8.7	WL-RULE-389	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-9	WL-RULE-390	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-9.1	WL-RULE-391	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-9.2	WL-RULE-392	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-9.3	WL-RULE-393	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-9.4	WL-RULE-394	full	
+WL-PLAN-13	superseded	worklode	spec	1	sec-9.5	WL-RULE-395	full	
+WL-PLAN-130	accepted	worklode	spec	61	sec-0	WL-RULE-1077	none	
+WL-PLAN-130	accepted	worklode	spec	61	sec-1	WL-RULE-1078	partial	
+WL-PLAN-130	accepted	worklode	spec	61	sec-1.1	WL-RULE-1079	none	
+WL-PLAN-130	accepted	worklode	spec	61	sec-2.5	WL-RULE-1085	none	
+WL-PLAN-130	accepted	worklode	spec	61	sec-3	WL-RULE-1086	full	
+WL-PLAN-130	accepted	worklode	spec	61	sec-4	WL-RULE-1087	full	
+WL-PLAN-130	accepted	worklode	spec	61	sec-5	WL-RULE-1088	full	
+WL-PLAN-130	accepted	worklode	spec	61	sec-6	WL-RULE-1089	none	
+WL-PLAN-130	accepted	worklode	spec	61	sec-7	WL-RULE-1090	none	
+WL-PLAN-131	accepted	worklode	spec	63	sec-0	WL-RULE-1114	none	
+WL-PLAN-131	accepted	worklode	spec	63	sec-1	WL-RULE-1115	full	
+WL-PLAN-131	accepted	worklode	spec	63	sec-2	WL-RULE-1116	full	
+WL-PLAN-131	accepted	worklode	spec	63	sec-3	WL-RULE-1117	full	
+WL-PLAN-131	accepted	worklode	spec	63	sec-4	WL-RULE-1118	full	
+WL-PLAN-131	accepted	worklode	spec	63	sec-5	WL-RULE-1119	full	
+WL-PLAN-132	draft	worklode	spec	59	sec-0	WL-RULE-1036	none	
+WL-PLAN-132	draft	worklode	spec	59	sec-1	WL-RULE-1037	none	
+WL-PLAN-132	draft	worklode	spec	59	sec-1.1	WL-RULE-1038	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-1.2	WL-RULE-1039	none	
+WL-PLAN-132	draft	worklode	spec	59	sec-10	WL-RULE-1054	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-11	WL-RULE-1055	full	
+WL-PLAN-132	draft	worklode	spec	59	sec-12	WL-RULE-1056	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-13	WL-RULE-1057	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-14	WL-RULE-1058	none	
+WL-PLAN-132	draft	worklode	spec	59	sec-15	WL-RULE-1059	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-16	WL-RULE-1060	none	
+WL-PLAN-132	draft	worklode	spec	59	sec-2	WL-RULE-1040	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-2.1	WL-RULE-1041	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-3	WL-RULE-1042	full	
+WL-PLAN-132	draft	worklode	spec	59	sec-3.1	WL-RULE-1043	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-5	WL-RULE-1047	full	
+WL-PLAN-132	draft	worklode	spec	59	sec-6	WL-RULE-1048	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-7	WL-RULE-1049	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-7.1	WL-RULE-1050	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-7.2	WL-RULE-1051	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-8	WL-RULE-1052	partial	
+WL-PLAN-132	draft	worklode	spec	59	sec-9	WL-RULE-1053	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-1	WL-RULE-1037	none	
+WL-PLAN-133	draft	worklode	spec	59	sec-1.1	WL-RULE-1038	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-1.2	WL-RULE-1039	none	
+WL-PLAN-133	draft	worklode	spec	59	sec-12	WL-RULE-1056	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-13	WL-RULE-1057	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-14	WL-RULE-1058	none	
+WL-PLAN-133	draft	worklode	spec	59	sec-15	WL-RULE-1059	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-2	WL-RULE-1040	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-2.1	WL-RULE-1041	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-3.1	WL-RULE-1043	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-4.2	WL-RULE-1046	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-6	WL-RULE-1048	partial	
+WL-PLAN-133	draft	worklode	spec	59	sec-8	WL-RULE-1052	partial	
+WL-PLAN-134	draft	worklode	spec	59	sec-1	WL-RULE-1037	none	
+WL-PLAN-134	draft	worklode	spec	59	sec-1.1	WL-RULE-1038	none	
+WL-PLAN-134	draft	worklode	spec	59	sec-1.2	WL-RULE-1039	none	
+WL-PLAN-134	draft	worklode	spec	59	sec-10	WL-RULE-1054	partial	
+WL-PLAN-134	draft	worklode	spec	59	sec-12	WL-RULE-1056	partial	
+WL-PLAN-134	draft	worklode	spec	59	sec-14	WL-RULE-1058	none	
+WL-PLAN-134	draft	worklode	spec	59	sec-15	WL-RULE-1059	partial	
+WL-PLAN-134	draft	worklode	spec	59	sec-4	WL-RULE-1044	full	
+WL-PLAN-134	draft	worklode	spec	59	sec-4.1	WL-RULE-1045	partial	
+WL-PLAN-134	draft	worklode	spec	59	sec-4.2	WL-RULE-1046	partial	
+WL-PLAN-134	draft	worklode	spec	59	sec-6	WL-RULE-1048	partial	
+WL-PLAN-134	draft	worklode	spec	59	sec-9	WL-RULE-1053	partial	
+WL-PLAN-135	draft	worklode	spec	59	sec-1	WL-RULE-1037	none	
+WL-PLAN-135	draft	worklode	spec	59	sec-1.1	WL-RULE-1038	partial	
+WL-PLAN-135	draft	worklode	spec	59	sec-1.2	WL-RULE-1039	none	
+WL-PLAN-135	draft	worklode	spec	59	sec-12	WL-RULE-1056	partial	
+WL-PLAN-135	draft	worklode	spec	59	sec-13	WL-RULE-1057	partial	
+WL-PLAN-135	draft	worklode	spec	59	sec-14	WL-RULE-1058	none	
+WL-PLAN-135	draft	worklode	spec	59	sec-15	WL-RULE-1059	partial	
+WL-PLAN-135	draft	worklode	spec	59	sec-6	WL-RULE-1048	partial	
+WL-PLAN-135	draft	worklode	spec	59	sec-7	WL-RULE-1049	partial	
+WL-PLAN-135	draft	worklode	spec	59	sec-7.1	WL-RULE-1050	full	
+WL-PLAN-135	draft	worklode	spec	59	sec-7.2	WL-RULE-1051	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-0	WL-RULE-1146	none	
+WL-PLAN-136	accepted	worklode	spec	66	sec-1	WL-RULE-1147	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-1.1	WL-RULE-1148	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-1.2	WL-RULE-1149	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-1.3	WL-RULE-1150	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-1.4	WL-RULE-1151	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-2	WL-RULE-1152	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-2.1	WL-RULE-1153	partial	
+WL-PLAN-136	accepted	worklode	spec	66	sec-2.2	WL-RULE-1154	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-2.3	WL-RULE-1155	partial	
+WL-PLAN-136	accepted	worklode	spec	66	sec-2.4	WL-RULE-1156	partial	
+WL-PLAN-136	accepted	worklode	spec	66	sec-2.5	WL-RULE-1157	full	
+WL-PLAN-136	accepted	worklode	spec	66	sec-4	WL-RULE-1165	none	
+WL-PLAN-136	accepted	worklode	spec	66	sec-4.1	WL-RULE-1166	none	
+WL-PLAN-136	accepted	worklode	spec	66	sec-4.2	WL-RULE-1167	none	
+WL-PLAN-136	accepted	worklode	spec	66	sec-4.3	WL-RULE-1168	none	
+WL-PLAN-136	accepted	worklode	spec	66	sec-4.4	WL-RULE-1169	none	
+WL-PLAN-136	accepted	worklode	spec	66	sec-4.5	WL-RULE-1170	none	
+WL-PLAN-136	accepted	worklode	spec	66	sec-7	WL-RULE-1180	partial	
+WL-PLAN-136	accepted	worklode	spec	66	sec-8	WL-RULE-1181	partial	
+WL-PLAN-136	accepted	worklode	spec	66	sec-9	WL-RULE-1182	none	
+WL-PLAN-137	accepted	worklode	spec	66	sec-0	WL-RULE-1146	none	
+WL-PLAN-137	accepted	worklode	spec	66	sec-2.1	WL-RULE-1153	partial	
+WL-PLAN-137	accepted	worklode	spec	66	sec-2.3	WL-RULE-1155	partial	
+WL-PLAN-137	accepted	worklode	spec	66	sec-2.5	WL-RULE-1157	none	
+WL-PLAN-137	accepted	worklode	spec	66	sec-3	WL-RULE-1158	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-3.1	WL-RULE-1159	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-3.2	WL-RULE-1160	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-3.3	WL-RULE-1161	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-3.4	WL-RULE-1162	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-3.5	WL-RULE-1163	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-3.6	WL-RULE-1164	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-4	WL-RULE-1165	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-4.1	WL-RULE-1166	none	
+WL-PLAN-137	accepted	worklode	spec	66	sec-4.2	WL-RULE-1167	partial	
+WL-PLAN-137	accepted	worklode	spec	66	sec-4.3	WL-RULE-1168	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-4.4	WL-RULE-1169	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-4.5	WL-RULE-1170	full	
+WL-PLAN-137	accepted	worklode	spec	66	sec-7	WL-RULE-1180	partial	
+WL-PLAN-137	accepted	worklode	spec	66	sec-8	WL-RULE-1181	partial	
+WL-PLAN-137	accepted	worklode	spec	66	sec-9	WL-RULE-1182	none	
+WL-PLAN-138	accepted	worklode	spec	66	sec-0	WL-RULE-1146	none	
+WL-PLAN-138	accepted	worklode	spec	66	sec-2.5	WL-RULE-1157	none	
+WL-PLAN-138	accepted	worklode	spec	66	sec-4	WL-RULE-1165	none	
+WL-PLAN-138	accepted	worklode	spec	66	sec-4.1	WL-RULE-1166	none	
+WL-PLAN-138	accepted	worklode	spec	66	sec-4.2	WL-RULE-1167	none	
+WL-PLAN-138	accepted	worklode	spec	66	sec-4.3	WL-RULE-1168	none	
+WL-PLAN-138	accepted	worklode	spec	66	sec-4.4	WL-RULE-1169	none	
+WL-PLAN-138	accepted	worklode	spec	66	sec-4.5	WL-RULE-1170	full	
+WL-PLAN-138	accepted	worklode	spec	66	sec-5	WL-RULE-1171	full	
+WL-PLAN-138	accepted	worklode	spec	66	sec-5.1	WL-RULE-1172	full	
+WL-PLAN-138	accepted	worklode	spec	66	sec-5.2	WL-RULE-1173	full	
+WL-PLAN-138	accepted	worklode	spec	66	sec-5.3	WL-RULE-1174	full	
+WL-PLAN-138	accepted	worklode	spec	66	sec-5.4	WL-RULE-1175	full	
+WL-PLAN-138	accepted	worklode	spec	66	sec-7	WL-RULE-1180	partial	
+WL-PLAN-138	accepted	worklode	spec	66	sec-8	WL-RULE-1181	partial	
+WL-PLAN-138	accepted	worklode	spec	66	sec-9	WL-RULE-1182	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-0	WL-RULE-1146	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-2.4	WL-RULE-1156	partial	
+WL-PLAN-139	accepted	worklode	spec	66	sec-2.5	WL-RULE-1157	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-3.6	WL-RULE-1164	full	
+WL-PLAN-139	accepted	worklode	spec	66	sec-4	WL-RULE-1165	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-4.1	WL-RULE-1166	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-4.2	WL-RULE-1167	partial	
+WL-PLAN-139	accepted	worklode	spec	66	sec-4.3	WL-RULE-1168	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-4.4	WL-RULE-1169	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-4.5	WL-RULE-1170	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-6	WL-RULE-1176	none	
+WL-PLAN-139	accepted	worklode	spec	66	sec-6.1	WL-RULE-1177	full	
+WL-PLAN-139	accepted	worklode	spec	66	sec-6.2	WL-RULE-1178	full	
+WL-PLAN-139	accepted	worklode	spec	66	sec-6.3	WL-RULE-1179	full	
+WL-PLAN-139	accepted	worklode	spec	66	sec-7	WL-RULE-1180	partial	
+WL-PLAN-139	accepted	worklode	spec	66	sec-8	WL-RULE-1181	partial	
+WL-PLAN-139	accepted	worklode	spec	66	sec-9	WL-RULE-1182	none	
+WL-PLAN-14	superseded	worklode	spec	1	sec-0	WL-RULE-373	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-1	WL-RULE-374	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-10	WL-RULE-396	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-11	WL-RULE-397	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-12	WL-RULE-398	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-13	WL-RULE-399	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-2	WL-RULE-375	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-2.1	WL-RULE-376	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-3	WL-RULE-377	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-4	WL-RULE-378	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-5	WL-RULE-379	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-6	WL-RULE-380	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-7	WL-RULE-381	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-8	WL-RULE-382	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-8.1	WL-RULE-383	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-8.2	WL-RULE-384	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-8.3	WL-RULE-385	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-8.4	WL-RULE-386	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-8.5	WL-RULE-387	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-8.6	WL-RULE-388	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-8.7	WL-RULE-389	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-9	WL-RULE-390	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-9.1	WL-RULE-391	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-9.2	WL-RULE-392	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-9.3	WL-RULE-393	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-9.4	WL-RULE-394	full	
+WL-PLAN-14	superseded	worklode	spec	1	sec-9.5	WL-RULE-395	full	
+WL-PLAN-140	draft	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-140	draft	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-140	draft	worklode	spec	32	sec-3	WL-RULE-779	none	
+WL-PLAN-140	draft	worklode	spec	32	sec-3.1	WL-RULE-780	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-0	WL-RULE-1183	none	
+WL-PLAN-141	draft	worklode	spec	67	sec-1	WL-RULE-1184	none	
+WL-PLAN-141	draft	worklode	spec	67	sec-2	WL-RULE-1185	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-2.1	WL-RULE-1186	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-2.2	WL-RULE-1187	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-2.3	WL-RULE-1188	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-2.4	WL-RULE-1189	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-3	WL-RULE-1190	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-4	WL-RULE-1191	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-5	WL-RULE-1192	partial	
+WL-PLAN-141	draft	worklode	spec	67	sec-5.1	WL-RULE-1193	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-5.2	WL-RULE-1194	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-7	WL-RULE-1196	full	
+WL-PLAN-141	draft	worklode	spec	67	sec-8	WL-RULE-1197	none	
+WL-PLAN-141	draft	worklode	spec	67	sec-9	WL-RULE-1198	partial	
+WL-PLAN-142	draft	worklode	spec	67	sec-5	WL-RULE-1192	partial	
+WL-PLAN-142	draft	worklode	spec	67	sec-5.1	WL-RULE-1193	partial	
+WL-PLAN-142	draft	worklode	spec	67	sec-5.2	WL-RULE-1194	partial	
+WL-PLAN-142	draft	worklode	spec	67	sec-6	WL-RULE-1195	full	
+WL-PLAN-142	draft	worklode	spec	67	sec-8	WL-RULE-1197	none	
+WL-PLAN-142	draft	worklode	spec	67	sec-9	WL-RULE-1198	partial	
+WL-PLAN-143	draft	worklode	spec	1	sec-9	WL-RULE-390	none	
+WL-PLAN-143	draft	worklode	spec	1	sec-9.1	WL-RULE-391	full	
+WL-PLAN-143	draft	worklode	spec	1	sec-9.2	WL-RULE-392	none	
+WL-PLAN-143	draft	worklode	spec	1	sec-9.3	WL-RULE-393	none	
+WL-PLAN-143	draft	worklode	spec	1	sec-9.4	WL-RULE-394	none	
+WL-PLAN-143	draft	worklode	spec	1	sec-9.5	WL-RULE-395	none	
+WL-PLAN-144	accepted			0			full	NO-SPEC
+WL-PLAN-145	accepted	worklode	spec	75	sec-4	WL-RULE-87	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-11.1	WL-RULE-173	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-11.2	WL-RULE-174	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-14	WL-RULE-178	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-18	WL-RULE-182	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-3	WL-RULE-164	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-7	WL-RULE-168	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-8	WL-RULE-169	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-8.1	WL-RULE-1288	full	
+WL-PLAN-145	accepted	worklode	spec	77	sec-9	WL-RULE-170	full	
+WL-PLAN-146	draft	worklode	spec	77	sec-19	WL-RULE-1294	full	
+WL-PLAN-146	draft	worklode	spec	77	sec-19.1	WL-RULE-1295	full	
+WL-PLAN-146	draft	worklode	spec	77	sec-19.2	WL-RULE-1296	full	
+WL-PLAN-146	draft	worklode	spec	77	sec-19.3	WL-RULE-1297	full	
+WL-PLAN-146	draft	worklode	spec	77	sec-19.4	WL-RULE-1298	full	
+WL-PLAN-146	draft	worklode	spec	77	sec-19.5	WL-RULE-1299	full	
+WL-PLAN-146	draft	worklode	spec	77	sec-19.6	WL-RULE-1300	full	
+WL-PLAN-146	draft	worklode	spec	77	sec-19.7	WL-RULE-1301	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-0	WL-RULE-373	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-1	WL-RULE-374	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-10	WL-RULE-396	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-11	WL-RULE-397	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-12	WL-RULE-398	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-13	WL-RULE-399	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-2	WL-RULE-375	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-2.1	WL-RULE-376	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-3	WL-RULE-377	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-4	WL-RULE-378	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-5	WL-RULE-379	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-6	WL-RULE-380	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-7	WL-RULE-381	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-8	WL-RULE-382	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-8.1	WL-RULE-383	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-8.2	WL-RULE-384	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-8.3	WL-RULE-385	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-8.4	WL-RULE-386	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-8.5	WL-RULE-387	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-8.6	WL-RULE-388	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-8.7	WL-RULE-389	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-9	WL-RULE-390	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-9.1	WL-RULE-391	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-9.2	WL-RULE-392	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-9.3	WL-RULE-393	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-9.4	WL-RULE-394	full	
+WL-PLAN-16	superseded	worklode	spec	1	sec-9.5	WL-RULE-395	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-0	WL-RULE-373	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-1	WL-RULE-374	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-10	WL-RULE-396	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-11	WL-RULE-397	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-12	WL-RULE-398	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-13	WL-RULE-399	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-2	WL-RULE-375	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-2.1	WL-RULE-376	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-3	WL-RULE-377	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-4	WL-RULE-378	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-5	WL-RULE-379	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-6	WL-RULE-380	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-7	WL-RULE-381	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-8	WL-RULE-382	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-8.1	WL-RULE-383	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-8.2	WL-RULE-384	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-8.3	WL-RULE-385	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-8.4	WL-RULE-386	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-8.5	WL-RULE-387	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-8.6	WL-RULE-388	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-8.7	WL-RULE-389	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-9	WL-RULE-390	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-9.1	WL-RULE-391	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-9.2	WL-RULE-392	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-9.3	WL-RULE-393	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-9.4	WL-RULE-394	full	
+WL-PLAN-18	superseded	worklode	spec	1	sec-9.5	WL-RULE-395	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-0	WL-RULE-407	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-1	WL-RULE-408	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-1.1	WL-RULE-409	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-1.2	WL-RULE-410	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-1.3	WL-RULE-411	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-1.4	WL-RULE-412	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-10	WL-RULE-443	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-11	WL-RULE-444	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-12	WL-RULE-445	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-13	WL-RULE-446	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-2	WL-RULE-413	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-2.1	WL-RULE-414	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-2.2	WL-RULE-415	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-2.3	WL-RULE-416	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-2.4	WL-RULE-417	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-2.5	WL-RULE-418	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-3	WL-RULE-419	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-4	WL-RULE-420	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-5	WL-RULE-421	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-5.1	WL-RULE-422	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-5.2	WL-RULE-423	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-5.3	WL-RULE-424	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-5.4	WL-RULE-425	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-5.5	WL-RULE-426	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-5.6	WL-RULE-427	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-5.7	WL-RULE-428	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6	WL-RULE-429	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.1	WL-RULE-430	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.10	WL-RULE-439	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.2	WL-RULE-431	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.3	WL-RULE-432	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.4	WL-RULE-433	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.5	WL-RULE-434	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.6	WL-RULE-435	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.7	WL-RULE-436	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.8	WL-RULE-437	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-6.9	WL-RULE-438	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-7	WL-RULE-440	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-8	WL-RULE-441	full	
+WL-PLAN-19	superseded	worklode	spec	4	sec-9	WL-RULE-442	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-0	WL-RULE-854	none	
+WL-PLAN-2	accepted	worklode	spec	40	sec-1	WL-RULE-855	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-10	WL-RULE-877	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-11	WL-RULE-878	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-12	WL-RULE-879	none	
+WL-PLAN-2	accepted	worklode	spec	40	sec-13	WL-RULE-880	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-2	WL-RULE-856	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-2.1	WL-RULE-857	none	
+WL-PLAN-2	accepted	worklode	spec	40	sec-2.2	WL-RULE-858	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-2.3	WL-RULE-859	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-2.4	WL-RULE-860	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-3	WL-RULE-861	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-4	WL-RULE-862	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-4.1	WL-RULE-863	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-4.2	WL-RULE-864	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-4.3	WL-RULE-865	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-4.4	WL-RULE-866	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-5	WL-RULE-867	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-6	WL-RULE-868	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-6.1	WL-RULE-869	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-6.2	WL-RULE-870	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-6.3	WL-RULE-871	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-6.4	WL-RULE-872	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-6.5	WL-RULE-873	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-7	WL-RULE-874	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-8	WL-RULE-875	full	
+WL-PLAN-2	accepted	worklode	spec	40	sec-9	WL-RULE-876	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-0	WL-RULE-447	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-1	WL-RULE-448	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-2	WL-RULE-449	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-2a	WL-RULE-450	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-3	WL-RULE-451	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-4	WL-RULE-452	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-5	WL-RULE-453	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-6	WL-RULE-454	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-7	WL-RULE-455	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-8	WL-RULE-456	full	
+WL-PLAN-20	superseded	worklode	spec	5	sec-9	WL-RULE-457	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-0	WL-RULE-504	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-1	WL-RULE-505	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-10	WL-RULE-520	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-11	WL-RULE-521	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-12	WL-RULE-522	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-13	WL-RULE-523	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-14	WL-RULE-524	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-15	WL-RULE-525	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-16	WL-RULE-526	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-16.1	WL-RULE-527	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-16.2	WL-RULE-528	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-16.3	WL-RULE-529	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-16.4	WL-RULE-530	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-16.5	WL-RULE-531	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-17	WL-RULE-532	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-17.1	WL-RULE-533	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-17.2	WL-RULE-534	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-17.3	WL-RULE-535	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-17.4	WL-RULE-536	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-17.5	WL-RULE-537	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-17.6	WL-RULE-538	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-17.7	WL-RULE-539	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-18	WL-RULE-540	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-19	WL-RULE-541	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-2	WL-RULE-506	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-20	WL-RULE-542	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-21	WL-RULE-543	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-22	WL-RULE-544	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-3	WL-RULE-507	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-3.1	WL-RULE-508	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-3.2	WL-RULE-509	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-4	WL-RULE-510	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-5	WL-RULE-511	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-5.1	WL-RULE-512	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-5.2	WL-RULE-513	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-6	WL-RULE-514	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-7	WL-RULE-515	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-7.1	WL-RULE-516	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-7.2	WL-RULE-517	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-8	WL-RULE-518	full	
+WL-PLAN-21	superseded	worklode	spec	8	sec-9	WL-RULE-519	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-0	WL-RULE-504	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-1	WL-RULE-505	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-10	WL-RULE-520	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-11	WL-RULE-521	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-12	WL-RULE-522	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-13	WL-RULE-523	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-14	WL-RULE-524	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-15	WL-RULE-525	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-16	WL-RULE-526	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-16.1	WL-RULE-527	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-16.2	WL-RULE-528	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-16.3	WL-RULE-529	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-16.4	WL-RULE-530	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-16.5	WL-RULE-531	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-17	WL-RULE-532	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-17.1	WL-RULE-533	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-17.2	WL-RULE-534	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-17.3	WL-RULE-535	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-17.4	WL-RULE-536	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-17.5	WL-RULE-537	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-17.6	WL-RULE-538	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-17.7	WL-RULE-539	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-18	WL-RULE-540	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-19	WL-RULE-541	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-2	WL-RULE-506	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-20	WL-RULE-542	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-21	WL-RULE-543	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-22	WL-RULE-544	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-3	WL-RULE-507	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-3.1	WL-RULE-508	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-3.2	WL-RULE-509	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-4	WL-RULE-510	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-5	WL-RULE-511	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-5.1	WL-RULE-512	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-5.2	WL-RULE-513	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-6	WL-RULE-514	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-7	WL-RULE-515	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-7.1	WL-RULE-516	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-7.2	WL-RULE-517	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-8	WL-RULE-518	full	
+WL-PLAN-22	superseded	worklode	spec	8	sec-9	WL-RULE-519	full	
+WL-PLAN-23	superseded	worklode	spec	12	sec-0	WL-RULE-545	full	
+WL-PLAN-23	superseded	worklode	spec	12	sec-1	WL-RULE-546	full	
+WL-PLAN-23	superseded	worklode	spec	12	sec-2	WL-RULE-547	full	
+WL-PLAN-23	superseded	worklode	spec	12	sec-3	WL-RULE-548	full	
+WL-PLAN-23	superseded	worklode	spec	12	sec-4	WL-RULE-549	full	
+WL-PLAN-23	superseded	worklode	spec	12	sec-5	WL-RULE-550	full	
+WL-PLAN-23	superseded	worklode	spec	12	sec-6	WL-RULE-551	full	
+WL-PLAN-23	superseded	worklode	spec	12	sec-7	WL-RULE-552	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-0	WL-RULE-407	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-1	WL-RULE-408	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-1.1	WL-RULE-409	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-1.2	WL-RULE-410	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-1.3	WL-RULE-411	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-1.4	WL-RULE-412	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-10	WL-RULE-443	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-11	WL-RULE-444	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-12	WL-RULE-445	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-13	WL-RULE-446	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-2	WL-RULE-413	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-2.1	WL-RULE-414	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-2.2	WL-RULE-415	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-2.3	WL-RULE-416	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-2.4	WL-RULE-417	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-2.5	WL-RULE-418	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-3	WL-RULE-419	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-4	WL-RULE-420	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-5	WL-RULE-421	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-5.1	WL-RULE-422	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-5.2	WL-RULE-423	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-5.3	WL-RULE-424	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-5.4	WL-RULE-425	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-5.5	WL-RULE-426	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-5.6	WL-RULE-427	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-5.7	WL-RULE-428	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6	WL-RULE-429	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.1	WL-RULE-430	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.10	WL-RULE-439	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.2	WL-RULE-431	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.3	WL-RULE-432	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.4	WL-RULE-433	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.5	WL-RULE-434	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.6	WL-RULE-435	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.7	WL-RULE-436	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.8	WL-RULE-437	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-6.9	WL-RULE-438	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-7	WL-RULE-440	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-8	WL-RULE-441	full	
+WL-PLAN-24	superseded	worklode	spec	4	sec-9	WL-RULE-442	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-0	WL-RULE-407	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-1	WL-RULE-408	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-1.1	WL-RULE-409	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-1.2	WL-RULE-410	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-1.3	WL-RULE-411	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-1.4	WL-RULE-412	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-10	WL-RULE-443	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-11	WL-RULE-444	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-12	WL-RULE-445	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-13	WL-RULE-446	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-2	WL-RULE-413	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-2.1	WL-RULE-414	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-2.2	WL-RULE-415	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-2.3	WL-RULE-416	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-2.4	WL-RULE-417	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-2.5	WL-RULE-418	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-3	WL-RULE-419	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-4	WL-RULE-420	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-5	WL-RULE-421	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-5.1	WL-RULE-422	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-5.2	WL-RULE-423	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-5.3	WL-RULE-424	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-5.4	WL-RULE-425	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-5.5	WL-RULE-426	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-5.6	WL-RULE-427	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-5.7	WL-RULE-428	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6	WL-RULE-429	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.1	WL-RULE-430	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.10	WL-RULE-439	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.2	WL-RULE-431	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.3	WL-RULE-432	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.4	WL-RULE-433	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.5	WL-RULE-434	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.6	WL-RULE-435	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.7	WL-RULE-436	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.8	WL-RULE-437	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-6.9	WL-RULE-438	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-7	WL-RULE-440	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-8	WL-RULE-441	full	
+WL-PLAN-25	superseded	worklode	spec	4	sec-9	WL-RULE-442	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-0	WL-RULE-566	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-1	WL-RULE-567	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-2	WL-RULE-568	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-3	WL-RULE-569	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-4	WL-RULE-570	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-5	WL-RULE-571	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-6	WL-RULE-572	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-7	WL-RULE-573	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-8	WL-RULE-574	full	
+WL-PLAN-27	superseded	worklode	spec	16	sec-9	WL-RULE-575	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-0	WL-RULE-504	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-1	WL-RULE-505	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-10	WL-RULE-520	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-11	WL-RULE-521	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-12	WL-RULE-522	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-13	WL-RULE-523	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-14	WL-RULE-524	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-15	WL-RULE-525	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-16	WL-RULE-526	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-16.1	WL-RULE-527	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-16.2	WL-RULE-528	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-16.3	WL-RULE-529	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-16.4	WL-RULE-530	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-16.5	WL-RULE-531	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-17	WL-RULE-532	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-17.1	WL-RULE-533	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-17.2	WL-RULE-534	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-17.3	WL-RULE-535	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-17.4	WL-RULE-536	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-17.5	WL-RULE-537	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-17.6	WL-RULE-538	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-17.7	WL-RULE-539	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-18	WL-RULE-540	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-19	WL-RULE-541	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-2	WL-RULE-506	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-20	WL-RULE-542	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-21	WL-RULE-543	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-22	WL-RULE-544	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-3	WL-RULE-507	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-3.1	WL-RULE-508	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-3.2	WL-RULE-509	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-4	WL-RULE-510	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-5	WL-RULE-511	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-5.1	WL-RULE-512	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-5.2	WL-RULE-513	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-6	WL-RULE-514	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-7	WL-RULE-515	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-7.1	WL-RULE-516	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-7.2	WL-RULE-517	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-8	WL-RULE-518	full	
+WL-PLAN-28	superseded	worklode	spec	8	sec-9	WL-RULE-519	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-0	WL-RULE-407	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-1	WL-RULE-408	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-1.1	WL-RULE-409	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-1.2	WL-RULE-410	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-1.3	WL-RULE-411	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-1.4	WL-RULE-412	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-10	WL-RULE-443	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-11	WL-RULE-444	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-12	WL-RULE-445	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-13	WL-RULE-446	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-2	WL-RULE-413	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-2.1	WL-RULE-414	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-2.2	WL-RULE-415	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-2.3	WL-RULE-416	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-2.4	WL-RULE-417	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-2.5	WL-RULE-418	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-3	WL-RULE-419	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-4	WL-RULE-420	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-5	WL-RULE-421	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-5.1	WL-RULE-422	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-5.2	WL-RULE-423	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-5.3	WL-RULE-424	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-5.4	WL-RULE-425	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-5.5	WL-RULE-426	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-5.6	WL-RULE-427	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-5.7	WL-RULE-428	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6	WL-RULE-429	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.1	WL-RULE-430	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.10	WL-RULE-439	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.2	WL-RULE-431	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.3	WL-RULE-432	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.4	WL-RULE-433	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.5	WL-RULE-434	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.6	WL-RULE-435	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.7	WL-RULE-436	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.8	WL-RULE-437	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-6.9	WL-RULE-438	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-7	WL-RULE-440	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-8	WL-RULE-441	full	
+WL-PLAN-29	superseded	worklode	spec	4	sec-9	WL-RULE-442	full	
+WL-PLAN-3	draft	worklode	spec	74	sec-10.6	WL-RULE-73	full	
+WL-PLAN-3	draft	worklode	spec	74	sec-10.8	WL-RULE-75	full	
+WL-PLAN-30	accepted	worklode	spec	6	sec-13	WL-RULE-478	full	
+WL-PLAN-30	accepted	worklode	spec	6	sec-13.1	WL-RULE-479	full	
+WL-PLAN-30	accepted	worklode	spec	6	sec-13.2	WL-RULE-480	partial	
+WL-PLAN-30	accepted	worklode	spec	6	sec-13.3	WL-RULE-481	partial	
+WL-PLAN-30	accepted	worklode	spec	6	sec-13.4	WL-RULE-482	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-0	WL-RULE-648	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-1	WL-RULE-649	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-10	WL-RULE-685	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-10.1	WL-RULE-686	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-11	WL-RULE-687	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-11.1	WL-RULE-688	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-11.2	WL-RULE-689	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-11.3	WL-RULE-690	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-11.4	WL-RULE-691	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-11.5	WL-RULE-692	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-11.6	WL-RULE-693	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-12	WL-RULE-694	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-13	WL-RULE-695	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-14	WL-RULE-696	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-14.1	WL-RULE-697	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-14.2	WL-RULE-698	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-14.3	WL-RULE-699	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-15	WL-RULE-700	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-15.1	WL-RULE-701	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-15.2	WL-RULE-702	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-15.3	WL-RULE-703	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-15.4	WL-RULE-704	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-15.5	WL-RULE-705	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-15.6	WL-RULE-706	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-15.7	WL-RULE-707	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-16	WL-RULE-708	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-16.1	WL-RULE-709	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-16.2	WL-RULE-710	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-16.3	WL-RULE-711	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-16.4	WL-RULE-712	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-16.5	WL-RULE-713	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-17	WL-RULE-714	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-18	WL-RULE-715	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-19	WL-RULE-716	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-2	WL-RULE-650	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-2.1	WL-RULE-651	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-2.2	WL-RULE-652	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-20	WL-RULE-717	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-21	WL-RULE-718	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-22	WL-RULE-719	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-23	WL-RULE-720	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-24	WL-RULE-721	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-3	WL-RULE-653	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-3.1	WL-RULE-654	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-3.2	WL-RULE-655	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-3.3	WL-RULE-656	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-4	WL-RULE-657	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-4.1	WL-RULE-658	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-4.2	WL-RULE-659	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-4.3	WL-RULE-660	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-4.4	WL-RULE-661	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-4.5	WL-RULE-662	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-5	WL-RULE-663	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-5.1	WL-RULE-664	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-6	WL-RULE-665	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-6.1	WL-RULE-666	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-6.2	WL-RULE-667	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-7	WL-RULE-668	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-7.1	WL-RULE-669	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-7.2	WL-RULE-670	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-7.3	WL-RULE-671	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8	WL-RULE-672	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8.1	WL-RULE-673	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8.2	WL-RULE-674	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8.3	WL-RULE-675	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8.4	WL-RULE-676	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8.5	WL-RULE-677	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8.6	WL-RULE-678	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8.7	WL-RULE-679	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-8.8	WL-RULE-680	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-9	WL-RULE-681	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-9.1	WL-RULE-682	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-9.2	WL-RULE-683	full	
+WL-PLAN-31	accepted	worklode	spec	25	sec-9.3	WL-RULE-684	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-0	WL-RULE-486	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-1	WL-RULE-487	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-1.1	WL-RULE-488	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-2	WL-RULE-489	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-2.1	WL-RULE-490	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-2.2	WL-RULE-491	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-2.3	WL-RULE-492	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-2.4	WL-RULE-493	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-3	WL-RULE-494	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-3.1	WL-RULE-495	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-3.2	WL-RULE-496	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-3.3	WL-RULE-497	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-3.4	WL-RULE-498	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-4	WL-RULE-499	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-5	WL-RULE-500	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-6	WL-RULE-501	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-7	WL-RULE-502	full	
+WL-PLAN-32	accepted	worklode	spec	7	sec-8	WL-RULE-503	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-0	WL-RULE-486	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-1	WL-RULE-487	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-1.1	WL-RULE-488	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-2	WL-RULE-489	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-2.1	WL-RULE-490	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-2.2	WL-RULE-491	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-2.3	WL-RULE-492	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-2.4	WL-RULE-493	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-3	WL-RULE-494	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-3.1	WL-RULE-495	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-3.2	WL-RULE-496	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-3.3	WL-RULE-497	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-3.4	WL-RULE-498	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-4	WL-RULE-499	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-5	WL-RULE-500	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-6	WL-RULE-501	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-7	WL-RULE-502	full	
+WL-PLAN-33	accepted	worklode	spec	7	sec-8	WL-RULE-503	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-0	WL-RULE-486	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-1	WL-RULE-487	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-1.1	WL-RULE-488	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-2	WL-RULE-489	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-2.1	WL-RULE-490	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-2.2	WL-RULE-491	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-2.3	WL-RULE-492	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-2.4	WL-RULE-493	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-3	WL-RULE-494	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-3.1	WL-RULE-495	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-3.2	WL-RULE-496	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-3.3	WL-RULE-497	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-3.4	WL-RULE-498	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-4	WL-RULE-499	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-5	WL-RULE-500	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-6	WL-RULE-501	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-7	WL-RULE-502	full	
+WL-PLAN-34	accepted	worklode	spec	7	sec-8	WL-RULE-503	full	
+WL-PLAN-35	accepted	worklode	spec	6	sec-10	WL-RULE-473	partial	
+WL-PLAN-35	accepted	worklode	spec	6	sec-10.1	WL-RULE-474	partial	
+WL-PLAN-35	accepted	worklode	spec	6	sec-11	WL-RULE-475	partial	
+WL-PLAN-35	accepted	worklode	spec	6	sec-11.1	WL-RULE-476	partial	
+WL-PLAN-35	accepted	worklode	spec	6	sec-3	WL-RULE-463	partial	
+WL-PLAN-35	accepted	worklode	spec	6	sec-3.1	WL-RULE-464	partial	
+WL-PLAN-36	accepted	worklode	spec	6	sec-11	WL-RULE-475	partial	
+WL-PLAN-36	accepted	worklode	spec	6	sec-11.1	WL-RULE-476	partial	
+WL-PLAN-36	accepted	worklode	spec	6	sec-16	WL-RULE-485	partial	
+WL-PLAN-37	superseded	worklode	spec	6	sec-0	WL-RULE-458	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-1	WL-RULE-459	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-1.1	WL-RULE-460	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-10	WL-RULE-473	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-10.1	WL-RULE-474	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-11	WL-RULE-475	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-11.1	WL-RULE-476	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-12	WL-RULE-477	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-13	WL-RULE-478	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-13.1	WL-RULE-479	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-13.2	WL-RULE-480	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-13.3	WL-RULE-481	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-13.4	WL-RULE-482	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-14	WL-RULE-483	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-15	WL-RULE-484	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-16	WL-RULE-485	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-2	WL-RULE-461	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-2.1	WL-RULE-462	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-3	WL-RULE-463	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-3.1	WL-RULE-464	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-4	WL-RULE-465	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-5	WL-RULE-466	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-6	WL-RULE-467	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-7	WL-RULE-468	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-8	WL-RULE-469	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-8.1	WL-RULE-470	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-8.2	WL-RULE-471	full	
+WL-PLAN-37	superseded	worklode	spec	6	sec-9	WL-RULE-472	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-0	WL-RULE-587	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-1	WL-RULE-588	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-2	WL-RULE-589	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-3	WL-RULE-590	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-3.1	WL-RULE-591	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-3.2	WL-RULE-592	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-3.3	WL-RULE-593	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-4	WL-RULE-594	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-4.1	WL-RULE-595	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-4.2	WL-RULE-596	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-4.3	WL-RULE-597	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-4.4	WL-RULE-598	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-4.5	WL-RULE-599	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-5	WL-RULE-600	full	
+WL-PLAN-38	superseded	worklode	spec	19	sec-6	WL-RULE-601	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-0	WL-RULE-553	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-1	WL-RULE-554	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-1.1	WL-RULE-555	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-1.2	WL-RULE-556	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-2	WL-RULE-557	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-2.1	WL-RULE-558	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-2.2	WL-RULE-559	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-2.3	WL-RULE-560	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-3	WL-RULE-561	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-4	WL-RULE-562	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-5	WL-RULE-563	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-6	WL-RULE-564	full	
+WL-PLAN-39	accepted	worklode	spec	13	sec-7	WL-RULE-565	full	
+WL-PLAN-4	draft	worklode	spec	39	sec-0	WL-RULE-846	none	
+WL-PLAN-4	draft	worklode	spec	39	sec-1	WL-RULE-847	none	
+WL-PLAN-4	draft	worklode	spec	39	sec-2	WL-RULE-848	full	
+WL-PLAN-4	draft	worklode	spec	39	sec-3	WL-RULE-849	full	
+WL-PLAN-4	draft	worklode	spec	39	sec-4	WL-RULE-850	full	
+WL-PLAN-4	draft	worklode	spec	39	sec-4.1	WL-RULE-851	full	
+WL-PLAN-4	draft	worklode	spec	39	sec-5	WL-RULE-852	none	
+WL-PLAN-4	draft	worklode	spec	39	sec-6	WL-RULE-853	none	
+WL-PLAN-40	accepted	worklode	spec	13	sec-0	WL-RULE-553	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-1	WL-RULE-554	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-1.1	WL-RULE-555	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-1.2	WL-RULE-556	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-2	WL-RULE-557	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-2.1	WL-RULE-558	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-2.2	WL-RULE-559	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-2.3	WL-RULE-560	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-3	WL-RULE-561	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-4	WL-RULE-562	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-5	WL-RULE-563	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-6	WL-RULE-564	full	
+WL-PLAN-40	accepted	worklode	spec	13	sec-7	WL-RULE-565	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-0	WL-RULE-553	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-1	WL-RULE-554	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-1.1	WL-RULE-555	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-1.2	WL-RULE-556	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-2	WL-RULE-557	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-2.1	WL-RULE-558	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-2.2	WL-RULE-559	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-2.3	WL-RULE-560	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-3	WL-RULE-561	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-4	WL-RULE-562	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-5	WL-RULE-563	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-6	WL-RULE-564	full	
+WL-PLAN-41	accepted	worklode	spec	13	sec-7	WL-RULE-565	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-0	WL-RULE-458	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-1	WL-RULE-459	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-1.1	WL-RULE-460	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-10	WL-RULE-473	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-10.1	WL-RULE-474	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-11	WL-RULE-475	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-11.1	WL-RULE-476	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-12	WL-RULE-477	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-13	WL-RULE-478	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-13.1	WL-RULE-479	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-13.2	WL-RULE-480	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-13.3	WL-RULE-481	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-13.4	WL-RULE-482	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-14	WL-RULE-483	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-15	WL-RULE-484	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-16	WL-RULE-485	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-2	WL-RULE-461	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-2.1	WL-RULE-462	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-3	WL-RULE-463	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-3.1	WL-RULE-464	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-4	WL-RULE-465	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-5	WL-RULE-466	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-6	WL-RULE-467	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-7	WL-RULE-468	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-8	WL-RULE-469	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-8.1	WL-RULE-470	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-8.2	WL-RULE-471	full	
+WL-PLAN-42	accepted	worklode	spec	6	sec-9	WL-RULE-472	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-0	WL-RULE-576	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-1	WL-RULE-577	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-10	WL-RULE-586	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-2	WL-RULE-578	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-3	WL-RULE-579	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-4	WL-RULE-580	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-5	WL-RULE-581	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-6	WL-RULE-582	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-7	WL-RULE-583	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-8	WL-RULE-584	full	
+WL-PLAN-43	accepted	worklode	spec	17	sec-9	WL-RULE-585	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-0	WL-RULE-576	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-1	WL-RULE-577	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-10	WL-RULE-586	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-2	WL-RULE-578	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-3	WL-RULE-579	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-4	WL-RULE-580	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-5	WL-RULE-581	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-6	WL-RULE-582	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-7	WL-RULE-583	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-8	WL-RULE-584	full	
+WL-PLAN-44	accepted	worklode	spec	17	sec-9	WL-RULE-585	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-0	WL-RULE-576	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-1	WL-RULE-577	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-10	WL-RULE-586	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-2	WL-RULE-578	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-3	WL-RULE-579	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-4	WL-RULE-580	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-5	WL-RULE-581	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-6	WL-RULE-582	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-7	WL-RULE-583	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-8	WL-RULE-584	full	
+WL-PLAN-45	accepted	worklode	spec	17	sec-9	WL-RULE-585	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-0	WL-RULE-617	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-1	WL-RULE-618	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-10	WL-RULE-629	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-11	WL-RULE-630	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-11.1	WL-RULE-631	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-11.2	WL-RULE-632	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-12	WL-RULE-633	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-13	WL-RULE-634	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-14	WL-RULE-635	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-15	WL-RULE-636	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-15.1	WL-RULE-637	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-2	WL-RULE-619	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-3	WL-RULE-620	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-4	WL-RULE-621	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-5	WL-RULE-622	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-6	WL-RULE-623	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-7	WL-RULE-624	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-8	WL-RULE-625	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-8.1	WL-RULE-626	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-8.2	WL-RULE-627	full	
+WL-PLAN-46	accepted	worklode	spec	21	sec-9	WL-RULE-628	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-0	WL-RULE-617	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-1	WL-RULE-618	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-10	WL-RULE-629	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-11	WL-RULE-630	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-11.1	WL-RULE-631	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-11.2	WL-RULE-632	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-12	WL-RULE-633	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-13	WL-RULE-634	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-14	WL-RULE-635	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-15	WL-RULE-636	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-15.1	WL-RULE-637	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-2	WL-RULE-619	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-3	WL-RULE-620	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-4	WL-RULE-621	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-5	WL-RULE-622	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-6	WL-RULE-623	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-7	WL-RULE-624	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-8	WL-RULE-625	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-8.1	WL-RULE-626	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-8.2	WL-RULE-627	full	
+WL-PLAN-47	accepted	worklode	spec	21	sec-9	WL-RULE-628	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-0	WL-RULE-617	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-1	WL-RULE-618	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-10	WL-RULE-629	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-11	WL-RULE-630	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-11.1	WL-RULE-631	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-11.2	WL-RULE-632	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-12	WL-RULE-633	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-13	WL-RULE-634	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-14	WL-RULE-635	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-15	WL-RULE-636	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-15.1	WL-RULE-637	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-2	WL-RULE-619	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-3	WL-RULE-620	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-4	WL-RULE-621	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-5	WL-RULE-622	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-6	WL-RULE-623	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-7	WL-RULE-624	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-8	WL-RULE-625	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-8.1	WL-RULE-626	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-8.2	WL-RULE-627	full	
+WL-PLAN-48	accepted	worklode	spec	21	sec-9	WL-RULE-628	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-0	WL-RULE-602	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-1	WL-RULE-603	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-2	WL-RULE-604	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-2.1	WL-RULE-605	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-2.2	WL-RULE-606	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-2.3	WL-RULE-607	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-3	WL-RULE-608	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-3.1	WL-RULE-609	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-3.2	WL-RULE-610	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-3.3	WL-RULE-611	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-3.4	WL-RULE-612	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-3.5	WL-RULE-613	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-4	WL-RULE-614	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-5	WL-RULE-615	full	
+WL-PLAN-49	superseded	worklode	spec	20	sec-6	WL-RULE-616	full	
+WL-PLAN-5	spent	worklode	spec	6	sec-10.1	WL-RULE-474	full	
+WL-PLAN-5	spent	worklode	spec	6	sec-11	WL-RULE-475	full	
+WL-PLAN-5	spent	worklode	spec	6	sec-11.1	WL-RULE-476	full	
+WL-PLAN-5	spent	worklode	spec	6	sec-3	WL-RULE-463	full	
+WL-PLAN-5	spent	worklode	spec	6	sec-3.1	WL-RULE-464	full	
+WL-PLAN-5	spent	worklode	spec	25	sec-11.5	WL-RULE-692	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-0	WL-RULE-638	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-1	WL-RULE-639	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-2	WL-RULE-640	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-3	WL-RULE-641	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-4	WL-RULE-642	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-5	WL-RULE-643	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-6	WL-RULE-644	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-7	WL-RULE-645	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-8	WL-RULE-646	full	
+WL-PLAN-50	superseded	worklode	spec	22	sec-9	WL-RULE-647	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-0	WL-RULE-373	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-1	WL-RULE-374	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-10	WL-RULE-396	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-11	WL-RULE-397	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-12	WL-RULE-398	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-13	WL-RULE-399	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-2	WL-RULE-375	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-2.1	WL-RULE-376	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-3	WL-RULE-377	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-4	WL-RULE-378	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-5	WL-RULE-379	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-6	WL-RULE-380	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-7	WL-RULE-381	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-8	WL-RULE-382	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-8.1	WL-RULE-383	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-8.2	WL-RULE-384	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-8.3	WL-RULE-385	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-8.4	WL-RULE-386	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-8.5	WL-RULE-387	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-8.6	WL-RULE-388	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-8.7	WL-RULE-389	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-9	WL-RULE-390	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-9.1	WL-RULE-391	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-9.2	WL-RULE-392	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-9.3	WL-RULE-393	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-9.4	WL-RULE-394	full	
+WL-PLAN-51	superseded	worklode	spec	1	sec-9.5	WL-RULE-395	full	
+WL-PLAN-52	accepted	worklode	spec	1	sec-9.3	WL-RULE-393	full	
+WL-PLAN-52	accepted	worklode	spec	1	sec-9.5	WL-RULE-395	full	
+WL-PLAN-53	accepted	worklode	spec	1	sec-10	WL-RULE-396	partial	
+WL-PLAN-53	accepted	worklode	spec	1	sec-11	WL-RULE-397	partial	
+WL-PLAN-53	accepted	worklode	spec	1	sec-9.4	WL-RULE-394	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-1	WL-RULE-723	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-10	WL-RULE-751	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-2	WL-RULE-724	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-2.1	WL-RULE-725	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-2.2	WL-RULE-726	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-2.3	WL-RULE-727	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-2.4	WL-RULE-728	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-2.5	WL-RULE-729	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-4	WL-RULE-733	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-4.1	WL-RULE-734	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-4.2	WL-RULE-735	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-4.3	WL-RULE-736	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-5.2	WL-RULE-739	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-8	WL-RULE-749	full	
+WL-PLAN-54	draft	worklode	spec	26	sec-9	WL-RULE-750	full	
+WL-PLAN-55	draft	worklode	spec	26	sec-10	WL-RULE-751	full	
+WL-PLAN-55	draft	worklode	spec	26	sec-3	WL-RULE-730	full	
+WL-PLAN-55	draft	worklode	spec	26	sec-3.1	WL-RULE-731	full	
+WL-PLAN-55	draft	worklode	spec	26	sec-3.2	WL-RULE-732	full	
+WL-PLAN-55	draft	worklode	spec	26	sec-9	WL-RULE-750	full	
+WL-PLAN-56	draft	worklode	spec	26	sec-10	WL-RULE-751	full	
+WL-PLAN-56	draft	worklode	spec	26	sec-4.1	WL-RULE-734	full	
+WL-PLAN-56	draft	worklode	spec	26	sec-9	WL-RULE-750	full	
+WL-PLAN-57	accepted	worklode	spec	25	sec-10	WL-RULE-685	full	
+WL-PLAN-57	accepted	worklode	spec	25	sec-10.1	WL-RULE-686	full	
+WL-PLAN-57	accepted	worklode	spec	25	sec-13	WL-RULE-695	full	
+WL-PLAN-57	accepted	worklode	spec	25	sec-17	WL-RULE-714	full	
+WL-PLAN-57	accepted	worklode	spec	25	sec-9.2	WL-RULE-683	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-5	WL-RULE-663	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-5.1	WL-RULE-664	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-6	WL-RULE-665	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-6.1	WL-RULE-666	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-6.2	WL-RULE-667	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-7	WL-RULE-668	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-7.1	WL-RULE-669	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-7.2	WL-RULE-670	full	
+WL-PLAN-58	accepted	worklode	spec	25	sec-7.3	WL-RULE-671	full	
+WL-PLAN-59	accepted	worklode	spec	25	sec-18	WL-RULE-715	full	
+WL-PLAN-59	accepted	worklode	spec	25	sec-9	WL-RULE-681	full	
+WL-PLAN-59	accepted	worklode	spec	25	sec-9.1	WL-RULE-682	full	
+WL-PLAN-59	accepted	worklode	spec	25	sec-9.2	WL-RULE-683	full	
+WL-PLAN-59	accepted	worklode	spec	25	sec-9.3	WL-RULE-684	full	
+WL-PLAN-6	draft	worklode	spec	55	sec-0	WL-RULE-987	none	
+WL-PLAN-6	draft	worklode	spec	55	sec-1	WL-RULE-988	none	
+WL-PLAN-6	draft	worklode	spec	55	sec-2	WL-RULE-989	full	
+WL-PLAN-6	draft	worklode	spec	55	sec-3	WL-RULE-990	full	
+WL-PLAN-6	draft	worklode	spec	55	sec-4	WL-RULE-991	full	
+WL-PLAN-6	draft	worklode	spec	55	sec-4.1	WL-RULE-992	full	
+WL-PLAN-6	draft	worklode	spec	55	sec-5	WL-RULE-993	full	
+WL-PLAN-6	draft	worklode	spec	55	sec-6	WL-RULE-994	none	
+WL-PLAN-6	draft	worklode	spec	55	sec-7	WL-RULE-995	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-11	WL-RULE-687	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-11.1	WL-RULE-688	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-11.2	WL-RULE-689	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-11.3	WL-RULE-690	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-11.4	WL-RULE-691	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-11.5	WL-RULE-692	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-11.6	WL-RULE-693	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-5	WL-RULE-663	full	
+WL-PLAN-60	accepted	worklode	spec	25	sec-5.1	WL-RULE-664	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-15	WL-RULE-700	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-15.1	WL-RULE-701	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-15.2	WL-RULE-702	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-15.3	WL-RULE-703	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-15.4	WL-RULE-704	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-15.5	WL-RULE-705	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-15.6	WL-RULE-706	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-15.7	WL-RULE-707	full	
+WL-PLAN-61	accepted	worklode	spec	25	sec-18	WL-RULE-715	full	
+WL-PLAN-62	accepted	worklode	spec	25	sec-15.4	WL-RULE-704	full	
+WL-PLAN-62	accepted	worklode	spec	25	sec-15.6	WL-RULE-706	full	
+WL-PLAN-62	accepted	worklode	spec	25	sec-15.7	WL-RULE-707	full	
+WL-PLAN-62	accepted	worklode	spec	25	sec-18	WL-RULE-715	full	
+WL-PLAN-63	accepted	worklode	spec	8	sec-17.1	WL-RULE-533	full	
+WL-PLAN-63	accepted	worklode	spec	8	sec-17.2	WL-RULE-534	full	
+WL-PLAN-63	accepted	worklode	spec	8	sec-17.4	WL-RULE-536	full	
+WL-PLAN-63	accepted	worklode	spec	8	sec-17.7	WL-RULE-539	full	
+WL-PLAN-64	accepted	worklode	spec	8	sec-17.3	WL-RULE-535	full	
+WL-PLAN-65	accepted	worklode	spec	8	sec-17.5	WL-RULE-537	full	
+WL-PLAN-66	accepted	worklode	spec	4	sec-2.2	WL-RULE-415	full	
+WL-PLAN-66	accepted	worklode	spec	25	sec-14.3	WL-RULE-699	full	
+WL-PLAN-66	accepted	worklode	spec	26	sec-4.2	WL-RULE-735	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-0	WL-RULE-504	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-1	WL-RULE-505	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-10	WL-RULE-520	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-11	WL-RULE-521	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-12	WL-RULE-522	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-13	WL-RULE-523	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-14	WL-RULE-524	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-15	WL-RULE-525	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-16	WL-RULE-526	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-16.1	WL-RULE-527	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-16.2	WL-RULE-528	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-16.3	WL-RULE-529	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-16.4	WL-RULE-530	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-16.5	WL-RULE-531	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-17	WL-RULE-532	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-17.1	WL-RULE-533	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-17.2	WL-RULE-534	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-17.3	WL-RULE-535	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-17.4	WL-RULE-536	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-17.5	WL-RULE-537	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-17.6	WL-RULE-538	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-17.7	WL-RULE-539	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-18	WL-RULE-540	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-19	WL-RULE-541	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-2	WL-RULE-506	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-20	WL-RULE-542	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-21	WL-RULE-543	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-22	WL-RULE-544	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-3	WL-RULE-507	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-3.1	WL-RULE-508	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-3.2	WL-RULE-509	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-4	WL-RULE-510	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-5	WL-RULE-511	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-5.1	WL-RULE-512	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-5.2	WL-RULE-513	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-6	WL-RULE-514	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-7	WL-RULE-515	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-7.1	WL-RULE-516	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-7.2	WL-RULE-517	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-8	WL-RULE-518	full	
+WL-PLAN-68	accepted	worklode	spec	8	sec-9	WL-RULE-519	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-0	WL-RULE-648	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-1	WL-RULE-649	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-10	WL-RULE-685	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-10.1	WL-RULE-686	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-11	WL-RULE-687	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-11.1	WL-RULE-688	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-11.2	WL-RULE-689	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-11.3	WL-RULE-690	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-11.4	WL-RULE-691	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-11.5	WL-RULE-692	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-11.6	WL-RULE-693	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-12	WL-RULE-694	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-13	WL-RULE-695	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-14	WL-RULE-696	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-14.1	WL-RULE-697	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-14.2	WL-RULE-698	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-14.3	WL-RULE-699	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-15	WL-RULE-700	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-15.1	WL-RULE-701	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-15.2	WL-RULE-702	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-15.3	WL-RULE-703	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-15.4	WL-RULE-704	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-15.5	WL-RULE-705	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-15.6	WL-RULE-706	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-15.7	WL-RULE-707	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-16	WL-RULE-708	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-16.1	WL-RULE-709	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-16.2	WL-RULE-710	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-16.3	WL-RULE-711	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-16.4	WL-RULE-712	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-16.5	WL-RULE-713	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-17	WL-RULE-714	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-18	WL-RULE-715	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-19	WL-RULE-716	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-2	WL-RULE-650	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-2.1	WL-RULE-651	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-2.2	WL-RULE-652	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-20	WL-RULE-717	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-21	WL-RULE-718	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-22	WL-RULE-719	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-23	WL-RULE-720	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-24	WL-RULE-721	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-3	WL-RULE-653	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-3.1	WL-RULE-654	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-3.2	WL-RULE-655	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-3.3	WL-RULE-656	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-4	WL-RULE-657	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-4.1	WL-RULE-658	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-4.2	WL-RULE-659	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-4.3	WL-RULE-660	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-4.4	WL-RULE-661	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-4.5	WL-RULE-662	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-5	WL-RULE-663	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-5.1	WL-RULE-664	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-6	WL-RULE-665	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-6.1	WL-RULE-666	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-6.2	WL-RULE-667	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-7	WL-RULE-668	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-7.1	WL-RULE-669	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-7.2	WL-RULE-670	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-7.3	WL-RULE-671	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8	WL-RULE-672	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8.1	WL-RULE-673	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8.2	WL-RULE-674	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8.3	WL-RULE-675	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8.4	WL-RULE-676	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8.5	WL-RULE-677	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8.6	WL-RULE-678	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8.7	WL-RULE-679	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-8.8	WL-RULE-680	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-9	WL-RULE-681	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-9.1	WL-RULE-682	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-9.2	WL-RULE-683	full	
+WL-PLAN-69	superseded	worklode	spec	25	sec-9.3	WL-RULE-684	full	
+WL-PLAN-7	accepted	worklode	spec	53	sec-0	WL-RULE-966	none	
+WL-PLAN-7	accepted	worklode	spec	53	sec-1	WL-RULE-967	full	
+WL-PLAN-7	accepted	worklode	spec	53	sec-2	WL-RULE-968	full	
+WL-PLAN-7	accepted	worklode	spec	53	sec-3	WL-RULE-969	full	
+WL-PLAN-7	accepted	worklode	spec	53	sec-4	WL-RULE-970	full	
+WL-PLAN-7	accepted	worklode	spec	53	sec-5	WL-RULE-971	full	
+WL-PLAN-7	accepted	worklode	spec	53	sec-6	WL-RULE-972	full	
+WL-PLAN-7	accepted	worklode	spec	53	sec-7	WL-RULE-973	none	
+WL-PLAN-70	superseded	worklode	spec	25	sec-0	WL-RULE-648	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-1	WL-RULE-649	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-10	WL-RULE-685	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-10.1	WL-RULE-686	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-11	WL-RULE-687	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-11.1	WL-RULE-688	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-11.2	WL-RULE-689	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-11.3	WL-RULE-690	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-11.4	WL-RULE-691	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-11.5	WL-RULE-692	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-11.6	WL-RULE-693	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-12	WL-RULE-694	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-13	WL-RULE-695	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-14	WL-RULE-696	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-14.1	WL-RULE-697	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-14.2	WL-RULE-698	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-14.3	WL-RULE-699	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-15	WL-RULE-700	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-15.1	WL-RULE-701	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-15.2	WL-RULE-702	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-15.3	WL-RULE-703	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-15.4	WL-RULE-704	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-15.5	WL-RULE-705	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-15.6	WL-RULE-706	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-15.7	WL-RULE-707	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-16	WL-RULE-708	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-16.1	WL-RULE-709	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-16.2	WL-RULE-710	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-16.3	WL-RULE-711	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-16.4	WL-RULE-712	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-16.5	WL-RULE-713	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-17	WL-RULE-714	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-18	WL-RULE-715	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-19	WL-RULE-716	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-2	WL-RULE-650	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-2.1	WL-RULE-651	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-2.2	WL-RULE-652	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-20	WL-RULE-717	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-21	WL-RULE-718	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-22	WL-RULE-719	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-23	WL-RULE-720	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-24	WL-RULE-721	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-3	WL-RULE-653	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-3.1	WL-RULE-654	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-3.2	WL-RULE-655	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-3.3	WL-RULE-656	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-4	WL-RULE-657	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-4.1	WL-RULE-658	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-4.2	WL-RULE-659	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-4.3	WL-RULE-660	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-4.4	WL-RULE-661	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-4.5	WL-RULE-662	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-5	WL-RULE-663	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-5.1	WL-RULE-664	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-6	WL-RULE-665	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-6.1	WL-RULE-666	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-6.2	WL-RULE-667	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-7	WL-RULE-668	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-7.1	WL-RULE-669	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-7.2	WL-RULE-670	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-7.3	WL-RULE-671	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8	WL-RULE-672	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8.1	WL-RULE-673	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8.2	WL-RULE-674	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8.3	WL-RULE-675	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8.4	WL-RULE-676	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8.5	WL-RULE-677	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8.6	WL-RULE-678	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8.7	WL-RULE-679	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-8.8	WL-RULE-680	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-9	WL-RULE-681	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-9.1	WL-RULE-682	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-9.2	WL-RULE-683	full	
+WL-PLAN-70	superseded	worklode	spec	25	sec-9.3	WL-RULE-684	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-0	WL-RULE-648	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-1	WL-RULE-649	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-10	WL-RULE-685	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-10.1	WL-RULE-686	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-11	WL-RULE-687	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-11.1	WL-RULE-688	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-11.2	WL-RULE-689	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-11.3	WL-RULE-690	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-11.4	WL-RULE-691	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-11.5	WL-RULE-692	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-11.6	WL-RULE-693	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-12	WL-RULE-694	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-13	WL-RULE-695	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-14	WL-RULE-696	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-14.1	WL-RULE-697	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-14.2	WL-RULE-698	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-14.3	WL-RULE-699	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-15	WL-RULE-700	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-15.1	WL-RULE-701	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-15.2	WL-RULE-702	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-15.3	WL-RULE-703	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-15.4	WL-RULE-704	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-15.5	WL-RULE-705	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-15.6	WL-RULE-706	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-15.7	WL-RULE-707	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-16	WL-RULE-708	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-16.1	WL-RULE-709	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-16.2	WL-RULE-710	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-16.3	WL-RULE-711	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-16.4	WL-RULE-712	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-16.5	WL-RULE-713	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-17	WL-RULE-714	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-18	WL-RULE-715	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-19	WL-RULE-716	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-2	WL-RULE-650	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-2.1	WL-RULE-651	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-2.2	WL-RULE-652	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-20	WL-RULE-717	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-21	WL-RULE-718	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-22	WL-RULE-719	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-23	WL-RULE-720	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-24	WL-RULE-721	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-3	WL-RULE-653	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-3.1	WL-RULE-654	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-3.2	WL-RULE-655	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-3.3	WL-RULE-656	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-4	WL-RULE-657	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-4.1	WL-RULE-658	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-4.2	WL-RULE-659	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-4.3	WL-RULE-660	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-4.4	WL-RULE-661	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-4.5	WL-RULE-662	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-5	WL-RULE-663	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-5.1	WL-RULE-664	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-6	WL-RULE-665	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-6.1	WL-RULE-666	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-6.2	WL-RULE-667	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-7	WL-RULE-668	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-7.1	WL-RULE-669	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-7.2	WL-RULE-670	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-7.3	WL-RULE-671	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8	WL-RULE-672	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8.1	WL-RULE-673	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8.2	WL-RULE-674	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8.3	WL-RULE-675	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8.4	WL-RULE-676	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8.5	WL-RULE-677	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8.6	WL-RULE-678	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8.7	WL-RULE-679	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-8.8	WL-RULE-680	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-9	WL-RULE-681	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-9.1	WL-RULE-682	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-9.2	WL-RULE-683	full	
+WL-PLAN-71	superseded	worklode	spec	25	sec-9.3	WL-RULE-684	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-0	WL-RULE-722	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-2.1	WL-RULE-725	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-5	WL-RULE-737	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-5.1	WL-RULE-738	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-5.2	WL-RULE-739	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-5.3	WL-RULE-740	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-5.4	WL-RULE-741	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-6	WL-RULE-742	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-6.1	WL-RULE-743	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-6.2	WL-RULE-744	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-6.3	WL-RULE-745	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-6.4	WL-RULE-746	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-7	WL-RULE-747	full	
+WL-PLAN-72	draft	worklode	spec	26	sec-7.1	WL-RULE-748	full	
+WL-PLAN-73	accepted	worklode	spec	32	sec-0	WL-RULE-776	full	
+WL-PLAN-73	accepted	worklode	spec	32	sec-1	WL-RULE-777	full	
+WL-PLAN-73	accepted	worklode	spec	32	sec-10	WL-RULE-787	partial	
+WL-PLAN-73	accepted	worklode	spec	32	sec-11	WL-RULE-788	partial	
+WL-PLAN-73	accepted	worklode	spec	32	sec-2	WL-RULE-778	partial	
+WL-PLAN-73	accepted	worklode	spec	32	sec-3	WL-RULE-779	full	
+WL-PLAN-73	accepted	worklode	spec	32	sec-3.1	WL-RULE-780	full	
+WL-PLAN-73	accepted	worklode	spec	32	sec-4	WL-RULE-781	full	
+WL-PLAN-74	accepted	worklode	spec	32	sec-12	WL-RULE-789	full	
+WL-PLAN-75	accepted	worklode	spec	1	sec-3	WL-RULE-377	full	
+WL-PLAN-75	accepted	worklode	spec	1	sec-9.2	WL-RULE-392	full	
+WL-PLAN-76	draft			0			full	NO-SPEC
+WL-PLAN-77	draft			0			full	NO-SPEC
+WL-PLAN-78	accepted			0			full	NO-SPEC
+WL-PLAN-79	accepted			0			full	NO-SPEC
+WL-PLAN-8	draft	worklode	spec	45	sec-1.1	WL-RULE-906	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-1.2	WL-RULE-907	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-1.3	WL-RULE-908	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-1.4	WL-RULE-909	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-11	WL-RULE-930	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-2	WL-RULE-910	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-3	WL-RULE-911	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-4	WL-RULE-912	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-4.1	WL-RULE-913	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-4.2	WL-RULE-914	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-4.3	WL-RULE-915	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-5.1	WL-RULE-917	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-5.2	WL-RULE-918	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-5.3	WL-RULE-919	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-5.4	WL-RULE-920	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-5.5	WL-RULE-921	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-6.1	WL-RULE-923	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-6.2	WL-RULE-924	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-6.3	WL-RULE-925	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-7	WL-RULE-926	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-8	WL-RULE-927	full	
+WL-PLAN-8	draft	worklode	spec	45	sec-9	WL-RULE-928	full	
+WL-PLAN-80	accepted			0			full	NO-SPEC
+WL-PLAN-81	accepted	worklode	spec	29	sec-7.1	WL-RULE-767	partial	
+WL-PLAN-81	accepted	worklode	spec	29	sec-7.3	WL-RULE-769	partial	
+WL-PLAN-81	accepted	worklode	spec	32	sec-10	WL-RULE-787	partial	
+WL-PLAN-81	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-82	superseded	worklode	spec	4	sec-5.2	WL-RULE-423	full	
+WL-PLAN-82	superseded	worklode	spec	4	sec-5.3	WL-RULE-424	full	
+WL-PLAN-83	accepted	worklode	spec	32	sec-10	WL-RULE-787	partial	
+WL-PLAN-83	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-83	accepted	worklode	spec	32	sec-2	WL-RULE-778	partial	
+WL-PLAN-84	draft	worklode	spec	4	sec-1.3	WL-RULE-411	partial	
+WL-PLAN-85	accepted	worklode	spec	32	sec-1	WL-RULE-777	none	
+WL-PLAN-85	accepted	worklode	spec	32	sec-10	WL-RULE-787	partial	
+WL-PLAN-85	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-85	accepted	worklode	spec	32	sec-9	WL-RULE-786	partial	
+WL-PLAN-86	draft			0			full	WL-ADR-36#sec-2
+WL-PLAN-86	draft			0			full	WL-ADR-36#sec-3
+WL-PLAN-86	draft			0			full	WL-ADR-36#sec-4
+WL-PLAN-86	draft			0			full	WL-ADR-36#sec-6
+WL-PLAN-87	accepted	worklode	spec	29	sec-6.1	WL-RULE-764	partial	
+WL-PLAN-87	accepted	worklode	spec	29	sec-6.2	WL-RULE-765	partial	
+WL-PLAN-87	accepted	worklode	spec	29	sec-8.2	WL-RULE-772	none	
+WL-PLAN-87	accepted	worklode	spec	29	sec-8.4	WL-RULE-774	partial	
+WL-PLAN-87	accepted	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-87	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-87	accepted	worklode	spec	32	sec-6	WL-RULE-783	partial	
+WL-PLAN-88	accepted			0			full	NO-SPEC
+WL-PLAN-89	accepted	worklode	spec	1	sec-6	WL-RULE-380	full	
+WL-PLAN-89	accepted	worklode	spec	21	sec-4	WL-RULE-621	full	
+WL-PLAN-9	draft	worklode	spec	52	sec-0	WL-RULE-959	full	
+WL-PLAN-9	draft	worklode	spec	52	sec-1	WL-RULE-960	full	
+WL-PLAN-9	draft	worklode	spec	52	sec-2	WL-RULE-961	full	
+WL-PLAN-9	draft	worklode	spec	52	sec-3	WL-RULE-962	full	
+WL-PLAN-9	draft	worklode	spec	52	sec-4	WL-RULE-963	full	
+WL-PLAN-9	draft	worklode	spec	52	sec-5	WL-RULE-964	full	
+WL-PLAN-9	draft	worklode	spec	52	sec-6	WL-RULE-965	full	
+WL-PLAN-90	draft			0			full	NO-SPEC
+WL-PLAN-91	draft	worklode	spec	37	sec-2.2	WL-RULE-795	full	
+WL-PLAN-91	draft	worklode	spec	37	sec-3.2	WL-RULE-800	full	
+WL-PLAN-91	draft	worklode	spec	37	sec-6	WL-RULE-810	partial	
+WL-PLAN-91	draft	worklode	spec	37	sec-6.1	WL-RULE-811	partial	
+WL-PLAN-91	draft	worklode	spec	37	sec-6.2	WL-RULE-812	partial	
+WL-PLAN-91	draft	worklode	spec	37	sec-6.3	WL-RULE-813	partial	
+WL-PLAN-91	draft	worklode	spec	37	sec-6.4	WL-RULE-814	partial	
+WL-PLAN-92	accepted	worklode	spec	7	sec-2.2	WL-RULE-491	partial	
+WL-PLAN-93	accepted	worklode	spec	26	sec-2.1	WL-RULE-725	partial	
+WL-PLAN-93	accepted	worklode	spec	26	sec-2.5	WL-RULE-729	full	
+WL-PLAN-93	accepted	worklode	spec	26	sec-5	WL-RULE-737	none	
+WL-PLAN-93	accepted	worklode	spec	26	sec-5.1	WL-RULE-738	none	
+WL-PLAN-93	accepted	worklode	spec	26	sec-5.2	WL-RULE-739	none	
+WL-PLAN-93	accepted	worklode	spec	26	sec-5.3	WL-RULE-740	none	
+WL-PLAN-93	accepted	worklode	spec	26	sec-5.4	WL-RULE-741	none	
+WL-PLAN-94	draft			0			full	NO-SPEC
+WL-PLAN-96	accepted	worklode	spec	25	sec-4.5	WL-RULE-662	full	
+WL-PLAN-97	accepted	worklode	spec	29	sec-0	WL-RULE-754	none	
+WL-PLAN-97	accepted	worklode	spec	29	sec-2	WL-RULE-756	partial	
+WL-PLAN-97	accepted	worklode	spec	29	sec-3	WL-RULE-757	partial	
+WL-PLAN-97	accepted	worklode	spec	29	sec-3.1	WL-RULE-758	partial	
+WL-PLAN-97	accepted	worklode	spec	29	sec-3.2	WL-RULE-759	partial	
+WL-PLAN-97	accepted	worklode	spec	29	sec-3.3	WL-RULE-760	partial	
+WL-PLAN-97	accepted	worklode	spec	29	sec-4	WL-RULE-761	partial	
+WL-PLAN-97	accepted	worklode	spec	29	sec-9	WL-RULE-775	none	
+WL-PLAN-97	accepted	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-97	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-97	accepted	worklode	spec	32	sec-7	WL-RULE-784	partial	
+WL-PLAN-98	accepted	worklode	spec	29	sec-1	WL-RULE-755	none	
+WL-PLAN-98	accepted	worklode	spec	29	sec-4	WL-RULE-761	partial	
+WL-PLAN-98	accepted	worklode	spec	29	sec-5	WL-RULE-762	full	
+WL-PLAN-99	accepted	worklode	spec	29	sec-7	WL-RULE-766	full	
+WL-PLAN-99	accepted	worklode	spec	29	sec-7.1	WL-RULE-767	partial	
+WL-PLAN-99	accepted	worklode	spec	29	sec-7.2	WL-RULE-768	full	
+WL-PLAN-99	accepted	worklode	spec	29	sec-7.3	WL-RULE-769	full	
+WL-PLAN-99	accepted	worklode	spec	32	sec-10	WL-RULE-787	none	
+WL-PLAN-99	accepted	worklode	spec	32	sec-11	WL-RULE-788	none	
+WL-PLAN-99	accepted	worklode	spec	32	sec-7	WL-RULE-784	partial	
