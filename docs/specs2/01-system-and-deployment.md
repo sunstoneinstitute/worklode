@@ -165,7 +165,7 @@ A coding agent in a provider-managed cloud sandbox has a fresh checkout, an ephe
 | templ | `tool github.com/a-h/templ/cmd/templ` in `go.mod` | `go tool templ` |
 | Tailwind | `scripts/tailwind.sha256` (version plus per-platform SHA256) | `scripts/fetch-tailwind.sh` |
 
-No tool manager (`mise`, `.tool-versions`) is used. The trigger to adopt one is a second runtime needing a pin no existing source carries, which the `plugins/obsidian/` Node toolchain is a candidate for. System packages live in the Dockerfile, which is Linux-only. `bootstrap.sh` fails loudly naming what a laptop lacks. No cross-platform package-name schema exists.
+No tool manager (`mise`, `.tool-versions`) is used. The trigger to adopt one is a second runtime needing a pin no existing source carries. System packages live in the Dockerfile, which is Linux-only. `bootstrap.sh` fails loudly naming what a laptop lacks. No cross-platform package-name schema exists.
 
 ### 5.2 Worker images
 
