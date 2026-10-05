@@ -223,7 +223,7 @@ jobs:
       # validates zero overlays against this repo's flat
       # deploy/overlays/<env>/kustomization.yaml layout and reports success
       # having checked nothing.
-      - uses: sunstoneinstitute/actions/validate-kustomize@c1b0fe620bef4371fad2ed9424573cb4c816fa08 # v1.8.0
+      - uses: sunstoneinstitute/actions/validate-kustomize@1dc757461086ff5f3f3765eea6089d9c8af46930 # v1.8.1
         with:
           overlay-base: deploy/overlays
           environments: hzdev hzprod

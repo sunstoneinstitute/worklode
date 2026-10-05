@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
 
       - name: Update deploy branch
-        uses: sunstoneinstitute/actions/update-deploy-branch@c1b0fe620bef4371fad2ed9424573cb4c816fa08 # v1.8.0
+        uses: sunstoneinstitute/actions/update-deploy-branch@1dc757461086ff5f3f3765eea6089d9c8af46930 # v1.8.1
         with:
           env: dev
           images: worklode
