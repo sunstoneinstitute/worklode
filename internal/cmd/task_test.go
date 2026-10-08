@@ -1138,3 +1138,34 @@ func TestTaskSetSkills(t *testing.T) {
 		t.Fatalf("set state with two values: %v", err)
 	}
 }
+
+// TestStatusShortcutWithTaskShowsHeader holds `lode status <id>` to
+// `task show --status <id>`: the task's header block and nothing else.
+func TestStatusShortcutWithTaskShowsHeader(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"WL-496","project":"worklode","title":"The shortcuts","priority":"high","kind":"feature","state":"deployed_prod","body":"not shown"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	var out strings.Builder
+	cmd := newStatusShortcutCmd()
+	cmd.SetArgs([]string{"WL-496"})
+	cmd.SetOut(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("status WL-496: %v", err)
+	}
+	want := `WL-496  The shortcuts
+  project:  worklode
+  priority: high
+  kind:     feature
+  state:    deployed_prod
+  assignee: -
+`
+	if out.String() != want {
+		t.Fatalf("output = %q; want %q", out.String(), want)
+	}
+}
