@@ -56,7 +56,7 @@ func bindingEvent(b hookBinding) Event {
 
 // eventsFor reads a binding table the other way round: the command a binding
 // runs names the Worklode event, so an adapter's event table cannot restate —
-// and so cannot drift from — what install actually writes (spec 008 §17.1).
+// and so cannot drift from — what install actually writes (WL-SPEC-80 §5).
 func eventsFor(bindings []hookBinding) map[Event][]string {
 	out := map[Event][]string{}
 	for _, b := range bindings {
@@ -99,8 +99,7 @@ func stripGroupedHooks(settings map[string]any) (action string) {
 }
 
 // installGroupedHooks writes bindings into the JSON config at path. A file
-// that exists but does not parse returns the read error and is never rewritten
-// (spec 024 acceptance 6).
+// that exists but does not parse returns the read error and is never rewritten.
 func installGroupedHooks(path string, bindings []hookBinding) error {
 	settings, err := ReadJSONFile(path)
 	if err != nil {

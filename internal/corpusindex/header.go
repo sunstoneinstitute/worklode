@@ -8,7 +8,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// docRef mirrors internal/cli/render.go's DocRef (025 §14.3 shorthand:
+// docRef mirrors internal/cli/render.go's DocRef (WL-SPEC-77 §7 shorthand:
 // <PROJECTKEY>-<KIND>-<N>). Duplicated rather than imported: internal/cli
 // pulls in net/http, which this package must stay clear of. Keep the two in
 // sync if the shorthand ever changes.
@@ -23,9 +23,9 @@ func docRef(d model.Doc) string {
 	return d.ProjectKey + "-" + ref
 }
 
-// DocHeader is a doc chunk's context header (040 §4.3):
+// DocHeader is a doc chunk's context header (WL-SPEC-79 §14):
 //
-//	WL-SPEC-025 "Documents in the backbone" — §15.2 The ordered log
+//	WL-SPEC-77 "Documents in the backbone" — §15.2 The ordered log
 //
 // number and heading name the chunk's section. Both "" renders the document
 // reference and title alone, for a whole-document or unstructured chunk;
@@ -41,14 +41,14 @@ func DocHeader(doc model.Doc, number, heading string) string {
 	return h
 }
 
-// TaskHeader is a task chunk's context header (040 §4.3):
+// TaskHeader is a task chunk's context header (WL-SPEC-79 §14):
 //
 //	WL-142 [feature/in_progress] Fix the thing
 func TaskHeader(task model.Task) string {
 	return fmt.Sprintf("%s [%s/%s] %s", task.ID, task.Kind, task.State, task.Title)
 }
 
-// SkillHeader is a skill chunk's context header (040 §4.3):
+// SkillHeader is a skill chunk's context header (WL-SPEC-79 §14):
 //
 //	skill: test-driven-development — <description>
 func SkillHeader(skill model.Skill) string {

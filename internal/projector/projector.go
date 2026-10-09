@@ -1,9 +1,9 @@
 // Package projector projects the backbone into the data-platform knowledge
-// graph (spec 006 §11). Authority stays split: the backbone (this repo,
-// Postgres) owns execution facts and — since 025 §5 moved authoring there —
+// graph (WL-SPEC-79 §12). Authority stays split: the backbone (this repo,
+// Postgres) owns execution facts and — since WL-SPEC-77 §3 moved authoring there —
 // the design documents, and both are projected read-only into the graph.
 // Tasks render into the project's own named graph; each document's canonical
-// node renders into its per-document declared graph (007 §1.1's
+// node renders into its per-document declared graph (WL-SPEC-82 §16.1's
 // declared/<doc-key>, iri.DeclaredGraph), whose writer is this projector now
 // that the backbone is the authoring surface (WL-289). graph-server
 // exposes no SPARQL Update, so there is no per-subject patch and no
@@ -40,7 +40,7 @@ import (
 )
 
 // Branch is the fixed graph-server branch the work graph lives on
-// (spec 006 §13.2 item 5).
+// (WL-SPEC-79 §13 item 5).
 const Branch = "main"
 
 // Projector re-renders dirty projects from the backbone and replaces their
@@ -308,7 +308,7 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 	// (WL-289): one graph per document, replaced whole, in the same attempt
 	// — a failure quarantines the project as a unit, documents included.
 	// Live documents are written and tombstoned ones have their graph
-	// removed, which is 044 §4's "the graph shows live rows only" for the
+	// removed, which is WL-SPEC-75 §12's "the graph shows live rows only" for the
 	// one entity that does not get it for free: a task leaves the graph by
 	// not being written into the project graph the next pass replaces, while
 	// a document owns a graph of its own that nothing else overwrites.
@@ -323,7 +323,7 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 		}
 		// Only the inbound edges are read: a section's supersession is stated
 		// by the document that replaced it, so it reaches this document as an
-		// inbound isReplacedBy (025 §6.2).
+		// inbound isReplacedBy (WL-SPEC-77 §6).
 		_, in, err := p.st.ListDocEdges(ctx, d.ID)
 		if err != nil {
 			return fmt.Errorf("list edges of doc %s: %w", d.Slug, err)

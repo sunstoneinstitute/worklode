@@ -22,7 +22,7 @@ const (
 )
 
 // specCanonDefault and planCanonDefault are the conventional corpus
-// directories (025 §16.1), used as the canonical key when the loaded corpus
+// directories, used as the canonical key when the loaded corpus
 // cannot be expressed relative to a repo root.
 const (
 	specCanonDefault = "docs/specs"
@@ -32,7 +32,7 @@ const (
 // canonDirs derives the canonical corpus-relative prefixes every claim and
 // every lookup is keyed on, from the directories the corpus was actually
 // loaded from. A repo that relocates its corpus with `spec_corpus` /
-// `plan_corpus` (025 §16.1) writes its references against the relocated
+// `plan_corpus` writes its references against the relocated
 // directory, so keying on a hardcoded "docs/specs" would normalise a document
 // and the claim naming it onto different keys and match nothing — a section
 // with a full covering plan would report as unplanned, under a path that does
@@ -98,7 +98,7 @@ type claim struct {
 }
 
 // deferral is one plan's explicit handoff of a section to a named owner
-// (026 §5.3), resolved once at index build time the same way claim is:
+// (WL-SPEC-78 §4), resolved once at index build time the same way claim is:
 // Section need not re-parse frontmatter per query.
 type deferral struct {
 	plan   string // repo-relative
@@ -116,12 +116,12 @@ func discharges(status string) bool {
 
 // sectionKey identifies a spec section by its repo-relative spec path (§4
 // reference, fragment split off) and bare anchor, both fully resolved
-// (026 §5.1) — never the raw string a document happened to write.
+// (WL-SPEC-78 §4) — never the raw string a document happened to write.
 type sectionKey struct {
 	spec, anchor string
 }
 
-// PlanIndex is the plan corpus indexed for 026 §2.1 coverage queries: every
+// PlanIndex is the plan corpus indexed for WL-SPEC-78 §1.2 coverage queries: every
 // plan's coverage claim against every section it names, keyed for lookup by
 // section.
 type PlanIndex struct {
@@ -139,7 +139,7 @@ type PlanIndex struct {
 
 	// specCanon and planCanon are those same two corpora in the canonical
 	// repo-relative form every claim is keyed by — derived from specDir and
-	// planDir rather than assumed, so a relocated corpus (025 §16.1) keys
+	// planDir rather than assumed, so a relocated corpus keys
 	// documents and the claims naming them the same way.
 	specCanon, planCanon string
 
@@ -217,9 +217,9 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 			}
 			if e.TargetAnchor == "" || e.Target == "NO-SPEC" {
 				// A whole-document covers names no section a coverage query
-				// can use, and NO-SPEC has no sections to cover (026 §2.1,
+				// can use, and NO-SPEC has no sections to cover (WL-SPEC-78 §1.2,
 				// §4.3). A defers entry with no fragment is rejected at write
-				// time (026 §5.3); this skip mirrors covers defensively.
+				// time (WL-SPEC-78 §4); this skip mirrors covers defensively.
 				continue
 			}
 			target := resolveNumberedAlias(ix.normalizeRef(e.Target, home), knownSpecs)
@@ -415,7 +415,7 @@ func (ix *PlanIndex) resolveShorthand(ref string) (string, bool) {
 
 // numberPrefixPattern is the leading "<digits>-" a numbered corpus filename
 // carries (WL-404) — "045-per-project-workflows.md" — even once a spec's
-// backbone slug has dropped the number 025 §17 minted its ordinal from.
+// backbone slug has dropped the number WL-SPEC-77 §14 minted its ordinal from.
 var numberPrefixPattern = regexp.MustCompile(`^\d+-`)
 
 // resolveNumberedAlias recognises ref as a numbered-filename alias of a spec
@@ -494,7 +494,7 @@ func (ix *PlanIndex) Section(specPath, anchor string) (PlanningOutcome, []Coveri
 }
 
 // deferredOwner returns the comma-joined, sorted, deduplicated set of owners
-// an accepted-or-superseded plan's `defers` names for key (026 §5.3) — the
+// an accepted-or-superseded plan's `defers` names for key (WL-SPEC-78 §4) — the
 // same "not draft" eligibility rule Section applies to a covers claim
 // (discharges), not a separate rule invented for defers. "" when no such
 // plan defers this section.

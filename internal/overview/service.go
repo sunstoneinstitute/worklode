@@ -83,7 +83,7 @@ func taskIDFromIRI(s string) string {
 	return ""
 }
 
-// Frontier returns the ranked ready set (backbone order, spec 007 §3.4)
+// Frontier returns the ranked ready set (backbone order, WL-SPEC-82 §16.2)
 // annotated with depth/fan-out/is_critical from the combined DAG.
 func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.FrontierTask, error) {
 	tasks, fanOut, err := s.Store.Frontier(ctx, projectID)
@@ -95,7 +95,7 @@ func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.Front
 		return nil, err
 	}
 	// Depth is historical (full DAG); criticality follows the open subgraph,
-	// matching CriticalPath (spec 007 §4's closed-task rule, WL-354).
+	// matching CriticalPath (WL-SPEC-82 §16.3's closed-task rule, WL-354).
 	full := Analyze(pairs, nil)
 	openPairs, err := s.openSubgraph(ctx, pairs)
 	if err != nil {
@@ -116,7 +116,7 @@ func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.Front
 // CriticalPath computes the enriched cross-store critical path (overview
 // only, D12) plus any cycles found.
 //
-// Per spec 007 §4's closed-task rule (WL-354): depth is historical — the
+// Per WL-SPEC-82 §16.3's closed-task rule (WL-354): depth is historical — the
 // full live DAG, closed predecessors included — while criticality and
 // fan-out are computed over the open subgraph, so a chain whose work is
 // entirely finished is never reported as the thing holding the project up.
@@ -222,7 +222,7 @@ func (s *Service) Roll(ctx context.Context, projectID string) (*model.Overview, 
 	return o, nil
 }
 
-// rollCoverage adds the 025 §11.5 reads to the roll-up. Coverage is per
+// rollCoverage adds the WL-SPEC-77 §13 reads to the roll-up. Coverage is per
 // document in the query and summed here: the roll-up is one screen, so it
 // carries the corpus ratio and leaves the per-document rows to Coverage's
 // callers.

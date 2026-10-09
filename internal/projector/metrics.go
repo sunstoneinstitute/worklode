@@ -6,7 +6,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Metrics holds the projector loop's instruments (spec 022). A nil *Metrics
+// Metrics holds the projector loop's instruments (WL-SPEC-73). A nil *Metrics
 // records nothing, so RunOnce can call its methods unconditionally, as this
 // package's tests that pass nil do.
 type Metrics struct {
@@ -80,7 +80,7 @@ func (m *Metrics) recordProject() {
 }
 
 // recordGraphDeleted records one declared graph removed because its document
-// was tombstoned (044 §4). Only an actual removal counts: a delete that finds
+// was tombstoned (WL-SPEC-75 §12). Only an actual removal counts: a delete that finds
 // the graph already gone is the steady state of a reconciler re-issuing it,
 // not an event, and counting it would turn one deletion into a rate.
 func (m *Metrics) recordGraphDeleted() {
@@ -99,7 +99,7 @@ func (m *Metrics) recordDocVersionGraph() {
 }
 
 // recordProjectFailure records one project that failed to project and was
-// quarantined. No project label: 022 §8 allows only bounded label values and
+// quarantined. No project label: WL-SPEC-73 §6 allows only bounded label values and
 // the project set is not closed. Which project is stuck is in the slog.Error
 // line beside this call and in graph_projection_failures.
 func (m *Metrics) recordProjectFailure() {

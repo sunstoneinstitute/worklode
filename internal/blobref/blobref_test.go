@@ -190,7 +190,7 @@ func TestReplaceDestinationSpans(t *testing.T) {
 			want: "![b](" + blob + ")\n",
 		},
 		{
-			// Spec 021 §7: a link to a local file is left alone.
+			// Spec WL-SPEC-78 §8.5: a link to a local file is left alone.
 			name: "sibling plain link",
 			body: "![a](./a.png)\n\n[dl](./a.png)\n",
 			want: "![a](" + blob + ")\n\n[dl](./a.png)\n",

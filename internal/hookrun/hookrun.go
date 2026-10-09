@@ -126,7 +126,7 @@ func (o Options) now() time.Time {
 }
 
 // layoutFor resolves the worktree layout for dir — the payload cwd (the same
-// directory resolveDir picks), never the process cwd. Spec 008 §5.1: a hook
+// directory resolveDir picks), never the process cwd. Spec WL-SPEC-80 §3.3: a hook
 // running inside a worktree resolves the base directory from its OWN cwd,
 // because .worklode/config.toml is repo content checked out into every
 // worktree; resolving from os.Getwd() (as cli.LoadConfig does) can silently
@@ -471,12 +471,12 @@ func closeSession(ctx context.Context, opts Options, p Payload, taskID, root str
 }
 
 // purgeSecrets removes a task's materialized secrets when its worktree goes
-// away — materialized lifetime equals worktree lifetime (spec 017). Local
+// away — materialized lifetime equals worktree lifetime (WL-SPEC-74). Local
 // only, so it runs BEFORE any backbone call and regardless of their outcome.
 //
 // Bound to worktree removal, not to a session leaving. A session that exits a
-// worktree (spec 012 §4: `ExitWorktree`, one session working several tasks in
-// sequence) still holds that task's lease and can come back, and 017 §3 purges
+// worktree (WL-SPEC-80 §8.4: `ExitWorktree`, one session working several tasks in
+// sequence) still holds that task's lease and can come back, and WL-SPEC-74 §10.4 purges
 // on exit only for a lease that is *gone*. Purging on every exit would cost a
 // fresh consent and a fresh Touch ID on return — impossible in the
 // non-interactive session that is the common case.
@@ -572,17 +572,17 @@ func refLinkHint(dir string) string {
 //     session-start.command.output schema declares
 //     hookSpecificOutput.{hookEventName,additionalContext} exactly as Claude
 //     Code's does, and WL-303 verified end to end against codex-cli 0.147.0
-//     that the string reaches the model (ADR 051 §6).
+//     that the string reaches the model (WL-SPEC-80 §5.4).
 //   - Amp gets plain text: the generated plugin captures the hook's stdout
 //     and returns it as the thread's first-turn context message.
 //   - Copilot gets nothing: its documented envelope is a *different* shape
 //     (flat additionalContext, no hookSpecificOutput wrapper) and no
 //     installed CLI existed to verify it against, so shipping one would be
-//     the unverified envelope ADR 051 §0 forbids.
+//     the unverified envelope WL-SPEC-80 §5.4 forbids.
 //
 // Codex rejects unknown keys and drops the context outright when stdout
 // looks like JSON but fails its schema, so the envelope must stay exactly
-// these two fields — see ADR 051 §6 before adding a third.
+// these two fields — see WL-SPEC-80 §5.4 before adding a third.
 func emitSessionContext(opts Options, text string) {
 	if text == "" {
 		return
@@ -601,7 +601,7 @@ func emitSessionContext(opts Options, text string) {
 // content-addressed store, bounded-parallel and bounded overall by
 // skillsBudget: however many skills a brief carries, this can never cost
 // more than one budget's worth of dead air at session start. Each fetched
-// skill is also linked into root's .agents/skills (spec 008 §17.3), and the
+// skill is also linked into root's .agents/skills (WL-SPEC-80 §5.2), and the
 // worktree's info/exclude gets one ".agents/" line if any link was made.
 // Failures are warnings: the pinned content is already inline in the brief,
 // and recommended skills degrade to an install hint. Returns name -> local
@@ -665,7 +665,7 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brie
 
 // linkWorktreeSkill links <root>/.agents/skills/<name> to the store version
 // dir, so any harness opened in this worktree reads exactly the skills its
-// brief named — a sandbox needs no lode install (spec 008 §17.3). Failures
+// brief named — a sandbox needs no lode install (WL-SPEC-80 §5.2). Failures
 // are warnings; the brief's inline content still stands. Returns whether a
 // new link was made, so the caller can gate the single info/exclude append
 // on it.
@@ -682,7 +682,7 @@ func linkWorktreeSkill(opts Options, root, name, versionDir string) bool {
 	// Only remove what is actually ours: a symlink at this exact path. A
 	// plain file or directory here was not created by linkWorktreeSkill
 	// (Worklode never deletes or repoints a path it did not create — spec
-	// 008 §18 row 4), so leave it alone and warn instead of clobbering it.
+	// WL-SPEC-80 §5.6 row 4), so leave it alone and warn instead of clobbering it.
 	if info, err := os.Lstat(link); err == nil {
 		if info.Mode()&os.ModeSymlink == 0 {
 			warn(opts, "worktree skill link %s: %s exists and is not a symlink; leaving it alone", name, link)
@@ -701,7 +701,7 @@ func linkWorktreeSkill(opts Options, root, name, versionDir string) bool {
 }
 
 // ensureExcluded appends ".agents/" to the repo's info/exclude once — never
-// .gitignore: the links are machine-local (spec 008 §17.3). Called once
+// .gitignore: the links are machine-local (WL-SPEC-80 §5.2). Called once
 // after every skill fetch has finished, never from inside ensureSkills's
 // per-skill closure, so concurrent appends are impossible by construction.
 func ensureExcluded(opts Options, root string) {
@@ -761,7 +761,7 @@ func ensureLease(ctx context.Context, opts Options, c *cli.Client, taskID, ident
 // Returns the lines to offer, empty when there is nothing to adopt.
 //
 // One flat ReadDir, not a walk: the layout puts every worktree exactly one
-// level below the base (spec 008 §5.1), so there is nothing deeper to find.
+// level below the base (WL-SPEC-80 §3.3), so there is nothing deeper to find.
 func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.Layout) string {
 	base := filepath.Join(repoRoot, filepath.FromSlash(l.Base()))
 	entries, err := os.ReadDir(base)

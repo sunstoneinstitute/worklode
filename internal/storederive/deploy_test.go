@@ -97,7 +97,7 @@ func TestDeployTriplesProjectsRows(t *testing.T) {
 	s := store.OpenTestStore(t)
 	seedArtifactAndDeployment(t, s)
 	// A second artifact built from a sha main_commits has never seen: the
-	// commit guard (006 §11.1) must mint nothing for it.
+	// commit guard (WL-SPEC-79 §12) must mint nothing for it.
 	seedArtifact(t, s, store.Artifact{
 		Kind:      "docker_image",
 		Name:      "acme/app",

@@ -15,7 +15,7 @@ import (
 //
 // Rendering an untrusted body is expensive in a way no cap fixes. goldmark's
 // inline parser is quadratic on repeated "[x](" — a hostile 64 KiB body,
-// exactly what maxBody still admits and exactly what spec 020's inbox import
+// exactly what maxBody still admits and exactly what WL-SPEC-80's inbox import
 // can write, measured at 1.584s of CPU — and balance() hands the sanitised
 // fragment to html.ParseFragment before maxRendered can bite, building a
 // ~1.9M-node DOM and allocating 315 MB for output that is then discarded.

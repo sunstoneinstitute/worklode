@@ -5,7 +5,7 @@
 // is why it lives here rather than in internal/cmd.
 //
 // A section's rule folds in the rules that amend it (WL-SPEC-77 §4),
-// attributed to the amending rule (**[amending WL-RULE-12 (WL-SPEC-45#sec-2)]:**<br>)
+// attributed to the amending rule (**[amending WL-RULE-12 (WL-SPEC-76#sec-2)]:**<br>)
 // so borrowed text is never mistakable for the document's own, and
 // transitively, depth-capped so a mutually-amending defect cannot hang. An
 // accepted or superseded amending rule is in force, a draft one is pending
@@ -62,7 +62,7 @@ func amendersOf(r *model.Rule) []string {
 }
 
 // ruleCite names an amending rule and where it is arranged:
-// "WL-RULE-12 (WL-SPEC-45#sec-2)".
+// "WL-RULE-12 (WL-SPEC-76#sec-2)".
 func ruleCite(r *model.Rule) string {
 	if len(r.ArrangedIn) == 0 {
 		return r.Ref
@@ -122,7 +122,7 @@ func effectiveStatus(status string) bool {
 var headingLine = regexp.MustCompile(`(?m)^#+[ \t]+(.*?)(?:[ \t]*\{#[^}]*\})?[ \t]*$`)
 
 // flattenHeadings turns an inlined subtree's headings into bold lines, so
-// the borrowed text cannot reshape the outline it lands in (026 §3.2).
+// the borrowed text cannot reshape the outline it lands in (WL-SPEC-78 §2).
 func flattenHeadings(text string) string {
 	return headingLine.ReplaceAllString(text, "**$1**")
 }

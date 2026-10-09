@@ -1120,7 +1120,7 @@ func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 	}
 }
 
-// TestPROpenedMaterializesAwaitingApproval: 029 §7.1 — the requirement is a
+// TestPROpenedMaterializesAwaitingApproval: WL-SPEC-75 §13 — the requirement is a
 // row, not an absence, so a task-correlated PR opening leaves an awaiting
 // approval bound to its head sha, naming the requested reviewer when that
 // login maps to an actor. A redelivery conflicts and writes nothing.
@@ -1216,7 +1216,7 @@ func TestReviewApprovedResolvesApproval(t *testing.T) {
 }
 
 // TestReviewCommentedLeavesApprovalAwaiting: a comment is not a decision.
-// The row stays visible as waiting on someone (029 §7.1).
+// The row stays visible as waiting on someone (WL-SPEC-75 §13).
 func TestReviewCommentedLeavesApprovalAwaiting(t *testing.T) {
 	e := newEnv(t)
 	taskID := e.seedTask(t)
@@ -1232,7 +1232,7 @@ func TestReviewCommentedLeavesApprovalAwaiting(t *testing.T) {
 	}
 }
 
-// TestChangesRequestedThenReviewRequestedReopens: 029 §7.1's re-request edge.
+// TestChangesRequestedThenReviewRequestedReopens: WL-SPEC-75 §13's re-request edge.
 // The reviewer is unknown when the PR opens and only becomes an actor later,
 // so the re-request also fills the required_actor the open ingest could not.
 func TestChangesRequestedThenReviewRequestedReopens(t *testing.T) {
@@ -1269,7 +1269,7 @@ func TestChangesRequestedThenReviewRequestedReopens(t *testing.T) {
 	}
 }
 
-// TestSynchronizeRebindsOpenApproval: 029 §7.1 — a push to the PR branch
+// TestSynchronizeRebindsOpenApproval: WL-SPEC-75 §13 — a push to the PR branch
 // designates the new head on the still-open review row rather than opening
 // a second one.
 func TestSynchronizeRebindsOpenApproval(t *testing.T) {
@@ -1298,7 +1298,7 @@ func TestSynchronizeRebindsOpenApproval(t *testing.T) {
 // TestSynchronizeAfterApprovedOpensCandidateRow: once a review has decided
 // the PR, a later push cannot quietly keep the stale approval standing in
 // for the new head — it opens a new, visibly unreviewed awaiting row, and
-// leaves the decided row exactly as the reviewer saw it (029 §7.1).
+// leaves the decided row exactly as the reviewer saw it (WL-SPEC-75 §13).
 func TestSynchronizeAfterApprovedOpensCandidateRow(t *testing.T) {
 	e := newEnv(t)
 	taskID := e.seedTask(t)
@@ -1325,7 +1325,7 @@ func TestSynchronizeAfterApprovedOpensCandidateRow(t *testing.T) {
 	}
 }
 
-// TestSynchronizeUncorrelatedWritesNothing: 029 §7.1 — a synchronize on a PR
+// TestSynchronizeUncorrelatedWritesNothing: WL-SPEC-75 §13 — a synchronize on a PR
 // that names no task has no task to hold up, and failing to correlate must
 // never fail the delivery.
 func TestSynchronizeUncorrelatedWritesNothing(t *testing.T) {
@@ -1414,7 +1414,7 @@ func workflowRunBody(sha string) []byte {
 // TestDeliveryNamesResolvedTask: a GitHub body names no worklode task, so the
 // applier records the correlation it resolved on the event's own payload —
 // what lets a reader of the log name the task without re-joining
-// (WL-SPEC-66 §5.1).
+// (WL-SPEC-82 §15.5).
 func TestDeliveryNamesResolvedTask(t *testing.T) {
 	e := newEnv(t)
 	taskID := e.seedTask(t) // WL-1
@@ -1521,7 +1521,7 @@ func (e *dbEnv) prQueuedAt(t *testing.T, repo string, number int64) *time.Time {
 	return &queuedAt.Time
 }
 
-// TestMergeGroupSetsAndClearsQueuedAt: WL-SPEC-66 §6.1 — checks_requested
+// TestMergeGroupSetsAndClearsQueuedAt: WL-SPEC-82 §15.6 — checks_requested
 // marks a PR queued, destroyed clears it, and a pull_request closed event
 // clears it too (independent of the merge_group lifecycle, e.g. when a PR
 // leaves the queue by ordinary merge rather than by "destroyed").
@@ -1562,7 +1562,7 @@ func TestMergeGroupSetsAndClearsQueuedAt(t *testing.T) {
 // entry, not a worklode task; the correlation lives on the PR row. The
 // applier records it on the event so the Progress page's stream can resolve
 // the delivery to the task whose position line just became "queued for
-// merge" (WL-SPEC-66 §5.1).
+// merge" (WL-SPEC-82 §15.5).
 func TestMergeGroupNamesResolvedTask(t *testing.T) {
 	e := newEnv(t)
 	taskID := e.seedTask(t)
@@ -1575,7 +1575,7 @@ func TestMergeGroupNamesResolvedTask(t *testing.T) {
 	}
 }
 
-// TestRepositoryRulesetKicksRefresh: WL-SPEC-66 §6.3 — a ruleset change on a
+// TestRepositoryRulesetKicksRefresh: WL-SPEC-82 §15.6 — a ruleset change on a
 // mapped repo pokes the server's branch-rules refresh loop. The payload
 // carries no fact worth storing (the merge-queue rule is read per branch from
 // the rules API), so the kick is the whole effect. A repo no project maps is

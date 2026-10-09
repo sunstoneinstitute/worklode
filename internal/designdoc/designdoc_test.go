@@ -13,7 +13,7 @@ import (
 // whitespace, heading spacing — fails here.
 //
 // The corpus is the `lode doc import` fixture rather than a live docs/ tree:
-// the backbone owns design documents now (025 §5), so this repo holds no
+// the backbone owns design documents now (WL-SPEC-77 §3), so this repo holds no
 // document corpus of its own to check against.
 func TestRoundTripCorpus(t *testing.T) {
 	var files []string
@@ -53,7 +53,7 @@ func TestRoundTripCorpus(t *testing.T) {
 	// Without this the round-trip passes vacuously: a scanner that finds no
 	// headings puts the whole file in Preamble and emits it back unchanged.
 	// The check is corpus-wide, not per file — a plan legitimately carries no
-	// section at all (025 §9).
+	// section at all (WL-SPEC-77 §11).
 	if withSections == 0 {
 		t.Error("no sections parsed anywhere; round-trip proves nothing")
 	}
@@ -212,7 +212,7 @@ func TestBytesReproducesInput(t *testing.T) {
 }
 
 // TestSubtreeCutsSectionWithDescendants covers what `lode show --section`
-// asks for (026 §3): a section is always its whole subtree, ending at the
+// asks for (WL-SPEC-78 §2): a section is always its whole subtree, ending at the
 // next heading of the same or shallower level.
 func TestSubtreeCutsSectionWithDescendants(t *testing.T) {
 	src := "---\nstatus: accepted\n---\n" +

@@ -7,7 +7,7 @@
 //
 // There are two flavours of body, differing only in the parser option and the
 // one attribute that option produces — see flavour. A task body is untrusted
-// (spec 020's inbox import writes GitHub issue text straight into it); a
+// (WL-SPEC-80's inbox import writes GitHub issue text straight into it); a
 // design-document body arrives through the doc.write-gated docs API, which is
 // a different threat model but not a reason to run a different pipeline. Both
 // run this one.
@@ -69,7 +69,7 @@ var (
 	calloutTitleClass = regexp.MustCompile(`\Acallout-title\z`)
 )
 
-// linkHref is the only shape an a[href] may take: spec 021 section 8.1's three
+// linkHref is the only shape an a[href] may take: WL-SPEC-78 section 8.1's three
 // schemes, an in-page fragment or query, or a root-relative path.
 //
 // bluemonday's own AllowRelativeURLs treats "//evil.example/x" as relative — it
@@ -379,7 +379,7 @@ func balance(fragment []byte) ([]byte, error) {
 // goldmark's inline parser is quadratic on some shapes — "[x](" repeated costs
 // seconds of CPU well before the input gets large — and nothing caches the
 // result, so this cap is the only thing bounding one page view. 64 KiB is
-// GitHub's own issue-body limit and therefore the largest body spec 020's
+// GitHub's own issue-body limit and therefore the largest body WL-SPEC-80's
 // inbox import can produce; the API's 1 MiB request cap sizes a request, not a
 // body a human wrote. The cap does not make a hostile 64 KiB body cheap, it
 // only stops the cost from growing; Cache is what stops it from being paid
@@ -387,7 +387,7 @@ func balance(fragment []byte) ([]byte, error) {
 const maxBody = 64 << 10
 
 // maxDocBody is the doc flavour's ceiling (WL-356). A design-document body
-// arrives through the doc.write-gated docs API — authored, not spec 020's
+// arrives through the doc.write-gated docs API — authored, not WL-SPEC-80's
 // untrusted issue import — and the corpus's largest specs and plans are
 // routinely past the task cap (025 is 137 KB). The DoS argument is weaker
 // (permission-gated writes, and Cache pays the render once per body) but a

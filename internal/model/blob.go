@@ -3,7 +3,7 @@ package model
 import "time"
 
 // Blob is one content-addressed payload. The bytes live in object storage at
-// blobstore.Key(Hash); this is the index row (spec 021 §1). There is
+// blobstore.Key(Hash); this is the index row (WL-SPEC-78 §8.1). There is
 // deliberately no key field — the key is a pure function of the hash, and
 // storing it would create a second source of truth that can disagree with
 // the content address.
@@ -16,12 +16,12 @@ type Blob struct {
 
 // BlobResponse is the response body of POST /api/v1/blobs and the shape the
 // blob endpoints answer with. URL is the root-relative permanent reference a
-// task body embeds (spec 021 §2) — /blob/<hash> — not the presigned object
+// task body embeds (WL-SPEC-78 §8.2) — /blob/<hash> — not the presigned object
 // URL, which is short-lived and never persisted.
 //
 // PosterURL is the same kind of reference to a second blob: the video's first
 // frame, extracted at upload so an embedded <video> is a picture of the bug
-// rather than a black rectangle (spec 021 §5). Empty for every non-video
+// rather than a black rectangle (WL-SPEC-78 §8.5). Empty for every non-video
 // upload, and for a video on a deployment whose image has no ffmpeg — a
 // poster is decoration, and its absence is never an upload failure.
 type BlobResponse struct {
@@ -32,7 +32,7 @@ type BlobResponse struct {
 	PosterURL string `json:"poster_url,omitempty"`
 }
 
-// TaskBlob is one row of a task's blob reference graph (spec 021 §1), joined
+// TaskBlob is one row of a task's blob reference graph (WL-SPEC-78 §8.1), joined
 // to the blob it names. Embedded is derived from the body on every task
 // write; Attached is declared by `lode task attach` and survives body edits.
 // URL is the root-relative /blob/<hash> reference, filled in at the HTTP
@@ -66,7 +66,7 @@ type AttachBlobResponse struct {
 	Status string `json:"status"`
 }
 
-// BlobGCRequest is the request body of POST /api/v1/blobs/gc (spec 021 §11).
+// BlobGCRequest is the request body of POST /api/v1/blobs/gc (WL-SPEC-78 §8.7).
 // GraceHours is a pointer so an omitted field falls back to the server's
 // default grace period rather than being read as an explicit zero.
 type BlobGCRequest struct {

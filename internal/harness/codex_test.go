@@ -290,7 +290,7 @@ func TestCodexUninstallKeepsUserModifiedExporter(t *testing.T) {
 }
 
 // A file that exists but does not parse is returned as an error, never
-// overwritten (spec 024 acceptance 6).
+// overwritten.
 func TestCodexRefusesUnroundtrippableFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("CODEX_HOME", home)

@@ -50,7 +50,7 @@ func TestUnboundMatchesEventTable(t *testing.T) {
 
 func TestEventsCoverHeartbeat(t *testing.T) {
 	// Every v1 adapter must map Heartbeat or report it unbound — it is the
-	// portability payoff (spec 008 §16.5). claude-code maps it to four events.
+	// portability payoff. claude-code maps it to four events.
 	h, _ := Get("claude-code")
 	if got := h.Events()[Heartbeat]; len(got) != 4 {
 		t.Fatalf("claude-code Heartbeat events = %v; want 4", got)

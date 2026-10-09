@@ -2,7 +2,7 @@ package otlp
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// Metrics holds the otlp package's instruments (spec 071 §3, WL-SPEC-22). A
+// Metrics holds the otlp package's instruments (WL-SPEC-80 §8.8, WL-SPEC-73). A
 // nil *Metrics records nothing, so decode and forward can run without one.
 type Metrics struct {
 	ingest       *prometheus.CounterVec

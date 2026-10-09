@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// queueSize and maxQueuedBytes bound the in-memory forward queue (spec 071
-// §3): gateway latency never delays the agent's export, and a full queue
+// queueSize and maxQueuedBytes bound the in-memory forward queue (WL-SPEC-80
+// §8.8): gateway latency never delays the agent's export, and a full queue
 // drops rather than blocks. Both bounds matter — 256 batches of the 4 MiB
 // the ingest route accepts would be a gigabyte of retained payloads, so the
 // byte bound is what keeps the pod inside its memory limit.
@@ -25,7 +25,7 @@ type payload struct {
 }
 
 // Forwarder relays stored OTLP log batches to the cluster otel-gateway
-// (spec 071 §3). A nil *Forwarder means forwarding is off: Enqueue returns
+// (WL-SPEC-80 §8.8). A nil *Forwarder means forwarding is off: Enqueue returns
 // false without blocking, Run returns at once.
 //
 // ponytail: no disk spool — a full queue or a dead process drops in-flight
@@ -37,7 +37,7 @@ type Forwarder struct {
 
 	// Client posts each payload; overridable so tests can point it at
 	// httptest, or a caller can tune transport settings. Defaults to a
-	// 10s-timeout client (spec 071 §3).
+	// 10s-timeout client (WL-SPEC-80 §8.8).
 	Client *http.Client
 
 	metrics *Metrics

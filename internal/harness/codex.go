@@ -74,7 +74,7 @@ func (Codex) Detect(repoDir string) (bool, error) {
 }
 
 // SkillTargets: ~/.agents/skills, the cross-harness personal skills directory
-// Codex reads (spec 008 §17.3). The directory itself may be the symlink, so
+// Codex reads (WL-SPEC-80 §5.2). The directory itself may be the symlink, so
 // this is not a per-skill target.
 func (Codex) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 	home, err := os.UserHomeDir()
@@ -85,12 +85,12 @@ func (Codex) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 }
 
 // Events is codexBindings read the other way round, so the event table cannot
-// drift from what install actually writes (spec 008 §17.1).
+// drift from what install actually writes (WL-SPEC-80 §5).
 func (Codex) Events() map[Event][]string { return eventsFor(codexBindings) }
 
 // InstallHooks merges Worklode's bindings into hooks.json, preserving every
 // foreign hook and top-level key it finds, and configures usage telemetry in
-// the user-level config.toml alongside it (spec 063 §3). The two files are
+// the user-level config.toml alongside it (WL-SPEC-73 §7.3). The two files are
 // separate because Codex reads them for different purposes -- hooks.json for
 // event handlers, config.toml for OTel export -- so the telemetry action is
 // folded into Notes rather than a second location on HookInstall.

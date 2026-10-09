@@ -13,7 +13,7 @@ import (
 
 // PRRef is the slice of a task-bound pull request this deriver needs. Shaped
 // like store.PRRef but declared here so the CLI-safe half of the derivers
-// does not import the store (053 §2, WL-324); the API caller converts.
+// does not import the store (WL-SPEC-73 §3.2, WL-324); the API caller converts.
 type PRRef struct {
 	Repo   string
 	Number int64
@@ -47,11 +47,10 @@ type RepoReader interface {
 // fetched at most once per repo — a hit or a miss is cached before moving
 // to the next PR, however many PRs share that repo.
 //
-// The edge only — never `<component> a wl:Component` (WL-273, on ADR 049's
-// principle): the type is asserted by deriver 2 in the repo's own
+// The edge only — never `<component> a wl:Component` (WL-273): the type is asserted by deriver 2 in the repo's own
 // observed/repo-layout graph. A repo with a manifest but no CI running
 // `lode graph derive` therefore fails wl:affectsShape's sh:class under union
-// validation, and that violation is the wiring gap made visible (007 §2.3),
+// validation, and that violation is the wiring gap made visible (WL-SPEC-82 §16.1),
 // not something to stub over here.
 func PRAffectsTriples(ctx context.Context, prs []PRRef, rr RepoReader) (doc []byte, skippedRepos []string, err error) {
 	manifests := map[string]*manifest.Manifest{}
