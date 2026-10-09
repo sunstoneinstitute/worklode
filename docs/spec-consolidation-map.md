@@ -220,3 +220,14 @@ Full S1–S64 table: scratchpad `audit-rule-model.md` (attach to the T5/T15 brie
 | A10 | T9: add `comment`, `approve`, `wait` to the verb allowlist; T12: rename back per K4 | K4 |
 | A11 | T13: drop `POST /projects/{id}/progress/review`; T12: add `PUT /reviews/{id}/guide` | K9 |
 | A9 | re-target WL-861 to 80 §8.6–8.9 | K2 |
+
+## Appendix D: phase 7 cleanup PR checklist
+
+Files to delete: `docs/specs2/` (whole directory, including `ttl/`, `section-map.tsv`, `12-spec-refactoring-design-tree.md`), `scripts/supersession_map.py`, `scripts/supersession_map_test.py` (K6; the A2 run is done).
+
+Files with old-spec citations to repoint at WL-SPEC-72..86 (non-code; code comments are the A1 chore):
+`CLAUDE.md` (053, 040, WL-SPEC-4/8), `README.md` (004, 025, 029), `www/README.md` (WL-SPEC-6/7/25), `internal/cmd/CLAUDE.md` (061, 040; also WL-957), `deploy/base/configmap.yaml` comments (039, 040, 021, WL-SPEC-71), `plugins/claude/lode/skills/writing-docs/SKILL.md` (025, 026), `plugins/claude/lode/skills/worklode/references/specs-and-docs.md` and `entities-and-edges.md` (025, 026, 029, WL-SPEC-1), `plugins/claude/lode/skills/splitting-specs-into-plans/SKILL.md` (032, 025), `docs/skill-integrations.md` (016, 025, 037), `docs/delivery-review-notes.md` (025, 029, 046), `docs/follow-ups.md` (113 hits; repoint only live items), `internal/ui/testdata/editor-roundtrip.md` (fixture text, leave).
+
+New index page: `docs/specs.md` listing the fifteen specs by ref and title with one line each, replacing the `docs/specs2/README.md` role. `CLAUDE.md` "Design documents live in the backbone" paragraph points at it.
+
+Backbone retirements (K8): withdraw accepted 1, 4, 25, 32, 40, 42, 53, 59, 61, 63, 67; delete drafts 2, 5, 6, 7, 8, 12, 13, 16, 17, 19, 20, 21, 22, 26, 29, 37, 38, 39, 41, 45, 46, 52, 54, 55, 56, 57, 58, 60, 62, 64, 65, 66, 68, 69, 70, 71 and ADRs 36, 43, 47, 48, 49, 50, 51, 62, 64. 44 is already superseded. Pending web approvals that lapse with the deletes: 711 (ADR 64), 717 (SPEC-71).
