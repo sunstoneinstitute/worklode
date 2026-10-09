@@ -1063,7 +1063,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/derive", s.postDerive)
 
 	r.publicFunc("GET /api/v1/openapi.json", s.serveOpenAPI)
-	b, err := buildOpenAPI(r.guards, routeDocs)
+	b, err := servedOpenAPI()
 	if err != nil {
 		return nil, err
 	}
