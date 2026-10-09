@@ -31,8 +31,12 @@ func renderCommandReference(root *cobra.Command) string {
 	if len(shortcuts) > 0 {
 		var pairs []string
 		for _, s := range shortcuts {
-			pairs = append(pairs, fmt.Sprintf("`lode %s` runs `lode %s`",
-				s.target[len(s.target)-1], strings.Join(s.target, " ")))
+			pair := fmt.Sprintf("`lode %s` runs `lode %s`",
+				s.target[len(s.target)-1], strings.Join(s.target, " "))
+			if s.argTarget != nil {
+				pair += fmt.Sprintf(", or `lode %s <arg>` given an argument", strings.Join(s.argTarget, " "))
+			}
+			pairs = append(pairs, pair)
 		}
 		sort.Strings(pairs)
 		fmt.Fprintf(&b, "Shortcuts: %s.\n\n", strings.Join(pairs, "; "))

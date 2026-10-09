@@ -474,7 +474,7 @@ func resolveStatusFilter(statuses []string) []string {
 }
 
 func newTaskShowCmd() *cobra.Command {
-	var pager, usage bool
+	var pager, usage, status bool
 	cmd := &cobra.Command{
 		Use:               "show <id>",
 		Short:             "Show a task's details: body, edges, blocked status, and lease holder",
@@ -483,12 +483,39 @@ func newTaskShowCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cleanupPager := withPager(cmd, pager)
 			defer cleanupPager()
+			if status {
+				return runTaskStatus(cmd, args[0])
+			}
 			return runTaskShow(cmd, args[0], usage)
 		},
 	}
+	cmd.Flags().BoolVar(&status, "status", false, "print only the header: id, title, project, priority, kind, state, assignee")
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	cmd.Flags().BoolVar(&usage, "usage", false, "include the task's token usage/cost (all history, own sessions only; see task cost for a window or --children)")
+	cmd.MarkFlagsMutuallyExclusive("status", "usage")
 	return cmd
+}
+
+// runTaskStatus is `task show --status`'s body, and `lode status <id>`'s.
+func runTaskStatus(cmd *cobra.Command, arg string) error {
+	c, cfg, err := newAPIClientWithConfig()
+	if err != nil {
+		return err
+	}
+	id, err := resolveTaskID(cmd.Context(), arg, c, cfg)
+	if err != nil {
+		return err
+	}
+	t, raw, err := c.GetTask(cmd.Context(), id)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.TaskHeaderRender(cmd.OutOrStdout(), t)
+	return nil
 }
 
 // runTaskShow is `task show`'s body, shared with the `lode show <id>`
