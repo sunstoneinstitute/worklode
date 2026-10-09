@@ -433,6 +433,9 @@ type Subject struct {
 	// itself — freshness comes from gating the act on Via, not from this
 	// field, which is why requireSession exists. Nil for authOpen/authNone.
 	Groups []string
+	// DisplayName is the actor row's display name, "" when unset. The cockpit
+	// avatar derives its initials from it.
+	DisplayName string
 }
 
 // Authenticated reports whether the subject presented a credential. An open
@@ -456,7 +459,7 @@ func subjectFromActor(a *store.Actor, via authMethod) Subject {
 	if a.Admin {
 		roles = append(roles, RoleAdmin)
 	}
-	return Subject{ActorID: a.ID, Kind: a.Kind, Roles: roles, Via: via, Groups: a.Groups}
+	return Subject{ActorID: a.ID, Kind: a.Kind, Roles: roles, Via: via, Groups: a.Groups, DisplayName: a.DisplayName}
 }
 
 // openSubject is the subject an unauthenticated-by-configuration web request
