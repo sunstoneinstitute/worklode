@@ -48,7 +48,8 @@ func coversRules(tx *sql.Tx, project, ref string) (rules []int64, named bool, er
 		return nil, false, err
 	}
 	// A section's subtree is its own rule and every later rule in position
-	// order until the next heading at its depth or shallower.
+	// order until the next heading at its depth or shallower. A spec heading
+	// has no rule of its own, so its anchor names only the rules under it.
 	rows, err := tx.Query(
 		`SELECT s.rule_id, r.kind
 		   FROM docs d
@@ -56,7 +57,7 @@ func coversRules(tx *sql.Tx, project, ref string) (rules []int64, named bool, er
 		   JOIN doc_rules s ON s.doc_id = d.id
 		   JOIN rules r ON r.id = s.rule_id
 		  WHERE d.id = $1 AND d.kind <> 'plan'
-		    AND ($2 = '' OR (a.rule_id IS NOT NULL AND s.position >= a.position
+		    AND ($2 = '' OR (a.position IS NOT NULL AND s.position >= a.position
 		         AND NOT EXISTS (SELECT 1 FROM doc_rules n
 		                          WHERE n.doc_id = d.id AND n.depth <= a.depth
 		                            AND n.position > a.position AND n.position <= s.position)))
