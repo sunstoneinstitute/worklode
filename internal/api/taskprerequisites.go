@@ -84,7 +84,7 @@ func prerequisitesView(tree model.BlockerTree) *ui.Prerequisites {
 	for _, p := range tree.BlockingPlans {
 		if !seenPlan[p.ID] {
 			seenPlan[p.ID] = true
-			v.Plans = append(v.Plans, ui.PrerequisitePlan{Slug: p.Slug, Title: p.Title, Status: p.Status, URL: docPageURL(p.ID)})
+			v.Plans = append(v.Plans, ui.PrerequisitePlan{Slug: p.Slug, Title: p.Title, Status: p.Status, URL: model.DocPageURL(p.ID)})
 		}
 	}
 
