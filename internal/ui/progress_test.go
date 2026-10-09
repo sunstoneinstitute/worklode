@@ -9,10 +9,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// TestProgressAcceptActionByViewer: WL-SPEC-66 §3.2's rule about who may
+// TestProgressAcceptActionByViewer: WL-SPEC-85 §4's rule about who may
 // press Accept. The button is enabled only for the document's owner, because
-// that is the only actor store.AcceptDoc admits (025 §7); everyone else gets
-// it disabled with the reason, never hidden (§3).
+// that is the only actor store.AcceptDoc admits (WL-SPEC-77 §9); everyone else gets
+// it disabled with the reason, never hidden (WL-SPEC-85 §4).
 func TestProgressAcceptActionByViewer(t *testing.T) {
 	t.Parallel()
 	plan := model.ProgressPlan{Doc: 7, Ref: "WL-PLAN-9", State: "draft", Owner: "alice"}
@@ -67,8 +67,8 @@ func TestProgressAcceptActionNeedsADraft(t *testing.T) {
 
 // actionOn is the one action on the given route, or nil. Every test below
 // asks for the act it is about rather than counting the slot's contents: a
-// spec row and a plan line each carry Rally and Review on every row (§3.5,
-// §3.3) alongside whichever of Accept and Plan applies.
+// spec row and a plan line each carry Rally and Review on every row (WL-SPEC-85 §4)
+// alongside whichever of Accept and Plan applies.
 func actionOn(acts []ProgressAction, route string) *ProgressAction {
 	for i, a := range acts {
 		if a.Route == route {
@@ -96,7 +96,7 @@ func TestProgressReviewActionRoute(t *testing.T) {
 	}
 }
 
-// TestProgressAcceptActionOnADraftSpec: §3.2 puts the button on a draft
+// TestProgressAcceptActionOnADraftSpec: WL-SPEC-85 §4 puts the button on a draft
 // spec's row as well as on a draft plan's line, on the same owner rule.
 func TestProgressAcceptActionOnADraftSpec(t *testing.T) {
 	t.Parallel()
@@ -124,7 +124,7 @@ func TestProgressAcceptActionUnowned(t *testing.T) {
 	}
 }
 
-// TestProgressPlanAction: §3.4's Plan button is offered when the spec has a
+// TestProgressPlanAction: WL-SPEC-85 §4's Plan button is offered when the spec has a
 // section no plan covers and no planning task is open. Any signed-in viewer
 // may press it; the task it mints is a prompt to plan, not the plan.
 func TestProgressPlanAction(t *testing.T) {
@@ -153,7 +153,7 @@ func TestProgressPlanAction(t *testing.T) {
 
 // TestProgressRowPlanningTaskLink: a spec whose planning task is already open
 // shows it as a link instead of the button — the route would only hand back
-// that same task (§3.4).
+// that same task (WL-SPEC-85 §4).
 func TestProgressRowPlanningTaskLink(t *testing.T) {
 	t.Parallel()
 	spec := model.ProgressSpec{Doc: 3, Ref: "WL-SPEC-66", Title: "Progress", Status: "accepted",
@@ -177,8 +177,8 @@ func TestProgressRowPlanningTaskLink(t *testing.T) {
 }
 
 // renderProgressRow renders one spec row as a signed-in viewer sees it, with
-// the review surface disabled — today's reality (§3.3) — and a GitHub App
-// configured, which is what §3.6's merge button needs.
+// the review surface disabled — today's reality (WL-SPEC-85 §4) — and a GitHub App
+// configured, which is what WL-SPEC-85 §4's merge button needs.
 func renderProgressRow(t *testing.T, s model.ProgressSpec) string {
 	t.Helper()
 	return renderProgressRowWithApp(t, s, true)
@@ -194,7 +194,7 @@ func renderProgressRowWithApp(t *testing.T, s model.ProgressSpec, mergeEnabled b
 }
 
 // specWithMerge is a spec whose one plan minted one task, carrying the open
-// PR §3.6 acts on.
+// PR WL-SPEC-85 §4 acts on.
 func specWithMerge(m *model.ProgressMerge) model.ProgressSpec {
 	return model.ProgressSpec{
 		Doc: 3, Ref: "WL-SPEC-66", Status: "accepted",
@@ -288,7 +288,7 @@ func TestProgressMergeButtonWithoutApp(t *testing.T) {
 	}
 }
 
-// TestProgressRallyActionOnEveryRow: §3.5 puts a Rally button on every spec
+// TestProgressRallyActionOnEveryRow: WL-SPEC-85 §4 puts a Rally button on every spec
 // row, whatever group the spec is in — a spec with nothing outstanding is a
 // no-op the route answers, not an act to hide.
 func TestProgressRallyActionOnEveryRow(t *testing.T) {
@@ -311,9 +311,9 @@ func TestProgressRallyActionOnEveryRow(t *testing.T) {
 	}
 }
 
-// TestProgressFooterHeightIsFixed: §2.1's reserved slot. The footer keeps the
+// TestProgressFooterHeightIsFixed: WL-SPEC-85 §3's reserved slot. The footer keeps the
 // same height class with and without a draft rally, so confirming or
-// discarding one moves nothing on the page above it (§5.4).
+// discarding one moves nothing on the page above it (WL-SPEC-85 §6).
 func TestProgressFooterHeightIsFixed(t *testing.T) {
 	t.Parallel()
 	empty := renderProgressFooter(t, nil)
@@ -341,7 +341,7 @@ func TestProgressFooterHeightIsFixed(t *testing.T) {
 }
 
 // TestProgressFooterNeedsASession: both footer acts are writes, so a viewer
-// with no session gets them disabled with the reason rather than missing (§3).
+// with no session gets them disabled with the reason rather than missing (WL-SPEC-85 §4).
 func TestProgressFooterNeedsASession(t *testing.T) {
 	t.Parallel()
 	html := renderProgressFooter(t, &model.RallyBand{ID: "WL-900", Members: 1, Specs: 1})
@@ -355,7 +355,7 @@ func TestProgressFooterNeedsASession(t *testing.T) {
 	}
 }
 
-// TestTaskPulseAnimationKeepsPageStill holds §5.3 and §5.4 together: the
+// TestTaskPulseAnimationKeepsPageStill holds WL-SPEC-85 §6 together: the
 // activity animations exist (in both a full-motion and a
 // prefers-reduced-motion form, so a reader who has turned off motion still
 // gets an instant colour change rather than no feedback), and neither one
@@ -364,13 +364,13 @@ func TestTaskPulseAnimationKeepsPageStill(t *testing.T) {
 	flat := strings.Join(strings.Fields(builtCSS(t)), "")
 
 	if !strings.Contains(flat, "@media(prefers-reduced-motion:no-preference){.task.pulse{") {
-		t.Error("app.css: no prefers-reduced-motion:no-preference block for .task.pulse (§5.3)")
+		t.Error("app.css: no prefers-reduced-motion:no-preference block for .task.pulse (WL-SPEC-85 §6)")
 	}
 	if !strings.Contains(flat, "@media(prefers-reduced-motion:reduce){.task.pulse{") {
-		t.Error("app.css: no prefers-reduced-motion:reduce fallback for .task.pulse (§5.3)")
+		t.Error("app.css: no prefers-reduced-motion:reduce fallback for .task.pulse (WL-SPEC-85 §6)")
 	}
 	if !strings.Contains(flat, ".prog-row.touched{") {
-		t.Error("app.css: no .prog-row.touched rule for the row's activity highlight (§5.3)")
+		t.Error("app.css: no .prog-row.touched rule for the row's activity highlight (WL-SPEC-85 §6)")
 	}
 
 	rules := regexp.MustCompile(`\.task\.pulse\{([^}]*)\}`).FindAllStringSubmatch(flat, -1)
@@ -380,13 +380,13 @@ func TestTaskPulseAnimationKeepsPageStill(t *testing.T) {
 	for _, r := range rules {
 		for _, layout := range []string{"width:", "height:", "margin:", "padding:"} {
 			if strings.Contains(r[1], layout) {
-				t.Errorf(".task.pulse rule %q sets %q; an activity animation must never change layout size (§5.4)", r[1], layout)
+				t.Errorf(".task.pulse rule %q sets %q; an activity animation must never change layout size (WL-SPEC-85 §6)", r[1], layout)
 			}
 		}
 	}
 }
 
-// renderProgressFooter renders §3.5's footer as a signed-in viewer sees it.
+// renderProgressFooter renders WL-SPEC-85 §4's footer as a signed-in viewer sees it.
 func renderProgressFooter(t *testing.T, d *model.RallyBand) string {
 	t.Helper()
 	var b strings.Builder

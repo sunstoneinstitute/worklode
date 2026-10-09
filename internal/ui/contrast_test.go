@@ -260,7 +260,7 @@ func TestControlBoundaryContrastMeetsAA(t *testing.T) {
 // elsewhere too (.chip.lead, .decision .dh, .step.current .pip).
 //
 // The light theme failed this until WL-260 darkened the accent: #FAD604 was
-// 1.43:1 on --surface and #E4C000 1.77:1, which is why spec 032 §10 carried it
+// 1.43:1 on --surface and #E4C000 1.77:1, which is why WL-SPEC-82 §4 carried it
 // as an open exception.
 func TestPrimaryButtonBoundaryContrastMeetsAA(t *testing.T) {
 	light, dark := themes(t)

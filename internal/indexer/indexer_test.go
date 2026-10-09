@@ -38,7 +38,7 @@ func (f *fakeProvider) Embed(ctx context.Context, role embed.Role, texts []strin
 	if v == nil {
 		v = []float32{1, 0, 0}
 	}
-	// index_chunks.embedding is vector(768) (040 §2.2), so a fixture written
+	// index_chunks.embedding is vector(768) (WL-SPEC-79 §14.2), so a fixture written
 	// as {1, 0, 0} has to reach the store at full width.
 	v = store.VecForTests(v...)
 	out := make([][]float32, len(texts))
@@ -125,7 +125,7 @@ func staleGauge(t *testing.T, m *Metrics) float64 {
 	return total
 }
 
-// TestConvergenceIsIdempotent is 040 §13.10: a second pass over an unchanged
+// TestConvergenceIsIdempotent is WL-SPEC-79 §19: a second pass over an unchanged
 // corpus re-embeds nothing and leaves worklode_index_subjects_stale at zero.
 func TestConvergenceIsIdempotent(t *testing.T) {
 	t.Parallel()
@@ -170,7 +170,7 @@ func TestConvergenceIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestProviderChangeKeepsLexicalRows is 040 §13.7 and §8: swapping the
+// TestProviderChangeKeepsLexicalRows is WL-SPEC-79 §16 and §19: swapping the
 // provider nulls every vector but keeps the rows, so the lexical arm never
 // stops serving, and the next pass rebuilds the vectors.
 func TestProviderChangeKeepsLexicalRows(t *testing.T) {
@@ -230,7 +230,7 @@ func TestProviderChangeKeepsLexicalRows(t *testing.T) {
 	}
 }
 
-// TestNoProviderWritesLexicalRows is 040 §13.8 and §11: an instance with no
+// TestNoProviderWritesLexicalRows is WL-SPEC-79 §17 and §19: an instance with no
 // provider still indexes the whole corpus, with null embeddings.
 func TestNoProviderWritesLexicalRows(t *testing.T) {
 	t.Parallel()
@@ -261,12 +261,12 @@ func TestNoProviderWritesLexicalRows(t *testing.T) {
 
 // TestFailedSubjectStaysStale: a provider that errors leaves the subject
 // unindexed and the pass alive, and the next pass picks it up. This is the
-// self-healing property §7 buys by converging rather than hooking writes.
+// self-healing property WL-SPEC-79 §16 buys by converging rather than hooking writes.
 //
 // It also covers WL-714: a configured-but-failing provider must not drop the
 // subject from the lexical arm the way an embed error used to. The chunk
 // rows still get written, with null vectors, exactly as the no-provider case
-// writes them (§11) — only now driven by a failure rather than by Embed
+// writes them (WL-SPEC-79 §17) — only now driven by a failure rather than by Embed
 // being nil. Without the fix, index() returned on vectors()'s error before
 // calling ReplaceSubjectChunks, so chunkStats would read 0 rows here.
 func TestFailedSubjectStaysStale(t *testing.T) {

@@ -6,7 +6,7 @@ package ui
 // internal/model values (model.BoardResponse, model.CockpitProjection, ...)
 // into them in render.go, so the dependency only ever points api -> ui. View
 // types may embed internal/model types (ui may import model) but never
-// reference api's DTOs (ADR 036 §3).
+// reference api's DTOs (WL-SPEC-73 §3.2a).
 
 import (
 	"encoding/json"
@@ -24,11 +24,11 @@ import (
 // PageProps carries the fields the Page shell needs on every page: the
 // document title and which primary-nav destination to mark aria-current.
 // ActiveGlobal drives the top bar's navigation marking: one of "ideas",
-// "intake", "projects", "work", "knowledge" — spec 056 §1's five
+// "intake", "projects", "work", "knowledge" — WL-SPEC-82 §2.1's five
 // destinations. It is left empty on project-scoped pages, whose project-local
 // nav carries the current-page marker instead, and on pages that name no
 // destination: the task page, Home, Reviews and Deliveries, which kept their
-// routes when §1 took them off the list, and the inbox (056 §3), which never
+// routes when §1 took them off the list, and the inbox (WL-SPEC-82 §12), which never
 // had one. No page ever sets aria-current="page" twice, or on both navs.
 type PageProps struct {
 	Title        string
@@ -66,9 +66,9 @@ type BoardFailure struct {
 	Message    string
 }
 
-// --- drift board (spec 007) --------------------------------------------------
+// --- drift board (WL-SPEC-82 §2.5) --------------------------------------------------
 
-// DriftView is the read-only drift board at /drift: four of spec 007's five
+// DriftView is the read-only drift board at /drift: four of the five
 // views, composed from internal/model directly because every field is a fact
 // the overview service already computed in the shape the page renders.
 //
@@ -87,7 +87,7 @@ type DriftView struct {
 }
 
 // gapSubject names what a gap finding is about: the component with no
-// governing doc, or the repository holding an unmatched path (spec 007 §4.2
+// governing doc, or the repository holding an unmatched path (WL-SPEC-82 §2.5
 // sets exactly one of the two).
 func gapSubject(g model.Gap) string {
 	if g.Component != "" {
@@ -96,10 +96,10 @@ func gapSubject(g model.Gap) string {
 	return g.Repo
 }
 
-// --- run board (032 §8) ------------------------------------------------------
+// --- run board ------------------------------------------------------
 
-// RunBoardView is a project's run board (032 §8): its live work grouped
-// into the spec's six fixed groups, rendered inside the project sidebar
+// RunBoardView is a project's run board: its live work grouped
+// into six fixed groups, rendered inside the project sidebar
 // frame like the other project-local destinations.
 type RunBoardView struct {
 	Page         PageProps
@@ -108,7 +108,7 @@ type RunBoardView struct {
 	Groups       []RunGroupView
 }
 
-// RunGroupView is one §8 group in the spec's pinned order: its heading, the
+// RunGroupView is one group in the spec's pinned order: its heading, the
 // rows in it, and how many more rows exist beyond the bound (always 0 for
 // Ready/Running/Waiting/Needs judgment, which are never bounded).
 type RunGroupView struct {
@@ -121,7 +121,7 @@ type RunGroupView struct {
 // so the templ component stays dumb (see internal/api/runboard.go's
 // assembleRunBoard). Ready and terminal (Failed/Completed) rows carry only
 // TaskID/Title/TaskURL/Owner; Waiting rows also set Holds; Running and
-// Needs-judgment rows carry the full §8 fact list — Delegate, LeaseAge,
+// Needs-judgment rows carry the full fact list — Delegate, LeaseAge,
 // LastEvent, Costs, and the PR/check labels — left empty/nil rather than
 // invented when the underlying fact is absent.
 type RunRowView struct {
@@ -143,11 +143,11 @@ type ProjectsView struct {
 	Projects []model.Project
 }
 
-// --- reviews (spec 029 §7.1) -------------------------------------------------
+// --- reviews (WL-SPEC-82 §9) -------------------------------------------------
 
 // ApprovalsView is the /reviews queue: every approval still awaiting a
 // decision, whatever kind of entity it governs, oldest first. Each row
-// carries the decide form (029 §7.3).
+// carries the decide form (WL-SPEC-82 §9).
 type ApprovalsView struct {
 	Page PageProps
 	Rows []ApprovalRow
@@ -163,7 +163,7 @@ type ApprovalsView struct {
 // kind nothing correlates has neither. Kind, Revision and Age are
 // pre-formatted for display (see FmtAge).
 //
-// Lane is the flow requirement this row answers (029 §7.2), "" for a row that
+// Lane is the flow requirement this row answers (WL-SPEC-82 §9), "" for a row that
 // answers no named lane. Two lanes of one revision are two rows, and the lane
 // is what tells them apart on the page.
 //
@@ -188,11 +188,11 @@ type ApprovalRow struct {
 	ReturnURL string
 }
 
-// --- approval detail (spec 032 §7) ------------------------------------------
+// --- approval detail (WL-SPEC-82 §9) ------------------------------------------
 
 // ApprovalDetailView is GET /approvals/{id}: one approval with everything an
-// actor needs to trust or revisit it (032 §7). Read-only except on an open
-// impact review, which carries its note and decision acts (029 §7.1).
+// actor needs to trust or revisit it (WL-SPEC-82 §9). Read-only except on an open
+// impact review, which carries its note and decision acts (WL-SPEC-82 §9).
 //
 // Title/URL are the governed entity's jump-out link, resolved through the
 // same join the Reviews queue uses (EntityTitleURL); both are "" when
@@ -219,7 +219,7 @@ type ApprovalDetailView struct {
 	CreatedAt time.Time
 
 	// CompareURL is the GitHub diff-from-previous jump-out link for a 'pr'
-	// row with a decided predecessor (029 §7.1, 032 §7); "" otherwise — no
+	// row with a decided predecessor (WL-SPEC-82 §9); "" otherwise — no
 	// predecessor, not a 'pr', or the stored PR URL does not parse into a
 	// compare base.
 	CompareURL string
@@ -228,12 +228,12 @@ type ApprovalDetailView struct {
 	ExceptionAuthorizedBy string
 
 	// ExceptionFlow is the project's stamped flow as "name@rev", the other
-	// fact 032 §7 renders beside a decision made under a self-review
+	// fact WL-SPEC-82 §9 renders beside a decision made under a self-review
 	// exception; "" when the project carries no flow, and only ever shown
 	// next to ExceptionAuthorizedBy.
 	ExceptionFlow string
 
-	// ImpactOpen marks an impact review still awaiting an answer (029 §7.1):
+	// ImpactOpen marks an impact review still awaiting an answer (WL-SPEC-82 §9):
 	// the page then offers the dependent owner's note and the prior
 	// approver's decision, both of which the store refuses on any other row.
 	ImpactOpen bool
@@ -244,7 +244,7 @@ type ApprovalDetailView struct {
 	// own /approvals/{id} page; Current marks the one this page is showing.
 	History []ApprovalHistoryRow
 
-	// Governed is the review-graph list (029 §7.1, 032 §7): the revision-
+	// Governed is the review-graph list (WL-SPEC-82 §9): the revision-
 	// bound references this approval's own designation recorded. Empty
 	// means the designation recorded none, never a fabricated lineage.
 	Governed []GovernedRefRow
@@ -265,22 +265,22 @@ type ApprovalHistoryRow struct {
 }
 
 // GovernedRefRow is one revision-bound reference an approval's designation
-// recorded, rendered "kind id @ revision" (029 §7.1, 032 §7).
+// recorded, rendered "kind id @ revision" (WL-SPEC-82 §9).
 type GovernedRefRow struct {
 	Kind, ID, Revision string
 }
 
-// --- inbox (spec 056 §3) -----------------------------------------------------
+// --- inbox (WL-SPEC-82 §12) -----------------------------------------------------
 
 // InboxView is the cross-project inbox at "/inbox": what is waiting on the
-// signed-in actor, in 056 §3.2's fixed bucket order. Only buckets that hold
+// signed-in actor, in WL-SPEC-82 §12's fixed bucket order. Only buckets that hold
 // something are present, so the page never renders an empty heading.
 type InboxView struct {
 	Page    PageProps
 	Buckets []InboxBucket
 }
 
-// InboxBucket is one §3.2 bucket: its heading and its items, already ranked.
+// InboxBucket is one WL-SPEC-82 §12 bucket: its heading and its items, already ranked.
 type InboxBucket struct {
 	Label string
 	Items []InboxItem
@@ -302,7 +302,7 @@ type TaskView struct {
 	Page PageProps
 	// Project is the task's owning project identity — id, name, key — the
 	// same lookup projectHeader makes for every other project-scoped page.
-	// The task page renders through projectShell with it (spec 056 §2), so
+	// The task page renders through projectShell with it (WL-SPEC-82 §2.2), so
 	// it carries the project sidebar like every other project destination.
 	Project CockpitProject
 	Task    model.Task
@@ -317,7 +317,7 @@ type TaskView struct {
 	// Publish button is disabled without one.
 	Viewer string
 	// Attachments is the task's blob reference graph row, embedded and
-	// attached alike (spec 021 §3), with URL filled in at the HTTP boundary.
+	// attached alike (WL-SPEC-78 §8.3), with URL filled in at the HTTP boundary.
 	Attachments []model.TaskBlob
 	Blocked     bool
 	Holder      *model.Lease
@@ -337,7 +337,7 @@ type TaskView struct {
 	// hang otherwise.
 	AgentSessions []AgentSessionRow
 	// Activity is the task's activity log, newest first, at most the page's
-	// own limit (spec 071 §4). The live stream prepends to the same list.
+	// own limit (WL-SPEC-80 §8.9). The live stream prepends to the same list.
 	Activity []ActivityRow
 	// Prerequisites is the open work still holding the task (WL-877). Nil
 	// when nothing holds it, and the page then omits the section.
@@ -352,7 +352,7 @@ type TaskView struct {
 // "#<number>", prefixed with the PR's repo name when the task has open PRs
 // in more than one repo. CI is "running", "failed", "passed", or "" when no
 // run is recorded for the PR's head SHA. Queued marks a PR in GitHub's merge
-// queue (WL-SPEC-66 §6.1) — its head SHA's CI still reflects its own commit,
+// queue (WL-SPEC-85 §7) — its head SHA's CI still reflects its own commit,
 // not the merge-queue SHA the queue actually runs (out of scope, WL-933).
 type TaskPR struct {
 	Label  string
@@ -424,7 +424,7 @@ type PrerequisitePlan struct {
 }
 
 // ActivityRow is one row of a task's activity log as a page renders it (spec
-// 071 §4): when it happened, the event without its claude_code. prefix, a
+// WL-SPEC-80 §8.9): when it happened, the event without its claude_code. prefix, a
 // one-line summary, and the agent session it came from. internal/api derives
 // the summary from the allowlisted attributes at the render seam, the same
 // way TimelineRow.Summary is built — internal/ui reads no attribute itself.
@@ -524,7 +524,7 @@ type CockpitView struct {
 	// AgentSessions is the agent sessions running on this project's tasks
 	// right now, liveliest first. It is carried on the view rather than added
 	// to model.CockpitProjection: the JSON projection's shape is contracted
-	// by spec 032, and this is a page affordance, not a change to that
+	// by WL-SPEC-82, and this is a page affordance, not a change to that
 	// contract.
 	AgentSessions []AgentSessionRow
 }
@@ -574,7 +574,7 @@ type CockpitProject struct {
 	ModeBasis string
 
 	// HasSpecs says whether the project has at least one spec. The sidebar's
-	// Progress entry is conditional on it (WL-SPEC-66 §2, amending 056 §2):
+	// Progress entry is conditional on it (WL-SPEC-85 §8, extending WL-SPEC-82 §2.2):
 	// a project with no spec has no Progress page to link to.
 	HasSpecs bool
 }
@@ -633,7 +633,7 @@ type CockpitCostTotal struct {
 	CostAmount     string
 	UnpricedTokens int64
 	// OverheadCostAmount is the share of CostAmount that had no task to bill
-	// to — orchestration run from the main checkout (spec 052).
+	// to — orchestration run from the main checkout.
 	OverheadCostAmount string
 }
 
@@ -646,7 +646,7 @@ type CockpitDecision struct {
 
 // --- deliverables -----------------------------------------------------------
 
-// DeliverablesView is a project's declared deliverables (spec 029 §3), the
+// DeliverablesView is a project's declared deliverables (WL-SPEC-75 §13.3), the
 // project-local Deliverables destination. NewURL is the "Declare a
 // deliverable" form; Groups holding no row at all renders an honest empty
 // state next to that form, never a fabricated row.
@@ -655,7 +655,7 @@ type DeliverablesView struct {
 	CanonicalURL string
 	Project      CockpitProject
 	NewURL       string
-	// Groups is the page's deliverables, grouped by milestone (spec 029 §2):
+	// Groups is the page's deliverables, grouped by milestone (WL-SPEC-75 §13.2):
 	// one group per milestone that holds one, in the project's milestone
 	// order, then an unattached group last. A single group renders with no
 	// header — the flat list a project with no milestones has always shown.
@@ -689,7 +689,7 @@ func (g DeliverableGroup) header() string {
 	return g.MilestoneTitle
 }
 
-// DeliverableRow is one declared deliverable. Spec 029 §3.2 makes deliverable
+// DeliverableRow is one declared deliverable. WL-SPEC-75 §13.3 makes deliverable
 // state a fact emitters and probers report, never one the deliverable stores,
 // so ReportedState and ReportedAt come from the newest evidence filed against
 // Artifact and are empty until something reports. A row with nothing reported
@@ -703,13 +703,13 @@ type DeliverableRow struct {
 	CreatedAt   time.Time
 
 	// Artifact is the address the deliverable declares it is verified by
-	// (029 §3.1) — a catalog identifier, not necessarily a browser link, so
+	// (WL-SPEC-75 §13.3) — a catalog identifier, not necessarily a browser link, so
 	// it renders as text and never as an href.
 	Artifact string
 
 	// Label is the worklode.deliverable=... address minted at build time
 	// when the deliverable was declared by label instead of by artifact
-	// address (029 §3.1) — the two are alternatives, so exactly one of
+	// address (WL-SPEC-75 §13.3) — the two are alternatives, so exactly one of
 	// Artifact and Label is set.
 	Label string
 
@@ -725,7 +725,7 @@ type DeliverableRow struct {
 	// verified fact.
 	ReportedProvenance string
 
-	// ReportURL is where the row's Report control posts (029 §3.2).
+	// ReportURL is where the row's Report control posts (WL-SPEC-75 §13.3).
 	ReportURL string
 }
 
@@ -736,7 +736,7 @@ var deliverableStates = model.ArtifactStates
 
 // deliverableChip maps a deliverable's reported state to its .chip variant.
 // An unreported deliverable keeps the "declared" evidence chip: a declaration
-// is all it honestly carries (spec 032 §1). Anything reported is observed
+// is all it honestly carries (WL-SPEC-82 §1). Anything reported is observed
 // evidence, coloured by what the state means for the deliverable.
 func deliverableChip(state string) string {
 	switch state {
@@ -764,7 +764,7 @@ func deliverableLabel(state string) string {
 
 // --- milestones --------------------------------------------------------------
 
-// MilestonesView is the project-local Milestones destination (spec 029 §2).
+// MilestonesView is the project-local Milestones destination (WL-SPEC-75 §13.2).
 // An empty Milestones slice renders an honest empty state, never a
 // fabricated row.
 type MilestonesView struct {
@@ -787,7 +787,7 @@ type MilestoneSection struct {
 	Tasks             []MilestoneTaskRow
 	Deliverables      []DeliverableRow
 
-	// References are the deliverables this milestone depends_on (029 §5),
+	// References are the deliverables this milestone depends_on (WL-SPEC-75 §13.4),
 	// the one edge kind allowed to cross a project boundary — so each row
 	// carries its own project, and its id links to that project's
 	// Deliverables page rather than to this one.
@@ -829,7 +829,7 @@ type MilestoneTaskRow struct {
 }
 
 // progress is the section's one-line readout: plain counts of what the store
-// derived. Spec 029 §2 makes progress a query over children, and a
+// derived. WL-SPEC-75 §13.2 makes progress a query over children, and a
 // percentage or a bar would claim a precision two small integers do not
 // carry.
 func (m MilestoneSection) progress() string {
@@ -845,7 +845,7 @@ func (m MilestoneSection) hasChildren() bool {
 
 // --- crew --------------------------------------------------------------------
 
-// CrewView is a project's Crew roster (spec 029 §6.1), the project-local
+// CrewView is a project's Crew roster (WL-SPEC-75 §13.5), the project-local
 // Crew destination. An empty Members slice renders an honest "No Crew yet"
 // state, never a fabricated row.
 type CrewView struct {
@@ -867,8 +867,8 @@ type CrewView struct {
 	// RemoveAction is where each non-lead member's Remove button POSTs; the
 	// member is named in a hidden field. RemoveError is the one message a
 	// refused removal shows ("" otherwise), and Responsibilities is that
-	// member's open work — spec 032 §6's responsibility review: what has to
-	// be reassigned or closed before the removal can proceed (spec 029 §6.1).
+	// member's open work — WL-SPEC-82 §8's responsibility review: what has to
+	// be reassigned or closed before the removal can proceed (WL-SPEC-75 §13.5).
 	RemoveAction     string
 	RemoveError      string
 	Responsibilities []CrewWorkItem
@@ -898,7 +898,7 @@ type CrewFormValues struct {
 // CrewMember is one Crew member: an actor holding at least one role-labelled
 // project_participants row, folded to one row per actor (internal/store's
 // ListParticipants already aggregates this). Exactly one member on a project
-// may have IsLead set (032 §6's "accountable human").
+// may have IsLead set (WL-SPEC-82 §8's "accountable human").
 type CrewMember struct {
 	ActorID     string
 	DisplayName string
@@ -908,7 +908,7 @@ type CrewMember struct {
 
 // --- deleted -----------------------------------------------------------------
 
-// DeletedView is a project's tombstoned tasks and documents (spec 044 §2),
+// DeletedView is a project's tombstoned tasks and documents (WL-SPEC-75 §12),
 // the project-local Deleted destination. Every other cockpit page reads
 // through the same filtered store calls the CLI does, so a deleted row
 // disappears from all of them; this page is the one that shows them, and the
@@ -956,7 +956,7 @@ func tombstone(t *model.Tombstone) model.Tombstone {
 // --- documents ---------------------------------------------------------------
 
 // DocsView is the document corpus index (GET /docs): every spec, ADR and plan
-// the backbone holds (025 §5). Read-only — a document's body is an artifact
+// the backbone holds (WL-SPEC-77 §3). Read-only — a document's body is an artifact
 // authored in a file and submitted through the API, not typed into a page.
 //
 // Project is nil for the global index and set for one project's Documents
@@ -1002,11 +1002,11 @@ type DocView struct {
 	Edges    []DocEdgeRow
 	EdgesIn  []DocEdgeRow
 	Revision *model.DocRevision
-	// Versions is the document's version history (025 §4.5), newest first —
+	// Versions is the document's version history (WL-SPEC-77 §3), newest first —
 	// its live row and every version it has superseded — rendered as the
 	// Versions table at the bottom of the page.
 	Versions []model.DocVersionSummary
-	// Consolidated says BodyHTML is the folded view (026 §3.2) rather than
+	// Consolidated says BodyHTML is the folded view (WL-SPEC-78 §2.4) rather than
 	// the stored source: every effective amendment and supersession inlined
 	// under the section it acts on. That is the page's default, because a
 	// reviewer reading the source of a spec four other specs have amended is
@@ -1017,12 +1017,12 @@ type DocView struct {
 	Consolidated    bool
 	ConsolidatedURL string
 	SourceURL       string
-	// Notes are the document's anchored notes (025 §8.5), oldest first.
+	// Notes are the document's anchored notes (WL-SPEC-77 §10), oldest first.
 	Notes []DocNoteRow
-	// Reviewers is the durable reviewer roster (025 §7.3), each row saying
+	// Reviewers is the durable reviewer roster (WL-SPEC-77 §9), each row saying
 	// whether that reviewer still owes a verdict on the current version.
 	Reviewers []DocReviewerRow
-	// Approvals are this document's still-awaiting approval rows (029 §7),
+	// Approvals are this document's still-awaiting approval rows (WL-SPEC-82 §9),
 	// each carrying the decide form the Reviews queue uses. Empty when none
 	// is open, which is the ordinary case for an accepted document.
 	Approvals []ApprovalRow
@@ -1161,7 +1161,7 @@ func docStatusChip(status string) string {
 	}
 }
 
-// --- rule (docs/specs2/12-spec-refactoring-design-tree.md S20) -----------
+// --- rule -----------
 
 // RuleView is the cockpit's rule page: one design rule at its current
 // or a named version.
@@ -1251,7 +1251,7 @@ type NewTaskView struct {
 }
 
 // NewDeliverableView is the "Declare a deliverable" form: exactly the
-// descriptive fields spec 029 §3.1 gives a custom deliverable — name,
+// descriptive fields WL-SPEC-75 §13.3 gives a custom deliverable — name,
 // description, URL, and the artifact address the ingest routes reports by —
 // and nothing that would let a person assert its state.
 type NewDeliverableView struct {
@@ -1265,7 +1265,7 @@ type NewDeliverableView struct {
 	// choice the person made.
 	Label bool
 	// Milestones is the project's milestones as a select menu, "No
-	// milestone" leading and selected by default (spec 029 §2).
+	// milestone" leading and selected by default (WL-SPEC-75 §13.2).
 	Milestones []FormOption
 }
 
@@ -1298,7 +1298,7 @@ func stateChip(state string) string {
 }
 
 // approvalStateChip returns the .chip variant class for an approval state
-// (the approval detail page, 032 §7).
+// (the approval detail page, WL-SPEC-82 §9).
 func approvalStateChip(state string) string {
 	switch state {
 	case "approved":
@@ -1443,7 +1443,7 @@ func pluralSuffix(n int) string {
 
 // --- home project list -------------------------------------------------------
 
-// HomeView is the Home project list (spec 032 §9, first slice). Mode is
+// HomeView is the Home project list (WL-SPEC-82 §11, first slice). Mode is
 // "actor" (signed-in, has cards), "open" (no actor — all projects, no role
 // badge or signal), or "empty" (an actor on no projects); it also labels the
 // worklode_web_home_renders_total metric, so the three values are fixed.
@@ -1487,7 +1487,7 @@ func homeRoleChip(badge string) string {
 	return "plain"
 }
 
-// --- CLI login (spec 001 §8.7) ----------------------------------------------
+// --- CLI login (WL-SPEC-74 §7.2) ----------------------------------------------
 
 // CLICodeView is the manual-`lode login` page: the one-time code the user
 // carries back to their terminal. It holds no project data and no session —
@@ -1503,9 +1503,9 @@ type CLICodeView struct {
 	ExpiresIn string
 }
 
-// --- morning brief (032 §9; NOT the task brief in internal/api/brief.go) --
+// --- morning brief (WL-SPEC-82 §11; NOT the task brief in internal/api/brief.go) --
 
-// MorningBriefView is the assembled Morning Brief: 032 §9's four tiers,
+// MorningBriefView is the assembled Morning Brief: WL-SPEC-82 §11's four tiers,
 // grouped by project in Home's display order. Nil (not zero) means there is
 // nothing to show — no tier-1 state and no events past the boundary.
 type MorningBriefView struct {
@@ -1534,7 +1534,7 @@ type MorningBriefItem struct {
 
 // routineLabel is the tier-4 collapsed count line's exact spelling. There is
 // no per-item text to pluralize against — Routine is a count, not a list
-// (032 §11: judgment obvious, no firehose).
+// (judgment obvious, no firehose).
 func routineLabel(n int) string {
 	if n == 1 {
 		return "1 routine update"
@@ -1542,46 +1542,46 @@ func routineLabel(n int) string {
 	return strconv.Itoa(n) + " routine updates"
 }
 
-// --- progress (WL-SPEC-66 §2) ------------------------------------------------
+// --- progress (WL-SPEC-85 §3) ------------------------------------------------
 
 // ProgressView is a project's Progress page: the rally band, the four group
-// counts, the section bar with its legend, and the §1.3 groups of spec rows.
+// counts, the section bar with its legend, and the WL-SPEC-85 §2 groups of spec rows.
 // Everything on it is derived per request (model.ProjectProgress); the page
-// stores no progress figure of its own, and shows no percentage (§2.5).
+// stores no progress figure of its own, and shows no percentage (WL-SPEC-85 §3).
 type ProgressView struct {
 	Page         PageProps
 	CanonicalURL string
 	Project      CockpitProject
 	// Viewer is the session's actor, empty for an anonymous viewer of an
 	// open instance. Every act on the page is enabled or disabled against
-	// it (§3); the server never derives an actor from anything the page
-	// sends back (§4.2 rule 6).
+	// it (WL-SPEC-85 §4); the server never derives an actor from anything the page
+	// sends back (WL-SPEC-85 §5 rule 6).
 	Viewer string
 	P      model.ProjectProgress
 	Legend []LegendEntry
-	// ReviewEnabled is hasReviewSurface's answer (internal/api): whether spec
-	// 059's routes are registered yet. The server decides it, not this
-	// package (§3.3) — every Review button on the page renders off this one
+	// ReviewEnabled is hasReviewSurface's answer (internal/api): whether WL-SPEC-84's
+	// routes are registered yet. The server decides it, not this
+	// package (WL-SPEC-85 §4) — every Review button on the page renders off this one
 	// bit rather than each act guessing at it.
 	ReviewEnabled bool
 	// MergeEnabled is whether the server has a GitHub App to act with
-	// (internal/api). §3.6's button needs one, and only the server knows;
+	// (internal/api). WL-SPEC-85 §4's button needs one, and only the server knows;
 	// without it the button renders disabled with that reason rather than
 	// posting a route that would answer 503.
 	MergeEnabled bool
 }
 
-// LegendEntry is one section state in the bar's legend: §1.2's label, a
+// LegendEntry is one section state in the bar's legend: WL-SPEC-85 §2's label, a
 // one-line meaning, and how many sections carry it.
 type LegendEntry struct {
 	State, Label, Help string
 	Count              int
 }
 
-// progressStates is §2.1's section-bar order, which is also the legend's.
+// progressStates is WL-SPEC-85 §3's section-bar order, which is also the legend's.
 var progressStates = []string{"built", "in_progress", "not_started", "no_record", "draft", "unplanned"}
 
-// progressStateLabels is §1.2's "Label on the page" column, verbatim.
+// progressStateLabels is WL-SPEC-85 §2's "Label on the page" column, verbatim.
 var progressStateLabels = map[string]string{
 	"built":       "Built",
 	"in_progress": "In progress",
@@ -1601,7 +1601,7 @@ var progressStateHelp = map[string]string{
 	"unplanned":   "no plan covers this section",
 }
 
-// progressGroupLabels and progressGroupHelp are §1.3's group names and its
+// progressGroupLabels and progressGroupHelp are WL-SPEC-85 §2's group names and its
 // "Why this order" column, one line each.
 var progressGroupLabels = map[string]string{
 	"active": "Active", "planning": "Needs planning",
@@ -1648,7 +1648,7 @@ func progressSectionNumber(anchor string) string {
 	return "§" + strings.TrimPrefix(anchor, "sec-")
 }
 
-// progressCellTip is a strip cell's tooltip text (§2.4): the section, its
+// progressCellTip is a strip cell's tooltip text (WL-SPEC-85 §3): the section, its
 // state, and the plans covering it, in the "·" form the spec spells out
 // (§3.1 Renewal · In progress · WL-PLAN-99). progress.js reads it from
 // data-tip; the page carries no title attribute for it, so a reader never
@@ -1661,7 +1661,7 @@ func progressCellTip(s model.ProgressSection) string {
 	return t
 }
 
-// progressTaskTip is a task cell's tooltip text (§2.4): the task, its title,
+// progressTaskTip is a task cell's tooltip text (WL-SPEC-85 §3): the task, its title,
 // and its position — the furthest fact the backbone holds about it, already
 // rendered as one line by internal/progress.
 func progressTaskTip(t model.ProgressTask) string {
@@ -1672,11 +1672,11 @@ func progressTaskTip(t model.ProgressTask) string {
 	return s
 }
 
-// progressRefTip is a plan or spec reference's tooltip text (§2.4).
+// progressRefTip is a plan or spec reference's tooltip text (WL-SPEC-85 §3).
 func progressRefTip(ref, title string) string { return ref + " · " + title }
 
 // progressSliceTitle is a bar slice's hover text: what the colour means and
-// how many owed sections it covers. A count, never a percentage (§2.5).
+// how many owed sections it covers. A count, never a percentage (WL-SPEC-85 §3).
 func progressSliceTitle(s model.ProgressSlice) string {
 	return progressStateLabel(s.State) + ": " + strconv.Itoa(s.Count) + " sections"
 }
@@ -1716,13 +1716,13 @@ func progressPlanAnchorID(specRef, planRef string) string { return "p-" + specRe
 // with aria-controls so the two are one control to assistive technology.
 func progressDetailID(ref string) string { return "d-" + ref }
 
-// ProgressAction is one §3.1 action button: the route progress.js posts to
+// ProgressAction is one WL-SPEC-85 §4 action button: the route progress.js posts to
 // under /projects/{id}/progress/, or an absolute path for a route that lives
 // elsewhere (Review's /api/v1/reviews, and every route act.js posts to on the
 // document and task pages), the JSON body it sends, and the sentence
 // the confirmation step shows. A non-empty Reason renders the button
 // disabled with that reason as its hover text, because a hidden button reads
-// as a missing feature (§3).
+// as a missing feature (WL-SPEC-85 §4).
 type ProgressAction struct {
 	Route   string
 	Body    string
@@ -1731,9 +1731,9 @@ type ProgressAction struct {
 	Reason  string
 }
 
-// progressPlanActions are the acts on one plan line (§2.3). Accept applies
-// only to a draft plan — the document `lode doc accept` accepts (§3.2).
-// Review (§3.3) is offered on every plan line, whatever its state.
+// progressPlanActions are the acts on one plan line (WL-SPEC-85 §3). Accept applies
+// only to a draft plan — the document `lode doc accept` accepts (WL-SPEC-85 §4).
+// Review (WL-SPEC-85 §4) is offered on every plan line, whatever its state.
 func progressPlanActions(p model.ProgressPlan, viewer string, reviewEnabled bool) []ProgressAction {
 	var acts []ProgressAction
 	if p.State == "draft" {
@@ -1743,12 +1743,12 @@ func progressPlanActions(p model.ProgressPlan, viewer string, reviewEnabled bool
 	return acts
 }
 
-// progressSpecActions are the acts on a spec row (§2.2's action slot). A
-// draft spec is accepted from here the same way a draft plan is (§3.2); an
-// accepted one has nothing to accept. Plan (§3.4) joins it when the spec has
+// progressSpecActions are the acts on a spec row (WL-SPEC-85 §3's action slot). A
+// draft spec is accepted from here the same way a draft plan is (WL-SPEC-85 §4); an
+// accepted one has nothing to accept. Plan (WL-SPEC-85 §4) joins it when the spec has
 // a section no plan covers and no planning task is open — an open one is
 // drawn as a link instead, because minting a second is not an act this page
-// offers. Rally (§3.5) and Review (§3.3) end the row and are offered on
+// offers. Rally and Review end the row and are offered on
 // every spec.
 func progressSpecActions(s model.ProgressSpec, viewer string, reviewEnabled bool) []ProgressAction {
 	var acts []ProgressAction
@@ -1770,7 +1770,7 @@ func progressSpecActions(s model.ProgressSpec, viewer string, reviewEnabled bool
 // whether that route is registered, and reviewEnabled is that answer, passed
 // in rather than re-derived here (ui depends on nothing beyond stdlib and
 // model). Disabled carries the reason rather than hiding the button, the
-// same rule every other act on this page follows (§3).
+// same rule every other act on this page follows (WL-SPEC-85 §4).
 func progressReviewAction(doc int64, ref string, reviewEnabled bool) ProgressAction {
 	a := ProgressAction{
 		Route:   "/api/v1/reviews",
@@ -1784,11 +1784,11 @@ func progressReviewAction(doc int64, ref string, reviewEnabled bool) ProgressAct
 	return a
 }
 
-// progressRallyAction is §3.5's Rally button. Every spec row carries one,
+// progressRallyAction is WL-SPEC-85 §4's Rally button. Every spec row carries one,
 // whatever group it is in: a spec with nothing outstanding is a no-op the
 // route answers with added 0, not an act to hide. Any signed-in viewer may
-// assemble a rally — a draft rally is inert until someone confirms it (005
-// §9) — so having no session is the only reason it is ever disabled.
+// assemble a rally — a draft rally is inert until someone confirms it (WL-SPEC-75
+// §8.3) — so having no session is the only reason it is ever disabled.
 func progressRallyAction(doc int64, ref, viewer string) ProgressAction {
 	a := ProgressAction{
 		Route:   "rally/add",
@@ -1802,7 +1802,7 @@ func progressRallyAction(doc int64, ref, viewer string) ProgressAction {
 	return a
 }
 
-// progressFooterActions are §3.5's footer controls: publish the draft rally,
+// progressFooterActions are WL-SPEC-85 §4's footer controls: publish the draft rally,
 // or drop it. Both are two-step buttons like every other write on this page,
 // and both send an empty body — the draft rally a project has is the one they
 // act on, so there is nothing to name.
@@ -1822,7 +1822,7 @@ func progressFooterActions(viewer string) []ProgressAction {
 	return []ProgressAction{confirm, discard}
 }
 
-// progressHasUnplanned is §3.4's condition: a section no plan covers. It is
+// progressHasUnplanned is WL-SPEC-85 §4's condition: a section no plan covers. It is
 // the same fact the route checks before it mints, so the button and the route
 // agree about when planning is owed.
 func progressHasUnplanned(s model.ProgressSpec) bool {
@@ -1834,7 +1834,7 @@ func progressHasUnplanned(s model.ProgressSpec) bool {
 	return false
 }
 
-// progressPlanAction is §3.4's Plan button: it mints 025 §15.4's planning
+// progressPlanAction is the Plan button (WL-SPEC-85 §4): it mints WL-SPEC-75 §9.6's planning
 // task for the spec. Any signed-in viewer may ask for it — the task is a
 // prompt to plan, not the plan — so the only reason it is ever disabled is
 // having no session to act as.
@@ -1851,12 +1851,12 @@ func progressPlanAction(doc int64, ref, viewer string) ProgressAction {
 	return a
 }
 
-// progressAcceptAction is §3.2's Accept button for one document. It is
+// progressAcceptAction is WL-SPEC-85 §4's Accept button for one document. It is
 // enabled only for the document's owner, because that is the only actor
-// store.AcceptDoc admits (025 §7) — a button this page enabled for anyone
+// store.AcceptDoc admits (WL-SPEC-77 §9) — a button this page enabled for anyone
 // else would promise a write the backbone refuses. Everyone else gets it
 // disabled with the reason, never hidden: a missing button reads as a
-// missing feature (§3).
+// missing feature (WL-SPEC-85 §4).
 func progressAcceptAction(doc int64, ref, owner, viewer string) ProgressAction {
 	a := ProgressAction{
 		Route:   "accept",
@@ -1875,22 +1875,22 @@ func progressAcceptAction(doc int64, ref, owner, viewer string) ProgressAction {
 	return a
 }
 
-// progressDocBody is the one-field body every document act sends (§7). It is
+// progressDocBody is the one-field body every document act sends (WL-SPEC-85 §8). It is
 // built from an integer, so it is a well-formed JSON object by construction.
 func progressDocBody(doc int64) string {
 	return `{"doc":` + strconv.FormatInt(doc, 10) + `}`
 }
 
-// progressMergeAction is §3.6's act on a task's open pull request. What the
+// progressMergeAction is WL-SPEC-85 §4's act on a task's open pull request. What the
 // repository's default branch does with a PR decides the label: a
 // queue-protected branch takes it into the queue, anything else merges it.
 // The page moves this button into the task cell's pinned tooltip, which is
-// where §3.6 puts it.
+// where WL-SPEC-85 §4 puts it.
 //
 // mergeEnabled is the server's answer about the GitHub App; t.Merge.Reason
 // carries what the backbone can already tell (checks not passed, already
 // queued). Either one renders the button disabled with that reason rather
-// than hidden (§3).
+// than hidden (WL-SPEC-85 §4).
 func progressMergeAction(t model.ProgressTask, mergeEnabled bool) ProgressAction {
 	m := t.Merge
 	pr := "PR #" + strconv.FormatInt(m.Number, 10)

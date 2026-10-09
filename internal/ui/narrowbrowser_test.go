@@ -10,7 +10,7 @@ package ui
 //	./scripts/narrow-check.sh
 //
 // It is behind the `narrowcheck` build tag because it needs a browser, and CI
-// has no business installing one (spec 032 §12). narrow_test.go — untagged, and
+// has no business installing one (WL-SPEC-82 §4). narrow_test.go — untagged, and
 // the thing `make test` runs — pins each fix the audit produced as a markup or
 // stylesheet fact. That guards a rule from being deleted; this guards a *new*
 // page from arriving broken, which is the thing a static assertion cannot see.

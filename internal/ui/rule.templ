@@ -1,11 +1,10 @@
 package ui
 
-// rule.templ renders a design rule's cockpit page
-// (docs/specs2/12-spec-refactoring-design-tree.md S8-S11, S20): the rule's
+// rule.templ renders a design rule's cockpit page: the rule's
 // current or a named version, the documents that arrange it, the tasks it
 // governs, and its version history. Read-only, like the document corpus it
 // is drawn from — a rule is edited through its arranging document, never
-// on this page (S14, S35).
+// on this page.
 templ Rule(v RuleView) {
 	@Page(v.Page) {
 		@globalShell() {

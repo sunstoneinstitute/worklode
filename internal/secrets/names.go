@@ -1,4 +1,4 @@
-// Package secrets implements the client-side half of spec 017 (task-declared
+// Package secrets implements the client-side half of WL-SPEC-74 §10 (task-declared
 // secrets): the org catalog format, the OS keystore holding materialized
 // values, the names-only manifest, and the op-run env-file template. The
 // package never logs, serializes, or persists a secret value — values exist
@@ -20,7 +20,7 @@ var loaderPrefixes = []string{"LD_", "DYLD_"}
 
 // loaderNames are the loader-sensitive variables outside those namespaces:
 // shell command resolution and startup files, glibc's non-LD_ module paths,
-// and language-runtime module paths and startup hooks. ADR 047 §3 holds the
+// and language-runtime module paths and startup hooks. WL-SPEC-74 §10.1 holds the
 // list and the reason each entry is on it; the boundary is "decides what code
 // gets loaded", not "tunes behaviour". `_JAVA_OPTIONS` needs no entry — the
 // grammar requires a leading letter, so it never validated.
@@ -36,7 +36,7 @@ var loaderNames = map[string]bool{
 
 // LoaderSensitive reports whether s names a variable that redirects how a
 // process loads or resolves code. `lode secret exec` assigns every
-// materialized name into the child environment (017 §4), so such a name would
+// materialized name into the child environment (WL-SPEC-74 §10.5), so such a name would
 // make the secret's value code the child loads rather than a credential it
 // holds. Exact and case-sensitive: the grammar admits upper-case only, so
 // case variants are already rejected a step earlier.
@@ -50,7 +50,7 @@ func LoaderSensitive(s string) bool {
 }
 
 // ValidName reports whether s is a well-formed secret name: it matches the
-// grammar and is not loader-sensitive (ADR 047 §2). Everything that stores or
+// grammar and is not loader-sensitive (WL-SPEC-74 §10.1). Everything that stores or
 // transmits secret names (task field, event payload, catalog keys, keystore
 // items, the manifest) gates on this one function, which is what keeps values
 // and op:// refs out of those channels by construction — and what keeps the
