@@ -265,7 +265,8 @@ func resolveRuleRef(tx *sql.Tx, project, ref string) (int64, error) {
 
 // ruleAtAnchor is the rule a document arranges at anchor, after
 // ensureRules splits a document that predates the rule tables. A plan
-// contains no rules, so a plan anchor names none.
+// contains no rules, so a plan anchor names none, and a spec heading's anchor
+// names none either (WL-SPEC-77 §19.1).
 // The sibling increment 4a ships store.RuleAtSection for the same lookup;
 // whichever branch lands second deletes one of the two (R7).
 func ruleAtAnchor(tx *sql.Tx, docID int64, anchor string) (int64, bool, error) {
@@ -275,7 +276,7 @@ func ruleAtAnchor(tx *sql.Tx, docID int64, anchor string) (int64, bool, error) {
 	var id int64
 	err := tx.QueryRow(
 		`SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
-		  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan'`, docID, anchor).Scan(&id)
+		  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan' AND dc.rule_id IS NOT NULL`, docID, anchor).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, nil
 	}

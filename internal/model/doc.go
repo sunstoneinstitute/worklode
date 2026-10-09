@@ -103,7 +103,8 @@ type DocSection struct {
 	// later section rebuild until the reviewers settle the document again.
 	Patched bool `json:"patched"`
 	// Kind is the kind of the rule arranged at the section's anchor
-	// (WL-SPEC-77 §4), "" when no rule is arranged there.
+	// (WL-SPEC-77 §4), "heading" for a spec heading (§19.1), "" when nothing
+	// is arranged there.
 	Kind string `json:"kind,omitempty"`
 }
 
@@ -153,11 +154,13 @@ type DocVersion struct {
 	Rules []DocVersionRule `json:"rules"`
 }
 
-// DocVersionRule is one rule a document version arranged, in position order.
+// DocVersionRule is one entry a document version arranged, in position order:
+// a rule, or a spec heading with Heading set and no rule (WL-SPEC-77 §19.1).
 type DocVersionRule struct {
 	Position    int    `json:"position"`
-	Rule        string `json:"rule"` // WL-RULE-<n>
-	RuleVersion int    `json:"rule_version"`
+	Rule        string `json:"rule,omitempty"` // WL-RULE-<n>
+	RuleVersion int    `json:"rule_version,omitempty"`
+	Heading     string `json:"heading,omitempty"`
 	Depth       int    `json:"depth"`
 	Anchor      string `json:"anchor"`
 }
