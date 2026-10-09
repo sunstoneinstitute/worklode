@@ -1,4 +1,4 @@
-// milestones.go is the client and the rendering for spec 029 §2's milestone:
+// milestones.go is the client and the rendering for WL-SPEC-75 §13.2's milestone:
 // one ordered container in a project, holding tasks and deliverables.
 package cli
 

@@ -108,7 +108,7 @@ func (c *Client) EditRule(ctx context.Context, ref string, in model.EditRuleInpu
 	return doJSON[model.Rule](ctx, c, http.MethodPut, "/api/v1/rules/"+url.PathEscape(ref), in, "rule")
 }
 
-// SetRuleMeta calls PATCH /api/v1/rules/{ref}: owner and/or tags (S15).
+// SetRuleMeta calls PATCH /api/v1/rules/{ref}: owner and/or tags.
 func (c *Client) SetRuleMeta(ctx context.Context, ref string, in model.RuleMetaInput) (model.Rule, []byte, error) {
 	return doJSON[model.Rule](ctx, c, http.MethodPatch, "/api/v1/rules/"+url.PathEscape(ref), in, "rule")
 }

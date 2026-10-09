@@ -33,8 +33,8 @@ const (
 	agentsBlockEnd   = "<!-- worklode:end -->"
 )
 
-// agentsBlock is the two facts an agent needs before a brief exists (spec 008
-// §17.7): that this repo is Worklode-tracked, and how work is entered.
+// agentsBlock is the two facts an agent needs before a brief exists (WL-SPEC-80
+// §5.3): that this repo is Worklode-tracked, and how work is entered.
 // Deliberately short — the task brief, not this file, carries task context.
 const agentsBlock = agentsBlockBegin + `
 ## Worklode

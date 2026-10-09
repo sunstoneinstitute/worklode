@@ -89,10 +89,10 @@ func newProjectListCmd() *cobra.Command {
 // doneStateFlagUsage documents --done-state on the repo subcommands.
 const doneStateFlagUsage = "terminal delivery state for the repo: merged, deployed_prod, or released"
 
-// newProjectRepoCmd groups the repo-mapping subcommands (061 §2.2, WL-490):
+// newProjectRepoCmd groups the repo-mapping subcommands (WL-SPEC-81 §2, WL-490):
 // a project's repos are a sub-collection of the project, nested the same way
 // `project crew add`/`remove` are. `remove` unmaps a repo and nothing else —
-// it is not `delete`, which tombstones an entity (044).
+// it is not `delete`, which tombstones an entity (WL-SPEC-75 §12).
 func newProjectRepoCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "repo",
@@ -135,7 +135,7 @@ func newProjectRepoAddCmd() *cobra.Command {
 }
 
 // newProjectCrewCmd groups the Crew subcommands: who is on a project and
-// what they do on it (spec 029 §6.1). `lode project crew <project>` on its
+// what they do on it (WL-SPEC-75 §13.5). `lode project crew <project>` on its
 // own lists the roster; `add`/`remove` mutate it. Cobra dispatches to a
 // subcommand whenever the first argument names one, so this RunE only runs
 // for the listing form — a plain ExactArgs(1) parent RunE alongside
@@ -309,7 +309,7 @@ func newProjectRepoRemoveCmd() *cobra.Command {
 }
 
 // newProjectFocusCmd is `lode project focus <id>`: the read-only view of a
-// project's ranking focus (ordered list of concerns) (061 §2.2, WL-489). A
+// project's ranking focus (ordered list of concerns) (WL-SPEC-81 §2, WL-489). A
 // view never writes (L6); the paired write is `lode project set focus`.
 func newProjectFocusCmd() *cobra.Command {
 	return &cobra.Command{
@@ -366,7 +366,7 @@ func newProjectRallyCmd() *cobra.Command {
 	}
 }
 
-// newProjectSetCmd is `lode project set <field>` (061 §2.2, WL-489): write
+// newProjectSetCmd is `lode project set <field>` (WL-SPEC-81 §2, WL-489): write
 // one named field on a project's cockpit cards. Each field takes its own
 // flags rather than a uniform value list (unlike `task set`/`doc set`), so
 // the field is a subcommand rather than a leading argument — nested the same
@@ -383,7 +383,7 @@ func newProjectSetCmd() *cobra.Command {
 
 // newProjectSetSettingsCmd is `lode project set settings <id> <key=value>…`:
 // merge a partial update into a project's settings (increment 3 R9), e.g.
-// plan_tokens_soft and plan_tokens_hard (S6, S19). The server's allowlist
+// plan_tokens_soft and plan_tokens_hard. The server's allowlist
 // (internal/store/projectsettings.go) refuses an unknown key or a
 // wrong-shaped value; key= (an empty value) removes that key.
 func newProjectSetSettingsCmd() *cobra.Command {
@@ -443,8 +443,8 @@ func parseSettingsArgs(pairs []string) (map[string]any, error) {
 
 // newProjectSetFlowCmd is `lode project set flow <id> --name <flow>`: stamp
 // the named approval flow on a project and materialize the requirements it
-// demands of the deliverables the project already holds (029 §7.2). It is a
-// `set` field and not its own verb because the flow is a project field (061
+// demands of the deliverables the project already holds (WL-SPEC-75 §13.6). It is a
+// `set` field and not its own verb because the flow is a project field (WL-SPEC-81
 // §1 L3). The vocabulary of flow names is instance configuration, so an
 // unknown name is the server's 404 rather than a client-side check.
 func newProjectSetFlowCmd() *cobra.Command {
@@ -789,9 +789,9 @@ func newProjectHealthCmd() *cobra.Command {
 
 // newProjectOverviewCmd builds `lode project overview`, the one-screen
 // roll-up (drift counts, gaps, frontier, critical head). Already
-// `--project`-scoped, so it was never cross-entity (061 §2.3). `lode work
+// `--project`-scoped, so it was never cross-entity (WL-SPEC-81 §2). `lode work
 // status` is a different view and stays as it is. Also registered at the
-// root as the `lode overview` shortcut (061 §1 L9).
+// root as the `lode overview` shortcut (WL-SPEC-81 §1 L9).
 func newProjectOverviewCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{

@@ -36,7 +36,7 @@ func timelineSummary(e model.TimelineEntry) string {
 		// The change payload is a stored state_log row, not a shape this API
 		// declares: "new" is a string for a field update and a list for the
 		// secrets ones, so it is read key by key rather than decoded into a
-		// struct (ADR 036 §3). Field "edge" (store.AddEdge/RemoveEdge) uses
+		// struct (WL-SPEC-73 §3.2a). Field "edge" (store.AddEdge/RemoveEdge) uses
 		// op/type/from/to instead of old/new.
 		var change map[string]any
 		if json.Unmarshal(e.Change, &change) != nil {

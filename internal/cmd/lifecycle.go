@@ -23,7 +23,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
-// This file implements the `lode work` group's commands. See WL-SPEC-61#sec-1
+// This file implements the `lode work` group's commands. See WL-SPEC-81#sec-1
 // L8 for what belongs here and why.
 
 func init() {
@@ -48,7 +48,7 @@ func newWorkCmd() *cobra.Command {
 
 // layoutFrom builds the worktree layout for dir's repo. It reads ONLY the
 // repo-local worktree_dir (cli.WorktreeDirFrom), never the merged
-// user-level value — spec 008 §6 scopes worktree_dir to the checkout, and
+// user-level value — WL-SPEC-80 §3.3 scopes worktree_dir to the checkout, and
 // internal/hookrun's guard resolves it the same way. Reading the merged value
 // here would let the CLI create worktrees under one base while every hook
 // guard NOPs on another.
@@ -85,7 +85,7 @@ func resolveWorktreeTask(l worktree.Layout, dir, byName string) (taskID, root st
 // binding. Every failure is the same answer because the caller is a command
 // for which task context is provenance it records if it has it, not a
 // precondition it enforces: `lode doc add` run from a plain checkout still
-// creates the document (025 §12, migration 0044). Commands that genuinely
+// creates the document (WL-SPEC-77 §13, migration 0044). Commands that genuinely
 // need the binding use resolveWorktreeTask and get its diagnosis.
 func currentTaskID() string {
 	dir, err := workingDir()
@@ -431,7 +431,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kinds []string, s
 		return fmt.Errorf("fetch brief for %s: %w", taskID, err)
 	}
 
-	// Spec 017: consent + materialization while the operator is present.
+	// WL-SPEC-74 §10.4: consent + materialization while the operator is present.
 	// Never fails the claim; writes to stderr only.
 	runSecretsCeremony(ctx, cmd, c, taskID, dir, brief.Task.Secrets)
 
@@ -545,7 +545,7 @@ func runResume(cmd *cobra.Command, dir string) error {
 // newSubmitCmd builds `lode work submit`: the worktree's "my work here is
 // finished" verb. It submits the task for review (in_progress -> in_review)
 // and closes the lease; it never moves the task to `merged`. `merged` means
-// the work landed on the default branch (spec 004 §5.1) — a fact only the
+// the work landed on the default branch (WL-SPEC-75 §3.1) — a fact only the
 // PR-merge webhook, the delivery resolver, or a human running `lode task set
 // state merged <id>` for a change that carries no PR can know. An agent
 // finishing in a worktree knows none of it: the branch may not even be

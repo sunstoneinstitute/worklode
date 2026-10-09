@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The closed top-level sets of 061 §1. Each is closed in the spec's own words
+// The closed top-level sets of WL-SPEC-81 §1. Each is closed in the spec's own words
 // — adding a member requires amending §1 — so each is transcribed here rather
 // than derived from anything.
 var (
@@ -38,12 +38,12 @@ var l3Canonical = map[string]bool{
 }
 
 // l3DomainActions is L3's allowlist of verbs that name an act none of the
-// seven expresses. Transcribed from 061 §1 L3 in its order; a verb reaching
-// the tree without reaching this list is the drift §0 describes.
+// seven expresses. Transcribed from WL-SPEC-81 §1 L3 in its order; a verb reaching
+// the tree without reaching this list is the drift this test catches.
 //
 // `pack` is the last entry for a reason worth keeping: `lode secret pack` is
 // Hidden, so two hand surveys enumerating from `lode --help` never saw it and
-// this test found it instead (061 §1, "Revised again"). The walk below reads
+// this test found it instead (WL-SPEC-81 §1, "Revised again"). The walk below reads
 // the built tree and does not skip hidden commands — the law says every
 // command is explicable by one of its rules, not every visible one.
 var l3DomainActions = map[string]bool{
@@ -60,11 +60,11 @@ var l3DomainActions = map[string]bool{
 	"parent": true, "duplicate": true, "request": true, "pack": true,
 	"note": true, "escalate": true, "gap": true, "fix": true,
 	"withdraw": true, "report": true, "check": true,
-	"supersede": true, // lode rule supersede: the refactor primitive (S24)
+	"supersede": true, // lode rule supersede: the refactor primitive
 }
 
-// nounViews is the noun-subcommand table of 061 §5, transcribed by full
-// command path: the L6 named views plus §2.2's nested entity groups. A noun is
+// nounViews is the noun-subcommand table of WL-SPEC-81 §4, transcribed by full
+// command path: the L6 named views plus the nested entity groups. A noun is
 // not a verb, so checks 2 and 3 must not run over it, and "is this verb
 // allowed" is unanswerable until this set is known. The set is closed in the
 // spec's own words — adding a member is part of adding the command.
@@ -111,7 +111,7 @@ var hyphenatedVerbs = map[string]string{
 	"lode task follow-up": "names the wl:followUpOf edge, which has no single-word verb",
 }
 
-// TestNameRule is 061 §5: the naming law of §1 as a test. It walks the live
+// TestNameRule is WL-SPEC-81 §4: the naming law of §1 as a test. It walks the live
 // cobra tree and fails on the four things a test can see — an unclassifiable
 // top-level command, a verb outside L3, a hyphenated verb outside the
 // allowlist, and pointless depth. It does not check L4's "verbs are imperative
@@ -153,7 +153,7 @@ func TestNameRule(t *testing.T) {
 						"061 §1 to open the closed set it belongs in", path)
 				}
 			case nounViews[path]:
-				seenView[path] = true // 061 §5: a noun, so not this rule's business
+				seenView[path] = true // WL-SPEC-81 §4: a noun, so not this rule's business
 			case c.Name() == "set":
 				// L4: under `set` the field "is an argument, not part of its
 				// name". `project set focus-note` is a field, never a verb.

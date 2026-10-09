@@ -6,7 +6,7 @@
 // `listen` asks the same question `lode work next` asks, through the same endpoint
 // with DryRun set, rather than reconstructing "is there ready work" from a
 // task list. Ranking, focus, blocked-ness and every other eligibility rule
-// live server-side (spec 005); a list filter here would be a second, drifting
+// live server-side (WL-SPEC-75 §8); a list filter here would be a second, drifting
 // answer to a question the claim path already answers exactly.
 
 package cmd

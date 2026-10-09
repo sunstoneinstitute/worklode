@@ -17,7 +17,7 @@ import (
 // path-qualified (`lode task claim`, not just `claim`). Every command also
 // accepts `--json` and `--help`; both are omitted throughout as implied.
 //
-// The 061 §1 L9 shortcuts get one line up front rather than an H2 of their
+// The WL-SPEC-81 §1 L9 shortcuts get one line up front rather than an H2 of their
 // own: each is a second instance of a command already documented under its
 // real parent, so an H2 would duplicate that entry.
 func renderCommandReference(root *cobra.Command) string {

@@ -296,7 +296,7 @@ func TestTaskListFilterByKind(t *testing.T) {
 }
 
 // TestTaskListFilterByPlan: `task list --plan <ref>` resolves the ref (a
-// plan doc id or slug, 025 §9.2) via resolveDocID and returns exactly its
+// plan doc id or slug, WL-SPEC-77 §11.2) via resolveDocID and returns exactly its
 // minted task set; an unmatched ref is an error, not an empty list.
 func TestTaskListFilterByPlan(t *testing.T) {
 	_, c := lifecycleTestServer(t)
@@ -340,7 +340,7 @@ func TestTaskListFilterByPlan(t *testing.T) {
 
 // TestTaskListFilterByAbout: `task list --about <ref>` resolves the ref the
 // same way `--plan` does and narrows to the tasks that reference that document
-// (025 §15.4). Nothing the CLI can create carries about_doc — the doc-lifecycle
+// (WL-SPEC-77 §9). Nothing the CLI can create carries about_doc — the doc-lifecycle
 // watcher mints those — so what is pinned here is that the filter reaches the
 // server: an ordinary task is listed unfiltered and excluded by --about.
 func TestTaskListFilterByAbout(t *testing.T) {
@@ -577,7 +577,7 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	if !strings.Contains(tree, container.ID) || !strings.Contains(tree, child.ID) {
 		t.Fatalf("tree missing parent or child:\n%s", tree)
 	}
-	// Only tasks with children are roots (029 §2 left no kind to select on):
+	// Only tasks with children are roots (WL-SPEC-75 §13.2 left no kind to select on):
 	// a childless task is neither a parent nor a child, so it must not appear.
 	if strings.Contains(tree, loose.ID) {
 		t.Fatalf("tree lists the childless %s:\n%s", loose.ID, tree)
@@ -700,7 +700,7 @@ func TestTaskDuplicateCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task dupe --of: %v\noutput: %s", err, out)
 	}
-	// The edge is provenance, not scheduling (004): the duplicate stays
+	// The edge is provenance, not scheduling (WL-SPEC-75 §4): the duplicate stays
 	// claimable, so the confirmation has to say that closing is a second act.
 	// Without it the message reads as if triage were finished while lode work next
 	// is still handing the duplicate out.
@@ -723,7 +723,7 @@ func TestTaskDuplicateCommands(t *testing.T) {
 			detail.Edges.Out, canonical.ID)
 	}
 
-	// No absorption (004 §1.3): the canonical task gains no children.
+	// No absorption (WL-SPEC-75 §4): the canonical task gains no children.
 	canon, _, err := c.GetTask(context.Background(), canonical.ID)
 	if err != nil {
 		t.Fatalf("get canonical: %v", err)
@@ -916,7 +916,7 @@ func TestTaskEditMilestone(t *testing.T) {
 	}
 }
 
-// TestTaskEditPlan covers --plan on `lode task edit` (WL-SPEC-66 §6.2): the
+// TestTaskEditPlan covers --plan on `lode task edit` (WL-SPEC-85 §7): the
 // flag sends a "plan" field carrying the ref verbatim (resolution happens
 // server-side, the same way `--plan` on `task list` resolves one), and
 // leaving the flag off carries no plan field at all so an unrelated edit

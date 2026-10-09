@@ -8,7 +8,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// TestApprovalHasNoDecisionCommand is the CLI half of 029 §7.3: approving is
+// TestApprovalHasNoDecisionCommand is the CLI half of WL-SPEC-75 §13.6: approving is
 // a web UI act because an OIDC session's group claims are fresh and a 30-day
 // CLI token's are not. `lode approval` therefore offers add, request and list
 // and nothing else, and the absence is asserted so a later "for convenience"
@@ -27,8 +27,8 @@ func TestApprovalHasNoDecisionCommand(t *testing.T) {
 	}
 }
 
-// TestApprovalAddRequirement covers `lode approval add` end to end (029
-// §7.2): the ad-hoc requirement round-trips to the server and renders, a
+// TestApprovalAddRequirement covers `lode approval add` end to end (WL-SPEC-75
+// §13.6): the ad-hoc requirement round-trips to the server and renders, a
 // document target is named by any reference rather than by its "doc:<id>"
 // entity id, and naming both a role and an actor is refused.
 func TestApprovalAddRequirement(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 )
 
 // TestTokenAddTaskMintsTaskScopedToken covers `lode token add --task`, the
-// verb `lode task token` folded into (WL-488, 061 §2). It must mint the same
+// verb `lode task token` folded into (WL-488, WL-SPEC-81 §2). It must mint the same
 // task-scoped token the old command did: a wl_ credential bound to the task,
 // attributed to the named actor, with a TTL-derived expiry.
 func TestTokenAddTaskMintsTaskScopedToken(t *testing.T) {
