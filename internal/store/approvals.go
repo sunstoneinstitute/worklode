@@ -982,7 +982,9 @@ const approvalProjectID = `coalesce(t.project_id, d.project_id, del.project_id, 
 // approvalEntityTitle and approvalEntityURL are what a queue row renders of
 // whichever entity join matched: the title a reader scans for, and the one
 // address that opens it. A PR jumps out to GitHub and a deliverable to its
-// declared address if it has one; the rest are cockpit pages. Every arm
+// declared address if it has one; the rest are cockpit pages. A numbered
+// document opens at its canonical URL, the same spelling as
+// model.DocCanonicalURL. Every arm
 // resolves to somewhere, because the queue renders the title as a link and
 // an empty href is a link that reloads the page. A row no join correlates
 // still lists, with both columns empty (see approvalEntityJoins).
@@ -991,7 +993,9 @@ const approvalProjectID = `coalesce(t.project_id, d.project_id, del.project_id, 
 // the PR's task and does not restate it.
 const (
 	approvalEntityTitle = `coalesce(pr.title, d.title, del.name, tk.title)`
-	approvalEntityURL   = `coalesce(pr.url, '/docs/' || d.id, nullif(del.url, ''),
+	approvalEntityURL   = `coalesce(pr.url,
+		'/projects/' || d.project_id || '/' || d.kind || '/' || nullif(d.number, 0),
+		'/docs/' || d.id, nullif(del.url, ''),
 		'/projects/' || del.project_id || '/deliverables', '/tasks/' || tk.id)`
 )
 

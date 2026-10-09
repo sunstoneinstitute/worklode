@@ -89,7 +89,7 @@ func (s *server) projectDocPage(w http.ResponseWriter, r *http.Request, p *store
 	}
 	if ver == "" {
 		if v := r.URL.Query().Get("v"); v != "" {
-			http.Redirect(w, r, docCanonicalURL(d)+"/"+v, http.StatusFound)
+			http.Redirect(w, r, model.DocCanonicalURL(d)+"/"+v, http.StatusFound)
 			return
 		}
 	}

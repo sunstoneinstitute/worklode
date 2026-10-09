@@ -216,10 +216,6 @@ func TestDocVersionPageRejectsInt32Overflow(t *testing.T) {
 	}
 }
 
-// docPageURL is the cockpit page path retained for plans, which have no
-// cross-corpus shorthand.
-func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
-
 // TestDocPageShowsNotes is WL-716's second gap: the anchored notes 025 §8.5
 // stores are rendered instead of invisible. ?body=source is the escape hatch
 // back to the stored text. Rule amendment folding is

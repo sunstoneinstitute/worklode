@@ -535,7 +535,7 @@ func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 		if d.Number != 0 {
 			ref = docWebRef(d, projectKeys[d.Project])
 		}
-		url := docCanonicalURL(d)
+		url := model.DocCanonicalURL(d)
 		v.Docs = append(v.Docs, ui.DocRow{Doc: d, URL: url, Ref: ref})
 	}
 	return v
@@ -608,7 +608,7 @@ func docReviewerRows(d model.Doc) []ui.DocReviewerRow {
 // ver is the version rendered, current when its number matches doc's live
 // version.
 func docVersionView(md *mdrender.Cache, keys mdrender.ProjectKeys, doc model.Doc, ver model.DocVersion) ui.DocVersionView {
-	docURL := docCanonicalURL(doc)
+	docURL := model.DocCanonicalURL(doc)
 	return ui.DocVersionView{
 		Page:     ui.PageProps{Title: "worklode: " + doc.Slug + " v" + strconv.Itoa(ver.Version), ActiveGlobal: "knowledge"},
 		Doc:      doc,
@@ -637,7 +637,7 @@ func docEdgeRows(edges []model.DocEdge, keys mdrender.ProjectKeys) []ui.DocEdgeR
 				row.Label = "document " + strconv.FormatInt(far.ID, 10)
 				break
 			}
-			row.URL = docCanonicalURL(far)
+			row.URL = model.DocCanonicalURL(far)
 			row.Label = far.FormatRef()
 			if e.ToAnchor != "" {
 				// The fragment rides the link, not just the label (WL-301).
@@ -678,28 +678,11 @@ func docRef(d model.Doc) string {
 	return d.Kind + " " + strconv.Itoa(d.Number)
 }
 
-// docCanonicalURL is the one spelling of a document's cockpit URL: the S20
-// canonical URL ("/projects/worklode/spec/25") when the document carries a
-// number, else the numeric page URL. The docs index, the version page, and
-// the /docs/ref/ redirect all link through it — they must agree or links
-// 404, so the rule lives here alone (WL-347).
-func docCanonicalURL(d model.Doc) string {
-	if d.Number != 0 {
-		return "/projects/" + d.Project + "/" + d.Kind + "/" + strconv.Itoa(d.Number)
-	}
-	return docPageURL(d.ID)
-}
-
 // docWebRef is a document's direct cockpit reference: the cross-corpus
 // shorthand, which every kind now carries (029 §4).
 func docWebRef(d model.Doc, projectKey string) string {
 	return projectKey + "-" + strings.ToUpper(d.Kind) + "-" + strconv.Itoa(d.Number)
 }
-
-// docPageURL is the fallback cockpit page path for a document with no number
-// to build a shorthand from: a tombstone, whose slug may be reused, and any row
-// predating 029 §4's backfill. Plans used to need it and no longer do.
-func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
 
 // formTitle is a creation form's document title, prefixed "Error: " when the
 // submit was rejected. On a rejected submit the browser announces the new
