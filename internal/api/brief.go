@@ -13,16 +13,13 @@ import (
 // is excluded from its own matches.
 func toBriefJSON(b *store.Brief) model.Brief {
 	out := model.Brief{
-		Task:               b.Task,
-		Body:               b.Body,
-		Branch:             b.Branch,
-		OpenBlockers:       make([]model.BriefBlocker, 0, len(b.OpenBlockers)),
-		BlockingPlans:      append(make([]model.DocRef, 0, len(b.BlockingPlans)), b.BlockingPlans...),
-		GoverningDesign:    b.GoverningDesign,
-		AffectedComponents: b.AffectedComponents,
-		DefinitionOfDone:   b.DefinitionOfDone,
-		StalePlan:          b.StalePlan,
-		Blobs:              make([]model.TaskBlob, 0, len(b.Blobs)),
+		Task:          b.Task,
+		Body:          b.Body,
+		Branch:        b.Branch,
+		OpenBlockers:  make([]model.BriefBlocker, 0, len(b.OpenBlockers)),
+		BlockingPlans: append(make([]model.DocRef, 0, len(b.BlockingPlans)), b.BlockingPlans...),
+		StalePlan:     b.StalePlan,
+		Blobs:         make([]model.TaskBlob, 0, len(b.Blobs)),
 		Skills: model.SkillRecommendation{
 			Pinned:   make([]model.PinnedSkill, 0, len(b.PinnedSkills)),
 			Matches:  []model.SkillMatch{},

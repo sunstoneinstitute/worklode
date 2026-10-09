@@ -63,11 +63,9 @@ func TestTaskBrief(t *testing.T) {
 		t.Fatalf("lease = %v, want worktree host:/wt-1", got["lease"])
 	}
 
-	// Reserved fields are present and null in v1.
 	for _, k := range []string{"governing_design", "affected_components", "definition_of_done"} {
-		v, present := got[k]
-		if !present || v != nil {
-			t.Fatalf("%s = %v (present=%v), want JSON null", k, v, present)
+		if _, present := got[k]; present {
+			t.Fatalf("%s present in brief, want removed", k)
 		}
 	}
 }
