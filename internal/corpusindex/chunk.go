@@ -118,6 +118,9 @@ func chunkSections(b Budget, doc model.Doc, sections []model.DocSection, parsed 
 	var out []Chunk
 	for i := range min(len(ordered), len(parsed.Sections)) {
 		sec := ordered[i]
+		if sec.Kind == "heading" {
+			continue // a spec heading has no text; the rules under it carry their own header (WL-SPEC-77 §19.1)
+		}
 		header := DocHeader(doc, sec.Number, sec.Heading)
 		chunks := windowed(b, sec.Anchor, header, parsed.Sections[i].Body, next[sec.Anchor])
 		next[sec.Anchor] += len(chunks)

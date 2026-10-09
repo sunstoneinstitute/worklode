@@ -591,3 +591,20 @@ func TestListRules(t *testing.T) {
 		t.Errorf("bogus status: err = %v, want ErrInvalidInput", err)
 	}
 }
+
+// TestSyncRulesKeepsMatchedHeadingShell: a section that loses its text keeps
+// the rule it matched rather than turning into a spec heading, so specs whose
+// heading shells are still rules stay arranged until the WL-SPEC-77 §19.7
+// migration converts them.
+func TestSyncRulesKeepsMatchedHeadingShell(t *testing.T) {
+	s := openDocStore(t)
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	if _, err := updateDocBody(t, s, d.ID, strings.Replace(ruleDocV1, "A.\n\n", "", 1)); err != nil {
+		t.Fatal(err)
+	}
+	assertArrangement(t, arrangementOf(t, s, d.ID), []arranged{
+		{0, 2, 1, 1, "sec-1", "draft"},
+		{1, 3, 2, 1, "sec-1.1", "draft"},
+		{2, 2, 3, 1, "sec-2", "draft"},
+	})
+}

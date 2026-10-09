@@ -583,6 +583,13 @@ func TestSpecHeadingArrangesNoRule(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("arrangement = %+v, want %+v", got, want)
 	}
+	secs, err := s.ListDocSections(t.Context(), spec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(secs) != 2 || secs[0].Kind != "heading" || secs[1].Kind != "requirement" {
+		t.Errorf("sections = %+v, want kinds heading, requirement", secs)
+	}
 	var rules int
 	if err := s.db.QueryRowContext(t.Context(), `SELECT count(*) FROM rules`).Scan(&rules); err != nil {
 		t.Fatal(err)
