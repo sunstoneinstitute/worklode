@@ -5,7 +5,7 @@
 // code for a wl_ token. The CLI speaks no provider protocol.
 //
 // Where no browser can be launched — no opener binary, or no display, as over
-// SSH — the same flow runs in manual mode (spec 001 §8.7): no listener is bound,
+// SSH — the same flow runs in manual mode (WL-SPEC-74 §7.2): no listener is bound,
 // the URL is printed for the user to open on any machine, and the one-time code
 // the server renders there is pasted back here. Only how the code travels
 // differs; discovery and the token exchange are identical.
@@ -35,7 +35,7 @@ type LoginOptions struct {
 	Server      string
 	HTTPClient  *http.Client
 	OpenBrowser func(string) error
-	// NoBrowser forces manual mode (§8.7) even where a browser could be
+	// NoBrowser forces manual mode (WL-SPEC-74 §7.2) even where a browser could be
 	// launched — for a terminal whose browser is on another machine.
 	NoBrowser bool
 	// Stdin is where manual mode reads the pasted code from; Stdout is where
@@ -80,7 +80,7 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	return res, err
 }
 
-// runLoopbackLogin is the flow of §8: bind an ephemeral loopback port, send the
+// runLoopbackLogin is the flow of WL-SPEC-74 §7.1: bind an ephemeral loopback port, send the
 // browser through the server's web login, and wait for the one-time code to come
 // back as a redirect. It returns ErrNoBrowser, unwrapped, when there is no
 // browser to send.
@@ -138,7 +138,7 @@ func runLoopbackLogin(ctx context.Context, opts LoginOptions, disc model.LoginDi
 	return exchangeCLIToken(ctx, opts.HTTPClient, disc.TokenURL, code, state)
 }
 
-// runManualLogin is the flow of §8.7, for a machine that cannot launch a
+// runManualLogin is the flow of WL-SPEC-74 §7.2, for a machine that cannot launch a
 // browser or reach its own loopback port from one. It binds no listener: the
 // server renders the one-time code on a page and the user pastes it back here.
 func runManualLogin(ctx context.Context, opts LoginOptions, disc model.LoginDiscovery) (*LoginResult, error) {

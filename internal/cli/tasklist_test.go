@@ -25,7 +25,7 @@ func tasklistStub(t *testing.T) (*cli.Client, *string) {
 }
 
 // TestListTasksDocFilters pins that both document filters reach the server
-// under the parameter names the API parses (025 §9.2, §15.4): PlanDoc as
+// under the parameter names the API parses (WL-SPEC-77 §11.2, §15.4): PlanDoc as
 // plan_doc, AboutDoc as about_doc. A zero id must not leak the parameter at
 // all — the server refuses a non-positive one.
 func TestListTasksDocFilters(t *testing.T) {

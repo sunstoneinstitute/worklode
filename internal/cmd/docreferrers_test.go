@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestDocReferrers covers `lode doc referrers <ref>#sec-N` (025 §8.2): the
+// TestDocReferrers covers `lode doc referrers <ref>#sec-N` (WL-SPEC-77 §10): the
 // section fragment is required, and it reaches the server as the anchor
 // query parameter.
 func TestDocReferrers(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// --- drift & overview (spec 007) -------------------------------------------
+// --- drift & overview (WL-SPEC-82) -------------------------------------------
 
 // Overview calls GET /api/v1/overview: the one-screen roll-up. An empty
 // project rolls up every project.

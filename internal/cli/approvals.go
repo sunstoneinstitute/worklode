@@ -11,12 +11,12 @@ import (
 )
 
 // RequestDocApproval calls POST /api/v1/docs/{id}/request-approval, opening
-// one awaiting lane per reviewer in the document's durable reviewer set (025
-// §7.3; assigned separately, see SetDocReviewers) on its current version. A
+// one awaiting lane per reviewer in the document's durable reviewer set (WL-SPEC-77
+// §9; assigned separately, see SetDocReviewers) on its current version. A
 // document with no reviewers assigned is a 422 naming it. Re-requesting the
 // same set at the same version changes nothing.
 //
-// There is deliberately no Decide counterpart on this client: 029 §7.3 makes
+// There is deliberately no Decide counterpart on this client: WL-SPEC-75 §13.6 makes
 // approving a web UI act, because a session's group claims are fresh and a
 // 30-day CLI token's are not.
 func (c *Client) RequestDocApproval(ctx context.Context, id int64) (model.Doc, []byte, error) {
@@ -31,7 +31,7 @@ func (c *Client) ListApprovals(ctx context.Context) (model.ApprovalListResponse,
 	return doJSON[model.ApprovalListResponse](ctx, c, http.MethodGet, "/api/v1/approvals", nil, "approval list")
 }
 
-// RequireApproval calls POST /api/v1/approvals: 029 §7.2's ad-hoc
+// RequireApproval calls POST /api/v1/approvals: WL-SPEC-75 §13.6's ad-hoc
 // requirement on any governed target. Re-filing the same
 // (kind, id, revision, lane) returns the row already there, so this is safe
 // to repeat.

@@ -47,7 +47,7 @@ document exits nonzero, so a typo cannot read as "nothing outstanding".`,
 	return cmd
 }
 
-// docTodoItem is one item of `lode doc todo --json`. Per ADR 036 this is an
+// docTodoItem is one item of `lode doc todo --json`. Per WL-SPEC-73 §3.2a this is an
 // internal/cmd stdout contract, not an HTTP body, so it is declared here —
 // and named, so the guard in internal/model/modelrule_test.go can see it.
 //
@@ -61,7 +61,7 @@ type docTodoItem struct {
 	Anchors []string `json:"anchors,omitempty"`
 	Heading string   `json:"heading"`
 	Plan    string   `json:"plan,omitempty"`
-	// Tasks names the plan's still-open minted tasks (025 §9.2). It replaces
+	// Tasks names the plan's still-open minted tasks (WL-SPEC-77 §11.2). It replaces
 	// the single `task` key, which read the plan body's retired `task:`
 	// frontmatter: a plan mints as many tasks as it declares, and only the
 	// backbone knows which.
@@ -97,7 +97,7 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	// against the current project's documents when the checkout has one —
 	// exactly the candidate set `lode show` uses, so the two cannot disagree
 	// (WL-358) — and a shorthand whose key is not this checkout's is the
-	// backbone's to answer, not a miss (026 §4.2). A tier-3 key nothing
+	// backbone's to answer, not a miss (WL-SPEC-78 §3.2). A tier-3 key nothing
 	// carries is returned as an error rather than printed: the exit status of
 	// this command means "work remains" for a document it resolved, so a ref
 	// it could not resolve must not read as "no work".
@@ -117,7 +117,7 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	// The walk reads the target's own project, not the whole backbone.
 	// resp.Docs spans every project because tier 2 above may resolve a
 	// shorthand into another one, but a spec's plans sit on its project's
-	// sequence (029 §4), so another project's documents can only add noise
+	// sequence (WL-SPEC-75 §13.4), so another project's documents can only add noise
 	// (WL-722).
 	corpus := make([]model.Doc, 0, len(resp.Docs))
 	for _, d := range resp.Docs {
@@ -161,7 +161,7 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 // docTodoRefs turns the corpus paths the walk keys on into the references a
 // reader acts on. The walk still keys on `docs/specs/<slug>.md`, because
 // that is the form the corpus writes its covers and requires edges in, but
-// no such file has existed since 055 moved documents into the backbone
+// documents live in the backbone, so no such file exists
 // (WL-624). What gets printed is the WL-SPEC-62 shorthand `lode show` takes.
 //
 // server, when set, is the cockpit base URL every reference is linked to.
@@ -181,7 +181,7 @@ var corpusMD = regexp.MustCompile(`[A-Za-z0-9._/-]*[A-Za-z0-9._-]\.md`)
 func newDocTodoRefs(docs []model.Doc, server string) *docTodoRefs {
 	r := &docTodoRefs{byPath: make(map[string]string, 2*len(docs)), server: server}
 	for _, d := range docs {
-		// A document with no number predates 029 §4's backfill, and
+		// A document with no number predates WL-SPEC-75 §13.4's backfill, and
 		// cli.DocRef renders it as its bare kind, which resolves nothing.
 		// Its slug is still a reference `lode show` takes.
 		ref := d.Slug
@@ -239,7 +239,7 @@ func docTodoLinkBase(cmd *cobra.Command, cfg cli.Config) string {
 const docTodoCorpusConcurrency = 8
 
 // docTodoCorpus loads every document the backbone serves as a CorpusDoc, so
-// the walk of 026 §2.5 reads the same corpus `lode doc list` does.
+// the walk of WL-SPEC-78 §1.7 reads the same corpus `lode doc list` does.
 //
 // Status, Sections and Edges come from GET /docs/{id}'s structured fields,
 // never from the body's header (WL-913): the backbone is the authority for
@@ -319,13 +319,13 @@ func docTodoEdgeMetas(edges []model.DocEdge, pathBySlug map[string]string) []des
 
 // docTodoPlanTasks builds the plan → minted-tasks lookup from one task list.
 // A plan's tasks are the rows its acceptance minted with `plan_doc` set to it
-// (025 §9.2) — the same fact `lode task list --plan` reads — so the whole
+// (WL-SPEC-77 §11.2) — the same fact `lode task list --plan` reads — so the whole
 // project's tasks are fetched once and indexed by plan rather than asked for
 // one plan at a time. A plan no task names minted none, which is a real
 // answer here and not a gap in the lookup.
 //
 // Closure travels with each task because it is the server's per-repo answer,
-// never a state string (026 §2.5).
+// never a state string (WL-SPEC-78 §1.7).
 func docTodoPlanTasks(cmd *cobra.Command, c *cli.Client, cfg cli.Config, docs []model.Doc) (func(string) []designdoc.ExecutionTask, error) {
 	// No working directory: the git-remote fallback would cost a subprocess
 	// to narrow a list this command wants wide anyway. Unscoped returns every
@@ -454,7 +454,7 @@ const docTodoContinuedNote = "(continued) marks a document the queue returns to:
 
 // writeDocTodoTable prints the work list one item per line, under a heading
 // naming the document each run of items belongs to. The heading repeats when
-// the document changes, because the order is the execution queue (026 §2.5)
+// the document changes, because the order is the execution queue (WL-SPEC-78 §1.7)
 // and gathering each document's items together would destroy it.
 //
 // Column widths are measured per run, not over the whole list: one document

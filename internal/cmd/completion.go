@@ -15,14 +15,14 @@ import (
 
 // completionTimeout bounds every completion lookup, scope resolution
 // included: TAB must never hang the user's shell on a slow backbone
-// (061 §3 C2). A test lowers it to force the deadline path.
+// (WL-SPEC-81 §3 C2). A test lowers it to force the deadline path.
 var completionTimeout = 250 * time.Millisecond
 
 // completionClient builds the client and deadline every completion lookup
 // needs, and nothing more. ok is false when there is no usable config or no
 // server URL, and the caller then offers no candidates. It never reports why:
 // a completion function's only channels to the user are the candidate list
-// and the shell prompt itself (061 §3 C2).
+// and the shell prompt itself (WL-SPEC-81 §3 C2).
 //
 // It is separate from completionScope because not every lookup is
 // project-scoped. GET /api/v1/projects is global, and requiring a resolved
@@ -55,7 +55,7 @@ func completionScope(cmd *cobra.Command) (ctx context.Context, cancel context.Ca
 
 // candidateTitleWidth truncates a task title so one candidate stays on one
 // completion line — 40 runes leaves room for the id and a shell's own column
-// budget without wrapping in a typical 80-column terminal (061 §3 C3).
+// budget without wrapping in a typical 80-column terminal (WL-SPEC-81 §3 C3).
 const candidateTitleWidth = 40
 
 // completionDescription sanitizes a free-text field for use as a completion
@@ -77,9 +77,9 @@ func completionDescription(s string) string {
 }
 
 // taskIDs completes a task-id argument from the tasks in the resolved
-// project, ordered by model.CompareTaskIDs (061 §4) and carrying the task's
+// project, ordered by model.CompareTaskIDs (WL-SPEC-81 §3) and carrying the task's
 // title as a completion description ("WL-5\tfix the thing"), so a shell can
-// render what a candidate is, not just its id (061 §3 C3). Any failure —
+// render what a candidate is, not just its id (WL-SPEC-81 §3 C3). Any failure —
 // offline, logged out, no project scope, server slower than
 // completionTimeout — yields no candidates and no output, never
 // cobra.ShellCompDirectiveError and never cobra.CompErrorln, both of which
@@ -102,7 +102,7 @@ func taskIDs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Comp
 	}
 	// Sort the tasks, not the candidate strings: model.CompareTaskIDs parses
 	// a bare id's numeric suffix, and a candidate already carries a
-	// tab-joined title by the time it would be sorted (061 §4 vs. §3 C3).
+	// tab-joined title by the time it would be sorted (WL-SPEC-81 §3 vs. §3 C3).
 	slices.SortFunc(tasks, func(a, b model.Task) int {
 		return model.CompareTaskIDs(a.ID, b.ID)
 	})
@@ -129,7 +129,7 @@ func taskIDAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion,
 }
 
 // staticCompletions offers a closed value set: the kinds, statuses,
-// priorities and `set` field names of 061 §3 C4. Only the values starting
+// priorities and `set` field names of WL-SPEC-81 §3 C4. Only the values starting
 // with what has been typed are offered, and nothing falls through to filename
 // completion behind them. The prefix match belongs here because cobra hands a
 // completion function's result to the shell unfiltered — unlike ValidArgs,
@@ -161,7 +161,7 @@ func completeProjectFlag(cmd *cobra.Command, flag string) {
 	_ = cmd.RegisterFlagCompletionFunc(flag, projectKeys)
 }
 
-// taskSetArgs completes `lode task set <field> <value…> <id>` (061 §2.1)
+// taskSetArgs completes `lode task set <field> <value…> <id>` (WL-SPEC-81 §2)
 // position by position. What belongs at a position is a property of the field
 // named first, so the field decides: after "state" comes one of the settable
 // states and then the id, after "checklist" an item and a true/false and then
@@ -197,8 +197,8 @@ func taskSetArgs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.
 }
 
 // docRefsFiltered is the shared body of the document-reference completers.
-// A document is addressable several ways (026 §4.2): by slug
-// ("design-doc-queries"), by the 025 §14.3 shorthand ("WL-SPEC-61"), by a
+// A document is addressable several ways (WL-SPEC-78 §3.2): by slug
+// ("design-doc-queries"), by the WL-SPEC-77 §7 shorthand ("WL-SPEC-61"), by a
 // number-and-slug form, by a corpus path, and by any of those with a
 // "#sec-N" fragment. Slug and shorthand are offered — the two forms a person
 // types from memory. Fragments are deliberately not attempted here: a
@@ -207,7 +207,7 @@ func taskSetArgs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.
 // If that is ever wanted it is its own task, not a line in this one.
 //
 // deleted selects the tombstoned corpus instead of the live one, which is
-// the only useful candidate set for `lode doc undelete` (044 §5).
+// the only useful candidate set for `lode doc undelete` (WL-SPEC-75 §12).
 func docRefsFiltered(cmd *cobra.Command, toComplete string, deleted bool) ([]cobra.Completion, cobra.ShellCompDirective) {
 	ctx, cancel, c, scope, ok := completionScope(cmd)
 	if !ok {
@@ -231,7 +231,7 @@ func docRefsFiltered(cmd *cobra.Command, toComplete string, deleted bool) ([]cob
 	for _, d := range docs {
 		desc := completionDescription(d.Title)
 		refs := []string{d.Slug}
-		// A document with no number predates 029 §4's backfill; DocRef
+		// A document with no number predates WL-SPEC-75 §13.4's backfill; DocRef
 		// degrades it to a bare kind ("spec"), which is not a reference.
 		if d.Number != 0 {
 			refs = append([]string{cli.DocRef(d)}, refs...)

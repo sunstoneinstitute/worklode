@@ -1,5 +1,5 @@
 // approvalflow.go is the client and rendering side of applying an approval
-// flow to a project (029 §7.2).
+// flow to a project (WL-SPEC-75 §13.6).
 
 package cli
 

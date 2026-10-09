@@ -12,7 +12,7 @@ import (
 )
 
 // SupersedeRules calls POST /api/v1/projects/{id}/rules/supersede,
-// applying a refactor map (S24).
+// applying a refactor map.
 func (c *Client) SupersedeRules(ctx context.Context, project string, in model.SupersedeInput) (model.SupersedeResult, []byte, error) {
 	return doJSON[model.SupersedeResult](ctx, c, http.MethodPost,
 		"/api/v1/projects/"+url.PathEscape(project)+"/rules/supersede", in, "supersede")

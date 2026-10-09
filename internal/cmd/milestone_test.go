@@ -215,7 +215,7 @@ func TestMilestoneDetachClearsMilestone(t *testing.T) {
 }
 
 // TestMilestoneAttachRejectsTaskID: a task id passed where a deliverable id
-// was wanted is a common mistake (029 §2 keeps the two attach paths
+// was wanted is a common mistake (WL-SPEC-75 §13.2 keeps the two attach paths
 // separate) — it must be caught client-side with a message pointing at the
 // task path, never sent to the server.
 func TestMilestoneAttachRejectsTaskID(t *testing.T) {
