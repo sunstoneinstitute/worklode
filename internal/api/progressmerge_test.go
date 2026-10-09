@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,6 +32,7 @@ type fakeMergeGitHub struct {
 	graphQLFail bool // /graphql answers 200 with an errors array
 
 	calls      []string
+	mergeBody  string
 	beforeCall func()
 }
 
@@ -44,6 +46,8 @@ func (f *fakeMergeGitHub) start(t *testing.T) *githubauth.AppAuth {
 		case "/app/installations/7/access_tokens":
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(map[string]any{"token": "ghs_test"})
+		case "/repos/acme/app":
+			json.NewEncoder(w).Encode(map[string]any{"allow_rebase_merge": true})
 		case "/repos/acme/app/pulls/7":
 			if f.beforeCall != nil {
 				f.beforeCall()
@@ -58,6 +62,8 @@ func (f *fakeMergeGitHub) start(t *testing.T) *githubauth.AppAuth {
 			}
 			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
 		case "/repos/acme/app/pulls/7/merge":
+			b, _ := io.ReadAll(r.Body)
+			f.mergeBody = string(b)
 			if f.beforeCall != nil {
 				f.beforeCall()
 			}
@@ -270,8 +276,11 @@ func TestProgressMergeMerges(t *testing.T) {
 	if got.Op != "merge" || got.Queued {
 		t.Errorf("reply = %+v; want the merge op and no queue", got)
 	}
-	if !f.called("PUT", "/repos/acme/app/pulls/7/merge") {
-		t.Errorf("calls = %v; want the REST merge", f.calls)
+	if !f.called("GET", "/repos/acme/app") || !f.called("PUT", "/repos/acme/app/pulls/7/merge") {
+		t.Errorf("calls = %v; want the allowed-methods read and the REST merge", f.calls)
+	}
+	if f.mergeBody != `{"merge_method":"rebase"}` {
+		t.Errorf("merge body = %s; want the one method the repository allows", f.mergeBody)
 	}
 	if f.called("POST", "/graphql") {
 		t.Errorf("calls = %v; want no mutation on an unqueued branch", f.calls)
