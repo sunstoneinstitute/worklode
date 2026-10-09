@@ -146,11 +146,18 @@ type ProjectsView struct {
 // --- reviews (spec 029 §7.1) -------------------------------------------------
 
 // ApprovalsView is the /reviews queue: every approval still awaiting a
-// decision, whatever kind of entity it governs, oldest first. Each row
-// carries the decide form (029 §7.3).
+// decision, whatever kind of entity it governs. Groups split it by who the
+// row waits on, in display order; each group is oldest first and omitted
+// when empty. Each row carries the decide form (029 §7.3).
 type ApprovalsView struct {
-	Page PageProps
-	Rows []ApprovalRow
+	Page   PageProps
+	Groups []ApprovalGroup
+}
+
+// ApprovalGroup is one headed section of the Reviews queue.
+type ApprovalGroup struct {
+	Heading string
+	Rows    []ApprovalRow
 }
 
 // ApprovalRow is one awaiting-approval queue row: the entity it governs (a
