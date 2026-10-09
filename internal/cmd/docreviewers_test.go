@@ -7,7 +7,7 @@ import (
 )
 
 // TestDocSetReviewersAndShow covers `lode doc set reviewers <actor…> <ref>`
-// and its read side `lode doc reviewers <ref>` (025 §7.3, WL-359, WL-487):
+// and its read side `lode doc reviewers <ref>` (WL-SPEC-77 §9, WL-359, WL-487):
 // the set command assigns the durable set, the view prints it back plus
 // whoever still owes a review after `lode approval request`, and the
 // removed `--set` flag on the view is now an error.

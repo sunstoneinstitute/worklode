@@ -1,4 +1,4 @@
-// deliverables.go is the client and the rendering for spec 029 §3's
+// deliverables.go is the client and the rendering for WL-SPEC-75 §13.3's
 // deliverable: a declared, checkable output of a project.
 package cli
 
@@ -32,14 +32,14 @@ func (c *Client) ListDeliverables(ctx context.Context, project string) (model.De
 }
 
 // CreateDeliverable calls POST /api/v1/projects/{id}/deliverables, declaring
-// a deliverable (spec 029 §3.1).
+// a deliverable (WL-SPEC-75 §13.3).
 func (c *Client) CreateDeliverable(ctx context.Context, project string, in model.CreateDeliverableInput) (model.Deliverable, []byte, error) {
 	return doJSON[model.Deliverable](ctx, c, http.MethodPost,
 		"/api/v1/projects/"+url.PathEscape(project)+"/deliverables", in, "deliverable")
 }
 
 // ReportDeliverable calls POST /api/v1/deliverables/{id}/report, filing the
-// state the caller says they see as user-reported evidence (029 §3.2).
+// state the caller says they see as user-reported evidence (WL-SPEC-75 §13.3).
 func (c *Client) ReportDeliverable(ctx context.Context, id string, in model.ReportDeliverableInput) (model.Deliverable, []byte, error) {
 	return doJSON[model.Deliverable](ctx, c, http.MethodPost,
 		"/api/v1/deliverables/"+url.PathEscape(id)+"/report", in, "deliverable")
@@ -79,7 +79,7 @@ func DeliverableTable(w io.Writer, ds []model.Deliverable) {
 
 // DeliverableRender prints one deliverable's detail: the `lode show
 // <deliverable>` view. ReportedState is "declared" until something reports
-// against Artifact (029 §3.2) — the deliverable itself carries no state of
+// against Artifact (WL-SPEC-75 §13.3) — the deliverable itself carries no state of
 // its own.
 func DeliverableRender(w io.Writer, d model.Deliverable) {
 	fmt.Fprintf(w, "%s  %s\n", d.ID, d.Name)

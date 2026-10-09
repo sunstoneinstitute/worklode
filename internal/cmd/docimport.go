@@ -1,5 +1,5 @@
 // docimport.go is `lode doc import`: the one-way cutover that moves a git
-// corpus of design documents into the backbone (025 §12). It is a client-side
+// corpus of design documents into the backbone (WL-SPEC-77 §13). It is a client-side
 // walker over internal/designdoc writing through the public API only — the
 // same re-runnable-backfill shape as `lode inbox import` — so the server keeps
 // one create path and one edge-resolution path.
@@ -12,7 +12,7 @@
 // the whole corpus is present.
 //
 // One relation cannot wait for pass 2: the server resolves a `blockedBy` edge at
-// create time and refuses one naming no plan (025 §5), so pass 1 creates the
+// create time and refuses one naming no plan (WL-SPEC-77 §3), so pass 1 creates the
 // corpus in an order that puts an ordering edge's target first
 // (importCreateOrder).
 //
@@ -22,7 +22,7 @@
 // plans at any status, draft specs and ADRs — because a corpus that keeps its
 // files (WL-357: edge-agent) edits frontmatter there and re-runs the import
 // expecting the backbone to follow. An accepted spec or ADR cannot be edited
-// in place (025 §7: revise it), so its drift is reported loudly instead of
+// in place (WL-SPEC-77 §9: revise it), so its drift is reported loudly instead of
 // silently keeping the stored body while claiming the document "wired".
 package cmd
 
@@ -66,7 +66,7 @@ type unresolvedRef struct {
 // and cannot be edited in place (an accepted or superseded spec/ADR).
 type driftedDoc struct{ path, kind, status string }
 
-// noSpecSentinel is 026 §4.3's "no governing spec" coverage declaration. It
+// noSpecSentinel is WL-SPEC-78 §3.3's "no governing spec" coverage declaration. It
 // resolves to nothing on purpose, so it is reported apart from the references
 // that were meant to resolve and did not.
 const noSpecSentinel = "NO-SPEC"
@@ -172,7 +172,7 @@ Stating a status needs the admin-only doc.import permission.`,
 						continue
 					}
 					// Editable in place: a plan at any status, a draft spec or
-					// ADR (025 §7/§9 — the same gate UpdateDocBody enforces,
+					// ADR (WL-SPEC-77 §9/§9 — the same gate UpdateDocBody enforces,
 					// checked here to tell "cannot" from a real failure).
 					if stored.Kind != "plan" && stored.Status != "draft" {
 						drifted = append(drifted, driftedDoc{
@@ -347,7 +347,7 @@ func importStatus(kind string, fm *designdoc.Frontmatter) string {
 // bare corpus number when exactly one spec or ADR carries it — a corpus can
 // hold both a spec 25 and an ADR 25.
 //
-// The 025 §14.3 <KEY>-<TYPE>-<n> shorthand is deliberately not resolved here:
+// The WL-SPEC-77 §7 <KEY>-<TYPE>-<n> shorthand is deliberately not resolved here:
 // it is matched against the project's key, which the walker cannot know
 // without a round trip.
 type importIndex struct {
@@ -384,7 +384,7 @@ func (ix importIndex) lookup(ref string) (int, bool) {
 //
 // Every other reference can wait for pass 2, which re-resolves the whole
 // frontmatter once the corpus is present. An ordering edge cannot: the server
-// resolves it at create time and refuses one naming no plan (025 §5), because
+// resolves it at create time and refuses one naming no plan (WL-SPEC-77 §3), because
 // a to_external ordering edge would gate nothing while looking like it did.
 // Walk order is filename order, so a plan series whose phases each block the
 // next fails outright unless the phases are created back to front (WL-339).
@@ -500,7 +500,7 @@ func printDriftedDocs(w io.Writer, drifted []driftedDoc) {
 // one per line, on stderr — the summary belongs on stdout, these belong where a
 // caller can filter them out of it.
 //
-// 026 §4.3's NO-SPEC sentinel is counted apart from the rest. It also lands in
+// WL-SPEC-78 §3.3's NO-SPEC sentinel is counted apart from the rest. It also lands in
 // to_external, but it names no target by design — it is a plan asserting that
 // no spec governs it — so counting it with the genuinely dangling references
 // would make a clean corpus look defective at exactly the moment the count is

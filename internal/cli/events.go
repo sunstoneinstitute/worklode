@@ -125,12 +125,12 @@ func (c *Client) EventSubscribers(ctx context.Context) (model.EventSubscriberLis
 
 // SeekEventSubscriber calls POST /api/v1/event-subscribers/{name}/seek,
 // moving both of the subscriber's offsets to to — an admin correction of
-// consumer state (025 §18), safe only because handlers are idempotent.
+// consumer state (WL-SPEC-77 §18), safe only because handlers are idempotent.
 func (c *Client) SeekEventSubscriber(ctx context.Context, name string, to int64) (model.EventSubscriberStatus, []byte, error) {
 	return doJSON[model.EventSubscriberStatus](ctx, c, http.MethodPost, "/api/v1/event-subscribers/"+url.PathEscape(name)+"/seek", model.EventSubscriberSeekRequest{To: to}, "event subscriber status")
 }
 
-// EventTable prints one row per event, newest last (025 §18): id, received
+// EventTable prints one row per event, newest last (WL-SPEC-77 §18): id, received
 // time, source, type, external id. The `lode event tail` view.
 func EventTable(w io.Writer, events []model.Event) {
 	tw := newTabwriter(w)

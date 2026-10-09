@@ -39,7 +39,7 @@ Body.
 `
 
 // todoPlanOpen covers sec-1 in full. Its item type depends entirely on the
-// tasks the backbone says its acceptance minted (025 §9.2) — this document is
+// tasks the backbone says its acceptance minted (WL-SPEC-77 §11.2) — this document is
 // id 2 in every fixture that pairs it with one spec, so a task carrying
 // "plan_doc":2 is one of its.
 const todoPlanOpen = `---
@@ -105,7 +105,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 			kind := "plan"
 			number := 0
 			if planCorpus {
-				// Plans sit on their project's own sequence (029 §4), so
+				// Plans sit on their project's own sequence (WL-SPEC-75 §13.4), so
 				// they render as WL-PLAN-n like every other document.
 				planNumber++
 				number = planNumber
@@ -144,7 +144,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 
 	srv := &todoServer{}
 	mux := http.NewServeMux()
-	// The org's projects, which 026 §4.2's tier 2 resolves a shorthand key
+	// The org's projects, which WL-SPEC-78 §3.2's tier 2 resolves a shorthand key
 	// through — the same path `lode show` takes.
 	mux.HandleFunc("GET /api/v1/projects", func(w http.ResponseWriter, r *http.Request) {
 		writeTestJSON(t, w, model.ProjectListResponse{Projects: []model.Project{
@@ -278,7 +278,7 @@ func TestDocTodoTable(t *testing.T) {
 		"unexecuted",
 		"sec-1",
 		// Documents are named by the reference `lode show` takes, never by
-		// a corpus path: no such file has existed since 055 (WL-624).
+		// a corpus path: no such file exists (WL-624).
 		"WL-PLAN-1",
 		"1 task open: WL-1",
 	} {
@@ -317,7 +317,7 @@ Body.
 	// The spec is document 1, the two plans 2 and 3, in the order
 	// setupTodoCorpus assigns ids. WL-1's state does not look done and the
 	// server calls it closed anyway: closure is the server's per-repo
-	// predicate, never a state string (026 §2.5), so an implementation
+	// predicate, never a state string (WL-SPEC-78 §1.7), so an implementation
 	// reading `state` fails here. WL-2 belongs to no plan, so it must not
 	// reach either item.
 	srv := setupTodoCorpus(t,
@@ -565,7 +565,7 @@ func TestDocTodoPrintsShortAnchorListWhole(t *testing.T) {
 
 // TestDocTodoResolvesShorthandWithoutProjectKey is WL-348: `.worklode/config.toml`
 // carries no project_key, so every <KEY>-<TYPE>-<n> ref — the checkout's own
-// included — misses tier 1 and is the backbone's to resolve (026 §4.2 tier 2).
+// included — misses tier 1 and is the backbone's to resolve (WL-SPEC-78 §3.2 tier 2).
 // It used to print "unresolved: project WL not known here" and exit 0.
 func TestDocTodoResolvesShorthandWithoutProjectKey(t *testing.T) {
 	setupTodoCorpus(t,
@@ -609,7 +609,7 @@ func TestDocTodoRefErrors(t *testing.T) {
 		t.Errorf("err = %v; want the sentinel explained", err)
 	}
 
-	// A plan now resolves (029 §4 gave it a number), so it refuses at
+	// A plan now resolves (WL-SPEC-75 §13.4 gave it a number), so it refuses at
 	// designdoc.Todo's own "this walk starts from a spec or ADR" guard, which
 	// says why rather than reporting the ref as naming nothing. The ref names
 	// plan 009-1 rather than 001-1 because a ref that matches no path falls
@@ -664,7 +664,7 @@ Body.
 }
 
 // TestDocTodoEmptyListSaysSo pins that a finished spec prints a statement,
-// not a blank screen (026 §2.5).
+// not a blank screen (WL-SPEC-78 §1.7).
 func TestDocTodoEmptyListSaysSo(t *testing.T) {
 	const covered = `---
 status: accepted
@@ -773,7 +773,7 @@ func TestDocTodoReadsOnlyTheTargetsProject(t *testing.T) {
 }
 
 // TestDocTodoThinBodyDegrades reproduces WL-724: a stored body with no
-// frontmatter — the shape `lode doc import` lands for a pre-055 corpus —
+// frontmatter — the shape `lode doc import` lands for a file corpus —
 // aborted the whole errgroup, so every ref on that project reported one
 // unrelated document and no work list. The walk now answers. Status and
 // Sections no longer come from the body at all (WL-913), so a thin plan is
@@ -808,7 +808,7 @@ func TestDocTodoThinBodyDegrades(t *testing.T) {
 }
 
 // todoPlanShorthandCovers covers sec-1 in full, naming the spec by the
-// WL-SPEC-1 shorthand rather than a corpus path — the form 025 §14.3 asks an
+// WL-SPEC-1 shorthand rather than a corpus path — the form WL-SPEC-77 §7 asks an
 // author to write, and the only form whose resolution needs a project key.
 const todoPlanShorthandCovers = `---
 status: accepted

@@ -1,4 +1,4 @@
-// lode doctor: client-side setup diagnosis (spec 013). Runs entirely
+// lode doctor: client-side setup diagnosis (WL-SPEC-80 §10.1). Runs entirely
 // locally, needs no privileges, and stays useful with the server
 // unreachable. Each failing check names its fix; any failure exits non-zero
 // so hooks and CI can gate on it.
@@ -50,7 +50,7 @@ func warn(name, detail, fix string) doctorCheck {
 
 // doctorReport is the --json form of `lode doctor`'s whole run. Named
 // deliberately, not an anonymous struct literal at the marshal call site:
-// this package's ADR 036 rule (internal/model/modelrule_test.go's modeNamed for
+// this package's WL-SPEC-73 §3.2a rule (internal/model/modelrule_test.go's modeNamed for
 // internal/cmd) flags anonymous json-tagged struct literals even though
 // named ones are fine for a --json stdout contract that crosses no HTTP
 // boundary (see CLAUDE.md's Architecture section).
@@ -253,7 +253,7 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 		}
 	}
 
-	// 8. Reap materialized secrets whose lease is gone (017 §4, ADR 048 §4).
+	// 8. Reap materialized secrets whose lease is gone (WL-SPEC-74 §10.5, §10.6).
 	checks = append(checks, sweepSecrets(ctx, c, serverReachable))
 
 	// 9. Local Edge Agent telemetry gateway reachable and healthy. No
@@ -299,7 +299,7 @@ func checkGatePRs(ctx context.Context, c *cli.Client, remote string, serverReach
 // question — a transport failure, a 5xx, a rejected token — and the caller
 // must treat that as "no idea", never as "gone". Only two answers are
 // definite: the backbone served the task and it carries no lease, or the
-// backbone served a 404 because the task no longer exists (044).
+// backbone served a 404 because the task no longer exists (WL-SPEC-75 §12).
 func leaseGone(ctx context.Context, c *cli.Client, taskID string) (gone, known bool) {
 	detail, _, err := c.GetTask(ctx, taskID)
 	var ce *cli.ClientError
@@ -318,9 +318,9 @@ func leaseGone(ctx context.Context, c *cli.Client, taskID string) (gone, known b
 //
 // This is the reaper for the abandoned worktree. Every other purge trigger
 // rides an event in the worktree — removal, `lode work submit`, `lode
-// work block`, and ADR 048's conditional purge on exit — so a worktree
+// work block`, and the conditional purge on exit — so a worktree
 // left sitting while its lease expires keeps live credentials on the laptop
-// until someone visits it again. ADR 048 §4 names that residual and leaves it
+// until someone visits it again. WL-SPEC-74 §10.6 names that residual and leaves it
 // to this sweep, which is the one trigger that needs no hook to fire in the
 // worktree at all.
 //

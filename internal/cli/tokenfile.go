@@ -1,7 +1,7 @@
 // tokenfile.go is the token store of last resort: a 0600 file under
 // ~/.config/worklode for machines with no OS keychain at all. It is reached
 // only through fallbackTokenStore, which probes for a keychain first — see
-// tokenstore.go and spec 001 §8.5.
+// tokenstore.go and WL-SPEC-74 §8.
 package cli
 
 import (

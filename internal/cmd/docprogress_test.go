@@ -44,7 +44,7 @@ func setupDocProgress(t *testing.T, p model.ProjectProgress) *string {
 
 // oneActiveSpec is a project whose single spec is under way: three sections
 // built, one in progress, one bound — which is not owed and so is not counted
-// (066 §1.4).
+// (WL-SPEC-85 §2).
 func oneActiveSpec() model.ProjectProgress {
 	return model.ProjectProgress{
 		Project: "proj",
@@ -94,7 +94,7 @@ func TestDocProgressTable(t *testing.T) {
 	if strings.Contains(out, "Needs planning") || strings.Contains(out, "No execution record") {
 		t.Errorf("output = %q, want empty groups omitted", out)
 	}
-	// 032 §4 forbids a completion percentage, so the table shows none.
+	// WL-SPEC-82 §5.3 forbids a completion percentage, so the table shows none.
 	if strings.Contains(out, "%") {
 		t.Errorf("output = %q, want no percentage anywhere", out)
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// decisionFlags are the fields a posed question carries (025 §10.1),
+// decisionFlags are the fields a posed question carries (WL-SPEC-77 §12),
 // shared by add and edit so the two surfaces cannot drift.
 type decisionFlags struct {
 	key          string
@@ -77,7 +77,7 @@ func newDecisionCmd() *cobra.Command {
 }
 
 // newDecisionResolveCmd records the answer to a posed question. `resolve` is
-// the L3 domain action for it (061 §1): "answer" names no verb the naming law
+// the L3 domain action for it (WL-SPEC-81 §1): "answer" names no verb the naming law
 // allows, and the seven canonical verbs do not express recording a decision.
 func newDecisionResolveCmd() *cobra.Command {
 	var a model.DecisionAnswer

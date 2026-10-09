@@ -47,7 +47,7 @@ Scope body.
 Model body.
 `
 
-// TestInlineDocNotesMarksPatchedSections is 025 §7.3's render: a patched
+// TestInlineDocNotesMarksPatchedSections is WL-SPEC-77 §9's render: a patched
 // section carries the marker and its notes inline, and an unpatched
 // neighbour carries neither.
 func TestInlineDocNotesMarksPatchedSections(t *testing.T) {
@@ -78,7 +78,7 @@ func TestInlineDocNotesUntouchedWithoutMarksOrNotes(t *testing.T) {
 	}
 }
 
-// TestDocDetailRenderFlagsStaleness is 025 §8.7's rendering rule on
+// TestDocDetailRenderFlagsStaleness is WL-SPEC-77 §9's rendering rule on
 // `lode doc show`: a stale document leads with a banner, a `requires` edge
 // whose target is stale says so on its own line, and a spec section covered
 // by a stale plan is named in the sections table. A current target picks up
@@ -126,7 +126,7 @@ func TestDocDetailRenderFlagsStaleness(t *testing.T) {
 	}
 }
 
-// TestDocDetailRenderWithdrawnBanner: the second status §8.7 serves
+// TestDocDetailRenderWithdrawnBanner: the second status WL-SPEC-77 §9 serves
 // differently gets its own banner, and a document in good standing gets none
 // and no COVERED BY column.
 func TestDocDetailRenderWithdrawnBanner(t *testing.T) {
