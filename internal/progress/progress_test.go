@@ -319,3 +319,22 @@ func TestDeriveWithdrawnAndStale(t *testing.T) {
 		t.Errorf("Bar = %+v, want %+v", got, want)
 	}
 }
+
+func TestDeriveSkipsInformativeSections(t *testing.T) {
+	out := Derive(Input{Specs: []Spec{
+		{Doc: 1, Ref: "WL-SPEC-1", Sections: []Section{{Anchor: "sec-not-built", Informative: true}}},
+		{Doc: 2, Ref: "WL-SPEC-2", Sections: []Section{{Anchor: "sec-not-built", Informative: true}, {Anchor: "sec-1"}}},
+	}})
+	got := map[string]string{}
+	for _, g := range out.Groups {
+		for _, s := range g.Specs {
+			got[s.Ref] = g.Key
+			if s.Ref == "WL-SPEC-2" && len(s.Sections) != 1 {
+				t.Errorf("owed sections = %d, want 1", len(s.Sections))
+			}
+		}
+	}
+	if got["WL-SPEC-1"] != "built" || got["WL-SPEC-2"] != "planning" {
+		t.Errorf("groups = %v", got)
+	}
+}
