@@ -18,9 +18,9 @@ func ProjectGraphTriples(g model.ProjectGraph) []Triple {
 		out[e.From] = append(out[e.From], e)
 		in[e.To] = append(in[e.To], e)
 	}
-	slug := map[int64]string{}
+	key := map[int64]string{}
 	for _, d := range g.Docs {
-		slug[d.ID] = d.Slug
+		key[d.ID] = DocKey(d)
 	}
 
 	var triples []Triple
@@ -31,8 +31,8 @@ func ProjectGraphTriples(g model.ProjectGraph) []Triple {
 		triples = append(triples, DocTriples(d, nil)...)
 	}
 	for _, e := range g.DocEdges {
-		from, okF := slug[e.From]
-		to, okT := slug[e.To]
+		from, okF := key[e.From]
+		to, okT := key[e.To]
 		if !okF || !okT {
 			continue
 		}
@@ -53,7 +53,7 @@ func ProjectGraphTriples(g model.ProjectGraph) []Triple {
 		triples = append(triples, Triple{S: s, P: p, O: IRIRef(o)})
 	}
 	for _, l := range g.Links {
-		to, ok := slug[l.Doc]
+		to, ok := key[l.Doc]
 		if !ok {
 			continue
 		}

@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
+
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 )
 
@@ -166,11 +168,11 @@ func evaluatePatched(in Input) []Action {
 func reviewBody(in Input) string {
 	return fmt.Sprintf(`Review %s (%s, version %d).
 
-prov:wasInformedBy wlid:event/%d
+prov:wasInformedBy %s
 
 Closing this task is the review outcome. Accepting the document is a
 separate, deliberate act — %s — which this task does not perform.`,
-		in.DocRef, in.DocIRI, in.Version, in.EventID, "`lode doc accept`")
+		in.DocRef, in.DocIRI, in.Version, iri.CURIE(iri.Event(in.EventID)), "`lode doc accept`")
 }
 
 // PlanningTitle is the title of the planning task 025 §15.4 mints when a
@@ -190,11 +192,11 @@ func PlanningBody(docIRI string, version int, eventID int64) string {
 
 Decide how to decompose this spec into plans, and write them.
 
-prov:wasInformedBy wlid:event/%d
+prov:wasInformedBy %s
 
 Claim this task (%s) before writing anything, so this session's
 tokens bill to it instead of going unattributed (025 §15.6).`,
-		docIRI, version, eventID, "`lode task claim <this task's id>`")
+		docIRI, version, iri.CURIE(iri.Event(eventID)), "`lode task claim <this task's id>`")
 }
 
 func patchBody(in Input) string {
@@ -208,9 +210,9 @@ The document stays accepted — only the patched sections are approved text
 that has changed since (025 §7.3). Review them, and decide each approval
 lane the patch reopened.
 
-prov:wasInformedBy wlid:event/%d
+prov:wasInformedBy %s
 
 The marks clear when the last reopened lane is approved; nothing here
 accepts the document again.`,
-		in.DocRef, in.DocIRI, in.Version, sections, in.EventID)
+		in.DocRef, in.DocIRI, in.Version, sections, iri.CURIE(iri.Event(in.EventID)))
 }

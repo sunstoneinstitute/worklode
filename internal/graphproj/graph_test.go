@@ -17,9 +17,9 @@ func TestProjectGraphTriples(t *testing.T) {
 		},
 		TaskEdges: []model.Edge{{From: "WL-1", To: "WL-2", Type: "blocks"}},
 		Docs: []model.Doc{
-			{ID: 10, Project: "worklode", Kind: "spec", Slug: "010-spec", Title: "Spec", Status: "accepted", Version: 1},
-			{ID: 20, Project: "worklode", Kind: "plan", Slug: "020-plan", Title: "Plan", Status: "accepted", Version: 1, GeneratedByTask: "WL-2"},
-			{ID: 30, Project: "worklode", Kind: "spec", Slug: "030-new", Title: "New", Status: "draft", Version: 1},
+			{ID: 10, Project: "worklode", Kind: "spec", Number: 10, Slug: "010-spec", Title: "Spec", Status: "accepted", Version: 1},
+			{ID: 20, Project: "worklode", Kind: "plan", Number: 20, Slug: "020-plan", Title: "Plan", Status: "accepted", Version: 1, GeneratedByTask: "WL-2"},
+			{ID: 30, Project: "worklode", Kind: "spec", Number: 30, Slug: "030-new", Title: "New", Status: "draft", Version: 1},
 		},
 		DocEdges: []model.GraphDocEdge{
 			{From: 20, To: 10, Type: "covers"},
@@ -37,10 +37,10 @@ func TestProjectGraphTriples(t *testing.T) {
 	want := []string{
 		"<" + iri.Task("WL-1") + "> <" + iri.Term("blocks") + "> <" + iri.Task("WL-2") + ">",
 		"<" + iri.Task("WL-2") + "> <" + iri.Term("dependsOn") + "> <" + iri.Task("WL-1") + ">",
-		"<" + iri.Doc("020-plan") + "> <" + iri.Term("covers") + "> <" + iri.Doc("010-spec") + ">",
-		"<" + iri.Task("WL-1") + "> <" + iri.Term("plannedIn") + "> <" + iri.Doc("020-plan") + ">",
-		"<" + iri.Task("WL-1") + "> <" + iri.Term("about") + "> <" + iri.Doc("010-spec") + ">",
-		"<" + iri.Doc("020-plan") + "> <" + ProvWasGeneratedBy + "> <" + iri.Task("WL-2") + ">",
+		"<" + iri.Doc("plan-worklode-020") + "> <" + iri.Term("covers") + "> <" + iri.Doc("spec-worklode-010") + ">",
+		"<" + iri.Task("WL-1") + "> <" + iri.Term("plannedIn") + "> <" + iri.Doc("plan-worklode-020") + ">",
+		"<" + iri.Task("WL-1") + "> <" + iri.Term("about") + "> <" + iri.Doc("spec-worklode-010") + ">",
+		"<" + iri.Doc("plan-worklode-020") + "> <" + ProvWasGeneratedBy + "> <" + iri.Task("WL-2") + ">",
 	}
 	for _, w := range want {
 		if !strings.Contains(doc, w) {

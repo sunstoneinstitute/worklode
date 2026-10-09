@@ -60,7 +60,7 @@ func TestEmitDocumentAcceptedRoundTrip(t *testing.T) {
 	if payload["wl:subject"] != "wlid:doc/spec-025" {
 		t.Fatalf("wl:subject: got %v", payload["wl:subject"])
 	}
-	if payload["prov:wasAssociatedWith"] != "wlid:actor/stig" {
+	if payload["prov:wasAssociatedWith"] != "wlid:agent/stig" {
 		t.Fatalf("prov:wasAssociatedWith: got %v", payload["prov:wasAssociatedWith"])
 	}
 	if payload["prov:atTime"] != at.Format(time.RFC3339) {

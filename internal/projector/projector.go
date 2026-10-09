@@ -4,7 +4,7 @@
 // the design documents, and both are projected read-only into the graph.
 // Tasks render into the project's own named graph; each document's canonical
 // node renders into its per-document declared graph (007 §1.1's
-// declared/<slug>, iri.DeclaredGraph), whose writer is this projector now
+// declared/<doc-key>, iri.DeclaredGraph), whose writer is this projector now
 // that the backbone is the authoring surface (WL-289). graph-server
 // exposes no SPARQL Update, so there is no per-subject patch and no
 // read-modify-write of graph state: the write unit is a whole named graph.
@@ -387,14 +387,14 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 					parsedSections[i].LastRevisedIn = versionRevisions[summary.Version][parsedSections[i].Anchor]
 				}
 				graph := graphproj.Document(graphproj.DocVersionTriples(d, version, parsedSections))
-				if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredVersionGraph(d.Slug, summary.Version), graph); err != nil {
+				if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredVersionGraph(graphproj.DocKey(d), summary.Version), graph); err != nil {
 					return fmt.Errorf("put version graph for doc %s v%d: %w", d.Slug, summary.Version, err)
 				}
 				p.m.recordDocVersionGraph()
 			}
 		}
 		triples := append(graphproj.DocTriples(d, versions), graphproj.SectionTriples(d, sections, in)...)
-		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(d.Slug), graphproj.Document(triples)); err != nil {
+		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(graphproj.DocKey(d)), graphproj.Document(triples)); err != nil {
 			return fmt.Errorf("put declared graph for doc %s: %w", d.Slug, err)
 		}
 	}
@@ -414,9 +414,9 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 		if err != nil {
 			return fmt.Errorf("list versions of tombstoned doc %s: %w", d.Slug, err)
 		}
-		graphs := []string{iri.DeclaredGraph(d.Slug)}
+		graphs := []string{iri.DeclaredGraph(graphproj.DocKey(d))}
 		for _, version := range versions {
-			graphs = append(graphs, iri.DeclaredVersionGraph(d.Slug, version.Version))
+			graphs = append(graphs, iri.DeclaredVersionGraph(graphproj.DocKey(d), version.Version))
 		}
 		for _, graph := range graphs {
 			switch err := p.gc.DeleteGraph(ctx, Branch, graph); {

@@ -1443,7 +1443,7 @@ func TestDocIRIRoundTrip(t *testing.T) {
 	}{
 		{spec, "wlid:doc/spec-p1-025"},
 		{adr, "wlid:doc/adr-p1-007"},
-		{plan, "wlid:doc/plan-p1-025-documents-in-the-backbone-2"},
+		{plan, "wlid:doc/plan-p1-001"},
 	}
 	for _, tc := range cases {
 		if got := DocIRI(*tc.doc); got != tc.want {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
+
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -300,4 +302,4 @@ func payloadStrings(v any) []string {
 }
 
 // eventIRI renders 025 §15.2's identifier for one event row.
-func eventIRI(id int64) string { return "wlid:event/" + strconv.FormatInt(id, 10) }
+func eventIRI(id int64) string { return iri.CURIE(iri.Event(id)) }

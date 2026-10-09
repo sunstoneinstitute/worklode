@@ -173,13 +173,13 @@ func TestDependsOnPath(t *testing.T) {
 // DeclaredGraph, DocVersionTriples for each version into its own
 // DeclaredVersionGraph (025 §4.1). d.Version is the last entry of versions,
 // so DocTriples emits dcat:hasCurrentVersion at it. Returns the run-unique
-// doc slug the caller builds query IRIs from.
+// doc key the caller builds query IRIs from.
 func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revisedIn map[string]int) string {
 	t.Helper()
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	slug := uniqueID(prefix)
 	d := model.Doc{
-		Slug:      slug,
+		Project:   uniqueID(prefix),
+		Number:    1,
 		Kind:      "spec",
 		Title:     "Staleness fixture",
 		Status:    "accepted",
@@ -205,13 +205,14 @@ func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revise
 		})
 	}
 
+	key := DocKey(d)
 	declared := append(DocTriples(d, summaries), SectionTriples(d, sections, nil)...)
-	graphtest.PutGraph(t, base, iri.DeclaredGraph(slug), Document(declared))
+	graphtest.PutGraph(t, base, iri.DeclaredGraph(key), Document(declared))
 	for _, v := range versions {
 		dv := model.DocVersion{Version: v, Title: d.Title, CreatedAt: ts}
-		graphtest.PutGraph(t, base, iri.DeclaredVersionGraph(slug, v), Document(DocVersionTriples(d, dv, nil)))
+		graphtest.PutGraph(t, base, iri.DeclaredVersionGraph(key, v), Document(DocVersionTriples(d, dv, nil)))
 	}
-	return slug
+	return key
 }
 
 // stalenessQuery is 025 §4.4's query shape verbatim: a claim pinned at pin

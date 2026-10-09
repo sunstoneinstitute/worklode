@@ -20,7 +20,7 @@ func TestDocTriples(t *testing.T) {
 		Version: 3, GeneratedByTask: "AL-9", CreatedAt: at, UpdatedAt: at,
 	}
 	doc := string(Document(DocTriples(d, nil)))
-	subj := "<" + iri.Doc("025-backbone") + ">"
+	subj := "<" + iri.Doc("spec-alpha-025") + ">"
 	for _, want := range []string{
 		subj + " <" + RDFType + "> <" + iri.Term("Spec") + ">",
 		subj + " <" + DCTTitle + "> \"Spec 025 — Backbone\"",
@@ -66,10 +66,10 @@ func TestDocTriples(t *testing.T) {
 	}
 	doc = string(Document(DocTriples(d, versions)))
 	for _, want := range []string{
-		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("025-backbone", 1) + ">",
-		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("025-backbone", 2) + ">",
-		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("025-backbone", 3) + ">",
-		subj + " <" + DCATHasCurrentVersion + "> <" + iri.DocVersion("025-backbone", 3) + ">",
+		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("spec-alpha-025", 1) + ">",
+		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("spec-alpha-025", 2) + ">",
+		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("spec-alpha-025", 3) + ">",
+		subj + " <" + DCATHasCurrentVersion + "> <" + iri.DocVersion("spec-alpha-025", 3) + ">",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("doc projection missing %q\n%s", want, doc)
@@ -83,19 +83,19 @@ func TestDocTriples(t *testing.T) {
 // dct:issued, and one wl:Section node per parsed section pointing dct:isPartOf
 // at the snapshot rather than the canonical document.
 func TestDocVersionTriples(t *testing.T) {
-	d := model.Doc{Slug: "025-backbone", Kind: "spec", Status: "accepted"}
+	d := model.Doc{Slug: "025-backbone", Kind: "spec", Project: "alpha", Number: 25, Status: "accepted"}
 	v := model.DocVersion{Version: 3, Title: "Spec 025 — Backbone",
 		Issued: "2026-07-26", CreatedAt: time.Date(2026, 7, 26, 9, 0, 0, 0, time.UTC)}
 	secs := []model.DocSection{{Anchor: "sec-1", Heading: "Why"}}
 	doc := string(Document(DocVersionTriples(d, v, secs)))
-	subj := "<" + iri.DocVersion("025-backbone", 3) + ">"
+	subj := "<" + iri.DocVersion("spec-alpha-025", 3) + ">"
 	for _, want := range []string{
 		subj + " <" + RDFType + "> <" + iri.Term("Spec") + ">",
 		subj + " <" + DCATVersion + "> \"3\"",
-		subj + " <" + DCATPreviousVersion + "> <" + iri.DocVersion("025-backbone", 2) + ">",
-		subj + " <" + ProvWasRevisionOf + "> <" + iri.DocVersion("025-backbone", 2) + ">",
+		subj + " <" + DCATPreviousVersion + "> <" + iri.DocVersion("spec-alpha-025", 2) + ">",
+		subj + " <" + ProvWasRevisionOf + "> <" + iri.DocVersion("spec-alpha-025", 2) + ">",
 		subj + " <" + DCTIssued + "> \"2026-07-26\"^^<" + XSDDate + ">",
-		"<" + iri.Section("025-backbone", "sec-1") + "> <" + DCTIsPartOf + "> " + subj,
+		"<" + iri.Section("spec-alpha-025", "sec-1") + "> <" + DCTIsPartOf + "> " + subj,
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("version projection missing %q\n%s", want, doc)
@@ -108,7 +108,7 @@ func TestDocVersionTriples(t *testing.T) {
 	v = model.DocVersion{Version: 1, Title: "Spec 025 — Backbone",
 		CreatedAt: time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)}
 	doc = string(Document(DocVersionTriples(d, v, nil)))
-	subj1 := "<" + iri.DocVersion("025-backbone", 1) + ">"
+	subj1 := "<" + iri.DocVersion("spec-alpha-025", 1) + ">"
 	if strings.Contains(doc, DCATPreviousVersion) {
 		t.Errorf("previousVersion emitted for version 1:\n%s", doc)
 	}
@@ -129,7 +129,7 @@ func TestDocVersionTriples(t *testing.T) {
 // per published section, and the derived supersession the document store keeps
 // as a query rather than a column (025 §6.2).
 func TestSectionTriples(t *testing.T) {
-	d := model.Doc{Slug: "025-backbone", Kind: "spec", Status: "accepted"}
+	d := model.Doc{Slug: "025-backbone", Kind: "spec", Project: "alpha", Number: 25, Status: "accepted"}
 	sections := []model.DocSection{
 		{Anchor: "sec-1", Heading: "Scope", Published: true, LastRevisedIn: 2},
 		{Anchor: "sec-2", Heading: "Retired", Published: true},
@@ -138,7 +138,7 @@ func TestSectionTriples(t *testing.T) {
 	}
 	in := []model.DocEdge{
 		// sec-2 was replaced by a section that resolves to a document here.
-		{Type: "isReplacedBy", FromAnchor: "sec-2", ToSlug: "040-successor", ToAnchor: "sec-7"},
+		{Type: "isReplacedBy", FromAnchor: "sec-2", ToSlug: "040-successor", ToKind: "spec", ToProject: "alpha", ToNumber: 40, ToAnchor: "sec-7"},
 		// sec-3 was replaced by something that resolves to no section.
 		{Type: "isReplacedBy", FromAnchor: "sec-3"},
 		// An unrelated inbound edge type must not supersede anything.
@@ -146,22 +146,22 @@ func TestSectionTriples(t *testing.T) {
 	}
 	doc := string(Document(SectionTriples(d, sections, in)))
 
-	sec1 := "<" + iri.Section("025-backbone", "sec-1") + ">"
-	sec2 := "<" + iri.Section("025-backbone", "sec-2") + ">"
-	sec3 := "<" + iri.Section("025-backbone", "sec-3") + ">"
+	sec1 := "<" + iri.Section("spec-alpha-025", "sec-1") + ">"
+	sec2 := "<" + iri.Section("spec-alpha-025", "sec-2") + ">"
+	sec3 := "<" + iri.Section("spec-alpha-025", "sec-3") + ">"
 	for _, want := range []string{
 		sec1 + " <" + RDFType + "> <" + iri.Term("Section") + ">",
 		sec1 + " <" + DCTTitle + "> \"Scope\"",
-		sec1 + " <" + DCTIsPartOf + "> <" + iri.Doc("025-backbone") + ">",
+		sec1 + " <" + DCTIsPartOf + "> <" + iri.Doc("spec-alpha-025") + ">",
 		// A live section carries its document's status, not a superseded one.
 		sec1 + " <" + iri.Term("status") + "> <" + iri.Concept("accepted") + ">",
 		sec2 + " <" + iri.Term("status") + "> <" + iri.Concept("superseded") + ">",
-		sec2 + " <" + DCTIsReplacedBy + "> <" + iri.Section("040-successor", "sec-7") + ">",
+		sec2 + " <" + DCTIsReplacedBy + "> <" + iri.Section("spec-alpha-040", "sec-7") + ">",
 		// Superseded with no nameable successor: status, and no dangling edge.
 		sec3 + " <" + iri.Term("status") + "> <" + iri.Concept("superseded") + ">",
 		// sec-1 was last revised in version 2: wl:lastRevisedIn names that
 		// snapshot.
-		sec1 + " <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("025-backbone", 2) + ">",
+		sec1 + " <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-025", 2) + ">",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("section projection missing %q\n%s", want, doc)
@@ -170,7 +170,7 @@ func TestSectionTriples(t *testing.T) {
 	if strings.Contains(doc, sec3+" <"+DCTIsReplacedBy+">") {
 		t.Errorf("sec-3 has no successor to name, but an isReplacedBy was emitted:\n%s", doc)
 	}
-	if strings.Contains(doc, iri.Section("025-backbone", "sec-4")) {
+	if strings.Contains(doc, iri.Section("spec-alpha-025", "sec-4")) {
 		t.Errorf("unpublished section projected, so its anchor could still change:\n%s", doc)
 	}
 	// sec-2 and sec-3 have LastRevisedIn: 0 (unset): no lastRevisedIn triple,

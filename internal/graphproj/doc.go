@@ -54,12 +54,16 @@ func docClass(kind string) string {
 // snapshot graphs to point at), which keeps a draft's projection
 // byte-identical to before this pointer machinery existed. Non-nil, each
 // entry gets a dcat:hasVersion edge to its snapshot node
-// (iri.DocVersion(d.Slug, v.Version)), plus one dcat:hasCurrentVersion naming
+// (iri.DocVersion(DocKey(d), v.Version)), plus one dcat:hasCurrentVersion naming
 // d.Version's snapshot (025 §4.1). Sections are separate subjects and have
-// their own projection, SectionTriples. Subject-complete for iri.Doc(d.Slug),
+// their own projection, SectionTriples. Subject-complete for iri.Doc(DocKey(d)),
 // like TaskTriples.
+// DocKey is d's document key (WL-SPEC-79 §10.2), the one identity every
+// document, section, version and declared-graph IRI is built on.
+func DocKey(d model.Doc) string { return iri.DocKey(d.Kind, d.Project, d.Number) }
+
 func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
-	subj := iri.Doc(d.Slug)
+	subj := iri.Doc(DocKey(d))
 	triples := []Triple{
 		{S: subj, P: RDFType, O: IRIRef(iri.Term(docClass(d.Kind)))},
 		{S: subj, P: DCTTitle, O: Text(d.Title)},
@@ -72,19 +76,19 @@ func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
 		triples = append(triples, Triple{S: subj, P: ProvWasGeneratedBy, O: IRIRef(iri.Task(d.GeneratedByTask))})
 	}
 	for _, v := range versions {
-		triples = append(triples, Triple{S: subj, P: DCATHasVersion, O: IRIRef(iri.DocVersion(d.Slug, v.Version))})
+		triples = append(triples, Triple{S: subj, P: DCATHasVersion, O: IRIRef(iri.DocVersion(DocKey(d), v.Version))})
 	}
 	if len(versions) > 0 {
-		triples = append(triples, Triple{S: subj, P: DCATHasCurrentVersion, O: IRIRef(iri.DocVersion(d.Slug, d.Version))})
+		triples = append(triples, Triple{S: subj, P: DCATHasCurrentVersion, O: IRIRef(iri.DocVersion(DocKey(d), d.Version))})
 	}
 	return triples
 }
 
 // DocVersionTriples projects one immutable document version into the
-// snapshot graph of 025 §4.1: the version's own node — iri.DocVersion(d.Slug,
+// snapshot graph of 025 §4.1: the version's own node — iri.DocVersion(DocKey(d),
 // v.Version) — plus one wl:Section node per entry in sections, the parsed
 // content of that version's body. Section IRIs are version-free
-// (iri.Section(d.Slug, anchor): the anchor is the identity, and the graph a
+// (iri.Section(DocKey(d), anchor): the anchor is the identity, and the graph a
 // caller loads them from already carries the version), but each section's
 // dct:isPartOf names the snapshot node, not the canonical document — that is
 // what makes this projection distinct from SectionTriples, which targets the
@@ -95,7 +99,7 @@ func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
 // document-level prov:wasGeneratedBy on the canonical node (DocTriples)
 // already carries authorship.
 func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSection) []Triple {
-	subj := iri.DocVersion(d.Slug, v.Version)
+	subj := iri.DocVersion(DocKey(d), v.Version)
 	triples := []Triple{
 		{S: subj, P: RDFType, O: IRIRef(iri.Term(docClass(d.Kind)))},
 		{S: subj, P: DCTTitle, O: Text(v.Title)},
@@ -103,7 +107,7 @@ func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSect
 		{S: subj, P: DCTCreated, O: Typed(v.CreatedAt.UTC().Format(time.RFC3339), XSDDateTime)},
 	}
 	if v.Version > 1 {
-		prev := iri.DocVersion(d.Slug, v.Version-1)
+		prev := iri.DocVersion(DocKey(d), v.Version-1)
 		triples = append(triples,
 			Triple{S: subj, P: DCATPreviousVersion, O: IRIRef(prev)},
 			Triple{S: subj, P: ProvWasRevisionOf, O: IRIRef(prev)},
@@ -113,14 +117,14 @@ func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSect
 		triples = append(triples, Triple{S: subj, P: DCTIssued, O: Typed(v.Issued, XSDDate)})
 	}
 	for _, sec := range sections {
-		secSubj := iri.Section(d.Slug, sec.Anchor)
+		secSubj := iri.Section(DocKey(d), sec.Anchor)
 		triples = append(triples,
 			Triple{S: secSubj, P: RDFType, O: IRIRef(iri.Term("Section"))},
 			Triple{S: secSubj, P: DCTTitle, O: Text(sec.Heading)},
 			Triple{S: secSubj, P: DCTIsPartOf, O: IRIRef(subj)},
 		)
 		if sec.LastRevisedIn > 0 {
-			triples = append(triples, Triple{S: secSubj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(d.Slug, sec.LastRevisedIn))})
+			triples = append(triples, Triple{S: secSubj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(DocKey(d), sec.LastRevisedIn))})
 		}
 	}
 	return triples
@@ -128,7 +132,7 @@ func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSect
 
 // SectionTriples projects one document's sections as wl:Section nodes in that
 // document's own declared graph (025 §3.3). Each section is its own subject —
-// iri.Section(slug, anchor) — so this is deliberately not part of DocTriples,
+// iri.Section(key, anchor) — so this is deliberately not part of DocTriples,
 // which stays subject-complete for the document node.
 //
 // Only published sections are projected. An unpublished section belongs to a
@@ -158,8 +162,8 @@ func SectionTriples(d model.Doc, sections []model.DocSection, in []model.DocEdge
 			continue
 		}
 		successor := ""
-		if e.ToSlug != "" && e.ToAnchor != "" {
-			successor = iri.Section(e.ToSlug, e.ToAnchor)
+		if e.ToKind != "" && e.ToAnchor != "" {
+			successor = iri.Section(iri.DocKey(e.ToKind, e.ToProject, e.ToNumber), e.ToAnchor)
 		}
 		// A later successor never unsets an earlier one: a section replaced by
 		// something nameable stays pointed at it.
@@ -173,7 +177,7 @@ func SectionTriples(d model.Doc, sections []model.DocSection, in []model.DocEdge
 		if !sec.Published {
 			continue
 		}
-		subj := iri.Section(d.Slug, sec.Anchor)
+		subj := iri.Section(DocKey(d), sec.Anchor)
 		status := d.Status
 		successor, replaced := replacedBy[sec.Anchor]
 		if replaced {
@@ -182,17 +186,17 @@ func SectionTriples(d model.Doc, sections []model.DocSection, in []model.DocEdge
 		triples = append(triples,
 			Triple{S: subj, P: RDFType, O: IRIRef(iri.Term("Section"))},
 			Triple{S: subj, P: DCTTitle, O: Text(sec.Heading)},
-			Triple{S: subj, P: DCTIsPartOf, O: IRIRef(iri.Doc(d.Slug))},
+			Triple{S: subj, P: DCTIsPartOf, O: IRIRef(iri.Doc(DocKey(d)))},
 			Triple{S: subj, P: iri.Term("status"), O: IRIRef(iri.Concept(status))},
 		)
 		if successor != "" {
 			triples = append(triples, Triple{S: subj, P: DCTIsReplacedBy, O: IRIRef(successor)})
 		}
-		// LastRevisedIn is 0 when unset; iri.DocVersion(d.Slug, 0) would point
+		// LastRevisedIn is 0 when unset; iri.DocVersion(DocKey(d), 0) would point
 		// at a "v0" snapshot that never exists, so the edge is only emitted
 		// once a real version has revised the section.
 		if sec.LastRevisedIn > 0 {
-			triples = append(triples, Triple{S: subj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(d.Slug, sec.LastRevisedIn))})
+			triples = append(triples, Triple{S: subj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(DocKey(d), sec.LastRevisedIn))})
 		}
 	}
 	return triples

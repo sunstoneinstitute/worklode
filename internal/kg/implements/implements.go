@@ -85,22 +85,22 @@ func Parse(data []byte) (*File, error) {
 	}
 	for i := range f.Implements {
 		e := &f.Implements[i]
-		docSlug, anchor, err := sectionDoc(expand(e.Section))
+		docKey, anchor, err := sectionDoc(expand(e.Section))
 		if err != nil {
 			return nil, fmt.Errorf("implements entry %d: %w", i, err)
 		}
-		pinSlug, version, err := pinnedDoc(expand(e.Pinned))
+		pinKey, version, err := pinnedDoc(expand(e.Pinned))
 		if err != nil {
 			return nil, fmt.Errorf("implements entry %d: %w", i, err)
 		}
 		// Re-mint from the validated parts rather than keep the input
 		// string, so the stored form is whatever internal/kg/iri says the
 		// grammar is even if the two ever diverge.
-		e.Section = iri.Section(docSlug, anchor)
-		e.Pinned = iri.DocVersion(pinSlug, version)
-		if pinSlug != docSlug {
+		e.Section = iri.Section(docKey, anchor)
+		e.Pinned = iri.DocVersion(pinKey, version)
+		if pinKey != docKey {
 			return nil, fmt.Errorf("implements entry %d: pinned %q names doc %q, but the section belongs to %q",
-				i, e.Pinned, pinSlug, docSlug)
+				i, e.Pinned, pinKey, docKey)
 		}
 		if len(e.By) == 0 {
 			return nil, fmt.Errorf("implements entry %d: by needs at least one path", i)
@@ -129,19 +129,19 @@ func expand(v string) string {
 	return strings.TrimSpace(v)
 }
 
-// sectionDoc validates a section IRI — id/section/<doc-slug>/<anchor> — and
+// sectionDoc validates a section IRI — id/section/<doc-key>/<anchor> — and
 // returns its doc slug and anchor.
-func sectionDoc(ref string) (docSlug, anchor string, err error) {
+func sectionDoc(ref string) (docKey, anchor string, err error) {
 	rest, ok := strings.CutPrefix(ref, sectionPrefix)
 	if !ok {
 		return "", "", fmt.Errorf("section %q is not a %s IRI", ref, sectionPrefix)
 	}
 	slug, anchor, ok := strings.Cut(rest, "/")
 	if !ok || strings.Contains(anchor, "/") {
-		return "", "", fmt.Errorf("section %q is not id/section/<doc-slug>/<anchor>", ref)
+		return "", "", fmt.Errorf("section %q is not id/section/<doc-key>/<anchor>", ref)
 	}
 	if !slugRE.MatchString(slug) {
-		return "", "", fmt.Errorf("section %q: doc slug %q does not match the slug grammar", ref, slug)
+		return "", "", fmt.Errorf("section %q: doc key %q does not match the doc-key grammar", ref, slug)
 	}
 	if !designdoc.ValidAnchor(anchor) {
 		return "", "", fmt.Errorf("section %q: anchor %q does not match the sec- grammar", ref, anchor)
@@ -149,19 +149,19 @@ func sectionDoc(ref string) (docSlug, anchor string, err error) {
 	return slug, anchor, nil
 }
 
-// pinnedDoc validates a versioned doc IRI — id/doc/<slug>/v<n> (025 §4) —
+// pinnedDoc validates a versioned doc IRI — id/doc/<doc-key>/v<n> (025 §4) —
 // and returns its doc slug and version number.
-func pinnedDoc(ref string) (docSlug string, version int, err error) {
+func pinnedDoc(ref string) (docKey string, version int, err error) {
 	rest, ok := strings.CutPrefix(ref, docPrefix)
 	if !ok {
 		return "", 0, fmt.Errorf("pinned %q is not a %s IRI", ref, docPrefix)
 	}
 	slug, v, ok := strings.Cut(rest, "/")
 	if !ok || !versionRE.MatchString(v) {
-		return "", 0, fmt.Errorf("pinned %q is not id/doc/<slug>/v<n>", ref)
+		return "", 0, fmt.Errorf("pinned %q is not id/doc/<doc-key>/v<n>", ref)
 	}
 	if !slugRE.MatchString(slug) {
-		return "", 0, fmt.Errorf("pinned %q: doc slug %q does not match the slug grammar", ref, slug)
+		return "", 0, fmt.Errorf("pinned %q: doc key %q does not match the doc-key grammar", ref, slug)
 	}
 	// versionRE has held v to v[1-9][0-9]*, so Atoi can only fail on overflow.
 	n, err := strconv.Atoi(strings.TrimPrefix(v, "v"))
