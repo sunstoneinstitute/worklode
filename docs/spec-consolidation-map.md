@@ -28,6 +28,12 @@ What has not happened:
 - `docs/specs2/` (11 files, README, section-map, ttl/) is stale against the backbone (file-to-backbone similarity 0.48–0.94) and still committed.
 - Old spec numbers are cited in code comments across `internal/` (hundreds of hits) and in `docs/follow-ups.md`.
 
+## 0a. Result (2026-10-09)
+
+Done in this run: 13 targets rewritten against code and accepted (86 stays a draft); 25 orphan and 4 residue rules superseded; plans 53, 122, 133, 135 revised, plans 6, 9, 54, 55, 56, 72, 84 deleted, plans 132–139 re-pointed to 84/85; tasks WL-468/758/770/771/772/801 abandoned, WL-861/874/951/964 re-targeted; old specs 1, 4, 25, 32, 40, 42, 53, 59, 61, 67 withdrawn (63 was already superseded), 36 draft specs and 9 ADRs deleted; `docs/specs2/` removed and guides repointed (commit 8956e69f). Owner decisions are in `docs/spec-consolidation-questions.md`.
+
+Left open, each with an owner: code comments citing old specs (chore A1), 18 plans now `stale` (owner: leave), WL-SPEC-83's open candidate revision blocks its §15.4→§3 fix, approvals 741–744 to re-request in the web UI (H9), WL-SPEC-86 untouched (K7).
+
 ## 1. Inventory
 
 | Where | What | Count | Status |

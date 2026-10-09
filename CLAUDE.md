@@ -16,7 +16,7 @@ subcommand shims (hook, statusline, serve, watch, migrate) were removed
 after the first split release shipped (WL-SPEC-73 §3.4, WL-319).
 
 **Design documents live in the backbone, not in this tree (WL-SPEC-77).**
-Specs, ADRs and plans are rows in Postgres, read and written through `lode
+Specs and plans are rows in Postgres, read and written through `lode
 doc`. `docs/specs.md` is the map of the fifteen specs; `lode show WL-SPEC-75`
 starts you on the execution backbone. `lode search <query>` ranks documents,
 tasks and skills together when you know what you are looking for but not where
@@ -231,9 +231,11 @@ one `store.ProjectProgress` read, recomputed per request and never stored, and
 `internal/api/progress.go`, `internal/ui/progress.templ` and `lode doc
 progress` are the three readers of it.
 
-The backbone (this repo, Postgres) owns execution facts and — design-document artifacts; derived architecture facts and the
-queryable view of both belong to the data-platform knowledge graph (WL-SPEC-79), which receives documents by projection. No fact has two owners —
-keep new state on the right side of that split.
+The backbone (this repo, Postgres) owns execution facts and design-document
+artifacts; derived architecture facts and the queryable view of both belong to
+the data-platform knowledge graph (WL-SPEC-79), which receives documents by
+projection. No fact has two owners — keep new state on the right side of that
+split.
 
 ## Conventions
 
