@@ -115,7 +115,7 @@ var showOrdinalShape = map[string]*regexp.Regexp{
 
 func newShowCmd() *cobra.Command {
 	var kind, taskFlag, specFlag, planFlag, milestoneFlag, projectFlag, deliverableFlag, section string
-	var pager, inline, usage bool
+	var pager, inline, usage, closure bool
 	var version int
 	cmd := &cobra.Command{
 		Use:               "show [id]",
@@ -178,6 +178,13 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 				return errors.New("--version applies only to rules")
 			}
 
+			if closure {
+				if versionSet || len(args) != 1 || nChanged > 0 || classify(args[0]).Kind != targetRule {
+					return errors.New("--closure applies only to rules, by ref and at their current version")
+				}
+				return runRuleClosure(cmd, args[0])
+			}
+
 			switch {
 			case kindSet:
 				if !slices.Contains(showKinds, kind) {
@@ -214,6 +221,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or rule: fold every effective amendment and supersession into the section or rule it acts on; ignored for tasks and projects")
 	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
 	cmd.Flags().IntVar(&version, "version", 0, "show one version of a rule (WL-REQ-<n>)")
+	cmd.Flags().BoolVar(&closure, "closure", false, "for a rule: list it with every rule reachable over refines and needs")
 	// --project is the only way to reach a project through show: a positional
 	// slug classifies as a document (classify, above), so the project
 	// candidates belong on the flag rather than in the positional's union.
@@ -405,6 +413,24 @@ func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline
 		return err
 	}
 	cli.RuleAmendmentsRender(cmd.OutOrStdout(), blocks, pending)
+	return nil
+}
+
+// runRuleClosure renders a rule's context closure (WL-SPEC-77 §4c).
+func runRuleClosure(cmd *cobra.Command, ref string) error {
+	c, err := newAPIClient()
+	if err != nil {
+		return err
+	}
+	closure, raw, err := c.GetRuleClosure(cmd.Context(), ref)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.RuleClosureTable(cmd.OutOrStdout(), closure)
 	return nil
 }
 
