@@ -25,6 +25,7 @@ func TestPlanState(t *testing.T) {
 		{"accepted, active only", "accepted", []Task{active}, "in_progress"},
 		{"accepted, none moved", "accepted", []Task{unstarted, unstarted}, "not_started"},
 		{"accepted, no tasks", "accepted", nil, "no_record"},
+		{"stale counts as accepted", "stale", []Task{landed, unstarted}, "in_progress"},
 		{"abandoned ignored", "accepted", []Task{landed, {State: "abandoned"}}, "built"},
 		{"only abandoned is no record", "accepted", []Task{{State: "abandoned"}}, "no_record"},
 	}
@@ -300,5 +301,21 @@ func TestDeriveSort(t *testing.T) {
 	want := []string{"B", "C", "A"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("group order = %v, want %v", got, want)
+	}
+}
+
+// TestDeriveWithdrawnAndStale: a withdrawn plan covers nothing; a stale plan
+// counts as accepted (WL-SPEC-85 §2).
+func TestDeriveWithdrawnAndStale(t *testing.T) {
+	in := Input{
+		Specs: []Spec{{Doc: 1, Ref: "WL-SPEC-1", Sections: []Section{{Anchor: "a"}, {Anchor: "b"}}}},
+		Plans: []Plan{
+			{Doc: 1, Ref: "WL-PLAN-1", Status: "withdrawn", Tasks: []Task{{State: "merged"}}, Covers: []Cover{{Spec: 1, Anchor: "a"}}},
+			{Doc: 2, Ref: "WL-PLAN-2", Status: "stale", Tasks: []Task{{State: "merged"}}, Covers: []Cover{{Spec: 1, Anchor: "b"}}},
+		},
+	}
+	want := []model.ProgressSlice{{State: "built", Count: 1}, {State: "unplanned", Count: 1}}
+	if got := Derive(in).Bar; !reflect.DeepEqual(got, want) {
+		t.Errorf("Bar = %+v, want %+v", got, want)
 	}
 }

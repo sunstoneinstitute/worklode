@@ -593,3 +593,20 @@ func TestProjectProgressQueryFootprint(t *testing.T) {
 		}
 	}
 }
+
+// TestProjectProgressSkipsWithdrawnPlans: a withdrawn plan is not read.
+func TestProjectProgressSkipsWithdrawnPlans(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	_, planID, _ := seedProgressCorpus(t, s)
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET status = 'withdrawn' WHERE id = $1`, planID); err != nil {
+		t.Fatalf("withdraw plan: %v", err)
+	}
+	in, err := s.ProjectProgress(t.Context(), "p1", nil)
+	if err != nil {
+		t.Fatalf("ProjectProgress: %v", err)
+	}
+	if len(in.Plans) != 0 {
+		t.Errorf("got %d plans, want 0", len(in.Plans))
+	}
+}
