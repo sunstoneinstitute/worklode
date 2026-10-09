@@ -657,6 +657,24 @@ func TestTodoSupersededRequirementDoesNotBlock(t *testing.T) {
 	})
 }
 
+// A spent requirement is done, so it blocks nothing.
+func TestTodoSpentRequirementDoesNotBlock(t *testing.T) {
+	docs := buildTodoCorpus(t,
+		map[string]string{"001-example.md": twoSectionSpec},
+		map[string]string{
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n" +
+				"requires:\n  - b.md\n---\n# A\n\nBody.\n",
+			"b.md": "---\nstatus: spent\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
+		})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1")})})
+	if err != nil {
+		t.Fatalf("Todo: %v", err)
+	}
+	checkItems(t, items, []string{
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1",
+	})
+}
+
 // A requirement this corpus does not hold cannot be judged, and an unjudgeable
 // requirement is not a blocker.
 func TestTodoRequirementOutsideCorpusDoesNotBlock(t *testing.T) {
