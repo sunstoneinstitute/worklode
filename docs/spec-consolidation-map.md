@@ -209,9 +209,10 @@ Full S1–S64 table: scratchpad `audit-rule-model.md` (attach to the T5/T15 brie
 | Code | Action | Source |
 |---|---|---|
 | A1 | chore: code comments citing old spec numbers (`WL-SPEC-66 §…`, `025 §7.3`, `ADR 036 §2`) point at the successor sections | X7, C-prog-2, K3 |
-| A2 | bug: gate push path lacks the `Worklode-Task:` body fallback | C-gate-2 |
-| A3 | bug: `lode doctor` does not check the PR requirement 72 §3 promises | C-gate-2 |
-| A4 | chore: configure the `[gate]` guarded-path table for this repo, or drop the claim from 72 | C-gate-1 |
+| A2 | downgraded to question H3: push has no PR body; the PR-body fallback is built | T15 |
+| A3 | filed as [WL-948](https://worklode.dev.sunstoneinstitute.ai/WL-948) | C-gate-2 |
+| A4 | question H2 (owner); 72 now reads as opt-in | C-gate-1 |
+| A12 | filed as [WL-949](https://worklode.dev.sunstoneinstitute.ai/WL-949): gate idempotency key qualifier; pr-checks docs-only comment | T15 |
 | A5 | chore: delete orphan rule WL-REQ-370 | C-drift-1 |
 | A6 | design: plan 77 §18–19 rule editing commands, if kept | C-rule-4 |
 | A7 | abandon WL-468, 758, 770, 771, 772 | X5 |
