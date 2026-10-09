@@ -16,12 +16,30 @@ import (
 // old and amends runs amending -> amended; their inverses (supersededBy,
 // amendedBy) are read from the far end and never stored.
 var ruleEdgeTypes = map[string]bool{
-	"refines": true, "constrains": true, "conflictsWith": true, "references": true,
+	"refines": true, "needs": true, "constrains": true, "conflictsWith": true, "references": true,
 	"amends": true, "supersedes": true, "wasDerivedFrom": true,
 }
 
 // ruleEdgeTypesList names every recognized type, for error messages.
-const ruleEdgeTypesList = "refines, constrains, conflictsWith, references, amends, supersedes, wasDerivedFrom"
+const ruleEdgeTypesList = "refines, needs, constrains, conflictsWith, references, amends, supersedes, wasDerivedFrom"
+
+// ruleEdgeInverses maps each inferred inverse to its declared term. A write
+// naming an inverse is refused, naming the declared term (WL-SPEC-77 §8.1).
+var ruleEdgeInverses = map[string]string{
+	"refinedBy": "refines", "neededBy": "needs", "referencedBy": "references",
+	"supersededBy": "supersedes", "amendedBy": "amends",
+}
+
+// checkRuleEdgeType refuses a type that is not a stored rule edge type.
+func checkRuleEdgeType(typ string) error {
+	if declared, ok := ruleEdgeInverses[typ]; ok {
+		return fmt.Errorf("%s is inferred and never stored; write %s from the other rule: %w", typ, declared, ErrInvalidInput)
+	}
+	if !ruleEdgeTypes[typ] {
+		return fmt.Errorf("edge type %q is not one of %s: %w", typ, ruleEdgeTypesList, ErrInvalidInput)
+	}
+	return nil
+}
 
 // LinkRules writes a manual edge.
 // A second identical edge is ErrEdgeExists, and so is a conflictsWith edge
@@ -30,8 +48,8 @@ const ruleEdgeTypesList = "refines, constrains, conflictsWith, references, amend
 // ErrInvalidInput; an unknown rule id is ErrNotFound. supersedes has one
 // writer, lode rule supersede (S22, R4): LinkRules refuses it.
 func LinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
-	if !ruleEdgeTypes[typ] {
-		return fmt.Errorf("edge type %q is not one of %s: %w", typ, ruleEdgeTypesList, ErrInvalidInput)
+	if err := checkRuleEdgeType(typ); err != nil {
+		return err
 	}
 	if typ == "supersedes" {
 		return fmt.Errorf("supersedes edges are written by lode rule supersede, not rule link: %w", ErrInvalidInput)
@@ -59,8 +77,8 @@ func LinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 // only by a later refactor. A conflictsWith edge is removed whichever
 // direction it was stored in.
 func UnlinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
-	if !ruleEdgeTypes[typ] {
-		return fmt.Errorf("edge type %q is not one of %s: %w", typ, ruleEdgeTypesList, ErrInvalidInput)
+	if err := checkRuleEdgeType(typ); err != nil {
+		return err
 	}
 	var source string
 	err := tx.QueryRow(`SELECT from_rule, to_rule, source FROM rule_edges

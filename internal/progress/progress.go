@@ -49,9 +49,10 @@ type Section struct {
 	Anchor  string
 	Heading string
 	Depth   int
-	// Informative is true when the section has rules and all are informative.
-	// Such a section is not owed (WL-SPEC-85 §2).
-	Informative bool
+	// NotOwed is true when the section has rules and none is of a covered
+	// kind (requirement, catalogue). Such a section is not owed (WL-SPEC-85 §2,
+	// WL-SPEC-77 §4).
+	NotOwed bool
 }
 
 // Plan is one plan document: its covers edges, its requires list, and every
@@ -227,7 +228,7 @@ func Derive(in Input) model.ProjectProgress {
 		var sawActive, sawPlanning, sawNoRecord bool
 		unplannedCount := 0
 		for _, sec := range spec.Sections {
-			if sec.Informative {
+			if sec.NotOwed {
 				continue
 			}
 			covers := coversByAnchor[sec.Anchor]

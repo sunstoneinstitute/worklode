@@ -657,13 +657,13 @@ func SetRuleMeta(tx *sql.Tx, ruleID int64, in model.RuleMetaInput) error {
 		return fmt.Errorf("rule kind %q: must be one of %s: %w",
 			*in.Kind, strings.Join(ns.Schemes["RuleKind"], ", "), ErrInvalidInput)
 	}
-	if in.Kind != nil && *in.Kind != designdoc.RuleKindRequirement {
+	if in.Kind != nil && !designdoc.RuleKindCovered(*in.Kind) {
 		plans, err := acceptedPlansCovering(tx, []int64{ruleID})
 		if err != nil {
 			return err
 		}
 		if len(plans) > 0 {
-			return fmt.Errorf("%s is covered by an accepted plan and stays a requirement (WL-SPEC-77 §4): %w",
+			return fmt.Errorf("%s is covered by an accepted plan and stays a requirement or catalogue (WL-SPEC-77 §4): %w",
 				ruleRefOf(tx, ruleID), ErrRuleCovered)
 		}
 	}
@@ -684,8 +684,8 @@ func SetRuleMeta(tx *sql.Tx, ruleID int64, in model.RuleMetaInput) error {
 // ruleRefSQL is designdoc.FormatRuleRef as a SQL expression over a projects
 // alias p and a rules alias r, for queries that build the ref in the row.
 func ruleRefSQL(p, r string) string {
-	return p + `.key || CASE ` + r + `.kind WHEN '` + designdoc.RuleKindRequirement +
-		`' THEN '-REQ-' ELSE '-RULE-' END || ` + r + `.number`
+	return p + `.key || CASE WHEN ` + r + `.kind IN ('` + designdoc.RuleKindRequirement + `', '` +
+		designdoc.RuleKindCatalogue + `') THEN '-REQ-' ELSE '-RULE-' END || ` + r + `.number`
 }
 
 // ruleRefOf is a rule's printed ref by row id, for an error message; the

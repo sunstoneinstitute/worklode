@@ -7,7 +7,7 @@ import "time"
 // wrote, "derived" for a references edge the store read out of the rule
 // text, and "refactor" for a supersedes edge lode rule supersede wrote.
 type RuleEdge struct {
-	Type        string    `json:"type"` // refines | constrains | conflictsWith | references | amends | supersedes | wasDerivedFrom
+	Type        string    `json:"type"` // refines | needs | constrains | conflictsWith | references | amends | supersedes | wasDerivedFrom
 	From        string    `json:"from"`
 	FromHeading string    `json:"from_heading"`
 	To          string    `json:"to"`

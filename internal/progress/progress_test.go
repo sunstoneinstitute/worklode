@@ -322,8 +322,8 @@ func TestDeriveWithdrawnAndStale(t *testing.T) {
 
 func TestDeriveSkipsInformativeSections(t *testing.T) {
 	out := Derive(Input{Specs: []Spec{
-		{Doc: 1, Ref: "WL-SPEC-1", Sections: []Section{{Anchor: "sec-not-built", Informative: true}}},
-		{Doc: 2, Ref: "WL-SPEC-2", Sections: []Section{{Anchor: "sec-not-built", Informative: true}, {Anchor: "sec-1"}}},
+		{Doc: 1, Ref: "WL-SPEC-1", Sections: []Section{{Anchor: "sec-not-built", NotOwed: true}}},
+		{Doc: 2, Ref: "WL-SPEC-2", Sections: []Section{{Anchor: "sec-not-built", NotOwed: true}, {Anchor: "sec-1"}}},
 	}})
 	got := map[string]string{}
 	for _, g := range out.Groups {
