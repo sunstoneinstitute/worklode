@@ -400,6 +400,7 @@ var routeGuards = map[string]routeGuard{
 	// --- projects, actors, tokens -------------------------------------------
 	"GET /api/v1/projects":                    guardedAny(permProjectRead),
 	"GET /api/v1/projects/resolve":            guardedAny(permProjectRead),
+	"GET /api/v1/repos/branch-rules":          guardedAny(permProjectRead),
 	"GET /api/v1/projects/{id}":               guardedAny(permProjectRead),
 	"GET /api/v1/projects/{id}/cockpit":       guarded(permProjectRead),
 	"GET /api/v1/projects/{id}/rally":         guarded(permProjectRead),

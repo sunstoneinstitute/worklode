@@ -13,6 +13,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 )
@@ -365,6 +366,58 @@ func TestDoctorNeverPurgesOnUncertainty(t *testing.T) {
 			out, _ := runLode(t, "doctor")
 			if !materialized(t, "WL-7") {
 				t.Fatalf("doctor purged WL-7 without a definite answer about its lease:\n%s", out)
+			}
+		})
+	}
+}
+
+// TestCheckGatePRs covers the gate-prs decision (WL-SPEC-72 §3): a recorded
+// PR rule passes, a recorded absence warns without failing the run, and
+// anything short of a recorded answer is an "unknown" skip.
+func TestCheckGatePRs(t *testing.T) {
+	cases := []struct {
+		name                       string
+		status                     int
+		body                       string
+		remote                     string
+		reachable                  bool
+		wantOK, wantWarn, wantSkip bool
+		wantDetail                 string
+	}{
+		{"required", 200, `{"repo":"acme/app","branch":"main","pull_request":true}`, "git@github.com:acme/app.git", true, true, false, false, "requires pull requests"},
+		{"not required", 200, `{"repo":"acme/app","branch":"main","pull_request":false}`, "git@github.com:acme/app.git", true, true, true, false, "do not require pull requests"},
+		{"not yet read", 200, `{"repo":"acme/app","branch":"main"}`, "git@github.com:acme/app.git", true, true, false, true, "unknown"},
+		{"nothing recorded", 404, `{"error":"not found"}`, "git@github.com:acme/app.git", true, true, false, true, "unknown"},
+		{"server error", 500, `{"error":"boom"}`, "git@github.com:acme/app.git", true, true, false, true, "unknown"},
+		{"no remote", 200, `{}`, "", true, true, false, true, "unknown: no origin remote"},
+		{"unreachable", 200, `{}`, "git@github.com:acme/app.git", false, true, false, true, "unknown: server unreachable"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotRemote string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/repos/branch-rules" {
+					t.Errorf("path = %q", r.URL.Path)
+				}
+				gotRemote = r.URL.Query().Get("remote")
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				io.WriteString(w, tc.body)
+			}))
+			t.Cleanup(srv.Close)
+			c := cli.NewClient(cli.Config{ServerURL: srv.URL})
+
+			got := checkGatePRs(context.Background(), c, tc.remote, tc.reachable)
+			if got.Name != "gate-prs" || got.OK != tc.wantOK || got.Warn != tc.wantWarn || got.Skipped != tc.wantSkip ||
+				!strings.Contains(got.Detail, tc.wantDetail) {
+				t.Fatalf("checkGatePRs = %+v, want ok=%v warn=%v skip=%v detail ~ %q",
+					got, tc.wantOK, tc.wantWarn, tc.wantSkip, tc.wantDetail)
+			}
+			if tc.wantWarn && got.Fix == "" {
+				t.Error("a warning must name its fix")
+			}
+			if tc.reachable && tc.remote != "" && gotRemote != tc.remote {
+				t.Errorf("remote sent = %q, want %q", gotRemote, tc.remote)
 			}
 		})
 	}
