@@ -63,6 +63,7 @@ type storeMetrics struct {
 	fixes                 *prometheus.CounterVec
 	ruleSupersedes        *prometheus.CounterVec
 	ruleClosureSize       prometheus.Histogram
+	ruleOps               *prometheus.CounterVec
 	queries               *prometheus.CounterVec
 	querySeconds          *prometheus.CounterVec
 }
@@ -172,6 +173,10 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help:    "Rules in a context closure read (WL-SPEC-77 §4c), the rule itself included.",
 			Buckets: []float64{1, 2, 4, 8, 16, 32, 64, 128},
 		}),
+		ruleOps: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_rule_ops_total",
+			Help: "Standalone rule writes (WL-SPEC-77 §19.2) by op (add|accept) and outcome (ok|invalid|not_found|forbidden|conflict|error).",
+		}, []string{"op", "outcome"}),
 		// Query counters rather than a histogram: the question these answer
 		// is which store function the database time is going to, and
 		// rate(seconds_total) by func ranks that directly. Distribution
@@ -186,7 +191,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help: "Seconds spent in database queries, by the same pkg and func labels as worklode_store_queries_total. rate() of this ranks store functions by the database time they consume.",
 		}, []string{"pkg", "func"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.ruleSupersedes, m.ruleClosureSize, m.queries, m.querySeconds)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.ruleSupersedes, m.ruleClosureSize, m.ruleOps, m.queries, m.querySeconds)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// WL-SPEC-79 §17 is about the first of those becoming the second.
@@ -312,6 +317,25 @@ func (m *storeMetrics) emitStaleDocs(n int) {
 		return
 	}
 	m.docsStaleEmitted.Add(float64(n))
+}
+
+// ruleOp records one AddRule or AcceptRule call by op and outcome.
+func (m *storeMetrics) ruleOp(op string, err error) {
+	if m == nil {
+		return
+	}
+	o := outcome(err)
+	switch {
+	case errors.Is(err, ErrInvalidInput):
+		o = "invalid"
+	case errors.Is(err, ErrNotFound):
+		o = "not_found"
+	case errors.Is(err, ErrForbidden):
+		o = "forbidden"
+	case errors.Is(err, ErrBadTransition):
+		o = "conflict"
+	}
+	m.ruleOps.WithLabelValues(op, o).Inc()
 }
 
 // projectWorkRead records one ListProjectWorkFacts call by outcome. Never

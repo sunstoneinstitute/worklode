@@ -154,3 +154,15 @@ type RuleClosureMember struct {
 	Edge    string `json:"edge,omitempty"` // refines | needs
 	From    string `json:"from,omitempty"`
 }
+
+// AddRuleInput is the body of POST /api/v1/rules: a standalone rule,
+// arranged in no document, created at draft version 1 and owned by the
+// caller (WL-SPEC-77 §19.2). Kind is one of the five rule kinds and
+// defaults to requirement.
+type AddRuleInput struct {
+	Project string   `json:"project"`
+	Heading string   `json:"heading"`
+	Body    string   `json:"body"`
+	Tags    []string `json:"tags,omitempty"`
+	Kind    string   `json:"kind,omitempty"`
+}
