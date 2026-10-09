@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/swaggest/jsonschema-go"
 	"github.com/swaggest/openapi-go"
@@ -87,6 +88,13 @@ func mergeRouteDocs(parts ...map[string]routeDoc) map[string]routeDoc {
 }
 
 const openAPISecurity = "bearerToken"
+
+// servedOpenAPI is the document every NewServer serves, built once per process.
+// Its inputs are package-level tables, and the schema reflection is slow
+// enough under -race that rebuilding it per server dominated test time.
+var servedOpenAPI = sync.OnceValues(func() ([]byte, error) {
+	return buildOpenAPI(routeGuards, routeDocs)
+})
 
 // buildOpenAPI renders the OpenAPI 3.1 document for every /api/v1 route in
 // guards. It errors on a /api/v1 guard with no descriptor and on a descriptor
