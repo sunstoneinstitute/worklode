@@ -17,10 +17,6 @@ import (
 // pinned SKILL.md bodies are the one deliberate exception, budget-bounded by
 // the pin list the task author wrote.
 //
-// GoverningDesign, AffectedComponents, and DefinitionOfDone are reserved for
-// spec 006 (Deliverable/design links) and stay nil in v1; the shape is fixed
-// now so the wire contract does not change when they are populated.
-//
 // Parent is exactly one hop up — an agent should know its task belongs to
 // "Delivery lifecycle" without spelunking, while the full ancestry and the
 // sibling list are both unbounded and stay out.
@@ -32,12 +28,9 @@ type Brief struct {
 	// BlockingPlans are the plan documents ordered before this task's plan
 	// (025 §9.3) whose work is unfinished. A blocking plan still draft has
 	// minted no task, so it lands here with nothing in OpenBlockers.
-	BlockingPlans      []model.DocRef
-	Parent             *model.Task // the task's parent, or nil; only ID/Title/State are populated
-	Lease              *Lease      // active lease, or nil
-	GoverningDesign    *string     // reserved: spec 006 (nil in v1)
-	AffectedComponents []string    // reserved: spec 006 (nil in v1)
-	DefinitionOfDone   *string     // reserved: spec 006 Deliverable (nil in v1)
+	BlockingPlans []model.DocRef
+	Parent        *model.Task // the task's parent, or nil; only ID/Title/State are populated
+	Lease         *Lease      // active lease, or nil
 	// PinnedSkills are the task's pinned skills, content included; deleted
 	// pins still resolve (with a warning) so briefs never break.
 	PinnedSkills []Skill
