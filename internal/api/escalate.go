@@ -1,4 +1,4 @@
-// escalate.go serves POST /api/v1/tasks/{id}/escalate (025 §8.1). The handler
+// escalate.go serves POST /api/v1/tasks/{id}/escalate (WL-SPEC-77 §10). The handler
 // owns one decision the store does not: which document the escalation is
 // against when the caller does not name one.
 package api

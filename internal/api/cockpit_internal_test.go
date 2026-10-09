@@ -292,7 +292,7 @@ func TestMapWorkItemNoAssigneeNoLease(t *testing.T) {
 }
 
 // TestRankSecondaryConcernsNamesBlockingPlan: a ready task held only by a
-// plan ordered before its own (025 §9.3) is blocked and its root-cause
+// plan ordered before its own (WL-SPEC-77 §11.3) is blocked and its root-cause
 // concern names that plan, even when it is still draft and has minted no
 // task to name. See cockpit_rank_test.go for det-v1's fuller coverage.
 func TestRankSecondaryConcernsNamesBlockingPlan(t *testing.T) {

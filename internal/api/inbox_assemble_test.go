@@ -11,7 +11,7 @@ import (
 )
 
 // These are inbox.go's tests. They live under inbox_assemble_test.go rather
-// than inbox_test.go, which is spec 020's /api/v1/inbox HTTP suite in
+// than inbox_test.go, which is WL-SPEC-80's /api/v1/inbox HTTP suite in
 // package api_test.
 
 // inboxFact builds an active-state store.ProjectWorkFact for the inbox
@@ -48,7 +48,7 @@ func inboxReviewFor(id int64, project, author string, required *string, age time
 
 func actorRef(s string) *string { return &s }
 
-// TestAssembleInbox pins spec 056 §3.1-§3.3: which item lands in which
+// TestAssembleInbox pins WL-SPEC-82 §12: which item lands in which
 // bucket, the fixed bucket order and headings, and the order within a
 // bucket. Each case names the buckets it expects, in order, with each
 // bucket's item hrefs in order.

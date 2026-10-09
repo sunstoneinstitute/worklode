@@ -73,7 +73,7 @@ func toUsageBuckets(in []model.SessionUsageBucket) ([]store.SessionUsageBucket, 
 
 // reportProjectSessionUsage handles POST /api/v1/projects/{id}/session-usage:
 // record one session's complete usage across the project, task rows and
-// overhead together (spec 052 §2). Each group is validated by the same
+// overhead together (WL-SPEC-73 §8.2). Each group is validated by the same
 // toUsageBuckets the task-scoped endpoints use.
 func (s *server) reportProjectSessionUsage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

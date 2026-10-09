@@ -1,4 +1,4 @@
-// progress.go serves the project Progress page (WL-SPEC-66 §2): one bulk
+// progress.go serves the project Progress page (WL-SPEC-85 §3): one bulk
 // read of the project's corpus and task set (store.ProjectProgress), derived
 // into model.ProjectProgress by internal/progress, rendered by ui.Progress.
 // Nothing is stored and nothing is cached — every state on the page is
@@ -29,7 +29,7 @@ import (
 // project header first (so an unknown project 404s like every other project
 // route), then the one progress read.
 //
-// A project with no spec has no Progress page at all (§2, amending 056 §2):
+// A project with no spec has no Progress page at all (WL-SPEC-85 §1, amending WL-SPEC-82 §2.2):
 // the sidebar shows no entry and the route answers 404. The specs in the
 // reader's own input decide that, so the page and the sidebar cannot disagree
 // about whether the project has any.
@@ -152,7 +152,7 @@ func (s *server) progressSummaryFragment(w http.ResponseWriter, r *http.Request)
 
 // hasSpecs is the sidebar's Progress-entry bit. It is read here rather than
 // carried on model.CockpitProject because the JSON cockpit's shape is
-// contracted by spec 032 and this is a page affordance, not a change to that
+// contracted by WL-SPEC-82 and this is a page affordance, not a change to that
 // contract — the same reason projectPage reads its agent sessions and rally
 // off the store. A failed read logs and hides the entry: the page it leads to
 // would fail the same way.
@@ -167,7 +167,7 @@ func (s *server) hasSpecs(ctx context.Context, projectID string) bool {
 
 // getProjectProgress handles GET /api/v1/projects/{id}/progress: the same
 // derived model.ProjectProgress the page renders, as JSON, so an agent reads
-// what a person sees (066 §7). The project is read first so an unknown id
+// what a person sees (WL-SPEC-85 §8). The project is read first so an unknown id
 // 404s rather than answering with an empty corpus. A project with no spec is
 // not a 404 here — the page hides itself because there is nothing to draw,
 // but "this project has no specs" is a real answer to an API question.
@@ -186,12 +186,12 @@ func (s *server) getProjectProgress(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, progress.Derive(in))
 }
 
-// --- writes (WL-SPEC-66 §3) -------------------------------------------------
+// --- writes (WL-SPEC-85 §4) -------------------------------------------------
 
 // progressAccept handles POST /projects/{id}/progress/accept (§3.2). It
 // performs exactly what POST /api/v1/docs/{id}/accept performs — the same
-// typed event, the same store.AcceptDoc — so the owner gate (025 §7) and, for
-// a plan, minting its tasks in the same transaction (025 §9.2) are the
+// typed event, the same store.AcceptDoc — so the owner gate (WL-SPEC-77 §9) and, for
+// a plan, minting its tasks in the same transaction (WL-SPEC-77 §11.2) are the
 // store's. This page can never accept what `lode doc accept` would refuse.
 //
 // Two refusals are the route's own. A document of another project is a 404:
@@ -266,7 +266,7 @@ func progressWriteOutcome(err error) string {
 }
 
 // progressPlan handles POST /projects/{id}/progress/plan (§3.4): mint the
-// planning task for a spec, the same task 025 §15.4 mints when the spec is
+// planning task for a spec, the same task WL-SPEC-77 §15 mints when the spec is
 // accepted. Title and guard come from internal/watcher, so a task minted
 // here and one minted on acceptance are the same thing.
 //
@@ -332,7 +332,7 @@ func (s *server) progressPlan(w http.ResponseWriter, r *http.Request) {
 			}
 			minted = id
 			// The id is allocated inside this transaction, after the payload
-			// was marshalled, so the event names its task from here (025 §15.2).
+			// was marshalled, so the event names its task from here (WL-SPEC-77 §15).
 			return store.AttributeEventToTask(tx, eventID, id)
 		})
 	if err != nil {
@@ -375,7 +375,7 @@ func (s *server) specHasUnplannedSection(ctx context.Context, projectID string, 
 	return false, nil
 }
 
-// mintPlanningTask creates 025 §15.4's planning task about doc inside tx —
+// mintPlanningTask creates WL-SPEC-77 §15's planning task about doc inside tx —
 // §3.4's act. Title and body come from internal/watcher, so a task minted
 // here, one minted by the Plan button, and one minted when the spec was
 // accepted are all the same thing. The caller guards with OpenTaskForDoc
@@ -397,7 +397,7 @@ func (s *server) mintPlanningTask(tx *sql.Tx, doc *model.Doc, actorID string, ev
 	return t.ID, nil
 }
 
-// --- the rally act (WL-SPEC-66 §3.5) -----------------------------------------
+// --- the rally act (WL-SPEC-85 §4) -----------------------------------------
 
 // progressRallyAdd handles POST /projects/{id}/progress/rally/add: put the
 // work that drives one spec to completion into the project's draft rally,
@@ -514,7 +514,7 @@ func (s *server) progressRallyAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 // progressRallyConfirm handles POST /projects/{id}/progress/rally/confirm:
-// publish the draft rally, which is what 005 §2a calls activation. The
+// publish the draft rally, which is what WL-SPEC-75 §8a calls activation. The
 // backbone allows one active rally per project and migration 0069's partial
 // unique index is what enforces it, so a project that already has one is
 // refused there rather than by a check here — and the refusal names the rally
@@ -590,7 +590,7 @@ func (s *server) writeRallyConflict(ctx context.Context, w http.ResponseWriter, 
 	})
 }
 
-// --- the live stream (WL-SPEC-66 §5.1) --------------------------------------
+// --- the live stream (WL-SPEC-85 §6) --------------------------------------
 
 // progressEvents handles GET /projects/{id}/progress/events: the project's
 // slice of the event log, followed live, so the Progress page redraws on
@@ -733,7 +733,7 @@ type progressOrigin struct {
 // no frame, as does an event whose family this page does not model
 // (progress.Resolve's zero Touch).
 //
-// A document named by IRI rather than row id — the typed 025 §15.3 events,
+// A document named by IRI rather than row id — the typed WL-SPEC-77 §15 events,
 // whose wl:subject is the only name they carry — is resolved in one further
 // batched call before the refs read, so a submission or an acceptance on a
 // plan reaches the page as the frame §5.1 asks for.

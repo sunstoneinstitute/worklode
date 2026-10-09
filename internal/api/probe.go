@@ -14,7 +14,7 @@ import (
 )
 
 // probeTargets handles GET /api/v1/probe-targets: every artifact address a
-// still-open entity declared (029 §3.2), for the prober to poll.
+// still-open entity declared (WL-SPEC-75 §13.3), for the prober to poll.
 func (s *server) probeTargets(w http.ResponseWriter, r *http.Request) {
 	artifacts, err := s.st.ProbeTargets(r.Context())
 	if err != nil {
@@ -27,7 +27,7 @@ func (s *server) probeTargets(w http.ResponseWriter, r *http.Request) {
 // createArtifactReport handles POST /api/v1/artifact-reports: one recorded
 // event (source "prober", external id = the caller's dedupe_key) whose apply
 // files the reported state as evidence against every open entity that
-// declared the artifact address (029 §3.2). A report for an address nobody
+// declared the artifact address (WL-SPEC-75 §13.3). A report for an address nobody
 // declares still lands in events with no evidence rows and an "unrouted"
 // ack — the same shape the signed catalog/ci/pipeline ingests use — and
 // stays a replay candidate since RecordEvent never marks it applied.

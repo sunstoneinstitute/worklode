@@ -14,7 +14,7 @@ import (
 )
 
 // TestCreateDeliverableWithArtifact: the JSON API accepts the address a
-// deliverable is verified by (029 §3.1) and echoes it back on the read, while
+// deliverable is verified by (WL-SPEC-75 §13.3) and echoes it back on the read, while
 // reported_state stays empty — nothing has reported yet, and the deliverable
 // itself never claims a state (§3.2).
 func TestCreateDeliverableWithArtifact(t *testing.T) {
@@ -52,7 +52,7 @@ func TestCreateDeliverableWithArtifact(t *testing.T) {
 	}
 }
 
-// TestCreateDeliverableByLabel sends 029 §3.1's label form through the JSON
+// TestCreateDeliverableByLabel sends WL-SPEC-75 §13.3's label form through the JSON
 // API, so the transport cannot silently drop the selector before it reaches
 // the store.
 func TestCreateDeliverableByLabel(t *testing.T) {
@@ -112,7 +112,7 @@ func TestCreateDeliverableArtifactBounds(t *testing.T) {
 }
 
 // TestPatchDeliverableMilestone covers PATCH /api/v1/deliverables/{id}'s
-// milestone field (spec 029 §2), mirroring TestPatchTaskMilestone for the
+// milestone field (WL-SPEC-75 §13.2), mirroring TestPatchTaskMilestone for the
 // deliverable side: an empty body is refused before it reaches the store, a
 // same-project attach is 200 and stored, an unknown or cross-project
 // milestone is refused (422), "" clears it, and the deliverable_attach
@@ -167,7 +167,7 @@ func TestPatchDeliverableMilestone(t *testing.T) {
 		t.Fatalf("stored milestone = %q, want %s", d.Milestone, milestoneID)
 	}
 
-	// Cross-project attach: 029 §5, containment never crosses a project
+	// Cross-project attach: WL-SPEC-75 §13.4, containment never crosses a project
 	// boundary.
 	rr = doReq(t, h, "POST", "/api/v1/projects/proj2/deliverables", token,
 		model.CreateDeliverableInput{Name: "Other project deliverable"})
@@ -266,7 +266,7 @@ func deliverableApprovals(t *testing.T, st *store.Store) []deliverableApproval {
 	return out
 }
 
-// TestDeliverableCreationMaterializesFlowLanes: 029 §7.1's "materialized as an
+// TestDeliverableCreationMaterializesFlowLanes: WL-SPEC-75 §13.6's "materialized as an
 // awaiting row when the entity is created". A stamped project's new
 // deliverable owes its flow's lanes immediately; a project with no snapshot
 // owes nothing; and two same-named deliverables owe a set each, because the
@@ -369,7 +369,7 @@ func TestGetDeliverableAPI(t *testing.T) {
 	}
 }
 
-// --- user-reported state (029 §3.2) -----------------------------------------
+// --- user-reported state (WL-SPEC-75 §13.3) -----------------------------------------
 
 // seedDeliverable creates a deliverable that declares no artifact address, so
 // its reports land against the empty address the projection coalesces to.

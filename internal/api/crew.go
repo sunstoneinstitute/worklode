@@ -1,4 +1,4 @@
-// crew.go serves a project's Crew (spec 029 §6.1, spec 032 §6): the roster
+// crew.go serves a project's Crew (WL-SPEC-75 §13.5, WL-SPEC-82 §8): the roster
 // page (GET /projects/{id}/crew), the JSON API's add and remove routes (POST
 // /api/v1/projects/{id}/participants, DELETE
 // /api/v1/projects/{id}/participants/{actor}), and the page's own add and
@@ -7,7 +7,7 @@
 // Each membership change has exactly one write function — recordCrewAdd and
 // recordCrewRemove — that both surfaces call, so a member added or removed
 // in a browser and one changed by the CLI are the same write, recorded under
-// the same event type ("crew.member_added" / "crew.member_removed", spec 029
+// the same event type ("crew.member_added" / "crew.member_removed", WL-SPEC-75
 // §8.4), and differ only in the event source that records which surface it
 // came from.
 package api
@@ -71,12 +71,12 @@ func crewView(project ui.CockpitProject, participants []store.Participant) ui.Cr
 
 // defaultCrewRole is what an add with no role means. Adding someone to the
 // Crew without an opinion about what they do is the common case, and spec
-// 029 §6.1 makes the label descriptive rather than load-bearing, so the
+// WL-SPEC-75 §13.5 makes the label descriptive rather than load-bearing, so the
 // default is a plain word and not a refusal.
 const defaultCrewRole = "member"
 
 // recordCrewAdd adds one role-labelled Crew row through RecordEvent under
-// event type "crew.member_added" (spec 029 §8.4) and returns the member as
+// event type "crew.member_added" (WL-SPEC-75 §13.8) and returns the member as
 // the roster now shows them — every role they hold, not just the one just
 // added. source is "cli" for the JSON API and "web" for the cockpit form,
 // which is the only difference between the two paths. by is the acting actor
@@ -136,7 +136,7 @@ func (s *server) listCrewMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 // toCrewMember is the one conversion point from the store's aggregated
-// Participant to the wire shape (ADR 036).
+// Participant to the wire shape (WL-SPEC-73 §3.2a).
 func toCrewMember(p store.Participant) model.CrewMember {
 	return model.CrewMember{
 		Actor:       p.ActorID,
@@ -249,7 +249,7 @@ func (s *server) crewMember(ctx context.Context, projectID, actorID string) (mod
 
 // recordCrewRemove removes one member from a project's Crew — every role row
 // they hold, in one act — through RecordEvent under event type
-// "crew.member_removed" (spec 029 §8.4). source is "cli" for the JSON API
+// "crew.member_removed" (WL-SPEC-75 §13.8). source is "cli" for the JSON API
 // and "web" for the cockpit form; by is the acting actor ("" on an open
 // instance).
 //
@@ -331,7 +331,7 @@ func (s *server) removeCrewMemberFromForm(w http.ResponseWriter, r *http.Request
 
 // renderCrewRemovalRefusal re-renders the roster with a refused removal
 // explained. When the member still owns open work, that work is the
-// explanation — listed and linked (spec 032 §6's responsibility review),
+// explanation — listed and linked (WL-SPEC-82 §8's responsibility review),
 // read from the same query the store's guard ran, so the page shows exactly
 // what is blocking the removal rather than a restatement of the refusal.
 func (s *server) renderCrewRemovalRefusal(w http.ResponseWriter, r *http.Request,

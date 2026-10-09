@@ -1,8 +1,8 @@
 package api_test
 
-// softdelete_test.go covers spec 044's delete and undelete over the HTTP
+// softdelete_test.go covers WL-SPEC-75's delete and undelete over the HTTP
 // surface: the tombstone the response carries, the justification rule that
-// keys off LODE_INSTANCE_ENV (044 §3), and the ?deleted= list switch (044 §5).
+// keys off LODE_INSTANCE_ENV (WL-SPEC-75 §12), and the ?deleted= list switch (WL-SPEC-75 §12).
 // The tombstone write itself is the store's (internal/store/softdelete_test.go);
 // what is checked here is the one rule this layer owns and the status code
 // each store refusal reaches the caller as.
@@ -89,7 +89,7 @@ var blankJustifications = map[string]any{
 
 // A prod instance refuses a justification-less delete with 422 and names the
 // instance environment, because the request is well-formed and the same server
-// configured the other way would have taken it (044 §5).
+// configured the other way would have taken it (WL-SPEC-75 §12).
 func TestDeleteProdRequiresJustification(t *testing.T) {
 	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceProd)
@@ -148,7 +148,7 @@ func TestDeleteProdWithJustification(t *testing.T) {
 }
 
 // A dev instance takes a bodyless delete and tombstones with an empty
-// justification: the environment gates the demand, not the mechanism (044 §3).
+// justification: the environment gates the demand, not the mechanism (WL-SPEC-75 §12).
 func TestDeleteDevWithoutJustification(t *testing.T) {
 	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
@@ -171,7 +171,7 @@ func TestDeleteDevWithoutJustification(t *testing.T) {
 }
 
 // A justification given on a dev instance is stored exactly as one given on
-// prod (044 §3).
+// prod (WL-SPEC-75 §12).
 func TestDeleteDevStoresGivenJustification(t *testing.T) {
 	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
@@ -188,7 +188,7 @@ func TestDeleteDevStoresGivenJustification(t *testing.T) {
 
 // Undelete round-trips on both instances and carries no body and no
 // justification: only the first half of the pair is worth making someone stop
-// and type (044 §3).
+// and type (WL-SPEC-75 §12).
 func TestUndeleteRoundTrip(t *testing.T) {
 	t.Parallel()
 	for _, env := range []string{api.InstanceDev, api.InstanceProd} {
@@ -235,7 +235,7 @@ func TestUndeleteRoundTrip(t *testing.T) {
 
 // Deleting an already-deleted row is the store's ErrInvalidInput, which is a
 // 422 here — not a silent success, because the tombstone it would overwrite
-// names someone else (044 §2).
+// names someone else (WL-SPEC-75 §12).
 func TestDeleteTwiceIsRejected(t *testing.T) {
 	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
@@ -318,7 +318,7 @@ func listDocIDs(t *testing.T, h http.Handler, token, query string) []int64 {
 }
 
 // ?deleted=true is a switch, not an addition: it lists the tombstoned rows
-// instead of the live ones (044 §5).
+// instead of the live ones (WL-SPEC-75 §12).
 func TestListDeletedIsASwitch(t *testing.T) {
 	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
@@ -351,7 +351,7 @@ func TestListDeletedIsASwitch(t *testing.T) {
 		t.Fatalf("deleted docs = %v, want only %d", got, f.doc)
 	}
 
-	// The tombstoned task still resolves by id, tombstone and all (044 §4).
+	// The tombstoned task still resolves by id, tombstone and all (WL-SPEC-75 §12).
 	rr := doReq(t, f.h, "GET", f.taskPath(""), f.token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("get deleted task status = %d, want 200", rr.Code)
@@ -398,7 +398,7 @@ func TestDeleteRoutesRequireAuth(t *testing.T) {
 	}
 }
 
-// Deleting a leased task closes the lease in the same transaction (044 §2):
+// Deleting a leased task closes the lease in the same transaction (WL-SPEC-75 §12):
 // a hidden task cannot be worked, and the sweeper should not be left tending a
 // row nothing can see.
 func TestDeleteTaskClosesLease(t *testing.T) {
@@ -419,7 +419,7 @@ func TestDeleteTaskClosesLease(t *testing.T) {
 
 // worklode_deletes_total is pre-initialised across every entity/op/outcome
 // combination and counts the prod refusal as an outcome of the delete op
-// rather than as an absence of one (044 §6).
+// rather than as an absence of one.
 func TestDeleteMetrics(t *testing.T) {
 	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceProd)
@@ -445,7 +445,7 @@ func TestDeleteMetrics(t *testing.T) {
 			t.Fatalf("metrics missing %s", want)
 		}
 	}
-	// Undelete asks for no justification on either instance (044 §3), so this
+	// Undelete asks for no justification on either instance (WL-SPEC-75 §12), so this
 	// series can never move; pre-initialising it would publish a permanently
 	// flat zero that reads as "no undelete was ever refused" rather than as
 	// "an undelete cannot be refused for that reason".
@@ -461,7 +461,7 @@ func TestDeleteMetrics(t *testing.T) {
 func TestParseInstanceEnv(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
-		"":     api.InstanceProd, // 039 §3: prod is the default nobody has to write down
+		"":     api.InstanceProd, // WL-SPEC-73 §4.2: prod is the default nobody has to write down
 		"dev":  api.InstanceDev,
 		"prod": api.InstanceProd,
 	} {
@@ -481,7 +481,7 @@ func TestParseInstanceEnv(t *testing.T) {
 }
 
 // NewServer re-checks the environment, so an embedder that builds a Config in
-// Go cannot get an unset or bogus value past the boot (039 §3).
+// Go cannot get an unset or bogus value past the boot (WL-SPEC-73 §4.2).
 func TestNewServerRejectsBadInstanceEnv(t *testing.T) {
 	t.Parallel()
 	st := newTestStore(t)

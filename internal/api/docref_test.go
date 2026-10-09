@@ -123,8 +123,8 @@ func TestRefShortcut(t *testing.T) {
 	}
 }
 
-// TestDocRefHomeProjectDisambiguates pins WL-723: two projects each hold a
-// spec 29, so /docs/ref/029 alone is ambiguous, and ?p=<KEY> resolves it
+// TestDocRefHomeProjectDisambiguates pins WL-723: two projects each hold
+// a document numbered 029, so /docs/ref/029 alone is ambiguous, and ?p=<KEY> resolves it
 // against the project whose corpus sequence the number is on.
 func TestDocRefHomeProjectDisambiguates(t *testing.T) {
 	t.Parallel()
@@ -177,7 +177,7 @@ func TestRefShortcutBareNumberAcrossProjects(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("/029 status = %d, want 404 (ambiguous across projects)", rr.Code)
 	}
-	// Candidates are named by citable id (025 §14.3): the project key is
+	// Candidates are named by citable id (WL-SPEC-77 §7): the project key is
 	// exactly what a bare number does not carry, so it is what the reader
 	// needs back.
 	for _, want := range []string{"WL-SPEC-29", "OTHER-SPEC-29"} {

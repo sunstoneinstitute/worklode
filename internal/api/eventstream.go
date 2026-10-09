@@ -17,7 +17,7 @@ import (
 )
 
 // eventstream.go serves GET /api/v1/events/stream: the ordered event log
-// followed live over server-sent events (spec 025 §15/§18), behind
+// followed live over server-sent events (WL-SPEC-77 §15/§18), behind
 // permEventStream.
 //
 // It is a poller, not a listener. Every read goes through the same

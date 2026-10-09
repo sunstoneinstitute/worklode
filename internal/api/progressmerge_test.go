@@ -1,5 +1,5 @@
 // progressmerge_test.go exercises POST /projects/{id}/progress/merge
-// (WL-SPEC-66 §3.6) against an httptest GitHub, white-box like the other
+// (WL-SPEC-85 §4) against an httptest GitHub, white-box like the other
 // Progress writes: a web route takes its actor from a session, and these
 // tests configure no login provider.
 package api
@@ -165,7 +165,7 @@ func mergeEvents(t *testing.T, s *server) []store.Event {
 }
 
 // mergeEventsWithin waits for want merge events to be readable, and returns
-// what it saw. Cursor reads of the log are commit-horizon bounded (spec 025
+// what it saw. Cursor reads of the log are commit-horizon bounded (WL-SPEC-77
 // §15): an event is committed the moment recordTaskEvent returns, but stays
 // invisible while any transaction anywhere on the instance holds
 // pg_snapshot_xmin back, which on a shared CI Postgres it does. 20s matches
@@ -198,7 +198,7 @@ func payloadField(t *testing.T, e store.Event, key string) string {
 }
 
 // TestProgressMergeEnqueues: a queue-protected branch is enqueued through
-// GraphQL, and criterion 19 — the intent event is in the log before the
+// GraphQL, and the intent event is in the log before the
 // GitHub call is made, checked from inside the call itself.
 func TestProgressMergeEnqueues(t *testing.T) {
 	f := &fakeMergeGitHub{}

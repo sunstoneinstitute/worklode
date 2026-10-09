@@ -49,7 +49,7 @@ func boardView(b *model.BoardResponse, inboxCount int, title, active string) ui.
 	return v
 }
 
-// driftView maps spec 007's four read surfaces into the drift board's view.
+// driftView maps WL-SPEC-82's four read surfaces into the drift board's view.
 // drift and gaps are nil when no graph-server is configured; graphEnabled is
 // what tells the page the difference between "no findings" and "nothing
 // looked", so it is passed rather than inferred from the nil slices.
@@ -70,7 +70,7 @@ func driftView(frontier []model.FrontierTask, cp *model.CriticalPath, drift *mod
 }
 
 // projectsView maps the cross-project portfolio, dropping store.Project's
-// curated cockpit-only fields (ADR 036 §3) down to the model.Project shape
+// curated cockpit-only fields (WL-SPEC-73 §3.2a) down to the model.Project shape
 // the page actually renders (id, name, key).
 func projectsView(projects []store.Project, title, active string) ui.ProjectsView {
 	out := make([]model.Project, 0, len(projects))
@@ -83,10 +83,10 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 	}
 }
 
-// approvalsView maps the awaiting-approvals queue (029 §7.1) into the
+// approvalsView maps the awaiting-approvals queue (WL-SPEC-75 §13.6) into the
 // Reviews page's view type; now is the reference point FmtAge renders each
 // row's age against. ID carries through because each row renders the decide
-// form that posts to /approvals/{id}/decide (029 §7.3).
+// form that posts to /approvals/{id}/decide (WL-SPEC-75 §13.6).
 //
 // The revision is formatted here, not in internal/ui, which takes
 // pre-formatted rows. Every kind but a PR shows its revision: an approval is
@@ -132,7 +132,7 @@ func approvalRows(rows []store.AwaitingApproval, now time.Time) []ui.ApprovalRow
 }
 
 // approvalDetailView maps one approval plus its context into the detail
-// page's view (032 §7): the entity it governs (title/url, resolved through
+// page's view (WL-SPEC-82 §9): the entity it governs (title/url, resolved through
 // EntityTitleURL — the exact join the Reviews queue uses, so the two pages
 // cannot disagree about what an entity is called or where it opens), its
 // full decision history (ListApprovalsForEntityCtx, newest first, this row
@@ -211,7 +211,7 @@ func approvalDetailView(a *store.Approval, title, url string,
 }
 
 // prCompareURL builds the GitHub diff-from-previous jump-out link for a
-// 'pr'-kind approval with a decided predecessor (029 §7.1, 032 §7): the
+// 'pr'-kind approval with a decided predecessor (WL-SPEC-75 §13.6, WL-SPEC-82 §9): the
 // compare view between the two head SHAs, derived from the stored PR URL
 // (".../pull/<n>" -> ".../compare/<prev>...<current>"). "" when either
 // revision is empty or prURL does not look like a GitHub PR URL — an honest
@@ -265,7 +265,7 @@ func projectAgentSessionRows(sessions []store.ProjectAgentSession, now time.Time
 	return out
 }
 
-// activityRows maps a task's activity log into rendered rows (spec 071 §4).
+// activityRows maps a task's activity log into rendered rows (WL-SPEC-80 §8.9).
 // Everything a row shows is derived here: internal/ui takes pre-formatted
 // rows and reads no attribute of its own.
 func activityRows(rows []model.TaskActivity) []ui.ActivityRow {
@@ -289,7 +289,7 @@ func activityRow(a model.TaskActivity) ui.ActivityRow {
 }
 
 // activitySummary is the one line a row shows beside its event name, built
-// from the allowlisted attributes alone (spec 071 §4). The event name is the
+// from the allowlisted attributes alone (WL-SPEC-80 §8.9). The event name is the
 // row's own cell, so no summary repeats it — except for a kind this switch
 // does not model, where naming the event is the only honest thing to say. An
 // attribute the exporter did not record contributes nothing rather than a
@@ -459,10 +459,10 @@ func rallyCardView(rally *model.Task, total int, tree model.BlockerTree) ui.Cock
 }
 
 // deliverablesView maps a project's declared deliverables into the project's
-// Deliverables page, grouped by milestone (spec 029 §2): one group per
+// Deliverables page, grouped by milestone (WL-SPEC-75 §13.2): one group per
 // milestone in position order — only milestones that actually hold a
 // deliverable — then an unattached group last. A row's state is not stored
-// (spec 029 §3.2): it is the newest evidence reported against the declared
+// (WL-SPEC-75 §13.3): it is the newest evidence reported against the declared
 // address, carried on the read projection, and empty until an emitter
 // reports one.
 func deliverablesView(project ui.CockpitProject, items []model.Deliverable, milestones []model.Milestone) ui.DeliverablesView {
@@ -536,7 +536,7 @@ func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 }
 
 // docView maps one document's detail projection into its page. body is the
-// markdown to render — the consolidated fold (026 §3.2) or the stored source,
+// markdown to render — the consolidated fold (WL-SPEC-78 §2) or the stored source,
 // which consolidated says which of — and path is this page's own URL, off
 // which the two toggle spellings are built.
 //
@@ -580,7 +580,7 @@ func docNoteRows(md *mdrender.Cache, keys mdrender.ProjectKeys, notes []model.Do
 	return out
 }
 
-// docReviewerRows pairs the durable reviewer roster (025 §7.3) with who of it
+// docReviewerRows pairs the durable reviewer roster (WL-SPEC-77 §9) with who of it
 // still owes a verdict on the current version. Both come from GetDoc, so a
 // list row (which carries neither) renders no roster rather than an empty one.
 func docReviewerRows(d model.Doc) []ui.DocReviewerRow {
@@ -662,8 +662,8 @@ func docEdgeRows(edges []model.DocEdge, keys mdrender.ProjectKeys) []ui.DocEdgeR
 	return out
 }
 
-// docRef is a document's corpus reference for display: "spec 25", or the kind
-// alone for a document with no number — which since 029 §4's backfill means one
+// docRef is a document's corpus reference for display: "WL-SPEC-77", or the kind
+// alone for a document with no number — which since WL-SPEC-75 §13.4's backfill means one
 // created before it, plans included.
 func docRef(d model.Doc) string {
 	if d.Number == 0 {
@@ -673,7 +673,7 @@ func docRef(d model.Doc) string {
 }
 
 // docWebRef is a document's direct cockpit reference: the cross-corpus
-// shorthand, which every kind now carries (029 §4).
+// shorthand, which every kind now carries (WL-SPEC-75 §13.4).
 func docWebRef(d model.Doc, projectKey string) string {
 	return projectKey + "-" + strings.ToUpper(d.Kind) + "-" + strconv.Itoa(d.Number)
 }
@@ -713,7 +713,7 @@ func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string, dic
 
 // newDeliverableView builds the deliverable form the same way, offering the
 // project's milestones as the optional attach-at-declaration choice
-// (spec 029 §2), default "No milestone".
+// (WL-SPEC-75 §13.2), default "No milestone".
 func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, milestones []model.Milestone, errMsg string, dictation bool) ui.NewDeliverableView {
 	return ui.NewDeliverableView{
 		Form: ui.FormShell{
@@ -881,7 +881,7 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 		Task:    *t,
 		// Sanitising happens here rather than in ui: internal/ui is a
 		// stdlib + internal/model leaf and cannot import mdrender's
-		// goldmark/bluemonday dependencies (ADR 036 §3, CLAUDE.md).
+		// goldmark/bluemonday dependencies (WL-SPEC-73 §3.2a, CLAUDE.md).
 		BodyHTML: md.Body(keys, t.Body),
 		Blocked:  blocked,
 		Timeline: timelineRows(entries),

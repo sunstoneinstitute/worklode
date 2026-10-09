@@ -23,7 +23,7 @@ import (
 
 // mintedPlanTasks creates and accepts a mintable plan doc in project "proj"
 // (which the caller must have created), returning the tasks it minted
-// (025 §9.2) — the fixture the plan_doc task tests build on.
+// (WL-SPEC-77 §11.2) — the fixture the plan_doc task tests build on.
 func mintedPlanTasks(t *testing.T, h http.Handler, token string) []model.Task {
 	t.Helper()
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
@@ -40,7 +40,7 @@ func mintedPlanTasks(t *testing.T, h http.Handler, token string) []model.Task {
 
 // taskAboutDoc creates a task directly through the store with AboutDoc set
 // to docID. The API accepts no about_doc creation input yet — only the
-// doc-lifecycle watcher (a later task in this plan) writes it (025 §15.4) —
+// doc-lifecycle watcher (a later task in this plan) writes it (WL-SPEC-77 §15) —
 // so tests exercising the read/filter surface seed it this way, mirroring
 // inbox_import_test.go's direct store.CreateTask use.
 func taskAboutDoc(t *testing.T, st *store.Store, project, kind string, docID int64) *model.Task {
@@ -319,7 +319,7 @@ func TestListTasksFilters(t *testing.T) {
 }
 
 // TestGetTaskShowsPlanDoc: a task minted from a plan carries "plan_doc"
-// (025 §9.2); an ordinary task no plan authored omits the key entirely —
+// (WL-SPEC-77 §11.2); an ordinary task no plan authored omits the key entirely —
 // its absence is the correct answer, not a zero value.
 func TestGetTaskShowsPlanDoc(t *testing.T) {
 	t.Parallel()
@@ -387,7 +387,7 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 }
 
 // TestGetTaskShowsAboutDoc: a task referencing a document carries
-// "about_doc" (025 §15.4); an ordinary task with none omits the key
+// "about_doc" (WL-SPEC-77 §15); an ordinary task with none omits the key
 // entirely — its absence is the correct answer, not a zero value.
 func TestGetTaskShowsAboutDoc(t *testing.T) {
 	t.Parallel()
@@ -669,7 +669,7 @@ func TestPatchTaskConcern(t *testing.T) {
 }
 
 // TestPatchTaskMilestone covers PATCH /api/v1/tasks/{id}'s milestone field
-// (spec 029 §2): a same-project attach is 200 and stored, a cross-project
+// (WL-SPEC-75 §13.2): a same-project attach is 200 and stored, a cross-project
 // attach is refused (422), "none" clears it, and the task_attach counter is
 // observed for every attempt including the refused one.
 func TestPatchTaskMilestone(t *testing.T) {
@@ -714,7 +714,7 @@ func TestPatchTaskMilestone(t *testing.T) {
 		t.Fatalf("stored milestone = %q, want %s", task.Milestone, milestoneID)
 	}
 
-	// Cross-project attach: 029 §5, containment never crosses a project
+	// Cross-project attach: WL-SPEC-75 §13.4, containment never crosses a project
 	// boundary.
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/PROJ2-1", token, map[string]any{"milestone": milestoneID})
 	if rr.Code != http.StatusUnprocessableEntity {
@@ -748,7 +748,7 @@ func TestPatchTaskMilestone(t *testing.T) {
 	}
 }
 
-// TestPatchTaskPlan is `lode task edit --plan` (WL-SPEC-66 §6.2): PATCH
+// TestPatchTaskPlan is `lode task edit --plan` (WL-SPEC-85 §7): PATCH
 // resolves a "plan" ref the same way `--plan` on `task list` does (id or
 // slug), then SetTaskPlan's own gates apply — a non-plan document, a plan in
 // another project, and a task already linked to a different plan all refuse,
@@ -1258,7 +1258,7 @@ func TestEdgeEndpointAcceptsDuplicateOf(t *testing.T) {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	// A duplicate names exactly one canonical task (004 §1.3).
+	// A duplicate names exactly one canonical task (WL-SPEC-75 §4).
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
 		map[string]any{"to": "WL-3", "type": "duplicate_of"})
 	if rr.Code != http.StatusConflict {
@@ -1657,7 +1657,7 @@ func TestTaskSecretsRejectsBadNames(t *testing.T) {
 		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
 	}
 	// A value or ref smuggled into the name field, then names that satisfy the
-	// grammar but redirect loading in a `lode secret exec` child (ADR 047).
+	// grammar but redirect loading in a `lode secret exec` child (WL-SPEC-74 §10.1).
 	for _, name := range []string{
 		"op://Employee/GitHub token/credential",
 		"LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "PATH", "IFS", "BASH_ENV",

@@ -28,7 +28,7 @@ var validActorKinds = ns.Set(model.ActorKinds)
 var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
 // reservedProjectKeys are the <TYPE> tokens of the <PROJECTKEY>-<TYPE>-<n>
-// document shorthand (025 §14.3). The same CHECK constraint rejects them; this
+// document shorthand (WL-SPEC-77 §7). The same CHECK constraint rejects them; this
 // mirrors it for a clean 422.
 var reservedProjectKeys = map[string]bool{"SPEC": true, "ADR": true}
 
@@ -96,7 +96,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	// Labels/horizon are optional metadata (029 §1) layered on after the
+	// Labels/horizon are optional metadata (WL-SPEC-75 §13.1) layered on after the
 	// schema-default insert, only when the caller supplied either.
 	if req.Labels != nil || req.Horizon != "" {
 		err := s.st.Tx(r.Context(), func(tx *sql.Tx) error {
@@ -479,7 +479,7 @@ func (s *server) patchRepo(w http.ResponseWriter, r *http.Request) {
 // its project. Only the mapping goes — the repo's tasks, documents and
 // ingestion history keep the project they were filed under, and future
 // webhook traffic for the repo simply stops resolving to one. This is not
-// `delete` in the 044 sense; nothing is tombstoned. 204 on success,
+// `delete` in the WL-SPEC-75 §12 sense; nothing is tombstoned. 204 on success,
 // 404 when the repo is not mapped.
 func (s *server) removeRepo(w http.ResponseWriter, r *http.Request) {
 	repo := r.PathValue("owner") + "/" + r.PathValue("name")
@@ -615,7 +615,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	req.Parent = strings.TrimSpace(req.Parent)
 	if req.Parent != "" {
 		// Named 404 ahead of the transaction: AddEdge's own lookup stays the
-		// authority for the rest of the spec-004 invariants, but its
+		// authority for the rest of the WL-SPEC-75 §5 invariants, but its
 		// ErrNotFound would otherwise be reported anonymously.
 		if _, err := s.st.GetTask(r.Context(), req.Parent); errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "parent not found: "+req.Parent)
@@ -630,7 +630,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 
 	actorID := actorIDFrom(r)
 
-	// Mirror remote images here rather than at import (spec 021 §12): a
+	// Mirror remote images here rather than at import (WL-SPEC-78 §8.8): a
 	// promote is where an issue-derived body first becomes a task body, and
 	// `lode inbox import` carries no body at all — neither githubauth.Issue
 	// nor model.Issue has one, so there would be nothing there to rewrite.
@@ -668,7 +668,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 			created = t
 			// The promoted task's id is minted here, after the payload was
 			// marshalled, so the event names it from inside the same
-			// transaction (025 §15.2).
+			// transaction (WL-SPEC-77 §15).
 			if err := store.AttributeEventToTask(tx, eventID, t.ID); err != nil {
 				return err
 			}

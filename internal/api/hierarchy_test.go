@@ -6,7 +6,7 @@ import (
 )
 
 // createContainer creates a task that will take children, through the API,
-// and returns its id. Since 029 §2 there is no container kind to declare.
+// and returns its id. Since WL-SPEC-75 §13.2 there is no container kind to declare.
 func createContainer(t *testing.T, h http.Handler, token, project, title string) string {
 	t.Helper()
 	got := createTaskViaAPI(t, h, token, map[string]any{
@@ -16,7 +16,7 @@ func createContainer(t *testing.T, h http.Handler, token, project, title string)
 }
 
 // TestCreateTaskRejectsContainerKind pins that no kind declares container-ness
-// at the HTTP edge (025 §10): container-ness is inferred from child_of edges, so
+// at the HTTP edge (WL-SPEC-77 §12): container-ness is inferred from child_of edges, so
 // validKinds admits nothing structural and the create is a 422.
 func TestCreateTaskRejectsContainerKind(t *testing.T) {
 	t.Parallel()
@@ -101,7 +101,7 @@ func TestTaskDetailProgress(t *testing.T) {
 	}
 }
 
-// TestCreateTaskUnderOrdinaryParent pins 029 §2 on the create path: any
+// TestCreateTaskUnderOrdinaryParent pins WL-SPEC-75 §13.2 on the create path: any
 // ordinary task may be a parent, so what used to be a 422 ("parent must be an
 // container") is now the supported way to file a child.
 func TestCreateTaskUnderOrdinaryParent(t *testing.T) {
@@ -130,7 +130,7 @@ func TestCreateTaskUnderOrdinaryParent(t *testing.T) {
 
 // TestCrossProjectParentIsUnprocessable drives create's "parent" field, the
 // only path that reaches this rule: the edges endpoint (POST
-// /tasks/{id}/edges) predates spec 004 and is already covered by
+// /tasks/{id}/edges) predates WL-SPEC-75 and is already covered by
 // internal/store/hierarchy_test.go and tasks_test.go's TestEdges/
 // TestEdgeValidation. This also proves the transaction rolls back on a 422,
 // not just on the 404 TestCreateTaskWithUnknownParentCreatesNothing covers.

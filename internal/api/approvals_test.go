@@ -221,7 +221,7 @@ func seedDecidedThenCandidate(t *testing.T, st *store.Store, entityID, decidedRe
 }
 
 // seedAwaitingDeliverableLane seeds a deliverable-kind approval on a lane
-// with no designated revision (029 §7.2): the flow requires a decision, the
+// with no designated revision (WL-SPEC-75 §13.6): the flow requires a decision, the
 // subject it is granted against has not been named yet.
 func seedAwaitingDeliverableLane(t *testing.T, st *store.Store, name, lane string) seededApproval {
 	t.Helper()

@@ -21,7 +21,7 @@ type referencePayload struct {
 }
 
 // seedMilestoneDeliverable creates a milestone and a deliverable in project
-// and returns their ids, for tests exercising the depends_on rel (029 §5).
+// and returns their ids, for tests exercising the depends_on rel (WL-SPEC-75 §13.4).
 func seedMilestoneDeliverable(t *testing.T, h http.Handler, token, project string) (milestoneID, deliverableID string) {
 	t.Helper()
 	rr := doReq(t, h, "POST", "/api/v1/projects/"+project+"/milestones", token,
@@ -41,7 +41,7 @@ func seedMilestoneDeliverable(t *testing.T, h http.Handler, token, project strin
 }
 
 // TestCreateReferenceAPI covers POST /api/v1/references and its GET
-// readback from both ends (029 §5): the 201 body is the created edge with
+// readback from both ends (WL-SPEC-75 §13.4): the 201 body is the created edge with
 // created_by taken from the authenticated actor (never the body), the write
 // is recorded as reference.created from the "cli" surface, and the
 // worklode_reference_writes_total counter is observed.
@@ -125,7 +125,7 @@ func TestCreateReferenceAPI(t *testing.T) {
 }
 
 // TestCreateReferenceAPISeededBy covers the project->task rel, the other half
-// of the closed rel vocabulary (029 §5), through project and task ids
+// of the closed rel vocabulary (WL-SPEC-75 §13.4), through project and task ids
 // instead of milestone and deliverable ones.
 func TestCreateReferenceAPISeededBy(t *testing.T) {
 	t.Parallel()

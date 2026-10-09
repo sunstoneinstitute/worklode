@@ -1,4 +1,4 @@
-// Task-scoped token minting (001 §2.1, WL-306): POST /api/v1/tasks/{id}/tokens
+// Task-scoped token minting (WL-SPEC-74 §2, WL-306): POST /api/v1/tasks/{id}/tokens
 // mints a wl_ token bound to the task, attributed to an agent actor, and
 // expiring with the task's lease — the just-in-time credential a sandbox
 // works with instead of the operator's own. Scoping is enforced by the

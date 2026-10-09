@@ -2,8 +2,8 @@
 // and the assembler shared with the project web page (see projectPage in
 // web.go). The cockpit is a projection, never a stored workflow field —
 // selectMode is a pure function of declared facts, and assembleProjectCockpit
-// builds its output fresh from existing store readers on every call (spec
-// 032). Work items, owner/delegate, evidence, blockers, repositories, and
+// builds its output fresh from existing store readers on every call (WL-SPEC-82).
+// Work items, owner/delegate, evidence, blockers, repositories, and
 // cost are all mapped directly from store.ListProjectWorkFacts (Task 3),
 // (*store.Store).GetActor, ListRepos, and ProjectCost — no board adapter, no
 // invented state. Pinned focus and the next governed decision are the curated
@@ -47,7 +47,7 @@ type modeFacts struct {
 // facts: an intake candidate is always in editorial decision; a project
 // promoted from intake but not yet in research is an approved launch
 // awaiting Enter Research; everything else — including every project that
-// predates spec 029/032 — is ordinary operations. ?variant= query parameters
+// predates WL-SPEC-75 and WL-SPEC-82 — is ordinary operations. ?variant= query parameters
 // never reach this function and must never change its result.
 func selectMode(f modeFacts) cockpitMode {
 	if f.IntakeCandidate {
@@ -59,14 +59,14 @@ func selectMode(f modeFacts) cockpitMode {
 	return modeOperations
 }
 
-// modeFactsForProject remains all-false until Part 2 stores spec-029
+// modeFactsForProject remains all-false until Part 2 stores WL-SPEC-82 §7
 // promotion and Enter Research decisions. A current project is therefore an
 // ordinary Operations project; query parameters are intentionally absent.
 func modeFactsForProject(store.Project) modeFacts { return modeFacts{} }
 
 // --- evidence classification ------------------------------------------------
 
-// evidenceCategory is one of the four evidence categories spec 032 defines
+// evidenceCategory is one of the four evidence categories WL-SPEC-82 defines
 // for every disclosed fact. Part 1 emits declared, user_reported, and
 // observed only — it has no AI-produced recommendation, so evidenceRecommended
 // is never assigned by stateEvidence, only reserved for a later part.
@@ -310,7 +310,7 @@ func buildNextDecision(p *store.Project) *model.CockpitDecision {
 // unreleased lease (f.Lease, already filtered by ListProjectWorkFacts to
 // released_at IS NULL) whose holder is an agent actor — a human or service
 // lease is real, technical evidence of who is touching the task, but is
-// never surfaced as a delegate or Crew member (spec 032 §6).
+// never surfaced as a delegate or Crew member (WL-SPEC-82 §8).
 func mapWorkItem(f store.ProjectWorkFact, blocked bool, resolveActor func(string) (*store.Actor, error)) (model.CockpitWorkItem, error) {
 	t := f.Task
 

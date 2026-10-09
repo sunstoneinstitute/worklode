@@ -500,7 +500,7 @@ func countTaskCommits(t *testing.T, st *store.Store, taskID string) int {
 	return n
 }
 
-// TestImportOfMergedPRLeavesTaskStateAlone fences the central rule of spec 020
+// TestImportOfMergedPRLeavesTaskStateAlone fences the central rule of WL-SPEC-80
 // ("import is inventory, not replay"): importing a merged PR that correlates to
 // a task must call none of Transition, CloseActiveLease, InsertTaskCommit, or
 // ResolveDelivery. Each of those is observable here — the fixture puts the
@@ -630,7 +630,7 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 		t.Errorf("active lease on %s: %v — import must not close a lease held by an active claim", taskID, err)
 	}
 
-	// Spec 004's roll-up runs off Transition, so a container that moved is proof a
+	// WL-SPEC-75's roll-up runs off Transition, so a container that moved is proof a
 	// child transition happened even where the child's own state looks benign.
 	container, err := st0.GetTask(ctx, containerID)
 	if err != nil {
@@ -677,7 +677,7 @@ func TestImportClosedUnmergedPRStoresNoMergedAt(t *testing.T) {
 // first seen through backfill import must carry its author immediately, not
 // only after a later webhook fills it in. While author is unset,
 // store.IsSelfApproval cannot prove anything either way, so the approver who
-// authored the PR could self-approve it during that window (029 §7.1's
+// authored the PR could self-approve it during that window (WL-SPEC-75 §13.6's
 // default refusal). The second half — actually deciding through
 // store.DecideApproval — is what catches a fix that sets Author but leaves
 // it unused, or a passing GetPR check that hides a still-broken decide path.

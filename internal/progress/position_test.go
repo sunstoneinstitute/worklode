@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// TestPosition covers WL-SPEC-66 §2.4's ladder, one case per rung in ladder
+// TestPosition covers WL-SPEC-85 §3's ladder, one case per rung in ladder
 // order, plus a case proving a delivery state beats a stale PR fact.
 func TestPosition(t *testing.T) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)

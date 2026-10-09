@@ -1,20 +1,20 @@
 // deleted.go serves the cockpit's Deleted destination: the project-local page
-// listing the tasks and design documents spec 044 tombstoned, and the per-row
+// listing the tasks and design documents WL-SPEC-75 tombstoned, and the per-row
 // Restore button that undeletes one.
 //
-// Spec 044 ships delete and undelete on the JSON API and the CLI, and every
+// WL-SPEC-75 ships delete and undelete on the JSON API and the CLI, and every
 // cockpit page reads through the same `deleted_at IS NULL` store calls the
 // CLI does — so a deleted row correctly vanishes from all of them, and until
 // this page there was nowhere in a browser to see that it had. That matters
-// on a prod instance, where a delete is refused without a justification (044
-// §3) precisely so someone can review it later.
+// on a prod instance, where a delete is refused without a justification (WL-SPEC-75
+// §12) precisely so someone can review it later.
 //
 // The page reuses the store's existing `--deleted` filters (TaskFilter and
 // DocFilter's Deleted switch), so it lists exactly what `lode task list
 // --deleted` and `lode doc list --deleted` list, narrowed to one project.
 //
 // Restore is two routes, not one: undeleting a task is permTaskWrite and
-// undeleting a document is permDocWrite (044 §5), routeGuards names one
+// undeleting a document is permDocWrite (WL-SPEC-75 §12), routeGuards names one
 // permission per route, and collapsing the two into a single endpoint would
 // mean one of the halves ran under the other's authority.
 package api

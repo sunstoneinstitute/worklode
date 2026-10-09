@@ -1,6 +1,6 @@
 package api_test
 
-// inboxdot_test.go covers spec 056 §4's inbox indicator: renderWeb computes
+// inboxdot_test.go covers WL-SPEC-82 §2.3's inbox indicator: renderWeb computes
 // HasInboxItems once per request and every page's top bar reads the result.
 // The other half — the icon markup and the dot's context plumbing — is
 // covered in internal/ui/layout_test.go; these tests drive the real HTTP
@@ -24,7 +24,7 @@ import (
 
 // TestInboxDotOnProjectsPage pins the indicator on a page that knows nothing
 // about inboxes: /projects shows the dot for a signed-in actor with one
-// review awaiting them directly (spec 056 §3.2 bucket 1), and loses it once
+// review awaiting them directly (WL-SPEC-82 §12 bucket 1), and loses it once
 // that review is decided.
 func TestInboxDotOnProjectsPage(t *testing.T) {
 	t.Parallel()
@@ -97,7 +97,7 @@ func TestInboxDotAbsentSignedOut(t *testing.T) {
 	}
 }
 
-// TestHasInboxItemsCalledOnce is a structural guard for spec 056 §4's
+// TestHasInboxItemsCalledOnce is a structural guard for WL-SPEC-82 §2.3's
 // once-per-request rule: renderWeb (webform.go) is the only place in
 // internal/api that calls store.Store.HasInboxItems. A second call site
 // would mean either a duplicate query per page or a page computing the flag

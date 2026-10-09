@@ -1,4 +1,4 @@
-// Package progress derives the WL-SPEC-66 §1 progress model — plan state,
+// Package progress derives the WL-SPEC-85 §2 progress model — plan state,
 // section state, spec grouping, and the next act — from typed facts about a
 // project's specs, plans and tasks. Every function is a pure function: no
 // I/O, no clock, no imports beyond stdlib and internal/model. Derive never
@@ -38,7 +38,7 @@ type Spec struct {
 	Owner   string
 	Updated time.Time
 	// PlanningTask is the open design task about this spec, when one exists
-	// (025 §15.4). §3.4 shows it instead of the Plan button; the derivation
+	// (WL-SPEC-77 §15). §3.4 shows it instead of the Plan button; the derivation
 	// itself never reads it.
 	PlanningTask string
 	Sections     []Section
@@ -127,7 +127,7 @@ func PlanState(status string, tasks []Task) string {
 	case "draft":
 		return "draft"
 	case "superseded", "spent":
-		return "built" // 026 §2.1; spent is increment 3 R4's finished plan
+		return "built" // WL-SPEC-78 §1.2; spent is increment 3 R4's finished plan
 	}
 	var landed, active, unstarted int
 	for _, t := range tasks {

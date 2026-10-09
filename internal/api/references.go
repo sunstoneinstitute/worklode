@@ -1,4 +1,4 @@
-// references.go serves spec 029 §5's entity_edges over the JSON API: typed
+// references.go serves WL-SPEC-75 §13.4's entity_edges over the JSON API: typed
 // references between entities of different kinds, the only edges allowed to
 // cross a project boundary. It follows deliverables.go's shape — a
 // record*/create* pair, RecordEvent wrapping the store write so the event log

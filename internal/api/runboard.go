@@ -1,5 +1,5 @@
 // runboard.go is the run board's pure fact-to-group classifier and assembler
-// (032 §8; see docs/plans/2026-08-27-project-cockpit-3-run-board.md). It has
+// (see docs/plans/2026-08-27-project-cockpit-3-run-board.md). It has
 // no store calls and no HTTP: it only turns already-fetched
 // store.ProjectWorkFact rows (plus session, PR/CI, and cost maps) into the
 // ui.RunBoardView a page renders. The rest of §8 — presets, scoped
@@ -20,8 +20,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
-// runBoardPage handles GET /projects/{id}/work: the project's run board
-// (032 §8), crewPage-shaped. It loads the project header first (so an
+// runBoardPage handles GET /projects/{id}/work: the project's run board,
+// crewPage-shaped. It loads the project header first (so an
 // unknown project 404s the same way every other project route does), then
 // every fact assembleRunBoard needs — work facts, open sessions, open PRs
 // and the CI runs on their head SHAs — and prices only the tasks that
@@ -102,7 +102,7 @@ func runBoardView(project ui.CockpitProject, board *ui.RunBoardView) ui.RunBoard
 	return v
 }
 
-// runGroup is 032 §8's grouping of live work, in the spec's own order.
+// runGroup is the grouping of live work, in display order.
 // runGroupNone marks a task the board excludes (draft: not execution yet).
 type runGroup int
 
@@ -288,8 +288,8 @@ func runRow(f store.ProjectWorkFact, g runGroup, sessions map[string]store.Proje
 }
 
 // holdsLabel names what holds a Waiting row: its open blocker task ids, then
-// its blocking plans' doc numbers — a plan carries no other number (025
-// §14.3), so the doc id is what "blocking plan numbers" means.
+// its blocking plans' doc numbers — a plan carries no other number (WL-SPEC-77
+// §7), so the doc id is what "blocking plan numbers" means.
 func holdsLabel(f store.ProjectWorkFact) string {
 	parts := make([]string, 0, len(f.OpenBlockers)+len(f.BlockingPlans))
 	for _, b := range f.OpenBlockers {

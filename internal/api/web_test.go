@@ -33,7 +33,7 @@ func bodyContains(t *testing.T, body string, want ...string) {
 // assertShell checks the structural markers every page rendered through the
 // Page shell component (layout.templ) must carry: the skip link, the
 // two-column shell frame, the one main landmark, and the shared stylesheet —
-// see docs/specs/032-project-cockpit.md §10.
+// see WL-SPEC-82 §2.
 func assertShell(t *testing.T, body string) {
 	t.Helper()
 	for _, want := range []string{
@@ -83,7 +83,7 @@ func assertOneAriaCurrent(t *testing.T, body string) {
 }
 
 // assertNoAriaCurrent is the same invariant for a page that names no current
-// destination: Home, Reviews and Deliveries left the global list in spec 056
+// destination: Home, Reviews and Deliveries left the global list in WL-SPEC-82
 // §1, so their own page marks nothing. Never two, and never one it cannot
 // justify.
 func assertNoAriaCurrent(t *testing.T, body string) {
@@ -133,7 +133,7 @@ func topbarRegion(t *testing.T, body string) string {
 	return rest[:j]
 }
 
-// TestGlobalNavLivesInTheTopbar checks spec 056 §1's one navigation row: the
+// TestGlobalNavLivesInTheTopbar checks WL-SPEC-82 §2.1's one navigation row: the
 // destinations render inside the top bar itself, between the brand — now a
 // link to / — and the actor controls, and no second nav row survives between
 // the header and the page shell.
@@ -153,9 +153,9 @@ func TestGlobalNavLivesInTheTopbar(t *testing.T) {
 }
 
 // TestGlobalNavOrder checks the primary nav renders the five destinations in
-// the exact order docs/specs/056-nav-shell-and-cross-project-inbox.md §1
+// the exact order WL-SPEC-82 §2.1
 // requires — Ideas, Intake, Projects, Work, Knowledge — and that Home,
-// Reviews and Deliveries left the list (§1 amends 032 §2's eight).
+// Reviews and Deliveries left the list (§1 amends WL-SPEC-82 §2's eight).
 func TestGlobalNavOrder(t *testing.T) {
 	t.Parallel()
 	_, h, _ := newTestServer(t)
@@ -172,7 +172,7 @@ func TestGlobalDestinations(t *testing.T) {
 	t.Parallel()
 	_, h, _ := newTestServer(t)
 
-	// Knowledge lands on /docs, the document corpus (spec 032 §2's
+	// Knowledge lands on /docs, the document corpus (WL-SPEC-82 §2's
 	// "documents and graph-backed expert views"); /knowledge redirects there.
 	for _, path := range []string{"/", "/ideas", "/intake", "/projects", "/work", "/reviews", "/deliveries", "/docs"} {
 		t.Run(path, func(t *testing.T) {
@@ -244,9 +244,9 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 }
 
 // TestReviewsPageListsAwaitingApprovals checks the Reviews destination is
-// the real awaiting-approvals queue (spec 029 §7.1), not a placeholder: a
+// the real awaiting-approvals queue (WL-SPEC-75 §13.6), not a placeholder: a
 // seeded PR-kind approval shows its title and entity id. The page marks no
-// current destination — Reviews left the global list in spec 056 §1.
+// current destination — Reviews left the global list in WL-SPEC-82 §2.1.
 func TestReviewsPageListsAwaitingApprovals(t *testing.T) {
 	t.Parallel()
 	st, h, _ := newTestServer(t)
@@ -262,7 +262,7 @@ func TestReviewsPageListsAwaitingApprovals(t *testing.T) {
 }
 
 // TestReviewsPageRendersNonPRLanes: the queue is one page over every
-// governed kind (029 §7.2). A deliverable row names its lane, and a lane
+// governed kind (WL-SPEC-75 §13.6). A deliverable row names its lane, and a lane
 // with no designated revision is not offered a decide form — the store
 // refuses that decide, and the page does not offer an act that can only 422.
 func TestReviewsPageRendersNonPRLanes(t *testing.T) {
@@ -325,7 +325,7 @@ func TestReviewsPageEmptyIsHonest(t *testing.T) {
 }
 
 // TestShellReferencesHTMX asserts the shell references the self-hosted,
-// dormant HTMX asset — no CDN, no hx-* behavior (that's spec 032 §11) — and
+// dormant HTMX asset — no CDN, no hx-* behavior — and
 // that /assets/htmx.min.js is served unauthenticated like the other assets.
 func TestShellReferencesHTMX(t *testing.T) {
 	t.Parallel()
@@ -444,7 +444,7 @@ func TestAppCSSContent(t *testing.T) {
 // every page that names a current destination — exactly one
 // aria-current="page". The task page and the new-task form name none (their
 // left column marks nothing), and neither do Home, Reviews and Deliveries,
-// which left the destination list in spec 056 §1; those assert zero.
+// which left the destination list in WL-SPEC-82 §2.1; those assert zero.
 func TestEveryPageRendersTheShell(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -590,7 +590,7 @@ func TestProjectDocsPage(t *testing.T) {
 // TestCrewPage checks the Crew destination: an empty roster renders the
 // honest "No Crew yet" state with no fabricated record, a populated roster
 // shows every member with their role labels and exactly one Lead badge
-// (032 §6), and an unknown project 404s the same way every other project
+// (WL-SPEC-82 §8), and an unknown project 404s the same way every other project
 // route does. The roster is seeded through the real write path, so what the
 // page shows is what a Crew add actually stores.
 func TestCrewPage(t *testing.T) {
@@ -609,7 +609,7 @@ func TestCrewPage(t *testing.T) {
 	if strings.Contains(body, "Crew arrives with project participants") {
 		t.Error("the crew destination still renders its old placeholder message")
 	}
-	// The add-member form is the page's one write affordance (029 §6.1).
+	// The add-member form is the page's one write affordance (WL-SPEC-75 §13.5).
 	bodyContains(t, mainContent(t, body), `<form method="post" action="/projects/proj/crew">`, `name="actor"`, `name="role"`, `name="lead"`)
 
 	seedCrewActors(t, st, "ada", "bob")
@@ -638,7 +638,7 @@ func TestCrewPage(t *testing.T) {
 	// two roles are folded into one row, sorted.
 	bodyContains(t, main, "Ada Person", "ada", "editor",
 		"Bob Person", "bob", "data-scientist, reporter")
-	// Exactly one Lead badge: 032 §6's accountable human is one person.
+	// Exactly one Lead badge: WL-SPEC-82 §8's accountable human is one person.
 	if n := strings.Count(main, ">Lead</span>"); n != 1 {
 		t.Fatalf("Lead badges = %d, want exactly 1:\n%s", n, main)
 	}
@@ -857,7 +857,7 @@ func pollHomeGET(t *testing.T, h http.Handler, session, want string) *httptest.R
 }
 
 // TestHomePageMorningBrief drives Home as a signed-in member and checks the
-// Morning Brief section it assembles (spec 032 §9): a tier-2 outcome, a
+// Morning Brief section it assembles (WL-SPEC-82 §11): a tier-2 outcome, a
 // tier-3 stopped event, and three tier-4 routine events collapsed to a
 // count with no per-event text, plus the review form's hidden cutoff
 // pinned to the highest seeded event id.
@@ -1244,7 +1244,7 @@ func briefCutoff(t *testing.T, body string) string {
 	return value
 }
 
-// TestMorningBriefJourney is spec 032 §11's acceptance demonstration: the
+// TestMorningBriefJourney is the Morning Brief's acceptance demonstration: the
 // brief makes the remaining human judgment obvious without showing a raw
 // activity firehose. One person logs in, work is created, finished and
 // stopped, and Home separates what needs her from what merely happened;
@@ -1482,7 +1482,7 @@ func TestTaskPage(t *testing.T) {
 		"docker_image reg/app 1.2.3", // artifact entry summary
 	)
 	assertShell(t, body)
-	// The task page carries the project sidebar (spec 056 §2): both nav
+	// The task page carries the project sidebar (WL-SPEC-82 §2.2): both nav
 	// landmarks render, the project's name links to its Overview, and — since
 	// the task page is not itself one of the sidebar's destinations —
 	// neither nav marks a current page.
@@ -1813,9 +1813,9 @@ func TestProjectPage(t *testing.T) {
 			t.Errorf("project page unexpectedly rendered %q:\n%s", absent, body)
 		}
 	}
-	// Project local nav, in docs/specs/032-project-cockpit.md §2's order, with
+	// Project local nav, in WL-SPEC-82 §2.2's order, with
 	// Milestones inserted after Crew: a milestone contains both work and
-	// deliverables (spec 029 §2), so it sits ahead of both lists.
+	// deliverables (WL-SPEC-75 §13.2), so it sits ahead of both lists.
 	assertOrder(t, body, ">Overview<", ">Crew<", ">Milestones<", ">Work<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
 	assertOrder(t, body, `class="backlink"`, "All projects", ">Overview<")
 	// The cockpit is a projection, never a stored workflow field: the page
@@ -1873,7 +1873,7 @@ func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 // TestDriftPageRendersWithoutGraph holds the drift board's two standing
 // properties on a deployment with no graph-server: the backbone-authoritative
 // half still renders (200), the graph-backed half says so honestly instead of
-// erroring, and the whole page stays read-only — spec 007's read surface has
+// erroring, and the whole page stays read-only — WL-SPEC-82's read surface has
 // no act to offer, so it must render no mutation affordance at all.
 func TestDriftPageRendersWithoutGraph(t *testing.T) {
 	t.Parallel()

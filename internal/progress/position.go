@@ -7,7 +7,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// PositionFacts is one task's run-board facts (032 §8), typed so Position
+// PositionFacts is one task's run-board facts, typed so Position
 // stays pure: no store, no HTTP, no clock reads beyond the Now field a
 // caller fills.
 type PositionFacts struct {
@@ -20,7 +20,7 @@ type PositionFacts struct {
 	Now      time.Time
 }
 
-// LeaseFact is a live lease on a task (004 §5).
+// LeaseFact is a live lease on a task (WL-SPEC-75 §6).
 type LeaseFact struct {
 	Actor string
 	Since time.Time
@@ -32,7 +32,7 @@ type PRFact struct {
 	Number int64
 	URL    string
 	// MergeQueue reports whether the PR's repo runs a merge queue on its
-	// base branch, sourced from stored branch rules (WL-SPEC-66 §6.3).
+	// base branch, sourced from stored branch rules (WL-SPEC-85 §7).
 	// Unknown reads as false — the merge button's fact, not the ladder's:
 	// Position decides the queued rung from Queued, not this field.
 	MergeQueue bool
@@ -52,7 +52,7 @@ var deliveryText = map[string]string{
 	"released":      "released",
 }
 
-// Position renders a task's position on WL-SPEC-66 §2.4's ladder: the first
+// Position renders a task's position on WL-SPEC-85 §3's ladder: the first
 // rung that applies wins. A landed state (TaskClass) always wins over any
 // PR or CI fact, so a stale PR row on a merged task can't outrank the
 // delivery state that already superseded it.

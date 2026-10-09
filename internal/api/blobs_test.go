@@ -129,7 +129,7 @@ func TestUploadBlobDedup(t *testing.T) {
 	}
 	// The object count above cannot tell the two paths apart: a second
 	// PutObject of the same content-addressed key also leaves exactly one
-	// object. Spec 021 AC1's "issues no second PutObject" is this assertion.
+	// object. The "issues no second PutObject" guarantee is this assertion.
 	if n := fake.Puts(); n != 1 {
 		t.Fatalf("PutObject called %d times, want 1: the second upload must "+
 			"dedup off the index and never reach the object store", n)
@@ -255,7 +255,7 @@ func TestServeBlobAttachmentDisposition(t *testing.T) {
 	}
 }
 
-// TestServeBlobOpenOnAnOptedInInstance pins half of spec 021 §4: the blob
+// TestServeBlobOpenOnAnOptedInInstance pins half of WL-SPEC-78 §8.4: the blob
 // route inherits the UI's posture, so on an instance with no login provider
 // that set LODE_WEB_OPEN, an anonymous fetch succeeds exactly as an anonymous
 // page load does. A 401 here would render a task page fine and break every
@@ -506,7 +506,7 @@ func servedDisposition(t *testing.T, h http.Handler, token, hash, rawQuery strin
 	return u.Query().Get("response-content-disposition")
 }
 
-// TestServeBlobFilenameDisposition pins the promise of spec 021 §2: a
+// TestServeBlobFilenameDisposition pins the promise of WL-SPEC-78 §8.2: a
 // reference that carries a name is served under it, encoded per RFC 6266.
 // The name arrives as a query parameter because task_blobs.filename is
 // per-reference while the route is per-blob.
@@ -547,7 +547,7 @@ func TestServeBlobFilenameDisposition(t *testing.T) {
 }
 
 // TestServeBlobFilenameKeepsTheInlineToken: the name is cosmetic, the token
-// is not. Spec 021 §6 rests the whole of the per-object hardening on
+// is not. WL-SPEC-78 §8.6 rests the whole of the per-object hardening on
 // inline-vs-attachment, so a caller-supplied name must not be able to move
 // it — including by naming a text blob something executable-looking.
 func TestServeBlobFilenameKeepsTheInlineToken(t *testing.T) {
@@ -615,7 +615,7 @@ func uploadedBlob(t *testing.T, h http.Handler, token string, body []byte) model
 
 // TestUploadVideoExtractsPoster: an uploaded video answers with a second blob
 // — its first frame — which is a real, servable blob and not a promise
-// (spec 021 §5, resolving Q021.2).
+// (WL-SPEC-78 §8.5).
 func TestUploadVideoExtractsPoster(t *testing.T) {
 	stubFFmpeg(t, true)
 	_, h, token, fake := newTestServerBlobs(t)

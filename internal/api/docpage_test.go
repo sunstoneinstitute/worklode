@@ -20,7 +20,7 @@ func TestDocsPage(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
-	// The plan is the point: since 029 §4 it carries a number, so the index
+	// The plan is the point: since WL-SPEC-75 §13.4 it carries a number, so the index
 	// links it by shorthand like every other kind rather than by database id.
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
@@ -116,8 +116,8 @@ func TestDocPageDegradesWithoutVersions(t *testing.T) {
 	bodyContains(t, body, "Documents in the backbone")
 }
 
-// TestDocVersionPage covers GET /docs/{id}/versions/{n} (025 §4.5): a plan
-// stays freely mutable (025 §9), so editing its body once leaves version 1
+// TestDocVersionPage covers GET /docs/{id}/versions/{n} (WL-SPEC-77 §3): a plan
+// stays freely mutable (WL-SPEC-77 §11), so editing its body once leaves version 1
 // superseded and version 2 current, and only the superseded one shows the
 // "back to current" banner.
 func TestDocVersionPage(t *testing.T) {
@@ -216,7 +216,7 @@ func TestDocVersionPageRejectsInt32Overflow(t *testing.T) {
 	}
 }
 
-// TestDocPageShowsNotes is WL-716's second gap: the anchored notes 025 §8.5
+// TestDocPageShowsNotes is WL-716's second gap: the anchored notes WL-SPEC-77 §10
 // stores are rendered instead of invisible. ?body=source is the escape hatch
 // back to the stored text. Rule amendment folding is
 // TestDocPageFoldsRuleAmendments.
@@ -283,7 +283,7 @@ func TestDocPageFoldsRuleAmendments(t *testing.T) {
 }
 
 // TestDocPageShowsReviewState is WL-716's third gap: the reviewer roster
-// (025 §7.3) and the open approval rows (029 §7) are rendered on the document
+// (WL-SPEC-77 §9) and the open approval rows (WL-SPEC-75 §13.6) are rendered on the document
 // itself, each with the decide form the Reviews queue uses — carrying this
 // page as its return, so deciding here does not throw the reviewer to /reviews.
 func TestDocPageShowsReviewState(t *testing.T) {

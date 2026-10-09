@@ -167,7 +167,7 @@ func TestRecommendWithProvider(t *testing.T) {
 	if m0["name"] != "acme:tdd" {
 		t.Fatalf("match name: %v", m0["name"])
 	}
-	// The score is the retrieval path's fused reciprocal rank (040 §6.1), not
+	// The score is the retrieval path's fused reciprocal rank (WL-SPEC-79 §15), not
 	// a cosine similarity: it orders matches, so the assertion is that it is
 	// present and positive, never that it is near 1.
 	if score, ok := m0["score"].(float64); !ok || score <= 0 {

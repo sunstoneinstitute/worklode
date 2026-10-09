@@ -1,5 +1,5 @@
 // authz.go is worklode's authorization layer. There is no RBAC model in the
-// backbone yet — spec 029 §6's Crew roles and project-scoped participation do
+// backbone yet — WL-SPEC-75 §13.5's Crew roles and project-scoped participation do
 // not exist — so this is deliberately a *seam*, not a pretend model: it
 // encodes exactly the two-level truth the server already had (every
 // authenticated actor, plus instance admins) in one readable place, and gives
@@ -47,7 +47,7 @@ import (
 )
 
 // Role is a named grant a subject holds. Two exist, because two exist in
-// Keycloak (spec 001 §9.2 syncs the admin role onto the actor at login) and
+// Keycloak (WL-SPEC-74 §4.3 syncs the admin role onto the actor at login) and
 // inventing more here would describe a system nobody can populate.
 type Role string
 
@@ -79,7 +79,7 @@ const (
 
 	permProjectRead  Permission = "project.read"
 	permProjectAdmin Permission = "project.admin"
-	// permProjectReport covers reporting overhead usage (spec 052 §2): tokens
+	// permProjectReport covers reporting overhead usage (WL-SPEC-73 §8.2): tokens
 	// spent with no task to bill to, from a main-checkout orchestration
 	// session or a worktree whose lease the reporting actor no longer held.
 	// Not a claim on any one task, so every authenticated role may report it.
@@ -88,14 +88,14 @@ const (
 	permDeliverableRead  Permission = "deliverable.read"
 	permDeliverableWrite Permission = "deliverable.write"
 
-	// permMilestoneWrite covers spec 029 §2's milestone, the container tasks
+	// permMilestoneWrite covers WL-SPEC-75 §13.2's milestone, the container tasks
 	// and deliverables hang off. Its own capability for the same reason a
 	// deliverable has one: shaping what a project is working towards is a
 	// different authority from filing the work.
 	permMilestoneWrite Permission = "milestone.write"
 	permMilestoneRead  Permission = "milestone.read"
 
-	// permReferenceRead and permReferenceWrite cover entity_edges (spec 029
+	// permReferenceRead and permReferenceWrite cover entity_edges (WL-SPEC-75
 	// §5): typed references between entities of different kinds, the only
 	// edges allowed to cross a project boundary. Any crew member may declare
 	// a dependency, matching deliverable creation, so both grant to
@@ -104,14 +104,14 @@ const (
 	permReferenceWrite Permission = "reference.write"
 
 	// permCrewWrite covers changing a project's Crew: who is on it and with
-	// which role labels (spec 029 §6.1). Its own capability rather than a
+	// which role labels (WL-SPEC-75 §13.5). Its own capability rather than a
 	// flavour of project.admin, because Crew is the working group of a
-	// project rather than its configuration — spec 029 §6.1 puts the change
+	// project rather than its configuration — WL-SPEC-75 §13.5 puts the change
 	// in the hands of the Crew itself, not of an instance administrator.
 	permCrewWrite Permission = "crew.write"
 
 	// permDocRead and permDocWrite cover the backbone's design documents (spec
-	// 025 §5): specs, ADRs and plans. Their own capability rather than a
+	// WL-SPEC-77 §3): specs, ADRs and plans. Their own capability rather than a
 	// flavour of task.read/task.write, because a document is a different
 	// object with a different lifecycle — authoring and accepting the corpus
 	// is not the same authority as filing and closing work, and a policy that
@@ -120,7 +120,7 @@ const (
 	// set, so nothing changes; the seam is what is being added.
 	permDocRead  Permission = "doc.read"
 	permDocWrite Permission = "doc.write"
-	// permDocImport is the corpus importer's authority (025 §12). It asserts
+	// permDocImport is the corpus importer's authority (WL-SPEC-77 §13). It asserts
 	// facts the ordinary lifecycle establishes — a status set directly instead
 	// of through the accept gate, an edge set replaced wholesale — so it is an
 	// instance-administration act rather than ordinary authoring, and is
@@ -129,7 +129,7 @@ const (
 
 	permActorAdmin Permission = "actor.admin"
 
-	// permTaskToken covers minting a task-scoped token (001 §2.1, WL-306):
+	// permTaskToken covers minting a task-scoped token (WL-SPEC-74 §2, WL-306):
 	// POST /api/v1/tasks/{id}/tokens. Not actor.admin, deliberately — the
 	// minted credential is strictly narrower than the minter's own (bound to
 	// one task, expiring with its lease, unable to mint further), so a user
@@ -142,7 +142,7 @@ const (
 	permSkillAdmin Permission = "skill.admin"
 
 	// permSearchRead covers GET /api/v1/search, which spans docs, tasks and
-	// skills in one query (040 §9). It is its own permission, not a reuse of
+	// skills in one query (WL-SPEC-79 §17). It is its own permission, not a reuse of
 	// permDocRead/permTaskRead/permSkillRead, so a future project-scoped role
 	// can gate it independently of the three reads it currently mirrors.
 	permSearchRead Permission = "search.read"
@@ -153,7 +153,7 @@ const (
 
 	permRuntimeWrite Permission = "runtime.write"
 
-	// permArtifactProbe covers the prober's two bearer-API routes (029 §3.2):
+	// permArtifactProbe covers the prober's two bearer-API routes (WL-SPEC-75 §13.3):
 	// reading the addresses to probe and reporting what it found. One
 	// permission for both, the same way permRuntimeWrite covers the watcher's
 	// single write — the prober has no read/write split worth a second
@@ -173,19 +173,19 @@ const (
 	permWebWrite Permission = "web.write"
 
 	// permBlobWrite and permBlobRead cover the content-addressed blobs a task
-	// body embeds (spec 021). Their own capability rather than a flavour of
+	// body embeds (WL-SPEC-78). Their own capability rather than a flavour of
 	// task.write/task.read because the objects outlive and are addressed
 	// independently of any one task: a blob is referenced by hash, and nothing
 	// about the upload names the work it belongs to.
 	permBlobWrite Permission = "blob.write"
 	permBlobRead  Permission = "blob.read"
-	// permBlobAdmin covers the GC sweeps (spec 021 §11): they delete index
+	// permBlobAdmin covers the GC sweeps (WL-SPEC-78 §8.7): they delete index
 	// rows and object-store bytes on every actor's behalf, which is instance
 	// administration, not ordinary blob authoring.
 	permBlobAdmin Permission = "blob.admin"
 
 	// permEventRead covers the read surfaces over the ordered event log
-	// (spec 025 §15/§18): the log itself and subscriber status. Any
+	// (WL-SPEC-77 §15/§18): the log itself and subscriber status. Any
 	// authenticated actor may read them — they are operational visibility,
 	// not a write.
 	permEventRead Permission = "event.read"
@@ -213,13 +213,13 @@ const (
 	// the CLI (and lode doctor) confirms a token is accepted and whose it is.
 	permWhoAmI Permission = "whoami"
 
-	// permReconcile covers spec 013's reconciliation surface: GET
+	// permReconcile covers WL-SPEC-80's reconciliation surface: GET
 	// /api/v1/repos/doctor (ingestion health across the org) and POST
 	// /api/v1/reconcile (replays/repairs ingestion). Admin-only — both read and
 	// act across every project's repos, not just the caller's own work.
 	permReconcile Permission = "reconcile"
 
-	// permOverviewRead covers spec 007's five read surfaces: the roll-up,
+	// permOverviewRead covers WL-SPEC-82's five read surfaces: the roll-up,
 	// drift, gaps, the frontier mirror and the critical path. Its own
 	// capability rather than a flavour of task.read because what it discloses
 	// is a different object — the org-wide shape of the work and where the
@@ -232,7 +232,7 @@ const (
 	// it spends GitHub App API calls across every repo the org has mapped.
 	permDeriveRun Permission = "derive.run"
 
-	// permApprovalDecide covers deciding an approval (spec 029 §7.3): POST
+	// permApprovalDecide covers deciding an approval (WL-SPEC-75 §13.6): POST
 	// /approvals/{id}/decide, the web surface's only decision act. The route
 	// is additionally gated by requireSession, an authentication-method check
 	// that runs ahead of and is orthogonal to this role check, and by the
@@ -240,7 +240,7 @@ const (
 	// rather than a role in this table.
 	permApprovalDecide Permission = "approval.decide"
 
-	// permApprovalRead covers reading the awaiting queue (029 §7.1): GET
+	// permApprovalRead covers reading the awaiting queue (WL-SPEC-75 §13.6): GET
 	// /api/v1/approvals. Its own permission rather than a flavour of
 	// task.read, because the queue spans entity kinds — a pull request, a
 	// document — and reads across every project, which is what makes "who
@@ -248,15 +248,15 @@ const (
 	// answer separately from "who may read a task".
 	permApprovalRead Permission = "approval.read"
 
-	// permApprovalRequire covers filing an ad-hoc approval requirement (029
-	// §7.2): POST /api/v1/approvals. Separate from permApprovalDecide on
+	// permApprovalRequire covers filing an ad-hoc approval requirement (WL-SPEC-75
+	// §13.6): POST /api/v1/approvals. Separate from permApprovalDecide on
 	// purpose — saying "this needs review" is authoring, which an agent or a
 	// CI job holding a bearer token may do, while the decision itself stays
 	// a web-session act.
 	permApprovalRequire Permission = "approval.require"
 
 	// permApprovalNote covers the dependent owner's note on an open impact
-	// review (029 §7.1): POST /approvals/{id}/note. Separate from
+	// review (WL-SPEC-75 §13.6): POST /approvals/{id}/note. Separate from
 	// permApprovalDecide because writing down what an upstream change means
 	// for your own entity is authoring, not deciding — the decision that
 	// follows is still the prior approver's. Like the decide route it is
@@ -285,7 +285,7 @@ var grants = map[Permission][]Role{
 	permProjectReport: {RoleUser, RoleAdmin},
 
 	// Declaring what a project ships is its own capability, not a flavour of
-	// task.write: spec 029 §3 makes a deliverable a different object, and a
+	// task.write: WL-SPEC-75 §13.3 makes a deliverable a different object, and a
 	// policy that lets an agent file tasks without letting it redefine the
 	// definition of done is one someone will plausibly want.
 	permDeliverableRead:  {RoleUser, RoleAdmin},
@@ -297,7 +297,7 @@ var grants = map[Permission][]Role{
 	permReferenceRead:  {RoleUser, RoleAdmin},
 	permReferenceWrite: {RoleUser, RoleAdmin},
 
-	// Every authenticated actor, which is wider than spec 029 §6.1 asks for:
+	// Every authenticated actor, which is wider than WL-SPEC-75 §13.5 asks for:
 	// the spec scopes the change to the project's own Crew ("any Crew member
 	// may add or remove"), and this table has no project scope to express
 	// that in — grants are instance-wide, keyed by role alone. This is a
@@ -307,7 +307,7 @@ var grants = map[Permission][]Role{
 	permCrewWrite: {RoleUser, RoleAdmin},
 
 	// Authoring the corpus is open to every authenticated actor; who may
-	// *accept* a document is not a role question at all — 025 §7 gates it on
+	// *accept* a document is not a role question at all — WL-SPEC-77 §9 gates it on
 	// the document's owner, checked in the store.
 	permDocRead:  {RoleUser, RoleAdmin},
 	permDocWrite: {RoleUser, RoleAdmin},
@@ -330,7 +330,7 @@ var grants = map[Permission][]Role{
 	// carry, so this adds a permission without changing who can see what.
 	// When project-scoped roles arrive, this is the endpoint to revisit: one
 	// permission over three subject kinds is only honest while all three
-	// reads are granted identically (040 §9).
+	// reads are granted identically (WL-SPEC-79 §17).
 	permSearchRead: {RoleUser, RoleAdmin},
 
 	permInboxRead:   {RoleUser, RoleAdmin},
@@ -366,7 +366,7 @@ var grants = map[Permission][]Role{
 	permApprovalRead: {RoleUser, RoleAdmin},
 	// Filing a requirement is authoring, so it sits with reading rather than
 	// with deciding: an agent that knows a change needs a second pair of eyes
-	// may say so (029 §7.2).
+	// may say so (WL-SPEC-75 §13.6).
 	permApprovalRequire: {RoleUser, RoleAdmin},
 
 	permEventRead:      {RoleUser, RoleAdmin},
@@ -385,7 +385,7 @@ var grants = map[Permission][]Role{
 	permDeriveRun:    {RoleAdmin},
 
 	// Every authenticated actor, because who may decide a *given* approval is
-	// not a role question: 029 §7.1 gates it on the approval's own
+	// not a role question: WL-SPEC-75 §13.6 gates it on the approval's own
 	// required_role against the decider's groups, checked in the store. This
 	// permission gates reaching the route at all.
 	permApprovalDecide: {RoleUser, RoleAdmin},
@@ -421,7 +421,7 @@ type Subject struct {
 	Kind    string // human, agent, service ("" when there is no actor)
 	Roles   []Role
 	Via     authMethod
-	// TaskID is the task a task-scoped token is bound to (001 §2.1, WL-306),
+	// TaskID is the task a task-scoped token is bound to (WL-SPEC-74 §2, WL-306),
 	// "" for every other subject. A non-empty TaskID narrows what the
 	// subject may reach: only routes whose guard names a task scope (see
 	// routeGuard.taskScope), with the {id}-bound ones additionally requiring
@@ -449,7 +449,7 @@ func (s Subject) HasRole(role Role) bool { return slices.Contains(s.Roles, role)
 
 // subjectFromActor builds the subject for an authenticated actor. Every actor
 // holds RoleUser; the admin flag — synced from Keycloak's admin role at login
-// (spec 001 §9.2) — adds RoleAdmin. This is the one place actor state becomes
+// (WL-SPEC-74 §4.3) — adds RoleAdmin. This is the one place actor state becomes
 // policy input.
 func subjectFromActor(a *store.Actor, via authMethod) Subject {
 	if a == nil {
@@ -483,7 +483,7 @@ type Decision struct {
 }
 
 // Request is what a decision is made about. Resource is unused today and is
-// here so that the project-scoped decision spec 029 §6 will need ("may this
+// here so that the project-scoped decision WL-SPEC-75 §13.5 will need ("may this
 // actor approve in *that* project") arrives as a new field on an existing
 // struct rather than as a new signature at every call site.
 type Request struct {
@@ -557,7 +557,7 @@ func actorIDFrom(r *http.Request) string {
 
 // --- enforcement ------------------------------------------------------------
 
-// requireTaskScope enforces 001 §2.1's narrowing for task-scoped subjects
+// requireTaskScope enforces WL-SPEC-74 §2's narrowing for task-scoped subjects
 // (WL-306). It composes ahead of the handler, after requirePerm: an
 // ordinary subject passes untouched; a task-scoped one is refused unless
 // this route's guard names a task scope, and on an {id}-bound route unless
@@ -646,7 +646,7 @@ func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFu
 }
 
 // requireSession refuses any subject not authenticated by a live OIDC
-// session cookie. Spec 029 §7.3: approving is a web-session act because the
+// session cookie. WL-SPEC-75 §13.6: approving is a web-session act because the
 // session's group claims are at most as old as the login that stored them; a
 // bearer token's are as old as the token. authOpen is refused too — an open
 // instance has no identity to attribute a decision to.
@@ -680,7 +680,7 @@ func (s *server) requireSession(perm Permission, next http.HandlerFunc) http.Han
 //     provider configured, webSubject yields the open subject only when the
 //     operator set LODE_WEB_OPEN, and nobody at all otherwise — so a blob is
 //     refused on a closed instance and served on one that opted in, exactly
-//     as the pages are (spec 021 §4). A blob route is not the place to
+//     as the pages are (WL-SPEC-78 §8.4). A blob route is not the place to
 //     unilaterally tighten or loosen an installation's auth model.
 //   - It answers with writeErr (JSON), never webErr (HTML), and never a login
 //     redirect. This is a subresource: a browser fetching <img src="/blob/…">
@@ -689,7 +689,7 @@ func (s *server) requireSession(perm Permission, next http.HandlerFunc) http.Han
 //     code is 401 and not webGuard's 503, even on a provider-less instance:
 //     unlike a page, a blob there *is* served to a caller carrying a bearer
 //     token, so the anonymous refusal is a missing credential rather than a
-//     deployment fact (spec 021 §15 AC3).
+//     deployment fact.
 //   - A bearer token that does not resolve is refused outright rather than
 //     retried as a web request. Falling through to webSubject would serve the
 //     blob to a rejected credential whenever LODE_WEB_OPEN is set.

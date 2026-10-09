@@ -1,8 +1,8 @@
 package api_test
 
-// inbox_page_test.go exercises GET /inbox (spec 056 §3) through the same
+// inbox_page_test.go exercises GET /inbox (WL-SPEC-82 §12) through the same
 // newOIDCServer + webLogin session harness web_test.go's actor-tier tests
-// use. It is a separate file from inbox_test.go (spec 020's /api/v1/inbox
+// use. It is a separate file from inbox_test.go (WL-SPEC-80's /api/v1/inbox
 // triage suite) and inbox_assemble_test.go (inbox.go's own package-internal
 // pure-assembly tests) — same word, three different things.
 
@@ -45,7 +45,7 @@ func ibCreateTask(t *testing.T, st *store.Store, extID string, now time.Time, pr
 	return task
 }
 
-// TestInboxPage seeds spec 056 §3.2's spread — an assigned review, an
+// TestInboxPage seeds WL-SPEC-82 §12's spread — an assigned review, an
 // unassigned review in a led project, an owned PR, an assigned task, a
 // created task, and a neighbour task — and checks a lead sees all six
 // buckets, in the spec's fixed order, each linking the item it holds.

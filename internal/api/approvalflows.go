@@ -15,7 +15,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// flowActorID owns every approval row a flow rule mints (029 §7.2). The
+// flowActorID owns every approval row a flow rule mints (WL-SPEC-75 §13.6). The
 // materializer stamps it as created_by, so the id is store's to define and
 // this side only asserts the actor exists at boot.
 const flowActorID = store.FlowActorID
@@ -23,7 +23,7 @@ const flowActorID = store.FlowActorID
 //go:embed approvalflows/*.json
 var defaultFlowFS embed.FS
 
-// LoadApprovalFlows returns the effective flow set (029 §7.2): the embedded
+// LoadApprovalFlows returns the effective flow set (WL-SPEC-75 §13.6): the embedded
 // defaults, then every *.json in dir (LODE_APPROVAL_FLOWS_DIR; an empty dir
 // string means defaults only). A dir flow whose name matches a default
 // replaces it.
@@ -88,8 +88,8 @@ func (s *server) flowNamed(name string) *model.ApprovalFlow {
 	return nil
 }
 
-// applyApprovalFlow handles POST /api/v1/projects/{id}/approval-flow (029
-// §7.2): stamp the named flow's snapshot on the project, and materialize the
+// applyApprovalFlow handles POST /api/v1/projects/{id}/approval-flow (WL-SPEC-75
+// §13.6): stamp the named flow's snapshot on the project, and materialize the
 // requirements it demands of the deliverables the project already holds. The
 // stamp and the backfill share the transaction that records the event, so a
 // project is never left carrying a flow whose rows were not written.

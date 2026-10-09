@@ -143,7 +143,7 @@ func TestCheckPlanBudget(t *testing.T) {
 }
 
 // TestCheckPlanBudgetMetric covers worklode_plan_budget_checks_total
-// (WL-SPEC-22): each of the three outcomes — ok, warn, refused — increments
+// (WL-SPEC-73 §6): each of the three outcomes — ok, warn, refused — increments
 // its own label exactly once, and a non-plan kind observes nothing at all.
 func TestCheckPlanBudgetMetric(t *testing.T) {
 	ctx := t.Context()

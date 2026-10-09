@@ -24,7 +24,7 @@ func seedProjectWithKey(t *testing.T, st *store.Store, key string) string {
 }
 
 // seedAddressDeliverable creates a deliverable declaring artifact as its
-// address (029 §3.1) — CreateDeliverable declares it as a side effect of a
+// address (WL-SPEC-75 §13.3) — CreateDeliverable declares it as a side effect of a
 // non-empty Artifact — and returns the deliverable id.
 func seedAddressDeliverable(t *testing.T, st *store.Store, projectID, name, artifact string) string {
 	t.Helper()
@@ -46,7 +46,7 @@ func seedAddressDeliverable(t *testing.T, st *store.Store, projectID, name, arti
 
 // seedLabelDeliverable creates a deliverable declaring a worklode.deliverable
 // label instead of an address, and returns its id. Used to pin that a label
-// declaration never surfaces as a probe target (029 §3.2): its address is
+// declaration never surfaces as a probe target (WL-SPEC-75 §13.3): its address is
 // minted at build time and reaches worklode by push, not poll.
 func seedLabelDeliverable(t *testing.T, st *store.Store, projectID, name string) string {
 	t.Helper()
@@ -93,7 +93,7 @@ func artifactReportBody(artifact string) map[string]any {
 
 // TestArtifactReportFilesObservedEvidence pins the happy path: a probe
 // result for a declared address files evidence with Source "prober" and
-// Provenance "observed" (029 §3.2), against the entity that declared it.
+// Provenance "observed" (WL-SPEC-75 §13.3), against the entity that declared it.
 func TestArtifactReportFilesObservedEvidence(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -127,7 +127,7 @@ func TestArtifactReportFilesObservedEvidence(t *testing.T) {
 
 // TestProbeTargetsListsAddressNotLabel pins the routing boundary: an address
 // declaration is a probe target, a label declaration is not — its address is
-// minted at build time and reaches worklode by push (029 §3.2).
+// minted at build time and reaches worklode by push (WL-SPEC-75 §13.3).
 func TestProbeTargetsListsAddressNotLabel(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
