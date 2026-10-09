@@ -233,9 +233,10 @@ jobs:
   # request, since a merge_group build has no PR body to read. It keys on
   # `run` alone, deliberately skipping `gate`'s `code` output: `code` is the
   # scope of the Go build, while a [gate] table may guard paths the Go build
-  # ignores, such as deploy/base/** or docs/**. Under the `code` scope a pull
-  # request confined to one of those would be a guarded change the gate never
-  # saw. The job is a Go build plus one git diff, so running it on every pull
+  # ignores, such as deploy/base/**. Under the `code` scope a pull request
+  # confined to one of those would be a guarded change the gate never saw.
+  # A docs-only pull request has run=false, so docs/** is not gateable
+  # (WL-SPEC-72 §4). The job is a Go build plus one git diff, so running it on every pull
   # request costs little. It prints a notice and exits 0 on a repo with no
   # [gate] table in .worklode/config.toml, which this repo does not have yet.
   spec-gate:
