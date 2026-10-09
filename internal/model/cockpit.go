@@ -4,7 +4,7 @@ import "time"
 
 // EvidenceSummary pairs a short human-readable line with the evidence
 // category (declared, user_reported, observed, recommended) it was
-// classified into (spec 032).
+// classified into (WL-SPEC-82).
 type EvidenceSummary struct {
 	Category string `json:"category"`
 	Summary  string `json:"summary"`
@@ -13,7 +13,7 @@ type EvidenceSummary struct {
 // CockpitMode is the cockpit's derived lifecycle mode — editorial decision,
 // approved launch, or ordinary operations — and the evidence basis for that
 // classification. Name is one of the fixed mode names; it is never a stored,
-// independently-editable field (spec 032).
+// independently-editable field (WL-SPEC-82).
 type CockpitMode struct {
 	Name  string          `json:"name"`
 	Basis EvidenceSummary `json:"basis"`
@@ -61,7 +61,7 @@ type EvidenceReference struct {
 }
 
 // CockpitDecision is the project's curated "Next decision" card (migration
-// 0013). Named apart from the spec 025 §10.1 Decision (a task's posed
+// 0013). Named apart from the WL-SPEC-77 §12 Decision (a task's posed
 // question) — the two are unrelated concepts that happened to share a name.
 type CockpitDecision struct {
 	Title            string              `json:"title"`
@@ -114,7 +114,7 @@ type CockpitWork struct {
 }
 
 // CockpitProjection is the wire form of GET /api/v1/projects/{id}/cockpit
-// (spec 032): a projection built fresh from declared facts on every call,
+// (WL-SPEC-82): a projection built fresh from declared facts on every call,
 // never a stored workflow field.
 type CockpitProjection struct {
 	CanonicalURL      string             `json:"canonical_url"`

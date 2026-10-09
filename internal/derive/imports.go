@@ -47,7 +47,7 @@ func componentOf(p listedPackage, moduleRoot string, m *manifest.Manifest) strin
 }
 
 // ImportsTriples turns a `go list -deps -json ./...` stream into the
-// observed/go-imports document (spec 007 deriver 1): one
+// observed/go-imports document (WL-SPEC-82 deriver 1): one
 // <a> dct:requires <b> per pair of distinct components with at least one
 // package-level import between them. Same-component and unmapped edges are
 // dropped; graphproj.Document sorts and dedupes, so output is deterministic.

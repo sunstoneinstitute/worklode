@@ -90,7 +90,7 @@ func TestTaskBodiesHaveNoAnchorSyntax(t *testing.T) {
 }
 
 // TestDocBodyIsSanitisedLikeATaskBody: a document body arrives through the
-// doc.write-gated docs API rather than through spec 020's issue import, so it
+// doc.write-gated docs API rather than through WL-SPEC-80's issue import, so it
 // is more trusted than a task body. That is not a reason to run a different
 // pipeline, and this replays every hostile shape TestHostileBodies pins
 // through DocBody to say so.

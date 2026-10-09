@@ -72,7 +72,7 @@ func TestPublishDirLinkCreatesSymlink(t *testing.T) {
 
 func TestPublishDirLinkDegradesToPerSkillInsideRealDir(t *testing.T) {
 	// agents dir exists as a REAL directory with a foreign skill in it:
-	// spec 008 §18 row 4 — link per-skill inside it, delete nothing.
+	// WL-SPEC-80 §5.6 row 4 — link per-skill inside it, delete nothing.
 	dirs := installedDirs(t)
 	agents := filepath.Join(t.TempDir(), "skills")
 	if err := os.MkdirAll(filepath.Join(agents, "their-skill"), 0o755); err != nil {
@@ -173,7 +173,7 @@ func TestPublishPerSkill(t *testing.T) {
 func TestPublishCopyFallback(t *testing.T) {
 	// Inject symlink failure (see below) and assert the version dir is
 	// copied file-for-file instead, with res naming the copy so a stale
-	// copy is diagnosable (spec 008 §18 row 5).
+	// copy is diagnosable (WL-SPEC-80 §5.6 row 5).
 	dirs := installedDirs(t)
 	target := t.TempDir()
 
@@ -230,7 +230,7 @@ func TestPublishCopyFallback(t *testing.T) {
 // TestPublishDirLinkPerSkillCopyFallbackReportsCopied covers the full
 // degradation chain: an existing real directory at target forces PublishDirLink
 // to delegate to PublishPerSkill, and symlinks being unavailable forces that
-// delegate to copy. The "copied" signal must survive both hops — spec 008
+// delegate to copy. The "copied" signal must survive both hops — WL-SPEC-80
 // §18 row 5 requires the copy be diagnosable, and PublishDirLink is the
 // entry point the harnesses actually go through, so losing the signal there
 // loses it where it matters most.

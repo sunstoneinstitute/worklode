@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// SectionMeta is one anchored section, as loaded for sync (025 §16.2).
+// SectionMeta is one anchored section, as loaded for sync.
 // Anchorless headings are skipped entirely — they have nothing to key a
 // backbone row on.
 type SectionMeta struct {
@@ -36,19 +36,19 @@ type EdgeMeta struct {
 }
 
 // CorpusDoc is one design document loaded for sync, with its file-derived
-// identity (025 §16.3): kind and ordinal come from the filename and corpus, not
+// identity: kind and ordinal come from the filename and corpus, not
 // the frontmatter, so a document's identity survives a frontmatter typo.
 type CorpusDoc struct {
 	Path, Filename  string
 	Kind            string // "spec" | "adr" | "plan"
-	Ordinal         string // "14" for spec/adr; "34-1" for plan (025 §16.3)
+	Ordinal         string // "14" for spec/adr; "34-1" for plan
 	Status, Title   string
 	Source          []byte          // the full file, frontmatter included
 	FrontmatterJSON json.RawMessage // the YAML header re-encoded as JSON
-	Sections        []SectionMeta   // empty for plans (025 §9)
+	Sections        []SectionMeta   // empty for plans (WL-SPEC-77 §11)
 	Edges           []EdgeMeta
 	// Number is this document's own corpus number — the <n> a <KEY>-<TYPE>-<n>
-	// shorthand or a bare-number reference names it by (026 §3-4) — 0 when
+	// shorthand or a bare-number reference names it by (WL-SPEC-78 §2-4) — 0 when
 	// unknown. Loaded from a spec/ADR's filename (both loaders can read it: it
 	// leads the filename); a plan loaded from local files carries 0, since 029
 	// §4's plan sequence is a backbone fact no plan file records anywhere. A
@@ -87,7 +87,7 @@ func LoadSyncCorpus(specDir, planDir string) ([]CorpusDoc, error) {
 
 // loadDoc parses one file and derives the kind-independent fields: status,
 // title, FrontmatterJSON. Frontmatter absence, a parse failure, an empty
-// status, or a missing H1 are sync errors naming the file (025 §16.2).
+// status, or a missing H1 are sync errors naming the file.
 func loadDoc(dir, name string) (*Document, CorpusDoc, error) {
 	p := filepath.Join(dir, name)
 	src, err := os.ReadFile(p)
@@ -133,7 +133,7 @@ func docFromSource(name string, src []byte) (*Document, CorpusDoc, error) {
 }
 
 // CorpusPath is the corpus path a document of the given kind and slug is
-// written at (025 §16.1), and so the form every covers/requires reference in
+// written at, and so the form every covers/requires reference in
 // the corpus names it by. It is the bridge for a caller reading documents
 // from the backbone rather than from disk: the backbone stores kind and slug,
 // while the references between documents are still written as paths.
@@ -141,8 +141,8 @@ func CorpusPath(kind, slug string) string {
 	return path.Join(CorpusDir(kind), slug+".md")
 }
 
-// CorpusDir is the corpus directory documents of the given kind live in
-// (025 §16.1): specs and ADRs share one, plans have their own.
+// CorpusDir is the corpus directory documents of the given kind live in:
+// specs and ADRs share one, plans have their own.
 func CorpusDir(kind string) string {
 	if kind == "plan" {
 		return planCanonDefault
@@ -216,8 +216,8 @@ func sectionMetas(doc *Document, name string) ([]SectionMeta, error) {
 }
 
 // planEdges is a plan's edges: its coverage assertions — the retired
-// `implements` spelling read as `covers` (026 §5.1) — then its defers
-// handoffs (026 §5.3), then its requires.
+// `implements` spelling read as `covers` (WL-SPEC-78 §4) — then its defers
+// handoffs (WL-SPEC-78 §4), then its requires.
 func planEdges(fm *Frontmatter) []EdgeMeta {
 	return edgeMetas(fm.RefsFor("covers", "defers", "requires"))
 }
@@ -243,7 +243,7 @@ func edgeMetas(refs []Ref) []EdgeMeta {
 // loadPlans loads planDir's documents as CorpusDocs, in two passes: the
 // first parses each file and derives its spec ordinal (from `implements`);
 // the second numbers plan ordinals within each spec-ordinal group, ascending
-// by filename (025 §16.3). Plans carry no Sections (025 §9).
+// by filename. Plans carry no Sections (WL-SPEC-77 §11).
 func loadPlans(planDir string) ([]CorpusDoc, error) {
 	files, err := corpusFilenames(planDir) // already sorted ascending
 	if err != nil {
@@ -255,7 +255,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 	}
 	var plans []pending
 	for _, f := range files {
-		doc, cd, err := loadDoc(planDir, f) // doc.Sections deliberately unused: plans carry none (025 §9)
+		doc, cd, err := loadDoc(planDir, f) // doc.Sections deliberately unused: plans carry none (WL-SPEC-77 §11)
 		if err != nil {
 			return nil, err
 		}
@@ -268,7 +268,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 		plans = append(plans, pending{doc: cd, specOrd: specOrd})
 	}
 	// Second pass: number within each spec-ordinal group, ascending filename
-	// (files is sorted, so arrival order is corpus order — 025 §16.3).
+	// (files is sorted, so arrival order is corpus order).
 	counts := map[int]int{}
 	var out []CorpusDoc
 	for _, p := range plans {
@@ -280,7 +280,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 }
 
 // planSpecOrdinal derives the plan id's spec ordinal from the first
-// coverage entry (025 §16.3): NO-SPEC or an absent key → 0.
+// coverage entry: NO-SPEC or an absent key → 0.
 func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
 	entries := fm.CoverageEntries()
 	if len(entries) == 0 {

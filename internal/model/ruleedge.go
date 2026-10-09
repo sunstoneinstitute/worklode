@@ -2,8 +2,7 @@ package model
 
 import "time"
 
-// RuleEdge is one typed edge between two rules
-// (docs/specs2/12-spec-refactoring-design-tree.md S12, S26). From and To are
+// RuleEdge is one typed edge between two rules. From and To are
 // rule refs ("WL-RULE-12"). Source is "manual" for an edge an architect
 // wrote, "derived" for a references edge the store read out of the rule
 // text, and "refactor" for a supersedes edge lode rule supersede wrote.

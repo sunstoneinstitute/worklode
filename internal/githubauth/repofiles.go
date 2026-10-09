@@ -1,4 +1,4 @@
-// Per-repo file reads for the pr-affects deriver (spec 007 deriver 3),
+// Per-repo file reads for the pr-affects deriver (WL-SPEC-82 deriver 3),
 // alongside the other RepoClient reads in repoclient.go.
 
 package githubauth

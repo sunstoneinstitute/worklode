@@ -12,13 +12,13 @@ type BriefBlocker struct {
 // start-of-work payload for a task. Lease is null when the task has no
 // active lease. OpenBlockers and BlockingPlans are always arrays (never
 // null); BlockingPlans names the unfinished plans ordered before this task's
-// plan (025 §9.3), which is the only thing holding a task whose blocking plan
+// plan (WL-SPEC-77 §11), which is the only thing holding a task whose blocking plan
 // is still draft and has minted no task to name. Parent is
 // null for a root task (no omitempty, so the key is always present — see
 // TaskHierarchy.Parent for the same convention on task detail). Skills carries the task's
 // pinned skills (content inline) plus embedding-matched suggestions, in the
 // same shape as POST /api/v1/skills/recommend. Blobs is always an array
-// (never null) and carries absolute URLs (spec 021 §10): an agent fetching a
+// (never null) and carries absolute URLs (WL-SPEC-78 §8.6): an agent fetching a
 // brief is not same-origin with the server and has nothing to resolve a
 // root-relative reference against.
 type Brief struct {
@@ -32,7 +32,7 @@ type Brief struct {
 	Skills        SkillRecommendation `json:"skills"`
 	Blobs         []TaskBlob          `json:"blobs"`
 	// StalePlan is the slug of the plan this task was minted from when that
-	// plan is stale (025 §8.6), "" otherwise: the task text may predate an
+	// plan is stale (WL-SPEC-77 §10), "" otherwise: the task text may predate an
 	// amendment to the spec the plan covers.
 	StalePlan string `json:"stale_plan,omitempty"`
 	// GovernedBy is the task's governing rules: its links plus its project's

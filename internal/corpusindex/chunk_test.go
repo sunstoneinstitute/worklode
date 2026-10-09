@@ -109,7 +109,7 @@ func TestChunkDocSectionOrderFollowsPosition(t *testing.T) {
 	}
 }
 
-// TestChunkDocPlanHeadings asserts a plan (no sections passed, 025 §9)
+// TestChunkDocPlanHeadings asserts a plan (no sections passed, WL-SPEC-77 §11)
 // chunks on its ##/### headings with an empty anchor.
 func TestChunkDocPlanHeadings(t *testing.T) {
 	body := "# A Plan\n\nIntro text.\n\n" +
@@ -165,7 +165,7 @@ func TestChunkDocPlanUnstructuredFallsBackToWindows(t *testing.T) {
 }
 
 // TestChunkDocPlanIndexUniquePerAnchor pins the fix for the duplicate-key
-// regression a plan triggers: every plan chunk shares anchor "", so 040 §5's
+// regression a plan triggers: every plan chunk shares anchor "", so WL-SPEC-79 §14's
 // (doc_id, anchor, chunk_index) unique index requires Index to keep counting
 // across headings rather than restart at 0 for each one.
 func TestChunkDocPlanIndexUniquePerAnchor(t *testing.T) {

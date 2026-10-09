@@ -8,7 +8,7 @@ package ns
 // TTL and scripts/nsgen.py will not generate one.
 
 // DeprecatedTaskKinds maps a retired task-kind spelling to the kind it became
-// (025 §10 renamed spec → design, migration 0025). It is input-only: callers
+// (WL-SPEC-77 §12 renamed spec → design, migration 0025). It is input-only: callers
 // normalise before validating, and only the current name is ever persisted, so
 // the tasks table never carries two spellings of one kind.
 var DeprecatedTaskKinds = map[string]string{"spec": "design"}

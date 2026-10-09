@@ -27,7 +27,7 @@ const (
 )
 
 // catalogEnv is a webhook test fixture: a store with project "demo" and the
-// catalog, ci, pipeline and cms handlers, all sharing one secret (029 §8.3).
+// catalog, ci, pipeline and cms handlers, all sharing one secret (WL-SPEC-75 §13).
 // The raw-SQL assertions come from the embedded dbEnv, shared with the
 // GitHub and Flux fixtures.
 type catalogEnv struct {
@@ -120,7 +120,7 @@ func (e *catalogEnv) seedDeliverable(t *testing.T, name, artifact string) string
 }
 
 // seedLabelDeliverable declares a label-identified deliverable (WL-581's mint
-// path, 029 §3.1) in a fresh project keyed projectKey, and returns its id.
+// path, WL-SPEC-75 §13) in a fresh project keyed projectKey, and returns its id.
 // The label it mints is "worklode.deliverable=<projectKey>/<slug of name>".
 func (e *catalogEnv) seedLabelDeliverable(t *testing.T, projectKey, name string) string {
 	t.Helper()
@@ -309,7 +309,7 @@ func TestCatalogPayloadRejected(t *testing.T) {
 // TestCatalogFilesEvidenceAgainstDeclarer is the happy path: the fact lands
 // as one evidence row against the deliverable that declared the address,
 // carrying the emitter's state, time and detail, and the provenance says
-// "observed" because a machine reported it (029 §3.2).
+// "observed" because a machine reported it (WL-SPEC-75 §13).
 func TestCatalogFilesEvidenceAgainstDeclarer(t *testing.T) {
 	e := newCatalogEnv(t)
 	id := e.seedDeliverable(t, "casualties", catalogArtifact)
@@ -520,7 +520,7 @@ func TestIngestRequiresArtifactOrLabel(t *testing.T) {
 // TestPipelineDeliveryRoutesByLabel: a delivery naming both an artifact
 // address nothing declares and a label something does routes only through
 // the label, filing evidence keyed by the selector string that matched
-// (029 §3.1, §8.3).
+// (WL-SPEC-75 §13, §13).
 func TestPipelineDeliveryRoutesByLabel(t *testing.T) {
 	e := newCatalogEnv(t)                               // existing harness, extended to mount all sources
 	del := e.seedLabelDeliverable(t, "COW", "Datasets") // Task 2's mint path
@@ -585,7 +585,7 @@ func TestPipelineLabelRedeliveryIsIdempotent(t *testing.T) {
 }
 
 // TestCMSDeliveryWithoutPersonIsRefused: the CMS source requires both
-// published_by and approved_by (029 §8.3) — omitting either is a 400 before
+// published_by and approved_by (WL-SPEC-75 §13) — omitting either is a 400 before
 // any event is recorded, not just an unrouted delivery.
 func TestCMSDeliveryWithoutPersonIsRefused(t *testing.T) {
 	e := newCatalogEnv(t)
@@ -621,7 +621,7 @@ func TestCMSDeliveryWithoutPersonIsRefused(t *testing.T) {
 // TestCMSDeliveryFilesEvidenceWithPerson: a complete delivery merges
 // published_by and approved_by into the evidence detail alongside whatever
 // the emitter itself sent, and the stored event payload keeps the whole body
-// — the event is the provenance record either way (029 §8.3).
+// — the event is the provenance record either way (WL-SPEC-75 §13).
 func TestCMSDeliveryFilesEvidenceWithPerson(t *testing.T) {
 	e := newCatalogEnv(t)
 	id := e.seedDeliverable(t, "story", "https://sunstone.example/cow")

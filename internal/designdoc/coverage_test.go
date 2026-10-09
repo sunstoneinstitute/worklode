@@ -68,7 +68,7 @@ func TestSectionFull_DirectClaim(t *testing.T) {
 		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
-// A superseded plan discharges exactly like an accepted one (026 §2.1,
+// A superseded plan discharges exactly like an accepted one (WL-SPEC-78 §1.2,
 // amended: "not draft" is the discharging set, not "accepted" alone).
 func TestSectionSuperseded_DischargesFull(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
@@ -92,7 +92,7 @@ func TestSectionUnplanned_EmptyCorpus(t *testing.T) {
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
 }
 
-// covers: NO-SPEC contributes to nothing and is never a gap (026 §4.3): an
+// covers: NO-SPEC contributes to nothing and is never a gap (WL-SPEC-78 §3): an
 // unrelated section stays unplanned in a corpus that has one.
 func TestSectionUnplanned_NoSpecPlanContributesNothing(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
@@ -145,7 +145,7 @@ func TestSectionWholeDocumentCoversContributesNothing(t *testing.T) {
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
 }
 
-// The retired `implements` spelling reads as `covers` (026 §5.1).
+// The retired `implements` spelling reads as `covers` (WL-SPEC-78 §4).
 func TestSectionRetiredImplementsSpelling(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
 		"a.md": "---\nstatus: accepted\nimplements: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
@@ -295,7 +295,7 @@ func shorthandFixture(t *testing.T) []designdoc.CorpusDoc {
 // TestSectionShorthandCoversResolves reproduces WL-409: a plan's covers
 // entry written as the <KEY>-<TYPE>-<n> shorthand names a spec that never
 // lives in the plan's own directory, so normalizeRef's old bare-filename
-// guess ("docs/plans/WL-SPEC-25") could never match it. With a project key,
+// guess ("docs/plans/WL-SPEC-77") could never match it. With a project key,
 // the fallback resolves the shorthand the same way ResolveRef does for
 // `lode show`, and the section reports covered rather than unplanned.
 func TestSectionShorthandCoversResolves(t *testing.T) {
@@ -356,7 +356,7 @@ func TestSectionPlanDirContainingSpecsSubstringDoesNotMisnormalise(t *testing.T)
 		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted"}})
 }
 
-// A `covers` entry with the optional leading "/" (026 §4: "docs/specs/x.md"
+// A `covers` entry with the optional leading "/" (WL-SPEC-78 §3: "docs/specs/x.md"
 // and "/docs/specs/x.md" are the same reference — live in the corpus at
 // docs/plans/2026-08-03-design-doc-queries-1-corpus-and-list.md's
 // `covers: /docs/specs/003-gamma.md`) reaches the same claims as the
@@ -422,7 +422,7 @@ func TestSectionAbsolutePathAndLeadingSlashRefBothResolve(t *testing.T) {
 }
 
 // A plan may defer a section it does not cover at all — `covers` and
-// `defers` are independent frontmatter fields (026 §5.3) — and an accepted
+// `defers` are independent frontmatter fields (WL-SPEC-78 §4) — and an accepted
 // plan's deferral alone reports the section deferred, with its owner, and no
 // covering plan (a defers claim is not a covers claim, so it never appears in
 // the covering list).
@@ -438,7 +438,7 @@ func TestSectionDeferred_NoCoveringPlan(t *testing.T) {
 }
 
 // A superseded plan's deferral still discharges the "not draft" eligibility
-// test (026 §2.1's "not `draft`" discharging set applies to defers exactly as
+// test (WL-SPEC-78 §1.2's "not `draft`" discharging set applies to defers exactly as
 // it does to covers), the same as TestSectionSuperseded_DischargesFull.
 func TestSectionDeferred_SupersededPlanStillDefers(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
@@ -451,7 +451,7 @@ func TestSectionDeferred_SupersededPlanStillDefers(t *testing.T) {
 		"docs/specs/006-knowledge-graph.md")
 }
 
-// A draft plan's deferral binds nothing (026 §2.1's "a draft plan has not yet
+// A draft plan's deferral binds nothing (WL-SPEC-78 §1.2's "a draft plan has not yet
 // undertaken work" applies to defers too, per WL-290's brief: the same
 // eligibility rule as covers, not a separate one for defers), so the section
 // stays unplanned.

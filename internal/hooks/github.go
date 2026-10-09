@@ -65,7 +65,7 @@ type githubHandler struct {
 // release falls back to main's head, as it did before this App integration.
 //
 // onRuleset, if non-nil, is called when a mapped repo's rulesets change
-// (WL-SPEC-66 §6.3). The event carries no fact worth storing — the merge-queue
+// (WL-SPEC-82 §15.6). The event carries no fact worth storing — the merge-queue
 // rule is read per branch from the rules API — so all it does is tell the
 // server's refresh loop to look again.
 func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, appAuth *githubauth.AppAuth, onRuleset func(), m *Metrics) http.Handler {
@@ -411,7 +411,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 	// The delivery body is GitHub's, and names no worklode task; the
 	// correlation only exists once UpsertPR has run. Recording it on the
 	// event is what lets a reader name the task without re-joining
-	// (WL-SPEC-66 §5.1).
+	// (WL-SPEC-82 §15.5).
 	if err := store.MergeEventPayload(tx, eventID, map[string]any{"task": taskID}); err != nil {
 		return err
 	}
@@ -447,7 +447,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		return a.reopenApproval(tx, repo, gh.Number, p.RequestedReviewer.Login)
 	case action == "synchronize":
 		// A push to the PR branch designates the new head as the governed
-		// revision (029 §7.1). An open row rebinds; a decided PR gets a
+		// revision (WL-SPEC-75 §13). An open row rebinds; a decided PR gets a
 		// visibly unreviewed candidate row. Correlation never fails the
 		// delivery — but that guard already ran above (pr.TaskID != nil);
 		// once past it, a DesignateRevision error is a genuine store
@@ -473,7 +473,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		return nil
 	case action == "closed" && gh.Merged:
 		// The lease is deliberately left alone: it says a worktree is
-		// occupied, which a merge does not change (spec 004 §3).
+		// occupied, which a merge does not change (WL-SPEC-75 §6).
 		// Record the PR's shas as task commits; the resolver advances the
 		// task once (and if) they appear on main via a push event.
 		shas := []string{gh.Head.SHA}
@@ -506,7 +506,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 var mergeGroupHeadRef = regexp.MustCompile(`/pr-(\d+)-[0-9a-f]+$`)
 
 // applyMergeGroup sets or clears pull_requests.queued_at for the PR named in
-// the merge_group's head_ref (WL-SPEC-66 §6.1): checks_requested marks the PR
+// the merge_group's head_ref (WL-SPEC-82 §15.6): checks_requested marks the PR
 // queued as of now, destroyed clears it. action is caller-guaranteed to be
 // one of those two (applyFunc filters). A head_ref that does not match the
 // expected shape names no PR to update; that is logged and treated as a
@@ -542,7 +542,7 @@ func (a *applier) applyMergeGroup(tx *sql.Tx, eventID int64, repo, action string
 	// The delivery names a queue entry, not a task; the correlation lives on
 	// the PR row. Recording it on the event is what lets the Progress page's
 	// stream resolve this to a task and refresh its position line
-	// (WL-SPEC-66 §5.1) without re-joining.
+	// (WL-SPEC-82 §15.5) without re-joining.
 	taskID, err := store.PRTaskID(tx, repo, number)
 	if err != nil {
 		return err
@@ -593,11 +593,11 @@ func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
 }
 
 // prLane is the lane a PR-review approval lives in. The GitHub ingest is not
-// a flow rule, so it writes and reads the no-lane row; 029 §7.2's named lanes
+// a flow rule, so it writes and reads the no-lane row; WL-SPEC-75 §13's named lanes
 // belong to flows that mint their own.
 const prLane = ""
 
-// openApproval materializes 029 §7.1's "a missing approval is a visible
+// openApproval materializes WL-SPEC-75 §13's "a missing approval is a visible
 // awaiting row" for a task-correlated PR, bound to the head sha it governs.
 // required_actor is best effort: the first requested reviewer that maps to an
 // actor, NULL when none does. A redelivery conflicts on (kind, id, revision)
@@ -626,7 +626,7 @@ func (a *applier) openApproval(tx *sql.Tx, now time.Time, repo string, number in
 	return nil
 }
 
-// reopenApproval handles 029 §7.1's re-request edge: asking for review again
+// reopenApproval handles WL-SPEC-75 §13's re-request edge: asking for review again
 // puts a changes_requested row back in the awaiting queue, and fills in the
 // reviewer the open delivery could not resolve. Any other state is a no-op.
 func (a *applier) reopenApproval(tx *sql.Tx, repo string, number int64, reviewerLogin string) error {
@@ -661,9 +661,9 @@ func (a *applier) reopenApproval(tx *sql.Tx, repo string, number int64, reviewer
 // resolveApprovalForReview closes the open approval a review decides. Only
 // approved and changes_requested decide anything: a commented review leaves
 // the row awaiting in the table, so a late real review can still resolve it
-// (029 §7.1). Once the PR itself closes, WL-663's approvalPROpen hides that
+// (WL-SPEC-75 §13). Once the PR itself closes, WL-663's approvalPROpen hides that
 // still-awaiting row from every display reader — tasks carry no review
-// requirement by default (029 §7.3), so a closed PR with no review was never
+// requirement by default (WL-SPEC-75 §13), so a closed PR with no review was never
 // a bypassed gate, just nothing left to act on. resolving_actor is NULL when
 // the reviewer maps to no actor. A PR with no open row, or none correlated
 // to a task, is a no-op — a correlation must never fail the delivery.
@@ -769,7 +769,7 @@ type ghPRRef struct {
 }
 
 // applyCheck names the task(s) a check_run or check_suite delivery is about
-// on its event (WL-SPEC-66 §5.1). There is no typed table: workflow_run
+// on its event (WL-SPEC-82 §15.5). There is no typed table: workflow_run
 // already carries the run-level facts.
 func (a *applier) applyCheck(tx *sql.Tx, eventID int64, repo, event string, body []byte) error {
 	type check struct {

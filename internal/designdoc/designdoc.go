@@ -20,7 +20,7 @@ import (
 // carrying a Quarto anchor: "## 4.1a Title {#sec-4.1a}". Ported from
 // scripts/secfmt.py, which is what the pre-commit hook enforces — the two
 // must agree on what a section is. H1 is excluded deliberately: it is the
-// document title, not an addressable section (025 §3).
+// document title, not an addressable section (WL-SPEC-77 §4).
 //
 // The trailing dot after the number is optional because the house style is
 // "1." at the top level and "1.1" below it; it is not captured either way.
@@ -177,7 +177,7 @@ func (d *Document) SectionByAnchor(anchor string) *Section {
 
 // Subtree returns the source text of the section anchored anchor, together
 // with every section nested under it, and reports whether that anchor exists.
-// It is the cut `lode show --section` prints (026 §3: a section is always its
+// It is the cut `lode show --section` prints (WL-SPEC-78 §2: a section is always its
 // whole subtree).
 //
 // The same round-trip guarantee Bytes rests on applies here: for an unedited

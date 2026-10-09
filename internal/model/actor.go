@@ -36,7 +36,7 @@ type CreateTokenInput struct {
 }
 
 // TaskTokenInput is the request body for POST /api/v1/tasks/{id}/tokens
-// (001 §2.1, WL-306). Actor names the agent actor the token is attributed
+// (WL-SPEC-74 §2, WL-306). Actor names the agent actor the token is attributed
 // to, defaulting to "sandbox" (auto-provisioned, kind agent). TTLSeconds
 // defaults to the lease TTL; the token also extends with lease renewals and
 // is revoked when the lease ends, whatever value is set here.

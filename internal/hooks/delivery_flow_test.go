@@ -80,7 +80,7 @@ func TestDeliveryEndToEnd(t *testing.T) {
 	}
 	// The transition writes only a state_log row attributed to this delivery,
 	// so the event payload is the only record of which tasks it moved
-	// (WL-775, WL-SPEC-66 §5.1).
+	// (WL-775, WL-SPEC-82 §15.5).
 	if got := e.eventPayloadTasks(t, "d-3"); !slices.Equal(got, []string{taskID}) {
 		t.Errorf("push event payload tasks = %v, want [%s]", got, taskID)
 	}

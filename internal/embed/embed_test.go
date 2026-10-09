@@ -306,7 +306,7 @@ func TestOpenAIID(t *testing.T) {
 
 // TestOpenAIIDWidth covers the width component of ID(): the same model at a
 // different truncation is a different, incomparable space, so ID must
-// change with it (spec 040 §3, §8).
+// change with it (WL-SPEC-79 §14, §16).
 func TestOpenAIIDWidth(t *testing.T) {
 	base := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m"}
 	truncated := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m", Dimensions: 512}
@@ -331,7 +331,7 @@ func TestOpenAIIDWidth(t *testing.T) {
 // are configuration (LODE_EMBEDDING_QUERY_PREFIX,
 // LODE_EMBEDDING_DOCUMENT_PREFIX), and changing one changes what every stored
 // vector means, so it must invalidate the same way a model swap does
-// (spec 040 §3, §8).
+// (WL-SPEC-79 §14, §16).
 func TestOpenAIIDRolePrefixes(t *testing.T) {
 	base := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m"}
 	doc := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m", DocumentPrefix: "title: none | text: "}

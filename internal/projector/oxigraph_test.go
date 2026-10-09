@@ -23,7 +23,7 @@ import (
 // TestProjectorEndToEnd is the plan's only end-to-end proof: a lifecycle
 // event flows through the outbox, the projector renders and PUTs the whole
 // project graph, and a real SPARQL endpoint answers the read-back — proving
-// 006 §16 criterion 1 (event → projection → read-back), the §3 promise that
+// the event → projection → read-back criterion, the promise that
 // wl:dependsOn+ is resolved query-time with no reasoner, and design call 4
 // (abandoned tasks stay projected, not deleted).
 //

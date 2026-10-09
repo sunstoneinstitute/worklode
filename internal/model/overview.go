@@ -1,8 +1,8 @@
 package model
 
-// The spec 007 read surface: drift, gaps, the frontier mirror and the
+// The WL-SPEC-82 read surface: drift, gaps, the frontier mirror and the
 // estimate-free critical path. internal/overview computes these,
-// internal/api serializes them and internal/cli decodes them, so ADR 036
+// internal/api serializes them and internal/cli decodes them, so WL-SPEC-73 §3.2a
 // puts the one declaration here.
 
 // DriftEdge is one dct:requires edge present in exactly one layer.
@@ -11,7 +11,7 @@ type DriftEdge struct {
 	To   string `json:"to"`
 }
 
-// Deviation is one wl:AcceptedDeviation (spec 006 §Accepted deviations).
+// Deviation is one wl:AcceptedDeviation (WL-SPEC-79 §Accepted deviations).
 type Deviation struct {
 	From         string `json:"from"`
 	To           string `json:"to"`
@@ -33,7 +33,7 @@ type GapList struct {
 	Gaps []Gap `json:"gaps"`
 }
 
-// Claim is one wl:implements edge (025 §11.5): a component's claim that its
+// Claim is one wl:implements edge (WL-SPEC-77 §13): a component's claim that its
 // code satisfies a section.
 type Claim struct {
 	Component string `json:"component"`
@@ -41,7 +41,7 @@ type Claim struct {
 }
 
 // DeliveredClaim is one wl:implements claim shown live: the environment the
-// claiming component's deliverable is deployed to (025 §11.5 row 5). One row
+// claiming component's deliverable is deployed to (WL-SPEC-77 §13 row 5). One row
 // per environment, so a claim live in two of them appears twice.
 type DeliveredClaim struct {
 	Component   string `json:"component"`
@@ -106,7 +106,7 @@ type DriftParams struct {
 	Acknowledged bool `query:"acknowledged,omitempty"`
 }
 
-// Overview is the one-screen roll-up. The 025 §11.5 coverage reads land here
+// Overview is the one-screen roll-up. The WL-SPEC-77 §13 coverage reads land here
 // as totals: the per-document rows are DocCoverage, and summing them keeps the
 // roll-up one screen whatever the corpus size.
 type Overview struct {
@@ -122,7 +122,7 @@ type Overview struct {
 	StaleClaims     int `json:"stale_claims"`
 	OrphanedClaims  int `json:"orphaned_claims"`
 	// DeliveredClaims counts (claim, environment) pairs a deliverable is
-	// deployed in. Zero until Deliverable nodes are projected (006 §9).
+	// deployed in. Zero until Deliverable nodes are projected (WL-SPEC-79 §8).
 	DeliveredClaims int           `json:"delivered_claims"`
 	FrontierSize    int           `json:"frontier_size"`
 	Cycles          [][]string    `json:"cycles,omitempty"`
@@ -136,9 +136,9 @@ type OverviewParams struct {
 	Project string `query:"project,omitempty"`
 }
 
-// DeriveResult reports one deriver run (spec 007). internal/derive aliases
+// DeriveResult reports one deriver run (WL-SPEC-82). internal/derive aliases
 // this as derive.Result; the shape is declared here because a handler
-// serializes it (ADR 036 §2).
+// serializes it (WL-SPEC-73 §3.2a).
 type DeriveResult struct {
 	Graph   string `json:"graph"`
 	Hash    string `json:"hash"`

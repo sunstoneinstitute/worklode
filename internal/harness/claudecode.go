@@ -66,7 +66,7 @@ func (ClaudeCode) Detect(repoDir string) (bool, error) {
 }
 
 // SkillTargets: ~/.claude/skills, per-skill — the directory is user-owned
-// (spec 008 §17.3). Claude Code reads no project-scope shared dir.
+// (WL-SPEC-80 §5.2). Claude Code reads no project-scope shared dir.
 func (ClaudeCode) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -76,7 +76,7 @@ func (ClaudeCode) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 }
 
 // Events is claudeBindings read the other way round, so the event table
-// cannot drift from what install actually writes (spec 008 §17.1).
+// cannot drift from what install actually writes (WL-SPEC-80 §5).
 func (ClaudeCode) Events() map[Event][]string { return eventsFor(claudeBindings) }
 
 // InstallHooks writes Worklode's bindings into the scope's settings file for

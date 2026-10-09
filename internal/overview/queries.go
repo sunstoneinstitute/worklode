@@ -20,7 +20,7 @@ PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
 `
 
-// The two named-graph families spec 007 §1.1 partitions the layers by. Both
+// The two named-graph families WL-SPEC-82 §16.1 partitions the layers by. Both
 // are derived from iri, which owns the grammar (iri.DeclaredGraph and
 // iri.ObservedGraph mint members of exactly these families).
 const (
@@ -36,7 +36,7 @@ const (
 // it) answers an unwrapped pattern with nothing. Wrapping is correct under
 // either configuration, so the query does not depend on the endpoint's.
 
-// violationsQuery is spec 007 §3.1 (violation direction):
+// violationsQuery is WL-SPEC-82 §16.2 (violation direction):
 // observed − declared − un-expired acknowledged. The layer partition is the
 // graph-name family; today's date is injected from Go (design call 8).
 //
@@ -116,10 +116,10 @@ const unmatchedQuery = sparqlPrefixes + `SELECT DISTINCT ?repo ?path WHERE {
   GRAPH ?g { ?repo wl:unmatchedPath ?path . }
 } ORDER BY ?repo ?path`
 
-// The 025 §11.5 standing queries, over wl:implements claims and the sections
+// The WL-SPEC-77 §13 standing queries, over wl:implements claims and the sections
 // they name.
 //
-// A claim's data shape is RDF 1.2 (006 §3, wl:pinnedVersion): the asserted
+// A claim's data shape is RDF 1.2 (WL-SPEC-79 §4, wl:pinnedVersion): the asserted
 // edge, an IRI reifier bound to that edge's triple term by rdf:reifies, and
 // wl:pinnedVersion on the reifier. `<< ?c wl:implements ?s >> wl:pinnedVersion
 // ?pv` is the SPARQL 1.2 annotation pattern for exactly those three triples,
@@ -153,7 +153,7 @@ const coverageQuery = sparqlPrefixes + `SELECT ?doc (COUNT(DISTINCT ?s) AS ?tota
 
 // staleClaimQuery is §11.5 row 3: a claim pinned at a version older than the
 // one that last revised the section it names. Both versions are compared as
-// xsd:integer, never as the strings or the IRIs carrying them — 025 §4.1: v10
+// xsd:integer, never as the strings or the IRIs carrying them — WL-SPEC-77 §5: v10
 // does not sort after v3 either way round.
 const staleClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
   GRAPH ?cg { << ?c wl:implements ?s >> wl:pinnedVersion ?pv . }
@@ -177,10 +177,10 @@ const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
 // deliveredCoverageQuery is §11.5 row 5: for each wl:implements claim, the
 // environments the claiming component's deliverable is actually deployed to.
 // It is the join that turns "component A claims section S" into "section S is
-// live in prod", which is what 006 §9 calls the vertical.
+// live in prod", which is what WL-SPEC-79 §8 calls the vertical.
 //
-// Two arms, because a deliverable is witnessed two ways (006 §9's witness
-// table) and there is no reasoner (spec 006), so wl:Effect's subclass edge to
+// Two arms, because a deliverable is witnessed two ways (WL-SPEC-79 §8's witness
+// table) and there is no reasoner (WL-SPEC-79), so wl:Effect's subclass edge to
 // wl:Deliverable does not fire and each arm names its own type:
 //
 //   - A wl:Deliverable targets an Artifact, and the witness is a Deployment
@@ -191,7 +191,7 @@ const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
 //   - A wl:Effect ships nothing, so its dct:relation names the Deployment
 //     directly and reaching wlc:deployed is the whole witness.
 //
-// v1 checks deployment status alone. 006 §9's open question 10 adds the
+// v1 checks deployment status alone. WL-SPEC-79 §8's open question 10 adds the
 // default-branch-commit witness for the Effect arm — that a deployed
 // Kustomization reconciles a commit on the delivering component's branch,
 // rather than any revision at all — and until it is settled an Effect counts
@@ -199,7 +199,7 @@ const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
 //
 // Deployment, Artifact and Environment nodes are projected today
 // (internal/storederive/deploy.go); Deliverable and Effect nodes are not
-// (006 §9, WL-PLAN-118). So against a production graph this answers empty,
+// (WL-SPEC-79 §8, WL-PLAN-118). So against a production graph this answers empty,
 // whatever it holds, until that projection lands — the query is right and its
 // left-hand input is missing.
 const deliveredCoverageQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s ?env WHERE {
@@ -218,7 +218,7 @@ const deliveredCoverageQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s ?env WHER
 
 // taskRequiresQuery pulls the KG half of the critical-path DAG:
 // wl:dependsOn is the projected task dependency (subPropertyOf
-// dct:requires; queried directly — no reasoner, spec 006).
+// dct:requires; queried directly — no reasoner, WL-SPEC-79).
 const taskRequiresQuery = sparqlPrefixes + `SELECT DISTINCT ?from ?to WHERE {
   GRAPH ?g { ?from wl:dependsOn ?to . }
 } ORDER BY ?from ?to`

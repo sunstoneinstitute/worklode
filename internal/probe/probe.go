@@ -1,5 +1,5 @@
 // Package probe polls declared artifact addresses and reports observed
-// state to the worklode server (spec 029 §3.2). It runs as lode-watch
+// state to the worklode server (WL-SPEC-75 §13). It runs as lode-watch
 // -mode artifacts: its own deployment, holding whatever read credentials
 // the addresses need, so the server's blast radius stays the database it
 // owns. It verifies existence and change, never a human claim — probing as
@@ -203,7 +203,7 @@ func SweepOnce(ctx context.Context, opts Options) error {
 		if !ok {
 			// A 5xx, a timeout, a refused connection: the origin said
 			// nothing about the artifact's state, so there is nothing to
-			// report (029 §3.2). It is still worth a line — an address
+			// report (WL-SPEC-75 §13). It is still worth a line — an address
 			// that never yields a fact is invisible otherwise.
 			log.Warn("probe inconclusive, reporting nothing", "address", address)
 			continue

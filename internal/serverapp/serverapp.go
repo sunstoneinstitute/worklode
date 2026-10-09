@@ -125,7 +125,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 }
 
-// parseDocDepthLimit reads the 025 §6.1 anchor depth limit (--doc-depth-limit
+// parseDocDepthLimit reads the WL-SPEC-77 §4 anchor depth limit (--doc-depth-limit
 // or LODE_DOC_DEPTH_LIMIT), defaulting to designdoc.DepthLimit. Below 1 no
 // document could hold an addressable section at all, so it fails the boot
 // rather than making every accept impossible.
@@ -159,7 +159,7 @@ func parseClusterEnvMap(s string) (map[string]string, error) {
 }
 
 // indexIntervalFromEnv reads LODE_INDEX_INTERVAL as a Go duration, defaulting
-// to the convergence loop's own 5 minutes (040 §7). A typo fails the boot
+// to the convergence loop's own 5 minutes (WL-SPEC-79 §16). A typo fails the boot
 // rather than silently converging on the default.
 func indexIntervalFromEnv() (time.Duration, error) {
 	v := os.Getenv("LODE_INDEX_INTERVAL")

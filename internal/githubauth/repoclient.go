@@ -1,5 +1,5 @@
 // RepoClient: authenticated reads against one repo for the reconcile poll
-// engine (spec 013 engine 2). One installation token is minted per repo per
+// engine (WL-SPEC-80 engine 2). One installation token is minted per repo per
 // run — the spec's batching unit for rate limits.
 
 package githubauth
@@ -52,7 +52,7 @@ type PRFacts struct {
 	} `json:"head"`
 	// User.Login is the PR's author (store.PullRequest.Author). Leaving it
 	// unread would let a PR the poller first observes sit with a NULL
-	// author — and therefore an unrefusable self-approval (029 §7.1) —
+	// author — and therefore an unrefusable self-approval (WL-SPEC-75 §13) —
 	// until some later webhook delivery fills it in (WL-244).
 	User struct {
 		Login string `json:"login"`

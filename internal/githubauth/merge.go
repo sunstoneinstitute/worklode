@@ -1,4 +1,4 @@
-// Acting on a pull request (WL-SPEC-66 §3.6): enqueue it into the
+// Acting on a pull request (WL-SPEC-82 §15.3): enqueue it into the
 // repository's merge queue, or merge it outright. Both act as the App's
 // installation, like every other per-repo write in this package.
 //

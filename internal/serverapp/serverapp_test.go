@@ -16,7 +16,7 @@ func TestRunRequiresDSN(t *testing.T) {
 	}
 }
 
-// TestParseDocDepthLimit: the depth limit is an operator knob (025 §6.1), and
+// TestParseDocDepthLimit: the depth limit is an operator knob (WL-SPEC-77 §4), and
 // a value below 1 would make every accept impossible, so it fails the boot.
 func TestParseDocDepthLimit(t *testing.T) {
 	for _, tc := range []struct {

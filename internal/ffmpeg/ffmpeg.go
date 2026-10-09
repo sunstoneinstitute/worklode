@@ -6,7 +6,7 @@
 // One operation needs it. An embedded <video> with no poster is a black
 // rectangle until it is played, which is a poor answer to "show me the bug",
 // so the first frame of an uploaded video is extracted and stored as a poster
-// image (spec 021 §5, resolving Q021.2).
+// image (WL-SPEC-78 §8.5, resolving Q021.2).
 //
 // The dependency is optional at runtime. A server built from source on a
 // machine with no ffmpeg stores the video and serves it without a poster

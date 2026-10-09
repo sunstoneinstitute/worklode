@@ -404,7 +404,7 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 	}
 }
 
-// TestRunOnceProjectsSections covers 025 §3.3: once a document is accepted,
+// TestRunOnceProjectsSections covers WL-SPEC-77 §4: once a document is accepted,
 // its sections are frozen and project as wl:Section nodes in the same declared
 // graph. A draft's sections stay out, because their anchors can still change.
 func TestRunOnceProjectsSections(t *testing.T) {
@@ -465,7 +465,7 @@ func TestRunOnceProjectsSections(t *testing.T) {
 	}
 }
 
-// TestDeletedDocumentGraphIsRemoved covers 044 §4's "the graph shows live rows
+// TestDeletedDocumentGraphIsRemoved covers WL-SPEC-75 §12's "the graph shows live rows
 // only" for the one entity that does not get it for free. A task leaves the
 // graph by not being written into the project graph the next pass replaces; a
 // document owns a graph of its own, so the projector has to remove it.

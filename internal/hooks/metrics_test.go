@@ -145,7 +145,7 @@ func TestFluxWebhookMetrics(t *testing.T) {
 // counted under one of the bounded action values, impact_opened included —
 // seedApprovedDependent puts one governed dependent behind PR 42, so the
 // first synchronize designates a new head and fans one impact review out to
-// it (029 §7.1). The second synchronize absorbs into that still-open row, so
+// it (WL-SPEC-75 §13). The second synchronize absorbs into that still-open row, so
 // the count stays 1.
 func TestApprovalIngestMetrics(t *testing.T) {
 	reg := prometheus.NewRegistry()
@@ -176,7 +176,7 @@ func TestApprovalIngestMetrics(t *testing.T) {
 
 // seedApprovedDependent creates a second pull request that has already been
 // approved and records that it references upstream, which is what makes a
-// designation of upstream raise an impact review on it (029 §7.1).
+// designation of upstream raise an impact review on it (WL-SPEC-75 §13).
 func seedApprovedDependent(t *testing.T, e *env, upstream string) {
 	t.Helper()
 	now := time.Now().UTC()

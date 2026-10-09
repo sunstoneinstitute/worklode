@@ -1,5 +1,5 @@
 // Paged REST reads of a repo's issues and pull requests, used by inbox import
-// (spec 020), alongside the App authentication in app.go.
+// (WL-SPEC-80), alongside the App authentication in app.go.
 
 package githubauth
 
@@ -43,7 +43,7 @@ type PullRequest struct {
 	HeadSHA        string
 	// Author is the PR's GitHub login (store.PullRequest.Author). Setting it
 	// from this first read matters: leaving it empty would let a PR sit with
-	// a NULL author — and therefore an unrefusable self-approval (029 §7.1)
+	// a NULL author — and therefore an unrefusable self-approval (WL-SPEC-75 §13)
 	// — until some later webhook delivery fills it in (WL-244).
 	Author string
 }

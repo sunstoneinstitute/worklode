@@ -1,5 +1,5 @@
 // Package blobstore abstracts S3-compatible object storage for
-// content-addressed blobs (spec 021). The server holds the only
+// content-addressed blobs (WL-SPEC-78). The server holds the only
 // credentials; clients receive presigned URLs with a short TTL.
 package blobstore
 

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Event is the wire form of one event log row (spec 025 §15/§18).
+// Event is the wire form of one event log row (WL-SPEC-77 §15, §18).
 type Event struct {
 	ID         int64           `json:"id"`
 	Source     string          `json:"source"`
@@ -48,7 +48,7 @@ type EventStreamParams struct {
 }
 
 // EventSubscriberStatus is the wire form of one event_subscribers row plus
-// its derived lag and lock holder (spec 025 §18).
+// its derived lag and lock holder (WL-SPEC-77 §18).
 type EventSubscriberStatus struct {
 	Name            string    `json:"name"`
 	LastReadOffset  int64     `json:"last_read_offset"`

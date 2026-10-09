@@ -20,7 +20,7 @@ var ErrNoTrailer = errors.New("no trailer")
 // Section and None is set.
 type Declaration struct {
 	Rule      *designdoc.RuleRef    // Spec: WL-REQ-456
-	Section   *designdoc.SectionRef // Spec: WL-SPEC-4 sec-5 (transitional, S52)
+	Section   *designdoc.SectionRef // Spec: WL-SPEC-75 sec-5 (transitional, S52)
 	None      string                // Spec: none <reason>: the reason
 	Qualifier string                // "", "amended", or a NoneReasons word on a cited ref
 	Line      string                // the line as written, trimmed

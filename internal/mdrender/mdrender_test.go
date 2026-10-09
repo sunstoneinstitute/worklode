@@ -104,7 +104,7 @@ var hostileBodies = []struct {
 }
 
 // TestHostileBodies is the load-bearing test. Task bodies are untrusted:
-// spec 020's inbox import writes GitHub issue text straight into tasks.body,
+// WL-SPEC-80's inbox import writes GitHub issue text straight into tasks.body,
 // so anyone who can open an issue on a mapped repo controls this input.
 func TestHostileBodies(t *testing.T) {
 	for _, tc := range hostileBodies {
@@ -181,7 +181,7 @@ func TestCalloutTitleClassSurvivesRaw(t *testing.T) {
 	}
 }
 
-// TestTaskListCheckboxes covers spec 021 section 15 criterion 7. goldmark
+// TestTaskListCheckboxes covers WL-SPEC-78 section 15 criterion 7. goldmark
 // renders the GFM checkbox with empty attribute values, which a value pattern
 // written for the attribute names would reject.
 func TestTaskListCheckboxes(t *testing.T) {
@@ -261,7 +261,7 @@ func TestRoundTripDoesNotMutate(t *testing.T) {
 	}
 }
 
-// TestLinkHrefSchemes covers spec 021 section 8.1's a[href] scheme list.
+// TestLinkHrefSchemes covers WL-SPEC-78 section 8.1's a[href] scheme list.
 // Protocol-relative "//host" has no scheme for bluemonday to check, so it
 // counts as relative and would otherwise survive; root-relative links must
 // keep working, since /blob/<hash> is one.

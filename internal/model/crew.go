@@ -2,11 +2,11 @@ package model
 
 import "time"
 
-// CrewMember is the wire form of one Crew member of a project (spec 029
+// CrewMember is the wire form of one Crew member of a project (WL-SPEC-75
 // §6.1): an actor holding at least one role-labelled participation row,
 // folded to one entry per actor. Roles is the sorted set of labels that
 // actor holds on the project; at most one member of a project has Lead set
-// (spec 032 §6's accountable human). AddedAt is the earliest of the actor's
+// (WL-SPEC-82 §8's accountable human). AddedAt is the earliest of the actor's
 // role rows.
 type CrewMember struct {
 	Actor       string    `json:"actor"`
@@ -29,7 +29,7 @@ type ParticipantListResponse struct {
 // opinion about what they do is one field. Role is drawn from the fixed
 // project-role vocabulary (WL-297; store.ParticipantRoles) — an unknown one
 // is refused naming the valid set. Deputy marks the member as the project's
-// one deputy (spec 029 §6.1): full lead authority when the lead does not
+// one deputy (WL-SPEC-75 §13): full lead authority when the lead does not
 // act, without becoming lead. Lead and Deputy are mutually exclusive.
 type AddCrewMemberInput struct {
 	Actor  string `json:"actor"`

@@ -21,7 +21,7 @@ type BlockerNode struct {
 
 // BlockerTree is the wire form of GET /api/v1/tasks/{id}/blockers: every open
 // task transitively holding the root, plus the unfinished plans ordered
-// before the root's own plan (025 §9.3) — the same two halves a Brief reports
+// before the root's own plan (WL-SPEC-77 §11) — the same two halves a Brief reports
 // for one hop, walked to the bottom.
 //
 // Blockers and BlockingPlans are always arrays (never null). BlockingPlans is

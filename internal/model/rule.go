@@ -2,8 +2,7 @@ package model
 
 import "time"
 
-// Rule is a design rule (docs/specs2/12-spec-refactoring-design-tree.md
-// S8 to S11, S20): the lowest heading unit of a spec or ADR, with its own
+// Rule is a design rule (WL-SPEC-77): the lowest heading unit of a spec or ADR, with its own
 // identity, status and version history. Heading and Body are the current
 // version's text.
 type Rule struct {
@@ -41,7 +40,7 @@ type Rule struct {
 // RuleArrangement is one document's placement of a rule.
 type RuleArrangement struct {
 	Doc         int64  `json:"doc"`
-	DocRef      string `json:"doc_ref"` // "WL-SPEC-4"
+	DocRef      string `json:"doc_ref"` // "WL-SPEC-75"
 	Anchor      string `json:"anchor"`
 	Position    int    `json:"position"`
 	Depth       int    `json:"depth"`
@@ -91,7 +90,7 @@ type RuleMetaInput struct {
 
 // SupersedeEntry is one line of a refactor map (S24, R7): an old rule and
 // the rules that continue it. Each ref is "WL-RULE-12" or a section ref,
-// "WL-SPEC-4#sec-2". An empty New withdraws the old rule with no successor.
+// "WL-SPEC-75#sec-2". An empty New withdraws the old rule with no successor.
 type SupersedeEntry struct {
 	Old string   `json:"old"`
 	New []string `json:"new"`

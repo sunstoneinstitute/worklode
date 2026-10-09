@@ -75,7 +75,7 @@ func resolveFrontier(tx *sql.Tx, now time.Time, repo, env string, eventID int64)
 // The tasks it moved are recorded on the deploy event: the transitions write
 // only a state_log row attributed to that event, so nothing else names the
 // set, and the Progress page reads it to redraw one cell per landed task
-// (WL-SPEC-66 §5.1).
+// (WL-SPEC-82 §15.5).
 func resolveTasksBelow(tx *sql.Tx, now time.Time, repo string, frontier, eventID int64) error {
 	tasks, err := store.TasksBelowFrontier(tx, repo, frontier)
 	if err != nil {

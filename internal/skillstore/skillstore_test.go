@@ -193,7 +193,7 @@ func TestEnsure(t *testing.T) {
 
 // TestEnsurePlacesVersionsInStoreDir is the split's point: harnesses walk the
 // links dir looking for skill names, so it must hold name symlinks and
-// nothing else — no ".store", no hash-named dirs (spec 008 acceptance
+// nothing else — no ".store", no hash-named dirs (WL-SPEC-80 acceptance
 // criterion 9).
 func TestEnsurePlacesVersionsInStoreDir(t *testing.T) {
 	dirs := testDirs(t)
@@ -351,7 +351,7 @@ func TestEnsureMigratesLegacyStoreSurvivesRenameFailure(t *testing.T) {
 	}
 }
 
-// TestEnsureTwoVersionsResolveSimultaneously is spec 016 acceptance
+// TestEnsureTwoVersionsResolveSimultaneously is WL-SPEC-81 acceptance
 // criterion 5: two worktrees briefed against different hashes of one skill
 // must both resolve valid local paths at the same time. The by-name symlink
 // holds one version, so the path Ensure returns has to be the content-

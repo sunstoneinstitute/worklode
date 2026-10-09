@@ -1,8 +1,8 @@
 // Package githubauth wraps the GitHub App user-authorization (OAuth) flow:
 // it builds the authorize URL, exchanges the code for a user-to-server
 // token, and reads the user's identity. Keycloak is worklode's only login
-// provider (spec 001 §3); these primitives are dormant raw material for
-// the deferred account-link flow (spec 001 §9.3). It parallels internal/oidc
+// provider (WL-SPEC-74 §1.1); these primitives are dormant raw material for
+// the deferred account-link flow (WL-SPEC-74 §9.2). It parallels internal/oidc
 // and never touches it. A Client is built only when the GitHub App client id
 // and secret are configured.
 package githubauth

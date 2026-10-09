@@ -35,18 +35,18 @@ func DocIDFromEntityID(entityID string) (int64, bool) {
 	return id, true
 }
 
-// Approval is one row of the approvals table (spec 029 §7.1): the human
+// Approval is one row of the approvals table (WL-SPEC-75 §13): the human
 // decision one entity revision is waiting on, or the settled record of one.
-// Lane names the flow requirement the row answers (029 §7.2): one revision
+// Lane names the flow requirement the row answers (WL-SPEC-75 §13): one revision
 // carries several independent lanes, and the row is unique on lane, so ""
 // is the no-lane row a PR ingest or an ad-hoc request writes. CreatedBy is
 // who put the requirement here, nil for rows that predate the column.
 // ReviewKind separates an ordinary review row ("review", the zero value)
-// from a dependent-object impact review ("impact", 029 §7.1) minted when an
+// from a dependent-object impact review ("impact", WL-SPEC-75 §13) minted when an
 // upstream decision the dependent relied on gets reopened; its DB column
 // lands with the exact "review"/"impact" spelling. internal/store aliases
 // this type rather than declaring its own, so the queue reader scans into
-// the shape internal/api serializes (ADR 036 §2).
+// the shape internal/api serializes (WL-SPEC-73 §3.2a).
 type Approval struct {
 	ID              int64   `json:"id"`
 	EntityKind      string  `json:"entity_kind"`
@@ -58,10 +58,10 @@ type Approval struct {
 	ResolvingActor  *string `json:"resolving_actor,omitempty"`
 	State           string  `json:"state"`
 	ReviewKind      string  `json:"review_kind,omitempty"`
-	// Note carries the downstream owner's impact note (029 §7.1); set on
+	// Note carries the downstream owner's impact note (WL-SPEC-75 §13); set on
 	// impact rows, empty on ordinary reviews. ExceptionAuthorizedBy is the
 	// author who decided their own entity under a flow that allows
-	// self-review (WL-SPEC-75 §13.6), rendered beside the decision (032 §7).
+	// self-review (WL-SPEC-75 §13.6), rendered beside the decision (WL-SPEC-82 §9).
 	Note                  *string    `json:"note,omitempty"`
 	ExceptionAuthorizedBy *string    `json:"exception_authorized_by,omitempty"`
 	CreatedAt             time.Time  `json:"created_at"`
@@ -95,7 +95,7 @@ type ApprovalListResponse struct {
 	Approvals []AwaitingApproval `json:"approvals"`
 }
 
-// RequireApprovalInput is the body of POST /api/v1/approvals: 029 §7.2's
+// RequireApprovalInput is the body of POST /api/v1/approvals: WL-SPEC-75 §13's
 // ad-hoc requirement, filed by hand on a governed target rather than minted
 // by a project's review flow. EntityKind is the approvals table's own
 // spelling — 'doc', 'deliverable', 'task' or 'pr' — and EntityID is the id
@@ -116,7 +116,7 @@ type RequireApprovalInput struct {
 }
 
 // SetDocReviewersInput is the body of POST /api/v1/docs/{id}/reviewers:
-// replaces the document's durable reviewer set wholesale (025 §7.3, WL-359).
+// replaces the document's durable reviewer set wholesale (WL-SPEC-77 §9, WL-359).
 // There is no add/remove verb — "who reviews stays a social choice",
 // decided once per change the way a PR's reviewer list is, not accumulated a
 // name at a time.

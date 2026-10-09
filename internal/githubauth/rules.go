@@ -1,5 +1,5 @@
 // Branch rules: whether a branch is protected by a merge queue
-// (WL-SPEC-66 §6.3) and whether it requires pull requests (WL-SPEC-72 §3). Read through an installation token, like every other
+// (WL-SPEC-82 §15.6) and whether it requires pull requests (WL-SPEC-72 §3). Read through an installation token, like every other
 // per-repo fact in this package.
 
 package githubauth

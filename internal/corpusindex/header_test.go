@@ -6,7 +6,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// TestDocHeader checks the exact format spec 040 §4.3 quotes.
+// TestDocHeader checks the exact format WL-SPEC-79 §14 quotes.
 func TestDocHeader(t *testing.T) {
 	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 25, Title: "Documents in the backbone"}
 	got := DocHeader(doc, "15.2", "The ordered log")
@@ -28,7 +28,7 @@ func TestDocHeaderNoNumber(t *testing.T) {
 	}
 }
 
-// TestTaskHeader checks the exact format spec 040 §4.3 quotes.
+// TestTaskHeader checks the exact format WL-SPEC-79 §14 quotes.
 func TestTaskHeader(t *testing.T) {
 	task := model.Task{ID: "WL-142", Kind: "feature", State: "in_progress", Title: "Fix the thing"}
 	got := TaskHeader(task)
@@ -38,7 +38,7 @@ func TestTaskHeader(t *testing.T) {
 	}
 }
 
-// TestSkillHeader checks the exact format spec 040 §4.3 quotes.
+// TestSkillHeader checks the exact format WL-SPEC-79 §14 quotes.
 func TestSkillHeader(t *testing.T) {
 	skill := model.Skill{Name: "test-driven-development", Description: "Write the test before the code"}
 	got := SkillHeader(skill)

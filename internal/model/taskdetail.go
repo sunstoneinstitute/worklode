@@ -64,12 +64,12 @@ type TaskDetail struct {
 	Lease         *Lease         `json:"lease,omitempty"`
 	AgentSessions []AgentSession `json:"agent_sessions,omitempty"`
 	Hierarchy     TaskHierarchy  `json:"hierarchy"`
-	// Blobs are the task's images and attachments (spec 021 §3). Attached
+	// Blobs are the task's images and attachments (WL-SPEC-78 §8.3). Attached
 	// blobs appear nowhere in the body markdown, so a reader that only
 	// renders Body would never learn they exist.
 	Blobs []TaskBlob `json:"blobs,omitempty"`
 	// Decisions are the questions posed on the task, in authored order
-	// (025 §10.1). Any kind may carry them.
+	// (WL-SPEC-77 §12). Any kind may carry them.
 	Decisions []Decision `json:"decisions,omitempty"`
 	// GovernedBy is the task's governing rules (S2), omitted when none.
 	GovernedBy []TaskGovernance `json:"governed_by,omitempty"`

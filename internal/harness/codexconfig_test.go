@@ -43,7 +43,7 @@ func TestCodexTelemetryRoundTripPreservesForeignConfig(t *testing.T) {
 }
 
 // installCodexTelemetry must never enable metrics or traces, and the exact
-// exporter shape spec 063 §3 requires must be present.
+// exporter shape WL-SPEC-73 §7.3 requires must be present.
 func TestCodexTelemetryInstallWritesExporter(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	action, err := installCodexTelemetry(path)
@@ -96,7 +96,7 @@ func TestCodexTelemetryUninstallMissingFileIsNoOp(t *testing.T) {
 }
 
 // A file that exists but does not parse is returned as an error and never
-// rewritten, mirroring the hooks.json contract (spec 024 acceptance 6).
+// rewritten, mirroring the hooks.json contract.
 func TestCodexTelemetryRefusesUnparseableFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	bad := "this is not [ valid toml"

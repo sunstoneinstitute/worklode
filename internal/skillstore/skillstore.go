@@ -10,7 +10,7 @@
 // convenience for humans and the path every coding-agent harness walks to
 // discover skills. It holds one name symlink per skill and nothing else: a
 // hash dir living there too would surface every version as a duplicate
-// skill (spec 008 §17.3). It holds one version at a time, so nothing that
+// skill (WL-SPEC-80 §5.2). It holds one version at a time, so nothing that
 // needs a specific version may depend on it.
 //
 // A pre-split layout (Store nested under Links, as <links>/.store/<hash>)
@@ -43,7 +43,7 @@ var (
 
 // Root returns the local skill dir: $LODE_SKILLS_DIR or ~/.worklode/skills.
 // Cleaned so a trailing slash can't make DefaultDirs derive the store as a
-// child of the links dir instead of its sibling (spec 008 §17.3, acceptance
+// child of the links dir instead of its sibling (WL-SPEC-80 §5.2, acceptance
 // 9: no store hash dir may be reachable by a harness walking the links dir).
 func Root() (string, error) {
 	if v := os.Getenv("LODE_SKILLS_DIR"); v != "" {
@@ -58,7 +58,7 @@ func Root() (string, error) {
 
 // Dirs locates the two halves of the local skill cache. Links holds one
 // symlink per skill name and nothing else — harnesses walk it, so a hash
-// dir here would surface every version as a duplicate skill (spec 008
+// dir here would surface every version as a duplicate skill (WL-SPEC-80
 // §17.3). Store holds the immutable content-addressed version dirs.
 type Dirs struct {
 	Links string // ~/.worklode/skills
@@ -99,7 +99,7 @@ func validHash(hash string) bool {
 
 // Ensure makes the version identified by hash available locally, calling
 // fetch for the tar.gz only when it is not already in the store. It returns
-// the canonical dirs.Store/<hash> path: spec 016 requires two worktrees
+// the canonical dirs.Store/<hash> path: WL-SPEC-81 requires two worktrees
 // briefed against different hashes of one skill to resolve valid paths
 // simultaneously, and the single dirs.Links/<name> symlink cannot do that —
 // the second install would repoint the first's path at the other version.

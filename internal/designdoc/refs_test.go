@@ -140,7 +140,7 @@ func TestFrontmatterRefsWalksDefers(t *testing.T) {
 }
 
 // The defers entry rides along with its reference: it is the one relation
-// carrying the named owner (026 §5.3).
+// carrying the named owner (WL-SPEC-78 §4).
 func TestFrontmatterRefsCarriesDeferralEntry(t *testing.T) {
 	doc, err := Parse([]byte(defersFixture))
 	if err != nil {
@@ -227,7 +227,7 @@ func TestFrontmatterRefsNil(t *testing.T) {
 }
 
 // ActingRels is the acting-direction set; the inverse spellings are read back
-// off the acting row (025 §14) and must stay out of it.
+// off the acting row (WL-SPEC-77 §7) and must stay out of it.
 func TestActingRelsExcludesInverseSpellings(t *testing.T) {
 	for _, rel := range ActingRels {
 		if _, inverse := InverseOf[rel]; inverse {

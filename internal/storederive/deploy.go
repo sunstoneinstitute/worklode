@@ -1,7 +1,7 @@
-// Package storederive holds the spec 007 derivers that read the backbone
+// Package storederive holds the WL-SPEC-82 derivers that read the backbone
 // store. They live apart from internal/derive (the local/pure derivers the
 // CLI runs) so cmd/lode's transitive graph stays clear of internal/store —
-// 053 §2's boundary, guarded by internal/disttest (WL-324).
+// WL-SPEC-73 §3.2's boundary, guarded by internal/disttest (WL-324).
 package storederive
 
 import (
@@ -12,8 +12,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// DeployTriples derives the observed/deploy document (spec 007 deriver 4,
-// vocabulary and guards per spec 006 §2.1-§6): a projection of already-
+// DeployTriples derives the observed/deploy document (WL-SPEC-82 deriver 4,
+// vocabulary and guards per WL-SPEC-79 §3-§6): a projection of already-
 // ingested artifacts, deployments, environments, commit links and release
 // frontiers. Projection, not new build (D6) — every triple comes from a row.
 func DeployTriples(ctx context.Context, s *store.Store) ([]byte, error) {

@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// ProjectProgress is WL-SPEC-66 §1 derived for one project: what each spec
+// ProjectProgress is WL-SPEC-82 §15.1 derived for one project: what each spec
 // says, and how much of it exists. Nothing here is stored; a reader
 // recomputes it per request.
 type ProjectProgress struct {
@@ -54,7 +54,7 @@ type ProgressSpec struct {
 	// button is offered on a draft spec and enabled only for its owner.
 	Status string `json:"status"`
 	Owner  string `json:"owner,omitempty"`
-	// PlanningTask is the open design task about this spec (025 §15.4's
+	// PlanningTask is the open design task about this spec (WL-SPEC-77 §15's
 	// planning task), when one exists. The row shows it as a link instead of
 	// §3.4's Plan button, which mints exactly that task.
 	PlanningTask string            `json:"planning_task,omitempty"`
@@ -117,7 +117,7 @@ type ProgressMerge struct {
 }
 
 // ProgressAcceptInput is the body POST /projects/{id}/progress/accept takes
-// (WL-SPEC-66 §3.2): the document to accept, and nothing else. The acting
+// (WL-SPEC-82 §15.3): the document to accept, and nothing else. The acting
 // actor is the session's, never the body's (§4.2 rule 6), and the write gate
 // refuses a body that names one.
 type ProgressAcceptInput struct {
@@ -125,8 +125,8 @@ type ProgressAcceptInput struct {
 }
 
 // ProgressAcceptResponse is the reply to POST /projects/{id}/progress/accept
-// (WL-SPEC-66 §3.2): the document that was accepted, the status it now
-// carries, and how many tasks the acceptance minted (025 §9.2 — zero for a
+// (WL-SPEC-82 §15.3): the document that was accepted, the status it now
+// carries, and how many tasks the acceptance minted (WL-SPEC-77 §11 — zero for a
 // spec or ADR). The page applies none of it; it re-reads the row from the
 // backbone (§3.1).
 type ProgressAcceptResponse struct {
@@ -136,7 +136,7 @@ type ProgressAcceptResponse struct {
 }
 
 // ProgressPlanInput is the body POST /projects/{id}/progress/plan takes
-// (WL-SPEC-66 §3.4): the spec to mint a planning task for. Like every other
+// (WL-SPEC-82 §15.3): the spec to mint a planning task for. Like every other
 // act on this page, the acting actor is the session's (§4.2 rule 6).
 type ProgressPlanInput struct {
 	Doc int64 `json:"doc"`
@@ -152,7 +152,7 @@ type ProgressPlanResponse struct {
 }
 
 // ProgressRallyAddInput is the body POST /projects/{id}/progress/rally/add
-// takes (WL-SPEC-66 §3.5): the spec whose remaining work joins the draft
+// takes (WL-SPEC-82 §15.3): the spec whose remaining work joins the draft
 // rally. The acting actor is the session's (§4.2 rule 6).
 type ProgressRallyAddInput struct {
 	Doc int64 `json:"doc"`
@@ -184,7 +184,7 @@ type ProgressRallyConflict struct {
 }
 
 // ProgressMergeInput is the body POST /projects/{id}/progress/merge takes
-// (WL-SPEC-66 §3.6): the task whose pull request to act on, and the PR
+// (WL-SPEC-82 §15.3): the task whose pull request to act on, and the PR
 // itself. Both are named so the route can refuse a page whose facts have
 // gone stale — a PR that no longer carries the task is a 409, not a merge.
 // The acting actor is the session's (§4.2 rule 6).
@@ -209,7 +209,7 @@ type ProgressMergeResponse struct {
 }
 
 // ProgressEventFrame is the data: payload of GET /projects/{id}/progress/events
-// (WL-SPEC-66 §5.1): what one backbone event moved, reduced to the fields
+// (WL-SPEC-82 §15.5): what one backbone event moved, reduced to the fields
 // the page redraws on. Event is the event's own type, e.g. "task.transition";
 // Task is empty when the touch is about a plan or spec rather than a task, in
 // which case Plan or Specs carries the touch instead. No field is omitted:

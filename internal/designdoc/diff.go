@@ -7,14 +7,14 @@ import (
 	"strings"
 )
 
-// DepthLimit is the default 025 §6.1 addressability limit. The server's own
+// DepthLimit is the default WL-SPEC-77 §4 addressability limit. The server's own
 // limit is configuration (LODE_DOC_DEPTH_LIMIT, store.SetDocDepthLimit); this
 // is what it falls back to, and what the client-side `lode doc lint` checks
 // against when there is no server to ask.
 const DepthLimit = 3
 
 // SectionDiff compares an accepted document with a candidate revision
-// (025 §6, enforced at accept time by the server per 025 §5). Removed,
+// (WL-SPEC-77 §6, enforced at accept time by the server per WL-SPEC-77 §3). Removed,
 // Renumbered and TooDeep are violations; Changed is the last_revised_in
 // input; Added is informational. All five slices hold anchors, sorted for
 // deterministic output.
@@ -28,7 +28,7 @@ type SectionDiff struct {
 
 // CompareSections diffs accepted against candidate over their anchored
 // sections only. An anchorless heading is never a node of its own: it is
-// content within its nearest anchored ancestor (025 §6.1) and is diffed as
+// content within its nearest anchored ancestor (WL-SPEC-77 §4) and is diffed as
 // part of that ancestor — see effectiveContent. An anchorless heading with no
 // anchored ancestor at all belongs to no section and so is diffed by nobody.
 // On a duplicate anchor within one document, the first occurrence wins; a
@@ -71,7 +71,7 @@ func CompareSections(accepted, candidate *Document, depthLimit int) SectionDiff 
 	return diff
 }
 
-// DepthViolations reports the 025 §6.1 depth rule over one document: an
+// DepthViolations reports the WL-SPEC-77 §4 depth rule over one document: an
 // anchored section deeper than limit is unaddressable content masquerading as
 // a node. It needs no prior version, which makes it the whole gate wherever
 // there is nothing to diff against — a first accept, and `lode doc lint <file>`.
@@ -125,7 +125,7 @@ func (d SectionDiff) Violations() []string {
 	return out
 }
 
-// effectiveContent is the text 025 §6.1 counts as s's own: its Body plus the
+// effectiveContent is the text WL-SPEC-77 §4 counts as s's own: its Body plus the
 // heading and body of every anchorless descendant. Section.Body stops at the
 // next heading of any level, so comparing bodies alone misses an edit confined
 // to an anchorless subheading and leaves claims against s falsely fresh.
@@ -133,7 +133,7 @@ func (d SectionDiff) Violations() []string {
 // An anchored descendant is a node in its own right, so the walk stops there.
 // An anchorless descendant's heading does participate — renaming "####
 // Tie-breaking" changes the section holding it — while rewording an *anchored*
-// heading is not a change (025 §3), which is why s's own heading is excluded.
+// heading is not a change (WL-SPEC-77 §4), which is why s's own heading is excluded.
 //
 // Pieces are whitespace-trimmed and newline-joined, so the result is as
 // insensitive to surrounding blank lines as the single-Body comparison was.
@@ -146,7 +146,7 @@ func effectiveContent(s *Section) string {
 // parts in document order, stopping at every anchored section. A heading
 // contributes its parsed fields rather than its source line, so reformatting
 // one is not a content change — over-stamping last_revised_in mass-invalidates
-// valid claims, which 025 §6 rule 5 forbids as squarely as under-stamping.
+// valid claims, which WL-SPEC-77 §6 rule 5 forbids as squarely as under-stamping.
 func appendUnanchored(parts []string, s *Section) []string {
 	for _, child := range s.Children {
 		if child.Anchor != "" {

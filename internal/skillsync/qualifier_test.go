@@ -8,7 +8,7 @@ import (
 )
 
 // The whole point of the qualifier: one marketplace-shaped source publishing
-// two plugins that ship the same skill name. Before 037 §4 the second one lost
+// two plugins that ship the same skill name. Before WL-SPEC-81 §7.4 the second one lost
 // to a UNIQUE (name) constraint; now the two are separate identities.
 func TestQualifierDistinguishesTwoPluginsInOneSource(t *testing.T) {
 	src := Source{Repo: "acme/claude-plugins", Ref: "main", Glob: "plugins/*/skills/*"}

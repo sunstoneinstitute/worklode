@@ -1,5 +1,5 @@
 // Package graphproj projects Worklode domain entities into RDF triples for
-// the data-platform knowledge graph (spec 006 §11). A projector writes a
+// the data-platform knowledge graph (WL-SPEC-79 §12). A projector writes a
 // whole named graph with a GSP replace, not incremental patches, so
 // Document must render byte-identical output for the same triple set
 // regardless of build order: determinism is what makes that replace

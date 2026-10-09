@@ -3,7 +3,7 @@ package hookrun
 import "encoding/json"
 
 // normalizePayload maps a harness hook payload onto hookrun's internal Payload
-// before the guard runs (spec 008 §17.4). There is no per-harness dispatch:
+// before the guard runs (WL-SPEC-80 §5.4). There is no per-harness dispatch:
 // each field is read from a harness-agnostic list of aliases, canonical
 // (claude-code) name first, so a payload from any harness — named, misnamed or
 // unnamed — resolves through the same list. A field no alias matches stays

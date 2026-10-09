@@ -18,7 +18,7 @@ import (
 // POST /sparql answers the hash SELECT with storedHash, and the branch-scoped
 // GSP PUT /branches/main/graphs counts writes. There is deliberately no
 // update route — graph-server exposes only whole-graph GSP writes plus the
-// read-only SPARQL proxy (spec 009), so Run must never need one.
+// read-only SPARQL proxy, so Run must never need one.
 type fakeGraphServer struct {
 	storedHash string
 	puts       atomic.Int32

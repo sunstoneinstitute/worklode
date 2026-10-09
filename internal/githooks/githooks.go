@@ -44,7 +44,7 @@ type Hook struct {
 // between them: `git merge` fires post-merge, while a squash merge and a
 // commit that resolves a merge fire only post-commit.
 //
-// commit-msg is the trailer stamper (004 §2.4). It reads git's $1, the
+// commit-msg is the trailer stamper (WL-SPEC-75 §1). It reads git's $1, the
 // message file, so it is the one hook here with Args set.
 var Managed = []Hook{
 	{Name: "pre-commit", Framework: true},

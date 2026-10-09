@@ -1,9 +1,9 @@
 // Reference autolinking (WL-301, WL-305): plain-text mentions of a design
 // document become links to the cockpit's resolving redirect, /docs/ref/<ref>,
 // which sends the browser to /docs/<id> and lets it carry the #sec fragment
-// across the redirect. Three spellings are linked — the 025 §14.3 shorthand
-// (WL-SPEC-42, with an optional #sec-10), the keyword form ("spec 042 §10",
-// "ADR 048"), and the bare corpus form ("025 §14.3") — because those are the
+// across the redirect. Three spellings are linked — the WL-SPEC-77 §7 shorthand
+// (WL-SPEC-74, with an optional #sec-10), the keyword form ("spec 042 §10",
+// "ADR 048"), and the bare corpus form ("WL-SPEC-77 §7") — because those are the
 // ways the corpus actually writes references.
 //
 // A bare task id (WL-129, COW-7) links straight to /tasks/<id>. There is no
@@ -74,17 +74,17 @@ const HomeParam = "p"
 const taskRefPrefix = "/tasks/"
 
 // The reference spellings, tried in order. A trailing sentence dot is
-// trimmed off a match in code, not in pattern, so "025 §14.3." links as
-// "025 §14.3".
+// trimmed off a match in code, not in pattern, so "WL-SPEC-77 §7." links as
+// "WL-SPEC-77 §7".
 var (
-	// WL-SPEC-42, WL-ADR-7, optionally #sec-10 / #sec-3.1a.
+	// WL-SPEC-74, WL-ADR-7, optionally #sec-10 / #sec-3.1a.
 	shorthandRef = regexp.MustCompile(`\b[A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+(?:#sec-[0-9A-Za-z._-]+)?`)
 	// WL-REQ-12, WL-RULE-12 or WL-CL-12 — the rule arm of the shorthand grammar (S20, WL-SPEC-77
 	// §4). It links to the resolving redirect /rules/<ref>, the counterpart of docRefPrefix.
 	ruleRefRe = regexp.MustCompile(`\b` + designdoc.RuleRefText + `\b`)
 	// spec 042 §10, ADR 048 §2, Spec 25 — keyword, number, optional §.
 	keywordRef = regexp.MustCompile(`\b(?:[Ss]pec|ADR|[Aa]dr)\s(\d{1,4})(?:\s?§\s?([0-9][0-9A-Za-z.]*))?`)
-	// 025 §14.3 — a bare number only when the § makes it unmistakably a ref.
+	// WL-SPEC-77 §7 — a bare number only when the § makes it unmistakably a ref.
 	bareRef = regexp.MustCompile(`\b(\d{1,4})\s?§\s?([0-9][0-9A-Za-z.]*)`)
 	// WL-129, COW-7 — the key is captured so it can be checked against the
 	// live project-key set, which is the only thing separating a task id from
@@ -131,8 +131,8 @@ func NewProjectKeys(keys []string) ProjectKeys {
 }
 
 // For returns a copy scoped to home, the key of the project whose body is
-// being rendered. A bare corpus number ("029 §7.2") is a per-project sequence
-// (029 §4), so the same number names a different document in every project;
+// being rendered. A bare corpus number ("WL-SPEC-75 §13") is a per-project sequence
+// (WL-SPEC-75 §13), so the same number names a different document in every project;
 // without a home key the redirect resolves org-wide and reports an ambiguity
 // (WL-723). The fingerprint is remixed so a body cached under one home is
 // never served under another.
@@ -306,7 +306,7 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 		}
 		out = append(out, section(loc, loc[2], loc[3], loc[4], loc[5]))
 	}
-	// Task ids last: a document shorthand (WL-SPEC-42) contains a token this
+	// Task ids last: a document shorthand (WL-SPEC-74) contains a token this
 	// pattern also matches, and running last lets the shorthand win.
 	for _, loc := range taskRef.FindAllSubmatchIndex(value, -1) {
 		if !keys.has(string(value[loc[2]:loc[3]])) || hyphenAdjacent(value, loc[0], loc[1]) {
