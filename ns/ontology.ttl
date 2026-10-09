@@ -393,6 +393,23 @@ wl:ruleKind a owl:ObjectProperty, owl:FunctionalProperty ;
         wlc:informative (05 §4). Only a requirement is covered by a plan; an invariant governs
         every task in its project.""" .
 
+wl:Arrangement a owl:Class ;
+    wl:layer wlc:intent ;
+    rdfs:subClassOf wl:DesignDoc ;
+    rdfs:comment "A document as an ordered selection of rules; it owns no text of its own (WL-SPEC-77)." .
+
+wl:arranges a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Arrangement ;
+    rdfs:range wl:Rule ;
+    rdfs:comment "The arrangement includes this rule; the rule's wl:position gives its order." .
+
+wl:position a owl:DatatypeProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Rule ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "1-based position of the rule in its arrangement." .
+
 wl:refines a owl:ObjectProperty ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.refines" ;
