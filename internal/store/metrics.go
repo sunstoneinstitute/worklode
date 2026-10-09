@@ -62,6 +62,7 @@ type storeMetrics struct {
 	gaps                  *prometheus.CounterVec
 	fixes                 *prometheus.CounterVec
 	ruleSupersedes        *prometheus.CounterVec
+	ruleClosureSize       prometheus.Histogram
 	queries               *prometheus.CounterVec
 	querySeconds          *prometheus.CounterVec
 }
@@ -166,6 +167,11 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_rule_supersede_total",
 			Help: "Refactor maps (lode rule supersede, S24) by outcome (applied|dry_run|invalid|not_found|error).",
 		}, []string{"outcome"}),
+		ruleClosureSize: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "worklode_rule_closure_size",
+			Help:    "Rules in a context closure read (WL-SPEC-77 §4c), the rule itself included.",
+			Buckets: []float64{1, 2, 4, 8, 16, 32, 64, 128},
+		}),
 		// Query counters rather than a histogram: the question these answer
 		// is which store function the database time is going to, and
 		// rate(seconds_total) by func ranks that directly. Distribution
@@ -180,7 +186,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help: "Seconds spent in database queries, by the same pkg and func labels as worklode_store_queries_total. rate() of this ranks store functions by the database time they consume.",
 		}, []string{"pkg", "func"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.ruleSupersedes, m.queries, m.querySeconds)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.ruleSupersedes, m.ruleClosureSize, m.queries, m.querySeconds)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// WL-SPEC-79 §17 is about the first of those becoming the second.
@@ -254,6 +260,14 @@ func (m *storeMetrics) ruleSupersede(outcome string) {
 		return
 	}
 	m.ruleSupersedes.WithLabelValues(outcome).Inc()
+}
+
+// ruleClosure records the size of one closure read.
+func (m *storeMetrics) ruleClosure(n int) {
+	if m == nil {
+		return
+	}
+	m.ruleClosureSize.Observe(float64(n))
 }
 
 func (m *storeMetrics) expire(n int) {

@@ -196,7 +196,7 @@ Flags: --server
 - `lode rule set owner` — Set a rule's owner; "" clears it
 - `lode rule set tags` — Replace a rule's tags; naming none clears them
 - `lode rule show` — Show a rule: its status, version, placements and text
-  Flags: --inline, --version
+  Flags: --closure, --inline, --version
 - `lode rule supersede` — Apply a refactor map: withdraw old rules and link each to its successors (S24)
   Flags: --dry-run, --map, --project, --repo
 - `lode rule unlink` — Remove a relation written with rule link
@@ -217,7 +217,7 @@ Flags: --kind, --limit, --mode, --project, --repo
 
 ## `lode show` — Show any entity by id or kind flag: a task, a design doc, a project
 
-Flags: --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage, --version
+Flags: --closure, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage, --version
 
 ## `lode skill` — Org-wide agent skills: list, recommend, install, sync
 

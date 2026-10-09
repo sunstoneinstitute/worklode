@@ -132,3 +132,25 @@ type RuleListParams struct {
 	Status  string `query:"status,omitempty"`
 	Doc     string `query:"doc,omitempty"`
 }
+
+// RuleClosure is GET /api/v1/rules/{id}/closure: a rule and every rule
+// reachable from it over refines and needs, in breadth-first order
+// (WL-SPEC-77 §4c). Members[0] is the rule itself. Words is the sum of the
+// members' body word counts.
+type RuleClosure struct {
+	Rule    string              `json:"rule"`
+	Members []RuleClosureMember `json:"members"`
+	Words   int                 `json:"words"`
+}
+
+// RuleClosureMember is one rule in a closure. Edge and From name the edge
+// it was first reached by ("needs" from "WL-REQ-12"); both are empty on the
+// rule the closure was read for.
+type RuleClosureMember struct {
+	Ref     string `json:"ref"`
+	Kind    string `json:"kind"`
+	Heading string `json:"heading"`
+	Words   int    `json:"words"`
+	Edge    string `json:"edge,omitempty"` // refines | needs
+	From    string `json:"from,omitempty"`
+}

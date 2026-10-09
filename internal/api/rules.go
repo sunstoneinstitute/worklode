@@ -146,6 +146,21 @@ func (s *server) getRuleVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
+// getRuleClosure handles GET /api/v1/rules/{id}/closure: the rule and every
+// rule reachable over refines and needs (WL-SPEC-77 §4c).
+func (s *server) getRuleClosure(w http.ResponseWriter, r *http.Request) {
+	ref, ok := ruleRef(w, r)
+	if !ok {
+		return
+	}
+	c, err := s.st.RuleClosure(r.Context(), ref.Key, ref.Number)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
 // listRules handles GET /api/v1/rules. ?project= and ?status= narrow the
 // list; ?doc= takes any document ref (WL-SPEC-73, a slug, an id) and returns
 // that document's arrangement in order.
@@ -216,6 +231,10 @@ var ruleRouteDocs = map[string]routeDoc{
 		summary:   "Edit a rule's owner, tags and kind",
 		request:   model.RuleMetaInput{},
 		responses: map[int]any{http.StatusOK: model.Rule{}},
+	},
+	"GET /api/v1/rules/{id}/closure": {
+		summary:   "Get a rule with its context closure over refines and needs",
+		responses: map[int]any{http.StatusOK: model.RuleClosure{}},
 	},
 	"GET /api/v1/rules/{id}/versions": {
 		summary:   "List a rule's versions",
