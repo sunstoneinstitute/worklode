@@ -416,10 +416,10 @@ func TestProgressDraftPlanAction(t *testing.T) {
 	}
 }
 
-// TestProgressReviewActionDisabled: spec 059's routes do not exist in
-// today's routeGuards, so hasReviewSurface reports false and every spec row
-// and plan line renders its Review button disabled with that reason
-// (WL-SPEC-66 §3.3). The enabled shape, once a route lands, is
+// TestProgressReviewActionDisabled: POST /api/v1/reviews (WL-SPEC-84 §6) is
+// not in today's routeGuards, so hasReviewSurface reports false and every
+// spec row and plan line renders its Review button, pointed at that route,
+// disabled with that reason (WL-SPEC-85 §4). The enabled shape, once a route lands, is
 // TestHasReviewSurfaceOnceRegistered's, in internal/api's own package —
 // this test only holds today's rendering to today's table.
 func TestProgressReviewActionDisabled(t *testing.T) {
@@ -438,7 +438,7 @@ func TestProgressReviewActionDisabled(t *testing.T) {
 	body := getPage(t, h, "/projects/proj/progress").Body.String()
 
 	const reason = `data-reason="Review surface (WL-SPEC-84) not yet built"`
-	if got := strings.Count(body, `data-route="review"`); got != 2 {
+	if got := strings.Count(body, `data-route="/api/v1/reviews"`); got != 2 {
 		t.Errorf("the page renders %d review buttons, want 2 (the spec row and the plan line): %s", got, body)
 	}
 	if got := strings.Count(body, reason); got != 2 {

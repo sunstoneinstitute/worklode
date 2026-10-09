@@ -1717,7 +1717,8 @@ func progressPlanAnchorID(specRef, planRef string) string { return "p-" + specRe
 func progressDetailID(ref string) string { return "d-" + ref }
 
 // ProgressAction is one §3.1 action button: the route progress.js posts to
-// under /projects/{id}/progress/ (an absolute path for act.js on the
+// under /projects/{id}/progress/, or an absolute path for a route that lives
+// elsewhere (Review's /api/v1/reviews, and every route act.js posts to on the
 // document and task pages), the JSON body it sends, and the sentence
 // the confirmation step shows. A non-empty Reason renders the button
 // disabled with that reason as its hover text, because a hidden button reads
@@ -1762,15 +1763,17 @@ func progressSpecActions(s model.ProgressSpec, viewer string, reviewEnabled bool
 	return acts
 }
 
-// progressReviewAction is §3.3's Review button. Whether it may be pressed at
+// progressReviewAction is the Review button (WL-SPEC-85 §4). It opens a
+// WL-SPEC-84 document review through 84's own POST /api/v1/reviews, whose
+// body names the document as {"doc": id}. Whether it may be pressed at
 // all is not this page's call: hasReviewSurface (internal/api) reports
-// whether spec 059's routes exist, and reviewEnabled is that answer, passed
+// whether that route is registered, and reviewEnabled is that answer, passed
 // in rather than re-derived here (ui depends on nothing beyond stdlib and
 // model). Disabled carries the reason rather than hiding the button, the
 // same rule every other act on this page follows (§3).
 func progressReviewAction(doc int64, ref string, reviewEnabled bool) ProgressAction {
 	a := ProgressAction{
-		Route:   "review",
+		Route:   "/api/v1/reviews",
 		Body:    progressDocBody(doc),
 		Label:   "Review",
 		Confirm: "Request review for " + ref,
