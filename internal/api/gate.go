@@ -71,7 +71,7 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	}
 	// Decoded into map[string]any rather than a named struct: GitHub's
 	// payload is a foreign schema internal/model does not own, and
-	// internal/model/modelrule_test.go (ADR 036 §2) holds internal/api to no
+	// internal/model/modelrule_test.go (WL-SPEC-73 §3.2a) holds internal/api to no
 	// json-tagged struct at all — internal/hooks is where such shapes are
 	// named, for the raw webhook delivery this event was recorded from.
 	var payload map[string]any

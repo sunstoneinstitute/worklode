@@ -11,8 +11,8 @@ import (
 )
 
 // TestDocVersions covers GET /api/v1/docs/{id}/versions and
-// GET /api/v1/docs/{id}/versions/{n} (025 §4.5): a plan stays freely mutable
-// (025 §9), so editing its body snapshots the version it leaves before
+// GET /api/v1/docs/{id}/versions/{n} (WL-SPEC-77 §3): a plan stays freely mutable
+// (WL-SPEC-77 §11), so editing its body snapshots the version it leaves before
 // serving the new one.
 func TestDocVersions(t *testing.T) {
 	t.Parallel()

@@ -8,7 +8,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// overviewReadPaths are the five spec 007 reads, which share one permission
+// overviewReadPaths are the five WL-SPEC-82 reads, which share one permission
 // and one authentication guard.
 var overviewReadPaths = []string{
 	"/api/v1/overview", "/api/v1/drift", "/api/v1/gaps",
@@ -155,7 +155,7 @@ func TestOverviewRollWithoutGraph(t *testing.T) {
 
 // WL-354 regression: a chain whose work is entirely finished is not the
 // critical path. Depth stays historical; criticality follows the open
-// subgraph (spec 007 §4's closed-task rule).
+// subgraph (the critical path's closed-task rule).
 func TestCriticalPathExcludesFinishedChains(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)

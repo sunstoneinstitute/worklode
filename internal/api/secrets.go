@@ -13,7 +13,7 @@ import (
 )
 
 // secretsCatalog handles GET /api/v1/secrets/catalog. Authenticated only —
-// the name → op:// map must not leak vault/item structure (spec 017), which
+// the name → op:// map must not leak vault/item structure (WL-SPEC-74), which
 // is why the route table guards it with permSecretRead rather than reusing
 // task.read. The file is re-read per request so a Secret update propagates
 // without a restart; it is small and requests are rare (one per claim).

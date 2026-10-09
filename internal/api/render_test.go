@@ -11,7 +11,7 @@ import (
 )
 
 // The cockpit's automation-boundary card shows overhead's share of a
-// project's spend, so the mapping has to carry it across (spec 052 §4).
+// project's spend, so the mapping has to carry it across (WL-SPEC-73 §8.3).
 func TestCockpitCostTotalsIncludesOverhead(t *testing.T) {
 	t.Parallel()
 	report := model.CostReport{Totals: []model.CostTotals{{
@@ -82,8 +82,8 @@ func TestTaskPageRendersDetailsAndMark(t *testing.T) {
 	}
 }
 
-// TestActivitySummary is the derivation table the Activity card reads (spec
-// 071 §4): one line per event kind, built from the allowlisted attributes
+// TestActivitySummary is the derivation table the Activity card reads (WL-SPEC-80
+// §8.9): one line per event kind, built from the allowlisted attributes
 // alone. The event name is the row's own cell, so no summary repeats it —
 // except for a kind this table does not model, where naming the event is the
 // honest answer.

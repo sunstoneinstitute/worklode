@@ -67,7 +67,7 @@ func storeEventsOfType(t *testing.T, st *store.Store, typ string, want int) []st
 
 // TestListEventsFilters exercises the query-string surface of GET
 // /api/v1/events: type, since, after and limit, plus the newest-last
-// ordering (025 §18). Any authenticated actor may read it.
+// ordering (WL-SPEC-77 §18). Any authenticated actor may read it.
 func TestListEventsFilters(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)

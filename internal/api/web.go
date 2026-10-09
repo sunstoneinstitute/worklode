@@ -1,7 +1,7 @@
 // web.go implements the web UI's read surfaces (its writes — the two
 // creation forms — live in webform.go): it builds the presentation views
 // internal/ui's templ components render (the shared Page shell, the eight
-// global destinations and the project-local destinations spec 032 §2 defines)
+// global destinations and the project-local destinations WL-SPEC-82 §2 defines)
 // and serves /assets/ (self-hosted stylesheet and fonts, embedded and served
 // from internal/ui — see assetHandler). When OIDC is configured every page
 // route except /assets/ is gated by webGuard (see authz.go), which
@@ -146,7 +146,7 @@ func (s *server) contentSecurityPolicy() string {
 
 // setWebHeaders sets the two headers every web response carries: the content
 // type and the Content-Security-Policy. It is a function of its own because
-// the Progress page's JSON write replies need the policy too (066 §4.4) —
+// the Progress page's JSON write replies need the policy too (WL-SPEC-85 §5) —
 // a reply that arrived without frame-ancestors 'none' is a bug — and they
 // overwrite the content type with application/json on the way out.
 func (s *server) setWebHeaders(w http.ResponseWriter) {
@@ -191,7 +191,7 @@ func (s *server) webStoreErr(w http.ResponseWriter, err error) {
 
 // homePage handles GET / (routed as "GET /{$}" — see server.go — so it
 // matches only the exact root path, not every otherwise-unmatched GET): the
-// default post-login destination, which is the actor's project list (spec 032
+// default post-login destination, which is the actor's project list (WL-SPEC-82
 // §9). It renders in one of three modes, which are also the bounded label
 // values of worklode_web_home_renders_total:
 //
@@ -208,7 +208,7 @@ func (s *server) webStoreErr(w http.ResponseWriter, err error) {
 // Keycloak claim (see authz.go's Subject.Groups) — the same rows GetActor
 // would return, without a second read.
 //
-// Actor mode also carries the Morning Brief (032 §9): what needs the actor,
+// Actor mode also carries the Morning Brief (WL-SPEC-82 §11): what needs the actor,
 // then what happened since their last review, with routine work collapsed to
 // a count. Assembling it is morningbrief.go's job; this handler only fetches
 // its inputs and never advances the review boundary — POST /home/reviewed
@@ -285,7 +285,7 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.observeHomeRender(mode)
 
-	// Actor mode only: the Morning Brief (032 §9). Open mode has no actor to
+	// Actor mode only: the Morning Brief (WL-SPEC-82 §11). Open mode has no actor to
 	// keep a boundary for, so Brief stays nil, no cursor read, no metric.
 	// This handler performs no write of any kind: opening Home does not
 	// advance the actor's review boundary — only POST /home/reviewed does.
@@ -370,7 +370,7 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 // workPage handles GET /work: task-oriented saved queries and the ready
-// frontier (spec 032 §2). Part 1 renders the org-wide board, built from the
+// frontier (WL-SPEC-82 §2). Part 1 renders the org-wide board, built from the
 // same assembleBoard used by GET /api/v1/board, plus a count of new
 // (untriaged) inbox issues.
 func (s *server) workPage(w http.ResponseWriter, r *http.Request) {
@@ -391,7 +391,7 @@ func (s *server) workPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "board page", ui.Board(view))
 }
 
-// driftPage handles GET /drift: spec 007's read surface as a page — the ready
+// driftPage handles GET /drift: WL-SPEC-82's read surface as a page — the ready
 // frontier and the critical path from the backbone, violations, stale intent
 // and gaps from the knowledge graph. It is read-only: the page offers no act,
 // because resolving drift means changing a declaration or the code.
@@ -439,7 +439,7 @@ func (s *server) driftPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "drift page", ui.Drift(view))
 }
 
-// projectsPage handles GET /projects: the cross-project portfolio (spec 032
+// projectsPage handles GET /projects: the cross-project portfolio (WL-SPEC-82
 // §2), linking each project to its canonical cockpit URL.
 func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 	projects, err := s.st.ListProjects(r.Context())
@@ -451,9 +451,9 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "projects page", ui.Projects(view))
 }
 
-// reviewsPage handles GET /reviews: the awaiting-approvals queue (spec 029
+// reviewsPage handles GET /reviews: the awaiting-approvals queue (WL-SPEC-75
 // §7.1), joining migration, store, and shell over real data. Every row
-// renders a decide form posting to the act route (029 §7.3).
+// renders a decide form posting to the act route (WL-SPEC-75 §13.6).
 func (s *server) reviewsPage(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.st.ListAwaitingApprovals(r.Context())
 	if err != nil {
@@ -463,7 +463,7 @@ func (s *server) reviewsPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "reviews page", ui.Approvals(approvalsView(rows, s.st.Now())))
 }
 
-// approvalPage handles GET /approvals/{id} (032 §7): one approval with
+// approvalPage handles GET /approvals/{id} (WL-SPEC-82 §9): one approval with
 // everything an actor needs to trust or revisit it — the entity it governs,
 // its full decision history, and the review-graph references its own
 // designation recorded, plus which flow the project is stamped with. 404 on an id
@@ -526,7 +526,7 @@ func (s *server) approvalPage(w http.ResponseWriter, r *http.Request) {
 
 // selfReviewPolicy carries store.SelfReviewPolicy's flow stamp from the
 // handler to approvalDetailView. Transport-internal: nothing here crosses the
-// HTTP boundary (ADR 036).
+// HTTP boundary (WL-SPEC-73 §3.2a).
 type selfReviewPolicy struct {
 	flowName string
 	flowRev  string
@@ -640,7 +640,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 // body (rendered as sanitised markdown — see taskView), prerequisites,
 // attachments, lease holder (if any), edges, and the full timeline — built from the same
 // assembleTimeline used by GET /api/v1/tasks/{id}/timeline. It renders
-// through the project shell (spec 056 §2), so an unknown owning project
+// through the project shell (WL-SPEC-82 §2.2), so an unknown owning project
 // 404s the same way projectHeader's other callers do — though that should
 // never happen for a task whose project id came from the store itself.
 func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id string) {
@@ -731,7 +731,7 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	// The Activity card's first page (spec 071 §4). A fixed limit, the same
+	// The Activity card's first page (WL-SPEC-80 §8.9). A fixed limit, the same
 	// one the stream polls with, so nothing a request supplies reaches the
 	// store as a limit.
 	activity, err := s.st.TaskActivity(ctx, id, 0, activityPageSize)
@@ -764,7 +764,7 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 	s.renderWeb(w, r, http.StatusOK, "task page", ui.Task(view))
 }
 
-// docsPage handles GET /docs: the whole document corpus (spec 025 §5), in
+// docsPage handles GET /docs: the whole document corpus (WL-SPEC-77 §3), in
 // ListDocs's corpus order — project, kind, number (plans last), slug.
 // Read-only, like the document page below.
 func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
@@ -785,7 +785,7 @@ func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
 
 // projectDocsPage handles GET /projects/{id}/documents: the same corpus index
 // docsPage renders, narrowed to one project and in the project-local shell.
-// Specs 025 and 026 are implemented — the documents are in the backbone — so
+// WL-SPEC-77 and WL-SPEC-78 are implemented — the documents are in the backbone — so
 // this destination lists them rather than naming the specs it waits for.
 func (s *server) projectDocsPage(w http.ResponseWriter, r *http.Request) {
 	project, err := s.projectHeader(r.Context(), r.PathValue("id"))
@@ -808,7 +808,7 @@ func (s *server) projectDocsPage(w http.ResponseWriter, r *http.Request) {
 // docPage handles GET /docs/{ref}. A numbered document's shorthand redirects
 // to its canonical URL (S20), with ?v=<n> going to the version path. A
 // numeric database id serves the page for a document with no number: a
-// tombstone, or a row predating 029 §4's backfill.
+// tombstone, or a row predating WL-SPEC-75 §13.4's backfill.
 func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(r.PathValue("id"))
 	if ref == "" {
@@ -855,7 +855,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 
 // renderDocPage renders the document page for d. detail is d's detail when
 // the caller already read it, else nil. ?v=<n> serves one version of d
-// (025 §4.5) on the numeric-id page, which has no version path.
+// (WL-SPEC-77 §3) on the numeric-id page, which has no version path.
 func (s *server) renderDocPage(w http.ResponseWriter, r *http.Request, d model.Doc, detail *model.DocDetail) {
 	var err error
 	if q := strings.TrimSpace(r.URL.Query().Get("v")); q != "" {
@@ -927,7 +927,7 @@ func (s *server) namePlanTasks(r *http.Request, d *model.DocDetail, body string)
 }
 
 // docPageBody picks the markdown the document page renders: the consolidated
-// view (026 §3.2) by default, so a reviewer reads the document's current
+// view (WL-SPEC-78 §2) by default, so a reviewer reads the document's current
 // state rather than what it said before four other specs amended it, and the
 // stored source under ?body=source. It reports which it returned.
 //
@@ -979,7 +979,7 @@ func (s *server) docPageApprovals(r *http.Request, docID int64) []ui.ApprovalRow
 }
 
 // docVersionPage handles GET /docs/versions/{id}/{n}: one version of a
-// document, current or superseded (025 §4.5), addressed by the document's
+// document, current or superseded (WL-SPEC-77 §3), addressed by the document's
 // numeric id like its JSON API sibling. A numbered document redirects to its
 // canonical version path (S20); a document with no number is served here.
 func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
@@ -1040,7 +1040,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read off the store rather than the projection: the cockpit's JSON shape
-	// is contracted by spec 032, and this is a page affordance, not a change
+	// is contracted by WL-SPEC-82, and this is a page affordance, not a change
 	// to that contract.
 	sessions, err := s.st.OpenAgentSessionsForProject(ctx, id)
 	if err != nil {
@@ -1137,7 +1137,7 @@ const timelineSummaryMax = 120
 
 // stateChange is the state_log "change" payload store.LogChange writes: a
 // stored row, not an HTTP body, which is why it is declared here rather than
-// in internal/model (ADR 036 §3). Field "edge" (store.AddEdge / RemoveEdge)
+// in internal/model (WL-SPEC-73 §3.2a). Field "edge" (store.AddEdge / RemoveEdge)
 // uses Op/Type/From/To instead of Old/New — see summarizeStateChange.
 type stateChange struct {
 	Field string `json:"field"`

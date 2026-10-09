@@ -67,7 +67,7 @@ func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
 }
 
 // newTestServerBlobs is newTestServer with an in-memory blob store attached,
-// for the spec 021 blob endpoints. WebOpen matches newTestServer: the blob
+// for the WL-SPEC-78 blob endpoints. WebOpen matches newTestServer: the blob
 // route inherits the UI's posture, and the opted-in instance is the case
 // most of these tests are about. The closed instance is covered separately in
 // blobs_test.go.
@@ -403,7 +403,7 @@ func TestMetricsEndpointDomainFamilies(t *testing.T) {
 
 // TestNewServerRejectsMalformedPublicURL and TestNewServerRejectsBadTokenEncKey
 // re-home from the deleted githubweb_test.go: they cover config validation
-// that survives the GitHub App OAuth client (dormant, spec 001 §9.3), not the
+// that survives the GitHub App OAuth client (dormant, WL-SPEC-74 §9.2), not the
 // login flow that was removed.
 func TestNewServerRejectsMalformedPublicURL(t *testing.T) {
 	t.Parallel()

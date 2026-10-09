@@ -49,7 +49,7 @@ func kindSelect(t *testing.T, main string) string {
 
 // TestNewTaskFormRenders checks the form offers every field the task needs,
 // and that every kind it offers is one the API would accept — the form and
-// validKinds cannot drift apart (025 §10).
+// validKinds cannot drift apart (WL-SPEC-77 §12).
 func TestNewTaskFormRenders(t *testing.T) {
 	t.Parallel()
 	st, h, _ := newTestServer(t)
@@ -320,7 +320,7 @@ func TestDeliverablesPageEmptyState(t *testing.T) {
 	}
 }
 
-// TestDeliverablesPageGroupsByMilestone pins the grouped shape (spec 029
+// TestDeliverablesPageGroupsByMilestone pins the grouped shape (WL-SPEC-75
 // §2): two milestones each holding one deliverable, plus one unattached
 // deliverable, render as three groups in the project's milestone order,
 // unattached last — and every declared deliverable still shows, whichever
@@ -482,7 +482,7 @@ func TestCreateDeliverableFromFormRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestDeliverableFormOffersNoStateControl pins spec 029 §3.2: the form asks
+// TestDeliverableFormOffersNoStateControl pins WL-SPEC-75 §13.3: the form asks
 // for a declaration, never for a state a person could assert.
 func TestDeliverableFormOffersNoStateControl(t *testing.T) {
 	t.Parallel()

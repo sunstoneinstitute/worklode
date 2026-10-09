@@ -584,7 +584,7 @@ func TestRecordLocalMergeNilSafe(t *testing.T) {
 }
 
 // TestObserveDeleteCounts: every entity/op/outcome combination is
-// pre-initialised to zero (044 §6 wants justification_required legible as a
+// pre-initialised to zero (justification_required must be legible as a
 // flat zero, not as no-data), and observeDelete increments the named one.
 func TestObserveDeleteCounts(t *testing.T) {
 	t.Parallel()
@@ -626,7 +626,7 @@ func TestObserveDeleteCounts(t *testing.T) {
 }
 
 // TestDeleteOutcomeClassifies: only a missing row is not_found; an
-// already-deleted row (ErrInvalidInput) is an error, keeping 044 §6's outcome
+// already-deleted row (ErrInvalidInput) is an error, keeping the outcome
 // set to the four values it names.
 func TestDeleteOutcomeClassifies(t *testing.T) {
 	t.Parallel()

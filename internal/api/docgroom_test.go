@@ -7,7 +7,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// TestWithdrawDoc is 025 §8.7's close verb over HTTP: an accepted document
+// TestWithdrawDoc is WL-SPEC-77 §9's close verb over HTTP: an accepted document
 // withdraws with a justification, the event carries it, and the statuses that
 // cannot be withdrawn come back as 422 rather than a silent no-op.
 func TestWithdrawDoc(t *testing.T) {
@@ -48,7 +48,7 @@ func TestWithdrawDoc(t *testing.T) {
 	pollEvents(t, h, token, "?type=doc.withdrawn", 1)
 }
 
-// TestListDocsUnresolved is 025 §8.7's `--unresolved` selector: the accepted
+// TestListDocsUnresolved is WL-SPEC-77 §9's `--unresolved` selector: the accepted
 // specs and plans nothing has executed, with withdrawal taking one out of the
 // set. The day bound is refused on its own, and a contradicting kind is
 // refused rather than answered with nothing.

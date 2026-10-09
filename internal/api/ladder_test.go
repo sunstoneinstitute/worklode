@@ -9,7 +9,7 @@ import (
 )
 
 // ladderFixture creates a project, one spec document, and a freestanding task
-// — the ladder's non-escalating rungs (025 §15.5) do not need a plan or a
+// — the ladder's non-escalating rungs (WL-SPEC-77 §15) do not need a plan or a
 // lease, unlike `lode task escalate`.
 func ladderFixture(t *testing.T, h http.Handler, token string) (model.Doc, map[string]any) {
 	t.Helper()
@@ -23,7 +23,7 @@ func ladderFixture(t *testing.T, h http.Handler, token string) (model.Doc, map[s
 }
 
 // TestTaskGapRecordsEvent: POST /api/v1/tasks/{id}/gap lands task.gap_found
-// with the same payload shape as escalate's minus "to" (025 §15.5).
+// with the same payload shape as escalate's minus "to" (WL-SPEC-77 §15).
 func TestTaskGapRecordsEvent(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)

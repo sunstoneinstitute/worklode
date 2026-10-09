@@ -315,7 +315,7 @@ func TestReportProjectSessionUsageUnknownProject404(t *testing.T) {
 	}
 }
 
-// TestReportProjectSessionUsageRejectsMalformedUsage covers spec 052 §5's
+// TestReportProjectSessionUsageRejectsMalformedUsage covers WL-SPEC-73 §9's
 // 400 for a malformed body: reportProjectSessionUsage routes each group through
 // the same toUsageBuckets validation the task-scoped endpoints use.
 func TestReportProjectSessionUsageRejectsMalformedUsage(t *testing.T) {

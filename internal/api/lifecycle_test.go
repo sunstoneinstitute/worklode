@@ -649,7 +649,7 @@ func TestClaimNextKindFilter(t *testing.T) {
 	}
 }
 
-// TestClaimNextKindList pins 025 §8.8 at the HTTP boundary: kind takes a
+// TestClaimNextKindList pins WL-SPEC-77 §10 at the HTTP boundary: kind takes a
 // comma-separated list, spaces around an element are tolerated, and a
 // deprecated spelling inside the list is still normalised.
 func TestClaimNextKindList(t *testing.T) {
@@ -707,7 +707,7 @@ func TestClaimNextInvalidKindInList(t *testing.T) {
 // TestClaimNextTrailingCommaKindRefused: an empty element is refused, not
 // dropped. Were it dropped the filter would widen to "any kind" and the
 // feature task below would be claimed by a loop that asked for design work —
-// the tier leak 025 §8.8 exists to close.
+// the tier leak WL-SPEC-77 §10 exists to close.
 func TestClaimNextTrailingCommaKindRefused(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
