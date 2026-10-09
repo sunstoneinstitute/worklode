@@ -49,6 +49,9 @@ type Section struct {
 	Anchor  string
 	Heading string
 	Depth   int
+	// Informative is true when the section has rules and all are informative.
+	// Such a section is not owed (WL-SPEC-85 §2).
+	Informative bool
 }
 
 // Plan is one plan document: its covers edges, its requires list, and every
@@ -224,6 +227,9 @@ func Derive(in Input) model.ProjectProgress {
 		var sawActive, sawPlanning, sawNoRecord bool
 		unplannedCount := 0
 		for _, sec := range spec.Sections {
+			if sec.Informative {
+				continue
+			}
 			covers := coversByAnchor[sec.Anchor]
 			state := SectionState(covers)
 			var coverPlans []string

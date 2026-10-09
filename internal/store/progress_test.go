@@ -610,3 +610,25 @@ func TestProjectProgressSkipsWithdrawnPlans(t *testing.T) {
 		t.Errorf("got %d plans, want 0", len(in.Plans))
 	}
 }
+
+// TestProjectProgressInformativeSection: a section whose rules are all
+// informative is flagged so Derive does not owe it; one with a requirement is not.
+func TestProjectProgressInformativeSection(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	seedProgressCorpus(t, s)
+	// progressSpecBody arranges sec-0, sec-1, sec-2 as rules 1, 2, 3.
+	setRuleKind(t, s, 2, "informative")
+
+	in, err := s.ProjectProgress(t.Context(), "p1", nil)
+	if err != nil {
+		t.Fatalf("ProjectProgress: %v", err)
+	}
+	got := map[string]bool{}
+	for _, sec := range in.Specs[0].Sections {
+		got[sec.Anchor] = sec.Informative
+	}
+	if want := map[string]bool{"sec-0": false, "sec-1": true, "sec-2": false}; !reflect.DeepEqual(got, want) {
+		t.Errorf("informative = %v, want %v", got, want)
+	}
+}
