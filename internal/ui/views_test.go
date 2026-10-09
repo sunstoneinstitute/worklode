@@ -145,7 +145,7 @@ func TestHomeOpenModeZeroProjects(t *testing.T) {
 }
 
 // TestDeliverableChipFollowsReportedState pins the page's one substantive
-// judgment: a deliverable stores no state (spec 029 §3.2), so the chip is
+// judgment: a deliverable stores no state (WL-SPEC-75 §13.3), so the chip is
 // whatever the newest evidence reported about the declared address, and
 // "Declared" only while nothing has reported one.
 func TestDeliverableChipFollowsReportedState(t *testing.T) {
@@ -170,7 +170,7 @@ func TestDeliverableChipFollowsReportedState(t *testing.T) {
 // user-reported and one unreported row: the observed one shows its state and
 // the time the emitter reported and nothing about provenance, the
 // user-reported one is labelled as such, the unreported one still says
-// Declared, and every row carries its own Report control (029 §3.2).
+// Declared, and every row carries its own Report control (WL-SPEC-75 §13.3).
 func TestDeliverablesPageShowsTheReport(t *testing.T) {
 	reportedAt := time.Date(2026, 8, 19, 9, 12, 0, 0, time.UTC)
 	var b strings.Builder
@@ -220,7 +220,7 @@ func TestDeliverablesPageShowsTheReport(t *testing.T) {
 	}
 }
 
-// TestRunBoard renders the run board with one row in every §8 group and
+// TestRunBoard renders the run board with one row in every group and
 // pins: the six group labels appear in the spec's fixed order; a Running
 // row's delegate, lease age, cost and check label render; a Waiting row
 // names its blocker; a bounded group's More renders "and N more"; and the
@@ -269,7 +269,7 @@ func TestRunBoard(t *testing.T) {
 			t.Fatalf("missing group heading %q", label)
 		}
 		if idx <= last {
-			t.Errorf("group %q rendered out of the pinned §8 order", label)
+			t.Errorf("group %q rendered out of the pinned order", label)
 		}
 		last = idx
 	}
@@ -326,7 +326,7 @@ func morningBriefFixture() *MorningBriefView {
 	}
 }
 
-// TestHomeMorningBrief pins spec 032 §9/§11's judgment bar: NeedsYou first
+// TestHomeMorningBrief pins WL-SPEC-82 §11's judgment bar: NeedsYou first
 // and strongest, routine collapsed to one line with no per-event rendering,
 // and the review form wired to /home/reviewed.
 func TestHomeMorningBrief(t *testing.T) {

@@ -1,5 +1,5 @@
-// Package indexer runs spec 040 §7's convergence loop: a background pass that
-// makes index_chunks agree with the corpus, one subject at a time, plus §8's
+// Package indexer runs WL-SPEC-79 §16's convergence loop: a background pass that
+// makes index_chunks agree with the corpus, one subject at a time, plus the
 // provider-change invalidation. It is the only writer of chunk rows and
 // vectors — skill sync's job ends at upserting the skill.
 //
@@ -24,7 +24,7 @@ import (
 )
 
 // DefaultInterval is how often the loop converges when LODE_INDEX_INTERVAL
-// says nothing (040 §7).
+// says nothing (WL-SPEC-79 §16).
 const DefaultInterval = 5 * time.Minute
 
 // defaultBatch is how many stale subjects one query claims. A pass keeps
@@ -50,14 +50,14 @@ var kinds = []string{store.SubjectDoc, store.SubjectTask, store.SubjectSkill}
 
 // Indexer converges the index. Embed nil is a fully supported configuration:
 // the pass still chunks and still writes chunk_text, so the lexical arm works
-// with no provider at all (§11); only the vectors are absent.
+// with no provider at all (WL-SPEC-79 §17); only the vectors are absent.
 type Indexer struct {
 	Store   *store.Store
 	Embed   embed.Provider
 	Metrics *Metrics     // nil-safe
 	Log     *slog.Logger // nil = slog.Default()
 	Batch   int          // 0 = defaultBatch
-	// Budget sizes the chunks (07 §14.4). The zero value means
+	// Budget sizes the chunks (WL-SPEC-79 §14.4). The zero value means
 	// corpusindex.DefaultBudget.
 	Budget corpusindex.Budget
 }
@@ -107,7 +107,7 @@ func (ix *Indexer) Loop(ctx context.Context, interval time.Duration) {
 
 // RunOnce converges every kind once and reports how many subjects it
 // re-indexed. A subject that fails is logged, counted, and left stale for the
-// next pass; the pass carries on with the rest, and so does the loop (§7:
+// next pass; the pass carries on with the rest, and so does the loop (WL-SPEC-79 §16:
 // self-healing is the whole point of converging rather than hooking writes).
 func (ix *Indexer) RunOnce(ctx context.Context) (int, error) {
 	start := time.Now()
@@ -182,7 +182,7 @@ func (ix *Indexer) convergeKind(ctx context.Context, kind string) (int, error) {
 // A configured provider that fails to embed must not make the subject
 // disappear from the lexical arm — that would be strictly worse than having
 // no provider at all, where the nil branch of vectors() already writes null
-// embeddings (§11). So an embed error still writes the chunk rows, with nil
+// embeddings (WL-SPEC-79 §17). So an embed error still writes the chunk rows, with nil
 // vectors, and is still returned: the caller counts it as a failure and logs
 // it, but StaleSubjects' no_vector disjunct re-selects the subject next pass
 // once embedding works again.
@@ -212,7 +212,7 @@ func (ix *Indexer) chunks(ctx context.Context, subj store.ChunkSubject) ([]corpu
 		if err != nil {
 			return nil, err
 		}
-		// Empty for a plan, which carries no anchors (025 §9) — ChunkDoc
+		// Empty for a plan, which carries no anchors (WL-SPEC-77 §11) — ChunkDoc
 		// chunks those on their own headings instead.
 		sections, err := ix.Store.ListDocSections(ctx, subj.DocID)
 		if err != nil {
@@ -239,8 +239,8 @@ func (ix *Indexer) chunks(ctx context.Context, subj store.ChunkSubject) ([]corpu
 
 // vectors embeds the chunks, or returns nil when no provider is configured —
 // which ReplaceSubjectChunks writes as null embeddings, leaving the lexical
-// arm fully served (§11). The header is prepended to the embed input so the
-// vector is conditioned on where the text lives (§4.3); the two stay in
+// arm fully served (WL-SPEC-79 §17). The header is prepended to the embed input so the
+// vector is conditioned on where the text lives (WL-SPEC-79 §14.4); the two stay in
 // separate columns.
 func (ix *Indexer) vectors(ctx context.Context, chunks []corpusindex.Chunk) ([][]float32, error) {
 	if ix.Embed == nil || len(chunks) == 0 {
@@ -253,7 +253,7 @@ func (ix *Indexer) vectors(ctx context.Context, chunks []corpusindex.Chunk) ([][
 	return ix.Embed.Embed(ctx, embed.RoleDocument, texts)
 }
 
-// observe refreshes §10's gauges after a pass: index size per kind, rows with
+// observe refreshes the gauges after a pass: index size per kind, rows with
 // no vector, and what is still stale — which should be zero every pass, and
 // is the metric to alert on when it is not.
 func (ix *Indexer) observe(ctx context.Context) error {

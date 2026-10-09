@@ -1,6 +1,6 @@
 package ui
 
-// context.go carries the inbox indicator's has-items flag (spec 056 §4) from
+// context.go carries the inbox indicator's has-items flag (WL-SPEC-82 §2.3) from
 // internal/api's renderWeb, which computes it once per request, down to
 // layout.templ's top bar, without widening PageProps or the Page(p
 // PageProps) signature every page already calls. templ's generated Render
@@ -22,7 +22,7 @@ type inboxDotKey struct{}
 // WithInboxDot returns ctx carrying whether the signed-in actor has at least
 // one item waiting in their inbox. Callers pass the ctx returned from this to
 // templ.Component.Render; internal/api's renderWeb is the only caller, so
-// this is computed exactly once per request (spec 056 §4).
+// this is computed exactly once per request (WL-SPEC-82 §2.3).
 func WithInboxDot(ctx context.Context, has bool) context.Context {
 	return context.WithValue(ctx, inboxDotKey{}, has)
 }
