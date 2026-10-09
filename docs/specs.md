@@ -9,7 +9,7 @@ Specs live in the backbone, not in this tree. Read one with `lode show <ref> --i
 | [WL-SPEC-74](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-74) | Identity, actors and secrets | Tokens, Keycloak login, agent actors, the route guard table and the grants policy. |
 | [WL-SPEC-75](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-75) | Tasks and execution | Projects, tasks, the state machine, edges, leases, atomic claim, the event log, delivery facts. |
 | [WL-SPEC-76](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-76) | Done, verification and workflows | Done declarations, workflows and automations. |
-| [WL-SPEC-77](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-77) | Documents | Specs, plans and ADRs as backbone rows, versions, sections and anchors, acceptance. |
+| [WL-SPEC-77](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-77) | Documents | Specs and plans as backbone rows, versions, sections and anchors, acceptance. |
 | [WL-SPEC-78](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-78) | Design queries, intents, decision decks, meetings, and attachments | Derived queries over the design corpus, intents, decision decks, meetings and minutes. |
 | [WL-SPEC-79](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-79) | Knowledge graph and search | The `wl:` knowledge graph projection and the corpus index. |
 | [WL-SPEC-80](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-80) | Agent harness and sessions | How a coding agent enters, holds and leaves work: hooks, statusline, `lode install`, sessions. |

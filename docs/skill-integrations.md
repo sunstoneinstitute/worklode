@@ -10,7 +10,7 @@ produce and consume. Input to one or more specs; not itself a spec.
 Two upstream plugins, both now in the official Claude marketplace:
 
 - **`mattpocock-skills`** — take `/grilling` and make it aware of Worklode
-  design documents, so a grilling session can read specs, ADRs and plans the
+  design documents, so a grilling session can read specs and plans the
   way it reads files, and land its result as one.
 - **`superpowers`** — take brainstorming, writing-plans, executing-plans and
   the visual brainstorming companion, and make them write **lode documents**
@@ -58,7 +58,7 @@ against: `lode doc sync` and `POST /api/v1/docs/sync` were deleted, and the old 
 and §5.1 are withdrawn. What shipped instead is the authoring surface of WL-SPEC-77, with
 the backbone — not git — as the place a document lives:
 
-- `lode doc add` / `edit` / `submit` / `accept` / `revise` — create a spec, ADR
+- `lode doc add` / `edit` / `submit` / `accept` / `revise` — create a spec
   or plan in the backbone and move it through its lifecycle.
 - `lode doc list` / `lode doc show` — list documents, and read one back with its
   body, sections and edges.
@@ -205,7 +205,7 @@ Cheap, independent of the authoring path, and useful on day one.
 
 **What grilling needs.** It answers frontier questions from environment facts
 without asking the user, dispatching sub-agents that grep the filesystem.
-Against a Worklode project the facts it should reach are the specs, ADRs and
+Against a Worklode project the facts it should reach are the specs and
 plans that govern the thing being grilled, including ones in other repos'
 corpora.
 

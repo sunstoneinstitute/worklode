@@ -212,3 +212,5 @@ configMapGenerator:
       - migrations/0099_rule-kinds.down.sql
       - migrations/0100_branch-rules-pull-request.up.sql
       - migrations/0100_branch-rules-pull-request.down.sql
+      - migrations/NEW-retire-adr-kind.up.sql
+      - migrations/NEW-retire-adr-kind.down.sql

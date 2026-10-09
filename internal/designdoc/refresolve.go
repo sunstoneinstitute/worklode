@@ -32,7 +32,7 @@ import (
 //
 // A form that matches nothing falls through to the next, which is how a bare
 // filename ("014-foo.md") still resolves by number. Every kind is a candidate
-// by slug and by shorthand; a bare number reaches specs and ADRs only, since
+// by slug and by shorthand; a bare number reaches specs only, since
 // WL-SPEC-75 §13 puts plans on a sequence of their own (see form 2).
 func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, error) {
 	base, section := SplitFragment(ref)
@@ -64,7 +64,7 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 	// does not hold it listed that corpus's WL-SPEC-74 and plan 1). None of
 	// them bears the name asked for, so the ref names no document.
 	//
-	// A *bare* number reaches specs and ADRs only, the kinds WL-SPEC-78 §2 calls a
+	// A *bare* number reaches specs only, the kind WL-SPEC-78 §2 calls a
 	// "spec number". Plans sit on a sequence of their own (WL-SPEC-75 §13), so plan
 	// 25 and WL-SPEC-77 share a number by construction, and including them made
 	// "WL-SPEC-77 §12" — the way the corpus writes a reference — ambiguous for every
@@ -115,6 +115,11 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 		if projectKey == "" || sh.Key != projectKey {
 			return model.Doc{}, "", &UnresolvedError{Key: sh.Key}
 		}
+		// A retired ADR number names the spec that took its place
+		// (WL-SPEC-77 §7a). RetiredADRNotice tells the reader.
+		if sh.Type == "ADR" {
+			return finishRef(ref, filterRefDocs(candidates, func(d model.Doc) bool { return d.FormerADR == sh.Number }), section)
+		}
 		// Numbers are unique per kind, not per corpus: WL-SPEC-75 §13 gives each kind
 		// its own project sequence, so WL-PLAN-1 and WL-SPEC-74 both exist. Narrow
 		// by kind only when the number alone is ambiguous, so a single near-miss
@@ -137,6 +142,17 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 	}
 
 	return model.Doc{}, "", NotFoundRefError(ref)
+}
+
+// RetiredADRNotice is the line `lode show` prints when ref is a retired
+// <KEY>-ADR-<n> that resolved to doc, its successor spec (WL-SPEC-77 §7a).
+// It is "" for every other ref.
+func RetiredADRNotice(ref string, doc model.Doc) string {
+	base, _ := SplitFragment(ref)
+	if sh, ok := ParseShorthand(base); !ok || sh.Type != "ADR" {
+		return ""
+	}
+	return fmt.Sprintf("%s is retired; showing its successor %s.", base, doc.FormatRef())
 }
 
 // CheckDocKind enforces WL-SPEC-77 §7's <TYPE> token, as widened by WL-SPEC-75 §13 to
@@ -195,8 +211,8 @@ func filterRefDocs(docs []model.Doc, keep func(model.Doc) bool) []model.Doc {
 	return matches
 }
 
-// numberedRefDocs is every document a bare corpus number can name: spec and
-// ADR, the kinds whose number the corpus writes as "WL-SPEC-77 §12". See form 2.
+// numberedRefDocs is every document a bare corpus number can name: a spec,
+// the kind whose number the corpus writes as "WL-SPEC-77 §12". See form 2.
 func numberedRefDocs(docs []model.Doc) []model.Doc {
 	return filterRefDocs(docs, func(d model.Doc) bool { return d.Kind != "plan" })
 }
