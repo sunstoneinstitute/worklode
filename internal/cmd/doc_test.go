@@ -559,8 +559,8 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("doc revise --accept: %v\noutput: %s", err, out)
 	}
 	landed := docJSON(t, out)
-	if landed.Version != 2 {
-		t.Errorf("doc revise --accept: version = %d, want 2", landed.Version)
+	if landed.Version != 3 {
+		t.Errorf("doc revise --accept: version = %d, want 3 (draft edit, then the landed revision)", landed.Version)
 	}
 	if landed.Body != revisedBody {
 		t.Errorf("doc revise --accept: body = %q, want %q", landed.Body, revisedBody)
