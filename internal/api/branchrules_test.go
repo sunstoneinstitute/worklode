@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -89,15 +92,16 @@ func waitForMergeQueue(t *testing.T, st *store.Store, want bool) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		got, known, err := st.BranchRules(context.Background(), branchRulesRepo, "main")
-		if err != nil {
+		got, err := st.BranchRules(context.Background(), branchRulesRepo)
+		known := err == nil
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			t.Fatalf("read branch rules: %v", err)
 		}
-		if known && got == want {
+		if known && got.MergeQueue == want {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("branch rules for %s@main = (%v, known=%v), want (%v, known=true)",
+			t.Fatalf("branch rules for %s = (%+v, known=%v), want merge queue %v",
 				branchRulesRepo, got, known, want)
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -134,11 +138,43 @@ func TestBranchRulesWithoutAppWritesNothing(t *testing.T) {
 
 	s.refreshBranchRules(context.Background())
 
-	_, known, err := s.st.BranchRules(context.Background(), branchRulesRepo, "main")
-	if err != nil {
-		t.Fatalf("read branch rules: %v", err)
+	if _, err := s.st.BranchRules(context.Background(), branchRulesRepo); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("a server with no GitHub App recorded a branch-rules fact (err = %v)", err)
 	}
-	if known {
-		t.Error("a server with no GitHub App recorded a branch-rules fact")
+}
+
+// GET /api/v1/repos/branch-rules serves what the refresh stored, keyed by
+// the remote URL the CLI has, and 404s a repo with nothing observed so
+// `lode doctor` can say "unknown" (WL-SPEC-72 §3).
+func TestGetBranchRules(t *testing.T) {
+	f := &fakeRulesApp{}
+	s := branchRulesServer(t, f.start(t))
+
+	get := func(remote string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		s.getBranchRules(rec, httptest.NewRequest(http.MethodGet,
+			"/api/v1/repos/branch-rules?remote="+url.QueryEscape(remote), nil))
+		return rec
+	}
+
+	if rec := get("git@github.com:acme/widgets.git"); rec.Code != http.StatusNotFound {
+		t.Fatalf("before refresh: %d %s, want 404", rec.Code, rec.Body.String())
+	}
+
+	s.refreshBranchRules(context.Background())
+	rec := get("git@github.com:acme/widgets.git")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("after refresh: %d %s", rec.Code, rec.Body.String())
+	}
+	var got model.RepoBranchRules
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Repo != branchRulesRepo || got.Branch != "main" || got.PullRequest == nil || !*got.PullRequest {
+		t.Fatalf("branch rules = %+v, want acme/widgets@main with PRs required", got)
+	}
+
+	if rec := get("not a remote"); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad remote: %d, want 422", rec.Code)
 	}
 }

@@ -117,7 +117,7 @@ func newMergeServer(t *testing.T, auth *githubauth.AppAuth, queue bool) (*server
 		}, ""); err != nil {
 			return err
 		}
-		return store.UpsertBranchRules(tx, mergeRepo, "main", queue, s.st.Now())
+		return store.UpsertBranchRules(tx, mergeRepo, "main", queue, true, s.st.Now())
 	})
 	if err != nil {
 		t.Fatalf("seed PR and branch rules: %v", err)
