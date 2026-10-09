@@ -406,18 +406,25 @@ func TaskTable(w io.Writer, tasks []model.Task) {
 	tbl.flush(w)
 }
 
-// TaskDetailRender prints one task with its edges, blocked status, and lease
-// holder — worktree and agent sessions included when leased — the
-// `lode task show` view. server is the API base URL, used to absolutize
-// /blob/ references in the rendered body (MarkdownWithBase); pass "" when
-// none is known.
-func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
+// TaskHeaderRender prints a task's id, title, project, priority, kind, state
+// and assignee: the `lode task show --status` view, and the top of
+// TaskDetailRender.
+func TaskHeaderRender(w io.Writer, t model.TaskDetail) {
 	fmt.Fprintf(w, "%s  %s\n", t.ID, t.Title)
 	fmt.Fprintf(w, "  project:  %s\n", t.Project)
 	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
 	fmt.Fprintf(w, "  kind:     %s\n", t.Kind)
 	fmt.Fprintf(w, "  state:    %s\n", t.State)
 	fmt.Fprintf(w, "  assignee: %s\n", dash(t.Assignee))
+}
+
+// TaskDetailRender prints one task with its edges, blocked status, and lease
+// holder — worktree and agent sessions included when leased — the
+// `lode task show` view. server is the API base URL, used to absolutize
+// /blob/ references in the rendered body (MarkdownWithBase); pass "" when
+// none is known.
+func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
+	TaskHeaderRender(w, t)
 	if t.Hierarchy.Parent != nil {
 		fmt.Fprintf(w, "  parent:   %s  %s (%s)\n",
 			t.Hierarchy.Parent.ID, t.Hierarchy.Parent.Title, t.Hierarchy.Parent.State)

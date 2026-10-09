@@ -68,7 +68,7 @@ tell an adjective from a verb or a view from an action.
   under `work` and nowhere else.
 - **L9** — A closed shortcut list. Exactly four top-level aliases, each
   because it runs many times per session: `lode next` (`work next`),
-  `lode status` (`work status`), `lode board` (`task board`), `lode overview`
+  `lode status` (`work status`; given a task, `task show --status <task>`), `lode board` (`task board`), `lode overview`
   (`project overview`). These are permanent API, not compatibility aliases.
   Adding a fifth requires amending spec 061 §1.
 

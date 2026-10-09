@@ -46,6 +46,12 @@ func TestShortcuts(t *testing.T) {
 		if top.GroupID != shortcutGroupID {
 			t.Errorf("shortcut %q: `lode %s` is not in the shortcuts help group", path, name)
 		}
+		if s.argTarget != nil {
+			at, rest := resolve(rootCmd, s.argTarget)
+			if at == rootCmd || len(rest) > 1 || (len(rest) == 1 && at.Flags().Lookup(strings.TrimPrefix(rest[0], "--")) == nil) {
+				t.Errorf("shortcut %q: argTarget `lode %s` is not a command", path, strings.Join(s.argTarget, " "))
+			}
+		}
 		if top.Short != target.Short {
 			t.Errorf("shortcut %q: `lode %s` and `lode %s` describe themselves differently",
 				path, name, path)
