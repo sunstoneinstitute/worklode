@@ -157,6 +157,10 @@ const (
 	RuleKindInformative = "informative"
 )
 
+// RuleKinds are the kinds a rule may be given, in §4's order; the retired
+// informative is not one of them.
+var RuleKinds = []string{RuleKindRequirement, RuleKindCatalogue, RuleKindInvariant, RuleKindDefinition, RuleKindPrinciple}
+
 // RuleKindCovered reports whether a plan covers rules of this kind: a
 // requirement or a catalogue. Every other kind is never covered and never a
 // gap (WL-SPEC-77 §4).

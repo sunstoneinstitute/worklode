@@ -108,6 +108,16 @@ func (c *Client) EditRule(ctx context.Context, ref string, in model.EditRuleInpu
 	return doJSON[model.Rule](ctx, c, http.MethodPut, "/api/v1/rules/"+url.PathEscape(ref), in, "rule")
 }
 
+// AddRule calls POST /api/v1/rules: a standalone rule (WL-SPEC-77 §19.2).
+func (c *Client) AddRule(ctx context.Context, in model.AddRuleInput) (model.Rule, []byte, error) {
+	return doJSON[model.Rule](ctx, c, http.MethodPost, "/api/v1/rules", in, "rule")
+}
+
+// AcceptRule calls POST /api/v1/rules/{ref}/accept.
+func (c *Client) AcceptRule(ctx context.Context, ref string) (model.Rule, []byte, error) {
+	return doJSON[model.Rule](ctx, c, http.MethodPost, "/api/v1/rules/"+url.PathEscape(ref)+"/accept", nil, "rule")
+}
+
 // SetRuleMeta calls PATCH /api/v1/rules/{ref}: owner and/or tags.
 func (c *Client) SetRuleMeta(ctx context.Context, ref string, in model.RuleMetaInput) (model.Rule, []byte, error) {
 	return doJSON[model.Rule](ctx, c, http.MethodPatch, "/api/v1/rules/"+url.PathEscape(ref), in, "rule")

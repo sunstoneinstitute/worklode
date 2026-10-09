@@ -113,6 +113,38 @@ func (s *server) patchRule(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
+// addRule handles POST /api/v1/rules: a standalone rule at draft version 1,
+// owned by the caller and arranged in no document (WL-SPEC-77 §19.2).
+func (s *server) addRule(w http.ResponseWriter, r *http.Request) {
+	var req model.AddRuleInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	req.Project = strings.TrimSpace(req.Project)
+	c, err := s.st.AddRule(r.Context(), req, actorIDFrom(r))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, c)
+}
+
+// acceptRule handles POST /api/v1/rules/{id}/accept: the rule's owner
+// accepts its newest draft version (WL-SPEC-77 §19.2).
+func (s *server) acceptRule(w http.ResponseWriter, r *http.Request) {
+	ref, ok := ruleRef(w, r)
+	if !ok {
+		return
+	}
+	c, err := s.st.AcceptRule(r.Context(), ref.Key, ref.Number, actorIDFrom(r))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
 // listRuleVersions handles GET /api/v1/rules/{id}/versions.
 func (s *server) listRuleVersions(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
@@ -217,6 +249,15 @@ var ruleRouteDocs = map[string]routeDoc{
 		summary:   "List rules, optionally filtered by project, status or document",
 		responses: map[int]any{http.StatusOK: []model.Rule{}},
 		params:    model.RuleListParams{},
+	},
+	"POST /api/v1/rules": {
+		summary:   "Add a standalone rule, arranged in no document, at draft version 1",
+		request:   model.AddRuleInput{},
+		responses: map[int]any{http.StatusCreated: model.Rule{}},
+	},
+	"POST /api/v1/rules/{id}/accept": {
+		summary:   "Accept a rule's newest draft version; owner only",
+		responses: map[int]any{http.StatusOK: model.Rule{}},
 	},
 	"GET /api/v1/rules/{id}": {
 		summary:   "Get a rule by ref",
