@@ -135,13 +135,18 @@ func (s *server) progressMerge(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// callGitHubMerge performs the operation itself. Enqueuing costs one read
-// more than merging: the mutation takes the PR's GraphQL node id, and REST
-// is where that is published.
+// callGitHubMerge performs the operation itself. Each costs one read first:
+// enqueuing needs the PR's GraphQL node id, which REST publishes; merging
+// needs the method the repository allows.
 func (s *server) callGitHubMerge(ctx context.Context, op, repo string, number int64) error {
 	if op == "merge" {
+		s.observeGitHubCall("merge_method")
+		method, err := s.appAuth.MergeMethod(ctx, repo)
+		if err != nil {
+			return err
+		}
 		s.observeGitHubCall("merge_pr")
-		return s.appAuth.MergePR(ctx, repo, number, "")
+		return s.appAuth.MergePR(ctx, repo, number, method)
 	}
 	s.observeGitHubCall("pr_node_id")
 	nodeID, err := s.appAuth.PRNodeID(ctx, repo, number)
