@@ -66,7 +66,7 @@ func (s *Store) EscalateTask(ctx context.Context, in EscalateInput) (*EscalateRe
 	}
 	in.Reason = reason
 
-	// The payload names the document by slug, and RecordEvent marshals it
+	// The payload names the document by ref, and RecordEvent marshals it
 	// before the transaction opens, so the document is read first. It also
 	// tells the caller "no such document" before anything is written.
 	doc, err := s.GetDoc(ctx, in.DocID)
@@ -74,12 +74,18 @@ func (s *Store) EscalateTask(ctx context.Context, in EscalateInput) (*EscalateRe
 		s.metrics.escalation("error")
 		return nil, err
 	}
+	proj, err := s.GetProject(ctx, doc.Project)
+	if err != nil {
+		s.metrics.escalation("error")
+		return nil, err
+	}
+	doc.ProjectKey = proj.Key
 	extID, err := randomExternalID()
 	if err != nil {
 		return nil, err
 	}
 	payload, err := EventPayload(map[string]any{
-		"task": in.TaskID, "doc": doc.Slug, "anchor": in.Anchor,
+		"task": in.TaskID, "doc": doc.FormatRef(), "anchor": in.Anchor,
 		"to": in.To, "reason": in.Reason,
 	})
 	if err != nil {

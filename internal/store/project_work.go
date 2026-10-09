@@ -209,10 +209,11 @@ SELECT dep.id, b.id, b.title, b.state
 // Claim then refuses is worse than no badge at all.
 func (s *Store) attachBlockingPlans(ctx context.Context, projectID string, facts map[string]*ProjectWorkFact) error {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
+SELECT DISTINCT dep.id, bd.id, bd.slug, coalesce(`+docRefSQL("bp", "bd")+`, bd.slug), bd.title, bd.status
   FROM tasks dep
   JOIN doc_edges de ON de.type = 'blockedBy' AND de.from_doc = dep.plan_doc
   JOIN docs bd ON bd.id = de.to_doc
+  JOIN projects bp ON bp.id = bd.project_id
  WHERE dep.plan_doc IS NOT NULL
    AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)
@@ -226,7 +227,7 @@ SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
 	for rows.Next() {
 		var depID string
 		var ref model.DocRef
-		if err := rows.Scan(&depID, &ref.ID, &ref.Slug, &ref.Title, &ref.Status); err != nil {
+		if err := rows.Scan(&depID, &ref.ID, &ref.Slug, &ref.Ref, &ref.Title, &ref.Status); err != nil {
 			return fmt.Errorf("scan blocking plan: %w", err)
 		}
 		if f, ok := facts[depID]; ok {

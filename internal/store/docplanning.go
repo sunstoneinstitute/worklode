@@ -392,7 +392,7 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // An unplanned section reports the strongest outcome that applies:
 // "plan-draft" when a draft plan covers it, "deferred" when an accepted or
 // superseded plan defers it to a named owner (reported beside the anchor: a
-// slug, or the reference verbatim when it did not resolve), "unplanned"
+// ref, or the reference verbatim when it did not resolve), "unplanned"
 // otherwise. A draft plan's deferral classifies nothing. `covers: NO-SPEC`
 // resolves to no rule and falls out of the join, and a tombstoned document
 // participates on neither end (WL-REQ-117).
@@ -411,11 +411,12 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		     SELECT e.to_doc AS doc_id, e.to_anchor AS anchor,
 		            -- Comma without a space: the CLI joins anchors with spaces,
 		            -- so a spaced separator would split one gap across tokens.
-		            string_agg(DISTINCT coalesce(o.slug, e.owner_external), ','
-		                       ORDER BY coalesce(o.slug, e.owner_external)) AS owner
+		            string_agg(DISTINCT coalesce(`+docRefSQL("op", "o")+`, o.slug, e.owner_external), ','
+		                       ORDER BY coalesce(`+docRefSQL("op", "o")+`, o.slug, e.owner_external)) AS owner
 		       FROM doc_edges e
 		       JOIN docs p ON p.id = e.from_doc
 		       LEFT JOIN docs o ON o.id = e.owner_doc
+		       LEFT JOIN projects op ON op.id = o.project_id
 		      WHERE e.type = 'defers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')

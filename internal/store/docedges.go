@@ -911,9 +911,10 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT 'unresolved', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
 		        coalesce(e.from_anchor,''), e.type, e.to_external,
-		        0::bigint, '', ''
+		        0::bigint, '', '', coalesce(`+docRefSQL("dp", "d")+`, d.slug), ''
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
+		   JOIN projects dp ON dp.id = d.project_id
 		  WHERE e.to_external IS NOT NULL AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 
@@ -921,9 +922,10 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 
 		 SELECT 'unresolved', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
 		        coalesce(e.from_anchor,''), e.type, e.owner_external,
-		        0::bigint, '', ''
+		        0::bigint, '', '', coalesce(`+docRefSQL("dp", "d")+`, d.slug), ''
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
+		   JOIN projects dp ON dp.id = d.project_id
 		  WHERE e.owner_external IS NOT NULL AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 
@@ -931,10 +933,13 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 
 		 SELECT 'missing-anchor', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
 		        coalesce(e.from_anchor,''), e.type, '',
-		        e.to_doc, td.slug, e.to_anchor
+		        e.to_doc, td.slug, e.to_anchor, coalesce(`+docRefSQL("dp", "d")+`, d.slug),
+		        coalesce(`+docRefSQL("tp", "td")+`, td.slug)
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
+		   JOIN projects dp ON dp.id = d.project_id
 		   JOIN docs td ON td.id = e.to_doc
+		   JOIN projects tp ON tp.id = td.project_id
 		  WHERE e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		    AND d.deleted_at IS NULL AND td.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
@@ -948,7 +953,7 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 	findings, err := collectRows(rows, "lint docs", func(r rowScanner) (model.DocLintFinding, error) {
 		var f model.DocLintFinding
 		err := r.Scan(&f.Kind, &f.Doc, &f.Project, &f.Number, &f.Slug, &f.DocKind,
-			&f.FromAnchor, &f.Type, &f.Ref, &f.ToDoc, &f.ToSlug, &f.ToAnchor)
+			&f.FromAnchor, &f.Type, &f.Ref, &f.ToDoc, &f.ToSlug, &f.ToAnchor, &f.DocRef, &f.ToRef)
 		return f, err
 	})
 	if err != nil {
@@ -1011,7 +1016,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
-		        coalesce(d.number,0), coalesce(d.status,''), coalesce(od.slug, e.owner_external, ''),
+		        coalesce(d.number,0), coalesce(d.status,''), coalesce(`+docRefSQL("op", "od")+`, od.slug, e.owner_external, ''),
 		        coalesce(`+ruleRefSQL("rp", "r")+`, ''), coalesce(d.title,''), coalesce(dp.key,'')
 		   FROM doc_edges e
 		   LEFT JOIN rules r ON r.id = e.to_rule
@@ -1024,6 +1029,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		   LEFT JOIN docs d ON d.id = coalesce(e.to_doc, ra.doc_id)
 		   LEFT JOIN projects dp ON dp.id = d.project_id
 		   LEFT JOIN docs od ON od.id = e.owner_doc
+		   LEFT JOIN projects op ON op.id = od.project_id
 		  WHERE e.from_doc = $1
 		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		           coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''), r.number`, docID)
@@ -1046,7 +1052,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	inRows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
 		        d.project_id, d.slug, d.kind, coalesce(d.number,0), d.status,
-		        coalesce(od.slug, e.owner_external, ''), '', d.title, dp.key
+		        coalesce(`+docRefSQL("op", "od")+`, od.slug, e.owner_external, ''), '', d.title, dp.key
 		   FROM (SELECT type, from_doc, from_anchor, to_anchor, owner_doc, owner_external
 		           FROM doc_edges WHERE to_doc = $1
 		         UNION ALL
@@ -1055,6 +1061,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		   JOIN docs d ON d.id = e.from_doc
 		   JOIN projects dp ON dp.id = d.project_id
 		   LEFT JOIN docs od ON od.id = e.owner_doc
+		   LEFT JOIN projects op ON op.id = od.project_id
 		  WHERE d.deleted_at IS NULL
 		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
 	if err != nil {

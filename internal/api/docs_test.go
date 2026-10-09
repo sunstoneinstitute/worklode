@@ -395,8 +395,8 @@ defers:
 	if len(deferrerDetail.Edges) != 1 || deferrerDetail.Edges[0].Type != "defers" {
 		t.Fatalf("deferring plan edges = %+v, want one defers edge", deferrerDetail.Edges)
 	}
-	if got := deferrerDetail.Edges[0].Owner; got != owner.Slug {
-		t.Errorf("defers edge owner = %q, want %q", got, owner.Slug)
+	if got := deferrerDetail.Edges[0].Owner; got != "WL-SPEC-26" {
+		t.Errorf("defers edge owner = %q, want WL-SPEC-26", got)
 	}
 }
 
@@ -1866,7 +1866,7 @@ func TestDocReferrers(t *testing.T) {
 	var got model.DocReferrersResponse
 	decodeInto(t, rr, &got)
 	want := []model.DocReferrer{{
-		Kind: "doc", Ref: "026-referring", Rel: "requires", Title: "Documents in the backbone",
+		Kind: "doc", Ref: "WL-SPEC-26", Rel: "requires", Title: "Documents in the backbone",
 	}}
 	if !reflect.DeepEqual(got.Referrers, want) {
 		t.Errorf("referrers = %+v, want %+v", got.Referrers, want)

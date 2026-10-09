@@ -89,6 +89,13 @@ type DocFilter struct {
 	HideTerminal bool
 }
 
+// docRefSQL is model.Doc.FormatRef as a SQL expression over a projects alias
+// p and a docs alias d. It is NULL when the document has no number, so a
+// caller wraps it in coalesce(..., d.slug).
+func docRefSQL(p, d string) string {
+	return p + `.key || '-' || upper(` + d + `.kind) || '-' || ` + d + `.number`
+}
+
 // logDocChange records one document mutation in the state log. Nine write
 // paths in this file need it; the entity kind and the id formatting are
 // stated here rather than re-typed at each of them.
@@ -1461,9 +1468,10 @@ func (s *Store) DocSectionReferrers(ctx context.Context, docID int64, anchor str
 // is WL-REQ-171's stale-marking business rather than a referrer.
 func docSectionReferrers(ctx context.Context, q rowQueryer, docID int64, anchor string) ([]model.DocReferrer, error) {
 	rows, err := q.QueryContext(ctx,
-		`SELECT 'doc' AS kind, d.slug AS ref, e.type AS rel, d.title
+		`SELECT 'doc' AS kind, coalesce(`+docRefSQL("dp", "d")+`, d.slug) AS ref, e.type AS rel, d.title
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
+		   JOIN projects dp ON dp.id = d.project_id
 		  WHERE e.to_doc = $1 AND e.to_anchor = $2
 		    AND e.type IN ('requires','covers')
 		    AND d.kind <> 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL

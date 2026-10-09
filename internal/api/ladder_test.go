@@ -47,7 +47,7 @@ func TestTaskGapRecordsEvent(t *testing.T) {
 	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	if payload["task"] != id || payload["doc"] != doc.Slug || payload["anchor"] != "sec-1" ||
+	if payload["task"] != id || payload["doc"] != "WL-SPEC-1" || payload["anchor"] != "sec-1" ||
 		payload["reason"] != "the spec skips the empty case" {
 		t.Errorf("payload = %+v", payload)
 	}
@@ -113,7 +113,7 @@ func TestTaskFixStartedRecordsEvent(t *testing.T) {
 	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	if payload["task"] != id || payload["tier"] != "spec" || payload["doc"] != doc.Slug {
+	if payload["task"] != id || payload["tier"] != "spec" || payload["doc"] != "WL-SPEC-1" {
 		t.Errorf("payload = %+v", payload)
 	}
 }

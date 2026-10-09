@@ -932,7 +932,7 @@ func TestDocListEdgesIncludesDefersOwner(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	spec := mustAcceptedSpec(t, s, "025-x")
-	owner := mustCreateDoc(t, s, DocInput{
+	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
 	})
 	deferrer := deferringPlan(t, s, "deferring-plan", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
@@ -941,8 +941,11 @@ func TestDocListEdgesIncludesDefersOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDocEdges(deferrer): %v", err)
 	}
-	if len(out) != 1 || out[0].Type != "defers" || out[0].Owner != owner.Slug {
-		t.Fatalf("deferring plan edges = %+v, want one defers edge owned by %s", out, owner.Slug)
+	if len(out) != 1 || out[0].Type != "defers" || out[0].Owner != "P1-SPEC-6" {
+		t.Fatalf("deferring plan edges = %+v, want one defers edge owned by P1-SPEC-6", out)
+	}
+	if got := out[0].ToRef(); got != "P1-SPEC-25" {
+		t.Errorf("ToRef() = %q, want P1-SPEC-25", got)
 	}
 
 	_, in, err := s.ListDocEdges(t.Context(), spec.ID)
@@ -953,8 +956,8 @@ func TestDocListEdgesIncludesDefersOwner(t *testing.T) {
 	for _, e := range in {
 		if e.Type == "isDeferredBy" && e.ToDoc == deferrer.ID {
 			sawDeferred = true
-			if e.Owner != owner.Slug {
-				t.Errorf("isDeferredBy Owner = %q, want %q", e.Owner, owner.Slug)
+			if e.Owner != "P1-SPEC-6" {
+				t.Errorf("isDeferredBy Owner = %q, want P1-SPEC-6", e.Owner)
 			}
 		}
 	}
@@ -1371,6 +1374,7 @@ covers:
 		t.Fatalf("findings = %+v, want an unresolved finding", findings)
 	}
 	if unresolved.Doc != plan.ID || unresolved.Slug != "lint-plan" || unresolved.DocKind != "plan" ||
+		unresolved.DocRef != fmt.Sprintf("P1-PLAN-%d", plan.Number) ||
 		unresolved.Type != "covers" || unresolved.Ref != "999-nowhere.md#sec-1" {
 		t.Errorf("unresolved finding = %+v, want it naming plan %d's 999-nowhere.md#sec-1 covers ref",
 			unresolved, plan.ID)
@@ -1382,7 +1386,8 @@ covers:
 		t.Errorf("unresolved refs = %v, want the covers sec-99 ref kept verbatim", unresolvedRefs)
 	}
 	if missingAnchor.Doc != plan.ID || missingAnchor.Type != "requires" ||
-		missingAnchor.ToDoc != spec.ID || missingAnchor.ToSlug != spec.Slug || missingAnchor.ToAnchor != "sec-99" {
+		missingAnchor.ToDoc != spec.ID || missingAnchor.ToSlug != spec.Slug || missingAnchor.ToAnchor != "sec-99" ||
+		missingAnchor.ToRef != "P1-SPEC-25" || missingAnchor.DocRef != fmt.Sprintf("P1-PLAN-%d", plan.Number) {
 		t.Errorf("missing-anchor finding = %+v, want it naming plan %d -> spec %d#sec-99",
 			missingAnchor, plan.ID, spec.ID)
 	}

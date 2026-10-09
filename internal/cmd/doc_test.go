@@ -831,7 +831,7 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 		t.Fatalf("doc list --needs-planning: %v\noutput: %s", err, out)
 	}
 	// Identified by ref, not slug: the slug is the file name and left to --json.
-	if !strings.Contains(out, "PROJ-SPEC-1") || !strings.Contains(out, "sec-2(deferred:owner-spec)") {
+	if !strings.Contains(out, "PROJ-SPEC-1") || !strings.Contains(out, "sec-2(deferred:PROJ-SPEC-2)") {
 		t.Errorf("needs-planning output = %q, want the spec and its deferred anchor with its owner", out)
 	}
 	if strings.Contains(out, "sec-1") {
@@ -850,8 +850,8 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 		t.Fatalf("json = %+v, want one doc and one gap", resp)
 	}
 	if resp.PlanningGaps[0].Sections != 2 || len(resp.PlanningGaps[0].Gaps) != 1 ||
-		resp.PlanningGaps[0].Gaps[0] != (model.DocSectionGap{Anchor: "sec-2", Coverage: "deferred", Owner: "owner-spec"}) {
-		t.Errorf("gap = %+v, want 2 sections with sec-2 deferred to owner-spec", resp.PlanningGaps[0])
+		resp.PlanningGaps[0].Gaps[0] != (model.DocSectionGap{Anchor: "sec-2", Coverage: "deferred", Owner: "PROJ-SPEC-2"}) {
+		t.Errorf("gap = %+v, want 2 sections with sec-2 deferred to PROJ-SPEC-2", resp.PlanningGaps[0])
 	}
 
 	out, err = runLode(t, "doc", "list", "--project", "proj", "--needs-execution")
