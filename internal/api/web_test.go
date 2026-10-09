@@ -310,7 +310,7 @@ func TestReviewsPageDocRowLinksItsPage(t *testing.T) {
 	seedAwaitingApprovalRow(t, st, "doc", store.DocEntityID(doc.ID), "1", "alice")
 
 	body := doReq(t, h, "GET", "/reviews", "", nil).Body.String()
-	bodyContains(t, body, `href="/docs/`+strconv.FormatInt(doc.ID, 10)+`"`,
+	bodyContains(t, body, `href="/projects/proj/spec/29"`,
 		doc.Title, ">doc<")
 }
 

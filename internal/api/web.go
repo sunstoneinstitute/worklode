@@ -838,7 +838,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if resolved.Number != 0 {
-			u := docCanonicalURL(resolved)
+			u := model.DocCanonicalURL(resolved)
 			q := r.URL.Query()
 			if v := q.Get("v"); v != "" {
 				u += "/" + v
@@ -1001,7 +1001,7 @@ func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d.Number != 0 && d.Tombstone == nil {
-		http.Redirect(w, r, fmt.Sprintf("%s/%d", docCanonicalURL(*d), version), http.StatusFound)
+		http.Redirect(w, r, fmt.Sprintf("%s/%d", model.DocCanonicalURL(*d), version), http.StatusFound)
 		return
 	}
 	s.renderDocVersion(w, r, *d, version)

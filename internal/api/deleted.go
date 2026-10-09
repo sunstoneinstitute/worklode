@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
@@ -73,7 +74,7 @@ func (s *server) deletedView(ctx context.Context, project ui.CockpitProject) (ui
 	// none of the markdown, and carrying every tombstoned document's source
 	// into it would make this the heaviest page the cockpit serves.
 	for _, d := range withoutDocBodies(docs) {
-		v.Docs = append(v.Docs, ui.DeletedDocRow{Doc: d, URL: docPageURL(d.ID), Ref: docRef(d)})
+		v.Docs = append(v.Docs, ui.DeletedDocRow{Doc: d, URL: model.DocPageURL(d.ID), Ref: docRef(d)})
 	}
 	return v, nil
 }

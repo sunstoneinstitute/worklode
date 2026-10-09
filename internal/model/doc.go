@@ -614,3 +614,20 @@ type DocReferrersParams struct {
 	// Required.
 	Anchor string `query:"anchor,omitempty"`
 }
+
+// DocCanonicalURL is the one spelling of a document's cockpit URL: the S20
+// canonical URL ("/projects/worklode/spec/25") when the document carries a
+// number, else DocPageURL. Every link to a document goes through it, so the
+// redirects and the pages agree (WL-347). The Reviews queue builds the same
+// URL in SQL (store's approvalEntityURL).
+func DocCanonicalURL(d Doc) string {
+	if d.Number != 0 {
+		return "/projects/" + d.Project + "/" + d.Kind + "/" + strconv.Itoa(d.Number)
+	}
+	return DocPageURL(d.ID)
+}
+
+// DocPageURL is the fallback cockpit page path for a document with no number
+// to build a shorthand from: a tombstone, whose slug may be reused, and any row
+// predating 029 §4's backfill.
+func DocPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }

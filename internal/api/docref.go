@@ -33,7 +33,7 @@ func (s *server) docRefRedirect(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, err.Error())
 		return
 	}
-	http.Redirect(w, r, docCanonicalURL(d), http.StatusFound)
+	http.Redirect(w, r, model.DocCanonicalURL(d), http.StatusFound)
 }
 
 // resolveDocRefWeb resolves ref against every live document, using the same
