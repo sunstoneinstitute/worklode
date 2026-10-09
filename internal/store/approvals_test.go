@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
 	"testing"
 	"time"
 
@@ -556,7 +555,7 @@ func TestListAwaitingApprovalsCoversEveryKind(t *testing.T) {
 	}
 	want := []struct{ kind, title, url, taskID string }{
 		{"pr", "a pr", pr.URL, task.ID},
-		{"doc", doc.Title, "/docs/" + strconv.FormatInt(doc.ID, 10), ""},
+		{"doc", doc.Title, "/projects/horndb/spec/29", ""},
 		{"deliverable", del.Name, "https://example.org/casualties", ""},
 		{"task", reviewed.Title, "/tasks/" + reviewed.ID, ""},
 	}
@@ -776,7 +775,7 @@ func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
 	if docRow.Title != doc.Title {
 		t.Errorf("doc row Title = %q, want %q", docRow.Title, doc.Title)
 	}
-	if want := "/docs/" + strconv.FormatInt(doc.ID, 10); docRow.URL != want {
+	if want := "/projects/horndb/spec/26"; docRow.URL != want {
 		t.Errorf("doc row URL = %q, want %q", docRow.URL, want)
 	}
 	if docRow.Task != "" {

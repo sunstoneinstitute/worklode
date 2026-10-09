@@ -294,7 +294,7 @@ func rootTitle(r *concernRoot) string {
 
 func rootURL(r *concernRoot) string {
 	if r.ref.isPlan {
-		return "/docs/" + strconv.FormatInt(r.ref.doc.ID, 10)
+		return model.DocPageURL(r.ref.doc.ID)
 	}
 	return "/tasks/" + r.ref.id
 }
