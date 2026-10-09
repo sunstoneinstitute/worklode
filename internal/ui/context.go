@@ -10,7 +10,11 @@ package ui
 // internal/ui imports nothing beyond stdlib, internal/model and the templ
 // runtime.
 
-import "context"
+import (
+	"context"
+	"strings"
+	"unicode"
+)
 
 // inboxDotKey is the context key for the inbox indicator's has-items flag.
 type inboxDotKey struct{}
@@ -49,4 +53,39 @@ func WithAdmin(ctx context.Context, is bool) context.Context {
 func isAdmin(ctx context.Context) bool {
 	is, _ := ctx.Value(adminKey{}).(bool)
 	return is
+}
+
+// actorKey is the context key for the signed-in actor's name, for the avatar.
+type actorKey struct{}
+
+// WithActor returns ctx carrying the signed-in actor's id and display name
+// (either may be empty). internal/api's renderWeb is the only caller.
+func WithActor(ctx context.Context, id, displayName string) context.Context {
+	name := displayName
+	if strings.TrimSpace(name) == "" {
+		name = id
+	}
+	return context.WithValue(ctx, actorKey{}, name)
+}
+
+// actorInitials is the avatar text for the actor on ctx: see initials.
+func actorInitials(ctx context.Context) string {
+	name, _ := ctx.Value(actorKey{}).(string)
+	return initials(name)
+}
+
+// initials returns the uppercased first letters of up to the first two words
+// of name, or "?" when name has none.
+func initials(name string) string {
+	var out []rune
+	for _, w := range strings.Fields(name) {
+		out = append(out, unicode.ToUpper([]rune(w)[0]))
+		if len(out) == 2 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return "?"
+	}
+	return string(out)
 }

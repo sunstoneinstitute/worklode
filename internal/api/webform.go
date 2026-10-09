@@ -197,6 +197,7 @@ func (s *server) renderWeb(w http.ResponseWriter, r *http.Request, status int, p
 	sub := subjectFrom(r)
 	ctx = ui.WithAdmin(ctx, sub.HasRole(RoleAdmin))
 	if actorID := sub.ActorID; actorID != "" {
+		ctx = ui.WithActor(ctx, actorID, sub.DisplayName)
 		has, err := s.st.HasInboxItems(ctx, actorID)
 		if err != nil {
 			s.log.Error("check inbox items", "err", err)

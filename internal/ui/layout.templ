@@ -75,7 +75,7 @@ templ Page(p PageProps) {
 					<button id="theme" type="button" class="iconbtn" aria-label="Toggle colour theme">
 						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>
 					</button>
-					<div class="avatar" aria-hidden="true">SB</div>
+					<div class="avatar" aria-hidden="true">{ actorInitials(ctx) }</div>
 				</div>
 			</header>
 			{ children... }
