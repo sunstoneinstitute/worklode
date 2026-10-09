@@ -27,7 +27,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		// outcome one of the three above.
 		actions: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_watcher_actions_total",
-			Help: "Doc-lifecycle watcher actions, by rule and outcome (applied, suppressed, error; spec 025 §15.7).",
+			Help: "Doc-lifecycle watcher actions, by rule and outcome (applied, suppressed, error; WL-SPEC-75 §9.7).",
 		}, []string{"rule", "outcome"}),
 	}
 	reg.MustRegister(m.actions)

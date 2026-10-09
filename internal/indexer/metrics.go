@@ -31,7 +31,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		chunks: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "worklode_index_chunks",
-			Help: "Chunk rows in the corpus index, by subject kind (spec 040 §10).",
+			Help: "Chunk rows in the corpus index, by subject kind (WL-SPEC-79 §14.5).",
 		}, []string{"subject_kind"}),
 		withoutVector: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "worklode_index_chunks_without_vector",

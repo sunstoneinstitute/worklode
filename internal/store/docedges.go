@@ -118,7 +118,7 @@ func edgeRefFromInput(in model.DocEdgeInput) (docEdgeRef, error) {
 			typ, ns.OrList(designdoc.StoredRels), ErrInvalidInput)
 	}
 	if !slices.Contains(designdoc.StoredRels, typ) {
-		return docEdgeRef{}, fmt.Errorf("edge type %s has no writer (026 §6.2); use %s: %w",
+		return docEdgeRef{}, fmt.Errorf("edge type %s has no writer (WL-SPEC-77 §8); use %s: %w",
 			typ, ns.OrList(designdoc.StoredRels), ErrInvalidInput)
 	}
 	e := docEdgeRef{
@@ -131,7 +131,7 @@ func edgeRefFromInput(in model.DocEdgeInput) (docEdgeRef, error) {
 		return docEdgeRef{}, fmt.Errorf("a %s edge names its target: %w", typ, ErrInvalidInput)
 	}
 	if typ != "defers" && e.owner != "" {
-		return docEdgeRef{}, fmt.Errorf("owner belongs to a defers edge, not %s (026 §5.3): %w", typ, ErrInvalidInput)
+		return docEdgeRef{}, fmt.Errorf("owner belongs to a defers edge, not %s (WL-SPEC-77 §8): %w", typ, ErrInvalidInput)
 	}
 	return e, nil
 }
@@ -297,12 +297,12 @@ func writeEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Fro
 		}
 		if fm.Covers != nil && fm.Implements != nil {
 			return fmt.Errorf(
-				"doc %d carries both covers and implements, which are one key under two names (026 §5.1): %w",
+				"doc %d carries both covers and implements, which are one key under two names (WL-SPEC-77 §8): %w",
 				docID, ErrInvalidInput)
 		}
 		for i, c := range fm.CoverageEntries() {
 			if strings.TrimSpace(c.Spec) == "" {
-				return fmt.Errorf("doc %d covers[%d] names no spec (026 §5.1): %w",
+				return fmt.Errorf("doc %d covers[%d] names no spec (WL-SPEC-77 §8): %w",
 					docID, i, ErrInvalidInput)
 			}
 			if !c.Plain() {
@@ -395,21 +395,21 @@ func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
 	var owner *ownerRef
 	if e.typ == "defers" {
 		if kind != "plan" {
-			return nil, nil, fmt.Errorf("doc %d defers %q, but defers is plan-only and doc %d is a %s (026 §5.3): %w",
+			return nil, nil, fmt.Errorf("doc %d defers %q, but defers is plan-only and doc %d is a %s (WL-SPEC-77 §8): %w",
 				docID, e.ref, docID, kind, ErrInvalidInput)
 		}
 		if fragment == "" {
 			return nil, nil, fmt.Errorf(
-				"doc %d defers %q with no #sec-N fragment: defers is section-scoped, unlike covers (026 §5.3): %w",
+				"doc %d defers %q with no #sec-N fragment: defers is section-scoped, unlike covers (WL-SPEC-77 §8): %w",
 				docID, e.ref, ErrInvalidInput)
 		}
 		if strings.TrimSpace(e.owner) == "" {
-			return nil, nil, fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (026 §5.3): %w",
+			return nil, nil, fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (WL-SPEC-77 §8): %w",
 				docID, e.ref, ErrInvalidInput)
 		}
 		if _, ownerFragment := designdoc.SplitFragment(e.owner); ownerFragment != "" {
 			return nil, nil, fmt.Errorf(
-				"doc %d defers %q to %q: the owner is a document, no fragment (026 §5.3): %w",
+				"doc %d defers %q to %q: the owner is a document, no fragment (WL-SPEC-77 §8): %w",
 				docID, e.ref, e.owner, ErrInvalidInput)
 		}
 		o, err := resolveOwner(tx, project, e.owner)
@@ -418,13 +418,13 @@ func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
 		}
 		if o.toDoc == docID {
 			return nil, nil, fmt.Errorf(
-				"doc %d defers %q to itself: a plan cannot defer a section to itself (026 §5.3): %w",
+				"doc %d defers %q to itself: a plan cannot defer a section to itself (WL-SPEC-77 §8): %w",
 				docID, e.ref, ErrInvalidInput)
 		}
 		owner = &o
 	}
 	if e.typ == "covers" && kind != "plan" {
-		return nil, nil, fmt.Errorf("doc %d covers %q, but covers is plan-only and doc %d is a %s (026 §5.1): %w",
+		return nil, nil, fmt.Errorf("doc %d covers %q, but covers is plan-only and doc %d is a %s (WL-SPEC-77 §8): %w",
 			docID, e.ref, docID, kind, ErrInvalidInput)
 	}
 
@@ -463,7 +463,7 @@ func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
 func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, owner *ownerRef, seen map[docEdgeRow]*ownerRef, candidate bool) error {
 	if prior, ok := seen[row]; ok {
 		if e.typ == "defers" && *prior != *owner {
-			return fmt.Errorf("doc %d defers %q twice, deferred to two different owners (026 §5.3): %w",
+			return fmt.Errorf("doc %d defers %q twice, deferred to two different owners (WL-SPEC-77 §8): %w",
 				docID, e.ref, ErrInvalidInput)
 		}
 		return nil

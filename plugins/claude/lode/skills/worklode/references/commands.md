@@ -107,7 +107,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 
 - `lode graph derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout), or --server for the server-side ones
   Flags: --allow-empty, --dry-run, --graph-url, --server
-- `lode graph drift` — Architectural drift: violations and stale intent (spec 007 §3.1)
+- `lode graph drift` — Architectural drift: violations and stale intent (WL-SPEC-82 §2.5)
   Flags: --acknowledged, --component
 - `lode graph gaps` — Doc gaps and unmatched-path coverage gaps
 - `lode graph quarantines` — Show the projects the projector has quarantined, since when, and why
@@ -207,7 +207,7 @@ Flags: --server
 
 Flags: --kind, --limit, --mode, --project, --repo
 
-## `lode secret` — Task-declared secrets: catalog, status, exec, purge (spec 017)
+## `lode secret` — Task-declared secrets: catalog, status, exec, purge (WL-SPEC-74 §10)
 
 - `lode secret catalog` — List the org secrets catalog: names, baseline flag, descriptions
 - `lode secret exec` — Run a command with the bound task's materialized secrets in its environment

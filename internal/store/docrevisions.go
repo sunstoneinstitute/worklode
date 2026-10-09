@@ -26,10 +26,10 @@ func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		return err
 	}
 	if d.kind == "plan" {
-		return fmt.Errorf("doc %d is a plan: plans are edited in place (025 §9): %w", id, ErrInvalidInput)
+		return fmt.Errorf("doc %d is a plan: plans are edited in place (WL-SPEC-77 §11): %w", id, ErrInvalidInput)
 	}
 	if d.status != "accepted" {
-		return fmt.Errorf("doc %d is %s: only an accepted document is revised (025 §7.2): %w",
+		return fmt.Errorf("doc %d is %s: only an accepted document is revised (WL-SPEC-77 §9): %w",
 			id, d.status, ErrInvalidInput)
 	}
 	if err := openRevision(tx, now, id, d.body, actorID); err != nil {
@@ -170,7 +170,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	if d.kind == "plan" {
-		return nil, fmt.Errorf("doc %d is a plan: plans are edited in place (025 §9): %w", id, ErrInvalidInput)
+		return nil, fmt.Errorf("doc %d is a plan: plans are edited in place (WL-SPEC-77 §11): %w", id, ErrInvalidInput)
 	}
 	if d.status != "accepted" {
 		return nil, fmt.Errorf("doc %d is %s: only an accepted document has a revision to land: %w",

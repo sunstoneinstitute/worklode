@@ -29,14 +29,14 @@ func newSearchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search <query>",
 		Short: "Search documents, tasks and skills by meaning and by exact token",
-		Long: "Search the indexed corpus (040 §9). Two retrieval arms run and their\n" +
+		Long: "Search the indexed corpus (WL-SPEC-79 §15). Two retrieval arms run and their\n" +
 			"rankings are fused: one over embeddings, which answers a question phrased\n" +
 			"differently from the text, and one lexical, which answers an identifier\n" +
 			"query the embedding cannot. Every argument joins into one query, so a\n" +
 			"question needs no quoting.\n\n" +
 			"Each line is an address to act on, its fused score, and the subject's\n" +
 			"title:\n\n" +
-			"  WL-SPEC-25 §15.2  0.032  The ordered log\n\n" +
+			"  WL-SPEC-75 §9.1   0.032  Tables\n\n" +
 			"A server with no embedding provider answers with the lexical arm alone\n" +
 			"and says so on stderr; the results are real, just narrower.",
 		Args: cobra.MinimumNArgs(1),

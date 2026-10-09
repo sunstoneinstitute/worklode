@@ -367,7 +367,7 @@ func lintUsabilityAlt(concern, body string) error {
 	}
 	if bad := blobref.EmptyAltImages(body); len(bad) > 0 {
 		return fmt.Errorf(
-			"body has %d image(s) with no alt text (usability tasks require it, spec 021 Q021.1): %w",
+			"body has %d image(s) with no alt text (usability tasks require it): %w",
 			len(bad), ErrInvalidInput)
 	}
 	return nil
