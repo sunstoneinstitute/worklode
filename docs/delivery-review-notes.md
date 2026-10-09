@@ -1,7 +1,7 @@
 # States, facts and deliverables — session conclusions
 
 Working notes from a design discussion on 2026-08-28. Nothing here is
-accepted; every spec it touches (004, 025, 029, 045, 046) is still `draft`,
+accepted; every spec it touches (WL-SPEC-75, WL-SPEC-77, WL-SPEC-76) is still `draft`,
 so each item lands as an amendment rather than a supersession.
 
 The through-line: **a state is the furthest milestone the recorded facts
@@ -12,19 +12,19 @@ that rule applied to a place where it currently isn't.
 
 ### C1 — Reintroduce `proposed` on documents, drop `in_review`
 
-`draft → proposed → accepted → superseded`. 025 §7 removed `proposed` on the
+`draft → proposed → accepted → superseded`. WL-SPEC-77 §9 removed `proposed` on the
 grounds that an open review task already proves "under review". That argument
 holds for review *progress* and not for authorial readiness: only the author
 can state that the text is finished enough to read, and no other row proves
-it. `in_review` (025 §7.3, spec'd, unimplemented) is the redundant one —
+it. `in_review` (WL-SPEC-77 §9, spec'd, unimplemented) is the redundant one —
 review progress is provable from the review task's own state.
 
 Anchors freeze at `proposed`, not at `accepted`, so crit comments cannot be
-renumbered out from under a reviewer. 025 §6 rule 4 currently exempts drafts
+renumbered out from under a reviewer. WL-SPEC-77 §6 rule 4 currently exempts drafts
 from the renumbering constraints, which allows exactly that.
 
 Cost: `ns/concept.ttl` + `nsgen`, the CHECK in `0027_docs.up.sql`, the accept
-guard at `internal/store/docs.go:377`, and an amendment to 025 §7 and §7.1.
+guard at `internal/store/docs.go:377`, and an amendment to WL-SPEC-77 §9.
 The enum has one source, so nothing else hand-mirrors it.
 
 ### C2 — Rename the task state `in_review` to `submitted`
@@ -35,7 +35,7 @@ draws the same line as C1: the author's readiness is a state, review progress
 is a query over `reviews`, `approvals` and `ci_runs`.
 
 Cost is a value rename across the CHECK constraint, `ns/shapes.ttl`, UI, CLI
-and e2e, plus edits to 045 and 046, which lean on the name throughout.
+and e2e, plus edits to WL-SPEC-76, which lean on the name throughout.
 
 ### C3 — `in_review` is the only hand-written transition on the ladder
 
@@ -43,11 +43,11 @@ Every delivery state is derived by `store.ResolveDelivery` from recorded
 facts, forward-only and arrival-order independent. `internal/hooks/github.go:399`
 says so in a comment while doing the opposite for this one edge.
 
-### C4 — The PR-open edge belongs to 046's rule list
+### C4 — The PR-open edge belongs to WL-SPEC-76's rule list
 
-046 §1.1 grandfathers "the PR-opened hook enters `in_review`" as backbone
+WL-SPEC-76 grandfathers "the PR-opened hook enters `in_review`" as backbone
 behavior, "not rule business". That edge is a GitHub-repo-shaped rule wearing
-backbone clothes. 045 already makes the state optional per workflow and
+backbone clothes. WL-SPEC-76 already makes the state optional per workflow and
 guards the hook on whether the workflow declares it, which covers the
 non-GitHub case (a dataset publication has no such state).
 
@@ -79,7 +79,7 @@ already key delivery on it. A branch is a movable label, and the default
 predictable, so a deliverable naming one would be pre-claimable by a third
 party.
 
-029 §3.1 already settles the "address not known in advance" case: a
+WL-SPEC-75 §13 already settles the "address not known in advance" case: a
 deliverable is verified **by address** when known ahead of time, or **by
 label** when minted at build time, with worklode defining the label key and
 value at creation. A worklode-minted label is not guessable, which is
@@ -114,7 +114,7 @@ correlation, where one body means one task.
 ### C9 — Required environments are declared intent, never observed state
 
 A deliverable may declare that prod is required before it counts as
-delivered. That is intent, which 029 §3.2 keeps distinct from reported state.
+delivered. That is intent, which WL-SPEC-75 §13 keeps distinct from reported state.
 A single checkbox that means both "prod is required" and "prod was reached"
 collapses the two. Required is declared and editable; reached is read-only and
 comes from `env_deploys`.
@@ -126,7 +126,7 @@ independently, so "prod required, dev skipped" works without changing it.
 
 `internal/api/webform.go`: `SameSite=Lax` cookie, a same-origin header check
 as the second lock, POST-redirect-GET, and `requireSession` on the
-approval-decide route because 029 §7.3 makes deciding a session act. A review
+approval-decide route because WL-SPEC-75 §13 makes deciding a session act. A review
 link is a plain GET that renders; claiming is a POST through the API.
 
 ### C11 — The review surface is designed, not decomposed
@@ -140,7 +140,7 @@ section names three specs. That thread needs tasks, not design.
 
 Task delivery is frontier-driven (`ResolveDelivery` over `main_commits` and
 `env_deploys`); deliverable state is declaration-driven
-(`artifact_declarations`, `artifact_evidence`), and 045 §7 says the two meet
+(`artifact_declarations`, `artifact_evidence`), and WL-SPEC-76 says the two meet
 "only in prose". They have to meet on the task's ladder instead: evidence
 advances the task, and a deliverable that reaches `published` while its task
 is still in review is a bug in the model rather than a valid state. The rest
@@ -155,7 +155,7 @@ post.
 
 ### C14 — One spec owns the evidence scheme, sources integrate against it (was Q3)
 
-046 §0 puts frontier-driven delivery resolution out of scope and 029 §3.2
+WL-SPEC-76 puts frontier-driven delivery resolution out of scope and WL-SPEC-75 §13
 stops at "is this deliverable live", so nothing claims the seam today. One
 spec owns the overall evidence scheme, and each source gets its own
 integration spec against it. Sources in view: GitHub/GHCR, the data catalog,
@@ -216,10 +216,10 @@ escalates a complex or risky change to a human. The same policy decides whether
 a planning task is created automatically when a plan is accepted, and whether
 execution tasks are created automatically, which lets a crew set automation to
 the level it is comfortable with; the high end depends on specs being good
-enough to execute from. Belongs with 045/046 per-project config.
+enough to execute from. Belongs with WL-SPEC-76 per-project config.
 
 ### Q7 — `done_state` as a per-repo workflow selector
 
-045 §7 defers this explicitly. The AI and Democracy project (key `AID`), the
+WL-SPEC-76 defers this explicitly. The AI and Democracy project (key `AID`), the
 one being used to test worklode for completeness, needs it now, and C15 is
 pressure on the same seam one level finer.

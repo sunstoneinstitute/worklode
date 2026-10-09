@@ -271,17 +271,18 @@ func TestSubtreeIsByteIdenticalToSource(t *testing.T) {
 	}
 }
 
-// TestRulesReassembleSpecs2 is 12-spec-refactoring-design-tree.md S21's
-// acceptance test. Every section is one rule, and Preamble plus each
-// section's HeadingAndBody in order rebuilds the source byte for byte, so an
-// arrangement of rules loses nothing a document had.
-func TestRulesReassembleSpecs2(t *testing.T) {
-	files, err := filepath.Glob("../../docs/specs2/*.md")
+// TestRulesReassemble checks that every section is one rule: Preamble plus
+// each section's HeadingAndBody in order rebuilds the source byte for byte, so
+// an arrangement of rules loses nothing a document had. The corpus is
+// testdata/reassemble: one real spec body (WL-SPEC-85) and a fixture for
+// fences, tables, nesting and a missing final newline.
+func TestRulesReassemble(t *testing.T) {
+	files, err := filepath.Glob("testdata/reassemble/*.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(files) == 0 {
-		t.Fatal("no files matched docs/specs2/*.md")
+		t.Fatal("no files matched testdata/reassemble/*.md")
 	}
 	for _, f := range files {
 		src, err := os.ReadFile(f)

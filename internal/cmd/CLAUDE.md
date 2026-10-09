@@ -15,7 +15,7 @@ picks the targets, calls one of them, and reports the result.
 
 ## Naming
 
-Every command name follows one of nine rules (`WL-SPEC-61` §1 has the
+Every command name follows one of nine rules (`WL-SPEC-81` §1 has the
 reasoning). L1–L3, L5, L7–L9 are enforced by
 `internal/cmd/namerule_test.go`; L4 ("verbs are imperative verbs") and L6
 ("named views are nouns, never verbs") are enforced by review — a test cannot
@@ -28,7 +28,7 @@ tell an adjective from a verb or a view from an action.
   top-level command may act on an entity.
 - **L2** — Bare top-level commands act on this machine or this checkout, not
   on an entity. The set is closed: `doctor`, `install`, `uninstall`, `login`,
-  `logout`. Adding one requires amending spec 061 §1.
+  `logout`. Adding one requires amending WL-SPEC-81 §1.
 - **L3** — One verb per operation. `add` creates, `show` reads one, `list`
   reads many, `edit` replaces a body, `set <field>` writes one named field or
   state, `remove` drops a member from a collection, `delete` tombstones an
@@ -42,7 +42,7 @@ tell an adjective from a verb or a view from an action.
   `request`, `pack`, `note`, `escalate`, `gap`, `fix`, `withdraw`, `report`,
   `supersede`.
 - **L4** — Verbs are imperative verbs. No adjectives: `task ready` becomes
-  `task publish`. No hyphenated verbs, with exceptions named in the spec 061
+  `task publish`. No hyphenated verbs, with exceptions named in WL-SPEC-81
   §5 allowlist. `set` is a verb like any other: the field it writes is an
   argument, not part of its name.
 - **L5** — Inverses take `un-` on the forward verb: `block`/`unblock`,
@@ -55,14 +55,14 @@ tell an adjective from a verb or a view from an action.
   `project overview`, `project health`, `project focus`, `project rally`,
   `project crew`. A view never writes; the paired write is `set <field>` (L3),
   never a `--set` flag on the view — except `project rally`, whose subject is
-  assembled with `task block`. Spec 061 §5 tables every noun subcommand in the
+  assembled with `task block`. WL-SPEC-81 §2 tables every noun subcommand in the
   tree, this rule's members included; that table is closed, so a new view is
   added there and in `namerule_test.go` together.
 - **L7** — Cross-entity readers sit at the top level, and there are two.
   `lode show <ref>` dispatches on a known reference or `--kind` and returns
   one subject; `lode search <query>` takes an unknown one and returns a
-  ranking over docs, tasks and skills (040 §9). Every entity also keeps its
-  typed `show`. Adding a third requires amending spec 061 §1.
+  ranking over docs, tasks and skills (WL-SPEC-79 §17). Every entity also keeps its
+  typed `show`. Adding a third requires amending WL-SPEC-81 §1.
 - **L8** — One workflow group, `lode work`. Commands acting on the task in
   the worktree the caller is standing in, rather than on a named entity, live
   under `work` and nowhere else.
@@ -70,7 +70,7 @@ tell an adjective from a verb or a view from an action.
   because it runs many times per session: `lode next` (`work next`),
   `lode status` (`work status`; given a task, `task show --status <task>`), `lode board` (`task board`), `lode overview`
   (`project overview`). These are permanent API, not compatibility aliases.
-  Adding a fifth requires amending spec 061 §1.
+  Adding a fifth requires amending WL-SPEC-81 §1.
 
 The resulting top-level, twenty-two commands and four shortcuts:
 
