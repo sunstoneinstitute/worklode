@@ -164,6 +164,38 @@ func TestLinkRulesAmends(t *testing.T) {
 	}
 }
 
+// TestLinkRulesNeeds: needs is a manual edge from the dependent rule to the
+// needed one. Every inferred inverse is refused, naming the declared term
+// (WL-SPEC-77 §8.1).
+func TestLinkRulesNeeds(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	a, b := ruleID(t, s, "P1", 3), ruleID(t, s, "P1", 1)
+	ctx := context.Background()
+	link := func(from, to int64, typ string) error {
+		return s.Tx(ctx, func(tx *sql.Tx) error { return LinkRules(tx, from, to, typ) })
+	}
+	if err := link(a, b, "needs"); err != nil {
+		t.Fatal(err)
+	}
+	needed, err := s.GetRule(ctx, "P1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(needed.Edges) != 1 || needed.Edges[0].Type != "needs" || needed.Edges[0].From != "P1-REQ-3" {
+		t.Errorf("needed side: %+v", needed.Edges)
+	}
+	for inverse, declared := range map[string]string{
+		"neededBy": "needs", "refinedBy": "refines", "referencedBy": "references",
+		"supersededBy": "supersedes", "amendedBy": "amends",
+	} {
+		err := link(b, a, inverse)
+		if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "write "+declared+" ") {
+			t.Errorf("%s via link: %v, want ErrInvalidInput naming %s", inverse, err, declared)
+		}
+	}
+}
+
 // TestRuleAmendsMigrationSwapsSupersession runs migration 0089 down and up
 // over a supersedes and an amends row: down restores the old supersededBy
 // (old -> new) spelling and drops amends, up swaps the ends back.
