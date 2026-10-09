@@ -159,29 +159,6 @@ func TestImpactDecisionEffect(t *testing.T) {
 	}
 }
 
-func TestSelfReviewExceptionValid(t *testing.T) {
-	t.Parallel()
-	actor := func(s string) *string { return &s }
-	cases := []struct {
-		name         string
-		policyAllows bool
-		authorizedBy *string
-		decider      string
-		want         bool
-	}{
-		{"policy off", false, actor("bob"), "alice", false},
-		{"nil authorizer", true, nil, "alice", false},
-		{"authorizer is the decider", true, actor("alice"), "alice", false},
-		{"valid case", true, actor("bob"), "alice", true},
-	}
-	for _, c := range cases {
-		if got := store.SelfReviewExceptionValid(c.policyAllows, c.authorizedBy, c.decider); got != c.want {
-			t.Errorf("%s: SelfReviewExceptionValid(%v, %v, %q) = %v, want %v",
-				c.name, c.policyAllows, c.authorizedBy, c.decider, got, c.want)
-		}
-	}
-}
-
 func TestMatchFlowOnLabels(t *testing.T) {
 	story := model.ApprovalFlow{Name: "story", Rev: "1",
 		Match: map[string]string{"kind": "sunstone-story"}}
@@ -356,6 +333,14 @@ func TestValidateFlowRefusals(t *testing.T) {
 		}, true},
 		{"no role", func(f model.ApprovalFlow) model.ApprovalFlow {
 			f.Requirements[0].Role = ""
+			return f
+		}, true},
+		{"self-review of a flow kind", func(f model.ApprovalFlow) model.ApprovalFlow {
+			f.SelfReview = []string{"doc"}
+			return f
+		}, false},
+		{"self-review of an unknown kind", func(f model.ApprovalFlow) model.ApprovalFlow {
+			f.SelfReview = []string{"pr"}
 			return f
 		}, true},
 	}

@@ -116,7 +116,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Acts on an approval that are not decisions (029 §7.1), by act (" +
 			strings.Join(approvalActKinds, ", ") + ") and outcome (" +
 			strings.Join(approvalActOutcomes, ", ") +
-			"). Today those are the dependent owner's note on an open impact review and the authorization of a self-review exception. Labels are bounded: the approval and the actor are deliberately not among them. The decision that follows a note is counted by worklode_approval_decisions_total.",
+			"). Today that is the dependent owner's note on an open impact review. Labels are bounded: the approval and the actor are deliberately not among them. The decision that follows a note is counted by worklode_approval_decisions_total.",
 	}, []string{"act", "outcome"})
 	s.approvalRequirements = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_requirements_total",
@@ -1000,12 +1000,11 @@ var (
 )
 
 // approvalActKinds and approvalActOutcomes are the bounded label values of
-// worklode_approval_acts_total: 029 §7.1's impact note and its self-review
-// exception. decisionInvalid stands for a submission refused before the act
-// could run; "refused" is the store declining the act itself — a policy that
-// forbids self-review, or an authorizer who is the author.
+// worklode_approval_acts_total: 029 §7.1's impact note. decisionInvalid
+// stands for a submission refused before the act could run; "refused" is the
+// store declining the act itself.
 var (
-	approvalActKinds    = []string{"note", "exception"}
+	approvalActKinds    = []string{"note"}
 	approvalActOutcomes = []string{"recorded", "conflict", "not_found",
 		"refused", decisionInvalid, "error"}
 )

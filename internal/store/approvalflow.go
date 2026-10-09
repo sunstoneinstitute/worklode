@@ -70,12 +70,9 @@ func ProjectApprovalFlow(tx *sql.Tx, projectID string) (*model.ApprovalFlowSnaps
 }
 
 // SelfReviewPolicy reports what the approval detail page has to say about
-// self-review on one approval (029 §7.1, 032 §7): the stamped flow's name and
-// rev, which the page names beside a decision made under an exception, and
-// whether that flow permits self-review, which decides whether the page
-// offers the exception act at all.
-//
-// allowed is false for every project today; SelfReviewAllowed says why.
+// self-review on one approval (WL-SPEC-75 §13.6, 032 §7): the stamped flow's
+// name and rev, which the page names beside a self-reviewed decision, and
+// whether that flow permits self-review.
 func (s *Store) SelfReviewPolicy(ctx context.Context, kind, entityID string) (
 	name string, rev string, allowed bool, err error) {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})

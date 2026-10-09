@@ -201,7 +201,7 @@ type ApprovalRow struct {
 // verbatim regardless of kind (unlike the queue, which hides a PR's own).
 //
 // Note and ExceptionAuthorizedBy are the facts written beside a decision (an
-// impact review's note, a self-review exception's authorizer); both "" when
+// impact review's note, the author who reviewed their own work); both "" when
 // unset.
 type ApprovalDetailView struct {
 	Page PageProps
@@ -232,13 +232,6 @@ type ApprovalDetailView struct {
 	// exception; "" when the project carries no flow, and only ever shown
 	// next to ExceptionAuthorizedBy.
 	ExceptionFlow string
-
-	// CanAuthorizeException offers the exception act on an open row whose
-	// policy permits self-review (029 §7.1). No project's policy permits it
-	// today — store.SelfReviewAllowed says why — so the button does not
-	// render, which is the honest state rather than a button that always
-	// refuses.
-	CanAuthorizeException bool
 
 	// ImpactOpen marks an impact review still awaiting an answer (029 §7.1):
 	// the page then offers the dependent owner's note and the prior

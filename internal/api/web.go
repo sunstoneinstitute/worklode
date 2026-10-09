@@ -466,8 +466,7 @@ func (s *server) reviewsPage(w http.ResponseWriter, r *http.Request) {
 // approvalPage handles GET /approvals/{id} (032 §7): one approval with
 // everything an actor needs to trust or revisit it — the entity it governs,
 // its full decision history, and the review-graph references its own
-// designation recorded, plus the project's self-review policy — which flow is
-// stamped, and whether it permits the exception act (029 §7.1). 404 on an id
+// designation recorded, plus which flow the project is stamped with. 404 on an id
 // nothing names.
 func (s *server) approvalPage(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -514,7 +513,7 @@ func (s *server) approvalPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var policy selfReviewPolicy
-	policy.flowName, policy.flowRev, policy.allowsSelfReview, err =
+	policy.flowName, policy.flowRev, _, err =
 		s.st.SelfReviewPolicy(r.Context(), a.EntityKind, a.EntityID)
 	if err != nil {
 		s.webStoreErr(w, err)
@@ -525,13 +524,12 @@ func (s *server) approvalPage(w http.ResponseWriter, r *http.Request) {
 		ui.ApprovalDetail(approvalDetailView(a, title, url, history, governed, names, policy)))
 }
 
-// selfReviewPolicy carries store.SelfReviewPolicy's three facts from the
+// selfReviewPolicy carries store.SelfReviewPolicy's flow stamp from the
 // handler to approvalDetailView. Transport-internal: nothing here crosses the
 // HTTP boundary (ADR 036).
 type selfReviewPolicy struct {
-	flowName         string
-	flowRev          string
-	allowsSelfReview bool
+	flowName string
+	flowRev  string
 }
 
 // globalPlaceholder returns a handler for a global destination with no

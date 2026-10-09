@@ -80,6 +80,12 @@ func ValidateFlow(f model.ApprovalFlow) error {
 		}
 		seen[r.Lane] = true
 	}
+	for _, k := range f.SelfReview {
+		if !slices.Contains(FlowEntityKinds, k) {
+			return fmt.Errorf("flow %q: self_review kind %q is not one of %v",
+				f.Name, k, FlowEntityKinds)
+		}
+	}
 	return nil
 }
 
@@ -183,20 +189,6 @@ func ImpactDecisionEffect(state string) ImpactEffect {
 		return ImpactConfirm
 	}
 	return ImpactReopen
-}
-
-// SelfReviewExceptionValid reports whether an author may decide their own
-// work (029 §7.1): only when the effective review policy allows it AND a
-// different authorized actor approved the exception before review.
-// authorizedBy == the decider is not "a different actor".
-func SelfReviewExceptionValid(policyAllows bool, authorizedBy *string, decider string) bool {
-	if !policyAllows {
-		return false
-	}
-	if authorizedBy == nil || *authorizedBy == "" {
-		return false
-	}
-	return *authorizedBy != decider
 }
 
 // RequirementsForEntity returns the lanes a flow demands of one entity:

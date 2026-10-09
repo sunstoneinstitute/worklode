@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -520,15 +521,12 @@ type DecideInput struct {
 // decider did not author the thing under review (ErrSelfApproval). Then it
 // resolves the row.
 //
-// Self-approval is refused by default (029 §7.1). The one exception is
-// SelfReviewExceptionValid: the effective policy permits self-review and a
-// different actor authorized the exception before review. SelfReviewAllowed
-// is false for every project today, so the refusal is unconditional in
-// practice — see its doc comment. An unknown author on either side proves
-// nothing, so it does not refuse — see IsSelfApproval. The author comparison
-// happens in the entity's own namespace (authorAndActorForEntity), while the
-// exception's authorizer is always an actor id, so that check compares
-// against in.ActorID rather than the comparison identity.
+// Self-approval is refused by default (WL-SPEC-75 §13.6), except on a plan
+// and where the project's flow allows self-review of the entity's kind
+// (SelfReviewAllowed). An allowed self-decision stamps the author as
+// exception_authorized_by, so the row records that it was self-reviewed. An
+// unknown author on either side proves nothing, so it does not refuse — see
+// IsSelfApproval.
 //
 // The row is locked FOR UPDATE, so two concurrent decisions serialize and the
 // second sees the resolved state rather than overwriting it: ResolveApproval
@@ -587,9 +585,15 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 			if err != nil {
 				return nil, err
 			}
-			if !SelfReviewExceptionValid(allowed, a.ExceptionAuthorizedBy, in.ActorID) {
+			if !allowed {
 				return nil, ErrSelfApproval
 			}
+			if _, err := tx.Exec(
+				`UPDATE approvals SET exception_authorized_by = $2 WHERE id = $1`,
+				a.ID, in.ActorID); err != nil {
+				return nil, fmt.Errorf("record self-review on approval %d: %w", a.ID, err)
+			}
+			a.ExceptionAuthorizedBy = &in.ActorID
 		}
 	}
 
@@ -817,16 +821,9 @@ func projectForApproval(tx *sql.Tx, kind, entityID string) (string, error) {
 	return projectID, nil
 }
 
-// SelfReviewAllowed reports whether the effective review policy lets an author
-// decide their own work (029 §7.1's "the effective review policy allows it").
-//
-// It returns false for every project today, and that is not a stub oversight:
-// §7.1 requires the allowance, but §7.2 defines a flow as declaring only which
-// entity kinds need which role's sign-off, so no accepted spec says where the
-// allowance lives and model.ApprovalFlow carries no field for it. The
-// resolution is written out anyway — project, then stamped snapshot — so the
-// day a flow field is defined, reading it is the only change here and no
-// caller moves.
+// SelfReviewAllowed reports whether the project's stamped flow lets the
+// author of an entity of this kind decide their own approval (WL-SPEC-75
+// §13.6). False when the entity has no project or the project no flow.
 func SelfReviewAllowed(tx *sql.Tx, kind, entityID string) (bool, error) {
 	projectID, err := projectForApproval(tx, kind, entityID)
 	if err != nil || projectID == "" {
@@ -836,63 +833,7 @@ func SelfReviewAllowed(tx *sql.Tx, kind, entityID string) (bool, error) {
 	if err != nil || snap == nil {
 		return false, err
 	}
-	// snap.Flow declares no self-review permission; see the doc comment.
-	return false, nil
-}
-
-// AuthorizeSelfReviewException stamps exception_authorized_by on an open
-// approval (029 §7.1): a different authorized actor says this author may
-// review their own work, before the review happens. DecideApproval then reads
-// the column through SelfReviewExceptionValid.
-//
-// Refused when the row is decided (ErrApprovalResolved); an exception is
-// already authorized (ErrInvalidInput); the authorizer authored the thing
-// under review (ErrSelfApproval — authorizing your own exception is the
-// self-approval the rule exists to prevent); or the effective policy does not
-// permit self-review (ErrForbidden). The row-local checks come first because
-// they hold whatever the policy says.
-//
-// SelfReviewAllowed is false for every project today, so this refuses every
-// call. See its doc comment for why that is the honest answer rather than a
-// stub.
-func AuthorizeSelfReviewException(tx *sql.Tx, id int64, actorID string) error {
-	if actorID == "" {
-		return fmt.Errorf("%w: authorizing an exception needs an actor", ErrInvalidInput)
-	}
-	a, err := scanApproval(tx.QueryRow(
-		`SELECT `+approvalColumns+` FROM approvals WHERE id = $1 FOR UPDATE`, id))
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("load approval %d: %w", id, err)
-	}
-	if a.State != "awaiting" && a.State != "changes_requested" {
-		return ErrApprovalResolved
-	}
-	if a.ExceptionAuthorizedBy != nil && *a.ExceptionAuthorizedBy != "" {
-		return fmt.Errorf("%w: this approval already carries an authorized self-review exception",
-			ErrInvalidInput)
-	}
-	author, authorizer, err := authorAndActorForEntity(tx, a.EntityKind, a.EntityID, actorID)
-	if err != nil {
-		return err
-	}
-	if IsSelfApproval(author, authorizer) {
-		return ErrSelfApproval
-	}
-	allowed, err := SelfReviewAllowed(tx, a.EntityKind, a.EntityID)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return fmt.Errorf("%w: this project's review flow does not permit self-review", ErrForbidden)
-	}
-	if _, err := tx.Exec(
-		`UPDATE approvals SET exception_authorized_by = $2 WHERE id = $1`, id, actorID); err != nil {
-		return fmt.Errorf("authorize self-review exception on approval %d: %w", id, err)
-	}
-	return nil
+	return slices.Contains(snap.Flow.SelfReview, kind), nil
 }
 
 // ReopenApproval flips changes_requested back to awaiting (029 §7.1's

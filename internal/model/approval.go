@@ -60,9 +60,8 @@ type Approval struct {
 	ReviewKind      string  `json:"review_kind,omitempty"`
 	// Note carries the downstream owner's impact note (029 §7.1); set on
 	// impact rows, empty on ordinary reviews. ExceptionAuthorizedBy is the
-	// actor who approved a policy-permitted self-review before review
-	// (SelfReviewExceptionValid) — one of the two facts 032 §7 renders
-	// beside the decision.
+	// author who decided their own entity under a flow that allows
+	// self-review (WL-SPEC-75 §13.6), rendered beside the decision (032 §7).
 	Note                  *string    `json:"note,omitempty"`
 	ExceptionAuthorizedBy *string    `json:"exception_authorized_by,omitempty"`
 	CreatedAt             time.Time  `json:"created_at"`
