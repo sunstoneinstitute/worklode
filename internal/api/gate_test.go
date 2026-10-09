@@ -217,6 +217,32 @@ func TestSpecReconcilerIgnoresQualifierForIdempotency(t *testing.T) {
 	if n := f.governedEvents(t, task.ID); n != 1 {
 		t.Errorf("task.governed events = %d, want 1", n)
 	}
+
+}
+
+// A section ref and the rule ref of the rule at that section are one link.
+func TestSpecReconcilerSectionAndRuleRefAreOneLink(t *testing.T) {
+	f := newReconcilerFixture(t)
+	task := f.createTask(t)
+	ctx := context.Background()
+
+	if out, err := f.srv.handleSpecReconcile(ctx, prEvent(7201, task.Branch, "Spec: WL-SPEC-1 sec-1.1\n")); err != nil || out != eventbus.OutcomeApplied {
+		t.Fatalf("section ref: %v %v", out, err)
+	}
+	gov := f.governedBy(t, task.ID)
+	if len(gov) != 1 {
+		t.Fatalf("governed_by = %+v", gov)
+	}
+	out, err := f.srv.handleSpecReconcile(ctx, pushEvent(7202, task.Branch, "more\n\nSpec: "+gov[0].Rule+"\n"))
+	if err != nil || out != eventbus.OutcomeSuppressed {
+		t.Fatalf("rule ref of the same rule: %v %v", out, err)
+	}
+	if got := testutil.ToFloat64(f.srv.reconcilerMetrics.outcomes.WithLabelValues("already")); got != 1 {
+		t.Errorf("already metric = %v, want 1", got)
+	}
+	if n := f.governedEvents(t, task.ID); n != 1 {
+		t.Errorf("task.governed events = %d, want 1", n)
+	}
 }
 
 func TestSpecReconcilerLeavesPlannedAndNoneAlone(t *testing.T) {
