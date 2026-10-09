@@ -170,12 +170,7 @@ templ ApprovalDetail(v ApprovalDetailView) {
 					if v.ExceptionFlow != "" {
 						<p><strong>Self-review permitted by flow</strong> <span class="mono">{ v.ExceptionFlow }</span></p>
 					}
-					<p><strong>Self-review exception authorized by:</strong> { v.ExceptionAuthorizedBy }</p>
-				}
-				if v.CanAuthorizeException {
-					<form method="post" action={ "/approvals/" + strconv.FormatInt(v.ID, 10) + "/exception" } class="decide">
-						<button type="submit" class="btn">Authorize self-review exception</button>
-					</form>
+					<p><strong>Self-reviewed by:</strong> { v.ExceptionAuthorizedBy }</p>
 				}
 				if v.ImpactOpen {
 					@impactActs(v.ID)

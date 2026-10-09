@@ -8,6 +8,9 @@ type ApprovalFlow struct {
 	Rev          string                `json:"rev"`
 	Match        map[string]string     `json:"match,omitempty"` // project label selector
 	Requirements []ApprovalRequirement `json:"requirements"`
+	// SelfReview names the entity kinds whose author may decide their own
+	// approval (WL-SPEC-75 §13.6).
+	SelfReview []string `json:"self_review,omitempty"`
 }
 
 // ApprovalRequirement is one review lane a flow demands.
