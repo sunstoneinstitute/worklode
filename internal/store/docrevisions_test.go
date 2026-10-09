@@ -105,27 +105,41 @@ func TestDocVersionsRevisionAccept(t *testing.T) {
 	}
 }
 
-// TestDocVersionsDraftEditNoSnapshot: a draft spec/ADR body edit does not
-// bump docs.version (025 §7), and the snapshot sits inside the
-// version-bumping branches only (025 §4.5) — so it must not run here.
-func TestDocVersionsDraftEditNoSnapshot(t *testing.T) {
+// TestDocVersionsDraftEditSnapshots: a draft spec/ADR body edit is the
+// document's next version (WL-958). The overwritten body stays readable, and
+// --if-version with the version a concurrent writer already replaced is
+// refused.
+func TestDocVersionsDraftEditSnapshots(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 92, Slug: "092-x", Body: specBody, CreatedBy: "stig",
 	})
-	if _, err := updateDocBody(t, s, doc.ID, specBody+"\nmore\n"); err != nil {
+	edited, err := updateDocBody(t, s, doc.ID, specBody+"\nmore\n", 1)
+	if err != nil {
 		t.Fatalf("UpdateDocBody: %v", err)
 	}
-	if rows := docVersionRows(t, s, doc.ID); len(rows) != 0 {
-		t.Errorf("doc_versions rows = %+v, want none", rows)
+	if edited.Version != 2 {
+		t.Fatalf("version = %d, want 2", edited.Version)
+	}
+	v1, err := s.GetDocVersion(t.Context(), doc.ID, 1)
+	if err != nil {
+		t.Fatalf("GetDocVersion(1): %v", err)
+	}
+	if v1.Body != noHeader(t, specBody) {
+		t.Errorf("GetDocVersion(1).Body = %q, want the overwritten draft body", v1.Body)
 	}
 	versions, err := s.ListDocVersions(t.Context(), doc.ID)
 	if err != nil {
 		t.Fatalf("ListDocVersions: %v", err)
 	}
-	if len(versions) != 1 || versions[0].Version != 1 {
-		t.Fatalf("versions = %+v, want just [1]", versions)
+	if len(versions) != 2 || versions[0].Version != 2 || versions[1].Version != 1 {
+		t.Fatalf("versions = %+v, want [2 1]", versions)
+	}
+
+	// A second writer that also read version 1 is refused.
+	if _, err := updateDocBody(t, s, doc.ID, specBody+"\nother\n", 1); !errors.Is(err, ErrVersionMismatch) {
+		t.Errorf("stale --if-version: err = %v, want ErrVersionMismatch", err)
 	}
 }
 

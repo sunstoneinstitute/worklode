@@ -286,28 +286,18 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 		if err := checkPlanTasksMinted(tx, id, parsed.doc); err != nil {
 			return nil, err
 		}
-		// A plan is edited in place rather than revised (025 §9), so its body
-		// edit is what a spec's accepted revision is: the next version of the
-		// document. Nothing else moves the number for a plan, and re-accepting
-		// one needs it to — the acceptance event's external id is derived from
-		// the document's IRI and version (§15.3), so a re-accept at an
-		// unchanged version collapses at the log, which is exactly the no-op
-		// an unedited plan should be. bumpDocVersion snapshots the version
-		// being replaced first (025 §4.5).
-		if version, err = bumpDocVersion(tx, id); err != nil {
-			return nil, err
-		}
 	}
-	// A plan's edit bumps version above, so second precision is enough to
-	// order its history; a draft spec/ADR is edited in place with no version
-	// bump (025 §7), so updated_at is its only externally visible signal that
-	// a second edit happened, and needs full precision to carry it — two
-	// edits inside the same wall-clock second must not collapse into one
-	// (WL-285).
-	ts := now.UTC()
-	if kind == "plan" {
-		ts = ts.Truncate(time.Second)
+	// Every body edit is the document's next version (WL-SPEC-77 §3):
+	// bumpDocVersion snapshots the text being replaced, so an overwritten
+	// draft stays readable through `lode doc versions`, and --if-version can
+	// tell a second writer apart. A plan needs the bump for re-acceptance
+	// too: the acceptance event's external id is derived from the document's
+	// IRI and version (§15.3), so a re-accept at an unchanged version
+	// collapses at the log.
+	if version, err = bumpDocVersion(tx, id); err != nil {
+		return nil, err
 	}
+	ts := now.UTC().Truncate(time.Second)
 
 	if _, err := tx.Exec(
 		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`, id, body, ts,

@@ -488,12 +488,9 @@ func TestDocUpdateBodyDraftSpec(t *testing.T) {
 	}
 }
 
-// TestDocUpdateBodySameSecondIsDistinguishable: a draft spec/ADR keeps its
-// version across a body edit (025 §7), so updated_at is the only externally
-// visible signal that a second edit landed. Two edits inside the same
-// wall-clock second, changing neither title nor issued, must still produce
-// distinguishable updated_at values (WL-285) rather than collapsing into an
-// update with no observable trace.
+// TestDocUpdateBodySameSecondIsDistinguishable: two draft spec edits inside
+// the same wall-clock second, changing neither title nor issued, must leave
+// an observable trace (WL-285). Each edit is the next version (WL-958).
 func TestDocUpdateBodySameSecondIsDistinguishable(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -526,12 +523,9 @@ func TestDocUpdateBodySameSecondIsDistinguishable(t *testing.T) {
 	if first.Title != second.Title || first.Issued != second.Issued {
 		t.Fatalf("test setup invalid: title/issued moved between edits: %+v, %+v", first, second)
 	}
-	if first.Version != second.Version {
-		t.Fatalf("test setup invalid: version moved between edits: %d, %d", first.Version, second.Version)
-	}
-	if first.UpdatedAt.Equal(second.UpdatedAt) {
-		t.Errorf("updated_at = %s for both edits; a second edit in the same wall-clock second left no trace",
-			first.UpdatedAt)
+	if second.Version != first.Version+1 {
+		t.Errorf("versions = %d, %d; a second edit in the same wall-clock second left no trace",
+			first.Version, second.Version)
 	}
 }
 
@@ -562,7 +556,7 @@ func TestDocUpdateBodyPreservesSectionState(t *testing.T) {
 	if !secs[0].Published || secs[0].LastRevisedIn != 3 {
 		t.Errorf("sec-1 = %+v, want published with last_revised_in 3", secs[0])
 	}
-	if secs[1].Published || secs[1].LastRevisedIn != 1 {
+	if secs[1].Published || secs[1].LastRevisedIn != 2 {
 		t.Errorf("sec-3 = %+v, want unpublished at the doc's version", secs[1])
 	}
 }

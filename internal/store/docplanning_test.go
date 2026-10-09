@@ -468,7 +468,7 @@ func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
 		t.Errorf("version = %d, want 2", updated.Version)
 	}
 
-	// A draft spec's body edit is not a publication, so its version holds.
+	// A draft spec's body edit is its next version too (WL-958).
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 91, Slug: "091-x", Body: specBody, CreatedBy: "stig",
 	})
@@ -476,8 +476,8 @@ func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDocBody on a draft spec: %v", err)
 	}
-	if editedSpec.Version != 1 {
-		t.Errorf("spec version = %d, want 1", editedSpec.Version)
+	if editedSpec.Version != 2 {
+		t.Errorf("spec version = %d, want 2", editedSpec.Version)
 	}
 }
 
