@@ -63,6 +63,7 @@ type storeMetrics struct {
 	fixes                 *prometheus.CounterVec
 	ruleSupersedes        *prometheus.CounterVec
 	ruleClosureSize       prometheus.Histogram
+	ruleLints             *prometheus.CounterVec
 	ruleOps               *prometheus.CounterVec
 	queries               *prometheus.CounterVec
 	querySeconds          *prometheus.CounterVec
@@ -173,6 +174,10 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help:    "Rules in a context closure read (WL-SPEC-77 §4c), the rule itself included.",
 			Buckets: []float64{1, 2, 4, 8, 16, 32, 64, 128},
 		}),
+		ruleLints: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_rule_lint_total",
+			Help: "Corpus lint runs (lode rule lint, WL-SPEC-77 §4c) by outcome (clean|findings|error).",
+		}, []string{"outcome"}),
 		ruleOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_rule_ops_total",
 			Help: "Standalone rule writes (WL-SPEC-77 §19.2) by op (add|accept) and outcome (ok|invalid|not_found|forbidden|conflict|error).",
@@ -273,6 +278,14 @@ func (m *storeMetrics) ruleClosure(n int) {
 		return
 	}
 	m.ruleClosureSize.Observe(float64(n))
+}
+
+// ruleLint counts one corpus lint run by outcome.
+func (m *storeMetrics) ruleLint(outcome string) {
+	if m == nil {
+		return
+	}
+	m.ruleLints.WithLabelValues(outcome).Inc()
 }
 
 func (m *storeMetrics) expire(n int) {

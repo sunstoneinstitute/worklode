@@ -193,6 +193,22 @@ func (s *server) getRuleClosure(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
+// getRuleLint handles GET /api/v1/projects/{id}/rules/lint: the project's
+// corpus against the targets of WL-SPEC-77 §4c.
+func (s *server) getRuleLint(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("id")
+	if _, err := s.st.GetProject(r.Context(), projectID); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	l, err := s.st.RuleLint(r.Context(), projectID)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, l)
+}
+
 // listRules handles GET /api/v1/rules. ?project= and ?status= narrow the
 // list; ?doc= takes any document ref (WL-SPEC-73, a slug, an id) and returns
 // that document's arrangement in order.
@@ -276,6 +292,10 @@ var ruleRouteDocs = map[string]routeDoc{
 	"GET /api/v1/rules/{id}/closure": {
 		summary:   "Get a rule with its context closure over refines and needs",
 		responses: map[int]any{http.StatusOK: model.RuleClosure{}},
+	},
+	"GET /api/v1/projects/{id}/rules/lint": {
+		summary:   "Lint a project's rules against the corpus targets",
+		responses: map[int]any{http.StatusOK: model.RuleLint{}},
 	},
 	"GET /api/v1/rules/{id}/versions": {
 		summary:   "List a rule's versions",

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -353,5 +354,36 @@ func TestRuleAddAndAcceptCommands(t *testing.T) {
 	}
 	if _, err := runLode(t, "rule", "add", "--file", file, "--project", "cow"); err == nil || err.Error() != "no heading: pass --heading <text>" {
 		t.Errorf("add without heading: err = %v", err)
+	}
+}
+
+// TestRuleLint covers `lode rule lint` end to end: a positional reference is
+// named with its rule in both human and --json output, and the command exits
+// non-zero while such a finding exists; a clean project exits zero
+// (WL-SPEC-77 §4c).
+func TestRuleLint(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	specFile := writeDocFile(t, "---\nstatus: draft\n---\n# S\n\n## 1. A {#sec-1}\n\nAs said above.\n")
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec", "--slug", "s", "--file", specFile); err != nil {
+		t.Fatalf("doc add: %v", err)
+	}
+	out, err := runLode(t, "rule", "lint", "--project", "proj")
+	if err == nil {
+		t.Fatalf("rule lint: err = nil, want non-zero exit\noutput: %s", out)
+	}
+	if !strings.Contains(out, "positional-reference") || !strings.Contains(out, "REQ-1") || !strings.Contains(out, "above") {
+		t.Errorf("rule lint output = %q, want the positional reference named with its rule", out)
+	}
+	out, _ = runLode(t, "rule", "lint", "--project", "proj", "--json")
+	var l model.RuleLint
+	if err := json.Unmarshal([]byte(out), &l); err != nil || l.Rules != 1 || len(l.Findings) != 1 {
+		t.Errorf("rule lint --json = %q (%v)", out, err)
+	}
+	if _, _, err := c.CreateProject(context.Background(), model.CreateProjectInput{ID: "clean", Name: "Clean", Key: "CLEAN"}); err != nil {
+		t.Fatalf("create project clean: %v", err)
+	}
+	if out, err := runLode(t, "rule", "lint", "--project", "clean"); err != nil {
+		t.Errorf("rule lint (clean project): %v\noutput: %s", err, out)
 	}
 }

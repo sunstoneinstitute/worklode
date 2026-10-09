@@ -19,7 +19,7 @@ func newRuleCmd() *cobra.Command {
 		Use:   "rule",
 		Short: "Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another",
 	}
-	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd())
+	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleLintCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd())
 	return cmd
 }
 
@@ -128,6 +128,49 @@ func newRuleShowCmd() *cobra.Command {
 	cmd.Flags().IntVar(&version, "version", 0, "show one version of the rule")
 	cmd.Flags().BoolVar(&inline, "inline", false, "fold the rules that amend this one in beneath its text")
 	cmd.Flags().BoolVar(&closure, "closure", false, "list the rule with every rule reachable over refines and needs")
+	return cmd
+}
+
+// newRuleLintCmd is `lode rule lint`: the project's rules against the corpus
+// targets (WL-SPEC-77 §4c). It exits non-zero on any finding but a rule with
+// one context edge, which is a report, not a verdict.
+func newRuleLintCmd() *cobra.Command {
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "lint",
+		Short: "Report rules per spec, closure sizes, undefined terms, conflicts and positional references",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			l, raw, err := c.RuleLint(cmd.Context(), sc.Project)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+			} else {
+				cli.RuleLintRender(cmd.OutOrStdout(), l)
+			}
+			n := 0
+			for _, f := range l.Findings {
+				if f.Check != "one-context-edge" {
+					n++
+				}
+			}
+			if n > 0 {
+				return fmt.Errorf("%d rule finding(s)", n)
+			}
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "lint this project's rules")
 	return cmd
 }
 

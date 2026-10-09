@@ -253,3 +253,24 @@ func TestAddAndAcceptRule(t *testing.T) {
 		t.Errorf("second accept: status %d, want 422", rr.Code)
 	}
 }
+
+// TestRuleLintAPI: GET /projects/{id}/rules/lint reports the project's rules
+// and 404s an unknown project (WL-SPEC-77 §4c).
+func TestRuleLintAPI(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "t", Body: ruleDocV1}) // WL-REQ-1..3
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-1/edges", token, model.RuleEdgeInput{Type: "conflictsWith", To: "WL-REQ-3"}); rr.Code != http.StatusCreated {
+		t.Fatalf("link: %d %s", rr.Code, rr.Body)
+	}
+	rr := doReq(t, h, http.MethodGet, "/api/v1/projects/"+projID+"/rules/lint", token, nil)
+	var l model.RuleLint
+	decodeInto(t, rr, &l)
+	if rr.Code != http.StatusOK || l.Rules != 3 || len(l.Specs) != 1 || len(l.Findings) != 1 || l.Findings[0].Check != "conflict" {
+		t.Errorf("lint: %d %+v", rr.Code, l)
+	}
+	if rr := doReq(t, h, http.MethodGet, "/api/v1/projects/nope/rules/lint", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown project: %d", rr.Code)
+	}
+}

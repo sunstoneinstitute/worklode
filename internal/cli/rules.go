@@ -159,6 +159,32 @@ func RuleClosureTable(w io.Writer, c model.RuleClosure) {
 	fmt.Fprintf(w, "\n%d rules, %d words\n", len(c.Members), c.Words)
 }
 
+// RuleLint calls GET /api/v1/projects/{id}/rules/lint.
+func (c *Client) RuleLint(ctx context.Context, project string) (model.RuleLint, []byte, error) {
+	return doJSON[model.RuleLint](ctx, c, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/rules/lint", nil, "rule lint")
+}
+
+// RuleLintRender prints `lode rule lint`: the corpus measures, rules per
+// spec, then one row per finding naming its rule.
+func RuleLintRender(w io.Writer, l model.RuleLint) {
+	fmt.Fprintf(w, "%d rules. Closure rules: median %d, p90 %d. Closure words: median %d, p90 %d.\n\n",
+		l.Rules, l.ClosureRules.Median, l.ClosureRules.P90, l.ClosureWords.Median, l.ClosureWords.P90)
+	specs := newTable(column{header: "SPEC"}, column{header: "RULES"})
+	for _, sp := range l.Specs {
+		specs.add(sp.Spec, strconv.Itoa(sp.Rules))
+	}
+	specs.flush(w)
+	if len(l.Findings) == 0 {
+		return
+	}
+	fmt.Fprintln(w)
+	tbl := newTable(column{header: "RULE"}, column{header: "CHECK"}, titleColumn("DETAIL"))
+	for _, f := range l.Findings {
+		tbl.add(f.Rule, f.Check, f.Detail)
+	}
+	tbl.flush(w)
+}
+
 // RuleVersionsTable lists a rule's versions, newest first: the `lode
 // rule versions` view.
 func RuleVersionsTable(w io.Writer, vs []model.RuleVersion) {

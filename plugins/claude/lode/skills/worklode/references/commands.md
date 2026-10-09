@@ -192,6 +192,8 @@ Flags: --server
   Flags: --file, --heading
 - `lode rule link` — Relate a rule to another: --refines, --needs, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>
   Flags: --amends, --conflicts-with, --constrains, --derived-from, --needs, --references, --refines
+- `lode rule lint` — Report rules per spec, closure sizes, undefined terms, conflicts and positional references
+  Flags: --project, --repo
 - `lode rule list` — List rules, or one document's rules in arrangement order
   Flags: --doc, --project, --repo, --status
 - `lode rule set` — Set a rule's kind, owner or tags
