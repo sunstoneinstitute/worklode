@@ -289,3 +289,18 @@ func TestBudgetFor(t *testing.T) {
 		t.Errorf("DefaultBudget = %+v, want BudgetFor(2048)", DefaultBudget)
 	}
 }
+
+// TestChunkDocSkipsSpecHeadings: a spec heading has no text, so it gets no
+// chunk and the rule under it keeps its own body (WL-SPEC-77 §19.1).
+func TestChunkDocSkipsSpecHeadings(t *testing.T) {
+	body := "# Spec\n\n## 1 A {#sec-1}\n\n### 1.1 B {#sec-1.1}\n\nb body\n"
+	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: body}
+	sections := []model.DocSection{
+		{Anchor: "sec-1", Number: "1", Heading: "A", Position: 0, Kind: "heading"},
+		{Anchor: "sec-1.1", Number: "1.1", Heading: "B", Position: 1, Kind: "requirement"},
+	}
+	chunks := ChunkDoc(DefaultBudget, doc, sections)
+	if len(chunks) != 1 || chunks[0].Anchor != "sec-1.1" || !strings.Contains(chunks[0].Text, "b body") {
+		t.Fatalf("chunks = %+v, want one for sec-1.1 with its body", chunks)
+	}
+}

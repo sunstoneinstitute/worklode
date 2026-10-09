@@ -173,38 +173,51 @@ func HasPlanGovernance(tx *sql.Tx, taskID string) (bool, error) {
 	return true, nil
 }
 
-// RuleAtSection resolves a section ref (WL-SPEC-4 plus sec-5) to the
-// rule arranged at that anchor, splitting the document first when it
-// predates the rule tables. ErrNotFound when the project, the document or
-// the anchor is unknown.
-func RuleAtSection(tx *sql.Tx, ref designdoc.SectionRef) (int64, error) {
+// RulesAtSection resolves a section ref (WL-SPEC-4 plus sec-5) to the rule
+// arranged at that anchor or, when the anchor is a spec heading, to the rules
+// grouped under it (WL-SPEC-77 §19.1), splitting the document first when it
+// predates the rule tables. ErrNotFound when the project, the document or the
+// anchor is unknown, or a heading groups no rule.
+func RulesAtSection(tx *sql.Tx, ref designdoc.SectionRef) ([]int64, error) {
 	var projectID string
 	err := tx.QueryRow(`SELECT id FROM projects WHERE key = $1`, ref.Shorthand.Key).Scan(&projectID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("project %s: %w", ref.Shorthand.Key, ErrNotFound)
+		return nil, fmt.Errorf("project %s: %w", ref.Shorthand.Key, ErrNotFound)
 	}
 	if err != nil {
-		return 0, fmt.Errorf("project %s: %w", ref.Shorthand.Key, err)
+		return nil, fmt.Errorf("project %s: %w", ref.Shorthand.Key, err)
 	}
 	base := fmt.Sprintf("%s-%s-%d", ref.Shorthand.Key, ref.Shorthand.Type, ref.Shorthand.Number)
 	docID, ok, err := resolveDocRef(tx, projectID, base)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if !ok {
-		return 0, fmt.Errorf("document %s: %w", base, ErrNotFound)
+		return nil, fmt.Errorf("document %s: %w", base, ErrNotFound)
 	}
 	if err := ensureRules(tx, docID); err != nil {
-		return 0, err
+		return nil, err
 	}
-	entries, err := arrangedRules(tx, docID)
+	rows, err := tx.Query(
+		`SELECT s.rule_id
+		   FROM doc_rules a
+		   JOIN doc_rules s ON s.doc_id = a.doc_id AND s.rule_id IS NOT NULL
+		  WHERE a.doc_id = $1 AND a.anchor = $2
+		    AND CASE WHEN a.rule_id IS NOT NULL THEN s.position = a.position
+		             ELSE s.position > a.position AND NOT EXISTS (
+		                  SELECT 1 FROM doc_rules n
+		                   WHERE n.doc_id = a.doc_id AND n.depth <= a.depth
+		                     AND n.position > a.position AND n.position <= s.position) END
+		  ORDER BY s.position`, docID, ref.Anchor)
 	if err != nil {
-		return 0, err
+		return nil, fmt.Errorf("rules at %s#%s: %w", base, ref.Anchor, err)
 	}
-	for _, c := range entries {
-		if c.anchor == ref.Anchor {
-			return c.id, nil
-		}
+	ids, err := scanColumn[int64](rows, fmt.Sprintf("rules at %s#%s", base, ref.Anchor))
+	if err != nil {
+		return nil, err
 	}
-	return 0, fmt.Errorf("%s has no rule at %s: %w", base, ref.Anchor, ErrNotFound)
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("%s has no rule at %s: %w", base, ref.Anchor, ErrNotFound)
+	}
+	return ids, nil
 }

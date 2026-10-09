@@ -440,6 +440,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		  WHERE d.kind = 'spec' AND d.status = 'accepted'
 		    AND d.deleted_at IS NULL
 		    AND coalesce(r.kind, 'requirement') IN ('requirement', 'catalogue')
+		    AND dr.heading IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 		  GROUP BY d.id
 		 HAVING count(*) FILTER (WHERE NOT coalesce(c.discharging AND NOT c.draft, false)) > 0

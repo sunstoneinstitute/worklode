@@ -350,3 +350,34 @@ func TestSpecReconcilerIgnoresUnmappedRepo(t *testing.T) {
 		t.Fatalf("nothing should be linked: %+v", gov)
 	}
 }
+
+// A section ref on a spec heading governs the task by every rule grouped
+// under it (WL-SPEC-77 §19.1).
+func TestSpecReconcilerHeadingGovernsByRulesUnderIt(t *testing.T) {
+	f := newReconcilerFixture(t)
+	ctx := context.Background()
+	if _, _, err := f.st.RecordEvent(ctx, "cli", "seed-heading-doc", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.CreateDoc(tx, f.st.Now(), store.DocInput{
+				Project: "wl", Kind: "spec", Number: 2, Slug: "h",
+				Body: "---\nstatus: draft\n---\n# H\n\n## 1. A {#sec-1}\n\n### 1.1 B {#sec-1.1}\n\nB.\n\n### 1.2 C {#sec-1.2}\n\nC.\n\n## 2. D {#sec-2}\n\nD.\n",
+			}, eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("seed heading doc: %v", err)
+	}
+	task := f.createTask(t)
+
+	if out, err := f.srv.handleSpecReconcile(ctx, prEvent(7301, task.Branch, "Spec: WL-SPEC-2 sec-1\n")); err != nil || out != eventbus.OutcomeApplied {
+		t.Fatalf("heading ref: %v %v", out, err)
+	}
+	// Spec 1 holds rules 1-3; spec 2's sec-1.1, sec-1.2 and sec-2 are 4-6.
+	gov := f.governedBy(t, task.ID)
+	if len(gov) != 2 || gov[0].Rule != "WL-REQ-4" || gov[1].Rule != "WL-REQ-5" {
+		t.Fatalf("governed_by = %+v, want WL-REQ-4 and WL-REQ-5", gov)
+	}
+	out, err := f.srv.handleSpecReconcile(ctx, pushEvent(7302, task.Branch, "more\n\nSpec: WL-SPEC-2 sec-1\n"))
+	if err != nil || out != eventbus.OutcomeSuppressed {
+		t.Fatalf("repeat heading ref: %v %v", out, err)
+	}
+}

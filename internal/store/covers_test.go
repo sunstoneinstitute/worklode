@@ -550,3 +550,60 @@ func TestResolveExternalCovers(t *testing.T) {
 		t.Errorf("second run: covered %v, want [1 2]", got)
 	}
 }
+
+// TestSpecHeadingArrangesNoRule: an anchored heading followed directly by a
+// deeper anchored heading is a spec heading, a doc_rules row with heading set
+// and no rule, and a covers entry on its anchor resolves to the rules grouped
+// under it (WL-SPEC-77 §19.1).
+func TestSpecHeadingArrangesNoRule(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "h", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n# H\n\n## 1. A {#sec-1}\n\n### 1.1 B {#sec-1.1}\n\nText.\n"})
+
+	type row struct {
+		Anchor, Heading string
+		Rule            sql.NullInt64
+	}
+	rows, err := s.db.QueryContext(t.Context(),
+		`SELECT dr.anchor, coalesce(dr.heading, ''), r.number
+		   FROM doc_rules dr LEFT JOIN rules r ON r.id = dr.rule_id
+		  WHERE dr.doc_id = $1 ORDER BY dr.position`, spec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := collectRows(rows, "arrangement", func(r rowScanner) (row, error) {
+		var x row
+		err := r.Scan(&x.Anchor, &x.Heading, &x.Rule)
+		return x, err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []row{{"sec-1", "A", sql.NullInt64{}}, {"sec-1.1", "", sql.NullInt64{Int64: 1, Valid: true}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("arrangement = %+v, want %+v", got, want)
+	}
+	secs, err := s.ListDocSections(t.Context(), spec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(secs) != 2 || secs[0].Kind != "heading" || secs[1].Kind != "requirement" {
+		t.Errorf("sections = %+v, want kinds heading, requirement", secs)
+	}
+	var rules int
+	if err := s.db.QueryRowContext(t.Context(), `SELECT count(*) FROM rules`).Scan(&rules); err != nil {
+		t.Fatal(err)
+	}
+	if rules != 1 {
+		t.Errorf("%d rules minted, want 1", rules)
+	}
+
+	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "hp", CreatedBy: "stig",
+		Body: coversPlanBody("P1-SPEC-1#sec-1")})
+	if got := coveredRuleNumbers(t, s, plan.ID); !slices.Equal(got, []int64{1}) {
+		t.Errorf("heading ref covers %v, want [1]", got)
+	}
+	if got := externalCovers(t, s, plan.ID); len(got) != 0 {
+		t.Errorf("unresolved covers = %v, want none", got)
+	}
+}

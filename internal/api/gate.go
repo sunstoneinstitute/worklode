@@ -136,13 +136,17 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	// times leaves one task.governed row behind.
 	// The id is keyed on the resolved rule, so a qualifier or a rule ref vs
 	// the section ref of the same rule is the same link.
-	var ruleID int64
+	// A section ref on a spec heading names every rule grouped under it
+	// (WL-SPEC-77 §19.1), so the task is governed by each.
+	var ruleIDs []int64
 	err = s.st.Tx(ctx, func(tx *sql.Tx) error {
 		var err error
 		if decl.Rule != nil {
-			ruleID, err = store.RuleIDByRef(tx, decl.Rule.Key, decl.Rule.Number)
+			var id int64
+			id, err = store.RuleIDByRef(tx, decl.Rule.Key, decl.Rule.Number)
+			ruleIDs = []int64{id}
 		} else {
-			ruleID, err = store.RuleAtSection(tx, *decl.Section)
+			ruleIDs, err = store.RulesAtSection(tx, *decl.Section)
 		}
 		return err
 	})
@@ -154,30 +158,35 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	if err != nil {
 		return eventbus.OutcomeError, fmt.Errorf("spec-reconciler: event %d: %w", ev.ID, err)
 	}
-	externalID := fmt.Sprintf("spec-reconciler-%s-%d", taskID, ruleID)
-	_, inserted, err := s.st.RecordEvent(ctx, watcherEventSource, externalID, "task.governed", notePayload,
-		func(tx *sql.Tx, _ int64) error {
-			planned, err := store.HasPlanGovernance(tx, taskID)
-			if err != nil {
-				return err
-			}
-			if planned {
-				outcome = "planned"
-				return errReconcileSkip
-			}
-			return store.Govern(tx, taskID, ruleID, "gate", false)
-		})
-	switch {
-	case errors.Is(err, errReconcileSkip):
-		s.reconcilerMetrics.Outcome(outcome)
-		return eventbus.OutcomeSuppressed, nil
-	case errors.Is(err, store.ErrNotFound):
-		s.log.Warn("spec-reconciler: trailer names nothing", "event", ev.ID, "task", taskID, "spec", decl.String(), "err", err)
-		s.reconcilerMetrics.Outcome("unknown_target")
-		return eventbus.OutcomeSuppressed, nil
-	case err != nil:
-		return eventbus.OutcomeError, fmt.Errorf("spec-reconciler: event %d: %w", ev.ID, err)
-	case !inserted:
+	linked := false
+	for _, ruleID := range ruleIDs {
+		externalID := fmt.Sprintf("spec-reconciler-%s-%d", taskID, ruleID)
+		_, inserted, err := s.st.RecordEvent(ctx, watcherEventSource, externalID, "task.governed", notePayload,
+			func(tx *sql.Tx, _ int64) error {
+				planned, err := store.HasPlanGovernance(tx, taskID)
+				if err != nil {
+					return err
+				}
+				if planned {
+					outcome = "planned"
+					return errReconcileSkip
+				}
+				return store.Govern(tx, taskID, ruleID, "gate", false)
+			})
+		switch {
+		case errors.Is(err, errReconcileSkip):
+			s.reconcilerMetrics.Outcome(outcome)
+			return eventbus.OutcomeSuppressed, nil
+		case errors.Is(err, store.ErrNotFound):
+			s.log.Warn("spec-reconciler: trailer names nothing", "event", ev.ID, "task", taskID, "spec", decl.String(), "err", err)
+			s.reconcilerMetrics.Outcome("unknown_target")
+			return eventbus.OutcomeSuppressed, nil
+		case err != nil:
+			return eventbus.OutcomeError, fmt.Errorf("spec-reconciler: event %d: %w", ev.ID, err)
+		}
+		linked = linked || inserted
+	}
+	if !linked {
 		s.reconcilerMetrics.Outcome("already")
 		return eventbus.OutcomeSuppressed, nil
 	}

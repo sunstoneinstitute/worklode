@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -392,19 +393,20 @@ func TestGovernGateLeavesExistingLinkUntouched(t *testing.T) {
 	}
 }
 
-// TestRuleAtSection: a section ref resolves to the rule arranged at that
-// anchor, and an unknown anchor is ErrNotFound (S51's unknown_target case).
-func TestRuleAtSection(t *testing.T) {
+// TestRulesAtSection: a section ref resolves to the rule arranged at that
+// anchor, a spec heading's anchor to the rules under it, and an unknown
+// anchor is ErrNotFound (S51's unknown_target case).
+func TestRulesAtSection(t *testing.T) {
 	s := openDocStore(t)
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	sh, ok := designdoc.ParseShorthand(fmt.Sprintf("P1-SPEC-%d", d.Number))
 	if !ok {
 		t.Fatalf("shorthand did not parse for doc number %d", d.Number)
 	}
-	var got int64
+	var got []int64
 	err := s.Tx(context.Background(), func(tx *sql.Tx) error {
 		var err error
-		got, err = RuleAtSection(tx, designdoc.SectionRef{Shorthand: sh, Anchor: "sec-1.1"})
+		got, err = RulesAtSection(tx, designdoc.SectionRef{Shorthand: sh, Anchor: "sec-1.1"})
 		return err
 	})
 	if err != nil {
@@ -419,12 +421,36 @@ func TestRuleAtSection(t *testing.T) {
 		`SELECT id FROM rules WHERE number = $1`, arr[1].Number).Scan(&want); err != nil {
 		t.Fatal(err)
 	}
-	if got != want {
-		t.Errorf("RuleAtSection = %d, want rule %d at sec-1.1", got, want)
+	if !slices.Equal(got, []int64{want}) {
+		t.Errorf("RulesAtSection = %v, want rule %d at sec-1.1", got, want)
+	}
+
+	h := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "h", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n# H\n\n## 1. A {#sec-1}\n\n### 1.1 B {#sec-1.1}\n\nB.\n\n### 1.2 C {#sec-1.2}\n\nC.\n\n## 2. D {#sec-2}\n\nD.\n"})
+	hsh, _ := designdoc.ParseShorthand(fmt.Sprintf("P1-SPEC-%d", h.Number))
+	err = s.Tx(context.Background(), func(tx *sql.Tx) error {
+		var err error
+		got, err = RulesAtSection(tx, designdoc.SectionRef{Shorthand: hsh, Anchor: "sec-1"})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var under []int64
+	rows, err := s.db.QueryContext(context.Background(),
+		`SELECT rule_id FROM doc_rules WHERE doc_id = $1 AND anchor IN ('sec-1.1', 'sec-1.2') ORDER BY position`, h.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if under, err = scanColumn[int64](rows, "rules under sec-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(under) != 2 || !slices.Equal(got, under) {
+		t.Errorf("heading resolves to %v, want the rules under it %v", got, under)
 	}
 
 	err = s.Tx(context.Background(), func(tx *sql.Tx) error {
-		_, err := RuleAtSection(tx, designdoc.SectionRef{Shorthand: sh, Anchor: "sec-9"})
+		_, err := RulesAtSection(tx, designdoc.SectionRef{Shorthand: sh, Anchor: "sec-9"})
 		return err
 	})
 	if !errors.Is(err, ErrNotFound) {
@@ -432,7 +458,7 @@ func TestRuleAtSection(t *testing.T) {
 	}
 
 	err = s.Tx(context.Background(), func(tx *sql.Tx) error {
-		_, err := RuleAtSection(tx, designdoc.SectionRef{Shorthand: designdoc.Shorthand{Key: "P1", Type: "SPEC", Number: 999}, Anchor: "sec-1"})
+		_, err := RulesAtSection(tx, designdoc.SectionRef{Shorthand: designdoc.Shorthand{Key: "P1", Type: "SPEC", Number: 999}, Anchor: "sec-1"})
 		return err
 	})
 	if !errors.Is(err, ErrNotFound) {
@@ -440,7 +466,7 @@ func TestRuleAtSection(t *testing.T) {
 	}
 
 	err = s.Tx(context.Background(), func(tx *sql.Tx) error {
-		_, err := RuleAtSection(tx, designdoc.SectionRef{Shorthand: designdoc.Shorthand{Key: "NOPE", Type: "SPEC", Number: 1}, Anchor: "sec-1"})
+		_, err := RulesAtSection(tx, designdoc.SectionRef{Shorthand: designdoc.Shorthand{Key: "NOPE", Type: "SPEC", Number: 1}, Anchor: "sec-1"})
 		return err
 	})
 	if !errors.Is(err, ErrNotFound) {

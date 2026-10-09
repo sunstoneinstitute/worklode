@@ -36,8 +36,8 @@ func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
 		return 0, fmt.Errorf("snapshot edges of doc %d: %w", docID, err)
 	}
 	if _, err := tx.Exec(
-		`INSERT INTO doc_rule_versions (doc_id, version, position, rule_id, rule_version, depth, anchor)
-		 SELECT r.doc_id, d.version, r.position, r.rule_id, r.rule_version, r.depth, r.anchor
+		`INSERT INTO doc_rule_versions (doc_id, version, position, rule_id, rule_version, heading, depth, anchor)
+		 SELECT r.doc_id, d.version, r.position, r.rule_id, r.rule_version, r.heading, r.depth, r.anchor
 		   FROM doc_rules r JOIN docs d ON d.id = r.doc_id
 		  WHERE r.doc_id = $1`, docID,
 	); err != nil {
@@ -122,18 +122,20 @@ func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...
 	return out, nil
 }
 
-// docVersionRules reads the rules document id arranged at version: from
-// doc_rule_versions when snapshot is set, else from the live doc_rules.
+// docVersionRules reads the entries document id arranged at version, rules
+// and spec headings: from doc_rule_versions when snapshot is set, else from
+// the live doc_rules.
 func (s *Store) docVersionRules(ctx context.Context, id int64, version int, snapshot bool) ([]model.DocVersionRule, error) {
 	table, where, args := "doc_rules", "x.doc_id = $1", []any{id}
 	if snapshot {
 		table, where, args = "doc_rule_versions", "x.doc_id = $1 AND x.version = $2", []any{id, version}
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT x.position, `+ruleRefSQL("p", "r")+`, x.rule_version, x.depth, x.anchor
+		`SELECT x.position, coalesce(`+ruleRefSQL("p", "r")+`, ''), coalesce(x.rule_version, 0),
+		        coalesce(x.heading, ''), x.depth, x.anchor
 		   FROM `+table+` x
-		   JOIN rules r ON r.id = x.rule_id
-		   JOIN projects p ON p.id = r.project_id
+		   LEFT JOIN rules r ON r.id = x.rule_id
+		   LEFT JOIN projects p ON p.id = r.project_id
 		  WHERE `+where+`
 		  ORDER BY x.position`, args...)
 	if err != nil {
@@ -141,7 +143,7 @@ func (s *Store) docVersionRules(ctx context.Context, id int64, version int, snap
 	}
 	return collectRows(rows, fmt.Sprintf("read rules of doc %d v%d", id, version), func(r rowScanner) (model.DocVersionRule, error) {
 		var v model.DocVersionRule
-		err := r.Scan(&v.Position, &v.Rule, &v.RuleVersion, &v.Depth, &v.Anchor)
+		err := r.Scan(&v.Position, &v.Rule, &v.RuleVersion, &v.Heading, &v.Depth, &v.Anchor)
 		return v, err
 	})
 }

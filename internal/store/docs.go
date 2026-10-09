@@ -1124,7 +1124,8 @@ func (a appendScan) Scan(dest ...any) error {
 func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSection, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT s.anchor, coalesce(s.number,''), s.heading, s.depth, s.position, s.last_revised_in,
-		        s.published, s.patched, coalesce(r.kind, '')
+		        s.published, s.patched,
+		        CASE WHEN dr.heading IS NOT NULL THEN 'heading' ELSE coalesce(r.kind, '') END
 		   FROM doc_sections s
 		   LEFT JOIN doc_rules dr ON dr.doc_id = s.doc_id AND dr.anchor = s.anchor
 		   LEFT JOIN rules r ON r.id = dr.rule_id

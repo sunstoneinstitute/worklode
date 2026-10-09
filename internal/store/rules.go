@@ -27,7 +27,8 @@ type ruleRow struct {
 }
 
 // syncRules makes a document's rules agree with its parsed source.
-// Every anchored section is a design rule; changed text rewrites the rule's draft version or, once
+// Every anchored section is a design rule or, when isSpecHeading holds and no
+// prior rule matches it, a spec heading row (WL-SPEC-77 §19.1); changed text rewrites the rule's draft version or, once
 // that version is accepted, becomes its next version; anything else is a new
 // rule numbered from the project's RULE counter. The arrangement
 // (doc_rules) is rewritten in section order. Plans never reach here:
@@ -116,6 +117,15 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 			continue
 		}
 		m := match[i]
+		if m == nil && isSpecHeading(doc.Sections, i) {
+			if _, err := tx.Exec(
+				`INSERT INTO doc_rules (doc_id, position, heading, depth, anchor) VALUES ($1, $2, $3, $4, $5)`,
+				docID, position, sec.Title, sec.Level, sec.Anchor); err != nil {
+				return false, fmt.Errorf("arrange heading %s in doc %d: %w", sec.Anchor, docID, err)
+			}
+			position++
+			continue
+		}
 		var id int64
 		var version int
 		switch {
@@ -149,8 +159,19 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 	return minted, nil
 }
 
+// isSpecHeading reports whether section i is a spec heading (WL-SPEC-77
+// §19.1): anchored, no text of its own, and followed directly by a deeper
+// anchored heading. syncRules writes one as a heading row only when no prior
+// rule matched it, so a heading-only rule written before spec headings
+// existed stays arranged until the §19.7 migration converts it.
+func isSpecHeading(secs []*designdoc.Section, i int) bool {
+	return i+1 < len(secs) && strings.TrimSpace(secs[i].Body) == "" &&
+		secs[i+1].Anchor != "" && secs[i+1].Level > secs[i].Level
+}
+
 // arrangedRules reads a document's current arrangement with each rule's
-// arranged version text, in position order.
+// arranged version text, in position order. Spec headings carry no rule and
+// are left out.
 func arrangedRules(tx *sql.Tx, docID int64) ([]ruleRow, error) {
 	rows, err := tx.Query(
 		`SELECT dc.rule_id, dc.rule_version, cv.heading, cv.body, dc.anchor, dc.depth

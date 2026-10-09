@@ -182,3 +182,33 @@ func TestBumpRuleVersionSnapshotsEdges(t *testing.T) {
 		t.Errorf("GetRuleVersion(v1).Edges = %+v, want the snapshotted refines edge", r.Edges)
 	}
 }
+
+// TestBumpDocVersionSnapshotsSpecHeadings: a spec heading row is carried into
+// doc_rule_versions and read back as an entry with Heading set and no rule
+// (WL-SPEC-77 §19.1).
+func TestBumpDocVersionSnapshotsSpecHeadings(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	const body = "---\nstatus: draft\n---\n# H\n\n## 1. A {#sec-1}\n\n### 1.1 B {#sec-1.1}\n\nText.\n"
+	doc := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "h", Body: body, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, doc.ID, strings.Replace(body, "Text.", "Text, revised.", 1)); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if _, err := acceptRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+	v1, err := s.GetDocVersion(t.Context(), doc.ID, 1)
+	if err != nil {
+		t.Fatalf("GetDocVersion(1): %v", err)
+	}
+	if len(v1.Rules) != 2 || v1.Rules[0].Heading != "A" || v1.Rules[0].Rule != "" ||
+		v1.Rules[1].Heading != "" || !strings.HasPrefix(v1.Rules[1].Rule, "P1-REQ-") {
+		t.Errorf("GetDocVersion(1).Rules = %+v, want heading A then a rule", v1.Rules)
+	}
+}
