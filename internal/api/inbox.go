@@ -1,10 +1,10 @@
-// inbox.go assembles the cross-project inbox page (spec 056 §3): what is
+// inbox.go assembles the cross-project inbox page (WL-SPEC-82 §12): what is
 // waiting on the signed-in actor, in the six buckets §3.2 fixes the order of.
 // The derivation is pure — everything it reads is fetched by the caller and
 // handed in — so the bucket rules and the §3.3 ordering are testable without
 // a database.
 //
-// Unrelated to inbox_mirror.go, which is spec 020's GitHub issue and
+// Unrelated to inbox_mirror.go, which is WL-SPEC-80's GitHub issue and
 // pull-request triage import. They share a word and nothing else.
 package api
 
@@ -19,7 +19,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
-// inboxPage handles GET /inbox (spec 056 §3): the cross-project inbox, what
+// inboxPage handles GET /inbox (WL-SPEC-82 §12): the cross-project inbox, what
 // is waiting on the signed-in actor across every project they belong to.
 // With no actor — LODE_WEB_OPEN, or no login provider configured — it
 // renders the honest signed-out empty state without fetching anything: no
@@ -79,8 +79,8 @@ func (s *server) inboxPage(w http.ResponseWriter, r *http.Request) {
 // inboxInputs is everything the inbox derivation reads, already fetched.
 // Reviews are every open pr-kind approval org-wide with its project, PR
 // title/URL, and author login; Facts are the all-projects work facts — fed
-// whole so det-v1 resolves blocked-by chains across project boundaries (056
-// §3.3) — and Membership/Led come from ProjectsForActor.
+// whole so det-v1 resolves blocked-by chains across project boundaries (WL-SPEC-82
+// §12) — and Membership/Led come from ProjectsForActor.
 type inboxInputs struct {
 	ActorID    string
 	ActorLogin string // the actor's GitHub login, "" when none stored
@@ -96,7 +96,7 @@ type inboxInputs struct {
 // same six buckets.
 var activeTaskStates = map[string]bool{"ready": true, "in_progress": true, "in_review": true}
 
-// assembleInbox derives 056 §3.2's six buckets in order. Work buckets rank by
+// assembleInbox derives WL-SPEC-82 §12's six buckets in order. Work buckets rank by
 // rankConcernRoots over the full facts slice, filtered to membership
 // afterwards — never before (§3.3). nil when every bucket is empty. Each item
 // carries the text and href the page renders.

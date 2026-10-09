@@ -231,7 +231,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"entity", "op", "outcome"})
 	// A distinct counter, not left to http_requests_total, because a seek is
 	// the one admin-triggered write on this surface: it is the only way an
-	// operator moves a subscriber's offsets backwards (025 §18), and how
+	// operator moves a subscriber's offsets backwards (WL-SPEC-77 §18), and how
 	// often that happens is worth alerting on independently of request
 	// volume. The GET reads beside it (listEvents, listEventSubscribers) are
 	// ordinary reads with no derived outcome, so the generic HTTP middleware
@@ -270,7 +270,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_progress_stream_frames_sent_total",
 		Help: "Frames pushed to Progress page followers, summed across all open streams.",
 	})
-	// The task page's Activity follow (spec 071 §4), the same two
+	// The task page's Activity follow (WL-SPEC-80 §8.9), the same two
 	// instruments again: a follow lasts as long as the page is open, so
 	// http_requests_total says nothing about how many are running or how
 	// much they are pushing.
@@ -282,7 +282,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_activity_stream_frames_sent_total",
 		Help: "Activity rows pushed to task page followers, summed across all open streams.",
 	})
-	// Spec 007's two families. http_requests_total cannot answer either
+	// WL-SPEC-82's two families. http_requests_total cannot answer either
 	// question: a 503 from a graph-less instance and a 500 from a broken
 	// SPARQL endpoint are both "not 200", and one POST /api/v1/derive runs
 	// two derivers whose outcomes differ independently of its status code.
@@ -517,7 +517,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// nobody has deleted anything reads as a flat zero rather than as no-data
 	// — the difference between "no delete was refused" and "refusals are not
 	// being counted". Undelete asks for no justification on either instance
-	// (044 §3), so justification_required is unreachable there and would be a
+	// (WL-SPEC-75 §12), so justification_required is unreachable there and would be a
 	// permanently flat series claiming to mean something.
 	for _, entity := range deleteEntities {
 		for _, op := range deleteOps {
@@ -588,7 +588,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 
 // A follow that has gone quiet reads identically whether the log is quiet or
 // the commit horizon is stuck behind a long-running transaction: the stream
-// keeps heartbeating either way (025 §15). This gauge is the difference —
+// keeps heartbeating either way (WL-SPEC-77 §15). This gauge is the difference —
 // flat while events are still being recorded means the horizon is held back,
 // and pg_stat_activity is the next place to look.
 var eventLogHorizonDesc = prometheus.NewDesc(
@@ -598,7 +598,7 @@ var eventLogHorizonDesc = prometheus.NewDesc(
 
 // The pool is capped at 16 connections (store.Open) and shared by every
 // request, including a Progress page follow that holds no connection between
-// polls but still competes for one every second it is open (WL-SPEC-66
+// polls but still competes for one every second it is open (WL-SPEC-85
 // §5.1). A rising worklode_db_wait_count_total, or wait_duration growing
 // faster than requests can absorb, means ordinary requests are queuing for a
 // connection — the thing an otherwise-trivial request taking seconds looks
@@ -664,7 +664,7 @@ func (c *eventHorizonCollector) Collect(ch chan<- prometheus.Metric) {
 // observeSkillSync records one sync pass, called from both syncOnce
 // (background) and the admin sync handler. A partial failure still carries a
 // summary of what landed before the error, so items are recorded on both
-// paths (spec 022 §4).
+// paths (WL-SPEC-73 §6).
 // Nil-safe: tests build a *server directly without initMetrics.
 func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Duration) {
 	if s.syncDuration == nil {
@@ -713,7 +713,7 @@ func (s *server) observeAssignment(action string) {
 }
 
 // crewChangeActions are every action label worklode_crew_changes_total
-// carries: the two membership mutations spec 029 §6.1 defines.
+// carries: the two membership mutations WL-SPEC-75 §13.5 defines.
 var crewChangeActions = []string{"add", "remove"}
 
 // crewChangeOutcomes are every outcome label worklode_crew_changes_total
@@ -778,7 +778,7 @@ func (s *server) observeMilestoneChange(action string, err error) {
 }
 
 // referenceRels are every rel label worklode_reference_writes_total carries:
-// the entity_edges vocabulary (029 §5, store.referenceShapes), pinned here so
+// the entity_edges vocabulary (WL-SPEC-75 §13.4, store.referenceShapes), pinned here so
 // an instance where nobody has declared a reference of a given rel reads as a
 // flat zero rather than as no-data. A rel outside this list (a caller's typo,
 // refused as ErrInvalidInput before the write reaches the table) is folded
@@ -1000,7 +1000,7 @@ var (
 )
 
 // approvalActKinds and approvalActOutcomes are the bounded label values of
-// worklode_approval_acts_total: 029 §7.1's impact note. decisionInvalid
+// worklode_approval_acts_total: WL-SPEC-75 §13.6's impact note. decisionInvalid
 // stands for a submission refused before the act could run; "refused" is the
 // store declining the act itself.
 var (
@@ -1134,7 +1134,7 @@ func (s *server) observeFormSubmission(form, outcome string) {
 }
 
 // progressWriteRoutes and progressWriteOutcomes bound
-// worklode_progress_writes_total's two labels. The routes are 066 §7's write
+// worklode_progress_writes_total's two labels. The routes are WL-SPEC-85 §8's write
 // table plus publish (the task and plan pages' Publish); the outcomes are the gate's one ("refused") plus the three a write
 // handler reports for itself.
 var (
@@ -1155,7 +1155,7 @@ func (s *server) observeProgressWrite(route, outcome string) {
 
 // progressFragments and progressFragmentOutcomes bound
 // worklode_progress_fragment_renders_total's two labels: the two fragment
-// routes 066 §5.2 adds, and the outcomes a GET on either of them can report.
+// routes WL-SPEC-85 §6 adds, and the outcomes a GET on either of them can report.
 var (
 	progressFragments        = []string{"spec", "summary"}
 	progressFragmentOutcomes = []string{"ok", "not_found", "error"}
@@ -1346,7 +1346,7 @@ func (s *server) observeProgressStreamFrames(n int) {
 }
 
 // The Activity follow's three observers, the same shape as the Progress
-// follow's above (spec 071 §4).
+// follow's above (WL-SPEC-80 §8.9).
 func (s *server) observeActivityStreamOpen() {
 	if s.activityStreamsActive == nil {
 		return
@@ -1543,7 +1543,7 @@ func (s *server) observeBlobGCObjects(action string, n int) {
 	s.blobGCObjects.WithLabelValues(action).Add(float64(n))
 }
 
-// The complete, bounded label sets for worklode_deletes_total (044 §6). The
+// The complete, bounded label sets for worklode_deletes_total. The
 // entity id is deliberately not a label: it is unbounded, and which rows were
 // deleted is a question for the events log, not for a counter.
 var (
@@ -1580,8 +1580,8 @@ func (s *server) observeDelete(entity, op, outcome string) {
 	s.deletes.WithLabelValues(entity, op, outcome).Inc()
 }
 
-// The complete, bounded label sets for worklode_overview_reads_total (spec
-// 007). The project filter is deliberately not a label: it is caller-chosen
+// The complete, bounded label sets for worklode_overview_reads_total
+// (WL-SPEC-82). The project filter is deliberately not a label: it is caller-chosen
 // and unbounded, and which project someone looked at is a question for the
 // access log, not for a counter.
 var (
@@ -1616,7 +1616,7 @@ func overviewOutcome(err error) string {
 	}
 }
 
-// observeOverviewRead records one spec 007 read, called exactly once on every
+// observeOverviewRead records one WL-SPEC-82 read, called exactly once on every
 // exit path of each of the five handlers.
 // Nil-safe: tests build a *server directly without initMetrics.
 func (s *server) observeOverviewRead(read, outcome string) {

@@ -121,8 +121,8 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 
 // recommendation resolves pins (inline content) and retrieval matches
 // excluding the pinned names. A provider failure degrades to the lexical arm
-// with a warning, and no provider at all to pins plus lexical matches (040
-// §11) — recommendations never block work. Matching itself is shared with
+// with a warning, and no provider at all to pins plus lexical matches (WL-SPEC-79
+// §17) — recommendations never block work. Matching itself is shared with
 // the task brief via skillMatches: the
 // brief already has its pins resolved by store.Brief, so taskBrief calls
 // skillMatches directly instead of re-resolving them here.
@@ -164,7 +164,7 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 // one retrieval path shared by recommendation (pins resolved just above) and
 // the task brief handler (pins already resolved by store.Brief).
 //
-// Retrieval is store.Search with kind=skill (040 §9): recommendation is a
+// Retrieval is store.Search with kind=skill (WL-SPEC-79 §17): recommendation is a
 // caller of the one hybrid path rather than a second embedding code path of
 // its own, which is what gives it the lexical arm — a brief naming a tool
 // literally now matches the skill that names it back.
@@ -173,7 +173,7 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 // plus a warning, never an error: no provider or a provider that is down or
 // slower than recommendTimeout drops to the lexical arm alone (§11), and a
 // query the store rejects drops to no matches at all. Pins-only is a fully
-// functional mode per spec 016, and this path serves the task brief: an
+// functional mode per WL-SPEC-81, and this path serves the task brief: an
 // error here would stop anyone from starting work.
 func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]model.SkillMatch, []string) {
 	matches := []model.SkillMatch{}
@@ -246,7 +246,7 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 		matches = append(matches, model.SkillMatch{
 			Name: h.Title, Description: sk.Description, Hash: sk.ContentHash,
 			// Score is the fused reciprocal-rank sum store.Search returns, not
-			// a cosine similarity (040 §6.1). It orders matches; it does not
+			// a cosine similarity (WL-SPEC-79 §15). It orders matches; it does not
 			// measure them.
 			Score: h.Score,
 		})

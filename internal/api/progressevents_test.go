@@ -257,7 +257,7 @@ func TestProgressEventsWaitsForWebhookCorrelation(t *testing.T) {
 	}
 }
 
-// TestProgressEventsDocumentFrames is WL-SPEC-66 §5.1's other half: a
+// TestProgressEventsDocumentFrames is WL-SPEC-85 §6's other half: a
 // document event on a plan reaches the stream as a frame with task empty and
 // plan set. Both events a plan's life starts with are checked, because before
 // WL-768 each failed to name its document for a different reason —

@@ -1,4 +1,4 @@
-// overview.go serves spec 007's read surface — the roll-up, drift, gaps, the
+// overview.go serves WL-SPEC-82's read surface — the roll-up, drift, gaps, the
 // frontier mirror and the critical path — plus the on-demand run of the
 // server-side derivers. The reads are computed in internal/overview; this
 // file is the thin HTTP skin over it: parse the query, map the one domain

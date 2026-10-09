@@ -2,8 +2,8 @@ package api
 
 import "fmt"
 
-// InstanceDev and InstanceProd are the only two instance environments (039
-// §3). They say which kind of worklode instance this process is — a dev
+// InstanceDev and InstanceProd are the only two instance environments (WL-SPEC-73
+// §4.2). They say which kind of worklode instance this process is — a dev
 // instance that re-seeds and discards data, or a prod instance that holds the
 // record. Unrelated to LODE_CLUSTER_ENV_MAP, which describes the environment
 // of the deployments worklode *observes*.
@@ -15,7 +15,7 @@ const (
 // ParseInstanceEnv validates a LODE_INSTANCE_ENV value, returning the
 // environment to run as.
 //
-// Empty means prod, because the failure modes are asymmetric (039 §3): a prod
+// Empty means prod, because the failure modes are asymmetric (WL-SPEC-73 §4.2): a prod
 // instance that silently believes it is dev drops decision records from the
 // org's real data, while a dev instance that believes it is prod asks for a
 // justification nobody needed. The permissive setting is the one an operator

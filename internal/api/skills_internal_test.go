@@ -357,7 +357,7 @@ func TestNewServerSkillsSourcesWithGitHubApp(t *testing.T) {
 	}
 }
 
-// TestRecommendDenseFloor pins the dense arm's candidate floor (040 §6.1,
+// TestRecommendDenseFloor pins the dense arm's candidate floor (WL-SPEC-79 §15,
 // 0.35, inherited from 016) end to end through NewServer and the HTTP
 // handler: a stored skill embedding and a query vector at a known cosine
 // similarity, just under and just over the threshold. (1,0) and (cosθ,sinθ)
@@ -953,7 +953,7 @@ func TestRunSkillSyncAbortsWhenBackgroundContextCancelled(t *testing.T) {
 	}
 }
 
-// TestRecommendationLexicalWithoutProvider is 040 §9 with §11: recommendation
+// TestRecommendationLexicalWithoutProvider is WL-SPEC-79 §17 with §11: recommendation
 // runs through the same retrieval path as search, so an instance with no
 // embedding provider still answers with the skill whose indexed text names
 // the query term literally. The pins-only era returned nothing here.

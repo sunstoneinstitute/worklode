@@ -1,4 +1,4 @@
-// Inbox import (spec 020): backfill a repo's existing GitHub issues and pull
+// Inbox import (WL-SPEC-80): backfill a repo's existing GitHub issues and pull
 // requests through the same store functions the webhook handler uses.
 
 package api
