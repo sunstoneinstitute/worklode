@@ -1,4 +1,4 @@
-// ladder.go is the ladder's non-escalating rungs (025 §15.5): an executor
+// ladder.go is the ladder's non-escalating rungs (WL-SPEC-77 §15): an executor
 // logs a gap without stopping, and a fixer logs starting and finishing the
 // design fix a gap or escalation named. Unlike EscalateTask, these move
 // nothing else — no lease, no edge, no task state — so each is a single
@@ -13,7 +13,7 @@ import (
 
 // GapInput is one gap report: the same information EscalateInput carries
 // minus To. A gap recorded without stopping has no escalation target —
-// inventing one would corrupt the funnel's label set (025 §15.5).
+// inventing one would corrupt the funnel's label set (WL-SPEC-77 §15).
 type GapInput struct {
 	TaskID string
 	Doc    string // document slug, already resolved by the caller

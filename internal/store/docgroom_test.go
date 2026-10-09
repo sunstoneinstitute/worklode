@@ -112,7 +112,7 @@ func TestPlansStaleMetric(t *testing.T) {
 	m.docOp("stale", nil)
 }
 
-// TestPatchMarksUnexecutedPlansStale is 025 §8.6: an amendment that moves a
+// TestPatchMarksUnexecutedPlansStale is WL-SPEC-77 §10: an amendment that moves a
 // section an accepted plan covers, with no claimed work behind it, leaves
 // that plan stale rather than blocked. The mark is idempotent on
 // (source, external_id), the plan's tasks stay claimable and say so, and
@@ -204,7 +204,7 @@ func TestPatchMarksUnexecutedPlansStale(t *testing.T) {
 	setDocStatus(t, s, plan.ID, "stale")
 
 	// Claim-time flag: the plan's tasks stay claimable and the brief says the
-	// text may predate the amendment (§8.6).
+	// text may predate the amendment (WL-SPEC-77 §10).
 	if _, err := s.Claim(ctx, minted[0].ID, "stig", "wt-stale", 0); err != nil {
 		t.Fatalf("claim %s: %v", minted[0].ID, err)
 	}
@@ -216,7 +216,7 @@ func TestPatchMarksUnexecutedPlansStale(t *testing.T) {
 		t.Errorf("brief.StalePlan = %q, want %q", brief.StalePlan, plan.Slug)
 	}
 
-	// Re-acceptance clears the mark (§8.6). The re-planning edit bumps the
+	// Re-acceptance clears the mark (WL-SPEC-77 §10). The re-planning edit bumps the
 	// plan's version, so the accept event is a new one and its mint pass
 	// picks up the added declaration while leaving the existing task alone.
 	if _, err := updateDocBody(t, s, plan.ID, groomPlanReplanned); err != nil {
@@ -252,7 +252,7 @@ func candidateByID(cs []StaleCandidate, id int64) (StaleCandidate, bool) {
 	return StaleCandidate{}, false
 }
 
-// TestStaleCandidateDocs is 025 §8.7's fact reader: one fixture per row of
+// TestStaleCandidateDocs is WL-SPEC-77 §9's fact reader: one fixture per row of
 // the truth table (accepted plan with/without a lease, accepted spec
 // with/without an accepted covering plan, a draft, a project with
 // doc_staleness_days set), asserted separately. The threshold verdict is
@@ -352,7 +352,7 @@ func TestStaleCandidateDocs(t *testing.T) {
 	}
 
 	// Claim the plan's task: execution now happened, so HasExecution flips
-	// even though the lease stays active (any lease row counts, §8.7).
+	// even though the lease stays active (any lease row counts, WL-SPEC-77 §9).
 	if _, err := s.Claim(ctx, minted[0].ID, "stig", "wt-stale-candidate", 0); err != nil {
 		t.Fatalf("claim: %v", err)
 	}
@@ -370,7 +370,7 @@ func TestStaleCandidateDocs(t *testing.T) {
 }
 
 // minimalPlanBody is an accepted-shaped plan with no covers and no mintable
-// task fence: the §8.7 sweep tests below only need a plan row past its
+// task fence: the WL-SPEC-77 §9 sweep tests below only need a plan row past its
 // staleness threshold with no leased task, and a plan's HasExecution check
 // (StaleCandidateDocs) looks at leases, not covers.
 const minimalPlanBody = `---
@@ -393,7 +393,7 @@ status: draft
 Nothing to cover. Revised.
 `
 
-// docStaleTestNow anchors the §8.7 sweep tests' injected clock.
+// docStaleTestNow anchors the WL-SPEC-77 §9 sweep tests' injected clock.
 var docStaleTestNow = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // openStaleSweepStore is openDocStore with a mutable clock, so a sweep test
@@ -408,10 +408,10 @@ func openStaleSweepStore(t *testing.T) (*Store, *time.Time) {
 	return s, &now
 }
 
-// TestSweepStaleDocsEmitsOnceThenSkipsUnchanged is 025 §8.7's idle path: an
+// TestSweepStaleDocsEmitsOnceThenSkipsUnchanged is WL-SPEC-77 §9's idle path: an
 // accepted plan with no execution crosses the (inclusive) instance-default
 // threshold and the sweep emits one doc.stale event with cause "clock". Its
-// status stays accepted — only the §8.6 amendment path flips a status, and
+// status stays accepted — only the WL-SPEC-77 §10 amendment path flips a status, and
 // only on plans. A second sweep at the same version emits nothing more.
 func TestSweepStaleDocsEmitsOnceThenSkipsUnchanged(t *testing.T) {
 	t.Parallel()
@@ -454,7 +454,7 @@ func TestSweepStaleDocsEmitsOnceThenSkipsUnchanged(t *testing.T) {
 	}
 }
 
-// TestSweepStaleDocsProjectOverrideFiresEarlier is 025 §8.7's per-project
+// TestSweepStaleDocsProjectOverrideFiresEarlier is WL-SPEC-77 §9's per-project
 // override: projects.doc_staleness_days shortens the threshold for
 // documents under that project, leaving the instance default in force for
 // every other project's documents.
@@ -493,7 +493,7 @@ func TestSweepStaleDocsProjectOverrideFiresEarlier(t *testing.T) {
 	}
 }
 
-// TestSweepStaleDocsRevisionRearms is 025 §8.7's version key: grooming a
+// TestSweepStaleDocsRevisionRearms is WL-SPEC-77 §9's version key: grooming a
 // document at one version leaves it re-armable. A later revision bumps the
 // plan's version and re-arms the clock from the revision's updated_at, not
 // the original.
@@ -539,7 +539,7 @@ func TestSweepStaleDocsRevisionRearms(t *testing.T) {
 	}
 }
 
-// TestSweepStaleDocsExecutedPlanNeverFires is 025 §8.7's execution guard: a
+// TestSweepStaleDocsExecutedPlanNeverFires is WL-SPEC-77 §9's execution guard: a
 // plan with a claimed task is never a candidate, no matter how long past the
 // threshold the clock moves.
 func TestSweepStaleDocsExecutedPlanNeverFires(t *testing.T) {
@@ -602,7 +602,7 @@ func withdrawDoc(t *testing.T, s *Store, id int64, justification string) (*model
 	return out, err
 }
 
-// TestWithdrawDocTransitions is 025 §8.7's close verb: accepted and stale go
+// TestWithdrawDocTransitions is WL-SPEC-77 §9's close verb: accepted and stale go
 // to withdrawn, and the three statuses that are not withdrawable are refused
 // with ErrBadTransition rather than silently accepted. The event is recorded
 // with its justification and the op is counted.
@@ -678,7 +678,7 @@ func TestWithdrawDocTransitions(t *testing.T) {
 	}
 }
 
-// TestUnresolvedDocsOlderThan is 025 §8.7's unresolved set: accepted specs
+// TestUnresolvedDocsOlderThan is WL-SPEC-77 §9's unresolved set: accepted specs
 // and plans nothing has executed, filtered by how long they have sat. The
 // --older-than boundary is inclusive, and an executed document is out however
 // old it is — the same "executed" predicate the staleness sweep applies.

@@ -16,7 +16,7 @@ import (
 )
 
 // TestKindCheckRejectsUnknownKinds pins the tasks_kind_check constraint: it is
-// exhaustive, so anything outside the six kinds of 025 §10 — including a
+// exhaustive, so anything outside the six kinds of WL-SPEC-77 §12 — including a
 // plausible-sounding container kind — fails at the database.
 func TestKindCheckRejectsUnknownKinds(t *testing.T) {
 	t.Parallel()
@@ -94,7 +94,7 @@ func TestAddEdgeFollowUpTo(t *testing.T) {
 
 // TestAddEdgeDuplicateOf checks the fourth edge type: it is accepted, and it
 // absorbs nothing — the canonical task gains no children and no roll-up, and
-// the duplicate gains no parent (004 §1.3, "No absorption").
+// the duplicate gains no parent (WL-SPEC-75 §4, "No absorption").
 func TestAddEdgeDuplicateOf(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -330,7 +330,7 @@ func migrationsThrough(t *testing.T, n int) string {
 }
 
 // containerInput is the shared fixture for a task that will take children.
-// Since 029 §2 there is no kind to declare — an ordinary task becomes a
+// Since WL-SPEC-75 §13.2 there is no kind to declare — an ordinary task becomes a
 // container by acquiring child_of edges — so this differs from
 // defaultTaskInput only in its title.
 func containerInput() TaskInput {
@@ -339,7 +339,7 @@ func containerInput() TaskInput {
 	return in
 }
 
-// TestAddEdgeAcceptsOrdinaryParent pins 029 §2's change to checkHierarchy:
+// TestAddEdgeAcceptsOrdinaryParent pins WL-SPEC-75 §13.2's change to checkHierarchy:
 // any ordinary task may be a parent, and the edge is what makes it one.
 func TestAddEdgeAcceptsOrdinaryParent(t *testing.T) {
 	t.Parallel()
@@ -563,7 +563,7 @@ func TestChildProgress(t *testing.T) {
 }
 
 // TestChildProgressPerRepoDoneState pins ChildProgress on the same per-repo
-// predicate the blocking queries use (taskClosed, spec 004 §1.3): a merged
+// predicate the blocking queries use (taskClosed, WL-SPEC-75 §4): a merged
 // child whose repo gates on released has not finished delivering, so it must
 // not be counted closed until it is released.
 func TestChildProgressPerRepoDoneState(t *testing.T) {
@@ -750,7 +750,7 @@ func TestParentNeverInReadySet(t *testing.T) {
 
 // TestClaimRejectsParent checks the direct-claim hole: ready -> in_progress is
 // a legal transition for a task with children (it is the roll-up trigger), so
-// Claim needs its own guard beyond the ready-set exclusion (004 §6.1).
+// Claim needs its own guard beyond the ready-set exclusion (WL-SPEC-75 §5).
 func TestClaimRejectsParent(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -776,7 +776,7 @@ func TestClaimAllowsChildlessTask(t *testing.T) {
 // a task with children can never enter a delivery state, and `lode task set
 // state merged`
 // (in_review -> merged) reports the roll-up rule rather than a from-state
-// mismatch. The guard keys off the children, not a kind (029 §2).
+// mismatch. The guard keys off the children, not a kind (WL-SPEC-75 §13.2).
 func TestContainerForbiddenStates(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -818,7 +818,7 @@ func TestChildlessTaskReachesDeliveryStates(t *testing.T) {
 
 // TestResolveDeliveryIgnoresParents checks that a task with children carrying
 // commit and deploy facts attributed to it is left alone: a container has no
-// commit of its own (004 §6.4).
+// commit of its own (WL-SPEC-75 §5.2).
 func TestResolveDeliveryIgnoresParents(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -877,7 +877,7 @@ func TestContainerTarget(t *testing.T) {
 		{"all closed via deploy", closedKids("deployed_dev", "released"), "merged"},
 		{"all abandoned", closedKids("abandoned", "abandoned"), "abandoned"},
 		{"all delivered", closedKids("merged", "deployed_prod"), "merged"},
-		// Per-repo closedness (004 §1.3): a landed child that has not reached
+		// Per-repo closedness (WL-SPEC-75 §4): a landed child that has not reached
 		// its repo's done_state holds the parent at in_progress rather than
 		// rolling it up — and must not read as un-started either, which would
 		// send the parent back to ready.
@@ -989,7 +989,7 @@ func TestRollUpForward(t *testing.T) {
 }
 
 // TestRollUpZeroChildren: a task with no children never moves. It is an
-// ordinary task and stays where it is (004 §6.5).
+// ordinary task and stays where it is (WL-SPEC-75 §5.3).
 func TestRollUpZeroChildren(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -1188,7 +1188,7 @@ func TestDecompose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	// 029 §2 / 004 §6.10: decompose does not touch the parent's kind — the
+	// WL-SPEC-75 §13.2 / WL-SPEC-75 §5.1: decompose does not touch the parent's kind — the
 	// child_of edges are what make it a container.
 	if got.Kind != "bug" {
 		t.Fatalf("parent kind = %s, want it untouched at bug", got.Kind)
@@ -1320,7 +1320,7 @@ func TestDecomposeRejectsTaskWithChildren(t *testing.T) {
 	}
 }
 
-// TestDecomposeRejectsDecisionParent pins 004 §6.3 as amended (WL-638): a
+// TestDecomposeRejectsDecisionParent pins WL-SPEC-75 §8 as amended (WL-638): a
 // decision closes by its recorded answer in one transaction, a parent closes
 // by roll-up, and the two cannot both hold.
 func TestDecomposeRejectsDecisionParent(t *testing.T) {
@@ -1352,7 +1352,7 @@ func TestAddEdgeRejectsDecisionParent(t *testing.T) {
 	}
 }
 
-// TestAddEdgeAcceptsDecisionChild pins the other half of 004 §6.3 as amended:
+// TestAddEdgeAcceptsDecisionChild pins the other half of WL-SPEC-75 §8 as amended:
 // a decision as a *child* stays legal, it is a leaf like any other. The
 // exclusion is on decision-as-parent, not on decision anywhere in a chain.
 func TestAddEdgeAcceptsDecisionChild(t *testing.T) {

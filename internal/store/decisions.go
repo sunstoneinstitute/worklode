@@ -17,7 +17,7 @@ import (
 // digits and hyphens.
 var decisionKeyRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 
-// decisionResponseTypes are the six response types §10.1 defines.
+// decisionResponseTypes are the six response types WL-SPEC-77 §12 defines.
 var decisionResponseTypes = []string{
 	"single_select",
 	"multi_select",
@@ -36,8 +36,8 @@ var decisionTypesWithOptions = []string{
 	"pick_or_freetext",
 }
 
-// ValidateDecisionSpec checks the shape of a decision as it is posed (025
-// §10.1): a routable key, a response_type the store recognizes with the
+// ValidateDecisionSpec checks the shape of a decision as it is posed (WL-SPEC-77
+// §12): a routable key, a response_type the store recognizes with the
 // options it needs and none it doesn't, and no answer yet. It does not
 // check that the key is unique within the task — the database's UNIQUE
 // constraint on (task, key) is the backstop for that.
@@ -110,7 +110,7 @@ func ValidateDecisionSpec(d model.Decision) error {
 }
 
 // validateAnswer checks a submitted answer against the decision's spec
-// (025 §10.1): the fields its response_type uses hold values that satisfy
+// (WL-SPEC-77 §12): the fields its response_type uses hold values that satisfy
 // its rule, and every field it doesn't use is empty. An answer that
 // smuggles an unused field is refused, so what is stored is exactly what
 // the type defines.
@@ -361,7 +361,7 @@ func InsertDecision(tx *sql.Tx, taskID string, d model.Decision) (*model.Decisio
 	return &out, nil
 }
 
-// AddDecision poses one question on an existing task (025 §10.1), recorded
+// AddDecision poses one question on an existing task (WL-SPEC-77 §12), recorded
 // as a "decision.posed" cli event. Any kind of task but a rally may carry
 // rows.
 //
@@ -399,7 +399,7 @@ func (s *Store) AddDecision(ctx context.Context, taskID, actorID string, in mode
 
 // EditDecision rewords, regroups or re-parents one unanswered question,
 // recorded as a "decision.edited" cli event. An answered row is immutable
-// (025 §10.1) and comes back as ErrBadTransition. A re-parent (in.Task set)
+// (WL-SPEC-77 §12) and comes back as ErrBadTransition. A re-parent (in.Task set)
 // moves the row to the end of the target task's order.
 //
 // Errors: ErrNotFound for an unknown task, row or actor; ErrInvalidInput if
@@ -458,7 +458,7 @@ func (s *Store) EditDecision(ctx context.Context, taskID, key, actorID string, i
 var answerableStates = map[string]bool{"ready": true, "in_progress": true, "in_review": true}
 
 // RecordDecision records actorID's answer to the question taskID poses under
-// key, as a "task.decided" cli event (025 §10.1). Recording is terminal: an
+// key, as a "task.decided" cli event (WL-SPEC-77 §12). Recording is terminal: an
 // already-answered row is never written over — deciding again is another row.
 // When the task's kind is "decision" and this was its last unanswered row,
 // the same transaction moves the task to merged. The last answer and the
@@ -466,7 +466,7 @@ var answerableStates = map[string]bool{"ready": true, "in_progress": true, "in_r
 //
 // Ownership mirrors StartTask: an unassigned task is assigned to actorID
 // (recorded via LogChange), and a task assigned to someone else is refused —
-// the assignee is the accountable decider (029 §6.1).
+// the assignee is the accountable decider (WL-SPEC-75 §13.5).
 //
 // Errors: ErrNotFound for an unknown task, actor or key; ErrBadTransition if
 // the task is past deciding or the row is already answered; ErrInvalidInput
@@ -670,7 +670,7 @@ func updateDecision(tx *sql.Tx, id int64, taskID string, d model.Decision, repos
 }
 
 // requireLiveTask refuses an unknown or soft-deleted task, the same
-// tombstone rule Claim uses (044 §4), and a rally (requireDecisionKind).
+// tombstone rule Claim uses (WL-SPEC-75 §12), and a rally (requireDecisionKind).
 func requireLiveTask(tx *sql.Tx, taskID string) error {
 	var kind string
 	err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&kind)

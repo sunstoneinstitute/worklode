@@ -421,7 +421,7 @@ func TestClaimNextKindFilterNoMatch(t *testing.T) {
 	}
 }
 
-// TestClaimNextKindFilterList pins 025 §8.8: Kind takes a comma-separated
+// TestClaimNextKindFilterList pins WL-SPEC-77 §10: Kind takes a comma-separated
 // list, so a high-tier loop asking for design,review claims the design task
 // and leaves the higher-ranked feature for the mechanical loop.
 func TestClaimNextKindFilterList(t *testing.T) {
@@ -554,7 +554,7 @@ func TestHumanOnlySkippedByRankButClaimableByID(t *testing.T) {
 	}
 }
 
-// TestDecisionNeverInReadySet pins 004 §6.3 as amended (WL-638): a decision
+// TestDecisionNeverInReadySet pins WL-SPEC-75 §8 as amended (WL-638): a decision
 // task has nothing to check out, so it never appears in the ready set even
 // when ready, unblocked and unleased. Unlike human_only, this is not an
 // escape hatch a direct claim can get past (see TestClaimRejectsDecision) —
@@ -576,7 +576,7 @@ func TestDecisionNeverInReadySet(t *testing.T) {
 	}
 }
 
-// TestClaimNextIgnoresFollowUpTo pins 004 §1.3: follow_up_to is provenance, not
+// TestClaimNextIgnoresFollowUpTo pins WL-SPEC-75 §4: follow_up_to is provenance, not
 // scheduling. A follow-up is claimable while its origin is wide open, which is
 // exactly what separates it from blocks.
 func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
@@ -610,7 +610,7 @@ func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
 	}
 }
 
-// TestClaimNextIgnoresDuplicateOf pins 004 §1.3: duplicate_of is provenance,
+// TestClaimNextIgnoresDuplicateOf pins WL-SPEC-75 §4: duplicate_of is provenance,
 // not scheduling. Marking a task a duplicate neither blocks nor closes it —
 // closing it is a separate, deliberate act.
 func TestClaimNextIgnoresDuplicateOf(t *testing.T) {
@@ -673,7 +673,7 @@ func TestClaimNextDryRun(t *testing.T) {
 	}
 }
 
-// --- plan-to-plan ordering (025 §9.3) ---------------------------------------
+// --- plan-to-plan ordering (WL-SPEC-77 §11) ---------------------------------------
 
 // planTaskBody renders a mintable one-task plan body carrying extra
 // frontmatter lines, so a test can state the ordering edge and nothing else.
@@ -693,7 +693,7 @@ Do it.
 }
 
 // mintReadyPlan creates a plan from body, accepts it, and returns the minted
-// ids in definition order. Minted tasks start ready (025 §9.2), so there is
+// ids in definition order. Minted tasks start ready (WL-SPEC-77 §11), so there is
 // no promotion step.
 func mintReadyPlan(t *testing.T, s *Store, slug, body string) []string {
 	t.Helper()
@@ -730,7 +730,7 @@ func inReadySet(t *testing.T, s *Store, taskID string) bool {
 // holds the blocked plan's whole task set out of the ready set and out of
 // Claim while any task of the blocking plan is open, and releases it when they
 // all close — no edge removal and no event, because the predicate is live
-// (025 §9.3).
+// (WL-SPEC-77 §11).
 func TestPlanBlockedReadySetReleasesWhenBlockerCloses(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -771,8 +771,8 @@ func TestPlanBlockedReadySetReleasesWhenBlockerCloses(t *testing.T) {
 	}
 }
 
-// TestPlanBlockedByDraftPlan: an unminted blocking set blocks. §7's literal
-// sentence would read the empty set as unblocked; §10's --needs-execution
+// TestPlanBlockedByDraftPlan: an unminted blocking set blocks. Read literally,
+// the empty set would be unblocked, but --needs-execution
 // calls an unminted set unfinished, so the edge holds until the blocking plan
 // is accepted and its tasks close.
 func TestPlanBlockedByDraftPlan(t *testing.T) {
@@ -826,7 +826,7 @@ func TestPlanBlockedIgnoresTasksWithoutPlan(t *testing.T) {
 	}
 }
 
-// WL-354: fan-out counts only open dependents (spec 007 §4's closed-task
+// WL-354: fan-out counts only open dependents (WL-SPEC-82's closed-task
 // rule). A closed intermediate still connects its open dependents to the
 // root, but finished work lends no weight.
 func TestBlockingFanOutCountsOnlyOpenTasks(t *testing.T) {

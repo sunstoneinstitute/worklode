@@ -112,7 +112,7 @@ func TestTaskIDFromRefCustomTemplate(t *testing.T) {
 	cases := map[string]string{
 		"lode/WL-7-fix-thing": "WL-7",
 		"WL-7-fix-thing":      "", // no longer matches without the configured prefix
-		"wl/WL-7-fix-thing":   "", // legacy prefix is not recognized (spec 008 §7)
+		"wl/WL-7-fix-thing":   "", // legacy prefix is not recognized
 		"main":                "",
 		"lode/wl-7-lower":     "",
 	}
@@ -821,7 +821,7 @@ func TestReviewsForPRs(t *testing.T) {
 	}
 }
 
-// TestSetPRQueuedRoundTrip covers WL-SPEC-66 §6.1: queued_at is scanned back
+// TestSetPRQueuedRoundTrip covers WL-SPEC-85 §7: queued_at is scanned back
 // through GetPR after being set, and clears back to nil.
 func TestSetPRQueuedRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -881,7 +881,7 @@ func TestSetPRQueuedRoundTrip(t *testing.T) {
 	}
 }
 
-// TestBranchRulesRoundTrip covers WL-SPEC-66 §6.3 and WL-SPEC-72 §3: an
+// TestBranchRulesRoundTrip covers WL-SPEC-85 §7 and WL-SPEC-72 §3: an
 // unknown repo is ErrNotFound, and UpsertBranchRules's second write
 // overwrites the first rather than erroring on the (repo, branch) key.
 func TestBranchRulesRoundTrip(t *testing.T) {

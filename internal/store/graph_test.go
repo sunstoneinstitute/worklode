@@ -17,7 +17,7 @@ func TestProjectGraph(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 67, Slug: "067-orphan",
 		Body: "---\nstatus: draft\n---\n\n# Orphan\n\n## 0. A {#sec-0}\n\nA.\n", CreatedBy: "stig",
 	})
-	// A spec reachable only through a doc edge: it requires spec 066's sec-0,
+	// A spec reachable only through a doc edge: it requires WL-SPEC-85's sec-0,
 	// and nothing else points at it.
 	adr := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 1, Slug: "001-adr",

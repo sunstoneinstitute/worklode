@@ -31,16 +31,16 @@ var (
 	// ErrInvalidInput means a field value failed validation.
 	ErrInvalidInput = errors.New("invalid input")
 	// ErrAmbiguousSkill means a bare skill name matched more than one
-	// plugin-qualified skill; the caller must qualify it (037 §4.2).
+	// plugin-qualified skill; the caller must qualify it (WL-SPEC-81 §7.4).
 	ErrAmbiguousSkill = errors.New("ambiguous skill name")
 	// ErrDocExists means the project already holds a document with that slug
 	// or that (kind, number).
 	ErrDocExists = errors.New("document already exists")
 	// ErrDecisionExists means the task already poses a question under that
-	// key; (task, key) is how a decision row is addressed (025 §10.1).
+	// key; (task, key) is how a decision row is addressed (WL-SPEC-77 §12).
 	ErrDecisionExists = errors.New("decision key already used on this task")
 	// ErrForbidden means the actor may not perform this operation on this
-	// entity — a document accept is the owner's act (025 §7).
+	// entity — a document accept is the owner's act (WL-SPEC-77 §9).
 	ErrForbidden = errors.New("forbidden")
 	// ErrVersionMismatch means the caller named the document version it
 	// expected to overwrite and the stored version has moved past it. The
@@ -48,26 +48,26 @@ var (
 	// racing on one body get a refusal instead of a silent clobber.
 	ErrVersionMismatch = errors.New("document version moved")
 	// ErrRevisionExists means the document already has an open candidate
-	// revision; 025 §7.2 allows one at a time.
+	// revision; WL-SPEC-77 §9 allows one at a time.
 	ErrRevisionExists = errors.New("revision already open")
 	// ErrApprovalResolved means the approval is no longer open: it has already
 	// been approved, rejected, or (for a decision that would resolve it)
 	// closed. A second decision on the same row is a conflict, not a retry.
 	ErrApprovalResolved = errors.New("approval is already resolved")
 	// ErrNotQualified means the decider does not hold the group the approval's
-	// required_role names (029 §7.1).
+	// required_role names (WL-SPEC-75 §13.6).
 	ErrNotQualified = errors.New("not qualified to decide this approval")
 	// ErrNotPriorApprover means the decider never approved the entity an
-	// impact review asks about. 029 §7.1 puts that question to "a qualified
+	// impact review asks about. WL-SPEC-75 §13.6 puts that question to "a qualified
 	// prior approver": only someone whose own approval is at stake may say
 	// whether it still holds.
 	ErrNotPriorApprover = errors.New("only a prior approver may decide an impact review")
 	// ErrSelfApproval means the decider authored the change under review.
-	// 029 §7.1 refuses this by default; the policy-permitted exception is not
+	// WL-SPEC-75 §13.6 refuses this by default; the policy-permitted exception is not
 	// implemented.
 	ErrSelfApproval = errors.New("cannot decide your own change")
 	// ErrNoRevision means the approval names no subject_revision, so nothing
-	// has been designated for review. 029 §7.1 binds a decision to "the
+	// has been designated for review. WL-SPEC-75 §13.6 binds a decision to "the
 	// immutable revision the actor actually saw"; with no revision there is
 	// nothing to bind, so the row is a visible gap rather than a decidable
 	// item.
@@ -76,14 +76,14 @@ var (
 	// Only the insert direction of task_blobs_hash_fkey maps to this: the
 	// delete direction is a GC bug, and must stay a 500.
 	ErrUnknownBlob = errors.New("body references an unknown blob")
-	// ErrMissingApprovals means AcceptDoc's mechanical reviewer gate (025
-	// §7.3) is not satisfied: at least one reviewer in the document's stored
+	// ErrMissingApprovals means AcceptDoc's mechanical reviewer gate (WL-SPEC-77
+	// §9) is not satisfied: at least one reviewer in the document's stored
 	// set has not approved its current version. It wraps ErrForbidden — the
 	// actor is not the one blocked, the document's review state is — so a
 	// caller mapping errors to HTTP status needs no new case for it.
 	ErrMissingApprovals = errors.New("document reviewer approval missing")
 	// ErrReferenceExists means the exact entity_edges row (from, to, rel)
-	// already exists (029 §5).
+	// already exists (WL-SPEC-75 §13.4).
 	ErrReferenceExists = errors.New("reference already exists")
 	// ErrActorExists means actors_pkey rejected the id: the caller picks it,
 	// so a collision is a caller mistake.

@@ -10,7 +10,7 @@ import (
 )
 
 // TestBlobsSchema asserts migration 0032 created both tables with the
-// constraints spec 021 §1 relies on: the CHECK that a task_blobs row must be
+// constraints WL-SPEC-78 §8.1 relies on: the CHECK that a task_blobs row must be
 // referenced somehow, and RESTRICT on the blobs foreign key.
 func TestBlobsSchema(t *testing.T) {
 	t.Parallel()
@@ -313,7 +313,7 @@ func TestAttachBlobKeepsFilename(t *testing.T) {
 // TestUnreferencedBlobs asserts the GC listing/delete pair: a blob with no
 // task_blobs row and past the grace period is collected, a fresh unreferenced
 // blob is held back (the upload path writes the object before the row, per
-// spec 021 §5), and a referenced blob is never listed or deletable.
+// WL-SPEC-78 §8.5), and a referenced blob is never listed or deletable.
 func TestUnreferencedBlobs(t *testing.T) {
 	t.Parallel()
 	s := OpenTestStore(t)

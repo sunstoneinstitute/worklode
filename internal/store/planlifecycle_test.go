@@ -107,7 +107,7 @@ func TestWithdrawnRuleMakesPlansStale(t *testing.T) {
 		t.Fatalf("plan arranging a withdrawn rule should be stale, got %s %v", d.Status, err)
 	}
 	// The doc.stale event this path records carries a distinct cause from
-	// the 025 §8.6 amend path (TestPatchMarksUnexecutedPlansStale pins
+	// the WL-SPEC-77 §10 amend path (TestPatchMarksUnexecutedPlansStale pins
 	// "amended" there) and names the withdrawn rule, not a spec slug.
 	evs := staleEvents(t, s, StaleExternalID(d.Slug, d.Version))
 	if len(evs) != 1 {
@@ -152,7 +152,7 @@ func TestListDocsHidesTerminalPlans(t *testing.T) {
 
 	// The terminal-plan hide is a default-listing rule, not a Deleted one: a
 	// tombstoned plan that was withdrawn before deletion must still show up
-	// under --deleted (044 §5's listing has no terminal-status concept of
+	// under --deleted (WL-SPEC-75 §12's listing has no terminal-status concept of
 	// its own to apply).
 	if err := deleteDoc(t, s, plan.ID, "stig", "cleanup"); err != nil {
 		t.Fatal(err)
@@ -222,7 +222,7 @@ func TestPlanNeverSpentWithNoLiveTasks(t *testing.T) {
 
 // TestSpentPlanStillCounts: a spent plan is a finished accepted plan. Its
 // spec's covered section stays planned, the spec stays executed, and the
-// §8.7 sweeper does not pick the plan up (final review C2, increment 3).
+// WL-SPEC-77 §9 sweeper does not pick the plan up (final review C2, increment 3).
 func TestSpentPlanStillCounts(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})

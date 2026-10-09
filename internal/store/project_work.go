@@ -47,7 +47,7 @@ type ProjectWorkFact struct {
 	Parent       *TaskRef
 	OpenBlockers []TaskRef
 	// BlockingPlans are the unfinished plan documents ordered before this
-	// task's plan (025 §9.3). A blocking plan still draft has minted no task,
+	// task's plan (WL-SPEC-77 §11). A blocking plan still draft has minted no task,
 	// so it appears here with nothing in OpenBlockers.
 	BlockingPlans []model.DocRef
 	Lease         *Lease
@@ -66,7 +66,7 @@ func (f ProjectWorkFact) Blocked() bool {
 // projectID, ordered the same way ListTasks orders its results (priority
 // rank, then the id's project-key prefix, then its numeric suffix).
 // projectID == "" returns every task across every project. Tombstoned tasks
-// are out, and a tombstoned parent is not named (044 §4).
+// are out, and a tombstoned parent is not named (WL-SPEC-75 §12).
 //
 // Parent, Lease, and StateEvent come from a single joined query (a task has
 // at most one child_of parent — task_edges_single_parent — at most one
@@ -151,7 +151,7 @@ SELECT `+taskColumnsT+`,
 // attachOpenBlockers fills in OpenBlockers on every fact in facts (keyed by
 // task id) with the open tasks holding a dependent in scope for projectID (""
 // meaning every project): the from_task of a 'blocks' edge, and the open tasks
-// of any plan ordered before the dependent's plan (025 §9.3). "Open" uses the
+// of any plan ordered before the dependent's plan (WL-SPEC-77 §11). "Open" uses the
 // same predicate as blockedCondition and planBlockedCondition: the blocker is
 // live and has not reached its repo's done_state (taskClosed). The blocker
 // itself need not be in the same project as its dependent — 'blocks' edges,

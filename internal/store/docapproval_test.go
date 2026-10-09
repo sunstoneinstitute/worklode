@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// AcceptDoc's approval gate (025 §7.3, 029 §7.3) and the pre-flight that has
+// AcceptDoc's approval gate (WL-SPEC-77 §9, WL-SPEC-75 §13.6) and the pre-flight that has
 // to answer the same — checkDocReviewerGate and checkDocReviewerGateCtx, in
 // both their halves.
 
@@ -33,7 +33,7 @@ func approveDocReviewerLane(t *testing.T, s *Store, docID int64, reviewer string
 }
 
 // TestAcceptDocReviewerGate is AcceptDoc's mechanical multi-approval gate
-// (025 §7.3): a spec/ADR with an assigned reviewer set cannot be accepted
+// (WL-SPEC-77 §9): a spec/ADR with an assigned reviewer set cannot be accepted
 // until every reviewer has approved the current version, and a document with
 // no reviewers assigned accepts exactly as it did before this gate existed.
 func TestAcceptDocReviewerGate(t *testing.T) {
@@ -103,7 +103,7 @@ func TestAcceptDocReviewerGate(t *testing.T) {
 
 // openDocApproval opens one unlaned awaiting row on a document revision —
 // what the doc-lifecycle watcher's approval-on-submit rule materializes on
-// submission (029 §7.3). It names no reviewer, so the reviewer-set gate never
+// submission (WL-SPEC-75 §13.6). It names no reviewer, so the reviewer-set gate never
 // sees it.
 func openDocApproval(t *testing.T, s *Store, docID int64, version int) int64 {
 	t.Helper()
@@ -136,8 +136,8 @@ func approveApproval(t *testing.T, s *Store, id int64) {
 	}
 }
 
-// TestAcceptDocOpenApprovalGate is the second half of AcceptDoc's gate (029
-// §7.3): the unlaned row a submission materializes names no reviewer, so the
+// TestAcceptDocOpenApprovalGate is the second half of AcceptDoc's gate (WL-SPEC-75
+// §13.6): the unlaned row a submission materializes names no reviewer, so the
 // reviewer-set gate above cannot see it, and accepting past an open decision
 // would make the row a lie. An open row at the version being accepted refuses;
 // approving it lets the accept through; an open row at an older version never
@@ -185,7 +185,7 @@ func TestAcceptDocOpenApprovalGate(t *testing.T) {
 }
 
 // TestCheckDocAcceptableReviewerGate: the pre-flight CheckDocAcceptable runs
-// (025 §7.3) must answer the same as AcceptDoc, so a caller that checks
+// (WL-SPEC-77 §9) must answer the same as AcceptDoc, so a caller that checks
 // first never sees "acceptable" for a document AcceptDoc would then refuse.
 func TestCheckDocAcceptableReviewerGate(t *testing.T) {
 	t.Parallel()

@@ -1,4 +1,4 @@
-// artifactevidence.go holds the two halves of spec 029 §3.1/§3.2's "verified
+// artifactevidence.go holds the two halves of WL-SPEC-75 §13.3's "verified
 // by address": the declarations that say which entity owns an artifact
 // address, and the evidence emitters report against it. Routing is a lookup,
 // not a static map — a delivery names an artifact, and the fact lands against
@@ -24,7 +24,7 @@ const maxArtifactURI = 2000
 
 // DeclareArtifact records that (entityKind, entityID) is verified by the
 // given selector: an artifact address, or a worklode.deliverable label
-// string (029 §3.1). Re-declaring is a no-op, so a create path that runs
+// string (WL-SPEC-75 §13.3). Re-declaring is a no-op, so a create path that runs
 // twice does not duplicate the routing target.
 func DeclareArtifact(tx *sql.Tx, now time.Time, entityKind, entityID, selector, key string) error {
 	_, err := tx.Exec(
@@ -51,7 +51,7 @@ type DeclaredEntity struct {
 // each arm ahead of that arm's own openness predicate, so the two queries
 // share the one definition of "open" per kind and cannot drift apart:
 //
-//   - deliverable: always open. It stores no state at all (029 §3.2), and
+//   - deliverable: always open. It stores no state at all (WL-SPEC-75 §13.3), and
 //     supplying the state it lacks is what this path is for.
 //   - task: live, and not past its repo's done_state — taskClosed's notion,
 //     shared with the ready set, so evidence and blocking cannot drift on
@@ -133,7 +133,7 @@ func InsertArtifactEvidence(tx *sql.Tx, eventID int64, ev model.ArtifactEvidence
 }
 
 // ProbeTargets returns the distinct artifact addresses ('address' selector)
-// declared by an entity that is still open (029 §3.2). Label declarations
+// declared by an entity that is still open (WL-SPEC-75 §13.3). Label declarations
 // are never probe targets: their addresses are minted at build time and
 // reach worklode by push, not poll. Reuses openDeclarationsQuery so probing
 // and routing cannot drift on what "open" means.

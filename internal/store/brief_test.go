@@ -179,7 +179,7 @@ func TestResolvePinsDedupes(t *testing.T) {
 	}
 }
 
-// TestResolvePinsAfterColonFallback covers 025 §9.1's skill-identifier rule:
+// TestResolvePinsAfterColonFallback covers WL-SPEC-77 §11's skill-identifier rule:
 // a plugin-qualified pin against an unqualified registry name falls back to
 // the segment after the colon.
 func TestResolvePinsAfterColonFallback(t *testing.T) {
@@ -469,7 +469,7 @@ func TestBriefParent(t *testing.T) {
 }
 
 // TestBriefPlanBlockers: the brief names the open tasks of a plan ordered
-// before this task's plan (025 §9.3), so an agent handed a refused task can
+// before this task's plan (WL-SPEC-77 §11), so an agent handed a refused task can
 // see what is holding it.
 func TestBriefPlanBlockers(t *testing.T) {
 	t.Parallel()

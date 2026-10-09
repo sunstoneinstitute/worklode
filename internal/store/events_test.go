@@ -288,7 +288,7 @@ func TestGetEvent(t *testing.T) {
 	}
 }
 
-// The 025 §15 ordering trap, directly. A last_seen_id cursor sees B (id 2),
+// The WL-SPEC-77 §15 ordering trap, directly. A last_seen_id cursor sees B (id 2),
 // advances, and never delivers A (id 1). The horizon delivers neither
 // until A's transaction is finished, then both, in id order.
 func TestReadEventBatchHonoursCommitHorizon(t *testing.T) {
@@ -667,7 +667,7 @@ func TestResetEventReadRedeliversUnacked(t *testing.T) {
 }
 
 // EventSubscriberLags reports, per subscriber, how far the horizon tail runs
-// ahead of what that subscriber has acked (025 §15.7). The horizon term is
+// ahead of what that subscriber has acked (WL-SPEC-77 §15). The horizon term is
 // shared, so an unconsumed subscriber lags by the whole log while a caught-up
 // one lags by nothing.
 func TestEventSubscriberLags(t *testing.T) {
@@ -794,7 +794,7 @@ func pollListEvents(t *testing.T, ctx context.Context, s *Store, f EventFilter, 
 	}
 }
 
-// TestListEventsHonoursCommitHorizon is the 025 §15 ordering trap again, this
+// TestListEventsHonoursCommitHorizon is the WL-SPEC-77 §15 ordering trap again, this
 // time against ListEvents directly rather than through a subscriber's
 // last_read_offset: an in-flight transaction's row must not appear even
 // though a later-committed row already has.

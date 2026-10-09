@@ -19,26 +19,26 @@ import (
 
 // docEntityKind is the state_log entity_kind every document mutation is
 // recorded under; the entity id is the doc id in decimal. Documents ride the
-// same event-logged transaction machinery as tasks (025 §5), so a mutation
+// same event-logged transaction machinery as tasks (WL-SPEC-77 §3), so a mutation
 // with no state_log row would be the one entity the timeline cannot render.
 const docEntityKind = "doc"
 
 // docDateLayout is the lexical form of docs.issued on the wire.
 const docDateLayout = "2006-01-02"
 
-// docDepthLimit is the 025 §6.1 anchor addressability limit every accept-time
+// docDepthLimit is the WL-SPEC-77 §4 anchor addressability limit every accept-time
 // gate reads. designdoc.DepthLimit is its default; an operator overrides it
 // with LODE_DOC_DEPTH_LIMIT.
 var docDepthLimit = designdoc.DepthLimit
 
-// SetDocDepthLimit sets the 025 §6.1 anchor depth limit. Boot-time only: call
+// SetDocDepthLimit sets the WL-SPEC-77 §4 anchor depth limit. Boot-time only: call
 // it once before serving. It is a plain package variable with no
 // synchronization, so mutating it while requests are in flight is a data race.
 func SetDocDepthLimit(n int) { docDepthLimit = n }
 
 // validDocKinds and validDocStatuses mirror the docs CHECK constraints, so a
 // bad input is ErrInvalidInput rather than a Postgres error the caller has to
-// decode. The status set is generated from wlc:DesignDocStatus (025 §17); the
+// decode. The status set is generated from wlc:DesignDocStatus (WL-SPEC-77 §14); the
 // kinds mirror the wl:Spec/wl:Plan classes, which are not a SKOS scheme.
 var (
 	validDocKinds    = map[string]bool{"spec": true, "plan": true}
@@ -47,7 +47,7 @@ var (
 
 // DocInput carries the fields for creating a document. Number 0 means
 // auto-assign the next free one for (project, kind); an explicit value stays
-// legal but is the rare override (029 §4). Owner defaults to CreatedBy —
+// legal but is the rare override (WL-SPEC-75 §13.4). Owner defaults to CreatedBy —
 // the accept gate is owner-only, so a document with none could never be
 // accepted.
 type DocInput struct {
@@ -58,7 +58,7 @@ type DocInput struct {
 	Body      string
 	Owner     string
 	CreatedBy string
-	// GeneratedByTask is the task that authored the document (025 §12). Empty
+	// GeneratedByTask is the task that authored the document (WL-SPEC-77 §13). Empty
 	// for every caller bound to no task — a cockpit author, an agent outside a
 	// worktree, `lode doc import` — which is a normal state, not a refusal.
 	GeneratedByTask string
@@ -72,14 +72,14 @@ type DocFilter struct {
 	Project string
 	Kind    string
 	Status  string
-	// Owner narrows to documents with this exact owner (025 §7.3), served by
+	// Owner narrows to documents with this exact owner (WL-SPEC-77 §9), served by
 	// the docs_owner partial index (migration 0058).
 	Owner string
 	// Deleted switches the list from live documents to tombstoned ones
-	// (044 §5). See TaskFilter.Deleted for why it is a switch.
+	// (WL-SPEC-75 §12). See TaskFilter.Deleted for why it is a switch.
 	Deleted bool
 	// HasNotes narrows to documents carrying at least one anchored note
-	// (025 §8.5) — "what has someone remarked on", answered by one EXISTS
+	// (WL-SPEC-77 §10) — "what has someone remarked on", answered by one EXISTS
 	// rather than by listing the corpus and asking per document.
 	HasNotes bool
 	// HideTerminal hides documents in a terminal status: withdrawn or
@@ -110,7 +110,7 @@ func logDocChange(tx *sql.Tx, docID, eventID int64, change map[string]string) er
 // header states and stores the body without it (WL-SPEC-77 §7).
 //
 // Status is the corpus importer's affordance. Creating a spec or ADR straight
-// at accepted must therefore establish what AcceptDoc would have: the 025 §6.1
+// at accepted must therefore establish what AcceptDoc would have: the WL-SPEC-77 §4
 // depth gate runs here too and the sections land published. It supersedes
 // nothing: a new document's rules are new, so no rule edge leaves them yet.
 func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Doc, error) {
@@ -124,7 +124,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, fmt.Errorf("a %s needs a non-negative corpus number, got %d: %w", in.Kind, in.Number, ErrInvalidInput)
 	}
 	// Every kind draws its number from its project's (project_id, kind) row in
-	// project_entity_seq — the same counter deliverables and, as of 029 §4's
+	// project_entity_seq — the same counter deliverables and, as of WL-SPEC-75 §13.4's
 	// plan-numbers cutover, plans already use. An explicit in.Number
 	// stays legal — the rare case of reserving one, or a corpus import
 	// preserving the number already in a spec/ADR's filename — checked for
@@ -169,7 +169,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	parsed.doc.Frontmatter = nil
 	body := strings.TrimLeft(string(parsed.doc.Bytes()), "\n")
 	// Created accepted: run AcceptDoc's first-accept gate. Plans skip it: they
-	// carry no sections and no anchors (025 §9).
+	// carry no sections and no anchors (WL-SPEC-77 §11).
 	acceptedAtCreate := status == "accepted" && in.Kind != "plan"
 	if acceptedAtCreate {
 		if v := designdoc.DepthViolations(parsed.doc, docDepthLimit); len(v) > 0 {
@@ -200,7 +200,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		nullText(in.GeneratedByTask), ts,
 	).Scan(&id)
 	if err != nil {
-		// The two unique indexes are the identity rules of 025 §5, so a
+		// The two unique indexes are the identity rules of WL-SPEC-77 §3, so a
 		// caller sees one sentinel rather than having to decode pgconn.
 		if isUniqueViolationOn(err, "docs_project_slug") {
 			return nil, fmt.Errorf("project %s already has a doc slugged %s: %w",
@@ -255,8 +255,8 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 // with SetDocColumns and LinkDocEdge (WL-SPEC-77 §7).
 //
 // An accepted spec or ADR is ErrInvalidInput: those are revised, never edited
-// in place, so their published anchors pass the 025 §6 diff gate. Plans stay
-// freely mutable at any status (025 §9).
+// in place, so their published anchors pass the WL-SPEC-77 §6 diff gate. Plans stay
+// freely mutable at any status (WL-SPEC-77 §11).
 //
 // ifVersion is the caller's compare-and-swap; see checkDocVersion. Zero skips
 // the check, which is what every caller did before the option existed.
@@ -294,7 +294,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 	// draft stays readable through `lode doc versions`, and --if-version can
 	// tell a second writer apart. A plan needs the bump for re-acceptance
 	// too: the acceptance event's external id is derived from the document's
-	// IRI and version (§15.3), so a re-accept at an unchanged version
+	// IRI and version (WL-SPEC-77 §15), so a re-accept at an unchanged version
 	// collapses at the log.
 	if version, err = bumpDocVersion(tx, id); err != nil {
 		return nil, err
@@ -366,7 +366,7 @@ func SetDocColumns(tx *sql.Tx, now time.Time, id int64, in model.DocColumnsInput
 	return getDocTx(tx, id)
 }
 
-// AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
+// AcceptDoc is the manual commit of WL-SPEC-77 §9: draft -> accepted, gated on the
 // owner. For a spec or ADR it freezes the document's published anchor set
 // and supersedes every document whose rules this one's rules supersede
 // (supersedeRetiredDocs), in the same transaction. For a plan it mints the plan's execution tasks
@@ -374,10 +374,10 @@ func SetDocColumns(tx *sql.Tx, now time.Time, id int64, in model.DocColumnsInput
 // definition order, and nil for a spec or ADR.
 //
 // A plan is also accepted from accepted: re-acceptance is how a declaration
-// added to an accepted plan reaches the task set (§9.2), and it mints only
+// added to an accepted plan reaches the task set (WL-SPEC-77 §11), and it mints only
 // what has no row yet.
 //
-// The depth limit is evaluated at publication (025 §6 rule 6), so a first
+// The depth limit is evaluated at publication (WL-SPEC-77 §6 rule 6), so a first
 // accept still rejects an anchored heading below the configured depth limit even
 // though rules 1-3 exempt drafts.
 func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
@@ -393,9 +393,9 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	}
 	if d.kind == "plan" {
 		// A plan is accepted from draft and re-accepted while accepted
-		// (025 §9.2): it stays freely mutable, and re-acceptance is how a
+		// (WL-SPEC-77 §11): it stays freely mutable, and re-acceptance is how a
 		// declaration added after the first accept reaches the task set.
-		// Stale is accepted from too: §8.6's mark is "cleared by
+		// Stale is accepted from too: WL-SPEC-77 §10's mark is "cleared by
 		// re-acceptance", which is what re-planning the amended text ends in.
 		// Superseded is still refused — there is nothing left to execute.
 		// Only a plan can be stale, so no other kind reaches this branch.
@@ -406,7 +406,7 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		}
 		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
 	}
-	// Draft-only for a spec or ADR: an accepted one is revised (§7.2), never
+	// Draft-only for a spec or ADR: an accepted one is revised (WL-SPEC-77 §9), never
 	// re-accepted.
 	if d.status != "draft" {
 		return nil, nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
@@ -492,7 +492,7 @@ func checkDocVersion(id int64, expected, stored int) error {
 		id, stored, expected, ErrVersionMismatch)
 }
 
-// checkDocOwner enforces 025 §7's accept gate: acceptance is the owner's
+// checkDocOwner enforces WL-SPEC-77 §9's accept gate: acceptance is the owner's
 // deliberate act. A document with no owner can be accepted by nobody, which
 // is why CreateDoc defaults it to the creator.
 func checkDocOwner(id int64, owner, actorID string) error {
@@ -511,10 +511,10 @@ func checkDocOwner(id int64, owner, actorID string) error {
 //
 // The first return says the accept has already happened and mints nothing
 // more: an accepted plan re-accepted at a version it was accepted at. That is
-// a legal no-op rather than a refusal (025 §9.2), and the caller answers with
+// a legal no-op rather than a refusal (WL-SPEC-77 §11), and the caller answers with
 // the document unchanged.
 //
-// It exists for one caller. The typed accept emission (025 §15.3) derives its
+// It exists for one caller. The typed accept emission (WL-SPEC-77 §15) derives its
 // external id from the document's IRI and version, so a second accept of the
 // same version conflicts at the log and eventbus.Emit skips apply — which
 // means AcceptDoc's gates never run and the handler has no store answer to
@@ -545,7 +545,7 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 		return true, nil
 	}
 	// A stale plan re-accepted at a version already accepted: the event
-	// collapsed, so AcceptDoc never ran and the §8.6 mark is still there.
+	// collapsed, so AcceptDoc never ran and the WL-SPEC-77 §10 mark is still there.
 	// Saying "not draft" would send the caller looking for the wrong problem.
 	if kind == "plan" && status == "stale" {
 		return false, fmt.Errorf(
@@ -563,7 +563,7 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 	return false, nil
 }
 
-// checkDocOwnerOrAdmin is checkDocOwner plus the admin bypass 025 §7.3 gives
+// checkDocOwnerOrAdmin is checkDocOwner plus the admin bypass WL-SPEC-77 §9 gives
 // ownership transfer: the current owner may always transfer, and so may an
 // actor whose actors.admin column is set, whether or not they own the
 // document. No caller plumbs an isAdmin flag into internal/store today, so
@@ -590,7 +590,7 @@ func checkDocOwnerOrAdmin(tx *sql.Tx, id int64, owner, actorID string) error {
 	return nil
 }
 
-// TransferDocOwner reassigns a document's owner (025 §7.3), so a document
+// TransferDocOwner reassigns a document's owner (WL-SPEC-77 §9), so a document
 // whose owner has left the org is not stuck forever unacceptable. The current
 // owner or an admin may transfer; anyone else is ErrForbidden. Transferring
 // to the actor that already owns it is a legal no-op that still answers
@@ -638,7 +638,7 @@ func TransferDocOwner(tx *sql.Tx, now time.Time, id int64, newOwner, actorID str
 // A draft target moves too: a superseded draft is reachable by no verb, which
 // is how a refactor retires specs that were never accepted. A tombstoned
 // target does not move: it is found for the caller, not named by them, and
-// flipping it would mutate and log against a row nothing can see (044 §4).
+// flipping it would mutate and log against a row nothing can see (WL-SPEC-75 §12).
 func supersedeRetiredDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error {
 	rows, err := tx.Query(
 		`UPDATE docs x SET status = 'superseded', updated_at = $2
@@ -719,7 +719,7 @@ func parseDocSource(kind, body string) (parsedDoc, error) {
 			return parsedDoc{}, fmt.Errorf("frontmatter issued %q is not YYYY-MM-DD: %w", issued, ErrInvalidInput)
 		}
 	}
-	// Plans carry no anchors (025 §9), so the lint applies to specs and ADRs
+	// Plans carry no anchors (WL-SPEC-77 §11), so the lint applies to specs and ADRs
 	// only. designdoc.LintAnchors is the one implementation; `lode doc
 	// anchors` reports its findings as a pre-accept lint, and here any finding
 	// refuses the write.
@@ -752,7 +752,7 @@ func parseWrittenDocSource(kind, body string) (parsedDoc, error) {
 type priorSection struct {
 	lastRevisedIn int
 	published     bool
-	// patched is 025 §8.4's mark: this section was amended in place since the
+	// patched is WL-SPEC-77 §10's mark: this section was amended in place since the
 	// document was last approved as a whole. Carried forward like the other
 	// two, so a later patch of another section does not clear it.
 	patched bool
@@ -778,7 +778,7 @@ func rebuildSections(tx *sql.Tx, docID int64, kind string, doc *designdoc.Docume
 // source, preserving last_revised_in and published for every anchor in prior
 // that survives: those are accept-time facts about the section, not facts
 // about the current text. A new anchor starts unpublished at the document's
-// current version. Plans have no sections (025 §9), so nothing is written for
+// current version. Plans have no sections (WL-SPEC-77 §11), so nothing is written for
 // one. The returned map is the state the rebuilt rows carry, so a caller
 // needing to compare before against after does not have to read them back.
 //
@@ -947,7 +947,7 @@ func (s *Store) GetDoc(ctx context.Context, id int64) (*model.Doc, error) {
 // ListDocs returns the matching documents in corpus order: kind, then number
 // (plans, which have none, last within their kind), then slug.
 func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) {
-	// 044 §4: a tombstoned document is out of every list by default.
+	// WL-SPEC-75 §12: a tombstoned document is out of every list by default.
 	where := "deleted_at IS NULL"
 	if f.Deleted {
 		where = "deleted_at IS NOT NULL"
@@ -995,7 +995,7 @@ func scanDocVersionSummary(row rowScanner) (model.DocVersionSummary, error) {
 
 // ListDocVersions returns every version of a document, newest first: its
 // current row (docs) and every version it has superseded (doc_versions),
-// (025 §4.5).
+// (WL-SPEC-77 §3).
 func (s *Store) ListDocVersions(ctx context.Context, id int64) (out []model.DocVersionSummary, err error) {
 	defer func() { s.metrics.docOp("list-versions", err) }()
 
@@ -1012,7 +1012,7 @@ func (s *Store) ListDocVersions(ctx context.Context, id int64) (out []model.DocV
 }
 
 // GetDocVersion returns one version of a document, current or superseded
-// (025 §4.5): the live docs row when version equals its current version,
+// (WL-SPEC-77 §3): the live docs row when version equals its current version,
 // otherwise the matching doc_versions row. ErrNotFound if neither exists.
 func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out model.DocVersion, err error) {
 	defer func() { s.metrics.docOp("get-version", err) }()
@@ -1066,7 +1066,7 @@ func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out m
 	return out, nil
 }
 
-// BareSupersededRules returns the withdrawn rules no rule supersedes: 025 §6
+// BareSupersededRules returns the withdrawn rules no rule supersedes: WL-SPEC-77 §6
 // rule 2's bare superseded section, read as a derived query (WL-SPEC-77 §6).
 // Each rule is reported once, with the first live document arranging it; a
 // rule no live document arranges reports an empty Doc. project and kind (the
@@ -1120,7 +1120,7 @@ func (a appendScan) Scan(dest ...any) error {
 }
 
 // ListDocSections returns a document's sections in document order. A plan
-// carries none (025 §9), which is an empty result rather than an error.
+// carries none (WL-SPEC-77 §11), which is an empty result rather than an error.
 func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSection, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT s.anchor, coalesce(s.number,''), s.heading, s.depth, s.position, s.last_revised_in,
@@ -1148,7 +1148,7 @@ func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSe
 //
 // The write functions themselves take a *sql.Tx rather than owning one, so a
 // single transaction can host a document mutation and its consequences —
-// plan acceptance mints tasks in the same commit (025 §9.2). This wrapper is
+// plan acceptance mints tasks in the same commit (WL-SPEC-77 §11). This wrapper is
 // where the metric lives because it is the one place every such mutation
 // passes through.
 func (s *Store) RecordDocEvent(
@@ -1165,7 +1165,7 @@ func (s *Store) RecordDocEvent(
 // RecordDocOp records one document mutation's outcome
 // (worklode_doc_operations_total) for a caller that records its event
 // through eventbus.Emit rather than RecordDocEvent — the typed emission
-// path of 025 §15.3, which cannot go through the wrapper because the
+// path of WL-SPEC-77 §15, which cannot go through the wrapper because the
 // payload needs the event id before the insert. Nil-safe.
 func (s *Store) RecordDocOp(op string, err error) { s.metrics.docOp(op, err) }
 
@@ -1199,7 +1199,7 @@ func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, er
 
 // DocIDsBySubjectIRI resolves a batch of wl:subject IRIs to row ids in one
 // query, for a reader holding a set of them rather than one — the Progress
-// stream resolving a poll's worth of events (WL-SPEC-66 §5.1). Same
+// stream resolving a poll's worth of events (WL-SPEC-85 §6). Same
 // reconstruct-the-IRI-in-SQL comparison as DocBySubjectIRI, for the same
 // reason.
 //
@@ -1231,13 +1231,13 @@ func (s *Store) DocIDsBySubjectIRI(ctx context.Context, iris []string) (map[stri
 
 // ListCorpusSections is the cross-corpus section listing `scripts/secindex.py`
 // used to write into docs/specs/index.yaml before the file corpus went away
-// (055 §4): every section of every spec and ADR the caller asks for, in
+// (WL-SPEC-77 §16): every section of every spec and ADR the caller asks for, in
 // document order.
 //
 // project narrows to one project, "" answers over all of them. number
 // narrows to one section by its number ("8.2") or its anchor ("sec-8.2"),
 // which is the "which document defines §N" question; "" answers over every
-// section. Deleted documents are excluded, as everywhere else (044 §4).
+// section. Deleted documents are excluded, as everywhere else (WL-SPEC-75 §12).
 func (s *Store) ListCorpusSections(ctx context.Context, project, number string) ([]model.DocSectionRow, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT d.id, d.project_id, d.slug, d.kind, coalesce(d.number,0), d.title,
@@ -1263,7 +1263,7 @@ func (s *Store) ListCorpusSections(ctx context.Context, project, number string) 
 }
 
 // claimedOpenStates is the SQL list of every state a claim holds short of
-// delivery or abandonment — 025 §8.2's "claimed but unfinished". Derived
+// delivery or abandonment — WL-SPEC-77 §10's "claimed but unfinished". Derived
 // from the state machine (allStates) less the states a task occupies before
 // anyone claims it and less deliveredStateSet, so a new mid-flight state
 // joins the referrer set without an edit here.
@@ -1278,11 +1278,11 @@ var claimedOpenStates = func() string {
 	return strings.Join(quoted, ", ")
 }()
 
-// DocSectionReferrers answers 025 §8.2: which open work points at this
+// DocSectionReferrers answers WL-SPEC-77 §10: which open work points at this
 // section, and would therefore have to be told if the section's text
 // changed. See docSectionReferrers for what counts.
 //
-// The answer is about the section, not about who is asking: §8.3's patch
+// The answer is about the section, not about who is asking: WL-SPEC-77 §10's patch
 // gate excludes the plan its own patching task was minted from, which is a
 // fact the caller holds and this reader does not.
 func (s *Store) DocSectionReferrers(ctx context.Context, docID int64, anchor string) ([]model.DocReferrer, error) {
@@ -1290,7 +1290,7 @@ func (s *Store) DocSectionReferrers(ctx context.Context, docID int64, anchor str
 }
 
 // docSectionReferrers is DocSectionReferrers against any queryer, so the
-// §8.3 patch gate can ask the same question inside the transaction that
+// WL-SPEC-77 §10 patch gate can ask the same question inside the transaction that
 // patches the section.
 //
 // Three parts. An accepted document holding an anchored requires/covers edge
@@ -1299,7 +1299,7 @@ func (s *Store) DocSectionReferrers(ctx context.Context, docID int64, anchor str
 // counted as such a document: a plan's claim on a section is the work claimed
 // from it, so it enters through its claimed-but-unfinished tasks instead, and
 // an accepted covering plan whose tasks are all unclaimed or already delivered
-// is 025 §8.6's stale-marking business rather than a referrer.
+// is WL-SPEC-77 §10's stale-marking business rather than a referrer.
 func docSectionReferrers(ctx context.Context, q rowQueryer, docID int64, anchor string) ([]model.DocReferrer, error) {
 	rows, err := q.QueryContext(ctx,
 		`SELECT 'doc' AS kind, d.slug AS ref, e.type AS rel, d.title

@@ -165,7 +165,7 @@ func TestListParticipants(t *testing.T) {
 }
 
 // TestListParticipantsAllProjects pins ListParticipants(ctx, "") — the
-// bulk form Home's card grid needs to avoid an N+1 read (spec 029, plan D
+// bulk form Home's card grid needs to avoid an N+1 read (WL-SPEC-75, plan D
 // task 5). It must return every project's roster in one query, each row
 // carrying its own ProjectID, grouped project id ascending with lead first
 // within a project. bob holds a role on both p1 and p2 with a different
@@ -230,7 +230,7 @@ func TestListParticipantsAllProjects(t *testing.T) {
 	}
 }
 
-// TestOpenWorkOwnedBy pins the removal guard's fact query (spec 029 §6.1):
+// TestOpenWorkOwnedBy pins the removal guard's fact query (WL-SPEC-75 §13.5):
 // only a task that is both assigned to the actor and still open (state not
 // in deliveredStateSet) counts as owned work blocking removal.
 func TestOpenWorkOwnedBy(t *testing.T) {
@@ -281,8 +281,8 @@ func TestOpenWorkOwnedBy(t *testing.T) {
 }
 
 // addParticipant drives AddParticipant the way production does: inside a
-// RecordEvent transaction under the "crew.member_added" event type (spec 029
-// §8.4), so the test exercises the same commit boundary the API handler
+// RecordEvent transaction under the "crew.member_added" event type (WL-SPEC-75
+// §13.8), so the test exercises the same commit boundary the API handler
 // does.
 func addParticipant(t *testing.T, s *Store, projectID, actor, role string, lead bool, by string) error {
 	t.Helper()
@@ -317,7 +317,7 @@ func TestAddParticipant(t *testing.T) {
 	if err := add("bob", "reporter", false); err != nil {
 		t.Fatal(err)
 	}
-	// One actor, several role labels (029 §6.1).
+	// One actor, several role labels (WL-SPEC-75 §13.5).
 	if err := add("bob", "data-scientist", false); err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +382,7 @@ func TestAddParticipant(t *testing.T) {
 	}
 }
 
-// TestAddParticipantDeputy covers the deputy designation (spec 029 §6.1): it
+// TestAddParticipantDeputy covers the deputy designation (WL-SPEC-75 §13.5): it
 // is mutually exclusive with lead, at most one per project, and read back as
 // a virtual "acting-lead" entry folded into Roles rather than a stored role.
 func TestAddParticipantDeputy(t *testing.T) {
@@ -463,7 +463,7 @@ func TestAddParticipantDeputy(t *testing.T) {
 
 // removeParticipant drives RemoveParticipant the way production does:
 // inside a RecordEvent transaction under the "crew.member_removed" event
-// type (spec 029 §8.4).
+// type (WL-SPEC-75 §13.8).
 func removeParticipant(t *testing.T, s *Store, projectID, actor, by string) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "crew.member_removed", nil,
@@ -473,7 +473,7 @@ func removeParticipant(t *testing.T, s *Store, projectID, actor, by string) erro
 	return err
 }
 
-// TestRemoveParticipantGuard covers spec 029 §6.1's removal guard in the
+// TestRemoveParticipantGuard covers WL-SPEC-75 §13.5's removal guard in the
 // order the rules fire: an unknown member, the lead, open work owned by the
 // member, and the removal itself clearing every role row at once.
 func TestRemoveParticipantGuard(t *testing.T) {
@@ -513,7 +513,7 @@ func TestRemoveParticipantGuard(t *testing.T) {
 	}
 
 	// Open work blocks the removal, and the message names the item so the
-	// caller can render the responsibility list (032 §6).
+	// caller can render the responsibility list (WL-SPEC-82 §8).
 	err := remove("bob")
 	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "task") {
 		t.Fatalf("open work must block removal with the item listed: %v", err)

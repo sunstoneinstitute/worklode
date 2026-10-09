@@ -490,8 +490,8 @@ func TestListTasksFilterByAssignee(t *testing.T) {
 	}
 }
 
-// TestAssignTaskNonCrewMember covers the Crew gate on assignment (spec 029
-// §6.1): a task belongs to someone on its project's Crew, so both AssignTask
+// TestAssignTaskNonCrewMember covers the Crew gate on assignment (WL-SPEC-75
+// §13.5): a task belongs to someone on its project's Crew, so both AssignTask
 // and StartTask — which assigns as it starts — refuse an outsider, and
 // neither leaves a trace on the task.
 func TestAssignTaskNonCrewMember(t *testing.T) {

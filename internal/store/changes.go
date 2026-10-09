@@ -32,7 +32,7 @@ type PullRequest struct {
 	// guard's clock. See UpsertPR.
 	UpdatedAt time.Time
 	// QueuedAt is when the PR entered the merge queue, nil when it never
-	// has or has since left it. Set via SetPRQueued (WL-SPEC-66 §6.1), not
+	// has or has since left it. Set via SetPRQueued (WL-SPEC-85 §7), not
 	// UpsertPR — it isn't part of GitHub's pull_request payload.
 	QueuedAt *time.Time
 }
@@ -138,7 +138,7 @@ func taskExists(tx *sql.Tx, taskID string) (bool, error) {
 // clause on DO UPDATE that UpsertCIRun, UpsertIssue and CreateArtifact also
 // carry. Deliveries arrive out of order — GitHub does not guarantee order,
 // and reconcile replays backlogged .ignored events after newer ones already
-// applied (spec 013 §2.1) — so an unconditional upsert lets a stale payload
+// applied (WL-SPEC-80 §10.3) — so an unconditional upsert lets a stale payload
 // overwrite newer facts (a replayed pull_request.opened regressing a merged
 // PR to open, dropping merge_sha and merged_at). The guard makes the write
 // non-regressing; a first insert has no conflicting row and always lands.
@@ -331,7 +331,7 @@ type PRRef struct {
 }
 
 // TaskPRs returns every merged or open pull request bound to a task, ordered
-// by repo then number. Two filters, both the pr-affects deriver's (007 §2.3):
+// by repo then number. Two filters, both the pr-affects deriver's (WL-SPEC-82):
 //
 //   - Unbound PRs are invisible: with no task there is no wl:affects subject
 //     to hang the triple off.
@@ -420,7 +420,7 @@ func TaskIDForRef(tx *sql.Tx, ref string) (string, error) {
 	return id, nil
 }
 
-// SetPRQueued sets or clears pull_requests.queued_at (WL-SPEC-66 §6.1): a
+// SetPRQueued sets or clears pull_requests.queued_at (WL-SPEC-85 §7): a
 // non-nil at marks the PR as entering the merge queue, nil marks it as
 // having left (merged, or removed from the queue). Unlike UpsertPR this
 // carries no non-regression guard — queue membership is a fact this store
@@ -441,7 +441,7 @@ func SetPRQueued(tx *sql.Tx, repo string, number int64, at *time.Time) error {
 }
 
 // UpsertBranchRules records the rules last observed for a repo/branch pair
-// (WL-SPEC-66 §6.3, WL-SPEC-72 §3), overwriting whatever was known before.
+// (WL-SPEC-85 §7, WL-SPEC-72 §3), overwriting whatever was known before.
 func UpsertBranchRules(tx *sql.Tx, repo, branch string, mergeQueue, pullRequest bool, at time.Time) error {
 	_, err := tx.Exec(
 		`INSERT INTO repo_branch_rules (repo, branch, merge_queue, pull_request, checked_at)
@@ -485,7 +485,7 @@ func (s *Store) BranchRules(ctx context.Context, repo string) (model.RepoBranchR
 // so repo_branch_rules holds at most one row per repo in practice, and that
 // row is the one a PR's base branch join would resolve to since
 // pull_requests carries no base branch of its own. A repo missing from the
-// result is unknown and reads as "no queue" (WL-SPEC-66 §6.3) — callers
+// result is unknown and reads as "no queue" (WL-SPEC-85 §7) — callers
 // should not distinguish absence from false.
 func (s *Store) BranchRulesForRepos(ctx context.Context, repos []string) (map[string]bool, error) {
 	out := map[string]bool{}

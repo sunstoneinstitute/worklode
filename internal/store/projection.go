@@ -8,7 +8,7 @@ import (
 )
 
 // ProjectionCheckpoint returns the transaction id through which the
-// backbone→knowledge-graph projector has already run (spec 006 §11). It is a
+// backbone→knowledge-graph projector has already run (WL-SPEC-79 §12). It is a
 // state_log.txid, not a state_log.id — see DirtyProjects for why the
 // watermark counts transactions.
 func (s *Store) ProjectionCheckpoint(ctx context.Context) (int64, error) {
@@ -120,7 +120,7 @@ const stateLogHorizon = "sl." + eventHorizon
 //   - Dirtiness is read from every *visible* row above the watermark, so a
 //     project is re-rendered as soon as its change is committed.
 //   - The watermark only advances through transactions below the commit
-//     horizon (spec 025 §15's rule for the event log, same predicate). A
+//     horizon (WL-SPEC-77 §15's rule for the event log, same predicate). A
 //     transaction still above it stays above the watermark, so the row it
 //     commits late — however low its id — is scanned on a later run.
 //
@@ -134,7 +134,7 @@ const stateLogHorizon = "sl." + eventHorizon
 //
 // The LEFT JOIN keeps the watermark advancing even over a log row whose
 // task no longer resolves. No path *removes* a task row — delete is a
-// tombstone (044 §2), which still joins — so this is a guard, not a feature.
+// tombstone (WL-SPEC-75 §12), which still joins — so this is a guard, not a feature.
 func (s *Store) DirtyProjects(ctx context.Context, after int64, limit int) (projects []string, through int64, err error) {
 	// Documents dirty their project too (WL-289): a doc mutation logs
 	// entity_kind 'doc' with the doc id in decimal, and the projector

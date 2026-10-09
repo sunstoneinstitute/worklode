@@ -1,4 +1,4 @@
-// Task hierarchy (docs/specs/004-execution-backbone.md): a container is
+// Task hierarchy (WL-SPEC-75 §5): a container is
 // inferred — a task that has child_of children — a task has at most one
 // parent, and a chain is at most maxHierarchyDepth edges deep. Progress is
 // derived on read; closure is stored as real transitions, attributed to the
@@ -18,7 +18,7 @@ import (
 )
 
 // maxHierarchyDepth caps a child_of chain at two edges, now spanning task ->
-// subtask only (spec 004 §6.1). The brief is a bounded payload and the walks
+// subtask only (WL-SPEC-75 §5). The brief is a bounded payload and the walks
 // that feed roll-up and breadcrumbs are unbounded without a cap.
 const maxHierarchyDepth = 2
 
@@ -26,7 +26,7 @@ const maxHierarchyDepth = 2
 // container predicate every guard keys off, container-ness being inferred
 // rather than declared: with decompose creating parent-hood and its children
 // in one transaction, "has children" is exactly as sharp as a column
-// (004 §6.1). Only live children count (044 §4) — deleting the last child
+// (WL-SPEC-75 §5). Only live children count (WL-SPEC-75 §12) — deleting the last child
 // makes its parent an ordinary task again, which is what keeps the parent
 // claimable and lets it advance past merged.
 // Served by the task_edges_children partial index.
@@ -133,9 +133,9 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 
 // checkHierarchy validates a proposed "child child_of parent" edge against the
 // spec-004 invariants. project carries both endpoints' project_id, already
-// read by AddEdge. Any ordinary task may be a parent — 029 §2 left no kind to
+// read by AddEdge. Any ordinary task may be a parent — WL-SPEC-75 §13.2 left no kind to
 // declare, and the edge itself is what makes the parent a container — except
-// a decision, which never is (004 §6.3 as amended): a decision closes by its
+// a decision, which never is (WL-SPEC-75 §8 as amended): a decision closes by its
 // recorded answer in one transaction, a parent closes by roll-up, and the two
 // cannot both hold. A rally is never a parent either: its members are the
 // 'blocks' edges pointing at it, and children would be a second, contradicting
@@ -381,18 +381,18 @@ func (s *Store) TaskTree(ctx context.Context, f TaskTreeFilter) ([]model.TaskTre
 
 // Decompose creates parentID's children in one transaction: needs_decomposition
 // clears and each title becomes a draft child inheriting the parent's project,
-// priority, concern, and kind. The parent's kind is not touched (004 §6.10) —
+// priority, concern, and kind. The parent's kind is not touched (WL-SPEC-75 §5.1) —
 // it is the child_of edges that make it a container. This is what makes the
 // spec-005 needs_decomposition gate actionable — an oversized task becomes its
 // own tracking task plus the pieces, in place, keeping its id and every
 // reference to it.
 //
-// Rejected when the parent already has children (spec 004's decompose is for
+// Rejected when the parent already has children (WL-SPEC-75's decompose is for
 // splitting an oversized task, not for re-splitting a container — add further
 // children with AddEdge instead), when it holds an active lease (decomposing
 // work someone is holding is a coordination bug), when it sits deep enough
 // that its children would exceed maxHierarchyDepth, when the parent is a
-// decision (004 §6.3 as amended — it closes by its recorded answer, not by
+// decision (WL-SPEC-75 §8 as amended — it closes by its recorded answer, not by
 // roll-up), and from the delivery states a task with children can never
 // occupy.
 func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, createdBy string, eventID int64) ([]model.Task, error) {

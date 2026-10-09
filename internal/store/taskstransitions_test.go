@@ -191,7 +191,7 @@ func TestDeliveredStateSetCoversDeliveryRanks(t *testing.T) {
 
 // TestDeliveryRanksMatchSettableTaskStates pins the store's delivery axis
 // against model.SettableTaskStates: "carries a delivery rank" (deliveryRanks)
-// and "landed" (internal/progress.TaskClass, WL-SPEC-66 §1.1) read the same
+// and "landed" (internal/progress.TaskClass, WL-SPEC-85 §2) read the same
 // state names, so the two cannot drift apart. Needs no Postgres.
 func TestDeliveryRanksMatchSettableTaskStates(t *testing.T) {
 	t.Parallel()

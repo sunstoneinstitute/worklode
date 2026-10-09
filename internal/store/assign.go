@@ -41,7 +41,7 @@ func lockTaskOwnership(tx *sql.Tx, id string) (project, state, assignee string, 
 }
 
 // requireCrewMember refuses to hand a task to an actor who holds no Crew row
-// on the task's project (spec 029 §6.1): work belongs to the people on the
+// on the task's project (WL-SPEC-75 §13.5): work belongs to the people on the
 // investigation, and an assignee who is not one of them cannot be reached by
 // the roster, the removal guard, or the responsibility listing.
 //

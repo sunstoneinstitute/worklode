@@ -23,7 +23,7 @@ func insertRawSession(t *testing.T, s *Store, leaseID int64, agent, sessionID st
 
 // sessionRowID reads the surrogate primary key of the session addressed by
 // its natural key. The store returns model.AgentSession, which does not carry
-// the row id (ADR 036); a test that needs to prove two calls hit the same row
+// the row id (WL-SPEC-73 §3.2a); a test that needs to prove two calls hit the same row
 // asks the database directly.
 func sessionRowID(t *testing.T, s *Store, leaseID int64, agent, sessionID string) int64 {
 	t.Helper()
@@ -730,7 +730,7 @@ func TestTouchAgentSessionInsertRaceWithLeaseClose(t *testing.T) {
 }
 
 // TestAgentSessionAcceptsCopilot pins that copilot is accepted end to end:
-// spec 024 adds it as a harness, and both the CHECK constraint (0033) and
+// WL-SPEC-80 adds it as a harness, and both the CHECK constraint (0033) and
 // the Go-side mirror (model.KnownAgents) must allow it or Touch fails before or
 // after reaching Postgres.
 func TestAgentSessionAcceptsCopilot(t *testing.T) {

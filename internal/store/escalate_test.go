@@ -18,7 +18,7 @@ func openEscalateStore(t *testing.T) *Store {
 	return s
 }
 
-// TestEscalateTask is 025 §8.1 end to end: the lease goes, the task goes back
+// TestEscalateTask is WL-SPEC-77 §10 end to end: the lease goes, the task goes back
 // to ready blocked on a design task assigned to the plan's author, and a
 // second executor hitting the same gap joins that task rather than minting a
 // rival.

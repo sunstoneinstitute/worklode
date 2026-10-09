@@ -1,5 +1,5 @@
 // Delivery-lifecycle fact tables
-// (docs/specs/004-execution-backbone.md). Handlers record
+// (WL-SPEC-75 §10). Handlers record
 // facts inside a RecordEvent transaction, then call ResolveDelivery
 // (delivery_resolve.go), which advances the task to the furthest milestone
 // the facts support.
@@ -438,7 +438,7 @@ func ReleaseFrontier(tx *sql.Tx, repo string) (*int64, error) {
 
 // ReleaseFrontierRow is one repo's release-frontier row resolved to the
 // commit sha it covers, for the deploy deriver's wl:cutFrom projection
-// (spelled wl:covers until 026 §6.1 took that name for Plan→Section).
+// (spelled wl:covers until WL-SPEC-78 §4.6 took that name for Plan→Section).
 type ReleaseFrontierRow struct {
 	Repo string
 	Tag  string
@@ -463,8 +463,8 @@ func (s *Store) AllReleaseFrontiers(ctx context.Context) ([]ReleaseFrontierRow, 
 }
 
 // HasMainCommit reports whether sha is a recorded main_commits row for
-// repo — the CommitKnown guard graphproj.ArtifactTriples requires (006
-// §11.1).
+// repo — the CommitKnown guard graphproj.ArtifactTriples requires (WL-SPEC-79
+// §12).
 func (s *Store) HasMainCommit(ctx context.Context, repo, sha string) (bool, error) {
 	var exists bool
 	err := s.db.QueryRowContext(ctx,

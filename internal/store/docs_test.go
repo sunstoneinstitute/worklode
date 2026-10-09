@@ -317,7 +317,7 @@ Do the thing.
 `
 
 // planMintBody is a well-formed plan in the mintable ## Tasks format
-// (025 §9.1): three definitions, Task 2 blocked by Task 1.
+// (WL-SPEC-77 §11): three definitions, Task 2 blocked by Task 1.
 const planMintBody = `---
 status: draft
 ---
@@ -388,7 +388,7 @@ func TestDocSchemaSpecRow(t *testing.T) {
 	}
 }
 
-// Since 029 §4 every kind carries a number, plans included: the rule migration
+// Since WL-SPEC-75 §13.4 every kind carries a number, plans included: the rule migration
 // 0037 split by kind is now one rule for the whole corpus, so a plan row is an
 // ordinary numbered row.
 func TestDocSchemaPlanRowCarriesANumber(t *testing.T) {
@@ -405,7 +405,7 @@ func TestDocSchemaPlanRowCarriesANumber(t *testing.T) {
 	}
 }
 
-// The schema half of 029 §4: no document goes without a number, whatever its
+// The schema half of WL-SPEC-75 §13.4: no document goes without a number, whatever its
 // kind and whichever writer went around the store.
 func TestDocSchemaNumberIsRequiredForEveryKind(t *testing.T) {
 	t.Parallel()
@@ -562,7 +562,7 @@ func TestDocUpdateBodyPreservesSectionState(t *testing.T) {
 }
 
 // TestDocUpdateBodyAcceptedSpecRejected: an accepted spec is revised, never
-// edited in place (025 §9).
+// edited in place (WL-SPEC-77 §11).
 func TestDocUpdateBodyAcceptedSpecRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -581,7 +581,7 @@ func TestDocUpdateBodyAcceptedSpecRejected(t *testing.T) {
 }
 
 // TestDocUpdateBodyAcceptedPlanAllowed: plans stay freely mutable at any
-// status (025 §9, AC6).
+// status (WL-SPEC-77 §11, AC6).
 func TestDocUpdateBodyAcceptedPlanAllowed(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -699,7 +699,7 @@ func TestDocOperationsMetric(t *testing.T) {
 		t.Fatalf("doc_operations{create,error} = %v, want 1", got)
 	}
 
-	// Owner transfer (025 §7.3) records under its own verb too.
+	// Owner transfer (WL-SPEC-77 §9) records under its own verb too.
 	if _, _, err := transferDocOwner(t, s, created.ID, "ada", "stig"); err != nil {
 		t.Fatalf("TransferDocOwner: %v", err)
 	}
@@ -734,7 +734,7 @@ func TestDocMetricsNilSafe(t *testing.T) {
 }
 
 // TestDocUpdateBodyKeepsIssued: issued is a lifecycle fact. A plan stays
-// mutable at accepted (025 §9), so a body edit that drops the frontmatter key
+// mutable at accepted (WL-SPEC-77 §11), so a body edit that drops the frontmatter key
 // must not erase the acceptance date.
 func TestDocUpdateBodyKeepsIssued(t *testing.T) {
 	t.Parallel()
@@ -855,7 +855,7 @@ func mustAcceptedSpec(t *testing.T, s *Store, slug string) *model.Doc {
 }
 
 // revisedSpecBody is specBody with sec-2's body edited and a letter-suffix
-// insert added: exactly one Changed anchor and one Added one (025 §3, §6).
+// insert added: exactly one Changed anchor and one Added one (WL-SPEC-77 §4, §6).
 const revisedSpecBody = `---
 status: accepted
 issued: 2026-08-01
@@ -920,7 +920,7 @@ func TestDocAcceptDraftSpec(t *testing.T) {
 	}
 }
 
-// TestDocAcceptWrongActorForbidden: acceptance is the owner's act (025 §7).
+// TestDocAcceptWrongActorForbidden: acceptance is the owner's act (WL-SPEC-77 §9).
 func TestDocAcceptWrongActorForbidden(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -963,7 +963,7 @@ func countTasksWithPlanDoc(t *testing.T, s *Store, docID int64) int {
 
 // planMintBodyFourth is planMintBody with a fourth declaration appended,
 // blocked by task 1, and Task 2's prose rewritten: the shape of a plan edited
-// after acceptance (025 §9.2).
+// after acceptance (WL-SPEC-77 §11).
 var planMintBodyFourth = strings.Replace(planMintBody,
 	"Do the second thing.", "Do the second thing, differently.", 1) + `
 ### Task 4 — Fourth task
@@ -997,7 +997,7 @@ func snapshotTask(t *testing.T, s *Store, id string) taskSnapshot {
 
 // TestRecordDocOpMetric: RecordDocOp is the exported way into
 // worklode_doc_operations_total for the handlers that record their event
-// through eventbus.Emit instead of RecordDocEvent (025 §15.3), so accept and
+// through eventbus.Emit instead of RecordDocEvent (WL-SPEC-77 §15), so accept and
 // submit stay counted with every other document verb.
 func TestRecordDocOpMetric(t *testing.T) {
 	t.Parallel()
@@ -1086,7 +1086,7 @@ func TestDocWriteRefusesRetiredKeys(t *testing.T) {
 }
 
 // TestDocAcceptRejectsTooDeepAnchor: the depth limit is evaluated at
-// publication (025 §6 rule 6), so a first accept enforces it too.
+// publication (WL-SPEC-77 §6 rule 6), so a first accept enforces it too.
 func TestDocAcceptRejectsTooDeepAnchor(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1121,7 +1121,7 @@ func TestDocAcceptAllowsAnchorAtTheDepthLimit(t *testing.T) {
 	}
 }
 
-// setDocDepthLimit points the package-level 025 §6.1 limit at n for one test
+// setDocDepthLimit points the package-level WL-SPEC-77 §4 limit at n for one test
 // and restores it afterwards. The limit is boot-time configuration with no
 // synchronization, so a test that calls this must not be parallel.
 func setDocDepthLimit(t *testing.T, n int) {
@@ -1131,7 +1131,7 @@ func setDocDepthLimit(t *testing.T, n int) {
 	t.Cleanup(func() { docDepthLimit = prev })
 }
 
-// TestDocDepthLimit: the depth limit is server configuration (025 §6.1), and
+// TestDocDepthLimit: the depth limit is server configuration (WL-SPEC-77 §4), and
 // lowering it is one-way-safe because every publication re-checks it. Not
 // parallel — the subtests move a package-level variable.
 func TestDocDepthLimit(t *testing.T) {
@@ -1212,7 +1212,7 @@ func setDocStatus(t *testing.T, s *Store, id int64, status string) {
 }
 
 // subheadingSpecBody is a spec whose sec-2 holds an anchorless "#### Tie-
-// breaking" block — legal per 025 §6.1, which makes a heading deeper than the
+// breaking" block — legal per WL-SPEC-77 §4, which makes a heading deeper than the
 // addressability limit content within its nearest anchored ancestor rather
 // than a node of its own.
 const subheadingSpecBody = `---
@@ -1238,7 +1238,7 @@ Oldest first.
 `
 
 // TestDocListSections: the reader the detail endpoint serves returns a spec's
-// sections in document order, and nothing at all for a plan (025 §9).
+// sections in document order, and nothing at all for a plan (WL-SPEC-77 §11).
 func TestDocListSections(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1312,14 +1312,14 @@ func coveringPlan(t *testing.T, s *Store, slug string, accept bool, refs ...stri
 }
 
 // deferralRef is one `defers` entry for a test plan body: the deferred
-// section and its named owner (026 §5.3).
+// section and its named owner (WL-SPEC-78 §4).
 type deferralRef struct {
 	spec string
 	to   string
 }
 
 // deferringPlanBody renders a mintable plan whose frontmatter defers each ref
-// to its named owner (026 §5.3), and optionally covers others alongside it.
+// to its named owner (WL-SPEC-78 §4), and optionally covers others alongside it.
 func deferringPlanBody(defers []deferralRef, covers ...string) string {
 	var b strings.Builder
 	b.WriteString("---\nstatus: draft\n")
@@ -1360,7 +1360,7 @@ func deferringPlan(t *testing.T, s *Store, slug string, accept bool, defers []de
 
 // gapAnchors renders anchor(coverage) for each of a gap's sections, in
 // order, so tests can assert against a plain string slice. A deferred section
-// carries its owner (026 §2.1, §5.3), rendered the way DocPlanningTable does:
+// carries its owner (WL-SPEC-78 §1.2, §4), rendered the way DocPlanningTable does:
 // "sec-N(deferred:OWNER)".
 func gapAnchors(gap model.DocPlanningGap) []string {
 	out := make([]string, len(gap.Gaps))
@@ -1415,7 +1415,7 @@ func docStatus(t *testing.T, s *Store, id int64) string {
 	return d.Status
 }
 
-// TestDocIRIRoundTrip: DocIRI renders spec 025 §4.1's project-qualified
+// TestDocIRIRoundTrip: DocIRI renders WL-SPEC-77 §5's project-qualified
 // subject IRI for a spec, an ADR, and a plan in the same project, and
 // DocBySubjectIRI resolves each back to its row. An unknown IRI is
 // ErrNotFound.
@@ -1466,13 +1466,13 @@ func TestDocIRIRoundTrip(t *testing.T) {
 // so a type outside
 // that set is a value the CHECK admits and no surface writes.
 //
-// Today that is exactly `implements`, and deliberately so: 026 §5.1 makes
+// Today that is exactly `implements`, and deliberately so: WL-SPEC-78 §4 makes
 // `implements` the retired frontmatter spelling of `covers` (read as covers,
 // never written as implements), while the `implements` *edge type* is reserved
-// for a component's evidence about its own code (026 §6.2) — a different
-// subject, declared in `.worklode/implements.yaml`, whose machinery is 025 §11
+// for a component's evidence about its own code (WL-SPEC-78 §4.6) — a different
+// subject, declared in `.worklode/implements.yaml`, whose machinery is WL-SPEC-77 §13
 // and is not built. WL-132 filed that gap so it is not re-diagnosed as a
-// defect; this test is the record. When §11's writer lands, or a new type
+// defect; this test is the record. When WL-SPEC-77 §13's writer lands, or a new type
 // joins docEdgeInverse, update the want list deliberately.
 func TestDocEdgeTypesWithoutWriter(t *testing.T) {
 	t.Parallel()
@@ -1489,7 +1489,7 @@ func TestDocEdgeTypesWithoutWriter(t *testing.T) {
 }
 
 // seedDocsTask inserts a task in the doc tests' project, for the authoring
-// edge 025 §12 asks for. Direct SQL, like seedDocsProject: what is under test
+// edge WL-SPEC-77 §13 asks for. Direct SQL, like seedDocsProject: what is under test
 // is the docs row, not how the task got there.
 func seedDocsTask(t *testing.T, s *Store, id string) {
 	t.Helper()
@@ -1501,7 +1501,7 @@ func seedDocsTask(t *testing.T, s *Store, id string) {
 	}
 }
 
-// TestCreateDocRecordsGeneratedByTask pins 025 §12's authorship edge at the
+// TestCreateDocRecordsGeneratedByTask pins WL-SPEC-77 §13's authorship edge at the
 // store: the task that wrote a document is persisted and read back, a create
 // naming no task leaves it unset rather than failing, and a create naming a
 // task that does not exist is refused with a message pointing at the field.
@@ -1549,7 +1549,7 @@ func TestCreateDocRecordsGeneratedByTask(t *testing.T) {
 }
 
 // referrerSpecBody is an accepted-shaped spec body pointing at one section of
-// another document: the `requires` half of a 025 §8.2 referrer. anchor is ""
+// another document: the `requires` half of a WL-SPEC-77 §10 referrer. anchor is ""
 // for a document-level reference, which claims the document rather than a
 // section and is therefore not a referrer.
 func referrerSpecBody(target, anchor string) string {
@@ -1561,13 +1561,13 @@ func referrerSpecBody(target, anchor string) string {
 }
 
 // referrerPlanBody is a plan covering one section of a spec: the `covers`
-// half, which reaches §8.2 through the plan's claimed tasks rather than as a
+// half, which reaches WL-SPEC-77 §10 through the plan's claimed tasks rather than as a
 // document of its own.
 func referrerPlanBody(target, anchor string) string {
 	return "---\nstatus: draft\ncovers:\n  - " + target + ".md#" + anchor + "\n---\n\n# Covering plan\n\n## Tasks\n\n### Task 1 — Do it\n\nBody.\n"
 }
 
-// TestDocSectionReferrers covers 025 §8.2: which open work points at one
+// TestDocSectionReferrers covers WL-SPEC-77 §10: which open work points at one
 // section. An accepted document's anchored requires/covers edge counts; a
 // draft's does not; a document-level edge claims the document, not the
 // section. A rule that amends or supersedes the section's rule counts
@@ -1679,7 +1679,7 @@ func TestDocSectionReferrers(t *testing.T) {
 	}
 }
 
-// TestListCorpusSections covers the cross-corpus section listing (055 §4): every
+// TestListCorpusSections covers the cross-corpus section listing (WL-SPEC-77 §16): every
 // section of every spec and ADR in scope, in document order, narrowable to
 // one project or to one section number across the corpus.
 func TestListCorpusSections(t *testing.T) {
@@ -1697,7 +1697,7 @@ func TestListCorpusSections(t *testing.T) {
 	mustCreateDoc(t, s, DocInput{
 		Project: "p2", Kind: "spec", Number: 25, Slug: "025-b", Body: specBody, CreatedBy: "stig",
 	})
-	// A plan carries no sections (025 §9), so it never shows up here.
+	// A plan carries no sections (WL-SPEC-77 §11), so it never shows up here.
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "030-p", Body: planBody, CreatedBy: "stig",
 	})

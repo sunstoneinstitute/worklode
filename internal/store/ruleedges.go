@@ -23,7 +23,7 @@ var ruleEdgeTypes = map[string]bool{
 // ruleEdgeTypesList names every recognized type, for error messages.
 const ruleEdgeTypesList = "refines, constrains, conflictsWith, references, amends, supersedes, wasDerivedFrom"
 
-// LinkRules writes a manual edge (12-spec-refactoring-design-tree.md S12).
+// LinkRules writes a manual edge.
 // A second identical edge is ErrEdgeExists, and so is a conflictsWith edge
 // whose reverse exists: the relation is symmetric and stored once per pair
 // (rule_edges_symmetric_once). A self edge or an unknown type is

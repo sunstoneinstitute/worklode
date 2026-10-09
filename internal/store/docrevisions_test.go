@@ -13,7 +13,7 @@ import (
 )
 
 // TestDocVersionsPlanBodyEdit: editing a plan's body snapshots the version it
-// leaves into doc_versions before overwriting it (025 §4.5), and
+// leaves into doc_versions before overwriting it (WL-SPEC-77 §3), and
 // ListDocVersions/GetDocVersion serve the archived and the current version
 // off that split.
 func TestDocVersionsPlanBodyEdit(t *testing.T) {
@@ -69,7 +69,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 }
 
 // TestDocVersionsRevisionAccept: landing a revision snapshots the accepted
-// version it replaces (025 §4.5).
+// version it replaces (WL-SPEC-77 §3).
 func TestDocVersionsRevisionAccept(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -144,7 +144,7 @@ func TestDocVersionsDraftEditSnapshots(t *testing.T) {
 }
 
 // TestDocReviseOpensOneCandidate: a revision copies the accepted body to edit,
-// and a second open revision is refused (025 §7.2, one candidate per doc).
+// and a second open revision is refused (WL-SPEC-77 §9, one candidate per doc).
 func TestDocReviseOpensOneCandidate(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -169,7 +169,7 @@ func TestDocReviseOpensOneCandidate(t *testing.T) {
 	}
 }
 
-// TestDocRevisePlanRejected: plans are edited in place (025 §9), never revised.
+// TestDocRevisePlanRejected: plans are edited in place (WL-SPEC-77 §11), never revised.
 func TestDocRevisePlanRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -222,7 +222,7 @@ func TestDocUpdateRevision(t *testing.T) {
 		t.Error("candidate body not swapped")
 	}
 	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Body != noHeader(t, specBody) {
-		t.Fatal("the accepted body must stay authoritative throughout (025 §7.2)")
+		t.Fatal("the accepted body must stay authoritative throughout (WL-SPEC-77 §9)")
 	}
 
 	bad := "---\nstatus: draft\n---\n\n# T\n\n## 1. A {#sec-1}\n\na\n\n## 2. B {#sec-1}\n\nb\n"
@@ -243,7 +243,7 @@ func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
 }
 
 // TestDocDiscardRevisionStanding: the owner and the revision's author may
-// each withdraw an open candidate; a third party may not (025 §7.2).
+// each withdraw an open candidate; a third party may not (WL-SPEC-77 §9).
 //
 // mustAcceptedSpec's documents are created by stig, and CreateDoc defaults the
 // owner to the creator, so stig is the owner throughout and ada is the
@@ -422,7 +422,7 @@ func TestDocDiscardRevisionLogsTheWithdrawnBody(t *testing.T) {
 }
 
 // TestDocAcceptRevisionRejectsRemovedPublishedAnchor: the one invariant that
-// survives into draft (025 §7.2) — an anchor the accepted version published
+// survives into draft (WL-SPEC-77 §9) — an anchor the accepted version published
 // may not disappear.
 func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
 	t.Parallel()
@@ -450,7 +450,7 @@ func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
 }
 
 // TestDocAcceptRevisionRejectsRenumber: anchors are immutable, so an accepted
-// section is never renumbered (025 §6 rule 3). Renumbering while keeping the
+// section is never renumbered (WL-SPEC-77 §6 rule 3). Renumbering while keeping the
 // anchor — "## 3. … {#sec-2}" — is a lintAnchors defect and never reaches the
 // diff, so the renumber arrives here the other way: the anchor moves with the
 // number and sec-2 reads as removed. Its twin below covers the form that does
@@ -501,7 +501,7 @@ func TestDocAcceptRevisionRejectsDroppedNumber(t *testing.T) {
 }
 
 // TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval: the append-only gate
-// protects anchors the accepted version published (025 §7.2), not every row.
+// protects anchors the accepted version published (WL-SPEC-77 §9), not every row.
 // An unpublished anchor on an accepted document is what a corpus import
 // leaves behind, and dropping one is legal.
 func TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval(t *testing.T) {
@@ -623,7 +623,7 @@ func TestDocAcceptRevisionStampsEveryChangedSection(t *testing.T) {
 // database. Section.Body stops at the next heading of any level, so a diff
 // over bodies alone would accept this revision as touching nothing and leave
 // every coverage claim against sec-2 falsely fresh — the silent-staleness half
-// of 025 §6 rule 5.
+// of WL-SPEC-77 §6 rule 5.
 func TestDocAcceptRevisionStampsAnchorlessSubheadingEdit(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)

@@ -30,7 +30,7 @@ func seedQualified(t *testing.T, st *Store, qualifier, name string) {
 	}
 }
 
-// 037 §4.1's collision, gone: two plugins ship "brainstorming", both land, and
+// WL-SPEC-81 §7.4's collision, gone: two plugins ship "brainstorming", both land, and
 // each is separately reachable by its qualified name. Under the old
 // UNIQUE (name) constraint the second sync lost outright.
 func TestTwoPluginsShipOneSkillName(t *testing.T) {
