@@ -1,7 +1,7 @@
 # Specs, rules and plans: the document model
 
 Deep reference for the `worklode` skill. Documents live *in the backbone*
-(spec 025). Use `lode doc` for document bodies and `lode rule` for individual
+(WL-SPEC-77). Use `lode doc` for document bodies and `lode rule` for individual
 rules. Scratch files are editor buffers.
 
 ## Kinds and lifecycle
@@ -9,7 +9,7 @@ rules. Scratch files are editor buffers.
 A **rule** is a design rule with its own identity, kind, heading, body,
 status and version history. A **spec** arranges rules into a readable
 document. Each placement records the rule and version, position, depth and
-section anchor. A rule ref names the rule; a ref such as `WL-SPEC-25#sec-9`
+section anchor. A rule ref names the rule; a ref such as `WL-SPEC-77#sec-11`
 names a place in that spec's arrangement.
 
 A rule's kind is one of three, and sets the infix its ref prints with:
@@ -70,7 +70,7 @@ one rule across several specs is not yet supported by this edit path.
 ## Rules govern plans and their tasks
 
 A `covers` entry is a plain reference: a requirement ref (`WL-REQ-<n>`), a
-document/section reference such as `WL-SPEC-25#sec-9`, or a whole-document
+document/section reference such as `WL-SPEC-77#sec-11`, or a whole-document
 reference. A requirement ref resolves to that rule; a section reference
 reaches the requirements at that anchor and under it; a whole-document
 reference reaches all its requirements. Invariants and informative rules in
@@ -185,11 +185,11 @@ Cross-project reference, since a doc reference cannot cross a repository:
 <PROJECTKEY>-SPEC|ADR-<n>[#sec-<anchor>]
 ```
 
-`WL-SPEC-1` · `WL-SPEC-25#sec-9` · `WL-ADR-7` · `WL-PLAN-7` · `CMS-SPEC-4`.
+`WL-SPEC-73` · `WL-SPEC-77#sec-11` · `WL-ADR-7` · `WL-PLAN-7` · `CMS-SPEC-4`.
 `<n>` is the document's own corpus number, unpadded. The `SPEC`/`ADR`/`PLAN`
-token disambiguates it from a task id (`WL-4` the task vs `WL-SPEC-4` the
+token disambiguates it from a task id (`WL-4` the task vs `WL-SPEC-75` the
 document) and is checked against the document's actual kind. Numbers are per
-kind, so `WL-SPEC-1` and `WL-PLAN-1` are different documents. A shorthand
+kind, so `WL-SPEC-73` and `WL-PLAN-1` are different documents. A shorthand
 naming a project this checkout can't reach resolves as `unresolved`, not an
 error; `lode show <ref>` is what actually verifies one.
 
