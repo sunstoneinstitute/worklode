@@ -22,7 +22,7 @@ import (
 // docKinds lists the valid --kind values for `lode doc add`, mirroring
 // validDocKinds in internal/api/docs.go (the server re-checks; this catches a
 // typo before the round trip).
-var docKinds = []string{"spec", "adr", "plan"}
+var docKinds = []string{"spec", "plan"}
 
 // docStatusValues is the closed set behind `lode doc list --status`: the
 // live document statuses plus "all", the pseudo-status that also includes
@@ -67,7 +67,7 @@ func resolveDocID(ctx context.Context, c *cli.Client, ref string) (int64, error)
 func newDocCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doc",
-		Short: "Create and inspect design documents: specs, ADRs, and plans",
+		Short: "Create and inspect design documents: specs and plans",
 	}
 	cmd.AddCommand(
 		newDocAddCmd(),
@@ -131,7 +131,7 @@ func newDocAddCmd() *cobra.Command {
 	var updateAnchors bool
 	cmd := &cobra.Command{
 		Use:   "add",
-		Short: "Create a document (spec, ADR, or plan) in draft",
+		Short: "Create a document (spec or plan) in draft",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !slices.Contains(docKinds, kind) {
 				return fmt.Errorf("unknown kind %q; valid kinds: %s", kind, strings.Join(docKinds, ", "))
@@ -181,7 +181,7 @@ func newDocAddCmd() *cobra.Command {
 		},
 	}
 	addScopeFlags(cmd, &scope, "project id")
-	cmd.Flags().StringVar(&kind, "kind", "", "document kind: spec, adr, or plan (required)")
+	cmd.Flags().StringVar(&kind, "kind", "", "document kind: spec or plan (required)")
 	completeFlagValues(cmd, "kind", docKinds)
 	cmd.Flags().StringVar(&slug, "slug", "", "document slug (required)")
 	cmd.Flags().IntVar(&number, "number", 0,
@@ -202,7 +202,7 @@ func newDocListCmd() *cobra.Command {
 	var needsPlanning, needsExecution, bareSuperseded, unresolved, deleted, hasNotes bool
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List documents: specs, ADRs, and plans",
+		Short: "List documents: specs and plans",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Ahead of the client: a contradicting selector is an error
 			// whatever the server would say, and refusing it here costs no
@@ -252,7 +252,7 @@ func newDocListCmd() *cobra.Command {
 		},
 	}
 	addScopeFlags(cmd, &scope, "filter by project id")
-	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, adr, plan")
+	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, plan")
 	cmd.Flags().StringVar(&status, "status", "",
 		"filter by status: "+strings.Join(ns.DesignDocStatuses, ", ")+", or all to include withdrawn, superseded and spent documents")
 	completeFlagValues(cmd, "kind", docKinds)
@@ -294,10 +294,9 @@ func parseDayDuration(s string) (int, error) {
 
 // checkDocSelectors refuses a --kind or --status that contradicts one of the
 // derived selectors (026 §2.1, §2.4; 025 §8.7): each implies a status, and
-// needs-planning/needs-execution each imply a single kind while
-// bare-superseded and unresolved each imply one of two (spec or adr — a plan
-// carries no sections, 025 §6 rule 2; spec or plan — an ADR is executed by
-// nothing). A contradicting restatement would make the
+// needs-planning, needs-execution and bare-superseded each imply a single
+// kind (bare-superseded is spec: a plan carries no sections, 025 §6 rule 2)
+// while unresolved implies spec or plan. A contradicting restatement would make the
 // conjunction always empty, which would read as "nothing to plan"; only a
 // contradiction is refused, restating the implied value is fine. The server
 // enforces the same rule for clients that are not this one; the mutual
@@ -321,7 +320,7 @@ func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareS
 		{needsPlanning, "--needs-planning", "accepted", func(k string) bool { return k == "spec" }, "spec"},
 		{needsExecution, "--needs-execution", "accepted", func(k string) bool { return k == "plan" }, "plan"},
 		{bareSuperseded, "--bare-superseded", "superseded",
-			func(k string) bool { return k == "spec" || k == "adr" }, "spec or adr"},
+			func(k string) bool { return k == "spec" }, "spec"},
 		{unresolved, "--unresolved", "accepted",
 			func(k string) bool { return k == "spec" || k == "plan" }, "spec or plan"},
 	} {
@@ -691,7 +690,7 @@ func newDocSectionsCmd() *cobra.Command {
 
 // newDocEditCmd is `lode doc edit <ref>`: one verb over two writes, chosen by
 // what the document is. A draft or a plan is replaced in place; an accepted
-// spec or ADR goes through 025 §8.4's in-place amendment, which the server
+// spec goes through 025 §8.4's in-place amendment, which the server
 // gates mechanically (§8.3). Nothing here re-checks those gates — a refusal
 // is the server's message, verbatim — so the CLI cannot drift from the rule.
 //
@@ -707,7 +706,7 @@ func newDocEditCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "edit <ref>",
 		ValidArgsFunction: docRefAt(0),
-		Short:             "Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment) or set its title and issued date",
+		Short:             "Replace a document's body (a draft or plan in place, an accepted spec as an amendment) or set its title and issued date",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			setTitle, setIssued := cmd.Flags().Changed("title"), cmd.Flags().Changed("issued")
@@ -802,9 +801,9 @@ func newDocEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&title, "title", "", "set the document's title")
 	cmd.Flags().StringVar(&issued, "issued", "", "set the document's issued date (YYYY-MM-DD)")
 	cmd.Flags().BoolVar(&substantive, "substantive", false,
-		"amending an accepted spec or ADR: the change is substantive, so its reviewers are asked again (WL-SPEC-77 §10)")
+		"amending an accepted spec: the change is substantive, so its reviewers are asked again (WL-SPEC-77 §10)")
 	cmd.Flags().StringVar(&note, "note", "",
-		"amending an accepted spec or ADR: what changed and why, required unless --substantive")
+		"amending an accepted spec: what changed and why, required unless --substantive")
 	cmd.Flags().IntVar(&ifVersion, "if-version", 0,
 		"only write if the document is still at this version, the one `doc show` reported (compare-and-swap)")
 	cmd.Flags().BoolVar(&updateAnchors, "update-section-anchors", false,
@@ -846,7 +845,7 @@ var docEdgeFlags = []struct{ flag, typ, usage string }{
 }
 
 func newDocLinkCmd() *cobra.Command {
-	return newDocEdgeCmd("link <ref>", "Add an edge to a document (a plan's next version, a draft in place, an accepted spec or ADR on its candidate revision)",
+	return newDocEdgeCmd("link <ref>", "Add an edge to a document (a plan's next version, a draft in place, an accepted spec on its candidate revision)",
 		(*cli.Client).LinkDocEdge)
 }
 

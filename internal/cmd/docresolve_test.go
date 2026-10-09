@@ -232,29 +232,36 @@ func TestResolveDocRefResolvesPlans(t *testing.T) {
 func TestResolveDocRefKindMismatch(t *testing.T) {
 	docs := resolveFixture()
 
-	_, _, err := resolveDocRef(docs, "WL", "WL-ADR-14")
+	_, _, err := resolveDocRef(docs, "WL", "WL-PLAN-14")
 	var mismatch *designdoc.KindMismatchError
 	if !errors.As(err, &mismatch) {
-		t.Fatalf("WL-ADR-14: err = %v, want *KindMismatchError", err)
+		t.Fatalf("WL-PLAN-14: err = %v, want *KindMismatchError", err)
 	}
-	if mismatch.Want != "adr" || mismatch.Got != "spec" {
-		t.Errorf("WL-ADR-14 mismatch = %+v, want {adr spec}", mismatch)
+	if mismatch.Want != "plan" || mismatch.Got != "spec" {
+		t.Errorf("WL-PLAN-14 mismatch = %+v, want {plan spec}", mismatch)
 	}
+}
 
-	got, _, err := resolveDocRef(docs, "WL", "WL-ADR-17")
-	if err != nil {
-		t.Fatalf("WL-ADR-17: %v", err)
+// TestResolveDocRefRetiredADR: a <KEY>-ADR-<n> names the spec that took the
+// retired ADR's place, and only that ref form gets the notice (WL-SPEC-77 §7a).
+func TestResolveDocRefRetiredADR(t *testing.T) {
+	docs := []model.Doc{
+		{ID: 1, ProjectKey: "WL", Kind: "spec", Number: 30, FormerADR: 2, Slug: "0002-decision"},
+		{ID: 2, ProjectKey: "WL", Kind: "spec", Number: 2, Slug: "002-other"},
 	}
-	if got.Slug != "017-some-adr" {
-		t.Errorf("WL-ADR-17 = %q", got.Slug)
+	got, section, err := resolveDocRef(docs, "WL", "WL-ADR-2#sec-3")
+	if err != nil || got.ID != 1 || section != "sec-3" {
+		t.Fatalf("WL-ADR-2#sec-3 = %d %q %v, want doc 1 at sec-3", got.ID, section, err)
 	}
-
-	_, _, err = resolveDocRef(docs, "WL", "WL-SPEC-17")
-	if !errors.As(err, &mismatch) {
-		t.Fatalf("WL-SPEC-17: err = %v, want *KindMismatchError", err)
+	if n := designdoc.RetiredADRNotice("WL-ADR-2#sec-3", got); n != "WL-ADR-2 is retired; showing its successor WL-SPEC-30." {
+		t.Errorf("notice = %q", n)
 	}
-	if mismatch.Want != "spec" || mismatch.Got != "adr" {
-		t.Errorf("WL-SPEC-17 mismatch = %+v, want {spec adr}", mismatch)
+	if n := designdoc.RetiredADRNotice("WL-SPEC-30", got); n != "" {
+		t.Errorf("notice for a spec ref = %q, want none", n)
+	}
+	var nf *designdoc.NotFoundError
+	if _, _, err := resolveDocRef(docs, "WL", "WL-ADR-9"); !errors.As(err, &nf) {
+		t.Errorf("WL-ADR-9: err = %v, want *NotFoundError", err)
 	}
 }
 

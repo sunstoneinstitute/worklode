@@ -409,7 +409,7 @@ func TestDocSchemaPlanRowCarriesANumber(t *testing.T) {
 // kind and whichever writer went around the store.
 func TestDocSchemaNumberIsRequiredForEveryKind(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"spec", "adr", "plan"} {
+	for _, kind := range []string{"spec", "plan"} {
 		t.Run(kind, func(t *testing.T) {
 			s := openTestStore(t)
 			seedDocsProject(t, s)
@@ -1428,10 +1428,6 @@ func TestDocIRIRoundTrip(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25,
 		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
 	})
-	adr := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "adr", Number: 7,
-		Slug: "007-some-decision", Body: specBody, CreatedBy: "stig",
-	})
 	plan := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan",
 		Slug: "025-documents-in-the-backbone-2", Body: planBody, CreatedBy: "stig",
@@ -1442,7 +1438,6 @@ func TestDocIRIRoundTrip(t *testing.T) {
 		want string
 	}{
 		{spec, "wlid:doc/spec-p1-025"},
-		{adr, "wlid:doc/adr-p1-007"},
 		{plan, "wlid:doc/plan-p1-001"},
 	}
 	for _, tc := range cases {
@@ -1534,7 +1529,7 @@ func TestCreateDocRecordsGeneratedByTask(t *testing.T) {
 	// Nullable by design: a document nothing claimed a task for is a normal
 	// state, the same way tasks.plan_doc and tasks.about_doc are nullable.
 	unauthored := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "adr", Number: 51, Slug: "051-x",
+		Project: "p1", Kind: "spec", Number: 51, Slug: "051-x",
 		Body: specBody, CreatedBy: "stig",
 	})
 	if unauthored.GeneratedByTask != "" {

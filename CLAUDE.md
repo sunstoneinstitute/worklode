@@ -54,7 +54,7 @@ in the same change. Preserve symlinks and the original path conditions.
 A **skill** is invoked by name or by its `description` matching the work,
 and carries a procedure that spans files or has no single path. The skills:
 
-- **Writing or editing a spec, ADR or plan through `lode doc`** —
+- **Writing or editing a spec or plan through `lode doc`** —
   frontmatter, `covers:`, `{#sec-N}` anchors, amend/supersede, the `ns/`
   `wl:` ontology and its camelCase term naming, and the spec/plan/task model
   (what is a claimable task vs a document status). See

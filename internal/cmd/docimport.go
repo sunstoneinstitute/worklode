@@ -46,7 +46,7 @@ import (
 // importDoc is one walked corpus file, parsed and ready to create.
 type importDoc struct {
 	path   string // the file, for error messages
-	kind   string // spec | adr | plan
+	kind   string // spec | plan
 	number int    // a plan's filename carries none, so this stays 0 (auto-assigned)
 	slug   string
 	status string
@@ -112,8 +112,8 @@ Re-running is safe. A slug already present with an identical body is left
 alone, and its edges are re-wired from its header, so an interrupted import is
 finished by running it again. Bodies are compared and stored without their
 header (WL-SPEC-77 §7). A body that drifted from the backbone is updated in place
-where an in-place edit is legal (a plan at any status, a draft spec or ADR);
-a drifted accepted spec or ADR is reported on stderr instead — revise it with
+where an in-place edit is legal (a plan at any status, a draft spec);
+a drifted accepted spec is reported on stderr instead — revise it with
 lode doc revise. A dry run is entirely local and cannot see drift.
 
 Stating a status needs the admin-only doc.import permission.`,
@@ -264,7 +264,8 @@ func walkImportCorpus(docsDir string) ([]importDoc, error) {
 }
 
 // readImportDoc parses one corpus file. defaultKind is the kind its directory
-// implies; a spec-directory file declaring `kind: adr` is an ADR (026 §4.2).
+// implies. A file declaring `kind: adr` is refused: the kind is retired
+// (WL-SPEC-77 §2).
 func readImportDoc(file, defaultKind string) (importDoc, error) {
 	src, err := os.ReadFile(file)
 	if err != nil {
@@ -298,8 +299,9 @@ func readImportDoc(file, defaultKind string) (importDoc, error) {
 			}
 		}
 	}
-	if d.fm != nil && d.fm.Kind == "adr" && defaultKind == "spec" {
-		d.kind = "adr"
+	if d.fm != nil && d.fm.Kind == "adr" {
+		return importDoc{}, fmt.Errorf(
+			"%s declares kind: adr, which is retired: drop the key to import it as a spec (WL-SPEC-77 §2)", file)
 	}
 	if d.kind != "plan" {
 		m := importLeadingNumber.FindStringSubmatch(name)
@@ -465,20 +467,18 @@ func importRefs(fm *designdoc.Frontmatter) []string {
 // printImportCorpus writes the would-be corpus: one line per document, then
 // the counts a dry run is read for.
 func printImportCorpus(w io.Writer, docs []importDoc) {
-	var specs, adrs, plans int
+	var specs, plans int
 	for _, d := range docs {
 		fmt.Fprintf(w, "%-4s %4s  %-56s %-10s %s\n",
 			d.kind, cli.DocNumber(d.number), d.slug, d.status, d.title)
 		switch d.kind {
 		case "spec":
 			specs++
-		case "adr":
-			adrs++
 		default:
 			plans++
 		}
 	}
-	fmt.Fprintf(w, "\n%d document(s): %d spec(s), %d ADR(s), %d plan(s)\n", len(docs), specs, adrs, plans)
+	fmt.Fprintf(w, "\n%d document(s): %d spec(s), %d plan(s)\n", len(docs), specs, plans)
 }
 
 // printDriftedDocs names every file whose body drifted from a document the

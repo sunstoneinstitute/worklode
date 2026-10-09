@@ -716,9 +716,10 @@ func TestProjectKeySpecAndADRReserved(t *testing.T) {
 	}
 }
 
-// TestDocResolveRefBareNumberAmbiguous: a project may hold a spec 25 and an
-// ADR 25. A bare number cannot say which, so it resolves to neither.
-func TestDocResolveRefBareNumberAmbiguous(t *testing.T) {
+// TestDocResolveRefBareNumberAndRetiredADR: a bare number names the project's
+// spec, and a retired <KEY>-ADR-<n> names the spec that took its place
+// (WL-SPEC-77 §7a).
+func TestDocResolveRefBareNumberAndRetiredADR(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
@@ -734,17 +735,15 @@ func TestDocResolveRefBareNumberAmbiguous(t *testing.T) {
 		t.Fatalf("edges = %+v, want one resolving to the spec", edges)
 	}
 
-	// Add an ADR 25 and the same reference becomes ambiguous.
-	mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "adr", Number: 25, Slug: "025-adr", Body: specBody, CreatedBy: "stig",
-	})
-	ambiguous := mustCreateDoc(t, s, DocInput{
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET former_adr = 3 WHERE id = $1`, spec.ID); err != nil {
+		t.Fatal(err)
+	}
+	retired := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "plan-b", CreatedBy: "stig",
-		Body: "---\nstatus: draft\nrequires: \"025\"\n---\n\n# B\n",
+		Body: "---\nstatus: draft\nrequires: P1-ADR-3\n---\n\n# B\n",
 	})
-	want := model.DocEdge{Type: "requires", ToExternal: "025"}
-	if edges := docEdges(t, s, ambiguous.ID); len(edges) != 1 || !reflect.DeepEqual(edges[0], want) {
-		t.Fatalf("edges = %+v, want %+v", edges, want)
+	if edges := docEdges(t, s, retired.ID); len(edges) != 1 || edges[0].ToDoc != spec.ID {
+		t.Fatalf("edges = %+v, want one resolving P1-ADR-3 to the spec", edges)
 	}
 }
 

@@ -64,7 +64,7 @@ A rule edit regenerates the arranging spec's body through its document write
 path. On a draft it rewrites the draft rule version. On an accepted spec it
 opens or updates a candidate revision; the change lands with
 `lode doc revise <spec-ref> --accept`. Direct editing requires exactly one
-arranging spec or ADR; covering plans do not count toward that limit. Sharing
+arranging spec; covering plans do not count toward that limit. Sharing
 one rule across several specs is not yet supported by this edit path.
 
 ## Rules govern plans and their tasks
@@ -165,7 +165,7 @@ amendment → supersession:
 | Key | Shape | On |
 |---|---|---|
 | `status` | `draft` \| `accepted` \| `superseded` | all |
-| `issued` | `YYYY-MM-DD` | specs, ADRs |
+| `issued` | `YYYY-MM-DD` | specs |
 | `covers` | requirement ref(s) (`WL-REQ-<n>`), spec section reference(s), or whole-document reference(s) — plain references only, no coverage level — or `NO-SPEC` | **plans**, mandatory |
 | `defers` | list of `{spec, to}`: a section this plan hands off (`spec`, with `#sec-N`) and the document that owns it (`to`, no fragment) — reported `deferred` with its owner by `--needs-planning` until some plan covers it (026 §5.3) | **plans** |
 | `requires` | reference list (`isRequiredBy` is refused) | all |
@@ -182,11 +182,12 @@ an absent `covers` reads as a forgotten one, not a deliberate choice.
 Cross-project reference, since a doc reference cannot cross a repository:
 
 ```
-<PROJECTKEY>-SPEC|ADR-<n>[#sec-<anchor>]
+<PROJECTKEY>-SPEC|PLAN-<n>[#sec-<anchor>]
 ```
 
-`WL-SPEC-73` · `WL-SPEC-77#sec-11` · `WL-ADR-7` · `WL-PLAN-7` · `CMS-SPEC-4`.
-`<n>` is the document's own corpus number, unpadded. The `SPEC`/`ADR`/`PLAN`
+`WL-SPEC-73` · `WL-SPEC-77#sec-11` · `WL-PLAN-7` · `CMS-SPEC-4`.
+`<n>` is the document's own corpus number, unpadded. A retired
+`<KEY>-ADR-<n>` resolves to the spec that replaced the ADR. The `SPEC`/`PLAN`
 token disambiguates it from a task id (`WL-4` the task vs `WL-SPEC-75` the
 document) and is checked against the document's actual kind. Numbers are per
 kind, so `WL-SPEC-73` and `WL-PLAN-1` are different documents. A shorthand

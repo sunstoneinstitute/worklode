@@ -22,16 +22,13 @@ const (
 	DCTRequires           = "http://purl.org/dc/terms/requires"
 )
 
-// docClass maps docs.kind to its ontology class (ns/ontology.ttl): specs and
-// ADRs are the two wl:DesignDoc subclasses, and a plan is a document but not
-// a DesignDoc. An unknown kind falls back to the DesignDoc super-type rather
+// docClass maps docs.kind to its ontology class (ns/ontology.ttl): a spec is
+// a wl:DesignDoc, and a plan is a document but not a DesignDoc. An unknown kind falls back to the DesignDoc super-type rather
 // than emitting an unknown term.
 func docClass(kind string) string {
 	switch kind {
 	case "spec":
 		return "Spec"
-	case "adr":
-		return "ADR"
 	case "plan":
 		return "Plan"
 	default:

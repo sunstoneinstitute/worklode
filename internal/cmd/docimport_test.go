@@ -13,7 +13,7 @@ import (
 )
 
 // importCorpus is the fixture corpus: two specs (one accepted and amending a
-// document later in the walk, one draft), an ADR, four plans covering the
+// document later in the walk, one draft), a third draft spec, four plans covering the
 // status and reference cases, and a specs/inlined/ subdirectory the walk must
 // never descend into. Absolute, because TestMain chdirs the package out of its
 // own directory (main_test.go).
@@ -39,7 +39,7 @@ func TestWalkImportCorpus(t *testing.T) {
 	}{
 		{"001-forward-spec", want{"spec", 1, "accepted"}},
 		{"002-target-spec", want{"spec", 2, "draft"}},
-		{"003-record-a-decision", want{"adr", 3, "draft"}},
+		{"003-record-a-decision", want{"spec", 3, "draft"}},
 		{"2026-01-01-mintable-plan", want{"plan", 0, "accepted"}},
 		{"2026-01-02-legacy-plan", want{"plan", 0, "accepted"}},
 		{"2026-01-03-task-key-plan", want{"plan", 0, "accepted"}},
@@ -71,6 +71,16 @@ func TestWalkImportCorpusRejectsUnnumberedSpec(t *testing.T) {
 	_, err := walkImportCorpus(dir)
 	if err == nil || !strings.Contains(err.Error(), "no-number.md") {
 		t.Fatalf("err = %v, want it to name the file", err)
+	}
+}
+
+// TestWalkImportCorpusRejectsADRKind: the adr kind is retired (WL-SPEC-77
+// §2), so a file still declaring it is refused by name.
+func TestWalkImportCorpusRejectsADRKind(t *testing.T) {
+	dir := writeCorpus(t, map[string]string{"specs/001-old.md": "---\nkind: adr\n---\n\n# Old\n"})
+	_, err := walkImportCorpus(dir)
+	if err == nil || !strings.Contains(err.Error(), "001-old.md declares kind: adr") {
+		t.Fatalf("err = %v, want it to refuse the adr kind by file", err)
 	}
 }
 
@@ -230,7 +240,7 @@ func TestDocImport(t *testing.T) {
 			number int
 		}{
 			"001-forward-spec":         {"spec", 1},
-			"003-record-a-decision":    {"adr", 3},
+			"003-record-a-decision":    {"spec", 3},
 			"2026-01-01-mintable-plan": {"plan", 1}, // 029 §4: allocated, not 0
 		} {
 			d := importedDoc(t, c, slug)
@@ -341,7 +351,7 @@ func TestDocImportDryRun(t *testing.T) {
 		t.Fatalf("doc import --dry-run: %v\noutput: %s", err, out)
 	}
 	for _, want := range []string{
-		"001-forward-spec", "accepted", "003-record-a-decision", "adr",
+		"001-forward-spec", "accepted", "003-record-a-decision", "3 spec(s)",
 		"7 document(s)", "2026-01-04-cross-corpus-plan: rdf-registry:ADR-0006",
 	} {
 		if !strings.Contains(out, want) {

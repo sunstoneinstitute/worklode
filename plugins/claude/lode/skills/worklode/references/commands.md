@@ -45,22 +45,22 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode deliverable report` — Report a deliverable's state as a person (published, updated, deprecated, removed, failed)
   Flags: --note
 
-## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
+## `lode doc` — Create and inspect design documents: specs and plans
 
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
-- `lode doc add` — Create a document (spec, ADR, or plan) in draft
+- `lode doc add` — Create a document (spec or plan) in draft
   Flags: --file, --kind, --number, --owner, --project, --repo, --slug, --update-section-anchors
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
-- `lode doc edit` — Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment) or set its title and issued date
+- `lode doc edit` — Replace a document's body (a draft or plan in place, an accepted spec as an amendment) or set its title and issued date
   Flags: --file, --if-version, --issued, --note, --substantive, --title, --update-section-anchors
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
-- `lode doc link` — Add an edge to a document (a plan's next version, a draft in place, an accepted spec or ADR on its candidate revision)
+- `lode doc link` — Add an edge to a document (a plan's next version, a draft in place, an accepted spec on its candidate revision)
   Flags: --blocked-by, --covers, --defers, --derived-from, --from-anchor, --owner, --requires
 - `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
   Flags: --project, --repo
-- `lode doc list` — List documents: specs, ADRs, and plans
+- `lode doc list` — List documents: specs and plans
   Flags: --bare-superseded, --deleted, --has-notes, --kind, --needs-execution, --needs-planning, --older-than, --owner, --project, --repo, --status, --unresolved
 - `lode doc note` — Leave an anchored, non-blocking note on a document section
   Flags: --body, --body-file
@@ -217,7 +217,7 @@ Flags: --kind, --limit, --mode, --project, --repo
 
 ## `lode show` — Show any entity by id or kind flag: a task, a design doc, a project
 
-Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage, --version
+Flags: --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage, --version
 
 ## `lode skill` — Org-wide agent skills: list, recommend, install, sync
 

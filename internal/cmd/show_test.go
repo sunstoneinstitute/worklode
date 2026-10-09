@@ -111,15 +111,18 @@ func setupDocServer(t *testing.T, projectKey string, files map[string]string) st
 		if err != nil {
 			t.Fatalf("parse fixture %s: %v", name, err)
 		}
-		if parsed.Frontmatter != nil && parsed.Frontmatter.Kind == "adr" {
-			kind = "adr"
-		}
 		number := 0
 		if m := docFixtureNumber.FindStringSubmatch(slug); m != nil {
 			number, _ = strconv.Atoi(m[1])
 		}
+		// A `kind: adr` fixture stands for a former ADR: a spec 100 past its
+		// old number, reachable by <KEY>-ADR-<n> (WL-SPEC-77 §7a).
+		formerADR := 0
+		if parsed.Frontmatter != nil && parsed.Frontmatter.Kind == "adr" {
+			formerADR, number = number, number+100
+		}
 		docs = append(docs, model.Doc{
-			ID: id, Project: "proj", Kind: kind, Number: number,
+			ID: id, Project: "proj", Kind: kind, Number: number, FormerADR: formerADR,
 			Slug: slug, Title: slug, Status: "accepted", Version: 1,
 		})
 		bodies[id] = files[name]
@@ -798,8 +801,9 @@ func TestDocShowNeedsAServer(t *testing.T) {
 	}
 }
 
-// fixtureADR is a minimal kind: adr document, so a WL-ADR-* ref has a real
-// target to exercise the show -> runDocShow wiring end to end.
+// fixtureADR is a minimal former ADR (see setupDocServer), so a retired
+// WL-ADR-* ref has a real successor to exercise the show -> runDocShow
+// wiring end to end.
 const fixtureADR = `---
 status: accepted
 kind: adr
@@ -809,15 +813,22 @@ kind: adr
 Decision body.
 `
 
-func TestShowDispatchesADRToDocShow(t *testing.T) {
+func TestShowRetiredADRShowsSuccessor(t *testing.T) {
 	setupDocServer(t, "WL", map[string]string{"018-fixture-adr.md": fixtureADR})
 
-	out, err := runLode(t, "show", "WL-ADR-18")
+	out, errOut, err := runLodeOutErr(t, "show", "WL-ADR-18")
 	if err != nil {
 		t.Fatalf("lode show WL-ADR-18: %v\noutput: %s", err, out)
 	}
 	if out != fixtureADR {
-		t.Fatalf("show output = %q; want the ADR fixture verbatim", out)
+		t.Fatalf("show output = %q; want the successor's text verbatim", out)
+	}
+	if !strings.Contains(errOut, "WL-ADR-18 is retired; showing its successor") {
+		t.Fatalf("stderr = %q; want the retired-ref notice", errOut)
+	}
+
+	if out, err := runLode(t, "show", "--spec", "118"); err != nil || out != fixtureADR {
+		t.Fatalf("lode show --spec 118 = %q, %v; want the successor", out, err)
 	}
 }
 
@@ -873,27 +884,6 @@ func TestDocShowSectionSurvivesTrailingSpaceFrontmatterClose(t *testing.T) {
 }
 
 // --- lode show <kind flags> -------------------------------------------
-
-// TestShowADRFlagEquivalence mirrors TestShowSpecFlagEquivalence for --adr.
-func TestShowADRFlagEquivalence(t *testing.T) {
-	setupDocServer(t, "WL", map[string]string{"018-fixture-adr.md": fixtureADR})
-
-	outFlag, err := runLode(t, "show", "--adr", "18")
-	if err != nil {
-		t.Fatalf("lode show --adr 18: %v\noutput: %s", err, outFlag)
-	}
-	if outFlag != fixtureADR {
-		t.Fatalf("show --adr 18 output = %q; want the ADR fixture verbatim (%q)", outFlag, fixtureADR)
-	}
-
-	outPositional, err := runLode(t, "show", "WL-ADR-18")
-	if err != nil {
-		t.Fatalf("lode show WL-ADR-18: %v\noutput: %s", err, outPositional)
-	}
-	if outFlag != outPositional {
-		t.Fatalf("show --adr 18 = %q; want it to match positional WL-ADR-18 = %q", outFlag, outPositional)
-	}
-}
 
 // newShowTaskStubServer serves the two routes `lode show --task`/a bare
 // number positional need, without a real store: GET /api/v1/projects (for
@@ -976,9 +966,9 @@ func TestShowProjectFlag(t *testing.T) {
 }
 
 func TestShowErrorsTwoKindFlags(t *testing.T) {
-	out, err := runLode(t, "show", "--spec", "1", "--adr", "2")
+	out, err := runLode(t, "show", "--spec", "1", "--plan", "2")
 	if err == nil {
-		t.Fatalf("lode show --spec 1 --adr 2 succeeded\noutput: %s", out)
+		t.Fatalf("lode show --spec 1 --plan 2 succeeded\noutput: %s", out)
 	}
 	if err.Error() != "pass only one kind flag" {
 		t.Fatalf("err = %q; want %q", err.Error(), "pass only one kind flag")
@@ -1207,48 +1197,26 @@ func TestShowPlanFlagTakesABareOrdinal(t *testing.T) {
 	}
 }
 
-// TestShowAdrFlagKeylessStillChecksKind covers a review fix: with no
-// project_key configured, --spec/--adr fall back to resolveDocRef's
-// bare-number form (form 2), which never kind-checks on its own, unlike the
-// <KEY>-SPEC-<n>/<KEY>-ADR-<n> shorthand form (3) the flag path uses when the
-// key IS known — so runDocShow's expectedKind parameter must enforce the
-// kind independently in the keyless case too. --adr pointing at a spec must
-// still error with the kind mismatch, and --spec must still render normally:
-// a flag always means this repo's own project, key or no key, so resolving by
-// number with no key is legitimate for --spec/--adr — unlike a positional
-// shorthand id (WL-SPEC-15), which would instead get 026 §4.2's tier-3
-// "unresolved" treatment for an unknown foreign key.
-func TestShowAdrFlagKeylessStillChecksKind(t *testing.T) {
-	setupDocServer(t, "", map[string]string{
-		"014-fixture.md":     fixtureSpec,
-		"018-fixture-adr.md": fixtureADR,
-	})
+// TestShowPlanFlagKeylessStillChecksKind: with no project_key configured,
+// --spec/--plan fall back to resolveDocRef's bare-number form, which never
+// kind-checks on its own, so runDocShow's expectedKind must. --plan pointing
+// at a spec errors with the kind mismatch, and --spec still renders.
+func TestShowPlanFlagKeylessStillChecksKind(t *testing.T) {
+	setupDocServer(t, "", map[string]string{"014-fixture.md": fixtureSpec})
 
-	// --adr 14 names a document that is actually a spec: still a
-	// KindMismatchError, not a silent spec render.
-	out, err := runLode(t, "show", "--adr", "14")
+	out, err := runLode(t, "show", "--plan", "14")
 	if err == nil {
-		t.Fatalf("lode show --adr 14 (a spec) succeeded\noutput: %s", out)
+		t.Fatalf("lode show --plan 14 (a spec) succeeded\noutput: %s", out)
 	}
-	if !strings.Contains(err.Error(), "ref names an ADR, document is a spec") {
+	if !strings.Contains(err.Error(), "ref names a plan, document is a spec") {
 		t.Fatalf("err = %v; want the kind-mismatch message", err)
 	}
 
-	// --spec 14 on the same keyless corpus still renders normally.
 	out, err = runLode(t, "show", "--spec", "14")
 	if err != nil {
 		t.Fatalf("lode show --spec 14: %v\noutput: %s", err, out)
 	}
 	if out != fixtureSpec {
 		t.Fatalf("show --spec 14 output = %q; want the fixture verbatim", out)
-	}
-
-	// Symmetric case: --spec 18 names an actual ADR.
-	out, err = runLode(t, "show", "--spec", "18")
-	if err == nil {
-		t.Fatalf("lode show --spec 18 (an ADR) succeeded\noutput: %s", out)
-	}
-	if !strings.Contains(err.Error(), "ref names a spec, document is an ADR") {
-		t.Fatalf("err = %v; want the kind-mismatch message", err)
 	}
 }

@@ -1,6 +1,6 @@
 ---
 name: worklode
-description: Use when asked to explain Worklode itself — what it is, what entities it tracks (task, rule, doc, project, deliverable, actor, approval), how task state changes automatically from GitHub/Flux webhooks vs. by hand, how to create or find a task or a spec/ADR/plan, what edges/relationships exist between objects, or how specs arrange rules, rules version, and tasks inherit governing rules. Also use for "what lode commands exist", "how do I file a bug/spec here", or when a project's CLAUDE.md points to this skill. Not for the in-worktree done/block/release judgment loop (working-under-worklode) or credential handling (lode-secrets).
+description: Use when asked to explain Worklode itself — what it is, what entities it tracks (task, rule, doc, project, deliverable, actor, approval), how task state changes automatically from GitHub/Flux webhooks vs. by hand, how to create or find a task or a spec/plan, what edges/relationships exist between objects, or how specs arrange rules, rules version, and tasks inherit governing rules. Also use for "what lode commands exist", "how do I file a bug/spec here", or when a project's CLAUDE.md points to this skill. Not for the in-worktree done/block/release judgment loop (working-under-worklode) or credential handling (lode-secrets).
 ---
 
 # Worklode
@@ -143,7 +143,7 @@ lode show <ref>                         # any entity by id: task, doc, project
 lode search <query>                     # rank docs, tasks and skills by meaning and by exact token
 lode task timeline <id>                 # full history: states, PRs, CI, deploys
 
-lode doc add --kind spec --slug <slug> --file <draft.md>   # kind: spec, adr, plan
+lode doc add --kind spec --slug <slug> --file <draft.md>   # kind: spec, plan
 lode doc list --needs-planning     # accepted specs with a section no accepted plan covers
 lode doc list --needs-execution    # accepted plans whose minted task set still has an open task
 lode doc show <ref> --json        # body, sections, edges

@@ -37,9 +37,9 @@ import (
 )
 
 // validDocKinds mirrors the docs.kind CHECK constraint (migration 0027) and
-// the wl:Spec/wl:ADR/wl:Plan classes in ns/ontology.ttl. The store re-checks;
+// the wl:Spec/wl:Plan classes in ns/ontology.ttl. The store re-checks;
 // this is here so a typo is a named 422 rather than a generic one.
-var validDocKinds = map[string]bool{"spec": true, "adr": true, "plan": true}
+var validDocKinds = map[string]bool{"spec": true, "plan": true}
 
 // validDocStatuses mirrors the docs.status CHECK constraint, derived from
 // wlc:DesignDocStatus in ns/concept.ttl (025 §17). Only the corpus importer
@@ -49,7 +49,7 @@ var validDocStatuses = ns.Set(ns.DesignDocStatuses)
 // invalidDocKindMsg is what createDoc — today the only handler that gates on
 // validDocKinds — answers with. It is a constant so a second write path names
 // the kinds the same way this one does.
-const invalidDocKindMsg = "invalid kind: must be spec, adr, or plan"
+const invalidDocKindMsg = "invalid kind: must be spec or plan"
 
 // invalidDocStatusMsg names the statuses a corpus import may assert.
 var invalidDocStatusMsg = "invalid status: must be " + ns.OrList(ns.DesignDocStatuses)
@@ -563,7 +563,7 @@ func docSelectorFrom(p model.DocListParams) (docListSelector, error) {
 		{sel.needsExecution, "needs_execution", "accepted", "WL-SPEC-77 §13",
 			func(k string) bool { return k == "plan" }, "plan"},
 		{sel.bareSuperseded, "bare_superseded", "superseded", "WL-SPEC-77 §4",
-			func(k string) bool { return k == "spec" || k == "adr" }, "spec or adr"},
+			func(k string) bool { return k == "spec" }, "spec"},
 		{sel.unresolved, "unresolved", "accepted", "WL-SPEC-77 §9",
 			func(k string) bool { return k == "spec" || k == "plan" }, "spec or plan"},
 	}

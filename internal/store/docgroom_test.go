@@ -254,7 +254,7 @@ func candidateByID(cs []StaleCandidate, id int64) (StaleCandidate, bool) {
 
 // TestStaleCandidateDocs is 025 §8.7's fact reader: one fixture per row of
 // the truth table (accepted plan with/without a lease, accepted spec
-// with/without an accepted covering plan, an ADR, a draft, a project with
+// with/without an accepted covering plan, a draft, a project with
 // doc_staleness_days set), asserted separately. The threshold verdict is
 // watcher.StaleAt's job, not this reader's, so nothing here checks a clock.
 func TestStaleCandidateDocs(t *testing.T) {
@@ -275,12 +275,6 @@ func TestStaleCandidateDocs(t *testing.T) {
 	// Accepted spec with no covering plan at all.
 	specAlone := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 220, Slug: "220-b",
-		Body: specBody, CreatedBy: "stig", Status: "accepted",
-	})
-	// Accepted ADR: excluded from the reader regardless of status, matching
-	// watcher.StaleAt.
-	adr := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "adr", Number: 1, Slug: "001-adr",
 		Body: specBody, CreatedBy: "stig", Status: "accepted",
 	})
 	// Draft spec: excluded, only accepted docs are candidates.
@@ -318,9 +312,6 @@ func TestStaleCandidateDocs(t *testing.T) {
 		}
 	}
 
-	if _, ok := candidateByID(cands, adr.ID); ok {
-		t.Errorf("ADR %d present, want excluded", adr.ID)
-	}
 	if _, ok := candidateByID(cands, draft.ID); ok {
 		t.Errorf("draft %d present, want excluded", draft.ID)
 	}

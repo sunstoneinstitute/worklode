@@ -27,9 +27,13 @@ type Doc struct {
 	// <KEY>-<KIND>-<N> shorthand task.ID uses for tasks ("WL-7"). Stamped
 	// alongside ProjectKey, from which it is built (FormatRef); empty on a
 	// store-side value that never passed through the API boundary.
-	Ref       string `json:"ref,omitempty"`
-	Kind      string `json:"kind"` // spec | adr | plan
-	Number    int    `json:"number"`
+	Ref    string `json:"ref,omitempty"`
+	Kind   string `json:"kind"` // spec | plan
+	Number int    `json:"number"`
+	// FormerADR is the number this spec carried as an ADR before the adr
+	// kind was retired, 0 for a document that never was one. It is what keeps
+	// a <KEY>-ADR-<n> ref resolving to this spec (WL-SPEC-77 §7a).
+	FormerADR int    `json:"former_adr,omitempty"`
 	Slug      string `json:"slug"`
 	Title     string `json:"title"`
 	Body      string `json:"body"` // the full markdown, frontmatter included

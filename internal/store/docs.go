@@ -39,9 +39,9 @@ func SetDocDepthLimit(n int) { docDepthLimit = n }
 // validDocKinds and validDocStatuses mirror the docs CHECK constraints, so a
 // bad input is ErrInvalidInput rather than a Postgres error the caller has to
 // decode. The status set is generated from wlc:DesignDocStatus (025 §17); the
-// kinds mirror the wl:Spec/wl:ADR/wl:Plan classes, which are not a SKOS scheme.
+// kinds mirror the wl:Spec/wl:Plan classes, which are not a SKOS scheme.
 var (
-	validDocKinds    = map[string]bool{"spec": true, "adr": true, "plan": true}
+	validDocKinds    = map[string]bool{"spec": true, "plan": true}
 	validDocStatuses = ns.Set(ns.DesignDocStatuses)
 )
 
@@ -877,7 +877,7 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 // docColumns is the SELECT list scanDoc expects, in order. The three
 // tombstone columns (migration 0034) are last so positional scans elsewhere
 // are unaffected by their addition; they are all-null or all-set together.
-const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, owner, created_by, generated_by_task, created_at, updated_at, deleted_at, deleted_by, delete_justification`
+const docColumns = `id, project_id, kind, number, former_adr, slug, title, body, status, version, issued, owner, created_by, generated_by_task, created_at, updated_at, deleted_at, deleted_by, delete_justification`
 
 // docColumnsD is docColumns under the `d` alias, for the queries that join
 // docs against a table carrying a column of the same name (doc_sections.number).
@@ -885,12 +885,12 @@ var docColumnsD = qualifyColumns(docColumns, "d")
 
 func scanDoc(row rowScanner) (*model.Doc, error) {
 	var d model.Doc
-	var number sql.NullInt64
+	var number, formerADR sql.NullInt64
 	var issued sql.NullTime
 	var owner, createdBy, generatedByTask sql.NullString
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
-	if err := row.Scan(&d.ID, &d.Project, &d.Kind, &number, &d.Slug, &d.Title, &d.Body,
+	if err := row.Scan(&d.ID, &d.Project, &d.Kind, &number, &formerADR, &d.Slug, &d.Title, &d.Body,
 		&d.Status, &d.Version, &issued, &owner, &createdBy, &generatedByTask,
 		&d.CreatedAt, &d.UpdatedAt,
 		&deletedAt, &deletedBy, &justification); err != nil {
@@ -898,6 +898,7 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	}
 	d.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
 	d.Number = int(number.Int64)
+	d.FormerADR = int(formerADR.Int64)
 	if issued.Valid {
 		d.Issued = issued.Time.Format(docDateLayout)
 	}

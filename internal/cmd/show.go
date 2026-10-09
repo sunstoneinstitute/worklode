@@ -16,7 +16,7 @@ import (
 
 // typedID matches 025 §14.3's <KEY>-<TYPE>-<n> grammar (generalized by 029
 // §4 to plans, milestones and deliverables), with an optional #sec- fragment
-// for the SPEC/ADR case. It is checked before taskID: a document reference
+// for the SPEC case. It is checked before taskID: a document reference
 // must never parse as a task id (025 §14.3).
 var typedID = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-([A-Z][A-Z0-9]*)-(\d+(?:-\d+)?)(#sec-[\w.\-]+)?$`)
 
@@ -31,7 +31,7 @@ const (
 	// targetTask: a bare task number or a full task id — dispatch to
 	// runTaskShow.
 	targetTask targetKind = iota
-	// targetDoc: a SPEC or ADR shorthand, or any other doc-ref shape — a
+	// targetDoc: a SPEC, PLAN or retired ADR shorthand, or any other doc-ref shape — a
 	// path, a filename, a number form, a bare slug — dispatch to runDocShow,
 	// whose resolveDocRef owns the full grammar.
 	targetDoc
@@ -99,7 +99,7 @@ var docRefShape = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // showKinds lists the valid --kind values, and the seven per-kind flags, in
 // the order the brief's surface documents them.
-var showKinds = []string{"task", "spec", "adr", "plan", "milestone", "project", "deliverable"}
+var showKinds = []string{"task", "spec", "plan", "milestone", "project", "deliverable"}
 
 // showOrdinalShape validates a kind flag's value against its ordinal shape:
 // every kind takes a bare integer, plans included since 029 §4 put them on
@@ -108,14 +108,13 @@ var showKinds = []string{"task", "spec", "adr", "plan", "milestone", "project", 
 var showOrdinalShape = map[string]*regexp.Regexp{
 	"task":        bareTaskNumber,
 	"spec":        bareTaskNumber,
-	"adr":         bareTaskNumber,
 	"milestone":   bareTaskNumber,
 	"deliverable": bareTaskNumber,
 	"plan":        bareTaskNumber,
 }
 
 func newShowCmd() *cobra.Command {
-	var kind, taskFlag, specFlag, adrFlag, planFlag, milestoneFlag, projectFlag, deliverableFlag, section string
+	var kind, taskFlag, specFlag, planFlag, milestoneFlag, projectFlag, deliverableFlag, section string
 	var pager, inline, usage bool
 	var version int
 	cmd := &cobra.Command{
@@ -133,15 +132,15 @@ func newShowCmd() *cobra.Command {
                                     corpus path/filename — the same refs
                                     the lode doc verbs resolve. A bare
                                     number is always a task; a document by
-                                    bare number is --spec/--adr <n>.
+                                    bare number is --spec <n>.
   lode show --<kind> <ordinal>      name the kind and its bare ordinal
                                     directly, e.g. --spec 15, --task 12
   lode show --kind <K> <ordinal>    the generic form of the same thing
 
-At most one of --task/--spec/--adr/--plan/--milestone/--project/
---deliverable and --kind may be given, and never together with a
+At most one of --task/--spec/--plan/--milestone/--project/--deliverable
+and --kind may be given, and never together with a
 positional id — the flag's value already is the id. --section (-s)
-narrows a spec or ADR render to one section (and its subsections) by
+narrows a spec render to one section (and its subsections) by
 anchor; -s 3 is shorthand for -s sec-3.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -149,7 +148,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 			defer cleanupPager()
 
 			flagValues := map[string]string{
-				"task": taskFlag, "spec": specFlag, "adr": adrFlag, "plan": planFlag,
+				"task": taskFlag, "spec": specFlag, "plan": planFlag,
 				"milestone": milestoneFlag, "project": projectFlag, "deliverable": deliverableFlag,
 			}
 			sectionSet := cmd.Flags().Changed("section")
@@ -195,7 +194,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 				return dispatchShowKind(cmd, changedKind, changedValue, section, sectionSet, inline, usage)
 			default:
 				if len(args) != 1 {
-					return errors.New("show requires exactly one argument: a task id, a document id, or a kind flag (--task, --spec, --adr, --plan, --milestone, --project, --deliverable, --kind)")
+					return errors.New("show requires exactly one argument: a task id, a document id, or a kind flag (--task, --spec, --plan, --milestone, --project, --deliverable, --kind)")
 				}
 				return dispatchShowPositional(cmd, args[0], section, sectionSet, inline, usage, version, versionSet)
 			}
@@ -205,15 +204,14 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	completeFlagValues(cmd, "kind", showKinds)
 	cmd.Flags().StringVar(&taskFlag, "task", "", "show a task by bare number (e.g. --task 12; equivalent to the bare number positional)")
 	cmd.Flags().StringVar(&specFlag, "spec", "", "show a spec by number (e.g. --spec 15)")
-	cmd.Flags().StringVar(&adrFlag, "adr", "", "show an ADR by number (e.g. --adr 7)")
 	cmd.Flags().StringVar(&planFlag, "plan", "", "show a plan by number (e.g. --plan 7)")
 	cmd.Flags().StringVar(&milestoneFlag, "milestone", "", "show a milestone by number (e.g. --milestone 2)")
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
 	completeProjectFlag(cmd, "project")
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3)")
-	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
+	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec only), by anchor: sec-3, #sec-3, or just 3")
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
-	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec, ADR or rule: fold every effective amendment and supersession into the section or rule it acts on; ignored for tasks and projects")
+	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or rule: fold every effective amendment and supersession into the section or rule it acts on; ignored for tasks and projects")
 	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
 	cmd.Flags().IntVar(&version, "version", 0, "show one version of a rule (WL-REQ-<n>)")
 	// --project is the only way to reach a project through show: a positional
@@ -256,7 +254,7 @@ func exampleOrdinal(value string) string {
 // flag or from --kind <K> plus its positional — to the same routines the
 // typed-id path (dispatchShowPositional) uses.
 func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSet, inline, usage bool) error {
-	if sectionSet && kind != "spec" && kind != "adr" {
+	if sectionSet && kind != "spec" {
 		return errors.New("--section applies only to documents")
 	}
 	if usage && kind != "task" {
@@ -270,7 +268,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 	switch kind {
 	case "task":
 		return runTaskShow(cmd, value, usage)
-	case "spec", "adr", "plan":
+	case "spec", "plan":
 		return runDocShowByOrdinal(cmd, kind, value, section, inline)
 	case "milestone":
 		return runMilestoneShowByOrdinal(cmd, value)
@@ -286,18 +284,18 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 	}
 }
 
-// runDocShowByOrdinal resolves a --spec/--adr flag's bare ordinal to a doc
+// runDocShowByOrdinal resolves a --spec/--plan flag's bare ordinal to a doc
 // ref and renders it through runDocShow. A flag can only ever mean this
 // repo's own project, so there is no foreign-key tier to consider. When the
 // project key is known (config project_key), the ref is built as the local
-// <KEY>-SPEC-<n>/<KEY>-ADR-<n> shorthand, which resolveDocRef resolves
+// <KEY>-SPEC-<n>/<KEY>-PLAN-<n> shorthand, which resolveDocRef resolves
 // through its form 3 (and so kind-checks there). When the key is unknown
 // there is no shorthand to build, so the ref falls back to the bare number
 // form (form 2) — legitimate for a flag, where the equivalent positional
 // shorthand (WL-SPEC-6) would instead get 026 §4.2's tier-3 "unresolved"
 // treatment for an unknown key. Either way expectedKind is passed through to
 // runDocShow, which verifies it against the resolved document's kind — so a
-// keyless --adr on a spec (or vice versa) still gets the KindMismatchError,
+// keyless --plan on a spec (or vice versa) still gets the KindMismatchError,
 // not a silent wrong-kind render.
 func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string, inline bool) error {
 	cfg, err := cli.LoadConfig()
@@ -334,7 +332,7 @@ func runMilestoneShow(cmd *cobra.Command, id string) error {
 }
 
 // runMilestoneShowByOrdinal resolves a --milestone flag's bare ordinal to a
-// full id the same way runDocShowByOrdinal resolves --spec/--adr: a flag can
+// full id the same way runDocShowByOrdinal resolves --spec: a flag can
 // only ever mean this repo's own project, so the id is built from the
 // configured project key. Unlike a document, a milestone id has no bare-
 // number fallback form to resolve through when the key is unknown — the id

@@ -22,7 +22,7 @@ import (
 
 // docKinds are the document kinds a canonical URL can name. rule is not
 // here: its literal routes win over the {kind} wildcard.
-var docKinds = []string{"spec", "adr", "plan"}
+var docKinds = []string{"spec", "plan"}
 
 // taskCanonicalURL is a task's canonical cockpit URL (S20). It is "" when
 // the id is not <projectKey>-<n>, so the caller keeps serving the page at
