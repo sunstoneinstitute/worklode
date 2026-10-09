@@ -8,12 +8,12 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-// inbox.templ renders the cross-project inbox (GET /inbox, spec 056 §3):
-// what is waiting on the signed-in actor, in 056 §3.2's fixed bucket order.
+// inbox.templ renders the cross-project inbox (GET /inbox, WL-SPEC-82 §12):
+// what is waiting on the signed-in actor, in WL-SPEC-82 §12's fixed bucket order.
 // Structurally the same shape as runboard.templ's groups — one
 // <section class="card"> per non-empty bucket, worklist rows (board.templ's
 // row shape, sans state chips: an inbox item carries none) linking their
-// href. It carries no ActiveGlobal key (spec 056 §1's five destinations
+// href. It carries no ActiveGlobal key (WL-SPEC-82 §2.1's five destinations
 // don't include it), so the shell's single aria-current="page" belongs to
 // nothing here, the same as Home. A nil view — no actor, or an actor with
 // nothing waiting — renders the honest "Nothing is waiting on you." line
@@ -96,7 +96,7 @@ func Inbox(v *InboxView) templ.Component {
 	})
 }
 
-// inboxBucket renders one §3.2 bucket: its heading and its items as
+// inboxBucket renders one WL-SPEC-82 §12 bucket: its heading and its items as
 // worklist rows.
 func inboxBucket(b InboxBucket) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

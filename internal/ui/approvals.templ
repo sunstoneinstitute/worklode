@@ -3,8 +3,8 @@ package ui
 import "strconv"
 
 // approvals.templ renders the Reviews destination (GET /reviews): the
-// awaiting-approvals queue (spec 029 §7.1), one row per approval still in
-// state 'awaiting', oldest first, each with the decide form (029 §7.3). A row
+// awaiting-approvals queue (WL-SPEC-82 §9), one row per approval still in
+// state 'awaiting', oldest first, each with the decide form (WL-SPEC-82 §9). A row
 // links to whatever it governs — a pull request jumps out to GitHub, which
 // stays the review surface for one; every other kind links to its cockpit
 // page — and names the kind, so the queue does not ask a reviewer to infer it
@@ -13,7 +13,7 @@ import "strconv"
 // refuses that decide, so the page does not offer it. An empty queue states
 // that honestly rather than showing a fabricated record.
 //
-// It also renders the approval detail page (GET /approvals/{id}, 032 §7):
+// It also renders the approval detail page (GET /approvals/{id}, WL-SPEC-82 §9):
 // see ApprovalDetail's own doc comment below.
 
 templ Approvals(v ApprovalsView) {
@@ -36,7 +36,7 @@ templ Approvals(v ApprovalsView) {
 // approvalRow renders one queue row. rel="noreferrer" on the entity link
 // matches the task page's own jump-out convention for an external source
 // link. Every line-two part is conditional: only a PR-kind row has a task,
-// and only a row answering a named lane (029 §7.2) has one to show.
+// and only a row answering a named lane (WL-SPEC-82 §9) has one to show.
 templ approvalRow(row ApprovalRow) {
 	<li>
 		<div>
@@ -88,7 +88,7 @@ templ approvalRow(row ApprovalRow) {
 	</li>
 }
 
-// impactActs renders the two acts an open impact review offers (029 §7.1):
+// impactActs renders the two acts an open impact review offers (WL-SPEC-82 §9):
 // the dependent owner writes down what the upstream change means for their
 // entity, and a prior approver then says whether their own approval still
 // holds. The buttons post the ordinary decide values — the question they
@@ -107,7 +107,7 @@ templ impactActs(id int64) {
 	</form>
 }
 
-// ApprovalDetail renders GET /approvals/{id} (032 §7), the tracer for the
+// ApprovalDetail renders GET /approvals/{id} (WL-SPEC-82 §9), the tracer for the
 // review-graph presentation surface: one approval, the entity it governs,
 // its full decision history, and the review-graph references its own
 // designation recorded. Read-mostly: the only acts it offers are an open

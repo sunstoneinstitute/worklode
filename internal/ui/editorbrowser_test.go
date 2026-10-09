@@ -12,7 +12,7 @@ package ui
 //
 // It shares the `narrowcheck` build tag with the narrow-width audit because
 // that tag means one thing: this test needs a browser, and CI does not install
-// one (spec 032 §12). It reuses that audit's CDP client (cdp_test.go) and its
+// one (WL-SPEC-82 §4). It reuses that audit's CDP client (cdp_test.go) and its
 // browser discovery (narrowbrowser_test.go).
 //
 // The round-trip report is the deliverable, not a pass/fail: BlockNote's

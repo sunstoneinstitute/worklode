@@ -11,12 +11,12 @@ import templruntime "github.com/a-h/templ/runtime"
 // milestones.templ renders a project's Milestones destination (GET
 // /projects/{id}/milestones): every milestone in the project as a section,
 // in position order, with the tasks and deliverables its progress was
-// derived from (spec 029 §2, spec 032 §10).
+// derived from (WL-SPEC-75 §13.2, WL-SPEC-82 §4).
 //
 // One page carries list and detail. A research project holds a handful of
 // milestones, so a per-milestone page would be chrome without a reader.
 //
-// Progress is plain counts. Spec 029 §2 derives it as a query over the
+// Progress is plain counts. WL-SPEC-75 §13.2 derives it as a query over the
 // children — two small integers per kind — and a percentage or a bar would
 // claim a precision those integers do not carry.
 func Milestones(v MilestonesView) templ.Component {
@@ -352,7 +352,7 @@ func milestoneSection(m MilestoneSection) templ.Component {
 	})
 }
 
-// milestoneRefs renders the milestone's deliverable references (spec 029 §5)
+// milestoneRefs renders the milestone's deliverable references (WL-SPEC-75 §13.4)
 // and the affordance to declare another. A reference is the one edge allowed
 // to cross a project boundary, so each row shows the deliverable id whole —
 // its project key is what makes a cross-project origin visible — and links

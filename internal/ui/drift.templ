@@ -1,11 +1,11 @@
 package ui
 
-// drift.templ renders the drift board at /drift — spec 007's read surface,
+// drift.templ renders the drift board at /drift — the read surface of WL-SPEC-82 §2.5,
 // the graph-backed expert view Knowledge covers (layout.templ's primaryNav
 // doc comment), which is why the page marks "knowledge" current rather than
 // taking an eighth nav destination.
 //
-// The page is read-only by construction: spec 007 is a set of reads over
+// The page is read-only by construction: the drift board is a set of reads over
 // derived facts, and nothing on it can be acted on here — resolving drift
 // means changing a declaration or the code, not clicking a button. So it
 // renders no form and no POST affordance, and internal/api's

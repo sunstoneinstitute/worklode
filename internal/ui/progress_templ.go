@@ -9,26 +9,26 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 // progress.templ renders a project's Progress page (GET
-// /projects/{id}/progress, WL-SPEC-66 §2) inside the same project sidebar
+// /projects/{id}/progress, WL-SPEC-85 §3) inside the same project sidebar
 // frame as the run board (runboard.templ), with active key "progress".
 //
-// Top to bottom, §2.1: the rally band (always rendered, always the same
+// Top to bottom, WL-SPEC-85 §3: the rally band (always rendered, always the same
 // height, so the page never moves when a rally starts or ends), the four
-// group counts, the section bar and its legend, the §1.3 groups of spec
-// rows, and the rally footer in its reserved slot (§3.5).
+// group counts, the section bar and its legend, the WL-SPEC-85 §2 groups of spec
+// rows, and the rally footer in its reserved slot (WL-SPEC-85 §4).
 //
 // Nothing here derives anything: model.ProjectProgress arrives already
 // derived (internal/progress), and every label, class and hover string comes
 // from the helpers in views.go. Two rules the page holds by construction: no
-// count carries a percentage (§2.5).
+// count carries a percentage (WL-SPEC-85 §3).
 //
-// Every row is followed by its detail block (§2.3), rendered server-side and
+// Every row is followed by its detail block (WL-SPEC-85 §3), rendered server-side and
 // hidden by the stylesheet until progress.js puts the "open" class on the row.
-// That script also owns the page's tooltips (§2.4), which it reads from the
+// That script also owns the page's tooltips (WL-SPEC-85 §3), which it reads from the
 // data-tip attributes written here — the page carries no title attribute on a
 // cell or a reference, so nothing shows two tooltips at once.
 //
-// The live swap (§5.2) reads three more attributes: data-doc names the spec a
+// The live swap (WL-SPEC-85 §6) reads three more attributes: data-doc names the spec a
 // row is, data-group the group it belongs in, and data-anchor the section a
 // strip cell is about, so a pinned tooltip survives its cell being replaced.
 
@@ -167,7 +167,7 @@ func Progress(v ProgressView) templ.Component {
 }
 
 // ProgressRowFragment is GET /projects/{id}/progress/spec/{doc}'s payload
-// (§5.2): one spec's row and its detail block, the same markup progressGroup
+// (WL-SPEC-85 §6): one spec's row and its detail block, the same markup progressGroup
 // draws inline on the full page. viewer and reviewEnabled decide the row's
 // actions exactly as they do there — the fragment and the page can never
 // disagree about what a viewer may do to this spec.
@@ -201,7 +201,7 @@ func ProgressRowFragment(s model.ProgressSpec, viewer string, reviewEnabled, mer
 }
 
 // ProgressSummaryFragment is GET /projects/{id}/progress/summary's payload
-// (§5.2): the rally band, the four group counts, the section bar and legend,
+// (WL-SPEC-85 §6): the rally band, the four group counts, the section bar and legend,
 // and the rally footer — everything on the page outside the spec groups
 // themselves. v carries the same model.ProjectProgress the full page
 // renders, from an unfiltered ProjectProgress read (these pieces are
@@ -247,7 +247,7 @@ func ProgressSummaryFragment(v ProgressView) templ.Component {
 	})
 }
 
-// progressFooter is §3.5's rally footer, in §2.1's reserved slot. The slot is
+// progressFooter is WL-SPEC-85 §4's rally footer, in WL-SPEC-85 §3's reserved slot. The slot is
 // the same height whether or not a draft rally exists, so confirming or
 // discarding one moves nothing on the page above it. With no draft rally
 // there is nothing to say and nothing to press: the bar is empty and hidden
@@ -324,7 +324,7 @@ func progressFooter(d *model.RallyBand, viewer string) templ.Component {
 	})
 }
 
-// progressBand is §2.1's rally band. It keeps its height whether or not a
+// progressBand is WL-SPEC-85 §3's rally band. It keeps its height whether or not a
 // rally is running, and says plainly when none is.
 func progressBand(r *model.RallyBand) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -435,7 +435,7 @@ func progressBand(r *model.RallyBand) templ.Component {
 	})
 }
 
-// progressCounts is §2.1's four tiles: the sizes of §1.3's four groups.
+// progressCounts is WL-SPEC-85 §3's four tiles: the sizes of WL-SPEC-85 §2's four groups.
 func progressCounts(c model.ProgressCounts) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -540,7 +540,7 @@ func progressCount(label string, n int) templ.Component {
 	})
 }
 
-// progressBar is §2.1's section bar and legend: every owed section in the
+// progressBar is WL-SPEC-85 §3's section bar and legend: every owed section in the
 // project as one slice per state, in state order, with no scale and no
 // labels beyond the legend's counts.
 func progressBar(v ProgressView) templ.Component {
@@ -699,7 +699,7 @@ func progressBar(v ProgressView) templ.Component {
 	})
 }
 
-// progressGroup renders one §1.3 group: its label, its size, its one-line
+// progressGroup renders one WL-SPEC-85 §2 group: its label, its size, its one-line
 // reason, then a row per spec. An empty group is omitted rather than
 // rendered as a heading over nothing.
 func progressGroup(g model.ProgressGroup, viewer string, reviewEnabled, mergeEnabled bool) templ.Component {
@@ -795,12 +795,12 @@ func progressGroup(g model.ProgressGroup, viewer string, reviewEnabled, mergeEna
 	})
 }
 
-// progressRow is §2.2's row: reference, title, strip, next act, and the
-// right-aligned action slot the row-level acts of §3 render into — Accept
-// (§3.2), Plan (§3.4), Rally (§3.5) and Review (§3.3), the last disabled
-// until hasReviewSurface (internal/api) says spec 059's routes exist. A spec
+// progressRow is WL-SPEC-85 §3's row: reference, title, strip, next act, and the
+// right-aligned action slot the row-level acts of WL-SPEC-85 §4 render into — Accept
+// (WL-SPEC-85 §4), Plan, Rally and Review, the last disabled
+// until hasReviewSurface (internal/api) says WL-SPEC-84's routes exist. A spec
 // whose planning task is already open shows it as a link there instead of the
-// Plan button (§3.4). The reference is the row's only link. Clicking the row anywhere but a link expands the
+// Plan button (WL-SPEC-85 §4). The reference is the row's only link. Clicking the row anywhere but a link expands the
 // detail block that follows it; the row is focusable so a keyboard can do the
 // same.
 func progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) templ.Component {
@@ -1078,7 +1078,7 @@ func progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnable
 	})
 }
 
-// progressDetail is §2.3's expanded row: the plans that cover the spec, then
+// progressDetail is WL-SPEC-85 §3's expanded row: the plans that cover the spec, then
 // every section of it. It is always rendered — the stylesheet hides it until
 // the row carries "open" — so expanding costs no request and the markup a
 // test reads is the markup a reader expands.
@@ -1250,7 +1250,7 @@ func progressDetail(s model.ProgressSpec, viewer string, reviewEnabled, mergeEna
 	})
 }
 
-// progressPill is a state pill: the same swatch the legend draws, with §1.2's
+// progressPill is a state pill: the same swatch the legend draws, with WL-SPEC-85 §2's
 // label beside it, so one vocabulary of colour covers strip, bar and detail.
 func progressPill(state string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -1316,9 +1316,9 @@ func progressPill(state string) templ.Component {
 	})
 }
 
-// progressPlanLine is one plan of §2.3's plans list: what it is, what it comes
+// progressPlanLine is one plan of WL-SPEC-85 §3's plans list: what it is, what it comes
 // after, its state, and one cell per minted task. A plan with no minted task
-// says so rather than drawing an empty strip (§1.1's no_record).
+// says so rather than drawing an empty strip (WL-SPEC-85 §2's no_record).
 func progressPlanLine(specRef string, p model.ProgressPlan, viewer string, reviewEnabled, mergeEnabled bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -1551,22 +1551,22 @@ func progressPlanLine(specRef string, p model.ProgressPlan, viewer string, revie
 	})
 }
 
-// A task cell's merge button (§3.6) is rendered here and hidden: it belongs
+// A task cell's merge button (WL-SPEC-85 §4) is rendered here and hidden: it belongs
 // in the cell's pinned tooltip, and progress.js moves a copy there when a
 // click pins one. Rendering it server-side keeps the label, the body and the
 // disabled reason decided in one place, like every other act on this page.
 
-// progressAct is §3.1's two-step control, the one button every act on this
+// progressAct is WL-SPEC-85 §4's two-step control, the one button every act on this
 // page uses. It carries what progress.js needs and nothing else: the route
 // to post to, the body to send, and the sentence the confirmation step
 // shows. The first click never writes — the script swaps this element's
 // content for that sentence with Confirm and Cancel, at the width it
 // measured first, so nothing on the page moves. That step guards against a
 // mis-click; what makes the write safe from another origin is the gate in
-// internal/api's beginJSONPost (§4.2, §4.3).
+// internal/api's beginJSONPost (WL-SPEC-85 §5).
 //
 // A viewer who may not act gets the button disabled with the reason in its
-// hover text rather than no button at all (§3).
+// hover text rather than no button at all (WL-SPEC-85 §4).
 func progressAct(a ProgressAction) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -1707,7 +1707,7 @@ func progressAct(a ProgressAction) templ.Component {
 	})
 }
 
-// pageActs renders a page's §3.1 buttons outside the Progress page, with
+// pageActs renders a page's WL-SPEC-85 §4 buttons outside the Progress page, with
 // act.js to drive them. No acts renders nothing, script included.
 func pageActs(acts []ProgressAction) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
