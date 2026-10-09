@@ -197,6 +197,28 @@ func TestSpecReconcilerLinksOncePerTrailer(t *testing.T) {
 	}
 }
 
+// A qualifier does not change the linked rule, so a later delivery that
+// differs only by "amended" is already governed and writes no second event.
+func TestSpecReconcilerIgnoresQualifierForIdempotency(t *testing.T) {
+	f := newReconcilerFixture(t)
+	task := f.createTask(t)
+	ctx := context.Background()
+
+	if out, err := f.srv.handleSpecReconcile(ctx, prEvent(7101, task.Branch, "Spec: WL-REQ-1\n")); err != nil || out != eventbus.OutcomeApplied {
+		t.Fatalf("first: %v %v", out, err)
+	}
+	out, err := f.srv.handleSpecReconcile(ctx, pushEvent(7102, task.Branch, "more\n\nSpec: WL-REQ-1 amended\n"))
+	if err != nil || out != eventbus.OutcomeSuppressed {
+		t.Fatalf("qualified trailer: %v %v", out, err)
+	}
+	if got := testutil.ToFloat64(f.srv.reconcilerMetrics.outcomes.WithLabelValues("already")); got != 1 {
+		t.Errorf("already metric = %v, want 1", got)
+	}
+	if n := f.governedEvents(t, task.ID); n != 1 {
+		t.Errorf("task.governed events = %d, want 1", n)
+	}
+}
+
 func TestSpecReconcilerLeavesPlannedAndNoneAlone(t *testing.T) {
 	f := newReconcilerFixture(t)
 	task := f.createTask(t)
