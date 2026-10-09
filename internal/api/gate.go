@@ -134,11 +134,27 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	// what distinguishes it from a plan-minted or a manually added one.
 	// The external id identifies the link, so a pull request pushed to twenty
 	// times leaves one task.governed row behind.
-	// The qualifier ("amended") does not change which rule is linked, so it
-	// stays out of the key.
-	linkDecl := decl
-	linkDecl.Qualifier = ""
-	externalID := fmt.Sprintf("spec-reconciler-%s-%s", taskID, linkDecl.String())
+	// The id is keyed on the resolved rule, so a qualifier or a rule ref vs
+	// the section ref of the same rule is the same link.
+	var ruleID int64
+	err = s.st.Tx(ctx, func(tx *sql.Tx) error {
+		var err error
+		if decl.Rule != nil {
+			ruleID, err = store.RuleIDByRef(tx, decl.Rule.Key, decl.Rule.Number)
+		} else {
+			ruleID, err = store.RuleAtSection(tx, *decl.Section)
+		}
+		return err
+	})
+	if errors.Is(err, store.ErrNotFound) {
+		s.log.Warn("spec-reconciler: trailer names nothing", "event", ev.ID, "task", taskID, "spec", decl.String(), "err", err)
+		s.reconcilerMetrics.Outcome("unknown_target")
+		return eventbus.OutcomeSuppressed, nil
+	}
+	if err != nil {
+		return eventbus.OutcomeError, fmt.Errorf("spec-reconciler: event %d: %w", ev.ID, err)
+	}
+	externalID := fmt.Sprintf("spec-reconciler-%s-%d", taskID, ruleID)
 	_, inserted, err := s.st.RecordEvent(ctx, watcherEventSource, externalID, "task.governed", notePayload,
 		func(tx *sql.Tx, _ int64) error {
 			planned, err := store.HasPlanGovernance(tx, taskID)
@@ -148,15 +164,6 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 			if planned {
 				outcome = "planned"
 				return errReconcileSkip
-			}
-			var ruleID int64
-			if decl.Rule != nil {
-				ruleID, err = store.RuleIDByRef(tx, decl.Rule.Key, decl.Rule.Number)
-			} else {
-				ruleID, err = store.RuleAtSection(tx, *decl.Section)
-			}
-			if err != nil {
-				return err
 			}
 			return store.Govern(tx, taskID, ruleID, "gate", false)
 		})
