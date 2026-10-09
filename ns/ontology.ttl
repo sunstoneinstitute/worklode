@@ -371,8 +371,8 @@ wl:covers a owl:ObjectProperty ;
     wl:storedAs "doc_edges.covers" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Plan ;
-    rdfs:range wl:Section ;
-    rdfs:comment """A Plan's undertaking to see a Section built, discharged by the tasks its
+    rdfs:range wl:Rule ;
+    rdfs:comment """A Plan's undertaking to see a Rule built, discharged by the tasks its
         acceptance mints (025 §9.2). Deliberately not wl:implements: a plan writes no code, so it
         claims nothing — one word for the promise and for the evidence that redeems it leaves the
         two indistinguishable (026 §5). The frontmatter key is `covers`; `implements` on a plan is
