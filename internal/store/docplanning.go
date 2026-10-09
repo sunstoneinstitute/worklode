@@ -259,12 +259,12 @@ func checkPlanTasksMinted(tx *sql.Tx, id int64, doc *designdoc.Document) error {
 func checkPlanOrdering(tx *sql.Tx, docID int64, docKind, ref string, toDoc int64, resolved bool) error {
 	if !resolved {
 		return fmt.Errorf(
-			"blockedBy edge from doc %d names %q, which no plan in this project resolves to (025 §5): %w",
+			"blockedBy edge from doc %d names %q, which no plan in this project resolves to (WL-SPEC-77 §8): %w",
 			docID, ref, ErrInvalidInput)
 	}
 	if toDoc == docID {
 		return fmt.Errorf(
-			"blockedBy edge from doc %d names %q, itself: a plan cannot block itself (025 §5): %w",
+			"blockedBy edge from doc %d names %q, itself: a plan cannot block itself (WL-SPEC-77 §8): %w",
 			docID, ref, ErrInvalidInput)
 	}
 	var toKind string
@@ -272,11 +272,11 @@ func checkPlanOrdering(tx *sql.Tx, docID int64, docKind, ref string, toDoc int64
 		return fmt.Errorf("read kind of doc %d: %w", toDoc, err)
 	}
 	if docKind != "plan" {
-		return fmt.Errorf("blockedBy orders plan documents, but the from end (doc %d) is a %s (025 §5): %w",
+		return fmt.Errorf("blockedBy orders plan documents, but the from end (doc %d) is a %s (WL-SPEC-77 §8): %w",
 			docID, docKind, ErrInvalidInput)
 	}
 	if toKind != "plan" {
-		return fmt.Errorf("blockedBy orders plan documents, but the to end (doc %d) is a %s (025 §5): %w",
+		return fmt.Errorf("blockedBy orders plan documents, but the to end (doc %d) is a %s (WL-SPEC-77 §8): %w",
 			toDoc, toKind, ErrInvalidInput)
 	}
 	back, err := blocksPath(tx, toDoc, docID)
@@ -288,7 +288,7 @@ func checkPlanOrdering(tx *sql.Tx, docID int64, docKind, ref string, toDoc int64
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("blockedBy edge from doc %d names %q, closing the cycle %s (025 §5): %w",
+		return fmt.Errorf("blockedBy edge from doc %d names %q, closing the cycle %s (WL-SPEC-77 §8): %w",
 			docID, ref, chain, ErrInvalidInput)
 	}
 	return nil

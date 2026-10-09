@@ -80,7 +80,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if reservedProjectKeys[req.Key] {
 		writeErr(w, http.StatusUnprocessableEntity,
-			"key SPEC and ADR are reserved by the document shorthand (025 §14.3)")
+			"key SPEC and ADR are reserved by the document shorthand (WL-SPEC-77 §7)")
 		return
 	}
 	horizon := req.Horizon

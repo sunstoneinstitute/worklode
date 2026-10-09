@@ -195,7 +195,7 @@ Decide how to decompose this spec into plans, and write them.
 prov:wasInformedBy %s
 
 Claim this task (%s) before writing anything, so this session's
-tokens bill to it instead of going unattributed (025 §15.6).`,
+tokens bill to it instead of going unattributed (WL-SPEC-75 §9.6).`,
 		docIRI, version, iri.CURIE(iri.Event(eventID)), "`lode task claim <this task's id>`")
 }
 
@@ -207,7 +207,7 @@ func patchBody(in Input) string {
 	return fmt.Sprintf(`%s (%s, version %d) was amended in place: %s.
 
 The document stays accepted — only the patched sections are approved text
-that has changed since (025 §7.3). Review them, and decide each approval
+that has changed since (WL-SPEC-77 §9). Review them, and decide each approval
 lane the patch reopened.
 
 prov:wasInformedBy %s

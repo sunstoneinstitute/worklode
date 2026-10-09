@@ -1776,7 +1776,7 @@ func progressReviewAction(doc int64, ref string, reviewEnabled bool) ProgressAct
 		Confirm: "Request review for " + ref,
 	}
 	if !reviewEnabled {
-		a.Reason = "Review surface (spec 059) not yet built"
+		a.Reason = "Review surface (WL-SPEC-84) not yet built"
 	}
 	return a
 }

@@ -554,13 +554,13 @@ func docStaleSuffix(status string) string {
 func docStatusBanner(d model.Doc) string {
 	switch d.Status {
 	case "draft":
-		return "DRAFT — not accepted yet (025 §7)"
+		return "DRAFT — not accepted yet (WL-SPEC-77 §9)"
 	case "superseded":
-		return fmt.Sprintf("SUPERSEDED since %s — a newer version replaces this one (025 §7)", LocalTime(d.UpdatedAt))
+		return fmt.Sprintf("SUPERSEDED since %s — a newer version replaces this one (WL-SPEC-77 §9)", LocalTime(d.UpdatedAt))
 	case "stale":
-		return fmt.Sprintf("STALE since %s — re-planning owed (025 §8.6)", LocalTime(d.UpdatedAt))
+		return fmt.Sprintf("STALE since %s — re-planning owed (WL-SPEC-77 §9)", LocalTime(d.UpdatedAt))
 	case "withdrawn":
-		return fmt.Sprintf("WITHDRAWN since %s — closed without execution (025 §8.7)", LocalTime(d.UpdatedAt))
+		return fmt.Sprintf("WITHDRAWN since %s — closed without execution (WL-SPEC-77 §9)", LocalTime(d.UpdatedAt))
 	case "spent":
 		return fmt.Sprintf("SPENT since %s — every minted task has closed (12 S5)", LocalTime(d.UpdatedAt))
 	}
@@ -685,7 +685,7 @@ func DocNoteRender(w io.Writer, d model.Doc, n model.DocNote) {
 // docPatchedMarker is what a section amended in place since it was last
 // approved renders as (025 §7.3): one blockquoted line above the section's
 // notes, so the reader sees which paragraph has not passed the gate.
-const docPatchedMarker = "> **patched** — approved text, amended in place since (025 §7.3)."
+const docPatchedMarker = "> **patched** — approved text, amended in place since (WL-SPEC-77 §9)."
 
 // InlineDocNotes returns body with each note folded in under the section it is
 // anchored to, as a blockquoted one-liner (025 §8.5), and a patched marker

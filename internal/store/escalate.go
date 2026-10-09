@@ -176,7 +176,7 @@ func mintEscalationTask(tx *sql.Tx, now time.Time, in EscalateInput, eventID int
 	t, err := CreateTask(tx, now, TaskInput{
 		ProjectID: projectID,
 		Title:     "Gap in " + where,
-		Body: fmt.Sprintf("Escalated from %s: the %s does not cover the case in front of the executor (025 §8.1).\n\n%s",
+		Body: fmt.Sprintf("Escalated from %s: the %s does not cover the case in front of the executor (WL-SPEC-77 §10).\n\n%s",
 			in.TaskID, in.To, in.Reason),
 		Kind:        "design",
 		Priority:    "high",
