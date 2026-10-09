@@ -1,9 +1,8 @@
-// Package iri is the single owner of the canonical IRI grammar of spec 006
-// §10 (schema/instance namespaces, id/ instance grammar) and §10.1 (runtime
-// IRI grammar, kind-first to mirror each relational natural key). The
-// published base carries no ontology-name segment (025 §17). Constructors
-// are pure concatenation: no validation, no error return. Slashes inside a
-// local id are permitted (slash namespace, opaque path).
+// Package iri is the single owner of the IRI grammar of WL-SPEC-79 §10:
+// namespaces, the instance grammar and named graphs. Callers never
+// concatenate IRIs themselves (§10.4). Constructors are pure concatenation:
+// no validation, no error return. Slashes inside a local id are permitted
+// (slash namespace, opaque path).
 package iri
 
 import (
@@ -58,23 +57,42 @@ func Component(slug string) string {
 	return IDNS + "component/" + slug
 }
 
-// Doc returns the instance IRI of a design document.
-func Doc(slug string) string {
-	return IDNS + "doc/" + slug
+// DocKey returns a design document's key (WL-SPEC-79 §10.2):
+// <kind>-<project>-<nnn>, the number zero-padded to three digits.
+// Project-qualified because document numbers are unique only per project.
+// Every document, section, version and declared-graph IRI is built on it.
+func DocKey(kind, project string, number int) string {
+	return fmt.Sprintf("%s-%s-%03d", kind, project, number)
+}
+
+// Doc returns the instance IRI of a design document, keyed by DocKey.
+func Doc(key string) string {
+	return IDNS + "doc/" + key
+}
+
+// Event returns the IRI of one event-log row (WL-SPEC-79 §10.3).
+func Event(id int64) string {
+	return IDNS + "event/" + strconv.FormatInt(id, 10)
+}
+
+// CURIE abbreviates an instance IRI to its wlid: form, the form event
+// payloads and task bodies store (WL-SPEC-79 §10.3).
+func CURIE(instance string) string {
+	return "wlid:" + strings.TrimPrefix(instance, IDNS)
 }
 
 // Section returns the IRI of an addressable design-document section
-// (025 §3): id/section/<doc-slug>/<anchor>. The anchor is assigned at first
+// (025 §3): id/section/<doc-key>/<anchor>. The anchor is assigned at first
 // publication and never changes, so the IRI is as durable as the document's.
-func Section(docSlug, anchor string) string {
-	return IDNS + "section/" + docSlug + "/" + anchor
+func Section(docKey, anchor string) string {
+	return IDNS + "section/" + docKey + "/" + anchor
 }
 
 // DocVersion returns the immutable versioned sibling IRI of a design
-// document (025 §4): id/doc/<slug>/v<n>. Everything links to the canonical
+// document (025 §4): id/doc/<doc-key>/v<n>. Everything links to the canonical
 // Doc IRI by default; versioned IRIs appear only in pinned claims.
-func DocVersion(slug string, version int) string {
-	return IDNS + "doc/" + slug + "/v" + strconv.Itoa(version)
+func DocVersion(docKey string, version int) string {
+	return IDNS + "doc/" + docKey + "/v" + strconv.Itoa(version)
 }
 
 // Claim returns the IRI of the reifier node for one wl:implements claim
@@ -132,13 +150,13 @@ func Commit(host, owner, repo, sha string) string {
 // DeclaredGraph returns the named graph holding one design doc's declared
 // edges (spec 007 §Representation: one graph per design doc, so acceptance
 // gating and re-authoring replace exactly one graph).
-func DeclaredGraph(docSlug string) string { return GraphNS + "declared/" + docSlug }
+func DeclaredGraph(docKey string) string { return GraphNS + "declared/" + docKey }
 
 // DeclaredVersionGraph returns the named graph holding one immutable
-// document version (025 §4.3): graph/declared/<slug>/v<n>. Sibling of
+// document version (025 §4.3): graph/declared/<doc-key>/v<n>. Sibling of
 // DeclaredGraph, which stays the document's mutable canonical graph.
-func DeclaredVersionGraph(docSlug string, version int) string {
-	return DeclaredGraph(docSlug) + "/v" + strconv.Itoa(version)
+func DeclaredVersionGraph(docKey string, version int) string {
+	return DeclaredGraph(docKey) + "/v" + strconv.Itoa(version)
 }
 
 // ObservedGraph returns the org-global named graph of a backbone-derived

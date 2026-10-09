@@ -241,8 +241,8 @@ func TestRunOnceProjectsDocuments(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatalf("RunOnce = %d, %v; want 1 project, nil", n, err)
 	}
-	declared := f.last(iri.DeclaredGraph("001-alpha-spec"))
-	subj := "<" + iri.Doc("001-alpha-spec") + ">"
+	declared := f.last(iri.DeclaredGraph("spec-alpha-001"))
+	subj := "<" + iri.Doc("spec-alpha-001") + ">"
 	for _, want := range []string{
 		subj + " <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + iri.Term("Spec") + ">",
 		subj + " <" + graphproj.ProvWasGeneratedBy + "> <" + iri.Task(taskID) + ">",
@@ -255,7 +255,7 @@ func TestRunOnceProjectsDocuments(t *testing.T) {
 	if strings.Contains(declared, graphproj.DCATHasVersion) || strings.Contains(declared, graphproj.DCATHasCurrentVersion) {
 		t.Errorf("draft document has version pointers:\n%s", declared)
 	}
-	if got := f.last(iri.DeclaredVersionGraph("001-alpha-spec", 1)); got != "" {
+	if got := f.last(iri.DeclaredVersionGraph("spec-alpha-001", 1)); got != "" {
 		t.Errorf("draft document has a version graph:\n%s", got)
 	}
 }
@@ -347,30 +347,30 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("project v3: %v", err)
 	}
-	v1 := f.last(iri.DeclaredVersionGraph("008-versioned", 1))
-	v2 := f.last(iri.DeclaredVersionGraph("008-versioned", 2))
-	v3 := f.last(iri.DeclaredVersionGraph("008-versioned", 3))
-	declared := f.last(iri.DeclaredGraph("008-versioned"))
-	if !strings.Contains(v1, "<"+iri.DocVersion("008-versioned", 1)+"> <"+graphproj.DCTTitle+">") {
+	v1 := f.last(iri.DeclaredVersionGraph("spec-alpha-008", 1))
+	v2 := f.last(iri.DeclaredVersionGraph("spec-alpha-008", 2))
+	v3 := f.last(iri.DeclaredVersionGraph("spec-alpha-008", 3))
+	declared := f.last(iri.DeclaredGraph("spec-alpha-008"))
+	if !strings.Contains(v1, "<"+iri.DocVersion("spec-alpha-008", 1)+"> <"+graphproj.DCTTitle+">") {
 		t.Errorf("v1 graph missing snapshot node:\n%s", v1)
 	}
-	if !strings.Contains(v2, "<"+iri.DocVersion("008-versioned", 2)+"> <"+graphproj.DCATPreviousVersion+"> <"+iri.DocVersion("008-versioned", 1)+">") {
+	if !strings.Contains(v2, "<"+iri.DocVersion("spec-alpha-008", 2)+"> <"+graphproj.DCATPreviousVersion+"> <"+iri.DocVersion("spec-alpha-008", 1)+">") {
 		t.Errorf("v2 graph missing previousVersion:\n%s", v2)
 	}
-	canonical := "<" + iri.Doc("008-versioned") + ">"
+	canonical := "<" + iri.Doc("spec-alpha-008") + ">"
 	for _, want := range []string{
-		canonical + " <" + graphproj.DCATHasCurrentVersion + "> <" + iri.DocVersion("008-versioned", 3) + ">",
-		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("008-versioned", 1) + ">",
-		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("008-versioned", 2) + ">",
-		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("008-versioned", 3) + ">",
+		canonical + " <" + graphproj.DCATHasCurrentVersion + "> <" + iri.DocVersion("spec-alpha-008", 3) + ">",
+		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("spec-alpha-008", 1) + ">",
+		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("spec-alpha-008", 2) + ">",
+		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("spec-alpha-008", 3) + ">",
 	} {
 		if !strings.Contains(declared, want) {
 			t.Errorf("declared graph missing %q:\n%s", want, declared)
 		}
 	}
-	scopeV1 := "<" + iri.Section("008-versioned", "sec-1") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("008-versioned", 1) + ">"
-	scopeV3 := "<" + iri.Section("008-versioned", "sec-1") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("008-versioned", 3) + ">"
-	model := "<" + iri.Section("008-versioned", "sec-2") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("008-versioned", 1) + ">"
+	scopeV1 := "<" + iri.Section("spec-alpha-008", "sec-1") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-008", 1) + ">"
+	scopeV3 := "<" + iri.Section("spec-alpha-008", "sec-1") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-008", 3) + ">"
+	model := "<" + iri.Section("spec-alpha-008", "sec-2") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-008", 1) + ">"
 	if !strings.Contains(v2, scopeV1) || !strings.Contains(v2, model) {
 		t.Errorf("v2 graph did not preserve immutable revision provenance:\n%s", v2)
 	}
@@ -382,20 +382,20 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("re-project touched project: %v", err)
 	}
-	if got := f.last(iri.DeclaredVersionGraph("008-versioned", 2)); got != v2BeforeTouch {
+	if got := f.last(iri.DeclaredVersionGraph("spec-alpha-008", 2)); got != v2BeforeTouch {
 		t.Errorf("v2 graph changed on idempotent re-projection:\nbefore:\n%s\nafter:\n%s", v2BeforeTouch, got)
 	}
 	order := f.putOrder()
 	version1, version2, version3, canonicalIndex := -1, -1, -1, -1
 	for i, graph := range order {
 		switch graph {
-		case iri.DeclaredVersionGraph("008-versioned", 1):
+		case iri.DeclaredVersionGraph("spec-alpha-008", 1):
 			version1 = i
-		case iri.DeclaredVersionGraph("008-versioned", 2):
+		case iri.DeclaredVersionGraph("spec-alpha-008", 2):
 			version2 = i
-		case iri.DeclaredVersionGraph("008-versioned", 3):
+		case iri.DeclaredVersionGraph("spec-alpha-008", 3):
 			version3 = i
-		case iri.DeclaredGraph("008-versioned"):
+		case iri.DeclaredGraph("spec-alpha-008"):
 			canonicalIndex = i
 		}
 	}
@@ -437,8 +437,8 @@ func TestRunOnceProjectsSections(t *testing.T) {
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("project the draft: %v", err)
 	}
-	section := "<" + iri.Section("002-sections", "sec-1") + ">"
-	if got := f.last(iri.DeclaredGraph("002-sections")); strings.Contains(got, section) {
+	section := "<" + iri.Section("spec-alpha-002", "sec-1") + ">"
+	if got := f.last(iri.DeclaredGraph("spec-alpha-002")); strings.Contains(got, section) {
 		t.Errorf("draft section projected before its anchor was frozen:\n%s", got)
 	}
 
@@ -453,10 +453,10 @@ func TestRunOnceProjectsSections(t *testing.T) {
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("project the accepted doc: %v", err)
 	}
-	declared := f.last(iri.DeclaredGraph("002-sections"))
+	declared := f.last(iri.DeclaredGraph("spec-alpha-002"))
 	for _, want := range []string{
 		section + " <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + iri.Term("Section") + ">",
-		section + " <" + graphproj.DCTIsPartOf + "> <" + iri.Doc("002-sections") + ">",
+		section + " <" + graphproj.DCTIsPartOf + "> <" + iri.Doc("spec-alpha-002") + ">",
 		section + " <" + iri.Term("status") + "> <" + iri.Concept("accepted") + ">",
 	} {
 		if !strings.Contains(declared, want) {
@@ -505,11 +505,11 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("project the live doc: %v", err)
 	}
-	graph := iri.DeclaredGraph("003-doomed")
+	graph := iri.DeclaredGraph("spec-alpha-003")
 	if f.last(graph) == "" {
 		t.Fatalf("live document was not projected into %s", graph)
 	}
-	if f.last(iri.DeclaredVersionGraph("003-doomed", 1)) == "" {
+	if f.last(iri.DeclaredVersionGraph("spec-alpha-003", 1)) == "" {
 		t.Fatalf("accepted document version was not projected")
 	}
 	bodyV2 := "# Spec 3 — Doomed\n\n" +
@@ -536,7 +536,7 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("project v2: %v", err)
 	}
-	if f.last(iri.DeclaredVersionGraph("003-doomed", 2)) == "" {
+	if f.last(iri.DeclaredVersionGraph("spec-alpha-003", 2)) == "" {
 		t.Fatalf("revised document version was not projected")
 	}
 
@@ -554,7 +554,7 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 		t.Fatalf("graph deletions after the delete = %d, want 1", got)
 	}
 	for _, version := range []int{1, 2} {
-		if got := f.deleteCount(iri.DeclaredVersionGraph("003-doomed", version)); got != 1 {
+		if got := f.deleteCount(iri.DeclaredVersionGraph("spec-alpha-003", version)); got != 1 {
 			t.Fatalf("version %d graph deletions after the delete = %d, want 1", version, got)
 		}
 	}
@@ -572,7 +572,7 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 		t.Errorf("graph deletions after an idempotent rerun = %d, want 1", got)
 	}
 	for _, version := range []int{1, 2} {
-		if got := f.deleteCount(iri.DeclaredVersionGraph("003-doomed", version)); got != 1 {
+		if got := f.deleteCount(iri.DeclaredVersionGraph("spec-alpha-003", version)); got != 1 {
 			t.Errorf("version %d graph deletions after an idempotent rerun = %d, want 1", version, got)
 		}
 	}

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
+
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
@@ -1166,30 +1168,24 @@ func (s *Store) RecordDocEvent(
 // payload needs the event id before the insert. Nil-safe.
 func (s *Store) RecordDocOp(op string, err error) { s.metrics.docOp(op, err) }
 
-// DocIRI is a document's canonical subject IRI (spec 025 §4.1's
-// wlid:doc/spec-worklode-025 form): wlid:doc/<kind>-<project>-<number>
-// zero-padded to three digits for the numbered kinds, and
-// wlid:doc/plan-<project>-<slug> for plans, which carry no number
-// (025 §14.3). Project-qualified because the identity rules of §5 are
-// per project: two projects may each hold a spec 25.
+// DocIRI is a document's subject CURIE as event payloads store it
+// (WL-SPEC-79 §10.3), e.g. wlid:doc/spec-worklode-079.
 func DocIRI(d model.Doc) string {
-	if d.Kind == "plan" {
-		return "wlid:doc/plan-" + d.Project + "-" + d.Slug
-	}
-	return fmt.Sprintf("wlid:doc/%s-%s-%03d", d.Kind, d.Project, d.Number)
+	return iri.CURIE(iri.Doc(iri.DocKey(d.Kind, d.Project, d.Number)))
 }
+
+// docIRIExpr is DocIRI in SQL, for the resolvers below.
+const docIRIExpr = `'wlid:doc/' || kind || '-' || project_id || '-' || lpad(number::text, 3, '0')`
 
 // DocBySubjectIRI resolves an event's wl:subject back to its row.
 //
 // Reconstructs the IRI in SQL and compares, rather than parsing iri in Go:
-// both a project id and a plan slug may contain hyphens, so
-// "wlid:doc/<kind>-<project>-<tail>" is not unambiguously splittable back
-// into its parts.
+// a project id may contain hyphens, so wlid:doc/<kind>-<project>-<nnn> is
+// not unambiguously splittable back into its parts.
 func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, error) {
 	d, err := scanDoc(s.db.QueryRowContext(ctx,
 		`SELECT `+docColumns+` FROM docs
-		  WHERE 'wlid:doc/' || kind || '-' || project_id || '-' ||
-		        CASE WHEN kind = 'plan' THEN slug ELSE lpad(number::text, 3, '0') END = $1`,
+		  WHERE `+docIRIExpr+` = $1`,
 		iri))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("doc with subject %q: %w", iri, ErrNotFound)
@@ -1214,11 +1210,9 @@ func (s *Store) DocIDsBySubjectIRI(ctx context.Context, iris []string) (map[stri
 	if len(iris) == 0 {
 		return out, nil
 	}
-	const iriExpr = `'wlid:doc/' || kind || '-' || project_id || '-' ||
-	                 CASE WHEN kind = 'plan' THEN slug ELSE lpad(number::text, 3, '0') END`
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+iriExpr+`, id FROM docs
-		  WHERE `+iriExpr+` = ANY($1) AND deleted_at IS NULL`, iris)
+		`SELECT `+docIRIExpr+`, id FROM docs
+		  WHERE `+docIRIExpr+` = ANY($1) AND deleted_at IS NULL`, iris)
 	if err != nil {
 		return nil, fmt.Errorf("resolve doc subjects: %w", err)
 	}
