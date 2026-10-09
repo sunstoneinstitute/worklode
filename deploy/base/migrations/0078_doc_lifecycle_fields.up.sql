@@ -1,4 +1,4 @@
--- Spec 025 §8.1, §8.6 and §8.7: retain section-scoped escalation context,
+-- WL-SPEC-77: retain section-scoped escalation context,
 -- permit stale and withdrawn documents, and configure grooming per project.
 BEGIN;
 

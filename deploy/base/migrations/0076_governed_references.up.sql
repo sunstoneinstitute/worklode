@@ -1,4 +1,4 @@
--- 029 §7.1 governed references: InsertGovernedRefs records, as
+-- WL-SPEC-75 governed references: InsertGovernedRefs records, as
 -- entity_edges rows, what a designated revision references. The endpoints
 -- are governed-entity kinds (model.ApprovalEntityKinds: doc, deliverable,
 -- task, pr), not entity_edges' original project/milestone -> deliverable/task

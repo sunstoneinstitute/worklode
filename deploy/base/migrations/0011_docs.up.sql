@@ -1,8 +1,8 @@
--- Spec 025 §5.1: the minimal document store the git→backbone sync populates.
--- Identity is (project, kind, ordinal), file-derived per 025 §16.3; doc_id is the
+-- WL-SPEC-77: the minimal document store the git→backbone sync populates.
+-- Identity is (project, kind, ordinal), file-derived per WL-SPEC-77; doc_id is the
 -- rendered <KEY>-SPEC-<n> / <KEY>-ADR-<n> / <KEY>-PLAN-<s>-<p> form, composed
 -- server-side from the project's key. status is carried as data — the store
--- runs no editorial transitions (025 §5.1).
+-- runs no editorial transitions (WL-SPEC-77).
 
 CREATE TABLE docs (
     project       text NOT NULL REFERENCES projects (id),
@@ -14,7 +14,7 @@ CREATE TABLE docs (
     body          text NOT NULL,
     frontmatter   jsonb NOT NULL,
     version       integer NOT NULL DEFAULT 1,
-    -- Sync provenance (025 §16.2): which branch the projection came from, and
+    -- Sync provenance (WL-SPEC-77): which branch the projection came from, and
     -- whether the tree was dirty — how a consumer tells a forced projection
     -- from a reviewed one.
     source_branch text NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE docs (
 
 CREATE UNIQUE INDEX docs_doc_id ON docs (doc_id);
 
--- Anchored sections; specs and ADRs only — plans take none (025 §9).
+-- Anchored sections; specs and ADRs only — plans take none (WL-SPEC-77).
 CREATE TABLE doc_sections (
     project  text NOT NULL,
     kind     text NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE doc_sections (
         REFERENCES docs (project, kind, ordinal) ON DELETE CASCADE
 );
 
--- Frontmatter relations (025 §5.1), section-scoped where an end is a section.
+-- Frontmatter relations (WL-SPEC-77), section-scoped where an end is a section.
 -- target is the raw corpus reference (a filename, repo-relative path, or the
 -- NO-SPEC sentinel) — resolution stays a read-time concern. rel 'blocks' is
 -- admitted for plans' document-level ordering edges even though no

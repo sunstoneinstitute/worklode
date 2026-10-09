@@ -1,4 +1,4 @@
--- Project Crew (spec 029 §6.1): role-labelled participant rows, visible
+-- Project Crew (WL-SPEC-75): role-labelled participant rows, visible
 -- before any task is picked up. One actor may hold several role labels
 -- (one row each); at most one row per project carries is_lead.
 CREATE TABLE project_participants (

@@ -1,4 +1,4 @@
--- Watermark for the backbone→knowledge-graph projector (spec 006 §11): one
+-- Watermark for the backbone→knowledge-graph projector (WL-SPEC-79): one
 -- row; last_state_log_id is the state_log id through which task changes have
 -- been projected. The index serves DirtyProjects' (entity_kind, id > $1)
 -- scan, so non-task rows are never touched.

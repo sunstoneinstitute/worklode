@@ -1,8 +1,8 @@
--- Reserve SPEC and ADR as project keys (025 §14.3, amending 004 §2.2).
+-- Reserve SPEC and ADR as project keys (WL-SPEC-77, amending WL-SPEC-75).
 --
 -- They are the <TYPE> token of the <PROJECTKEY>-<TYPE>-<n> document shorthand.
 -- Resolution keys the shorthand on the project key alone so it can cross
--- corpora; a project keyed SPEC or ADR would make WL-SPEC-1 readable two ways.
+-- corpora; a project keyed SPEC or ADR would make WL-SPEC-74 readable two ways.
 
 ALTER TABLE projects DROP CONSTRAINT projects_key_format;
 ALTER TABLE projects ADD CONSTRAINT projects_key_format

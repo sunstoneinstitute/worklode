@@ -1,7 +1,7 @@
 -- Corpus index: one chunk table over docs, tasks and skills, carrying both
--- retrieval arms' inputs (spec 040 §5). Replaces skill_embeddings (0007).
+-- retrieval arms' inputs (WL-SPEC-79). Replaces skill_embeddings (0007).
 --
--- Two deviations from 040 §5's printed DDL, both forced:
+-- Two deviations from WL-SPEC-79's printed DDL, both forced:
 --   * embedding is NULLABLE. §5 shows NOT NULL, but §8 invalidates a provider
 --     change by nulling the column and §11 requires a no-provider instance to
 --     write chunk rows with no vectors at all. §8/§11 win.
@@ -22,7 +22,7 @@ CREATE TABLE index_chunks (
     -- than three joins. Null for skills: the registry is org-wide (016).
     project      text REFERENCES projects (id) ON DELETE RESTRICT,
 
-    -- Frozen section anchor for docs (025 §3.2); '' for everything else.
+    -- Frozen section anchor for docs (WL-SPEC-77); '' for everything else.
     anchor       text NOT NULL DEFAULT '',
     chunk_index  int  NOT NULL,
 
@@ -77,5 +77,5 @@ CREATE INDEX index_chunks_tsv ON index_chunks USING gin (tsv);
 -- Rows are not carried over: they are 016-width vectors from a possibly
 -- different model, so they are comparable with nothing this spec produces,
 -- and they carry none of the text the lexical arm needs. The corpus re-embeds
--- on first convergence. embedding_config survives unchanged (040 §5).
+-- on first convergence. embedding_config survives unchanged (WL-SPEC-79).
 DROP TABLE skill_embeddings;

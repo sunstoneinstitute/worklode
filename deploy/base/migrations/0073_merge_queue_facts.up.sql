@@ -1,4 +1,4 @@
--- WL-SPEC-66 §6.1, §6.3: merge queue facts for a PR and its repo/branch.
+-- WL-SPEC-85: merge queue facts for a PR and its repo/branch.
 --
 -- queued_at is set when a PR enters the merge queue (GitHub's
 -- enqueued_for_merge / merge_group.checks_requested event) and cleared when

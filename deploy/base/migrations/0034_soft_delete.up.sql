@@ -16,7 +16,7 @@ ALTER TABLE docs
     ADD COLUMN delete_justification text;
 
 -- A tombstoned document releases its slug and its corpus number. `lode doc
--- delete` exists for a wrong corpus number or a duplicate import (044 §0), and
+-- delete` exists for a wrong corpus number or a duplicate import (WL-SPEC-75), and
 -- both fixes mean re-creating the document: an unconditional unique index would
 -- refuse that with a collision against a row the operator cannot see. The index
 -- names are unchanged, so CreateDoc's ErrDocExists mapping still fires.

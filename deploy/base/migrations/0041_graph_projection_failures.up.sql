@@ -1,4 +1,4 @@
--- Per-project quarantine for the backbone→knowledge-graph projector (spec 006
+-- Per-project quarantine for the backbone→knowledge-graph projector (WL-SPEC-79
 -- §11). The projector tracks one global watermark (graph_projection), so
 -- before this table a single project graph-server kept rejecting held that
 -- watermark back for every project: nothing was projected anywhere until the

@@ -6,8 +6,8 @@
 # "Enums with no scheme" at the foot of this file. All but wlc:ModelLayer do
 # also mirror a CHECK constraint in the schema, and internal/store's
 # TestConceptSchemesMatchCheckConstraints holds each one to its column.
-# Sources: spec 006 §4/§1.5, spec 025 §7/§8 (status enum and task kinds),
-# spec 006 §6 (the four runtime enums) and spec 025 §7 (document lifecycle).
+# Sources: WL-SPEC-79, WL-SPEC-77 (status enum and task kinds),
+# WL-SPEC-79 (the four runtime enums) and WL-SPEC-77 (document lifecycle).
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -22,9 +22,9 @@
 
 
 # ---------------------------------------------------------------------------
-# DesignDoc lifecycle — purely editorial. `implemented` was removed by 025 §7:
+# DesignDoc lifecycle — purely editorial. `implemented` was removed by WL-SPEC-77:
 # implementation is per-section and derived, so a document-level status would be
-# a hand-maintained, lossy summary of something computable. 025 §7 removed
+# a hand-maintained, lossy summary of something computable. WL-SPEC-77 removed
 # `proposed`: a document under review stays `draft` with an open review task.
 # ---------------------------------------------------------------------------
 
@@ -44,7 +44,7 @@ wlc:spent a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "s
     skos:definition "A plan whose every minted task has closed (12 S5)." .
 
 # The order is data, so "is X before Y" is queryable. RDF still does not enforce
-# legal transitions; those rules live with the authoring skill (spec 008).
+# legal transitions; those rules live with the authoring skill (WL-SPEC-80).
 wlc:DesignDocStatusOrder a skos:OrderedCollection ;
     skos:memberList ( wlc:draft wlc:accepted wlc:stale wlc:superseded wlc:withdrawn wlc:spent ) .
 
@@ -67,7 +67,7 @@ wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "in
 # ---------------------------------------------------------------------------
 # Task kind — the union matching the tasks.kind CHECK constraint. Every kind
 # describes a nature of work, not the artifact produced and not a structural
-# role: container-ness is inferred from child_of edges (004 §6.1), never
+# role: container-ness is inferred from child_of edges (WL-SPEC-75), never
 # declared here. wlc:rally is the one exception — it carries no work of its
 # own, only the blocks edges naming what to finish now.
 # ---------------------------------------------------------------------------
@@ -119,8 +119,8 @@ wlc:inferred a skos:Concept ; skos:inScheme wlc:EdgeOrigin ; skos:prefLabel "inf
 
 
 # ---------------------------------------------------------------------------
-# Artifact kind (006 §6). In v1 only git_tag rows are ever created; the other
-# three are grammar, not data (006 §11.1).
+# Artifact kind (WL-SPEC-79). In v1 only git_tag rows are ever created; the other
+# three are grammar, not data (WL-SPEC-79).
 # ---------------------------------------------------------------------------
 
 wlc:ArtifactKind a skos:ConceptScheme ; skos:prefLabel "Artifact kind" .
@@ -136,7 +136,7 @@ wlc:binary a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "bin
 
 
 # ---------------------------------------------------------------------------
-# Deployment status (006 §6).
+# Deployment status (WL-SPEC-79).
 # ---------------------------------------------------------------------------
 
 wlc:DeploymentStatus a skos:ConceptScheme ; skos:prefLabel "Deployment status" .
@@ -153,7 +153,7 @@ wlc:failed a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel 
 
 
 # ---------------------------------------------------------------------------
-# Deployment target kind (006 §6). wlc:pypi_target is spelled apart from
+# Deployment target kind (WL-SPEC-79). wlc:pypi_target is spelled apart from
 # wlc:pypi deliberately: the artifact kind and the target kind are different
 # concepts that happen to share a name in the relational schema.
 # ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ wlc:manual a skos:Concept ; skos:inScheme wlc:DeployTargetKind ; skos:prefLabel 
 
 
 # ---------------------------------------------------------------------------
-# Runtime event kind (006 §6).
+# Runtime event kind (WL-SPEC-79).
 # ---------------------------------------------------------------------------
 
 wlc:RuntimeEventKind a skos:ConceptScheme ; skos:prefLabel "Runtime event kind" .
@@ -190,14 +190,14 @@ wlc:flux_recovery a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:pre
 #
 # - `tasks.state`, `tasks.priority` and `tasks.concern` reach the graph as
 #   projected literals on `wl:taskState`, `wl:priority` and `wl:concern`, all
-#   xsd:string datatype properties (006 §3). The backbone owns the enums and
-#   the state machine; a scheme here would fork them (006 Open Q3), which is
-#   the drift 025 §17 exists to prevent. ontology.ttl's "deliberately absent"
+#   xsd:string datatype properties (WL-SPEC-79). The backbone owns the enums and
+#   the state machine; a scheme here would fork them (WL-SPEC-79), which is
+#   the drift WL-SPEC-77 exists to prevent. ontology.ttl's "deliberately absent"
 #   register already names them.
 # - `actors.kind` has no `wl:` property to be the range of. Actors project as
-#   `foaf:Agent`/`prov:Agent`, reused rather than minted (006 §1, §10), and
+#   `foaf:Agent`/`prov:Agent`, reused rather than minted (WL-SPEC-79), and
 #   human/agent/service is the split `prov:Person` and `prov:SoftwareAgent`
-#   already carry — so 006 §1's standards-first rule forbids the mint.
+#   already carry — so WL-SPEC-79's standards-first rule forbids the mint.
 #
 # All three are pinned in Go instead: `model.TaskStates`,
 # `model.TaskPriorities` and `model.ActorKinds`, each held to its CHECK

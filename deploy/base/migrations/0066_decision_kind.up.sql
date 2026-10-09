@@ -1,4 +1,4 @@
--- Add the 'decision' task kind (025 §10) and its side table (§10.1):
+-- Add the 'decision' task kind (WL-SPEC-77) and its side table (§10.1):
 -- everything a decision needs beyond its own title/body lives in
 -- task_decisions, so the core tasks table stays generic and no kind of task
 -- carries columns another kind leaves null. Ships with the concept.ttl edit

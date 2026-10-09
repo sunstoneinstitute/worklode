@@ -1,4 +1,4 @@
--- Content-addressed blobs for task bodies and attachments (spec 021).
+-- Content-addressed blobs for task bodies and attachments (WL-SPEC-78).
 --
 -- Bytes live in S3-compatible object storage at blobs/<hash[0:2]>/<hash>;
 -- this table is the index, not the payload. There is deliberately no key
@@ -15,8 +15,8 @@ CREATE TABLE blobs (
 );
 
 -- The reference graph. A blobs row with no row here is garbage; GC is
--- exactly that query (spec 021 section 11). When spec 014 adds
--- section_blobs, the GC predicate grows a second NOT EXISTS clause -- that
+-- exactly that query (WL-SPEC-78). When a table such as
+-- section_blobs is added, the GC predicate grows a second NOT EXISTS clause -- that
 -- is the one place a new reference table has to touch.
 --
 -- embedded is DERIVED: reconciled from the parsed task body on every write,

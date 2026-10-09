@@ -1,6 +1,6 @@
 -- Crew roles become a fixed vocabulary (WL-297): free-form labels made a
 -- dropdown's option set, constrained here so the two cannot drift. The list
--- is drawn from the corpus (spec 029 §6.1, the cockpit design brief):
+-- is drawn from the corpus (WL-SPEC-75, the cockpit design brief):
 -- member is the generic default, the rest are the named story-project roles.
 -- Widening means a new migration plus the UI option list and the store's
 -- validParticipantRoles, which a test holds together.

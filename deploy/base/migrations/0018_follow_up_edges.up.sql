@@ -1,4 +1,4 @@
--- The third task edge (004 §1.3): "A follow_up_to B" records that A was spun
+-- The third task edge (WL-SPEC-75): "A follow_up_to B" records that A was spun
 -- out of the work on B. Provenance only -- it gates no claim and confers no
 -- parent-hood, so no existing query changes: every one of them is already
 -- qualified by edge type.

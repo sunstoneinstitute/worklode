@@ -1,12 +1,12 @@
--- Plans join the corpus numbering (spec 029 §4, amending 025 §14.3).
+-- Plans join the corpus numbering (WL-SPEC-75, amending WL-SPEC-77).
 --
--- 025 §14.3 gave plans no number and no shorthand: their handle was their
+-- WL-SPEC-77 gave plans no number and no shorthand: their handle was their
 -- repo-relative path. That made a plan the one document kind a person could
 -- not cite, and the one row a listing could not render as <KEY>-<KIND>-<N>.
 -- Every kind now draws a number from its project's sequence, so WL-PLAN-7
--- reads exactly like WL-SPEC-29 and WL-ADR-43.
+-- reads exactly like WL-SPEC-75 and WL-ADR-43.
 --
--- Flat, not the per-parent-spec pair 029 §4 first specified: a plan's number
+-- Flat, not the per-parent-spec pair WL-SPEC-75 first specified: a plan's number
 -- is one per-project sequence like every other kind's. A plan is identified by
 -- what it is, not by what it covers -- coverage already has an edge, and
 -- binding identity to it would renumber a plan whenever its covers set moved.
@@ -20,7 +20,7 @@ ALTER TABLE docs DROP CONSTRAINT docs_number_matches_kind;
 -- the order internal/designdoc's loadPlans already walks a corpus in, so a
 -- plan's number matches the position a reader of the directory would give it.
 -- Numbering is per project: two projects' plan 1 are different documents, the
--- same way their spec 1 are.
+-- same way their WL-SPEC-74 are.
 WITH numbered AS (
     SELECT id, row_number() OVER (PARTITION BY project_id ORDER BY slug, id) AS n
       FROM docs
@@ -43,9 +43,9 @@ DROP INDEX docs_project_kind_number;
 CREATE UNIQUE INDEX docs_project_kind_number
     ON docs (project_id, kind, number) WHERE deleted_at IS NULL;
 
--- PLAN joins the per-project ordinal counters (029 §4). Specs and ADRs still
+-- PLAN joins the per-project ordinal counters (WL-SPEC-75). Specs and ADRs still
 -- take an author-supplied number -- the filename carries their identity, and
--- moving them onto counters is the wider cutover 029 §4's plan series owns.
+-- moving them onto counters is the wider cutover WL-SPEC-75's plan series owns.
 -- A plan has no filename number to inherit, so the server allocates it, and
 -- the counter starts past whatever the backfill above already used.
 ALTER TABLE project_entity_seq DROP CONSTRAINT project_entity_seq_kind_check;

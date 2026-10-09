@@ -5,7 +5,7 @@
 -- never see the lower one when its transaction finally committed. txid
 -- records the writing transaction, and DirtyProjects now reads only
 -- transactions below pg_snapshot_xmin — the rule the event log has carried
--- since 0021 (spec 025 §15) — so nothing can appear behind the watermark.
+-- since 0021 (WL-SPEC-77) — so nothing can appear behind the watermark.
 --
 -- The volatile DEFAULT rewrites state_log under an ACCESS EXCLUSIVE lock,
 -- safe for the same reason 0021's rewrite of events was, and with the same

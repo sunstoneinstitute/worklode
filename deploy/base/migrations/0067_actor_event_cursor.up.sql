@@ -1,4 +1,4 @@
--- Per-actor Morning Brief boundary (029 §8.2, 032 §9). A read cursor over
+-- Per-actor Morning Brief boundary (WL-SPEC-75, WL-SPEC-82). A read cursor over
 -- the events log, like event_subscribers' offsets: bookkeeping, not a fact,
 -- so writes to it are plain row writes, not events.
 CREATE TABLE actor_event_cursor (

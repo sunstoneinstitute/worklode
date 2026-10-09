@@ -1,4 +1,4 @@
--- Rename the 'spec' task kind to 'design' (025 §10, reversed back to this
+-- Rename the 'spec' task kind to 'design' (WL-SPEC-77, reversed back to this
 -- decision by WL-97/PR #79 after a brief detour). "Spec work" read as
 -- narrower than the task actually covers: a design document is still called
 -- a spec in docs/specs/, but the task kind and the document kind are two

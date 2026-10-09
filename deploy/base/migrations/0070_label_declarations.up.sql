@@ -1,4 +1,4 @@
--- Spec 029 §3.1: a deliverable is identified by address OR by label, for
+-- WL-SPEC-75: a deliverable is identified by address OR by label, for
 -- artifacts whose address is minted at build time (a docker tag, an Iceberg
 -- snapshot). A label declaration stores the full selector string
 -- ('worklode.deliverable=COW/datasets') in artifact_uri — the routing key and

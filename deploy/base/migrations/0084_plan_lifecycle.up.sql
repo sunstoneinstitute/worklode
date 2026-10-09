@@ -1,5 +1,4 @@
--- Plan lifecycle (docs/specs2/12-spec-refactoring-design-tree.md S5, S19):
--- a plan whose every minted task has closed is spent, and a project may
+-- Plan lifecycle: a plan whose every minted task has closed is spent, and a project may
 -- override the server's plan token budget. settings is a small JSON object
 -- behind a server-side key allowlist (internal/store/projectsettings.go).
 BEGIN;

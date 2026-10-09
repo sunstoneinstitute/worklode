@@ -1,5 +1,4 @@
--- Design clauses (docs/specs2/12-spec-refactoring-design-tree.md S8 to S11,
--- S20): every anchored section of a spec or ADR is a clause with a project
+-- Design clauses: every anchored section of a spec or ADR is a clause with a project
 -- counter number (WL-CL-<n>, drawn from project_entity_seq kind 'CL'), a
 -- status of its own and immutable versions. A document arranges clauses in
 -- order; the arrangement is rebuilt on every body write.

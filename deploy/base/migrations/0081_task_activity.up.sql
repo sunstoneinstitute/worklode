@@ -1,7 +1,7 @@
--- Spec 071 §2: a per-task activity log fed by Claude Code's OTel log events
+-- WL-SPEC-80: a per-task activity log fed by Claude Code's OTel log events
 -- (tool_result, and similar). Kept separate from events: events is
 -- append-only provenance that is never purged, but these arrive hundreds
--- per session and are worthless once the task closes (012 §3's "a heartbeat
+-- per session and are worthless once the task closes (WL-SPEC-80's "a heartbeat
 -- is not an event worth keeping" reasoning). A later task adds the purge.
 CREATE TABLE task_activity (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
