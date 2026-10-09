@@ -10,7 +10,7 @@ func TestChildOfCycleRejected(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
 
-	// t1, t2, and t3 each stand in as a child_of parent below; since 029 §2
+	// t1, t2, and t3 each stand in as a child_of parent below; since WL-SPEC-75 §13.2
 	// any ordinary task may be one.
 	t1 := createTask(t, s, taskTestNow, containerInput())
 	t2 := createTask(t, s, taskTestNow, containerInput())

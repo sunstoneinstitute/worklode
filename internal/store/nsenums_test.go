@@ -9,7 +9,7 @@ import (
 )
 
 // schemeChecks pairs each wlc: concept scheme in ns/concept.ttl with the
-// column whose CHECK constraint must list exactly its members. 025 §17 makes
+// column whose CHECK constraint must list exactly its members. WL-SPEC-77 §14 makes
 // the Turtle authoritative for these enums; scripts/nsgen.py keeps the Go
 // side derived and internal/ns pins it, but nothing until this test held the
 // schema to the same list — so a scheme could grow a member and the CHECK
@@ -92,7 +92,7 @@ func checkedValues(t *testing.T, s *Store, table, column string) []string {
 
 // TestConceptSchemesMatchCheckConstraints holds every concept scheme against
 // the column that stores it. Adding a member to ns/concept.ttl without the
-// migration that widens the CHECK — the omission 025 §17's "in one commit"
+// migration that widens the CHECK — the omission WL-SPEC-77 §14's "in one commit"
 // warns about — fails here.
 func TestConceptSchemesMatchCheckConstraints(t *testing.T) {
 	t.Parallel()

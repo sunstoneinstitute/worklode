@@ -14,7 +14,7 @@ import (
 // RuntimeEvent is deliberately not model.RuntimeEvent: ArtifactID is
 // database bookkeeping this package needs internally (linking a Flux event
 // to the deployment artifact that caused it) that never crosses the wire, so
-// it stays outside the seven fields model.RuntimeEvent declares (ADR 036 §3,
+// it stays outside the seven fields model.RuntimeEvent declares (WL-SPEC-73 §3.2a,
 // "store scan plumbing"). api.toRuntimeEventJSON is the one conversion point
 // from this type to model.RuntimeEvent.
 type RuntimeEvent struct {

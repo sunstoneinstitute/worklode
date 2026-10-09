@@ -1,4 +1,4 @@
-// escalate.go is the upward path of the escalation ladder (025 §8.1): an
+// escalate.go is the upward path of the escalation ladder (WL-SPEC-77 §10): an
 // executor that cannot proceed hands the design defect to the tier that owns
 // it, in one transaction, and stops holding the task while that happens.
 package store
@@ -35,15 +35,15 @@ type EscalateResult struct {
 	Joined string
 }
 
-// EscalateTask runs 025 §8.1's five steps as one transaction: release the
+// EscalateTask runs WL-SPEC-77 §10's five steps as one transaction: release the
 // caller's lease and put the task back in `ready`; join an open design task
 // already covering this document and section, or mint one; block the
 // escalating task on it; record `task.gap_found`.
 //
 // Dedup comes before the mint, so a second executor hitting the same gap joins
-// the first escalation rather than minting a rival (§8.1.5). The design task
+// the first escalation rather than minting a rival (WL-SPEC-77 §10). The design task
 // is assigned to whoever authored the target document, when they are on the
-// project's crew (029 §6.1) — an author who is not gets an unassigned task
+// project's crew (WL-SPEC-75 §13.5) — an author who is not gets an unassigned task
 // rather than a failed escalation, the same trade MintAcceptDecision makes.
 //
 // The task ends in `ready` rather than a state of its own: 004 has no
@@ -127,7 +127,7 @@ func (s *Store) EscalateTask(ctx context.Context, in EscalateInput) (*EscalateRe
 	return &res, nil
 }
 
-// openEscalationFor is the §8.1.5 dedup: the oldest open design task about
+// openEscalationFor is the WL-SPEC-77 §10 dedup: the oldest open design task about
 // this document and section, or "". Open is taskClosed's complement and live,
 // the same notion OpenTaskForDoc uses — this is that guard with the section
 // added, and IS NOT DISTINCT FROM is what makes "the whole document" (a NULL
@@ -187,7 +187,7 @@ func mintEscalationTask(tx *sql.Tx, now time.Time, in EscalateInput, eventID int
 	if err != nil {
 		return nil, err
 	}
-	// §8.1.4 puts the fix in the author's queue. created_by is who wrote it;
+	// WL-SPEC-77 §10 puts the fix in the author's queue. created_by is who wrote it;
 	// owner is the fallback for a document whose author predates the column or
 	// has since handed it on.
 	for _, candidate := range []string{createdBy, owner} {

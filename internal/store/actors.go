@@ -21,22 +21,22 @@ import (
 // Actor is deliberately not model.Actor: GitHubUsername, Email, and
 // Groups are auth bookkeeping fields this package needs internally (matching
 // a Keycloak login) that never cross the wire, so they stay outside the four
-// fields model.Actor declares (ADR 036 §3, "store scan plumbing").
+// fields model.Actor declares (WL-SPEC-73 §3.2a, "store scan plumbing").
 type Actor struct {
 	ID          string
 	Kind        string
 	DisplayName string
 	Admin       bool
 	// GitHubUsername is the GitHub login Keycloak asserts for this actor via
-	// the realm's githubUsername user attribute (spec 001 §9.2), re-synced on
+	// the realm's githubUsername user attribute (WL-SPEC-74 §4.3), re-synced on
 	// every login. Empty when the Keycloak account carries no such attribute.
 	GitHubUsername string
-	// Email is the Keycloak email claim, re-synced on every login (spec 029
-	// §6.2). Empty when the account carries no email or has never logged in
+	// Email is the Keycloak email claim, re-synced on every login (WL-SPEC-74).
+	// Empty when the account carries no email or has never logged in
 	// since migration 0035.
 	Email string
 	// Groups is the raw groups claim, stored in full (not filtered to
-	// user/admin) and re-synced on every login (spec 029 §6.2). Nil when the
+	// user/admin) and re-synced on every login (WL-SPEC-74). Nil when the
 	// actor has never logged in since migration 0035.
 	Groups []string
 }
@@ -86,8 +86,8 @@ func (s *Store) EnsureServiceActor(ctx context.Context, id, displayName string) 
 
 // UpsertHumanActor inserts a human actor, or on repeat login updates its
 // display name, admin flag, GitHub username, email, and groups. All of these
-// are re-synced on every login — Keycloak stays the sole authority (spec 029
-// §6.2) — so a Keycloak demotion, a cleared githubUsername attribute, or a
+// are re-synced on every login — Keycloak stays the sole authority (WL-SPEC-74)
+// — so a Keycloak demotion, a cleared githubUsername attribute, or a
 // narrower groups claim takes effect the next time the user logs in.
 // githubUsername and email are stored as SQL NULL when empty; groups is
 // stored as jsonb, with nil marshalled as `[]` (matching SetProjectFocus's
@@ -180,7 +180,7 @@ func scanActorGroups(raw []byte) ([]string, error) {
 }
 
 // ActorDisplayNames resolves a set of actor ids to their display names in
-// one round trip — the approval detail page's decided-by column (032 §7),
+// one round trip — the approval detail page's decided-by column (WL-SPEC-82 §9),
 // which may name a different actor per history row. An id absent from the
 // result is honest empty (a deleted actor, or a nil id the caller filtered
 // out), never a fabricated name; ids may repeat and duplicates cost nothing
@@ -238,7 +238,7 @@ func (s *Store) CreateToken(ctx context.Context, actorID, description string, ex
 	return plaintext, nil
 }
 
-// CreateTaskToken mints a bearer token bound to one task (001 §2.1,
+// CreateTaskToken mints a bearer token bound to one task (WL-SPEC-74 §2,
 // WL-306): the same wl_ shape as CreateToken, with tokens.task_id set and a
 // required expiry — a task-scoped token that never expires would outlive the
 // lease whose lifecycle it exists to follow. The lease-ending paths revoke
@@ -277,7 +277,7 @@ func (s *Store) EnsureActor(ctx context.Context, id, kind, displayName string) e
 }
 
 // revokeTaskTokens revokes every live token bound to taskID, inside the
-// caller's transaction — the lease-ending half of 001 §2.1's "expires with
+// caller's transaction — the lease-ending half of WL-SPEC-74 §2's "expires with
 // its lease".
 func revokeTaskTokens(tx *sql.Tx, now time.Time, taskID string) error {
 	if _, err := tx.Exec(
@@ -345,7 +345,7 @@ func (s *Store) RevokeToken(ctx context.Context, plaintextOrHash string) error {
 
 // Authenticate looks up the actor for a plaintext bearer token. It returns
 // ErrNotFound if the token is unknown, revoked, or expired. taskID is the
-// task the token is scoped to (001 §2.1, WL-306), "" for an ordinary
+// task the token is scoped to (WL-SPEC-74 §2, WL-306), "" for an ordinary
 // actor-scoped token.
 func (s *Store) Authenticate(ctx context.Context, plaintext string) (a *Actor, taskID string, err error) {
 	hash := tokenHashOf(plaintext)

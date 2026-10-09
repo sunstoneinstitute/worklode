@@ -64,7 +64,7 @@ func TestDocCreateSpec(t *testing.T) {
 	}
 }
 
-// TestDocCreateAutoAssignsNumber: 025 §14.3 — a caller who omits Number gets
+// TestDocCreateAutoAssignsNumber: WL-SPEC-77 §7 — a caller who omits Number gets
 // the next free one for (project, kind), and it climbs on each subsequent
 // create rather than colliding.
 func TestDocCreateAutoAssignsNumber(t *testing.T) {
@@ -117,7 +117,7 @@ func TestDocCreateAutoAssignsNumber(t *testing.T) {
 }
 
 // TestDocCreateAutoAssignsNumberPerKind: spec and plan draw from separate
-// sequences within the same project, per 025 §14.3's "own" per-kind count.
+// sequences within the same project, per WL-SPEC-77 §7's "own" per-kind count.
 func TestDocCreateAutoAssignsNumberPerKind(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -176,7 +176,7 @@ func TestDocCreateResolvesEdges(t *testing.T) {
 }
 
 // TestDocCreatePlanHasNoSections: plans carry no anchors and no section rows
-// (025 §9), even when their body has headings.
+// (WL-SPEC-77 §11), even when their body has headings.
 func TestDocCreatePlanHasNoSections(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -185,7 +185,7 @@ func TestDocCreatePlanHasNoSections(t *testing.T) {
 		Project: "p1", Kind: "plan",
 		Slug: "025-documents-in-the-backbone-2", Body: planBody, CreatedBy: "stig",
 	})
-	// 029 §4: the server allocates a plan's number from its project's
+	// WL-SPEC-75 §13.4: the server allocates a plan's number from its project's
 	// sequence, so the first plan in a fresh project is 1.
 	if plan.Number != 1 {
 		t.Errorf("plan number = %d, want 1 (the project's first plan)", plan.Number)
@@ -265,7 +265,7 @@ func TestDocCreateAcceptedPublishesSections(t *testing.T) {
 	}
 }
 
-// TestDocCreateAcceptedRejectsTooDeepAnchor: the 025 §6.1 depth gate runs at
+// TestDocCreateAcceptedRejectsTooDeepAnchor: the WL-SPEC-77 §4 depth gate runs at
 // publication, so creating straight at accepted must run it too.
 func TestDocCreateAcceptedRejectsTooDeepAnchor(t *testing.T) {
 	t.Parallel()
@@ -331,7 +331,7 @@ func TestDocCreateDedupesEdgesByResolvedTarget(t *testing.T) {
 	})
 
 	// Four spellings of one target: bare filename, a path to it, the bare
-	// corpus number, and 025 §14.3's shorthand.
+	// corpus number, and WL-SPEC-77 §7's shorthand.
 	body := `---
 status: draft
 requires:
@@ -364,7 +364,7 @@ requires:
 
 // TestDocCreateSkipsEmptyRefs: a blank reference names no target, so it
 // writes no edge — never one with to_external ”. The `covers` spelling of
-// this is refused outright (026 §5.1, TestDocCoversRejections), so the
+// this is refused outright (WL-SPEC-78 §4, TestDocCoversRejections), so the
 // guarantee is pinned on a relation that has no required-key rule.
 func TestDocCreateSkipsEmptyRefs(t *testing.T) {
 	t.Parallel()
@@ -403,7 +403,7 @@ func TestDocCreateDuplicateIsErrDocExists(t *testing.T) {
 }
 
 // TestDocCreateWritesPlanBlockedByEdge: a plan's document-level `blockedBy`
-// orders it after another plan (025 §5, §9.3), stored from the declaring plan.
+// orders it after another plan (WL-SPEC-77 §3, §11), stored from the declaring plan.
 func TestDocCreateWritesPlanBlockedByEdge(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -481,7 +481,7 @@ func TestDocCreateRepointsExternalEdges(t *testing.T) {
 func TestDocCreateRepointDedupesSpellings(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
-	// Bare filename, a path to it, the bare corpus number and 025 §14.3's
+	// Bare filename, a path to it, the bare corpus number and WL-SPEC-77 §7's
 	// shorthand, plus two spellings carrying the same anchor.
 	body := `---
 status: draft
