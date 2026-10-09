@@ -1400,7 +1400,7 @@ func TestAcceptDocEmitsTypedEvent(t *testing.T) {
 		"wl:subject":             iri,
 		"wl:fromStatus":          "wlc:draft",
 		"wl:toStatus":            "wlc:accepted",
-		"prov:wasAssociatedWith": "wlid:actor/alice",
+		"prov:wasAssociatedWith": "wlid:agent/alice",
 	})
 
 	if dotted := eventsOfType(t, h, token, "doc.accepted"); len(dotted) != 0 {
@@ -1467,7 +1467,7 @@ func TestSubmitDoc(t *testing.T) {
 		"@type":                  "wl:DocumentSubmitted",
 		"@id":                    fmt.Sprintf("wlid:event/%d", int64(id)),
 		"wl:subject":             iri,
-		"prov:wasAssociatedWith": "wlid:actor/alice",
+		"prov:wasAssociatedWith": "wlid:agent/alice",
 	})
 
 	// Submitting the same version twice is one fact: the deterministic

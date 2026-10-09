@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
+
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/staleness"
 )
@@ -73,7 +75,7 @@ func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, cause, specSlug 
 			"cause":              cause,
 			"spec":               specSlug,
 			"anchors":            anchors,
-			"prov:wasInformedBy": "wlid:event/" + strconv.FormatInt(eventID, 10),
+			"prov:wasInformedBy": iri.CURIE(iri.Event(eventID)),
 		})
 		if err != nil {
 			return marked, err

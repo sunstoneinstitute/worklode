@@ -8,6 +8,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
+
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -26,7 +28,7 @@ type DomainEvent interface {
 // DocumentSubmitted records a document entering review (025 §15.3).
 type DocumentSubmitted struct {
 	Doc     string // subject IRI, e.g. wlid:doc/spec-worklode-025 (025 §4.1)
-	Actor   string // actor id; rendered wlid:actor/<id>
+	Actor   string // actor id; rendered wlid:agent/<id>
 	At      time.Time
 	Version int
 }
@@ -40,7 +42,7 @@ func (e DocumentSubmitted) ExternalID() string {
 func (e DocumentSubmitted) Properties() map[string]any {
 	return map[string]any{
 		"prov:atTime":            e.At.UTC().Format(time.RFC3339),
-		"prov:wasAssociatedWith": "wlid:actor/" + e.Actor,
+		"prov:wasAssociatedWith": iri.CURIE(iri.Agent(e.Actor)),
 		"wl:subject":             e.Doc,
 	}
 }
@@ -64,7 +66,7 @@ func (e DocumentAccepted) ExternalID() string {
 func (e DocumentAccepted) Properties() map[string]any {
 	return map[string]any{
 		"prov:atTime":            e.At.UTC().Format(time.RFC3339),
-		"prov:wasAssociatedWith": "wlid:actor/" + e.Actor,
+		"prov:wasAssociatedWith": iri.CURIE(iri.Agent(e.Actor)),
 		"wl:subject":             e.Doc,
 		"wl:fromStatus":          e.From,
 		"wl:toStatus":            e.To,
@@ -93,7 +95,7 @@ func Emit(ctx context.Context, st *store.Store, source string, ev DomainEvent,
 			// the id 025 §15.2 mandates.
 			full["@context"] = "https://worklode.io/ns/ontology#"
 			full["@type"] = ev.EventType()
-			full["@id"] = fmt.Sprintf("wlid:event/%d", id)
+			full["@id"] = iri.CURIE(iri.Event(id))
 			return json.Marshal(full)
 		}, apply)
 }
