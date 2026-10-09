@@ -33,6 +33,18 @@ func writeFlow(t *testing.T, name, body string) string {
 	return dir
 }
 
+func TestLoadApprovalFlowsShipsTheSoloDefault(t *testing.T) {
+	flows, err := api.LoadApprovalFlows("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	solo := flowByName(t, flows, "solo")
+	if len(solo.Match) != 0 || len(solo.Requirements) != 0 ||
+		len(solo.SelfReview) != 1 || solo.SelfReview[0] != "doc" {
+		t.Errorf("solo = %+v, want no match, no requirements, self-review of docs", solo)
+	}
+}
+
 func TestLoadApprovalFlowsShipsTheStoryDefault(t *testing.T) {
 	flows, err := api.LoadApprovalFlows("")
 	if err != nil {
