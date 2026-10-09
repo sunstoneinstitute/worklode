@@ -387,3 +387,40 @@ func TestRuleLint(t *testing.T) {
 		t.Errorf("rule lint (clean project): %v\noutput: %s", err, out)
 	}
 }
+
+// TestRuleArrangeAndUnarrangeCommands: arrange posts the rule and position
+// to the spec's rules route; unarrange deletes the rule from it.
+func TestRuleArrangeAndUnarrangeCommands(t *testing.T) {
+	var posted model.ArrangeRuleInput
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		if r.Method == http.MethodPost {
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Fatalf("decode POST body: %v", err)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(model.Rule{Ref: "WL-REQ-3", Heading: "H", Status: "accepted", Version: 1})
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	if out, err := runLode(t, "rule", "arrange", "7", "WL-REQ-3", "--under", "sec-2", "--anchor", "sec-2.4"); err != nil {
+		t.Fatalf("lode rule arrange: %v\noutput: %s", err, out)
+	}
+	if want := (model.ArrangeRuleInput{Rule: "WL-REQ-3", Under: "sec-2", Anchor: "sec-2.4"}); posted != want {
+		t.Errorf("posted = %+v, want %+v", posted, want)
+	}
+	if _, err := runLode(t, "rule", "unarrange", "7", "WL-REQ-3"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"POST /api/v1/docs/7/rules", "DELETE /api/v1/docs/7/rules/WL-REQ-3"}
+	if !reflect.DeepEqual(paths, want) {
+		t.Errorf("called %v, want %v", paths, want)
+	}
+	if _, err := runLode(t, "rule", "arrange", "7", "WL-REQ-3", "--after", "sec-1", "--under", "sec-2"); err == nil {
+		t.Error("--after with --under did not error")
+	}
+}

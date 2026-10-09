@@ -61,6 +61,7 @@ var l3DomainActions = map[string]bool{
 	"note": true, "escalate": true, "gap": true, "fix": true,
 	"withdraw": true, "report": true, "check": true,
 	"supersede": true, // lode rule supersede: the refactor primitive
+	"arrange":   true, // lode rule arrange: place a rule in a spec (WL-SPEC-77 §19.3)
 }
 
 // nounViews is the noun-subcommand table of WL-SPEC-81 §4, transcribed by full
