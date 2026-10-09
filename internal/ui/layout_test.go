@@ -1,6 +1,6 @@
 package ui
 
-// layout_test.go covers the top bar's inbox indicator (spec 056 §4): the
+// layout_test.go covers the top bar's inbox indicator (WL-SPEC-82 §2.3): the
 // icon renders on every page, and the alert dot renders only when the
 // request context carries WithInboxDot(ctx, true).
 

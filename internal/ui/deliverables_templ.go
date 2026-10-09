@@ -9,13 +9,13 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 // deliverables.templ renders a project's Deliverables destination (GET
-// /projects/{id}/deliverables): the declared outputs of the project (spec 029
-// §3), grouped by the milestone each is attached to (spec 029 §2), and the
+// /projects/{id}/deliverables): the declared outputs of the project (WL-SPEC-75
+// §13.3), grouped by the milestone each is attached to (WL-SPEC-75 §13.2), and the
 // affordance to declare another.
 //
 // Each row shows what is stored — id, name, description, the declared
 // artifact address, and who declared it when — plus the newest state reported
-// about that address and where that report came from. Spec 029 §3.2 makes
+// about that address and where that report came from. WL-SPEC-75 §13.3 makes
 // deliverable state something reported, in one of two provenances: emitters
 // and the prober report observed facts, a person reports a user-reported one
 // through the row's Report control. A row with neither says "Declared" instead
@@ -211,7 +211,7 @@ func deliverableGroup(g DeliverableGroup) templ.Component {
 // deliverableRow renders one declared deliverable. The chip is the newest
 // state reported about the declared address; with nothing reported it falls
 // back to "Declared", the only evidence category a typed-in deliverable can
-// honestly carry on its own (spec 032 §1).
+// honestly carry on its own (WL-SPEC-82 §1).
 func deliverableRow(d DeliverableRow) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -458,7 +458,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 }
 
 // deliverableReportForm is the row's Report control: a person files the state
-// they see (029 §3.2). Native controls only — a menu and a submit — so it is
+// they see (WL-SPEC-75 §13.3). Native controls only — a menu and a submit — so it is
 // keyboard-operable with no script on the page.
 func deliverableReportForm(d DeliverableRow) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

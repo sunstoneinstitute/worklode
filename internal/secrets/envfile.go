@@ -10,9 +10,8 @@ import (
 
 // WriteEnvFile renders entries in `op run` env-file format —
 // NAME=op://vault/item/field, one per line, sorted by name. References only,
-// never values: the file is the portable packing manifest (spec 017 v1.5
-// re-uses it verbatim for remote executors). 0600 because vault/item names
-// are mildly sensitive.
+// never values: the file is the portable packing manifest, reusable verbatim by remote executors.
+// 0600 because vault/item names are mildly sensitive.
 func WriteEnvFile(path string, entries []Entry) error {
 	sorted := append([]Entry(nil), entries...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })

@@ -87,7 +87,7 @@ func TestEndedSessionRendersAsEnded(t *testing.T) {
 }
 
 // A lease that outlives its agent's session must not keep the Activity card
-// up on the strength of that ended session (spec 071 §4, WL-862).
+// up on the strength of that ended session (WL-SPEC-80 §8.9, WL-862).
 func TestTaskPageOmitsActivityCardForEndedSessionOnly(t *testing.T) {
 	body := renderTask(t, TaskView{
 		Page:          PageProps{Title: "WL-7"},

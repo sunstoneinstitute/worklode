@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// specExample is the catalog from docs/specs/017-task-secrets.md, verbatim.
+// specExample is the catalog from WL-SPEC-74 §10.2, verbatim.
 const specExample = `
 [GITHUB_TOKEN]
 ref = "op://Employee/GitHub agent token/credential"

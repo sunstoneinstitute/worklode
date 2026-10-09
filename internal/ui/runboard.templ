@@ -1,7 +1,6 @@
 package ui
 
-// runboard.templ renders a project's run board (GET /projects/{id}/work,
-// spec 032 §8): its live work grouped into the spec's six fixed groups,
+// runboard.templ renders a project's run board (GET /projects/{id}/work): its live work grouped into six fixed groups,
 // presented inside the same project sidebar frame as Crew and the cockpit
 // (crew.templ, cockpit.templ), with active key "work" so localNav marks
 // Work current. Each group is its own <section class="card"> with the group
@@ -10,7 +9,7 @@ package ui
 // Rows reuse the .wl worklist row shape and the owner-vs-delegate avatar
 // treatment cockpit.templ's workRow uses (avatarClass/avatarInitials/
 // actorsLine, internal/ui/views.go). Running and Needs-judgment rows carry
-// the full §8 active-item fact list — delegate, lease age, last event,
+// the full active-item fact list — delegate, lease age, last event,
 // cost, PR and check — on the row's muted second line, the PR and check
 // labels linking back to the PR they came from; a Waiting row's second line
 // names what holds it instead. A bounded group (Failed, Completed) adds the
@@ -37,7 +36,7 @@ templ RunBoard(v RunBoardView) {
 	}
 }
 
-// runGroup renders one §8 group: heading, a count chip (rows shown plus any
+// runGroup renders one group: heading, a count chip (rows shown plus any
 // bounded-out More), its rows, and the "and N more" line when bounded.
 templ runGroup(g RunGroupView) {
 	<section class="card">
@@ -71,7 +70,7 @@ templ runRow(r RunRowView) {
 }
 
 // runRowFacts is a run row's muted second line (.wlrow .tl .s): the
-// owner/delegate who-line, then whatever §8 facts the row carries — what
+// owner/delegate who-line, then whatever facts the row carries — what
 // holds a Waiting row, an active row's lease age/last event/cost, and its PR
 // and check labels, both linking to the PR they came from (checks run
 // against the PR's head SHA, so it is their source too).

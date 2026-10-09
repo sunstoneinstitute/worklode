@@ -11,7 +11,7 @@ type Metrics struct {
 }
 
 // outcomes bounds the "outcome" label of worklode_watcher_actions_total
-// (025 §15.7). rules bounds "rule" to the labels Evaluate emits.
+// (WL-SPEC-75 §9.7). rules bounds "rule" to the labels Evaluate emits.
 var (
 	rules = []string{ruleReviewOnSubmit, rulePlanOnAccept, ruleReviewOnPatch,
 		ruleGroomOnStale, ruleApprovalOnSubmit}
@@ -22,7 +22,7 @@ var (
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		// worklode_watcher_actions_total{rule, outcome} — outcome is one of
-		// applied|suppressed|error (spec 025 §15.7). Both labels are
+		// applied|suppressed|error (WL-SPEC-75 §9.7). Both labels are
 		// bounded: rule is one of the rule names Evaluate emits,
 		// outcome one of the three above.
 		actions: prometheus.NewCounterVec(prometheus.CounterOpts{

@@ -10,7 +10,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
 
-// TestEvaluate covers the §5 truth table of the plan: the two doc-lifecycle
+// TestEvaluate covers the truth table of the doc-lifecycle rules (WL-SPEC-75 §9.6): the two
 // rules, each guard, and the "everything else mints nothing" cases (plan and
 // ADR acceptance, a vendor event, an unrecognised wl: type).
 func TestEvaluate(t *testing.T) {

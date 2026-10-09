@@ -1,13 +1,13 @@
 package ui
 
 // crew.templ renders a project's Crew destination (GET /projects/{id}/crew):
-// the read-only roster of the time-limited group defined by spec 029 §6.1,
-// presented as "Crew" per spec 032 §6 (never "participants"). Add/remove
+// the read-only roster of the time-limited group defined by WL-SPEC-75 §13.5,
+// presented as "Crew" per WL-SPEC-82 §8 (never "participants"). Add/remove
 // affordances arrive with later tasks; this page is a projection only.
 //
 // Each row shows what is stored — display name (falling back to the actor
 // id when none is set) and role labels — plus a visually distinct Lead
-// badge on the one accountable human (032 §6). An empty roster states that
+// badge on the one accountable human (WL-SPEC-82 §8). An empty roster states that
 // honestly instead of showing a fabricated record.
 //
 // The add-member form below the roster, and the per-row Remove button, are
@@ -18,7 +18,7 @@ package ui
 // implemented, so offering one would promise something the store refuses.
 //
 // A removal refused because the member still owns open work re-renders with
-// that work listed and linked: spec 032 §6's responsibility review in its
+// that work listed and linked: WL-SPEC-82 §8's responsibility review in its
 // minimal honest form — the page names what has to be reassigned or closed
 // rather than reporting a bare refusal.
 
@@ -126,7 +126,7 @@ templ crewResponsibilities(items []CrewWorkItem) {
 }
 
 // crewRow renders one Crew member. The Lead badge is the only member marked
-// current: 032 §6 requires exactly one project lead be visually distinct as
+// current: WL-SPEC-82 §8 requires exactly one project lead be visually distinct as
 // the accountable human. Every other member carries a Remove button; the
 // lead does not, because lead handoff is not implemented.
 templ crewRow(m CrewMember, removeAction string) {

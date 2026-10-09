@@ -60,7 +60,7 @@ func hasMermaid(body template.HTML) bool {
 
 // FmtAge renders how long ago t was, relative to now, in the coarsest unit
 // that stays legible: minutes under an hour, hours under a day, days beyond
-// that. The Reviews queue (spec 029 §7.1) is the first page to show it; any
+// that. The Reviews queue (WL-SPEC-82 §9) is the first page to show it; any
 // later page needing a relative age should call this rather than inventing
 // a second phrasing.
 func FmtAge(t, now time.Time) string {
@@ -82,7 +82,7 @@ func FmtAge(t, now time.Time) string {
 
 // fmtBytes renders a byte count for display: exact below 1 kB, one decimal
 // place above it. Attachment sizes span a 33-byte PNG and a 100 MiB screen
-// recording (spec 021 §5), and neither reads as a plain byte count.
+// recording (WL-SPEC-78 §8.5), and neither reads as a plain byte count.
 func fmtBytes(n int64) string {
 	if n < 1000 {
 		return strconv.FormatInt(n, 10) + " B"

@@ -20,7 +20,7 @@ import (
 // sections for prerequisites, agent sessions, activity, attachments, edges
 // and the full timeline.
 //
-// The body is the page's one piece of untrusted markup (spec 021 §8): it
+// The body is the page's one piece of untrusted markup (WL-SPEC-78 §8.6): it
 // arrives as v.BodyHTML, already rendered and sanitised by internal/mdrender
 // at the api boundary, and is the only value emitted raw. Everything else,
 // row.URL (TimelineRow.URL) included, is rendered as a plain string href, so
@@ -29,7 +29,7 @@ import (
 // web_test.go's TestTaskPageEscapesHostileTimelineURL).
 //
 // It renders through projectShell — the same frame crew.templ and every
-// other project-scoped page use (spec 056 §2) — with local-nav active ""
+// other project-scoped page use (WL-SPEC-82 §2.2) — with local-nav active ""
 // since the task page is not itself one of the sidebar's destinations;
 // PageProps.ActiveGlobal stays unset too, so the page carries both nav
 // landmarks but marks neither current (web_test.go's assertNoAriaCurrent).
@@ -1049,7 +1049,7 @@ func activityRow(r ActivityRow) templ.Component {
 }
 
 // ActivityRowFragment is one row rendered on its own: the data of a frame on
-// GET /tasks/{id}/activity/events (§4). The stream sends the same markup the
+// GET /tasks/{id}/activity/events (WL-SPEC-80 §8.9). The stream sends the same markup the
 // page draws, so an inserted row can never disagree with a reloaded one.
 func ActivityRowFragment(r ActivityRow) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

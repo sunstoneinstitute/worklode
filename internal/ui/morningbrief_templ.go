@@ -8,10 +8,10 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-// morningbrief.templ renders the Morning Brief section on Home (spec 032 §9,
-// §11; NOT the task brief in internal/api/brief.go): tier-1 NeedsYou through
+// morningbrief.templ renders the Morning Brief section on Home (WL-SPEC-82 §11;
+// NOT the task brief in internal/api/brief.go): tier-1 NeedsYou through
 // tier-3 Stopped items in full, tier-4 Routine collapsed to a count with no
-// per-event rendering anywhere. That absence is §11's acceptance bar in
+// per-event rendering anywhere. That absence is the acceptance bar in
 // markup form — judgment obvious, no firehose.
 
 import "strconv"
