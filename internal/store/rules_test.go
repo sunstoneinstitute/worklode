@@ -515,6 +515,29 @@ func TestSetRuleMeta(t *testing.T) {
 	}
 }
 
+// TestSetRuleMetaKindRefusedWhenCovered: a rule an accepted plan covers
+// refuses informative and invariant; an uncovered rule accepts it.
+func TestSetRuleMetaKindRefusedWhenCovered(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "cov", Body: ruleDocV1, CreatedBy: "stig"})
+	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "cov-plan", CreatedBy: "stig",
+		Body: "---\nstatus: draft\ncovers:\n  - cov.md#sec-1\n---\n# P\n\n## Tasks\n\n### Task 1 — Do it\n\n```yaml\nkind: chore\n```\n\nText.\n"})
+	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	set := func(num int64, kind string) error {
+		id := ruleID(t, s, "P1", num)
+		return s.Tx(ctx, func(tx *sql.Tx) error { return SetRuleMeta(tx, id, model.RuleMetaInput{Kind: &kind}) })
+	}
+	if err := set(1, "informative"); !errors.Is(err, ErrRuleCovered) {
+		t.Errorf("covered rule to informative: %v, want ErrRuleCovered", err)
+	}
+	if err := set(3, "informative"); err != nil {
+		t.Errorf("uncovered rule to informative: %v", err)
+	}
+}
+
 // TestListRules: a document filter returns its arrangement in order, a
 // status filter narrows, an unknown status is refused, and the unfiltered
 // list runs by number with bodies left empty.

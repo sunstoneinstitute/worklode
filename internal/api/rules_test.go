@@ -13,6 +13,24 @@ import (
 // name: a spec whose first anchored section mints WL-REQ-1.
 const ruleDocV1 = "---\nstatus: draft\n---\n# T\n\nIntro.\n\n## 1. One {#sec-1}\n\nA.\n\n### 1.1 Sub {#sec-1.1}\n\nB.\n\n## 2. Two {#sec-2}\n\nC.\n"
 
+// TestPatchRuleKindCovered: PATCH answers 409 when an accepted plan covers
+// the rule and the new kind is not requirement.
+func TestPatchRuleKindCovered(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "cov", Body: ruleDocV1})
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "plan", Slug: "cov-plan",
+		Body: "---\nstatus: draft\ncovers:\n  - cov.md#sec-1\n---\n# P\n\n## Tasks\n\n### Task 1 — Do it\n\n```yaml\nkind: chore\n```\n\nText.\n"})
+	if rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("accept plan: %d %s", rr.Code, rr.Body.String())
+	}
+	kind := "informative"
+	if rr := doReq(t, h, http.MethodPatch, "/api/v1/rules/WL-REQ-1", token, model.RuleMetaInput{Kind: &kind}); rr.Code != http.StatusConflict {
+		t.Errorf("covered rule to informative: status %d, want 409", rr.Code)
+	}
+}
+
 // TestGetRule reads a rule over the API by its ref, and answers 400 for
 // a malformed ref and 404 for one that doesn't resolve. WL-REQ-1, WL-RULE-1
 // and WL-CL-1 name the same rule, and the ref printed carries the infix of

@@ -92,6 +92,10 @@ var (
 	// ErrKeyTaken, which is the other caller-chosen column on the same insert
 	// (projects_key_unique).
 	ErrProjectExists = errors.New("project already exists")
+	// ErrRuleCovered means the rule is covered by an accepted plan, so it
+	// cannot leave the requirement kind (WL-SPEC-77 §4). No constraint backs
+	// it; SetRuleMeta checks covered_rules.
+	ErrRuleCovered = errors.New("rule is covered by an accepted plan")
 )
 
 // pgViolation reports whether err is a Postgres error with the given

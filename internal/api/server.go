@@ -1678,7 +1678,8 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrVersionMismatch),
 		errors.Is(err, store.ErrReferenceExists),
 		errors.Is(err, store.ErrActorExists),
-		errors.Is(err, store.ErrProjectExists):
+		errors.Is(err, store.ErrProjectExists),
+		errors.Is(err, store.ErrRuleCovered):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		s.log.Error("internal error", "err", err)

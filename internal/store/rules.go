@@ -659,6 +659,16 @@ func SetRuleMeta(tx *sql.Tx, ruleID int64, in model.RuleMetaInput) error {
 		return fmt.Errorf("rule kind %q: must be one of %s: %w",
 			*in.Kind, strings.Join(ns.Schemes["RuleKind"], ", "), ErrInvalidInput)
 	}
+	if in.Kind != nil && *in.Kind != designdoc.RuleKindRequirement {
+		plans, err := acceptedPlansCovering(tx, []int64{ruleID})
+		if err != nil {
+			return err
+		}
+		if len(plans) > 0 {
+			return fmt.Errorf("%s is covered by an accepted plan and stays a requirement (WL-SPEC-77 §4): %w",
+				ruleRefOf(tx, ruleID), ErrRuleCovered)
+		}
+	}
 	res, err := tx.Exec(
 		`UPDATE rules
 		    SET owner = CASE WHEN $2::boolean THEN nullif($3, '') ELSE owner END,
