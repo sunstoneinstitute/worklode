@@ -121,7 +121,7 @@ func TestDocDetailRenderFlagsStaleness(t *testing.T) {
 	for _, want := range []string{
 		"STALE since " + LocalTime(time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)) +
 			" — re-planning owed (WL-REQ-170)",
-		"025-a requires 004-backbone#sec-6 (stale)",
+		"SPEC-25 requires 004-backbone#sec-6 (stale)",
 		"COVERED BY",
 		"covered by 210-plan (stale)",
 	} {

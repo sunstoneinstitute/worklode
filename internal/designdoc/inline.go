@@ -16,6 +16,7 @@
 package designdoc
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"strings"
@@ -134,13 +135,13 @@ func flattenHeadings(text string) string {
 func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, error) {
 	parsed, err := Parse([]byte(d.Body))
 	if err != nil {
-		return "", fmt.Errorf("parse %s: %w", d.Slug, err)
+		return "", fmt.Errorf("parse %s: %w", cmp.Or(d.Ref, d.Slug), err)
 	}
 
 	var b strings.Builder
 
 	if section == "" {
-		fmt.Fprintf(&b, "<!-- Consolidated view of %s: effective amendments and supersessions folded in (lode show --inline). Not a source document. -->\n\n", d.Slug)
+		fmt.Fprintf(&b, "<!-- Consolidated view of %s: effective amendments and supersessions folded in (lode show --inline). Not a source document. -->\n\n", cmp.Or(d.Ref, d.Slug))
 		if p := strings.TrimSpace(parsed.Preamble); p != "" {
 			b.WriteString(p + "\n\n")
 		}

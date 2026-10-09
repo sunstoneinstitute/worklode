@@ -16,6 +16,7 @@ package hookrun
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1104,11 +1105,11 @@ func compactBrief(b model.Brief, skillPaths map[string]string) string {
 		fmt.Fprintf(&sb, "\nopen blockers: %s", strings.Join(names, ", "))
 	}
 	if len(b.BlockingPlans) > 0 {
-		slugs := make([]string, 0, len(b.BlockingPlans))
+		refs := make([]string, 0, len(b.BlockingPlans))
 		for _, p := range b.BlockingPlans {
-			slugs = append(slugs, p.Slug)
+			refs = append(refs, cmp.Or(p.Ref, p.Slug))
 		}
-		fmt.Fprintf(&sb, "\nblocking plans: %s", strings.Join(slugs, ", "))
+		fmt.Fprintf(&sb, "\nblocking plans: %s", strings.Join(refs, ", "))
 	}
 	if len(b.Skills.Pinned)+len(b.Skills.Matches) > 0 {
 		fmt.Fprintf(&sb, "\n## Skills\n")

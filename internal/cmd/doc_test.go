@@ -1141,7 +1141,7 @@ func TestDocWithdrawAndUnresolved(t *testing.T) {
 	if out, err := runLode(t, "doc", "withdraw", "unexecuted",
 		"--justification", "the approach was abandoned"); err != nil {
 		t.Fatalf("doc withdraw: %v\noutput: %s", err, out)
-	} else if !strings.Contains(out, "withdrew doc") {
+	} else if !strings.Contains(out, "withdrew PROJ-SPEC-1: ") {
 		t.Errorf("withdraw output = %q, want it to confirm the withdrawal", out)
 	}
 

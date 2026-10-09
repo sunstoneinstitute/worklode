@@ -423,9 +423,9 @@ func DocLintTable(w io.Writer, findings []model.DocLintFinding) {
 	for _, f := range findings {
 		detail := f.Ref
 		if f.Kind == "missing-anchor" {
-			detail = fmt.Sprintf("%s#%s: no such section", f.ToSlug, f.ToAnchor)
+			detail = fmt.Sprintf("%s#%s: no such section", cmp.Or(f.ToRef, f.ToSlug), f.ToAnchor)
 		}
-		tbl.add(f.Slug, f.Kind, dash(f.FromAnchor), f.Type, detail)
+		tbl.add(cmp.Or(f.DocRef, f.Slug), f.Kind, dash(f.FromAnchor), f.Type, detail)
 	}
 	tbl.flush(w)
 }
@@ -617,6 +617,9 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	if d.Number != 0 {
 		fmt.Fprintf(w, "  number:   %d\n", d.Number)
 	}
+	if ref := DocRef(d.Doc); ref != d.Kind {
+		fmt.Fprintf(w, "  ref:      %s\n", ref)
+	}
 	fmt.Fprintf(w, "  slug:     %s\n", d.Slug)
 	fmt.Fprintf(w, "  status:   %s\n", d.Status)
 	fmt.Fprintf(w, "  version:  %d\n", d.Version)
@@ -660,10 +663,10 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	if len(d.Edges) > 0 || len(d.EdgesIn) > 0 {
 		fmt.Fprintln(w, "\nedges:")
 		for _, e := range d.Edges {
-			fmt.Fprintf(w, "  %s %s %s\n", d.Slug, e.Type, docEdgeTarget(e))
+			fmt.Fprintf(w, "  %s %s %s\n", cmp.Or(DocRef(d.Doc), d.Slug), e.Type, docEdgeTarget(e))
 		}
 		for _, e := range d.EdgesIn {
-			fmt.Fprintf(w, "  %s %s %s\n", docEdgeTarget(e), e.Type, d.Slug)
+			fmt.Fprintf(w, "  %s %s %s\n", docEdgeTarget(e), e.Type, cmp.Or(DocRef(d.Doc), d.Slug))
 		}
 	}
 }
@@ -771,7 +774,7 @@ func docEdgeTarget(e model.DocEdge) string {
 	if e.ToDoc == 0 {
 		return cmp.Or(e.ToRule, e.ToExternal)
 	}
-	name := e.ToSlug
+	name := cmp.Or(e.ToRef(), e.ToSlug)
 	if name == "" {
 		name = strconv.FormatInt(e.ToDoc, 10)
 	}

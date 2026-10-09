@@ -1050,6 +1050,7 @@ func (s *server) renderDocVersion(w http.ResponseWriter, r *http.Request, d mode
 	for _, k := range keyByID {
 		keys = append(keys, k)
 	}
+	d = s.withProjectKey(r.Context(), d)
 	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys).For(keyByID[d.Project]), d, v)
 	s.renderWeb(w, r, http.StatusOK, "doc version page", ui.DocVersion(view))
 }

@@ -93,7 +93,7 @@ reported; new output always writes `covers`.
 and a plan's `## Tasks` definitions. Creating the document is what turns
 `covers:` into edges: a reference no document in the project resolves to is
 kept as an external reference instead, which is a silently unplanned section,
-so check `lode doc show <slug> --json` for `edges` you expected.
+so check `lode doc show <ref> --json` for `edges` you expected.
 
 Note the layer this sits in: **planning** coverage is declared intent on a plan.
 WL-REQ-177's `<component> wl:implements <section>` is **implementation** coverage,

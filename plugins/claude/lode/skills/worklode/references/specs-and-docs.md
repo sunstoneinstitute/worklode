@@ -241,7 +241,7 @@ never reopens planning gaps a prior plan already closed.
 lode doc list --needs-planning     # accepted specs with a section no accepted plan covers
 lode doc list --needs-execution    # accepted plans whose minted task set still has an open task
 lode doc list --bare-superseded    # withdrawn rules no rule supersedes
-lode doc todo <slug> --deps        # one spec's remaining work, recursively through its dependencies
+lode doc todo <ref> --deps        # one spec's remaining work, recursively through its dependencies
 lode doc progress                  # the whole project at a glance: each spec's state and next act
 ```
 

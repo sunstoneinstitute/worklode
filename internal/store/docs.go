@@ -1237,7 +1237,7 @@ func (s *Store) BareSupersededRules(ctx context.Context, project, kind string) (
 		`SELECT rule, doc, anchor, heading FROM (
 		     SELECT DISTINCT ON (r.id) p.key AS key, r.number AS number,
 		            `+ruleRefSQL("p", "r")+` AS rule,
-		            coalesce(dp.key || '-' || upper(d.kind) || '-' || d.number, '') AS doc,
+		            coalesce(`+docRefSQL("dp", "d")+`, '') AS doc,
 		            CASE WHEN d.id IS NULL THEN '' ELSE dr.anchor END AS anchor,
 		            v.heading AS heading
 		       FROM rules r

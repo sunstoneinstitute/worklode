@@ -345,7 +345,7 @@ templ taskPrerequisites(v TaskView) {
 				<h4>Plans ordered first</h4>
 				<ul class="pq-plans">
 					for _, pl := range p.Plans {
-						<li><a href={ pl.URL }>{ pl.Slug }</a> { pl.Title } <span class={ "chip " + docStatusChip(pl.Status) }>{ pl.Status }</span></li>
+						<li><a href={ pl.URL }>{ pl.Ref }</a> { pl.Title } <span class={ "chip " + docStatusChip(pl.Status) }>{ pl.Status }</span></li>
 					}
 				</ul>
 			}
