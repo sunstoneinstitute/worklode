@@ -147,7 +147,7 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 	manPath := filepath.Join(root, ".worklode", "components.yaml")
 	data, err := os.ReadFile(manPath)
 	if err != nil {
-		return "", fmt.Errorf("read %s: %w (spec 007 §1: every derived repo needs a component-boundary manifest)", manPath, err)
+		return "", fmt.Errorf("read %s: %w (every derived repo needs a component-boundary manifest)", manPath, err)
 	}
 	m, err := manifest.Parse(data)
 	if err != nil {
@@ -359,7 +359,7 @@ func newGraphDriftCmd() *cobra.Command {
 	var component string
 	cmd := &cobra.Command{
 		Use:   "drift",
-		Short: "Architectural drift: violations and stale intent (spec 007 §3.1)",
+		Short: "Architectural drift: violations and stale intent (WL-SPEC-82 §2.5)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newAPIClientWithConfig()
 			if err != nil {

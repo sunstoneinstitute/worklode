@@ -725,9 +725,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /{$}", s.navWrap("home", s.homePage))
 	r.web("POST /home/reviewed", s.navWrap("brief_review", s.requireSession(permWebWrite, s.reviewedThroughNow)))
 	r.web("GET /ideas", s.navWrap("ideas", s.globalPlaceholder("ideas", "Ideas",
-		"Low-friction idea capture, looser than and promotable into Intake, arrives with spec 032 §5.")))
+		"Low-friction idea capture, looser than and promotable into Intake, arrives with WL-SPEC-82 §7.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
-		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8.")))
+		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with WL-SPEC-82 §7 and WL-SPEC-75 §13.7.")))
 	r.web("GET /projects", s.navWrap("projects", s.projectsPage))
 	r.web("GET /projects/{id}", s.navWrap("projects", s.projectPage))
 	// The literal-segment patterns win over the {section} wildcard below for
@@ -775,7 +775,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))
 	r.web("GET /approvals/{id}", s.navWrap("reviews", s.approvalPage))
 	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("", "Deliveries",
-		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 004 §5.")))
+		"Publication, deployment, and operational delivery evidence arrive with WL-SPEC-75 §10 and §13.3.")))
 	// Knowledge is the document corpus: spec 032 §2 defines the destination
 	// as "documents and graph-backed expert views", and /docs is the half of
 	// it that exists. /knowledge stays as a redirect so the spec's own

@@ -437,7 +437,7 @@ func TestProgressReviewActionDisabled(t *testing.T) {
 
 	body := getPage(t, h, "/projects/proj/progress").Body.String()
 
-	const reason = `data-reason="Review surface (spec 059) not yet built"`
+	const reason = `data-reason="Review surface (WL-SPEC-84) not yet built"`
 	if got := strings.Count(body, `data-route="review"`); got != 2 {
 		t.Errorf("the page renders %d review buttons, want 2 (the spec row and the plan line): %s", got, body)
 	}

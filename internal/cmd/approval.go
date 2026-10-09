@@ -23,7 +23,7 @@ func newApprovalCmd() *cobra.Command {
 		Use:   "approval",
 		Short: "Require and request review, and see what review is outstanding",
 		Long: "Require and request review, and see what review is outstanding.\n\n" +
-			"Deciding an approval is a web UI act (spec 029 §7.3) and has no\n" +
+			"Deciding an approval is a web UI act (WL-SPEC-75 §13.6) and has no\n" +
 			"command here: open the cockpit's Reviews page to approve, reject, or\n" +
 			"request changes.",
 	}
@@ -44,7 +44,7 @@ func newApprovalAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <kind> <id>",
 		Short: "Require an approval on one entity",
-		Long: "Require an approval on one entity (029 §7.2): a review lane a\n" +
+		Long: "Require an approval on one entity (WL-SPEC-75 §13.6): a review lane a\n" +
 			"project's flow did not demand, filed by hand.\n\n" +
 			"<kind> is " + strings.Join(model.ApprovalEntityKinds, ", ") + " and <id> is that\n" +
 			"entity's id — a task id, a deliverable id, a \"repo#number\" pull\n" +
@@ -119,7 +119,7 @@ func newApprovalRequestCmd() *cobra.Command {
 		Use:   "request <ref>",
 		Short: "Open an approval lane for each of a document's assigned reviewers",
 		Long: "Open an approval lane for each of a document's assigned reviewers,\n" +
-			"on its current version (025 §7.3). Assign the reviewer set first with\n" +
+			"on its current version (WL-SPEC-77 §9). Assign the reviewer set first with\n" +
 			"`lode doc set reviewers <actor> <actor> ... <ref>`; re-running this\n" +
 			"after a later `lode doc set reviewers` call adds only the newly\n" +
 			"assigned lanes.",

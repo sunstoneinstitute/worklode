@@ -23,7 +23,7 @@ import (
 func init() {
 	cmd := &cobra.Command{
 		Use:   "secret",
-		Short: "Task-declared secrets: catalog, status, exec, purge (spec 017)",
+		Short: "Task-declared secrets: catalog, status, exec, purge (WL-SPEC-74 §10)",
 	}
 	cmd.AddCommand(newSecretsCatalogCmd(), newSecretsStatusCmd(), newSecretsExecCmd(),
 		newSecretsPurgeCmd(), newSecretsPackCmd())

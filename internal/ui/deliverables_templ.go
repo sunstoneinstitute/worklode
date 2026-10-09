@@ -134,7 +134,7 @@ func Deliverables(v DeliverablesView) templ.Component {
 						}
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></section><p class=\"muted small\">Deliverable state is reported, never declared (spec 029 §3.2), and a row says which of three things it is showing. Emitters and the prober report observed facts: a data catalog files a state against the declared address, the prober checks that address on a schedule. People report the rest with the Report control, and those rows are marked User-reported, because a person saying a thing shipped is a claim, not a check. A row with neither says Declared, which is all a declaration carries on its own.</p></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></section><p class=\"muted small\">Deliverable state is reported, never declared (WL-SPEC-75 §13.3), and a row says which of three things it is showing. Emitters and the prober report observed facts: a data catalog files a state against the declared address, the prober checks that address on a schedule. People report the rest with the Report control, and those rows are marked User-reported, because a person saying a thing shipped is a claim, not a check. A row with neither says Declared, which is all a declaration carries on its own.</p></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

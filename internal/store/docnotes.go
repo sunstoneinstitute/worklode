@@ -39,11 +39,11 @@ func AddDocNote(
 	anchor := strings.TrimPrefix(strings.TrimSpace(in.Anchor), "#")
 	if anchor == "" {
 		return model.DocNote{}, fmt.Errorf(
-			"a note on doc %d needs a section anchor (025 §8.5): %w", docID, ErrInvalidInput)
+			"a note on doc %d needs a section anchor (WL-SPEC-77 §10): %w", docID, ErrInvalidInput)
 	}
 	if d.kind == "plan" {
 		return model.DocNote{}, fmt.Errorf(
-			"doc %d is a plan and has no sections to anchor a note to (025 §9): %w", docID, ErrInvalidInput)
+			"doc %d is a plan and has no sections to anchor a note to (WL-SPEC-77 §11): %w", docID, ErrInvalidInput)
 	}
 	var exists bool
 	err = tx.QueryRow(

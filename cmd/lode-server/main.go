@@ -22,7 +22,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	listen := fs.String("listen", ":8080", "address for the public app server (web UI, API, webhooks)")
 	admin := fs.String("admin-listen", ":9090", "address for the admin server (/healthz, /metrics)")
 	docDepth := fs.String("doc-depth-limit", os.Getenv("LODE_DOC_DEPTH_LIMIT"),
-		"deepest addressable anchored section in a document (025 §6.1); defaults to $LODE_DOC_DEPTH_LIMIT, then 3")
+		"deepest addressable anchored section in a document (WL-SPEC-77 §4); defaults to $LODE_DOC_DEPTH_LIMIT, then 3")
 	version := fs.Bool("version", false, "print version")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {

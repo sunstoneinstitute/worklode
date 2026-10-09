@@ -550,7 +550,7 @@ func (s *server) globalPlaceholder(destination, heading, message string) http.Ha
 // deliverablesPage), routed ahead of this wildcard. Crew and Documents are
 // absent for the same reason (crew.go's crewPage, projectDocsPage below).
 var projectSections = map[string]struct{ Title, Message string }{
-	"reviews":   {"Reviews", "Governed approval reviews arrive with spec 029 §7."},
+	"reviews":   {"Reviews", "Governed approval reviews arrive with WL-SPEC-75 §13.6."},
 	"decisions": {"Decisions", "Research decisions arrive with specs 025 and 029."},
 	"activity":  {"Activity", "Project activity arrives when the ordered event view is implemented."},
 }

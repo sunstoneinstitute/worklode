@@ -67,7 +67,7 @@ func TestDocUpdateSectionAnchors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("doc edit on an accepted document: want a refusal, got: %s", out)
 	}
-	if !strings.Contains(err.Error()+out, "025 §6") {
-		t.Errorf("refusal = %v / %s, want it to cite 025 §6", err, out)
+	if !strings.Contains(err.Error()+out, "WL-SPEC-77 §4") {
+		t.Errorf("refusal = %v / %s, want it to cite WL-SPEC-77 §4", err, out)
 	}
 }

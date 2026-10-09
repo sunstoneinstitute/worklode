@@ -54,13 +54,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"surface", "action", "outcome"})
 	s.milestoneChanges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_milestone_changes_total",
-		Help: "Milestone changes (spec 029 §2), by action (" + strings.Join(milestoneChangeActions, ", ") +
+		Help: "Milestone changes (WL-SPEC-75 §13.2), by action (" + strings.Join(milestoneChangeActions, ", ") +
 			") and outcome (" + strings.Join(milestoneChangeOutcomes, ", ") +
 			"). Labels are bounded: the project, the milestone and the actor are deliberately not among them.",
 	}, []string{"action", "outcome"})
 	s.referenceWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_reference_writes_total",
-		Help: "Reference (entity_edges, spec 029 §5) write attempts, by rel (" +
+		Help: "Reference (entity_edges, WL-SPEC-75 §13.4) write attempts, by rel (" +
 			strings.Join(referenceRels, ", ") +
 			") and outcome (ok, error). Labels are bounded: the from and to ids are deliberately not among them.",
 	}, []string{"rel", "outcome"})
@@ -90,13 +90,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"mode"})
 	s.runBoardRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_run_board_renders_total",
-		Help: "Project run board page renders (GET /projects/{id}/work, 032 §8), by outcome (" +
+		Help: "Project run board page renders (GET /projects/{id}/work), by outcome (" +
 			strings.Join(runBoardRenderOutcomes, ", ") +
 			"). A rising \"empty\" share means projects are landing on a run board with no live work. Bounded by construction: no project or task id is a label here.",
 	}, []string{"outcome"})
 	s.inboxRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_inbox_renders_total",
-		Help: "Cross-project inbox page renders (GET /inbox, 056 §3), by outcome (" +
+		Help: "Cross-project inbox page renders (GET /inbox, WL-SPEC-82 §12), by outcome (" +
 			strings.Join(inboxRenderOutcomes, ", ") +
 			"). A rising \"empty\" share means people are landing on an inbox with nothing waiting on them. Bounded by construction: no actor or task id is a label here.",
 	}, []string{"outcome"})
@@ -106,34 +106,34 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"permission", "outcome"})
 	s.approvalDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_decisions_total",
-		Help: "Decisions submitted to POST /approvals/{id}/decide (029 §7.3), by decision (" +
+		Help: "Decisions submitted to POST /approvals/{id}/decide (WL-SPEC-75 §13.6), by decision (" +
 			strings.Join(approvalDecisionKinds, ", ") + ") and outcome (" +
 			strings.Join(approvalDecisionOutcomes, ", ") +
 			"). Labels are bounded: the approval, the decider and the required role are deliberately not among them. The session refusal in front of the route is counted by worklode_authz_decisions_total, not here.",
 	}, []string{"decision", "outcome"})
 	s.approvalActs = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_acts_total",
-		Help: "Acts on an approval that are not decisions (029 §7.1), by act (" +
+		Help: "Acts on an approval that are not decisions (WL-SPEC-75 §13.6), by act (" +
 			strings.Join(approvalActKinds, ", ") + ") and outcome (" +
 			strings.Join(approvalActOutcomes, ", ") +
 			"). Today that is the dependent owner's note on an open impact review. Labels are bounded: the approval and the actor are deliberately not among them. The decision that follows a note is counted by worklode_approval_decisions_total.",
 	}, []string{"act", "outcome"})
 	s.approvalRequirements = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_requirements_total",
-		Help: "Approval rows materialized from a project's review flow (029 §7.1), by origin (" +
+		Help: "Approval rows materialized from a project's review flow (WL-SPEC-75 §13.6), by origin (" +
 			strings.Join(approvalRequirementOrigins, ", ") +
 			"). One per inserted row, so a re-materialization that inserts nothing adds nothing. " +
 			"Labels are bounded: the project, the entity and the lane are deliberately not among them.",
 	}, []string{"origin"})
 	s.approvalFlowApplies = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_flow_applied_total",
-		Help: "Approval flows applied to a project (POST /api/v1/projects/{id}/approval-flow, 029 §7.2), by outcome (" +
+		Help: "Approval flows applied to a project (POST /api/v1/projects/{id}/approval-flow, WL-SPEC-75 §13.6), by outcome (" +
 			strings.Join(approvalFlowApplyOutcomes, ", ") +
 			"). Labels are bounded: the project and the flow name are deliberately not among them.",
 	}, []string{"outcome"})
 	s.taskTokens = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_tokens_total",
-		Help: "Task-scoped token mints (POST /tasks/{id}/tokens, 001 §2.1), by outcome (" +
+		Help: "Task-scoped token mints (POST /tasks/{id}/tokens, WL-SPEC-74 §2), by outcome (" +
 			strings.Join(taskTokenOutcomes, ", ") + ").",
 	}, []string{"outcome"})
 	s.dictations = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -147,14 +147,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"form", "outcome"})
 	s.progressWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_progress_writes_total",
-		Help: "Cockpit writes issued by a page script through the 066 §4.2 gate (the Progress page, and the document and task pages' Accept and Publish), by route (" +
+		Help: "Cockpit writes issued by a page script through the WL-SPEC-85 §5 gate (the Progress page, and the document and task pages' Accept and Publish), by route (" +
 			strings.Join(progressWriteRoutes, ", ") + ") and outcome (" +
 			strings.Join(progressWriteOutcomes, ", ") +
 			"). \"refused\" is the act declined before anything changed — a wrong origin, a missing page header, a body naming its own actor, an actor without standing — and \"conflict\" is the backbone refusing the document's state, so steady refused traffic on a route people use means a stale page, not an attack. Labels are bounded: the project, the document and the actor are deliberately not among them.",
 	}, []string{"route", "outcome"})
 	s.progressFragmentRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_progress_fragment_renders_total",
-		Help: "Progress page fragment requests (066 §5.2), by fragment (" +
+		Help: "Progress page fragment requests (WL-SPEC-85 §6), by fragment (" +
 			strings.Join(progressFragments, ", ") + ") and outcome (" +
 			strings.Join(progressFragmentOutcomes, ", ") +
 			"). \"not_found\" on the spec fragment is a doc id that is not a live spec of this project; on the summary fragment it is a project with no spec, same as the full page. Labels are bounded: the project and the document are deliberately not among them.",
@@ -224,7 +224,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"alias", "surface"})
 	s.deletes = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_deletes_total",
-		Help: "Tombstone operations on tasks and design documents (044 §6), by entity (" +
+		Help: "Tombstone operations on tasks and design documents (WL-SPEC-75 §12), by entity (" +
 			strings.Join(deleteEntities, ", ") + "), op (" +
 			strings.Join(deleteOps, ", ") + ") and outcome (" +
 			strings.Join(deleteOutcomes, ", ") + ").",
@@ -264,7 +264,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// lasts as long as the page stays open.
 	s.progressStreamsActive = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "worklode_progress_streams_active",
-		Help: "Open Progress page follows (GET /projects/{id}/progress/events, WL-SPEC-66 §5.1).",
+		Help: "Open Progress page follows (GET /projects/{id}/progress/events, WL-SPEC-85 §6).",
 	})
 	s.progressStreamFramesSent = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "worklode_progress_stream_frames_sent_total",
@@ -276,7 +276,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// much they are pushing.
 	s.activityStreamsActive = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "worklode_activity_streams_active",
-		Help: "Open task Activity follows (GET /tasks/{id}/activity/events, WL-SPEC-71 §4).",
+		Help: "Open task Activity follows (GET /tasks/{id}/activity/events).",
 	})
 	s.activityStreamFramesSent = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "worklode_activity_stream_frames_sent_total",
@@ -288,7 +288,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// two derivers whose outcomes differ independently of its status code.
 	s.overviewReads = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_overview_reads_total",
-		Help: "Spec 007 overview reads, by read (" +
+		Help: "Architecture overview reads, by read (" +
 			strings.Join(overviewReadKinds, ", ") + ") and outcome (" +
 			strings.Join(overviewReadOutcomes, ", ") +
 			"). Sustained no_graph means the instance is serving the surface with LODE_GRAPHSERVER_URL unset, so drift and gaps are answering nothing.",
@@ -330,14 +330,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"op"})
 	s.probeReports = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_probe_reports_total",
-		Help: "POST /api/v1/artifact-reports attempts (029 §3.2), by state (" +
+		Help: "POST /api/v1/artifact-reports attempts (WL-SPEC-75 §13.3), by state (" +
 			strings.Join(hooks.CatalogStates, ", ") +
 			", or \"invalid\" for a payload that failed validation) and result (" +
 			strings.Join(probeReportResults, ", ") + ").",
 	}, []string{"state", "result"})
 	s.deliverableReports = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_deliverable_reports_total",
-		Help: "Deliverable states filed by a person (029 §3.2), by source (" +
+		Help: "Deliverable states filed by a person (WL-SPEC-75 §13.3), by source (" +
 			strings.Join(deliverableReportSources, ", ") + ") and outcome (" +
 			strings.Join(deliverableReportOutcomes, ", ") +
 			"). These are claims, not observations: read them against worklode_probe_reports_total, which counts the states emitters and the prober report. Labels are bounded: the deliverable, the state and the reporter are deliberately not among them.",

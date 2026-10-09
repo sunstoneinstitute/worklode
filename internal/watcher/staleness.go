@@ -55,9 +55,9 @@ func evaluateStale(in Input) []Action {
 }
 
 func groomBody(in Input) string {
-	why := "no revision or execution since the\nstaleness threshold (025 §8.7)"
+	why := "no revision or execution since the\nstaleness threshold (WL-SPEC-77 §9)"
 	if in.StaleCause == "amended" {
-		why = "a spec section it covers was amended in\nplace (025 §8.6)"
+		why = "a spec section it covers was amended in\nplace (WL-SPEC-77 §9)"
 	}
 	return fmt.Sprintf(`%s has gone stale: %s. The charge is to
 "re-evaluate, adjust, or close" it.

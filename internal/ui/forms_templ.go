@@ -548,7 +548,7 @@ func NewDeliverable(v NewDeliverableView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\"> <span class=\"hint\">The catalog address this deliverable is verified by (spec 029 §3.1) &mdash; <span class=\"mono\">bigquery://</span>, <span class=\"mono\">iceberg://</span>, <span class=\"mono\">gs://</span>, &hellip; Emitters report state against this exact address, so copy it from the catalog rather than typing it. An artifact address and a label are alternatives: declare one or the other, not both.</span></p><p class=\"fieldrow check\"><input id=\"label\" name=\"label\" type=\"checkbox\" value=\"1\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\"> <span class=\"hint\">The catalog address this deliverable is verified by (WL-SPEC-75 §13.3) &mdash; <span class=\"mono\">bigquery://</span>, <span class=\"mono\">iceberg://</span>, <span class=\"mono\">gs://</span>, &hellip; Emitters report state against this exact address, so copy it from the catalog rather than typing it. An artifact address and a label are alternatives: declare one or the other, not both.</span></p><p class=\"fieldrow check\"><input id=\"label\" name=\"label\" type=\"checkbox\" value=\"1\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

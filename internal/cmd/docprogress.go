@@ -11,7 +11,7 @@ func newDocProgressCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "progress",
 		Short: "How much of each spec in a project exists, and what moves it next",
-		Long: `Print the project's derived progress (066 §1): one line per spec, grouped
+		Long: `Print the project's derived progress (WL-SPEC-85 §1): one line per spec, grouped
 by the act that moves it next.
 
 This is the same reading the cockpit's Progress page draws, so an agent

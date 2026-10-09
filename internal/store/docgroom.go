@@ -267,7 +267,7 @@ func WithdrawDoc(tx *sql.Tx, now time.Time, id, eventID int64) (*model.Doc, erro
 	}
 	if d.status != "accepted" && d.status != "stale" {
 		return nil, fmt.Errorf(
-			"doc %d is %s; only an accepted or stale document can be withdrawn (025 §8.7): %w",
+			"doc %d is %s; only an accepted or stale document can be withdrawn (WL-SPEC-77 §9): %w",
 			id, d.status, ErrBadTransition)
 	}
 	// A withdrawn plan closes without executing the rest of its arrangement,

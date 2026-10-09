@@ -127,7 +127,7 @@ func newShowCmd() *cobra.Command {
   lode show <id>                    classify the id and dispatch (a task,
                                     a document, a milestone, or a
                                     deliverable). A document is named
-                                    by shorthand (WL-SPEC-25), slug
+                                    by shorthand (WL-SPEC-77), slug
                                     (design-doc-queries), number-and-slug
                                     (025-documents-in-the-backbone), or
                                     corpus path/filename — the same refs
@@ -213,7 +213,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3)")
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
-	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec, ADR or rule: fold every effective amendment and supersession into the section or rule it acts on (026 §3.2); ignored for tasks and projects")
+	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec, ADR or rule: fold every effective amendment and supersession into the section or rule it acts on; ignored for tasks and projects")
 	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
 	cmd.Flags().IntVar(&version, "version", 0, "show one version of a rule (WL-REQ-<n>)")
 	// --project is the only way to reach a project through show: a positional
@@ -455,6 +455,6 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 	case targetUnknownType:
 		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL, REQ, RULE (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:
-		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document ref (WL-SPEC-25, a slug, a corpus path)", arg)
+		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document ref (WL-SPEC-77, a slug, a corpus path)", arg)
 	}
 }

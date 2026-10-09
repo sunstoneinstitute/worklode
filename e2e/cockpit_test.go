@@ -292,7 +292,7 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	// Only the unbuilt destinations belong here. /reviews left this map when
 	// the approvals queue was built; approvals_test.go asserts it instead.
 	honestDestinations := map[string]string{
-		"/intake": "spec 032 §5",
+		"/intake": "WL-SPEC-82 §7",
 	}
 	for path, wantSpec := range honestDestinations {
 		code, body := getPage(t, srv.URL+path)

@@ -564,7 +564,7 @@ func StalePlanWarning(w io.Writer, slug string) {
 	if slug == "" {
 		return
 	}
-	fmt.Fprintf(w, "warning: plan %s is stale — task text may predate the amendment (025 §8.6)\n", slug)
+	fmt.Fprintf(w, "warning: plan %s is stale — task text may predate the amendment (WL-SPEC-77 §9)\n", slug)
 }
 
 // BlockersRender prints what is holding a task up, shared by `lode task

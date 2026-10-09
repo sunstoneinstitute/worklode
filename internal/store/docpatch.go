@@ -90,12 +90,12 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 		return nil, nil, err
 	}
 	if d.kind == "plan" {
-		return nil, nil, fmt.Errorf("doc %d is a plan: plans are edited in place (025 §9): %w",
+		return nil, nil, fmt.Errorf("doc %d is a plan: plans are edited in place (WL-SPEC-77 §11): %w",
 			in.ID, ErrInvalidInput)
 	}
 	if d.status != "accepted" {
 		return nil, nil, fmt.Errorf(
-			"doc %d is %s: only an accepted document is amended in place (025 §8.4): %w",
+			"doc %d is %s: only an accepted document is amended in place (WL-SPEC-77 §10): %w",
 			in.ID, d.status, ErrInvalidInput)
 	}
 	if in.Body == d.body {
@@ -133,7 +133,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 
 	if !in.Substantive && strings.TrimSpace(in.Note) == "" {
 		return nil, nil, fmt.Errorf(
-			"doc %d: a non-substantive patch needs a note saying what changed and why (025 §8.5): %w",
+			"doc %d: a non-substantive patch needs a note saying what changed and why (WL-SPEC-77 §10): %w",
 			in.ID, ErrInvalidInput)
 	}
 

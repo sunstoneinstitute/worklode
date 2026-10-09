@@ -86,7 +86,7 @@ func Milestones(v MilestonesView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if len(v.Milestones) == 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<section class=\"card\"><div class=\"hd\"><h3>Milestones</h3></div><div class=\"bd\"><p class=\"muted\">No milestones yet. A milestone is an ordered container in this project (spec 029 §2), holding the work and the deliverables that belong to one step of it.</p></div></section>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<section class=\"card\"><div class=\"hd\"><h3>Milestones</h3></div><div class=\"bd\"><p class=\"muted\">No milestones yet. A milestone is an ordered container in this project (WL-SPEC-75 §13.2), holding the work and the deliverables that belong to one step of it.</p></div></section>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

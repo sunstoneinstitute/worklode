@@ -90,11 +90,11 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"result"}),
 		docGroomRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_groom_runs_total",
-			Help: "Stale-doc sweeper runs (025 §8.7) by outcome.",
+			Help: "Stale-doc sweeper runs (WL-SPEC-77 §9) by outcome.",
 		}, []string{"outcome"}),
 		activityPurgeRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_activity_purge_runs_total",
-			Help: "Task activity purge sweeper runs (071 §2) by outcome.",
+			Help: "Task activity purge sweeper runs by outcome.",
 		}, []string{"outcome"}),
 		docsStaleEmitted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_docs_stale_emitted_total",
@@ -106,15 +106,15 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document operations by op (create|update|patch|stale|accept|submit|revise|discard|withdraw|edges|resolve|note|delete|undelete|list-versions|get-version) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (025 §7.3), or refused-mechanical|no-reviewers for patch's gate (025 §8.4)).",
+			Help: "Design-document operations by op (create|update|patch|stale|accept|submit|revise|discard|withdraw|edges|resolve|note|delete|undelete|list-versions|get-version) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (WL-SPEC-77 §9), or refused-mechanical|no-reviewers for patch's gate (WL-SPEC-77 §10)).",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",
-			Help: "Tasks minted across all plan-document accepts (025 §9.2).",
+			Help: "Tasks minted across all plan-document accepts (WL-SPEC-77 §11.2).",
 		}),
 		skillAmbiguous: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_skill_name_ambiguous_total",
-			Help: "Bare skill-name lookups matching more than one qualified skill (037 §4).",
+			Help: "Bare skill-name lookups matching more than one qualified skill (WL-SPEC-81 §7.4).",
 		}),
 		instructions: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_task_instructions_total",
@@ -152,15 +152,15 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		escalations: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_task_escalations_total",
-			Help: "Task escalations by outcome (minted|joined|error) — 025 §8.1's ladder, §15.5's funnel.",
+			Help: "Task escalations by outcome (minted|joined|error) — WL-SPEC-77 §10's ladder, §15.5's funnel.",
 		}, []string{"outcome"}),
 		gaps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_task_gaps_total",
-			Help: "task.gap_found calls by outcome (recorded|replayed|error) — 025 §15.5's funnel, the ladder's non-escalating rung.",
+			Help: "task.gap_found calls by outcome (recorded|replayed|error) — WL-SPEC-75 §9.6's funnel, the ladder's non-escalating rung.",
 		}, []string{"outcome"}),
 		fixes: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_task_fixes_total",
-			Help: "fix.started/fix.finished calls by phase (started|finished) and outcome (recorded|replayed|error) — 025 §15.5's funnel.",
+			Help: "fix.started/fix.finished calls by phase (started|finished) and outcome (recorded|replayed|error) — WL-SPEC-75 §9.6's funnel.",
 		}, []string{"phase", "outcome"}),
 		ruleSupersedes: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_rule_supersede_total",

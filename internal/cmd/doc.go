@@ -215,7 +215,7 @@ func newDocListCmd() *cobra.Command {
 				return err
 			}
 			if olderThanDays > 0 && !unresolved {
-				return errors.New("--older-than applies to --unresolved only (025 §8.7)")
+				return errors.New("--older-than applies to --unresolved only (WL-SPEC-77 §9)")
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -265,13 +265,13 @@ func newDocListCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&bareSuperseded, "bare-superseded", false,
 		"withdrawn rules no rule supersedes")
 	cmd.Flags().BoolVar(&unresolved, "unresolved", false,
-		"accepted specs and plans nothing has executed (025 §8.7)")
+		"accepted specs and plans nothing has executed (WL-SPEC-77 §9)")
 	cmd.Flags().StringVar(&olderThan, "older-than", "",
 		`with --unresolved, only those untouched for at least this long, in days ("30d")`)
 	cmd.Flags().BoolVar(&deleted, "deleted", false,
-		"list deleted documents instead of live ones (044 §5)")
+		"list deleted documents instead of live ones (WL-SPEC-75 §12)")
 	cmd.Flags().BoolVar(&hasNotes, "has-notes", false,
-		"only documents carrying an anchored note (025 §8.5)")
+		"only documents carrying an anchored note (WL-SPEC-77 §10)")
 	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution", "bare-superseded", "unresolved")
 	return cmd
 }
@@ -560,7 +560,7 @@ func newDocShowCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&version, "version", 0, "get a specific past version instead of the current one (025 §4.5)")
+	cmd.Flags().IntVar(&version, "version", 0, "get a specific past version instead of the current one (WL-SPEC-77 §5)")
 	return cmd
 }
 
@@ -749,7 +749,7 @@ func newDocEditCmd() *cobra.Command {
 			// reference. Insert with a letter suffix (§2.1a) instead.
 			if updateAnchors {
 				if detail.Status == "accepted" || detail.Status == "superseded" {
-					return fmt.Errorf("--update-section-anchors: %s is %s, and 025 §6 freezes a published anchor; insert a lettered section (2.1a) instead",
+					return fmt.Errorf("--update-section-anchors: %s is %s, and WL-SPEC-77 §4 freezes a published anchor; insert a lettered section (2.1a) instead",
 						args[0], detail.Status)
 				}
 				if body, err = renumberAnchors(body); err != nil {
@@ -802,7 +802,7 @@ func newDocEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&title, "title", "", "set the document's title")
 	cmd.Flags().StringVar(&issued, "issued", "", "set the document's issued date (YYYY-MM-DD)")
 	cmd.Flags().BoolVar(&substantive, "substantive", false,
-		"amending an accepted spec or ADR: the change is substantive, so its reviewers are asked again (025 §8.4)")
+		"amending an accepted spec or ADR: the change is substantive, so its reviewers are asked again (WL-SPEC-77 §10)")
 	cmd.Flags().StringVar(&note, "note", "",
 		"amending an accepted spec or ADR: what changed and why, required unless --substantive")
 	cmd.Flags().IntVar(&ifVersion, "if-version", 0,
@@ -937,7 +937,7 @@ func newDocNoteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref, anchor := designdoc.SplitFragment(args[0])
 			if anchor == "" {
-				return fmt.Errorf("a note needs the section it is about: pass %s#sec-N (025 §8.5)", args[0])
+				return fmt.Errorf("a note needs the section it is about: pass %s#sec-N (WL-SPEC-77 §10)", args[0])
 			}
 			text, err := resolveBody(body, bodyFile, cmd.InOrStdin())
 			if err != nil {

@@ -289,7 +289,7 @@ func MintAcceptDecision(tx *sql.Tx, now time.Time, planDoc int64, actorID string
 	t, err := CreateTask(tx, now, TaskInput{
 		ProjectID: projectID,
 		Title:     title,
-		Body:      "Answering this records the decision. Accepting the plan is a separate act, in its owner's hands (WL-SPEC-66 §3.5).",
+		Body:      "Answering this records the decision. Accepting the plan is a separate act, in its owner's hands (WL-SPEC-85 §4).",
 		Kind:      "decision",
 		Priority:  "medium",
 		AboutDoc:  planDoc,
