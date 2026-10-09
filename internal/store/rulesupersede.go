@@ -5,8 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -218,7 +219,7 @@ func applySupersede(tx *sql.Tx, now time.Time, actor string, eventID int64, line
 				"rule":               resolved[i].Old,
 				"successors":         resolved[i].New,
 				"actor":              actor,
-				"prov:wasInformedBy": "wlid:event/" + strconv.FormatInt(eventID, 10),
+				"prov:wasInformedBy": iri.CURIE(iri.Event(eventID)),
 			})
 			if err != nil {
 				return err
