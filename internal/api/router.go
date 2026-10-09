@@ -173,6 +173,7 @@ var routeGuards = map[string]routeGuard{
 	// page is never shadowed by the task and document pages.
 	"GET /projects/{proj}/rule/{n}":         guarded(permWebRead),
 	"GET /projects/{proj}/rule/{n}/{ver}":   guarded(permWebRead),
+	"GET /projects/{proj}/term/{slug}":      guarded(permWebRead),
 	"GET /projects/{proj}/{kind}/{n}":       guarded(permWebRead),
 	"GET /projects/{proj}/{kind}/{n}/{ver}": guarded(permWebRead),
 	"GET /rules/{ref}":                      guarded(permWebRead),
@@ -320,6 +321,7 @@ var routeGuards = map[string]routeGuard{
 	"DELETE /api/v1/rules/{id}/edges":     guardedAny(permDocWrite),
 	// The refactor primitive (S24): same guard as the rule edge write above.
 	"POST /api/v1/projects/{id}/rules/supersede": guardedAny(permDocWrite),
+	"GET /api/v1/projects/{id}/terms":            guardedAny(permDocRead),
 	"PUT /api/v1/docs/{id}/body":                 guardedAny(permDocWrite),
 	"POST /api/v1/docs/{id}/patch":               guardedAny(permDocWrite),
 	"PUT /api/v1/docs/{id}/edges":                guarded(permDocImport),

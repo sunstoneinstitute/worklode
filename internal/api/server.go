@@ -807,6 +807,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// route. ruleRefRedirect only ever 302s, like docRefRedirect above.
 	r.web("GET /projects/{proj}/rule/{n}", s.navWrap("knowledge", s.rulePage))
 	r.web("GET /projects/{proj}/rule/{n}/{ver}", s.navWrap("knowledge", s.rulePage))
+	r.web("GET /projects/{proj}/term/{slug}", s.navWrap("knowledge", s.termPage))
 	r.web("GET /projects/{proj}/{kind}/{n}", s.projectEntityPage)
 	r.web("GET /projects/{proj}/{kind}/{n}/{ver}", s.projectEntityPage)
 	r.web("GET /rules/{ref}", s.ruleRefRedirect)
@@ -950,6 +951,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/rules/{id}/edges", s.linkRule)
 	r.api("DELETE /api/v1/rules/{id}/edges", s.unlinkRule)
 	r.api("POST /api/v1/projects/{id}/rules/supersede", s.supersedeRules)
+	r.api("GET /api/v1/projects/{id}/terms", s.listTerms)
 	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
 	r.api("POST /api/v1/docs/{id}/patch", s.patchDoc)
 	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)
