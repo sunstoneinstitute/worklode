@@ -120,7 +120,7 @@ func TestProjectProgress(t *testing.T) {
 	if spec.Ref != "P1-SPEC-66" {
 		t.Errorf("spec Ref = %q, want P1-SPEC-66", spec.Ref)
 	}
-	// Status and owner ride along for 066 §3.2's Accept button, which is
+	// Status and owner ride along for WL-SPEC-85 §4's Accept button, which is
 	// offered on a draft document and enabled only for its owner.
 	if spec.Status != "draft" || spec.Owner != "stig" {
 		t.Errorf("spec Status/Owner = %q/%q, want draft/stig", spec.Status, spec.Owner)
@@ -181,7 +181,7 @@ func TestProjectProgress(t *testing.T) {
 }
 
 // TestProjectProgressPositionFromPRAndCI: an open task carrying a PR whose
-// head SHA has a running CI run reports the checks rung of §2.4's ladder.
+// head SHA has a running CI run reports the checks rung of WL-SPEC-85 §3's ladder.
 func TestProjectProgressPositionFromPRAndCI(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -222,7 +222,7 @@ func TestProjectProgressPositionFromPRAndCI(t *testing.T) {
 	}
 }
 
-// TestProjectProgressPositionQueued covers WL-SPEC-66 §2.4, §8 criterion 5:
+// TestProjectProgressPositionQueued covers WL-SPEC-85 §3:
 // a task whose PR has entered the merge queue reads as "queued for merge"
 // ahead of any PR/CI rung, and a task whose PR has not is unaffected.
 func TestProjectProgressPositionQueued(t *testing.T) {
@@ -278,7 +278,7 @@ func TestProjectProgressPositionQueued(t *testing.T) {
 }
 
 // TestProjectProgressPlanningTask: the open design task about a spec rides
-// along on the read, so the page can draw it as a link instead of 066 §3.4's
+// along on the read, so the page can draw it as a link instead of WL-SPEC-85 §4's
 // Plan button. A closed one is not carried — that spec owes planning again.
 func TestProjectProgressPlanningTask(t *testing.T) {
 	t.Parallel()
@@ -313,7 +313,7 @@ func TestProjectProgressPlanningTask(t *testing.T) {
 }
 
 // TestProjectProgressSpecsFilter: a non-empty specs filter narrows the read
-// to those spec ids and the plans that cover at least one of them (WL-SPEC-66
+// to those spec ids and the plans that cover at least one of them (WL-SPEC-85
 // §5.2) — a second, unrelated spec and its own plan are absent from the
 // result entirely, while the requested spec's own sections, covering plan
 // and derived group/next act come back exactly as an unfiltered read

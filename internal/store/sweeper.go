@@ -14,7 +14,7 @@ const leaseSweepInterval = 60 * time.Second
 // StartLeaseSweeper runs ExpireLeases on a background goroutine every
 // leaseSweepInterval until ctx is cancelled. The loop and its
 // worklode_lease_sweeper_runs_total counter live here rather than in the
-// serve command because the sweep is this package's operation (022 §4).
+// serve command because the sweep is this package's operation (WL-SPEC-73 §6).
 // Callers get the counter by opening the store WithMetrics.
 func (s *Store) StartLeaseSweeper(ctx context.Context) {
 	go s.sweepLeases(ctx, leaseSweepInterval)
@@ -33,8 +33,8 @@ func (s *Store) StartLeaseSweeper(ctx context.Context) {
 // context.Canceled — so matching on the error alone would count shutdown as a
 // failed sweep.
 //
-// Each tick also runs the §8.7 stale-doc sweep (sweepStaleDocs, docgroom.go)
-// and the 071 §2 task-activity purge (PurgeTaskActivity, activity.go), after
+// Each tick also runs the WL-SPEC-77 §9 stale-doc sweep (sweepStaleDocs, docgroom.go)
+// and the WL-SPEC-80 §8.7 task-activity purge (PurgeTaskActivity, activity.go), after
 // the lease sweep, on this same goroutine and ticker rather than a second
 // one each — they are independent operations the tick performs, not a
 // continuation of the lease sweep, so a lease-sweep failure does not skip

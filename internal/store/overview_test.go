@@ -27,7 +27,7 @@ func TestTaskPRs(t *testing.T) {
 	if _, err := upsertPR(t, s, unbound, ""); err != nil {
 		t.Fatalf("upsertPR unbound: %v", err)
 	}
-	// Bound but abandoned: its files never landed, so 007 §2.3 keeps it out.
+	// Bound but abandoned: its files never landed, so WL-SPEC-82 keeps it out.
 	closed := defaultPR(task.ID)
 	closed.Number = 3
 	closed.State = "closed"
@@ -67,7 +67,7 @@ func TestAllBlockEdges(t *testing.T) {
 }
 
 // TestAllBlockEdgesExcludesDeletedEndpoints: soft delete leaves task_edges
-// alone (044 §4), so the filter has to be in the read. Otherwise a deleted
+// alone (WL-SPEC-75 §12), so the filter has to be in the read. Otherwise a deleted
 // task enters the overview's critical path, and AllBlockEdges disagrees with
 // BlockingFanOut on the same screen.
 func TestAllBlockEdgesExcludesDeletedEndpoints(t *testing.T) {

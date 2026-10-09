@@ -9,12 +9,12 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// Retrieval constants from spec 040 §6. None is a caller's knob: the floor
+// Retrieval constants from WL-SPEC-79 §15. None is a caller's knob: the floor
 // and the candidate depth shape what each arm offers fusion, and k is the
 // constant from the original RRF formulation.
 const (
 	// searchDenseFloor is the cosine similarity below which the dense arm
-	// stops offering candidates (§6.1, from 016). It is a candidate filter on
+	// stops offering candidates (WL-SPEC-79 §15, from 016). It is a candidate filter on
 	// that arm only, never a threshold on the fused score — after fusion the
 	// score is a rank-reciprocal sum, and comparing that to 0.35 would be a
 	// category error.
@@ -29,11 +29,11 @@ const (
 	searchExcerptRunes = 400
 )
 
-// SearchQuery is one retrieval request over the corpus index (040 §6).
+// SearchQuery is one retrieval request over the corpus index (WL-SPEC-79 §15).
 //
 // Vector is the query text already embedded by the caller — the store does no
 // embedding — and nil means the dense arm does not run at all. That is the
-// no-provider instance (§11): it serves real lexical results rather than an
+// no-provider instance (WL-SPEC-79 §17): it serves real lexical results rather than an
 // empty set.
 type SearchQuery struct {
 	Text   string
@@ -42,21 +42,21 @@ type SearchQuery struct {
 	Kinds []string
 	// Project scopes the search. Chunks carrying no project stay visible —
 	// that disjunct is what keeps org-wide skills findable from inside a
-	// project-scoped search (§6.4).
+	// project-scoped search (WL-SPEC-79 §15).
 	Project string
 	Limit   int
 	// Mode is hybrid (default), dense or lexical.
 	Mode string
 }
 
-// searchSQL is the whole of §6 in one statement: two arms ranked
+// searchSQL is the whole of WL-SPEC-79 §15 in one statement: two arms ranked
 // independently, then fused by reciprocal rank.
 //
 // Both arms pool by subject *before* ranking, and that is not cosmetic. RRF
 // gives every row in a ranked list a share of the score, so fusing chunk
 // rankings would let a long document accumulate mass by placing eight
 // mediocre chunks in the top 50 and outrank a short document that answered
-// the question exactly once (§6.1).
+// the question exactly once (WL-SPEC-79 §15).
 //
 // Each arm is switched by a bound boolean rather than by assembling a
 // different query per mode, so all three modes run the statement a reader has
@@ -112,7 +112,7 @@ fused AS (
            -- query that is the chunk literally containing the identifier,
            -- which is the excerpt a reader wants to see.
            coalesce(l.chunk_id, d.chunk_id)         AS chunk_id,
-           -- Reciprocal rank, k = 60, weight 1.0 on both arms (§6.3). A
+           -- Reciprocal rank, k = 60, weight 1.0 on both arms (WL-SPEC-79 §15). A
            -- missing arm contributes zero rather than dropping the row.
            coalesce(1.0 / (60 + d.rank), 0) + coalesce(1.0 / (60 + l.rank), 0) AS score,
            coalesce(d.rank, 0) AS dense_rank,
@@ -146,7 +146,7 @@ SELECT f.subject_kind,
  LIMIT $7`
 
 // Search runs the two retrieval arms over index_chunks and returns their
-// fused ranking, best first (040 §6). Neither arm is primary and neither is a
+// fused ranking, best first (WL-SPEC-79 §15). Neither arm is primary and neither is a
 // fallback: mode=dense and mode=lexical run one arm each and return its own
 // ranking, for comparing the two on a real query.
 func (s *Store) Search(ctx context.Context, q SearchQuery) ([]model.SearchHit, error) {
@@ -202,8 +202,8 @@ func (s *Store) Search(ctx context.Context, q SearchQuery) ([]model.SearchHit, e
 	s.metrics.searchDuration(mode, time.Since(start))
 
 	// An arm that ran and offered nothing is the failure this spec is most
-	// exposed to (§10): a silently broken tsv degrades the system into the
-	// dense-only setup §0 rejects, and nothing else would notice. No rows at
+	// exposed to (WL-SPEC-79 §17): a silently broken tsv degrades the system into the
+	// dense-only setup the design rejects, and nothing else would notice. No rows at
 	// all means both arms came back empty, since fusion drops nothing.
 	if dense && denseN == 0 {
 		s.metrics.searchArmEmpty("dense")
@@ -251,7 +251,7 @@ func (q SearchQuery) normalize() (string, error) {
 	return mode, nil
 }
 
-// searchModes is the bounded label set for the search metrics (§10).
+// searchModes is the bounded label set for the search metrics (WL-SPEC-79 §17).
 var searchModes = []string{model.SearchHybrid, model.SearchDense, model.SearchLexical}
 
 func validSearchMode(mode string) bool { return slices.Contains(searchModes, mode) }

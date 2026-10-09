@@ -112,7 +112,7 @@ func TestResolveDocRef(t *testing.T) {
 
 // TestResolveDocRefFallsBackToTombstones pins the half `lode doc undelete
 // <slug>` depends on: a deleted document has left every list, so a resolver
-// that stopped at the live rows could not name it (044 §4). A live document
+// that stopped at the live rows could not name it (WL-SPEC-75 §12). A live document
 // with that slug still wins.
 func TestResolveDocRefFallsBackToTombstones(t *testing.T) {
 	t.Parallel()
@@ -242,11 +242,11 @@ covers:
 	}
 }
 
-// --- defers (026 §5.3) ------------------------------------------------
+// --- defers (WL-SPEC-78 §4) ------------------------------------------------
 
 // TestDocDefersCreatesEdgeAndOwner: an accepted plan's defers entry becomes
 // one doc_edges row of type defers with to_doc/to_anchor set and the owner
-// resolved on the row (026 §5.3).
+// resolved on the row (WL-SPEC-78 §4).
 func TestDocDefersCreatesEdgeAndOwner(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -296,7 +296,7 @@ defers:
 }
 
 // TestDocDefersOnSpecRejected: defers is plan-only — a spec defers nothing,
-// it is what work is deferred *from* (026 §5.3).
+// it is what work is deferred *from* (WL-SPEC-78 §4).
 func TestDocDefersOnSpecRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -328,7 +328,7 @@ Scope body.
 
 // TestDocDefersMissingFragmentRejected: a defers entry whose spec reference
 // carries no #sec-N fragment is refused, not tolerated-and-ignored the way a
-// whole-document covers claim is (026 §5.3).
+// whole-document covers claim is (WL-SPEC-78 §4).
 func TestDocDefersMissingFragmentRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -359,8 +359,8 @@ defers:
 }
 
 // TestDocDefersEmptyOwnerRejected: a deferral without an owner is just an
-// uncovered section, which needs no syntax — omitting `to` is refused (026
-// §5.3).
+// uncovered section, which needs no syntax — omitting `to` is refused (WL-SPEC-78
+// §4).
 func TestDocDefersEmptyOwnerRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -388,7 +388,7 @@ defers:
 
 // TestDocDefersOwnerWithFragmentRejected: the owner is a document, never a
 // section — a `to` carrying a #sec-N fragment is refused, matching
-// secmeta.py's check rather than silently stripping the fragment (026 §5.3).
+// secmeta.py's check rather than silently stripping the fragment (WL-SPEC-78 §4).
 func TestDocDefersOwnerWithFragmentRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -415,7 +415,7 @@ defers:
 }
 
 // TestDocDefersToItselfRejected: a plan deferring a section to itself has
-// confused deferral with coverage; refused (026 §5.3).
+// confused deferral with coverage; refused (WL-SPEC-78 §4).
 func TestDocDefersToItselfRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -443,7 +443,7 @@ defers:
 
 // TestDocDefersSameSectionTwoOwnersRejected: the same section deferred to two
 // different owners is a contradiction the frontmatter cannot mean, refused
-// the way conflicting covers levels are (026 §5.3, §5.1).
+// the way conflicting covers levels are (WL-SPEC-78 §4).
 func TestDocDefersSameSectionTwoOwnersRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -480,7 +480,7 @@ defers:
 }
 
 // TestDocDefersIdenticalEntryTwiceDeduped: the same entry twice is one edge,
-// not an error (026 §5.3).
+// not an error (WL-SPEC-78 §4).
 func TestDocDefersIdenticalEntryTwiceDeduped(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -515,7 +515,7 @@ defers:
 
 // TestDocDefersUnresolvableSpecLandsInExternal: an unresolvable `spec`
 // reference lands verbatim in to_external, same as a covers typo — it reads
-// as an unplanned section rather than an error (026 §5.3).
+// as an unplanned section rather than an error (WL-SPEC-78 §4).
 func TestDocDefersUnresolvableSpecLandsInExternal(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -598,7 +598,7 @@ func TestDocSchemaBogusEdgeTypeViolatesCheck(t *testing.T) {
 	}
 }
 
-// TestDocResolveRefShorthand covers 025 §14.3's <KEY>-<TYPE>-<n> form against
+// TestDocResolveRefShorthand covers WL-SPEC-77 §7's <KEY>-<TYPE>-<n> form against
 // the referring document's own corpus: the key must be a real project's, and
 // the type token is verified against the target's kind rather than trusted.
 func TestDocResolveRefShorthand(t *testing.T) {
@@ -641,7 +641,7 @@ requires:
 	}
 }
 
-// TestDocResolveRefShorthandCrossesProjects: 025 §14.3's "distance decides
+// TestDocResolveRefShorthandCrossesProjects: WL-SPEC-77 §7's "distance decides
 // which form is canonical". The shorthand is the form for a reference across
 // corpora, so it resolves on the project key alone; a filename and a bare
 // number carry no corpus and stay same-project, landing in to_external when
@@ -692,7 +692,7 @@ requires:
 }
 
 // TestProjectKeySpecAndADRReserved: SPEC and ADR are the <TYPE> token of the
-// document shorthand, which resolves on the project key alone (025 §14.3), so
+// document shorthand, which resolves on the project key alone (WL-SPEC-77 §7), so
 // the projects_key_format CHECK rejects them as keys.
 func TestProjectKeySpecAndADRReserved(t *testing.T) {
 	t.Parallel()
@@ -748,8 +748,8 @@ func TestDocResolveRefBareNumberAndRetiredADR(t *testing.T) {
 }
 
 // TestDocResolveRefNumberPrefixIsNotANumber: a number-prefixed filename that
-// matches no slug is a miss, not spec 025. Resolving on the shared prefix
-// would turn "025-…-2.md" into an edge to spec 025 — a wrong edge is worse
+// matches no slug is a miss, not WL-SPEC-77. Resolving on the shared prefix
+// would turn "025-…-2.md" into an edge to WL-SPEC-77 — a wrong edge is worse
 // than an unresolved one.
 func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
 	t.Parallel()
@@ -771,13 +771,13 @@ func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
 	}
 }
 
-// --- editorial lifecycle (025 §6, §7) ---------------------------------------
+// --- editorial lifecycle (WL-SPEC-77 §6, §9) ---------------------------------------
 
 // TestDocListEdgesBothDirections: the same row is read forward out of the
 // document that declared it and backward into the document it names, where it
-// carries its inverse spelling and points back at the other end (025 §14).
+// carries its inverse spelling and points back at the other end (WL-SPEC-77 §7).
 // Every resolved far end also carries the other document's project, slug, kind,
-// number and status, so a reader can name it and flag it (025 §8.7); an
+// number and status, so a reader can name it and flag it (WL-SPEC-77 §9); an
 // unresolved reference carries none.
 func TestDocListEdgesBothDirections(t *testing.T) {
 	t.Parallel()
@@ -830,7 +830,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	// The covers edge lands on the spec's #sec-5, so from the spec's end that
 	// is the near anchor and the plan is the far end.
 	planFar := func(e model.DocEdge) model.DocEdge {
-		// Since 029 §4 a plan carries a number like every other kind, so its
+		// Since WL-SPEC-75 §13.4 a plan carries a number like every other kind, so its
 		// far end names one too.
 		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind = plan.ID, "p1", plan.Slug, "plan"
 		e.ToNumber = plan.Number
@@ -853,7 +853,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 }
 
 // TestDocListEdgesResolvesFarProject: an edge can leave its project — the
-// 025 §14.3 shorthand resolves on a project *key*, not within the declaring
+// WL-SPEC-77 §7 shorthand resolves on a project *key*, not within the declaring
 // document's project — so the resolved far end names the project it landed in
 // and not the one it left. Both directions, since a client that addresses a
 // document by project and slug would otherwise silently assume the near end's project for either.
@@ -1097,7 +1097,7 @@ func TestHeaderRefusesBlocksAndIsRequiredBy(t *testing.T) {
 }
 
 // TestDocEdgesRejectBadBlockedByEnds: blockedBy orders two distinct plans
-// (025 §5). An end that is not a plan, an unresolvable reference, or a plan
+// (WL-SPEC-77 §3). An end that is not a plan, an unresolvable reference, or a plan
 // naming itself is ErrInvalidInput rather than a dead edge.
 func TestDocEdgesRejectBadBlockedByEnds(t *testing.T) {
 	t.Parallel()
@@ -1240,7 +1240,7 @@ func TestDocEdgesAllowConvergingBlocks(t *testing.T) {
 	}
 }
 
-// --- NeedsPlanning / NeedsExecution (026 §2) -----------------------------
+// --- NeedsPlanning / NeedsExecution (WL-SPEC-78 §1.2) -----------------------------
 
 // TestFrontmatterEdgesReadsBlockedByOnly: plan ordering is read as blockedBy
 // and nothing else; a `blocks` key never becomes an edge (rebuildEdges
@@ -1260,11 +1260,11 @@ func TestFrontmatterEdgesReadsBlockedByOnly(t *testing.T) {
 	}
 }
 
-// TestLintDocs covers the dangling-reference report (055 §4.1): an unresolved
-// reference is reported, a resolved one is not, the NO-SPEC sentinel (026
-// §4.3) is not, a resolved edge whose anchor names no section of its target
-// is reported, and a deleted document's edges are excluded entirely (044
-// §4) — from the referring end.
+// TestLintDocs covers the dangling-reference report (WL-SPEC-77 §16): an unresolved
+// reference is reported, a resolved one is not, the NO-SPEC sentinel (WL-SPEC-78
+// §3) is not, a resolved edge whose anchor names no section of its target
+// is reported, and a deleted document's edges are excluded entirely (WL-SPEC-75
+// §12) — from the referring end.
 func TestLintDocs(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1366,7 +1366,7 @@ covers:
 
 	for _, f := range findings {
 		if f.Doc == deletedPlan.ID {
-			t.Errorf("finding %+v belongs to deleted doc %d, want it excluded (044 §4)", f, deletedPlan.ID)
+			t.Errorf("finding %+v belongs to deleted doc %d, want it excluded (WL-SPEC-75 §12)", f, deletedPlan.ID)
 		}
 	}
 }

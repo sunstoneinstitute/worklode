@@ -10,8 +10,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// Govern links a task to a governing rule (12-spec-refactoring-design-tree.md
-// S2, S3), recording the rule version current at link time (S10). source is
+// Govern links a task to a governing rule, recording the rule version current
+// at link time. source is
 // "plan" when a plan's acceptance minted the link and "manual" when an
 // architect added it. pin records the current version as the link's pinned
 // version, so the link keeps reading that text as the rule moves on;

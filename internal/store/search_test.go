@@ -15,7 +15,7 @@ import (
 )
 
 // fixtureChunk is one chunk of a fixture subject. A nil vec indexes the text
-// for the lexical arm only, the way a no-provider instance writes it (§11).
+// for the lexical arm only, the way a no-provider instance writes it (WL-SPEC-79 §17).
 type fixtureChunk struct {
 	anchor string
 	header string
@@ -24,7 +24,7 @@ type fixtureChunk struct {
 }
 
 // seedChunks writes one subject's chunks. chunk_index runs per anchor, as
-// 040 §4.2 requires.
+// WL-SPEC-79 §14 requires.
 func seedChunks(t *testing.T, s *Store, subj ChunkSubject, cs ...fixtureChunk) {
 	t.Helper()
 	var (
@@ -85,8 +85,8 @@ func seedSearchSkill(t *testing.T, s *Store, name string) int64 {
 	return sk.ID
 }
 
-// TestSearchFusesArmRankings is 040 §6.3's worked example, and the §13.2
-// acceptance case with it. The dense arm puts the section that defines
+// TestSearchFusesArmRankings is WL-SPEC-79 §15's worked example.
+// The dense arm puts the section that defines
 // `child_of` third; the lexical arm puts it first; fusion has to put it
 // first. The mode=dense half is the "and the test fails when the lexical arm
 // is disabled" clause: the same assertion run over one arm does not hold.
@@ -146,7 +146,7 @@ func TestSearchFusesArmRankings(t *testing.T) {
 		t.Fatalf("third hit: %+v", hits[2])
 	}
 
-	// §13.2: without the lexical arm the same assertion fails — the dense arm
+	// Without the lexical arm the same assertion fails — the dense arm
 	// alone leaves the correct answer third.
 	q.Mode = model.SearchDense
 	denseOnly, err := s.Search(t.Context(), q)
@@ -169,7 +169,7 @@ func TestSearchFusesArmRankings(t *testing.T) {
 	}
 }
 
-// TestSearchPoolsPerSubjectBeforeRanking is 040 §13.3: a long document with
+// TestSearchPoolsPerSubjectBeforeRanking is WL-SPEC-79 §15: a long document with
 // many mediocre chunks must not outrank a short exact match. It can only hold
 // because each arm max-pools per subject before it ranks — fusing chunk
 // rankings would give the long document eight shares of the score.
@@ -218,7 +218,7 @@ func TestSearchPoolsPerSubjectBeforeRanking(t *testing.T) {
 	}
 }
 
-// TestSearchLexicalConfigIsSimple is 040 §13.6. Under `english`, `child_of`
+// TestSearchLexicalConfigIsSimple is WL-SPEC-79 §15. Under `english`, `child_of`
 // stems to `child` and the query matches prose reading "the child task of a
 // parent". Under `simple` it does not, and it does match a chunk containing
 // the identifier. This test is what stops someone "fixing" the configuration.
@@ -243,7 +243,7 @@ func TestSearchLexicalConfigIsSimple(t *testing.T) {
 	}
 }
 
-// TestSearchHeaderOutranksBody pins the setweight pair in 040 §5: the context
+// TestSearchHeaderOutranksBody pins the setweight pair in WL-SPEC-79 §14: the context
 // header is weight A and the chunk body weight B, so under ts_rank_cd a term
 // in the header ranks above the same term in a body.
 func TestSearchHeaderOutranksBody(t *testing.T) {
@@ -274,7 +274,7 @@ func TestSearchHeaderOutranksBody(t *testing.T) {
 	}
 }
 
-// TestSearchFilters covers 040 §6.4: kind and project narrow both arms, and
+// TestSearchFilters covers WL-SPEC-79 §15: kind and project narrow both arms, and
 // the project filter keeps chunks carrying no project — which is how the
 // org-wide skill registry stays visible from inside a project-scoped search.
 func TestSearchFilters(t *testing.T) {
@@ -332,7 +332,7 @@ func TestSearchFilters(t *testing.T) {
 	}
 }
 
-// TestSearchWithoutVectorIsLexicalOnly is 040 §13.8: an instance with no
+// TestSearchWithoutVectorIsLexicalOnly is WL-SPEC-79 §17: an instance with no
 // embedding provider serves real lexical results rather than an empty set.
 func TestSearchWithoutVectorIsLexicalOnly(t *testing.T) {
 	t.Parallel()
@@ -390,7 +390,7 @@ func TestSearchRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestSearchMetrics covers 040 §10's search instruments, including the one
+// TestSearchMetrics covers WL-SPEC-79 §17's search instruments, including the one
 // that matters operationally: an arm that ran and offered nothing.
 func TestSearchMetrics(t *testing.T) {
 	t.Parallel()

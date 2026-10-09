@@ -1022,7 +1022,7 @@ func TestClearTaskCommitsVoidsDelivery(t *testing.T) {
 // caller reaches routinely — an unknown task, work that has not landed, and
 // a re-resolve of a task already at that milestone. The flag is what lets a
 // delivery event's caller name the tasks it moved on the event payload,
-// which is the only record of the set (WL-SPEC-66 §5.1).
+// which is the only record of the set (WL-SPEC-85 §6).
 func TestResolveDeliveryReportsMoved(t *testing.T) {
 	t.Parallel()
 	s := OpenTestStore(t)

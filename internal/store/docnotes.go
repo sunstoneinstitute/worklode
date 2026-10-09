@@ -12,13 +12,13 @@ import (
 )
 
 // AddDocNote leaves one anchored, non-blocking note on a document section
-// (025 §8.5). It blocks nothing and changes nothing about the document: the
+// (WL-SPEC-77 §10). It blocks nothing and changes nothing about the document: the
 // row records a remark and the task, session and actor that raised it.
 //
 // The anchor must name a section the document currently has. An unanchored
 // note is not a note — nobody reading the document would ever meet it — so a
 // stray anchor is refused rather than stored and lost. That refusal covers
-// plans by construction, since a plan carries no sections at all (025 §9);
+// plans by construction, since a plan carries no sections at all (WL-SPEC-77 §11);
 // it gets its own message because "no section sec-1" would read as a typo
 // rather than as a category error.
 //

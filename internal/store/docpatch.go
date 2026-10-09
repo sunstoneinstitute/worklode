@@ -14,10 +14,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// DocPatchInput is one 025 §8.4 in-place amendment of an accepted spec or
+// DocPatchInput is one WL-SPEC-77 §10 in-place amendment of an accepted spec or
 // ADR. Body is the whole markdown source. Substantive is the caller's judged
 // call, which only gets asked once the mechanical rules pass; Note is what a
-// non-substantive patch records about itself (§8.5). TaskID and SessionID
+// non-substantive patch records about itself (WL-SPEC-77 §10). TaskID and SessionID
 // come from the worktree the caller stands in — TaskID also names the plan
 // whose own claimed tasks do not block this amendment.
 type DocPatchInput struct {
@@ -33,7 +33,7 @@ type DocPatchInput struct {
 	IfVersion int
 }
 
-// patchRefusal is a §8.3/§8.4 gate refusing an in-place amendment, carrying
+// patchRefusal is a WL-SPEC-77 §10 gate refusing an in-place amendment, carrying
 // the rule that fired. The rule is what the doc.patched event payload and the
 // worklode_doc_operations_total outcome need, and neither can recover it from
 // a message. It wraps ErrInvalidInput like every other refusal in this
@@ -56,7 +56,7 @@ func refusePatch(rule, format string, args ...any) error {
 	}
 }
 
-// PatchRule returns the §8.4 rule that refused a patch, or "" for any other
+// PatchRule returns the WL-SPEC-77 §10 rule that refused a patch, or "" for any other
 // error. The API reads it for the event payload; the metric reads it for the
 // outcome label.
 func PatchRule(err error) string {
@@ -67,20 +67,20 @@ func PatchRule(err error) string {
 	return ""
 }
 
-// PatchDoc amends an accepted spec or ADR in place (025 §8.4): the one path
+// PatchDoc amends an accepted spec or ADR in place (WL-SPEC-77 §10): the one path
 // that changes an accepted document without a revision cycle. Drafts and
 // plans are edited with UpdateDocBody and a superseded document is not edited
 // at all.
 //
-// The gates are mechanical and the server owns them (§8.3). A changed section
+// The gates are mechanical and the server owns them (WL-SPEC-77 §10). A changed section
 // that carries a wl:/wlc: term, a code surface or acceptance criteria, or a
-// section open work already points at (§8.2) is refused outright — that edit
+// section open work already points at (WL-SPEC-77 §10) is refused outright — that edit
 // is a revision. A new dependency is a `lode doc link`, which writes the
 // candidate revision. What survives is the
 // caller's own judgment: a non-substantive patch records a note saying what
 // changed and why, a substantive one reopens the document's reviewers on the
 // new version and marks the sections it touched. The document stays accepted
-// either way (§7.3).
+// either way (WL-SPEC-77 §9).
 func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*model.Doc, *model.DocPatchResult, error) {
 	d, err := lockDoc(tx, in.ID)
 	if err != nil {
@@ -121,7 +121,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 		return nil, nil, err
 	}
 
-	// §8.3's text-level rules first: they read the two bodies alone, so a
+	// WL-SPEC-77 §10's text-level rules first: they read the two bodies alone, so a
 	// finding is cheaper than the corpus query below.
 	if f := designdoc.MechanicalFindings(old.doc, next.doc); len(f) > 0 {
 		return nil, nil, refusePatch(f[0].Rule, "doc %d cannot be patched: %s", in.ID, f[0].Detail)
@@ -138,7 +138,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 	}
 
 	// Substantive means the reviewers who approved this document owe a
-	// decision on the version this patch makes (§7.3). A document with none
+	// decision on the version this patch makes (WL-SPEC-77 §9). A document with none
 	// assigned has nobody to re-approve it, so the patch is refused up front,
 	// before anything is written: the honest paths are assigning reviewers or
 	// revising.
@@ -175,17 +175,17 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 	}
 	if in.Substantive {
 		// "judged", not a rule name: no mechanical rule fired — the caller
-		// classified the edit itself, which is what §8.3 leaves to them.
+		// classified the edit itself, which is what WL-SPEC-77 §10 leaves to them.
 		res.Classification, res.RuleFired = "substantive", "judged"
 	}
 	return doc, res, nil
 }
 
-// ClearPatchedSections drops 025 §7.3's patched mark from every section of
+// ClearPatchedSections drops WL-SPEC-77 §9's patched mark from every section of
 // doc last revised at or before version — the marks a document carries once
 // its reviewers have approved that version again. A later section rebuild
 // carries the flag forward (rebuildSectionsFrom), so clearing the rows is
-// what actually ends the mark; a §7.2 revision landing on top of the patched
+// what actually ends the mark; a WL-SPEC-77 §9 revision landing on top of the patched
 // text clears it the same way, one version later.
 //
 // Sections revised after version keep their mark: those are amendments the
@@ -200,7 +200,7 @@ func ClearPatchedSections(tx *sql.Tx, docID int64, version int) error {
 	return nil
 }
 
-// checkReferrers is §8.2's question asked of every section this patch
+// checkReferrers is WL-SPEC-77 §10's question asked of every section this patch
 // changes: is there open work pointing at it. A referrer that is left is a
 // refusal — the amendment would move text someone is already building
 // against — with two exclusions the reader in docs.go cannot make, because
@@ -210,7 +210,7 @@ func ClearPatchedSections(tx *sql.Tx, docID int64, version int) error {
 //     minted from: a plan does not block the amendment it is executing;
 //   - an accepted covering plan nobody has claimed work from, which
 //     docSectionReferrers already leaves out of the blocking set. Those are
-//     returned instead, to be reported and not acted on (§8.6).
+//     returned instead, to be reported and not acted on (WL-SPEC-77 §10).
 func checkReferrers(tx *sql.Tx, in DocPatchInput, changed []string) ([]int64, error) {
 	ctx := context.Background()
 	ownPlan, err := taskPlanDoc(tx, in.TaskID)
@@ -290,7 +290,7 @@ func planTaskIDs(tx *sql.Tx, plan int64) (map[string]bool, error) {
 }
 
 // unexecutedCoveringPlans lists the accepted plans covering one section that
-// nobody has claimed work from yet — the half of §8.2 docSectionReferrers
+// nobody has claimed work from yet — the half of WL-SPEC-77 §10 docSectionReferrers
 // deliberately leaves out, since an intention is not open work. exclude drops
 // the plan the patching task belongs to, which is the one plan that is not
 // news to the caller.
@@ -327,7 +327,7 @@ func unexecutedCoveringPlans(tx *sql.Tx, docID int64, anchor string, exclude int
 // same publication AcceptRevision performs, minus the candidate and the
 // status move. Sections keep their existing published and patched flags
 // through the rebuild, last_revised_in moves on exactly the changed anchors
-// (§6 rule 5), and a section the patch added is published like the rest of
+// (WL-SPEC-77 §6 rule 5), and a section the patch added is published like the rest of
 // the accepted text it now belongs to. Title, issued and edges are not the
 // body's, so the patch leaves them. It returns the version it published.
 func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
@@ -364,7 +364,7 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 	})
 }
 
-// patchNote records §8.5's note on a non-substantive patch: one row, anchored
+// patchNote records WL-SPEC-77 §10's note on a non-substantive patch: one row, anchored
 // at the first section the patch changed and prefixed with all of them, so
 // the reader of any one changed section can see the whole edit. It runs after
 // the section rebuild, since the anchor may be a section this patch added.

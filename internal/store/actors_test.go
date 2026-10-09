@@ -342,7 +342,7 @@ func TestUpsertHumanActor(t *testing.T) {
 }
 
 // TestUpsertHumanActorSyncsGitHubExpectation asserts github_username is
-// re-synced on every login exactly like the admin flag (spec 001 §9.2): the
+// re-synced on every login exactly like the admin flag (WL-SPEC-74 §4.3): the
 // first upsert with a github_username persists it, and a later login without
 // the attribute clears it back to NULL (round-tripped as "").
 func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
@@ -376,7 +376,7 @@ func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
 
 // TestUpsertHumanActorStoresIdentityClaims asserts the email and groups
 // claims are stored in full at login and re-synced on every login — Keycloak
-// stays the sole authority (spec 029 §6.2) — exactly like the admin flag and
+// stays the sole authority (WL-SPEC-74) — exactly like the admin flag and
 // expected GitHub login.
 func TestUpsertHumanActorStoresIdentityClaims(t *testing.T) {
 	t.Parallel()
@@ -396,7 +396,7 @@ func TestUpsertHumanActorStoresIdentityClaims(t *testing.T) {
 	}
 
 	// Re-login with narrower claims replaces the stored value in full —
-	// Keycloak stays the sole authority (029 §6.2).
+	// Keycloak stays the sole authority (WL-SPEC-74).
 	if err := s.UpsertHumanActor(ctx, "ada", "Ada", false, "adal", "", []string{"user"}); err != nil {
 		t.Fatal(err)
 	}

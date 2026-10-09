@@ -9,7 +9,7 @@ import (
 )
 
 // TestDocFilterByOwner: DocFilter.Owner narrows ListDocs to that owner's
-// documents (025 §7.3, WL-382 task 4), served by the docs_owner partial index
+// documents (WL-SPEC-77 §9, WL-382 task 4), served by the docs_owner partial index
 // (migration 0058). It composes with Project and Kind rather than replacing
 // them, and an owner with no documents returns an empty list, not an error.
 func TestDocFilterByOwner(t *testing.T) {
@@ -71,7 +71,7 @@ func TestDocFilterByOwner(t *testing.T) {
 }
 
 // TestDocTransferOwner: the owner may hand the document to another actor
-// (025 §7.3), which lands as a doc.owner_changed event and a state_log entry
+// (WL-SPEC-77 §9), which lands as a doc.owner_changed event and a state_log entry
 // naming the old and new owner.
 func TestDocTransferOwner(t *testing.T) {
 	t.Parallel()
@@ -108,7 +108,7 @@ func TestDocTransferOwner(t *testing.T) {
 }
 
 // TestDocTransferOwnerAdminNotOwner: an admin may transfer a document it does
-// not own (025 §7.3) — the mechanism a document whose owner left the org is
+// not own (WL-SPEC-77 §9) — the mechanism a document whose owner left the org is
 // rescued through.
 func TestDocTransferOwnerAdminNotOwner(t *testing.T) {
 	t.Parallel()
@@ -158,7 +158,7 @@ func TestDocTransferOwnerEmptyActorForbidden(t *testing.T) {
 }
 
 // TestDocTransferOwnerAdminRescuesOwnerlessDoc: an admin can still transfer a
-// document with no owner — the rescue path 025 §7.3 exists for, and the one
+// document with no owner — the rescue path WL-SPEC-77 §9 exists for, and the one
 // the empty-actorID defense above must not break.
 func TestDocTransferOwnerAdminRescuesOwnerlessDoc(t *testing.T) {
 	t.Parallel()

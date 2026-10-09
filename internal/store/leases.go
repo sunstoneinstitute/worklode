@@ -22,7 +22,7 @@ import (
 // Lease is deliberately not model.Lease: ID and ReleasedAt are database
 // bookkeeping this package needs internally (primary-key updates, the
 // sweeper) that never cross the wire, so they stay outside the six fields
-// model.Lease declares (ADR 036 §3, "store scan plumbing"). api.toLeaseJSON
+// model.Lease declares (WL-SPEC-73 §3.2a, "store scan plumbing"). api.toLeaseJSON
 // is the one conversion point from this type to model.Lease.
 type Lease struct {
 	ID         int64
@@ -158,8 +158,8 @@ func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 //     leases_active and leases_active_worktree unique indexes are the
 //     backstop for races).
 //   - ErrBlocked: an open 'blocks' edge points at the task, or a plan
-//     ordered before the task's plan is unfinished (025 §9.3).
-//   - ErrBadTransition: the task has children, is a decision (004 §6.3 as
+//     ordered before the task's plan is unfinished (WL-SPEC-77 §11).
+//   - ErrBadTransition: the task has children, is a decision (WL-SPEC-75 §8 as
 //     amended — use `lode task assign` instead), or is not in state ready
 //     (draft, merged, ...).
 //   - ErrNotFound: the task or actor does not exist, or the task is deleted.
@@ -186,7 +186,7 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			now := s.nowFn().UTC().Truncate(time.Second)
 
 			// Lock the task row first so concurrent claims serialize here.
-			// A tombstoned task is outside the claimable universe (044 §4),
+			// A tombstoned task is outside the claimable universe (WL-SPEC-75 §12),
 			// so it reads as ErrNotFound rather than as some other refusal.
 			var state, kind string
 			if err := tx.QueryRow(
@@ -198,10 +198,10 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 				return fmt.Errorf("lock task %s: %w", taskID, err)
 			}
 			// A container has nothing to check out; decomposition work that
-			// needs a worktree is a child task (spec 004 §6.3). ready ->
+			// needs a worktree is a child task (WL-SPEC-75 §8). ready ->
 			// in_progress is legal for a parent — it is the roll-up trigger —
 			// so the ready-set exclusion alone would still let a direct claim
-			// through (004 §6.1).
+			// through (WL-SPEC-75 §5).
 			container, err := hasChildren(tx, taskID)
 			if err != nil {
 				return err
@@ -328,7 +328,7 @@ func (s *Store) Renew(ctx context.Context, taskID, actorID string, ttl time.Dura
 				return fmt.Errorf("renew lease %d: %w", l.ID, err)
 			}
 			// The lease grew, so its task's scoped tokens grow with it
-			// (001 §2.1, WL-306) — extended, never shortened, so a token
+			// (WL-SPEC-74 §2, WL-306) — extended, never shortened, so a token
 			// minted with a longer deliberate expiry keeps it.
 			if _, err := tx.Exec(
 				`UPDATE tokens SET expires_at = $1
@@ -377,7 +377,7 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 // releaseLeaseTx is Release's transactional body: the holder check, the lease
 // close, and closeLease's back-to-ready transition. It is a function of its
 // own so a caller that releases as one step of a larger transaction —
-// EscalateTask (025 §8.1) — reuses the ownership policy rather than restating
+// EscalateTask (WL-SPEC-77 §10) — reuses the ownership policy rather than restating
 // it. A non-holder gets ErrNotFound, same as Release.
 func releaseLeaseTx(tx *sql.Tx, now time.Time, taskID, actorID string, eventID int64) error {
 	l, err := activeLeaseTx(tx, taskID)
@@ -458,7 +458,7 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 		return err
 	}
 	// The lease is ending, so the task's scoped tokens end with it
-	// (001 §2.1, WL-306) — release, expiry sweep, and delete-parking alike.
+	// (WL-SPEC-74 §2, WL-306) — release, expiry sweep, and delete-parking alike.
 	if err := revokeTaskTokens(tx, now, taskID); err != nil {
 		return err
 	}
@@ -479,7 +479,7 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 // is not a caller: a merge or deploy leaves the lease alone.
 func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
 	// done/abandon end the lease here, so the task's scoped tokens end too
-	// (001 §2.1, WL-306) — revoked even when no lease was active, because a
+	// (WL-SPEC-74 §2, WL-306) — revoked even when no lease was active, because a
 	// finished task must not keep a live credential either way.
 	if err := revokeTaskTokens(tx, now, taskID); err != nil {
 		return err

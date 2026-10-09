@@ -13,7 +13,7 @@ import (
 // Skill is deliberately not model.Skill: ID, SourcePath, and SkillMD's
 // content-hashed home are database bookkeeping this package needs internally
 // (sync, archive lookup) that never cross the wire, so they stay outside the
-// five fields model.Skill declares (ADR 036 §3, "store scan plumbing").
+// five fields model.Skill declares (WL-SPEC-73 §3.2a, "store scan plumbing").
 // api.toSkillJSON and api.toPinnedSkillJSON are the conversion points from
 // this type to model.Skill and model.PinnedSkill.
 type Skill struct {
@@ -50,7 +50,7 @@ func (s *Store) UpsertSkill(ctx context.Context, u SkillUpsert) (int64, bool, er
 	if u.ContentHash == "" {
 		return 0, false, fmt.Errorf("skill %s: content hash required: %w", u.Name, ErrInvalidInput)
 	}
-	// The qualifier is half the skill's identity (037 §4.2); without it two
+	// The qualifier is half the skill's identity (WL-SPEC-81 §7.4); without it two
 	// plugins' same-named skills are one row again.
 	if u.Qualifier == "" {
 		return 0, false, fmt.Errorf("skill %s: qualifier required: %w", u.Name, ErrInvalidInput)
@@ -161,7 +161,7 @@ func scanSkill(row rowScanner) (*Skill, error) {
 // GetSkill returns one skill (deleted or not) by reference: either the
 // qualified name (<plugin>:<name>) or a bare name that matches exactly one
 // skill. A bare name matching more than one reports ErrAmbiguousSkill naming
-// the candidates rather than picking one (037 §4.2).
+// the candidates rather than picking one (WL-SPEC-81 §7.4).
 func (s *Store) GetSkill(ctx context.Context, ref string) (*Skill, error) {
 	res, err := s.ResolveSkillRefs(ctx, []string{ref})
 	if err != nil {
@@ -193,7 +193,7 @@ func (s *Store) ListSkills(ctx context.Context, includeDeleted bool) ([]Skill, e
 }
 
 // SkillByID returns one skill by primary key, soft-deleted ones included:
-// the convergence loop resolves the ids StaleSubjects hands it (040 §7), and
+// the convergence loop resolves the ids StaleSubjects hands it (WL-SPEC-79 §16), and
 // a skill soft-deleted between the two queries is indexed once more rather
 // than failing the pass.
 func (s *Store) SkillByID(ctx context.Context, id int64) (*Skill, error) {

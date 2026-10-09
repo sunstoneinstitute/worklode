@@ -15,9 +15,9 @@ import (
 
 // ReviseDoc opens a candidate revision against an accepted spec or ADR: a copy
 // of the current body to edit while the accepted version stays authoritative
-// (025 §7.2). One candidate at a time.
+// (WL-SPEC-77 §9). One candidate at a time.
 //
-// Plans are edited in place with UpdateDocBody (025 §9) and drafts are edited
+// Plans are edited in place with UpdateDocBody (WL-SPEC-77 §11) and drafts are edited
 // in place because there is nothing to revise against; both are
 // ErrInvalidInput.
 func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) error {
@@ -94,7 +94,7 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 }
 
 // DiscardRevision withdraws a document's open candidate revision without
-// landing it — the close-without-merging half of the pull request 025 §7.2
+// landing it — the close-without-merging half of the pull request WL-SPEC-77 §9
 // says a revision structurally is. Deleting the row frees the
 // one-candidate-per-document slot, so the next ReviseDoc succeeds immediately
 // instead of hitting ErrRevisionExists. ErrNotFound if no revision is open.
@@ -151,7 +151,7 @@ func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID 
 }
 
 // AcceptRevision lands a document's open candidate revision: it runs the
-// 025 §6 constraint check against the accepted version and, when clean, swaps
+// WL-SPEC-77 §6 constraint check against the accepted version and, when clean, swaps
 // the body, bumps the version, rebuilds sections, lands the candidate's own
 // edge set (title and issued are columns, untouched by the body), stamps
 // last_revised_in on exactly the changed anchors, publishes every anchor the
@@ -159,7 +159,7 @@ func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID 
 // (supersedeRetiredDocs), and consumes the candidate — one transaction, owner-gated like AcceptDoc.
 //
 // The append-only rule protects the anchors the accepted version *published*
-// (025 §7.2), so a never-published row that disappears is legal; renumbering
+// (WL-SPEC-77 §9), so a never-published row that disappears is legal; renumbering
 // and excess depth are violations regardless.
 func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
 	d, err := lockDoc(tx, id)
@@ -207,7 +207,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	}
 
 	ts := now.UTC().Truncate(time.Second)
-	// Snapshot the version this accept replaces (025 §4.5) and move to the
+	// Snapshot the version this accept replaces (WL-SPEC-77 §3) and move to the
 	// next one, before any other write.
 	version, err := bumpDocVersion(tx, id)
 	if err != nil {
@@ -236,7 +236,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		}
 	}
 
-	// 025 §6 rule 5: last_revised_in moves on exactly the sections whose
+	// WL-SPEC-77 §6 rule 5: last_revised_in moves on exactly the sections whose
 	// content changed. Touching it elsewhere invalidates valid claims.
 	if len(diff.Changed) > 0 {
 		if _, err := tx.Exec(
@@ -248,8 +248,8 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		}
 	}
 
-	// 025 §7.3: a landed revision is a reviewed replacement for the text the
-	// §8.4 marks were on, so nothing here is still "approved text, modified
+	// WL-SPEC-77 §9: a landed revision is a reviewed replacement for the text the
+	// WL-SPEC-77 §10 marks were on, so nothing here is still "approved text, modified
 	// since". The section rebuild carries the flag forward deliberately — one
 	// patch must not clear another's mark — so this is where it ends.
 	if err := ClearPatchedSections(tx, id, version); err != nil {
@@ -290,10 +290,10 @@ func landRevisionEdges(tx *sql.Tx, id int64) error {
 	return nil
 }
 
-// checkAnchorFreeze applies 025 §6's anchor rules to a diff between a
+// checkAnchorFreeze applies WL-SPEC-77 §6's anchor rules to a diff between a
 // document's accepted text and the text about to replace it: append-only
 // anchors, no renumbering, no anchor past the depth limit. Both publication
-// paths run it — an accepted revision and an §8.4 in-place patch — since an
+// paths run it — an accepted revision and an WL-SPEC-77 §10 in-place patch — since an
 // in-place amendment relaxes nothing about the freeze. what names the act in
 // the refusal message (e.g. "revision of doc 25 cannot be accepted").
 //
@@ -303,7 +303,7 @@ func landRevisionEdges(tx *sql.Tx, id int64) error {
 // anchors in place, so the caller's later reads see the same set the refusal
 // was decided on.
 func checkAnchorFreeze(what string, diff *designdoc.SectionDiff, prior map[string]priorSection) error {
-	// Lowering the limit is one-way-safe by construction (025 §6.1): the check
+	// Lowering the limit is one-way-safe by construction (WL-SPEC-77 §4): the check
 	// re-runs at every publication, so a too-deep anchor the accepted version
 	// already published is refused here. It gets its own wording — the fix is
 	// to raise the limit back, not to restructure the document.
@@ -358,7 +358,7 @@ func (s *Store) GetDocRevision(ctx context.Context, id int64) (*model.DocRevisio
 // owner or the revision's author. Wider than checkDocOwner on purpose:
 // accepting is the maintainer's act, but closing a proposal without merging it
 // is also the proposer's, which is what lets ReviseDoc stay open to any
-// doc.write holder (025 §7.2's pull-request analogy).
+// doc.write holder (WL-SPEC-77 §9's pull-request analogy).
 //
 // An empty actorID matches nobody, including a revision or document whose own
 // column is empty.
