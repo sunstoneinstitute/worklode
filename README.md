@@ -792,6 +792,9 @@ picking up work:
 - `/lode:setup-merge-queue [owner/repo]` — one-time repo setup (auto-merge,
   `merge_group` checks, merge queue) so `/lode:done` can hand a PR to the
   queue; see `docs/github-advanced-setup.md`.
+- `/lode:consolidate-specs [scope]` — merge a project's overlapping specs into
+  one current-state spec per subsystem, with owner review and a final check
+  before the sources are retired.
 
 These are thin wrappers over the underlying `lode` subcommands: `lode work
 next`, `lode work resume`, `lode work submit`, `lode work block`,
