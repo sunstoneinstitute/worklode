@@ -8,6 +8,7 @@ package api
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +89,17 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 // row's age against. ID carries through because each row renders the decide
 // form that posts to /approvals/{id}/decide (029 §7.3).
 //
+// Rows split into three groups, in this order, each keeping the store's
+// oldest-first order (WL-1003):
+//
+//  1. Waiting on the viewer: required_actor is actorID, required_role is one
+//     of groups (the Home badge's match, store.ApprovalsAwaiting), or the
+//     viewer authored it under a flow that allows self-review of its kind
+//     (selfReview, from store.SelfReviewableApprovals).
+//  2. Assigned to nobody: neither required_actor nor required_role is set.
+//  3. Assigned to someone else. These stay listed: the store does not limit
+//     a decision to required_actor, and hiding them would hide work again.
+//
 // The revision is formatted here, not in internal/ui, which takes
 // pre-formatted rows. Every kind but a PR shows its revision: an approval is
 // granted against one version and the reviewer needs to see which, where a
@@ -95,11 +107,35 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 //
 // Decidable follows the store's own rule: an approval naming no revision
 // cannot be decided, so the row must not offer the form.
-func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsView {
-	return ui.ApprovalsView{
-		Page: ui.PageProps{Title: "worklode: reviews"},
-		Rows: approvalRows(rows, now),
+func approvalsView(rows []store.AwaitingApproval, now time.Time,
+	actorID string, groups []string, selfReview map[int64]bool) ui.ApprovalsView {
+	var mine, nobody, others []store.AwaitingApproval
+	for _, a := range rows {
+		switch {
+		case actorID != "" && a.RequiredActor != nil && *a.RequiredActor == actorID,
+			a.RequiredRole != nil && slices.Contains(groups, *a.RequiredRole),
+			selfReview[a.ID]:
+			mine = append(mine, a)
+		case a.RequiredActor == nil && a.RequiredRole == nil:
+			nobody = append(nobody, a)
+		default:
+			others = append(others, a)
+		}
 	}
+	v := ui.ApprovalsView{Page: ui.PageProps{Title: "worklode: reviews"}}
+	for _, g := range []struct {
+		heading string
+		rows    []store.AwaitingApproval
+	}{
+		{"Waiting on you", mine},
+		{"Assigned to nobody", nobody},
+		{"Assigned to someone else", others},
+	} {
+		if len(g.rows) > 0 {
+			v.Groups = append(v.Groups, ui.ApprovalGroup{Heading: g.heading, Rows: approvalRows(g.rows, now)})
+		}
+	}
+	return v
 }
 
 // approvalRows maps queue rows for whichever page renders them: the Reviews

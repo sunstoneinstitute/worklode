@@ -1053,6 +1053,47 @@ func (s *Store) ApprovalsAwaiting(ctx context.Context,
 	})
 }
 
+// SelfReviewableApprovals returns the ids of the awaiting approvals actorID
+// may decide as the author: they created the entity (a PR's author login is
+// matched against their GitHub login), and the project's flow lists the
+// entity's kind under self_review. This is the self-review half of
+// DecideApproval's rule (SelfReviewAllowed), read for the whole queue at
+// once. A plan's author-may-approve rule is not included. Empty actorID
+// matches nothing.
+func (s *Store) SelfReviewableApprovals(ctx context.Context, actorID string) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	if actorID == "" {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT a.id
+		 FROM approvals a
+		 `+approvalEntityJoins+`
+		 JOIN projects p ON p.id = `+approvalProjectID+`
+		 LEFT JOIN actors me ON me.id = $1
+		 WHERE a.state = 'awaiting'
+		   AND `+approvalPROpen+`
+		   AND coalesce(p.approval_flow->'flow'->'self_review', '[]'::jsonb) ? a.entity_kind
+		   AND (coalesce(d.created_by, del.created_by, tk.created_by) = $1
+		        OR (pr.author <> '' AND lower(pr.author) = lower(me.github_username)))`,
+		actorID)
+	if err != nil {
+		return nil, fmt.Errorf("self-reviewable approvals for %s: %w", actorID, err)
+	}
+	ids, err := collectRows(rows, "self-reviewable approvals", func(r rowScanner) (int64, error) {
+		var id int64
+		err := r.Scan(&id)
+		return id, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
+}
+
 // InboxReview is one open pr-kind approval as the cross-project inbox
 // consumes it (spec 056 §3.1).
 type InboxReview struct {
