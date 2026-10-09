@@ -14,8 +14,8 @@ work.
 2. **The decomposition** — how one part's requirements become tasks governed
    by those rules. This is the layer order in §3.
 
-Derived from the four-way planning comparison on spec 032 part 1
-(2026-08-09): the plans differed more in what they thought part 1 *was* than
+Derived from the four-way planning comparison on old spec 032 part 1
+(2026-08-09, now folded into WL-SPEC-82): the plans differed more in what they thought part 1 *was* than
 in quality, because nothing recorded the split.
 
 A spec arranges independently versioned rules. A plan is governed by the rules
@@ -32,7 +32,7 @@ the requirements in its scope and skips invariants and informative rules,
 and a direct ref to an invariant or informative rule is refused. The key is
 `covers`, not `implements`: a plan writes no code, so it claims nothing.
 `wl:implements` is a component's claim that its code meets a section
-(025 §11); a plan undertakes, and its minted tasks discharge that
+(WL-SPEC-77 §13); a plan undertakes, and its minted tasks discharge that
 (WL-SPEC-78 §4.1). A `covers` entry always means the plan builds the whole
 requirement: there are no coverage levels, and `coverage:`/`fullCoverageWith:` are
 refused on write.
@@ -41,8 +41,8 @@ refused on write.
 ---
 status: draft
 covers:
-  - WL-SPEC-32#sec-2
-  - WL-SPEC-32#sec-4
+  - WL-SPEC-82#sec-2
+  - WL-SPEC-82#sec-4
 ---
 ```
 
@@ -58,7 +58,7 @@ A rule's kind is set with `lode rule set <rule-ref> --kind <kind>`.
 If a rule is still a requirement but only states a constraint, reclassify it
 before planning rather than leaving it as a gap no plan will close.
 
-Use it for a standing rule such as 032 §11's "end-to-end tests drive the HTTP
+Use it for a standing rule such as the old 032 §11's "end-to-end tests drive the HTTP
 UI and API surfaces and do not write directly to the store": an invariant
 governs every part while being built by none of them, and it needs no
 `covers` entry to do so.
@@ -97,7 +97,7 @@ kept as an external reference instead, which is a silently unplanned section,
 so check `lode doc show <slug> --json` for `edges` you expected.
 
 Note the layer this sits in: **planning** coverage is declared intent on a plan.
-025 §11's `<component> wl:implements <section>` is **implementation** coverage,
+WL-SPEC-77 §13's `<component> wl:implements <section>` is **implementation** coverage,
 observed from `.worklode/implements.yaml`. Different question, different owner.
 
 ## 2. Choosing the split
@@ -173,7 +173,7 @@ for a substantial part; 5 usually means several tasks were merged.
 
 ## 4. Step granularity
 
-Calibrated from the 032 comparison, where the same part drew plans from 474 to
+Calibrated from the spec 032 comparison, where the same part drew plans from 474 to
 4,204 lines:
 
 - **Too thin** (~2 aggregate steps per task, no test code): the implementer

@@ -18,7 +18,7 @@ Each item carries a priority tag (assessed 2026-08-14):
 - `[gated]` waiting on another decision, spec, or condition — don't schedule
 
 **A gap a plan's `covers:` already declares does not belong here.** A
-`coverage: partial` claim (026 §5, `lode:splitting-specs-into-plans`) states the
+`coverage: partial` claim (WL-SPEC-78, `lode:splitting-specs-into-plans`) states the
 gap in a form a coverage query reads; restating it here creates a second copy
 in a file nothing queries, and the two drift. This file is for what coverage
 cannot express: a conflict between spec and system, a fact that has gone
@@ -27,37 +27,37 @@ whether some plan's `partial` already says it — and prefer removing an entry
 outright once it is fixed over annotating it as resolved.
 
 - `[P4]` **The doc-sync config shape contradicts itself (surfaced by the spec fold,
-  2026-08-14).** 025 §5/§10 make the git file mirror opt-in through a
-  `[doc_sync]` **block** in `.worklode/config.toml`; 025 §16.1 states the config
+  2026-08-14).** WL-SPEC-77 makes the git file mirror opt-in through a
+  `[doc_sync]` **block** in `.worklode/config.toml`; WL-SPEC-77 states the config
   reader is a flat `key = "value"` parser with no TOML-table support and
   declares the scalar `spec_corpus` / `plan_corpus` keys instead. Both are
   accepted-or-draft spec text, no document reconciles them, and folding 034
-  into 025 put them in one document — which now requires a block it also says
+  into WL-SPEC-77 put them in one document — which now requires a block it also says
   the parser cannot read. The consolidation deliberately preserved the
   mismatch rather than picking a winner (part-4 ruling 15: choosing is a
   design act, not a transcription), so it needs a spec amendment: either the
   reader grows table support, or the gate becomes the presence of the corpus
   keys. `lode doc sync` has since been retired unshipped (`f11af04`,
-  2026-08-17), withdrawing 025 §16 and §5.1 with it, so nothing reads a
+  2026-08-17), withdrawing the old §16 and §5.1 with it, so nothing reads a
   `[doc_sync]` block at all; WL-147 then re-pointed `lode show --spec/--adr`
   at the backbone and deleted the scalar keys, their reader
   (`internal/cli.CorporaFrom`) and their entry in `.worklode/config.toml`.
-  Neither shape survives in code. The contradiction is now confined to 025
-  §5/§10's text, and the corpus cutover (025 §12) removes its subject rather
+  Neither shape survives in code. The contradiction is now confined to WL-SPEC-77
+  §5/§10's text, and the corpus cutover (WL-SPEC-77) removes its subject rather
   than reconciling it.
-- `[P2]` **Per-artifact delivery tracking** (004 §5.3, already deferred there): a
+- `[P2]` **Per-artifact delivery tracking** (WL-SPEC-75, already deferred there): a
   repo shipping two images plus a CLI binary has one `done_state`. The
   `registry_package` handler mints every image as an artifact, but delivery is
   still decided per repo, so the second image's deploy tells the tracker
   nothing the first one didn't.
-- `[P3]` **Spec 006 §11.1 still says image ingest does not exist.** It reads
+- `[P3]` **WL-SPEC-79 still says image ingest does not exist.** It reads
   "Nothing creates `docker_image`, `pypi` or `binary` rows" and calls
   `deployments.artifact_id` null in practice, but `applyRegistryPackage`
   (`internal/hooks/github.go`) mints `docker_image` artifacts from
   `registry_package` webhooks and `FindArtifactByImage` resolves them. §15
   question 11 ("the artifact ingest gap is the real blocker") is therefore
   narrower than it reads — what remains is the App permission item below, not
-  the absence of a handler. Needs an amendment to 006 §11.1 and §15 item 11.
+  the absence of a handler. Needs an amendment to WL-SPEC-79 and §15 item 11.
   Noticed while executing the runtime-layer plan (WL-27), whose projection is
   correct either way: a nil artifact emits no `prov:used`.
 - `[P4]` **`registry_package` ignores non-container packages**: PyPI/npm
@@ -82,7 +82,7 @@ outright once it is fixed over annotating it as resolved.
   installation to approve it. Until then no `docker_image` artifacts are minted
   and the Flux OCI correlation has nothing to resolve against.
 - `[P2]` **One `tasks.state` cannot express per-repo delivery.** `taskClosed`
-  (004 §1.3) asks one scalar state to satisfy every repo the task landed in,
+  (WL-SPEC-75) asks one scalar state to satisfy every repo the task landed in,
   but `ResolveDelivery` is repo-scoped — it advances on the frontiers of the
   one repo whose webhook fired. So a task that landed in two repos with the
   same `done_state = deployed_prod` reads as delivered for both the moment
@@ -94,7 +94,7 @@ outright once it is fixed over annotating it as resolved.
   it properly is a delivery-state-per-repo table, not a predicate change.
 - `[P4]` **`deliveredStateSet` stayed state-only when the blocking predicate went
   per-repo.** `internal/store/tasks.go`'s `taskClosed` now joins through the
-  repo mapping (004 §1.3), and the roll-up, progress counts and blocking
+  repo mapping (WL-SPEC-75), and the roll-up, progress counts and blocking
   queries all read it. `AssignTask`/`UnassignTask`/`StartTask` (`assign.go`)
   still ask the fixed `deliveredStateSet`, so a `merged` task in a repo gating
   on `deployed_prod` — the shape discovery defaults any repo with a prod
@@ -108,13 +108,13 @@ outright once it is fixed over annotating it as resolved.
   one query instead of two.
 - `[P2]` **`lode task list --mine`**: blocked on `cli.Config` not persisting the
   caller's actor id — `lode login` prints `res.ActorID` and discards it. The
-  `whoami` route and `Client.WhoAmI` now exist (spec 013); persisting the actor
+  `whoami` route and `Client.WhoAmI` now exist (WL-SPEC-80); persisting the actor
   id at login unblocks this. Until then `--assignee <actor>` is the explicit
   form.
 - `[P2]` **PR closed without merge**: release the lease and surface the task on the
   board (today it stays `in_review`; `lode task rework` is the manual path).
 - `[P2]` **Bulk inbox dismiss**: `lode inbox dismiss` takes one issue at a time, which
-  does not scale to `lode inbox import --state all` on a mature repo — spec 020
+  does not scale to `lode inbox import --state all` on a mature repo — WL-SPEC-80
   keeps the import default narrow for this reason.
 - `[P4]` **e2e coverage for the inbox verbs**: `lode inbox import` and `lode inbox link`
   are tested per layer but never through CLI → API → store. `link` is the cheap
@@ -139,14 +139,14 @@ outright once it is fixed over annotating it as resolved.
   entirely to the 5-minute TTL (the vendor default), which underprices a 1-hour
   cache by 37.5%. Every current Claude Code version emits the breakdown, so
   this only bites on old transcripts.
-- `[P3]` **Follow-up edges shipped without four adjacent pieces (spec 004 §1.3
+- `[P3]` **Follow-up edges shipped without four adjacent pieces (WL-SPEC-75
   follow-up, 2026-08-14).** The `lode` plugin (`plugins/claude/lode/`, the
   `lode-worker` agent and `/lode:*` commands) does not yet know to reach for
   `--follow-up-to`, so an agent that spots a loose end mid-task still has to
   file it by hand instead of the edge doing its job. `docs/follow-ups.md`
   itself is not migrated into tasks carrying `follow_up_to` edges — a data
   question, not a code one. No board or cockpit surface shows follow-ups
-  (a spec 032 question, not asked here). And `wl:followUpTo` now has its
+  (a WL-SPEC-82 question, not asked here). And `wl:followUpTo` now has its
   triple in the projection mapping (`internal/graphproj`, WL-25) but reaches
   the graph only when the part-2 projector ships (WL-26). Recorded in
   `docs/plans/2026-08-14-follow-up-edges.md`'s "Follow-ups this plan
@@ -156,7 +156,7 @@ outright once it is fixed over annotating it as resolved.
   still the two-level truth the server always had — every authenticated actor,
   plus instance admins. Three things a real model needs are absent. Roles are
   **global**: `Decide` takes the resource it would scope on (`Request.Resource`)
-  and ignores it, because project membership is spec 029 §6's Crew and does not
+  and ignores it, because project membership is WL-SPEC-75's Crew and does not
   exist; the day it does, project roles become rows and `Decide` gains a lookup
   rather than a new signature. There is no **ownership** rule — any authenticated
   actor may edit any task, which is deliberate for a small org and wrong for a
@@ -175,19 +175,19 @@ outright once it is fixed over annotating it as resolved.
   `internal/api` and `internal/hooks`; consolidate if a third copy appears.
 - `[gated]` **Notifications** (Slack/email) remain a deliberate non-goal until the
   tracker has real usage.
-- `[P4]` **`internal/api` metrics shape is the outlier** (spec 022): store, hooks, and
+- `[P4]` **`internal/api` metrics shape is the outlier** (WL-SPEC-73): store, hooks, and
   embed each own a nil-safe package-private metrics struct; api hangs its
   instruments off `*server` and the HTTP middleware is not nil-safe. Extract an
-  `apiMetrics` struct, or document the exception in spec 022 §1.
+  `apiMetrics` struct, or document the exception in WL-SPEC-73
 - `[gated]` **Alert on `promhttp_metric_handler_errors_total`**: the /metrics handler
   serves partial output on collector failure (`ContinueOnError`); this counter
   is the only signal a collector is broken. Dashboards/alerts are out of scope
-  for spec 022, so wire it when those land.
+  for WL-SPEC-73, so wire it when those land.
 - `[P1]` **Provisioning doc fix** (other repo): `provisioning/context/metrics.md`
   shows bare `prometheus.io/*` annotations and a ServiceMonitor example without
   saying the annotations must sit on the *Service* (the hzdev collector's
   `k8s-service-endpoints` job) and that no Prometheus operator exists — exactly
-  the trap worklode fell into before spec 022 §9.
+  the trap worklode fell into before WL-SPEC-73
 - `[gated]` **Two shapes still duplicate a backbone enum** in `ns/shapes.ttl`
   (`sh:in`): `wl:priority` mirrors the `tasks.priority` CHECK and `wl:concern`
   the `tasks.concern` CHECK, so widening either CHECK in a migration means
@@ -195,16 +195,16 @@ outright once it is fixed over annotating it as resolved.
   pinned by `TestTaskStateShapeMatchesStateMachine` (`internal/store`). The
   transitions themselves are still not duplicated into RDF — they stay in
   `internal/store/tasks.go`.
-- `[gated]` **`ns/` changes still owed at spec 029's acceptance**: `wl:Milestone`
-  (subsuming 006's reserved term) and the participants/approvals vocabulary.
+- `[gated]` **`ns/` changes still owed at WL-SPEC-75's acceptance**: `wl:Milestone`
+  (subsuming WL-SPEC-79's reserved term) and the participants/approvals vocabulary.
   Two halves are **done** — the task kinds (the `0017` CHECK, `validKinds`, and
   `wlc:TaskKind`, held together by `TestTaskKindsAgreeAcrossSources`) and
   `wl:Deliverable`, now a class in `ns/ontology.ttl`.
 - `[gated]` **Adjacent repos are not registered as worklode projects**, so no cross-project
   shorthand resolves. rdf-registry, admin-cluster and provisioning carry
   `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
-  `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
-  dormant into useful, and it needs 025's `docs` rows first.
+  `docs/superpowers/specs/`. Registering them is what turns WL-SPEC-78's tier 2 from
+  dormant into useful, and it needs WL-SPEC-77's `docs` rows first.
 - `[P3]` **The `lode` plugin still exists in claude-public-plugins** (`plugins/claude/lode/`,
   published as `lode@sunstone-public`). It was in-sourced here so it versions
   with the binary; removing the public copy is deliberately a separate step,
@@ -232,21 +232,21 @@ outright once it is fixed over annotating it as resolved.
   graph-server returns, and no method sends `If-Match`. graph-server has
   honoured If-Match compare-and-swap since 2026-07-25
   (`crates/graph-server/src/gsp.rs` `parse_precondition`, 412 on mismatch).
-  Needed before a second work-graph writer exists; spec 006 should-have 6.
-  Adding it changes `PutGraph`'s signature. WL-266 (spec 007 §1.1) scoped this
+  Needed before a second work-graph writer exists; WL-SPEC-79 should-have 6.
+  Adding it changes `PutGraph`'s signature. WL-266 (WL-SPEC-79) scoped this
   as hardening, not a prerequisite: the multi-repo `lode graph derive` case is solved
   by per-repo graph partitioning, and same-graph races are last-write-wins over
   fully recomputed documents — at worst one run stale, self-healing on the next
   run.
-- `[P3]` **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (spec 006
+- `[P3]` **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (WL-SPEC-79
   must-have 3, publishing half): decided 2026-08-06 that this repo serves the
   files from its own site, without rdf-registry (rdf-registry#31 closed).
   `deploy-www.yml` uploads only `www/`, so `ns/` is not served today — the
   deploy must include the ttl files and add `ns/**` to its path trigger. The
   namespace is hash-style (`…/ns/ontology#`), so dereferencing any term
   fetches the extensionless `…/ns/ontology`, which GitHub Pages cannot
-  content-negotiate — pick a serving strategy deliberately. Specs 006 §14,
-  006 §13.2 item 3, 025 §17 and the `ns/ontology.ttl` header still record the
+  content-negotiate — pick a serving strategy deliberately. Specs WL-SPEC-79,
+  WL-SPEC-79 item 3, WL-SPEC-77 and the `ns/ontology.ttl` header still record the
   rdf-registry approach and need amending.
 - `[P4]` **`internal/designdoc/corpus.go`'s sync loader is dead code.**
   `LoadSyncCorpus`, `CorpusDoc`, `SectionMeta`, `EdgeMeta` and
@@ -269,7 +269,7 @@ outright once it is fixed over annotating it as resolved.
 
 ## From the 2026-08-04 architecture grilling
 
-Design items landed in spec 025. These are the mechanical leftovers.
+Design items landed in WL-SPEC-77. These are the mechanical leftovers.
 
 - `[P2]` **`claim --next --concern <c>`** as a caller-side soft preference, ranking
   above `concern_rank` and below `is_critical`. `project.focus` is team-wide
@@ -277,8 +277,8 @@ Design items landed in spec 025. These are the mechanical leftovers.
   change everyone's ranking.
 - `[P3]` **Compose gets its own graph-server**, sharing the Postgres instance on a
   separate database. Requires vendoring graph-server's migrations. Severs the
-  dependency on the data-platform prod deployment (006 §13.2's only v1 blocker), so
-  006/007/025 become testable in `docker compose up` and in e2e.
+  dependency on the data-platform prod deployment (WL-SPEC-79's only v1 blocker), so
+  WL-SPEC-79/WL-SPEC-79/WL-SPEC-77 become testable in `docker compose up` and in e2e.
 - `[gated]` **Review API before review UI.** Embedding crit in the worklode web UI is the
   plan; agents review too (Claude reviews Codex's work and vice versa), so
   comment/thread/resolve/approve must exist as API + `lode doc` verbs with the
@@ -293,48 +293,48 @@ Design items landed in spec 025. These are the mechanical leftovers.
 - `[gated]` **One door for authoring.** A worklode skill owns the terminal write step and
   delegates the interview to `superpowers:brainstorming` / `grill-with-docs`;
   `/lode:spec` is the entry point. The file corpus it wanted gated is gone
-  (055), so what is left of this item is the single authoring door and, if
+  (WL-SPEC-77), so what is left of this item is the single authoring door and, if
   anyone still wants grep over the corpus, a `lode doc export`. Customising or
   hook-patching the brainstorming skill is the wrong
   lever — it forks a skill we do not own, or makes behaviour depend on invisible
   mutation.
 - `[P3]` **The copy of the `lode` plugin in `claude-public-plugins` still documents
-  `wt/<id>-<slug>` (spec 008 follow-up).** The in-repo `plugins/claude/lode/` copy was
-  updated when spec 008's naming cutover landed, but the duplicate published from the other
+  `wt/<id>-<slug>` (WL-SPEC-80 follow-up).** The in-repo `plugins/claude/lode/` copy was
+  updated when WL-SPEC-80's naming cutover landed, but the duplicate published from the other
   marketplace was not — it needs the same edit, or to be dropped as part of the
   de-duplication already tracked above.
 - `[P1]` **`handleWorktreeEnter`/`Create`/`Remove` resolve the layout from the wrong
-  cwd (spec 008 follow-up).** `internal/hookrun/hookrun.go` resolves the
+  cwd (WL-SPEC-80 follow-up).** `internal/hookrun/hookrun.go` resolves the
   worktree layout once from the payload cwd, then applies it to a
   `tool_input` path that may live in a different repo. `runResume` fixed the
   equivalent hazard by resolving from the target dir; these three hooks did
   not.
-- `[P1]` **`applyPush`'s branch-pattern match is looser than a prefix check (spec 008
+- `[P1]` **`applyPush`'s branch-pattern match is looser than a prefix check (WL-SPEC-80
   follow-up).** `internal/hooks/push.go` short-circuits on a branch-pattern
   shape match, skipping default-branch and `last-deploy/` handling; the
   pattern is now `^KEY-N-anything$` rather than prefix-anchored. Theoretical
   today (a default branch would have to start with an uppercase project key),
   but cheap to tighten to "task exists".
-- `[gated]` **`lode show --spec/--adr/<id>` shipped as the cat-mode slice of 026 §3
-  only (2026-08-07).** `--resolved` / `--with-drafts` consolidation (026
-  §3.1–§3.2) remains unimplemented. `lode doc list` now exists (spec 025),
-  carrying the 026 §2 planning-status flags (`--needs-planning` /
+- `[gated]` **`lode show --spec/--adr/<id>` shipped as the cat-mode slice of WL-SPEC-78
+  only (2026-08-07).** `--resolved` / `--with-drafts` consolidation (WL-SPEC-78
+  §3.1–§3.2) remains unimplemented. `lode doc list` now exists (WL-SPEC-77),
+  carrying the WL-SPEC-78 planning-status flags (`--needs-planning` /
   `--needs-execution`); `lode doc sync` was retired unshipped (`f11af04`).
   `lode doc sections` shipped as the plain cross-corpus listing (WL-622): the
   sections of every live document in scope, narrowable to one by number or
-  anchor. 026 §2.3's wider view — `--with-drafts`, `--show-dropped`, and the
+  anchor. WL-SPEC-78's wider view — `--with-drafts`, `--show-dropped`, and the
   footer summarising sections an effective `replaces` retired — and
   `--strict-refs` remain unimplemented. WL-147 moved
   the resolution source from the file corpus to the backbone, so the command
   now needs a reachable server; the `--json` shape's `path` field became
   `doc` + `slug` with it.
-- `[P4]` **025 (draft; §18 and elsewhere) still spells the command `lode doc show`;
-  026 §3 implements the same command spelled `lode show` (2026-08-07).**
+- `[P4]` **WL-SPEC-77 (draft; §18 and elsewhere) still spells the command `lode doc show`;
+  WL-SPEC-78 implements the same command spelled `lode show` (2026-08-07).**
   `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`
-  (draft, implements 026 §3) is titled "consolidated `lode doc show`" too.
-  Reconcile the spelling when 025's reserved surface is next revisited.
+  (draft, implements WL-SPEC-78) is titled "consolidated `lode doc show`" too.
+  Reconcile the spelling when WL-SPEC-77's reserved surface is next revisited.
 - `[gated]` **Full WCAG 2.2 AA assistive-technology walkthrough** is deferred to the
-  four-part project cockpit series' acceptance (spec 032), not Part 1: Part 1
+  four-part project cockpit series' acceptance (WL-SPEC-82), not Part 1: Part 1
   only proves the structural markers (landmarks, one `aria-current`, focus
   order) automated tests can check.
 - `[gated]` **Browser-rendered 1280px/768px/360px regression automation** for the
@@ -349,9 +349,9 @@ Design items landed in spec 025. These are the mechanical leftovers.
   Knowledge: it lands on the document corpus at `/docs` (WL-127), with the
   graph-backed expert views still to join it there.
 - `[gated]` **Mode facts stay all-false**: `modeFactsForProject`
-  (`internal/api/cockpit.go`) returns an empty `modeFacts` because spec 029's
+  (`internal/api/cockpit.go`) returns an empty `modeFacts` because WL-SPEC-75's
   intake and promotion stores do not exist, so mode selection cannot see them.
-  Spec 032's `PinnedFocus`/`NextDecision` no longer belong here — both are
+  Spec WL-SPEC-82's `PinnedFocus`/`NextDecision` no longer belong here — both are
   built.
 
 ## From the 2026-08-14 spec-corpus consolidation (part 5)
@@ -360,41 +360,41 @@ Deliberately not fixed by the cutover — recorded so a reviewer does not read
 them as consolidation-introduced drift. All four are `[P4]`, and cheapest as
 one pass.
 
-- `[P4]` **Folded 001 §8.3 states a stale infrastructure fact.** The one-time CLI
+- `[P4]` **Folded WL-SPEC-74 states a stale infrastructure fact.** The one-time CLI
   login code store is justified as in-memory-safe because "the server is
   single-instance (one PVC + litestream)"; the backbone is Postgres today,
   not a single-instance litestream deployment.
-- `[P4]` **Folded 008 relies on an `ExitWorktree` harness event its own event map
+- `[P4]` **Folded WL-SPEC-80 relies on an `ExitWorktree` harness event its own event map
   never covers.** §9 defines lease release on `ExitWorktree`/`SessionEnd`,
   but §17.4's per-harness event map (derived from §9's vocabulary) has no
   `ExitWorktree`/`WorktreeExit` row — only `WorktreeEnter` is mapped per
   harness.
-- `[P4]` **Folded 006 §13 ships an implementation-status report verified in
+- `[P4]` **Folded WL-SPEC-79 ships an implementation-status report verified in
   2026-07** ("done in dev", must-have 1 "prod remains blocked on item 1", and
   must-have 3's base-URL override "not yet implemented" in rdf-registry) that
   needs refreshing against current state.
-- `[P4]` **Folded 026 §4 documents a frontmatter form the corpus no longer uses.**
+- `[P4]` **Folded WL-SPEC-78 documents a frontmatter form the corpus no longer uses.**
   Its parenthetical-annotation rule is written against `wasDerivedFrom`, and
   the fold left frontmatter carrying only `status`, `issued` and `requires`.
   Same class as the three acceptance criteria ruling 23 retired: the machinery
   stays correct for a document written after the cutover, but nothing exercises
-  it today. §4.2 also still cites 025's `amends: rdf-registry:ADR-0006` as "the
+  it today. §4.2 also still cites WL-SPEC-77's `amends: rdf-registry:ADR-0006` as "the
   corpus's one existing cross-project reference"; the fold dropped that key, so
   the corpus now has none and the unresolvable-reference example survives only
   in prose.
-- `[P4]` **`WL-SPEC-25#sec-9` is awkward to type in a shell** (025 §14.3,
-  026 §4.2): `#` starts a comment, so the shorthand needs quoting on every
-  `lode show` invocation. Accept `WL-SPEC-25:sec-9` — and its `WL-SPEC-25:9`
+- `[P4]` **`WL-SPEC-77#sec-9` is awkward to type in a shell** (WL-SPEC-77,
+  WL-SPEC-78): `#` starts a comment, so the shorthand needs quoting on every
+  `lode show` invocation. Accept `WL-SPEC-77:sec-9` — and its `WL-SPEC-77:9`
   short form — as an alternate spelling that resolves identically, keeping `#`
   canonical for prose and frontmatter. Touches `designdoc.ResolveRef` and the
   shorthand fixtures (`testdata/shorthand.yaml`, exercised from both Go and
   Python).
 - `[P4]` **`secrets_materialized` breaks the dotted event-type convention**
-  (spec 017): every other CLI-sourced event is `task.<verb>` —
+  (WL-SPEC-74): every other CLI-sourced event is `task.<verb>` —
   `task.assigned`, `task.started`, `task.reworked` — and the claim ceremony's
   event is the one underscore in the set. The spelling comes from the spec, so
   it was kept rather than improvised away, but a subscriber filtering on the
-  `task.` prefix (025 §15) silently misses it. Renaming it to
+  `task.` prefix (WL-SPEC-77) silently misses it. Renaming it to
   `task.secrets_materialized` is a spec amendment plus a one-line change, and
   is cheapest before part 2 of the task-secrets series ships a client that
   emits it.
@@ -418,7 +418,7 @@ one pass.
   frontier reads as not-yet-delivered. The direction is safe — it under-reports
   rather than corrupts — so it was out of scope for the non-regressing-upsert
   fix, which guards fact columns and not this ordering. Reconcile engine 2
-  (013 §2.2, WL-33) repairs facts against GitHub's current truth and heals it.
+  (WL-SPEC-80, WL-33) repairs facts against GitHub's current truth and heals it.
 
 ## From WL-207 — blob spool volume (2026-08-20)
 
@@ -432,7 +432,7 @@ one pass.
   is the worse trade, so the fix is a semaphore in the handler capping
   concurrency at `sizeLimit / maxBlobBytes` and returning 503 above it, not a
   larger volume. Needs the 503-vs-queue decision made before it is written.
-- `[P4]` **Spec 021 §13 does not mention the spool directory's writability
+- `[P4]` **Spec WL-SPEC-78 does not mention the spool directory's writability
   requirement.** The table still reads "defaults to `os.TempDir()`"; since
   WL-207 the server refuses to boot when blob storage is configured and that
   directory is unwritable, and the deployment mounts a volume for it. A
@@ -470,12 +470,12 @@ while dogfooding it against the real corpus.
   implementation), and none of these six callers read anything but the
   not-found error.
 - `[P4]` **Nearly every spec is `status: draft`**, including several long
-  since built (e.g. 004, 005, 017, 022). This is why
+  since built (e.g. WL-SPEC-75, WL-SPEC-75, WL-SPEC-74, WL-SPEC-73). This is why
   `lode doc todo` leads every answer with a `plan-draft (document)`
   acceptance item: with no spec ever marked `accepted`, the "document is
   draft: acceptance is the first act" gap fires universally rather than
   distinguishing built specs from unwritten ones. Backfilling `status` per
-  spec is a deliberate human act (025 §7 — acceptance is a status transition,
+  spec is a deliberate human act (WL-SPEC-77 — acceptance is a status transition,
   not something to automate), not a script; recording it here so the question
   is visible rather than rediscovered the next time `doc todo`'s output looks
   noisier than expected.
@@ -489,7 +489,7 @@ while dogfooding it against the real corpus.
   `docs/plans` paths `designdoc.CorpusPath` builds, so this is latent rather
   than live; `path.Join` on that one line fixes it.
 
-- `[P3]` **026 §1 still describes an unbuilt `--docs <dir>` flag.** Its "no new
+- `[P3]` **WL-SPEC-78 still describes an unbuilt `--docs <dir>` flag.** Its "no new
   config key" claim is true again — WL-147 made `spec_corpus`/`plan_corpus`
   accepted-and-ignored — but the flag it offers in their place was never built,
   and the corpus location is no longer a client-side question at all.
@@ -509,8 +509,8 @@ while dogfooding it against the real corpus.
   both HTML rendering and the GC that deletes unreferenced blobs. An
   uncounted reference there is a live image whose bytes get collected, so
   settle it before plan 3 starts: either count raw-HTML `img` sources or
-  state in 021 that only markdown image syntax references a blob.
-- `[P4]` **Spec 021 §7's warning for a local file behind a plain link is not
+  state in WL-SPEC-78 that only markdown image syntax references a blob.
+- `[P4]` **Spec WL-SPEC-78's warning for a local file behind a plain link is not
   implemented.** §7 says a link to a local file "is left alone and reported
   as a warning — use `lode task attach` for those". `uploadBodyImages`
   (`internal/cmd/task.go`) does leave it alone, correctly, but says nothing,
@@ -522,14 +522,14 @@ while dogfooding it against the real corpus.
 
 - `[gated]` **`crew.write` is granted to every authenticated user, not scoped
   to a project's own Crew.** `internal/api/authz.go`'s grants table reads
-  `permCrewWrite: {RoleUser, RoleAdmin}`, so spec 029 §6.1's "any Crew member
+  `permCrewWrite: {RoleUser, RoleAdmin}`, so WL-SPEC-75's "any Crew member
   may add or remove an ordinary Crew member" is enforced far wider than the
   spec intends — any authenticated actor, Crew member or not, can add or
   remove one on any project. This is a conflict between spec and system, not
   a planned partial: there is no project-scoped role concept yet (`authz.go`'s
   own package doc says as much), and fixing it needs authz decisions to become
   project-scoped, which is a larger change than this plan's task set. Gated on
-  that decision landing. The deputy designation (spec 029 §6.1) sharpens the
+  that decision landing. The deputy designation (WL-SPEC-75) sharpens the
   stakes too: deputy is meant to carry full lead authority, so that authority
   needs to be properly scoped before it gates anything real, though today
   nothing in `authz.go` grants anything off `is_deputy` so the label is purely
@@ -542,12 +542,12 @@ while dogfooding it against the real corpus.
   ("spec 024 acceptance 6"), `internal/hookrun/hookrun_test.go` ("024
   acceptance 3") and `internal/store/agent_sessions_test.go` ("spec 024 adds
   it as a harness"). There is no spec 024; it was an earlier
-  number for what became 008 §17, so each should name the 008 criterion it
+  number for what became WL-SPEC-80, so each should name the WL-SPEC-80 criterion it
   means. They landed with the adapter core (WL-46) and were left alone here
   rather than rewritten under an unrelated task. Note the open-question ids
-  `Q024.1`-`Q024.5` in 008 §20 are NOT affected — the `024` in a question id
+  `Q024.1`-`Q024.5` in WL-SPEC-80 are NOT affected — the `024` in a question id
   is historical but the ids themselves resolve.
-- `[P4]` **008 §20's Q024.2 is now answered in code but still open in the
+- `[P4]` **WL-SPEC-80's Q024.2 is now answered in code but still open in the
   spec.** It asked whether moving `.store` out of `~/.worklode/skills/`
   should "migrate silently, or does `lode doctor` report and `lode skills
   install` re-fetch?". `skillstore.migrateLegacyStore` settles it: silent, by
@@ -571,7 +571,7 @@ while dogfooding it against the real corpus.
   against a foreign symlink at `~/.agents/skills` prints
   `amp: skipped ~/.agents/skills` with no explanation, and when `PublishDirLink`
   delegates to `PublishPerSkill` the individual skipped skill names are dropped
-  entirely. Spec 008 §18 row 4 wants every refusal named; the install path does
+  entirely. Spec WL-SPEC-80 row 4 wants every refusal named; the install path does
   that, this one does not. WL-47 already aligned the two loops on error
   handling — skip *reporting* is the half that stayed divergent.
 - `[P4]` **Two different ownership tests guard the same kind of path.**
@@ -597,7 +597,7 @@ while dogfooding it against the real corpus.
   `Parent == nil`, so an edit under it still marks nothing `Changed` and stamps
   no `last_revised_in` — the same silent staleness, one level up. Nothing on
   the write path refuses the shape: `LintAnchors` skips anchorless headings and
-  `DepthViolations` only inspects anchored ones. 025 §6.1 scopes its "content
+  `DepthViolations` only inspects anchored ones. WL-SPEC-77 scopes its "content
   within the nearest anchored ancestor" rule to headings *below* the
   addressability limit and says nothing about a shallow one, so the fix is a
   spec decision first: either require every H2 in a spec or ADR to be anchored
@@ -623,7 +623,7 @@ while dogfooding it against the real corpus.
   plan but not yet re-accepted is a fact about the body. So `lode doc list
   --needs-execution` omits such a plan once its minted tasks close, and a
   downstream plan's tasks become claimable while the upstream plan still
-  declares unstarted work. 025 §18's "unminted" arm always meant this; making
+  declares unstarted work. WL-SPEC-77's "unminted" arm always meant this; making
   it detectable needs the accept-time parse to record a declaration count, or a
   reconciler that re-reads bodies.
 
@@ -650,21 +650,21 @@ while dogfooding it against the real corpus.
 
 ## From WL-238 — the cockpit's Deleted destination (2026-08-22)
 
-- `[P3]` **Spec 032 §2's project-local navigation still names eight
+- `[P3]` **Spec WL-SPEC-82's project-local navigation still names eight
   destinations; the cockpit now renders ten.** WL-238 added Deleted — spec
-  044's tombstone review; WL-532 added Milestones — spec 029 §2's container.
-  Both sit in `localNav` (`internal/ui/layout.templ`) outside 032 §2's fixed
-  order, because each belongs to its own spec, not to the cockpit spec. 032
-  §2 (or, for Deleted, 044 §5, which lists only the API and CLI surfaces) is
+  WL-SPEC-75's tombstone review; WL-532 added Milestones — WL-SPEC-75's container.
+  Both sit in `localNav` (`internal/ui/layout.templ`) outside WL-SPEC-82's fixed
+  order, because each belongs to its own spec, not to the cockpit spec. WL-SPEC-82
+  §2 (or, for Deleted, WL-SPEC-75, which lists only the API and CLI surfaces) is
   owed an amendment naming both, so the destination list stops being a spec
-  that the page contradicts. Spec 056 §1 does not settle this: it amends 032
+  that the page contradicts. Spec WL-SPEC-82 does not settle this: it amends WL-SPEC-82
   §2's *global* list only and says project-local navigation is untouched.
 - `[P3]` **The Deleted page is per project and has no instance-wide view.** A
   document or task is always project-scoped, so nothing is unreachable, but
   reviewing every delete across an instance still means visiting each project.
   A global destination was out of WL-238's scope for the same reason the nav
   item above is a deviation: it would be an addition to a spec's destination
-  list — and after 056 §1 that list is five, deliberately shorter.
+  list — and after WL-SPEC-82 that list is five, deliberately shorter.
 
 ## From the steering-instructions final review (2026-08-25)
 
@@ -694,13 +694,13 @@ Recorded by WL-347's housekeeping pass over the doc-version-history plan:
 - `[P4]` **Version-to-version document diffing is deliberately out of scope.**
   `lode doc versions` and `/docs/versions/{id}/{n}` show whole snapshots; a
   diff between two versions was declined by the doc-version-history plan and
-  025 §4.5 (versions are immutable snapshots read whole). Check here before
+  WL-SPEC-77 (versions are immutable snapshots read whole). Check here before
   filing a diffing feature request as new.
 
-Recorded by WL-643's pass over spec 040 §5 and §7:
+Recorded by WL-643's pass over WL-SPEC-79 and §7:
 
 - `[P3]` **A chunker change does not make the index stale.** `content_hash`
-  (040 §5, §7) covers a subject's source columns only, so `ChunkRunes`,
+  (WL-SPEC-79, §7) covers a subject's source columns only, so `ChunkRunes`,
   `ChunkOverlap` or a `context_header` format change leaves every existing
   chunk row looking fresh while the text it holds no longer matches what the
   chunker would produce today. §8 handles the sibling case for the provider,
@@ -708,10 +708,10 @@ Recorded by WL-643's pass over spec 040 §5 and §7:
   a manual truncate until it does. Folding a chunker version into the hashed
   expression would fix it, at the cost of one full re-embed per bump.
 
-Recorded by WL-633's pass over spec 040 §9:
+Recorded by WL-633's pass over WL-SPEC-79:
 
 - `[P3]` **The lexical arm contributes nothing on the task-brief path.**
-  Recommendation now retrieves through `store.Search` (040 §9), so a short
+  Recommendation now retrieves through `store.Search` (WL-SPEC-79), so a short
   `lode skill recommend --text "pytest"` matches the skill naming pytest.
   The brief path (`internal/api/brief.go`) passes the whole title plus body,
   and `websearch_to_tsquery` ANDs every unquoted term, so a brief of any
@@ -721,30 +721,30 @@ Recorded by WL-633's pass over spec 040 §9:
   from a brief (or OR-ing them) is a retrieval-quality change, not a wiring
   one, so it is not folded into this task.
 
-Recorded by WL-634's pass over spec 040 §9:
+Recorded by WL-634's pass over WL-SPEC-79:
 
 - `[P3]` **A document hit's address costs one extra request.**
-  `model.SearchHit` carries the document's row id, not the `WL-SPEC-25`
+  `model.SearchHit` carries the document's row id, not the `WL-SPEC-77`
   reference §9's line renders, so `lode search` fetches the project's
   document list to map ids to references whenever the results hold a
   document. A `ref` on the hit itself — built where the store already
   builds a skill's qualified name — would drop the second request.
 
-Recorded by WL-603 (`lode doc note`, 025 §8.5):
+Recorded by WL-603 (`lode doc note`, WL-SPEC-77):
 
-- `[P3]` **`note` is in the L3 allowlist here but not yet in WL-SPEC-61 §1.**
+- `[P3]` **`note` is in the L3 allowlist here but not yet in WL-SPEC-81**
   `lode doc note` leaves an anchored remark, which none of L3's seven verbs
   expresses, so `note` was added to `l3DomainActions` in
   `internal/cmd/namerule_test.go` and to `internal/cmd/CLAUDE.md`'s L3 list.
-  That test's list is transcribed from 061 §1 L3, so the spec owes the same
+  That test's list is transcribed from WL-SPEC-81 L3, so the spec owes the same
   entry; adding it is a revision of an accepted spec, not part of this task.
 
-Recorded by WL-532 (the project Milestones page, 029 §2 and 032 §10):
+Recorded by WL-532 (the project Milestones page, WL-SPEC-75 and WL-SPEC-82):
 
-- `[P3]` **Spec 032 §2's project-local navigation now names two destinations
+- `[P3]` **Spec WL-SPEC-82's project-local navigation now names two destinations
   it does not list.** WL-532 adds Milestones between Crew and Work in
   `localNav` (`internal/ui/layout.templ`), ahead of both Work and
-  Deliverables because a milestone contains both (029 §2). That is the same
+  Deliverables because a milestone contains both (WL-SPEC-75). That is the same
   gap WL-238's Deleted entry above records, and the same amendment closes
   both.
 - **Deleted (WL-533, WL-534).** A milestone's children could not be attached
@@ -753,7 +753,7 @@ Recorded by WL-532 (the project Milestones page, 029 §2 and 032 §10):
   `internal/api` one. `lode task edit --milestone` and `lode milestone
   attach`/`detach` now write `milestone_id` from both sides.
 
-Recorded by WL-667 (the rally task kind, 005 §2a and 004 §6.1):
+Recorded by WL-667 (the rally task kind, WL-SPEC-75 and WL-SPEC-75):
 
 - `[P3]` **The cockpit's rally progress can render a negative count under a
   concurrent edge.** `internal/api/web.go` reads `RallyMemberCount` and
@@ -771,7 +771,7 @@ Recorded by WL-667 (the rally task kind, 005 §2a and 004 §6.1):
   checks. The race needs two interleaved transactions and is untested; closing
   it means locking the task row in both paths.
 
-Recorded by WL-762 (`deliverable` joins 061 §1's L1 entity set):
+Recorded by WL-762 (`deliverable` joins WL-SPEC-81's L1 entity set):
 
 - `[P3]` **`internal/cmd/CLAUDE.md`'s "resulting top-level" table lags its own
   L1 rule.** The table still lists thirteen entities and calls the top level
@@ -780,7 +780,7 @@ Recorded by WL-762 (`deliverable` joins 061 §1's L1 entity set):
   not the law, so nothing enforces it — refresh it the next time a top-level
   command lands.
 
-Recorded by WL-747 (e2e and docs alignment, WL-SPEC-66 §8):
+Recorded by WL-747 (e2e and docs alignment, WL-SPEC-85):
 
 - `[P3]` **The Progress page's live stream polls the event log once a
   second**, the same interval `GET /api/v1/events/stream` (`lode event tail
@@ -792,7 +792,7 @@ Recorded by WL-747 (e2e and docs alignment, WL-SPEC-66 §8):
   streams' poll loops can subscribe to instead of each hitting the store on
   its own tick.
 
-Recorded by WL-754 (backfill the historic plan record, WL-SPEC-66 §6.2):
+Recorded by WL-754 (backfill the historic plan record, WL-SPEC-85):
 
 - `[P4]` **Three accepted plans have no execution record and never will.**
   `WL-PLAN-67` (human assignment), `WL-PLAN-68` (branch and worktree naming)
@@ -803,34 +803,34 @@ Recorded by WL-754 (backfill the historic plan record, WL-SPEC-66 §6.2):
   read that group as three known-empty plans plus whatever is genuinely
   unlinked.
 
-Recorded by WL-819 (the doc-lifecycle watcher series, spec 025 §15):
+Recorded by WL-819 (the doc-lifecycle watcher series, WL-SPEC-77):
 
 - `[P4]` **`internal/eventbus/vocab.go` hand-mirrors the event ontology.**
   Its constants (`TypeDocumentSubmitted`, `TypeDocumentAccepted`, ...) and
   each type's allowed payload keys are copied by hand from `ns/ontology.ttl`
-  (025 §15.2). `vocab_test.go`'s `TestVocabMatchesOntology` catches the
+  (WL-SPEC-77). `vocab_test.go`'s `TestVocabMatchesOntology` catches the
   constants drifting from the ontology, but adding a new event type or
   payload key still means editing both files. The fix is `scripts/nsgen.py`
   generating this file the way it already generates `internal/ns/gen.go`
-  (025 §17) — worth doing once that codegen lands, not before.
+  (WL-SPEC-77) — worth doing once that codegen lands, not before.
 - `[P4]` **A poison event blocks its subscriber, by design, with no DLQ.**
   `eventbus.Run` acks a batch only up to the last event its handler
   succeeded on; a handler error rewinds the read offset back onto the
   failed event, so it's retried every poll and nothing behind it is
-  delivered until it's fixed. This is deliberate (025 §22): it keeps
+  delivered until it's fixed. This is deliberate (WL-SPEC-77): it keeps
   delivery ordered and never silently drops an event. An operator sees the
   stall today through `GET /api/v1/event-subscribers` (its lag and lock
   holder are asserted by the e2e test). A dead-letter queue or a
   skip-and-record path would let the subscriber move past a poison event,
   but it's worth building when one actually occurs, not in anticipation.
 
-Recorded by WL-829 (`lode task escalate`, spec 025 §8.1), extended by WL-830
-(`lode task gap`/`lode task fix`, spec 025 §15.5) and WL-833 (`lode doc
-withdraw`, spec 025 §8.7):
+Recorded by WL-829 (`lode task escalate`, WL-SPEC-77), extended by WL-830
+(`lode task gap`/`lode task fix`, WL-SPEC-77) and WL-833 (`lode doc
+withdraw`, WL-SPEC-77):
 
-- `[P3]` **Spec 061's L3 domain-action list does not name `escalate`, `gap`,
+- `[P3]` **Spec WL-SPEC-81's L3 domain-action list does not name `escalate`, `gap`,
   `fix` or `withdraw`, so its transcription in code no longer matches it.**
-  Spec 025 §8.1 specifies `lode task escalate --to plan|spec --reason "..."`
+  Spec WL-SPEC-77 specifies `lode task escalate --to plan|spec --reason "..."`
   verbatim; §15.5 specifies only the events `task.gap_found`, `fix.started`
   and `fix.finished`, and the `lode task gap`/`lode task fix` commands that
   emit them were named by the plan, not the spec; §8.7 likewise calls for a
@@ -838,22 +838,22 @@ withdraw`, spec 025 §8.7):
   name one, so `lode doc withdraw` is the plan's name for it too. Shipping
   each needed its verb in `internal/cmd/namerule_test.go`'s `l3DomainActions`
   and in `internal/cmd/CLAUDE.md`'s Naming section. Both are transcriptions of
-  spec 061 §5, so they now carry four verbs the spec they transcribe does not.
-  Spec 061 has been revised three times for exactly this — L3 gained
-  `request` (WL-646), then `pack`, then `note` for 025 §8.5 — so the fix is
-  the same ceremony: one `lode doc revise` on 061 adding `escalate`, `gap`,
+  WL-SPEC-81, so they now carry four verbs the spec they transcribe does not.
+  Spec WL-SPEC-81 has been revised three times for exactly this — L3 gained
+  `request` (WL-646), then `pack`, then `note` for WL-SPEC-77 — so the fix is
+  the same ceremony: one `lode doc revise` on WL-SPEC-81 adding `escalate`, `gap`,
   `fix` and `withdraw` to L3 together, after which the two transcriptions are
   true again. Not blocking: nothing disagrees about what the commands do, only
   the allowlist is behind.
 
-  WL-584 hit the same wall for `report` (`lode deliverable report`, 029 §3.2)
+  WL-584 hit the same wall for `report` (`lode deliverable report`, WL-SPEC-75)
   and added it to both transcriptions too, so the one outstanding revise on
-  061 now owes two verbs: `escalate` and `report`. Do them together.
+  WL-SPEC-81 now owes two verbs: `escalate` and `report`. Do them together.
 
 Recorded by WL-831 (§8.6 stale marking off the patch seam):
 
 - `[P4]` **Re-accepting an unedited stale plan cannot clear the mark.**
-  025 §8.6 says the mark is "cleared by re-acceptance", and re-acceptance is
+  WL-SPEC-77 says the mark is "cleared by re-acceptance", and re-acceptance is
   what `acceptPlanDoc` does out of `stale`. But the acceptance event's
   external id is `<doc IRI>:<version>` (`eventbus.DocumentAccepted`), and a
   plan that goes stale keeps the version it was accepted at, so a re-accept
@@ -863,10 +863,10 @@ Recorded by WL-831 (§8.6 stale marking off the patch seam):
   version moves. The honest fix is a status-aware accept key or an explicit
   clear verb; a one-character edit works today and the case is rare.
 
-Recorded by WL-561 (the impact review lifecycle, 029 §7.1):
+Recorded by WL-561 (the impact review lifecycle, WL-SPEC-75):
 
 - `[P3]` **An impact reopen overwrites the dependent's approval record.**
-  029 §7.1 says `ImpactReopen` puts the dependent back into review "at the
+  WL-SPEC-75 says `ImpactReopen` puts the dependent back into review "at the
   revision its approved row bound", and `reopenDependentReview` inserts that
   awaiting row. On an unlaned dependent the insert cannot land: the approved
   row already occupies the unique key
@@ -890,7 +890,7 @@ Recorded by WL-561 (the impact review lifecycle, 029 §7.1):
   showing as outstanding. Worth a decision on whether a reopen should resolve
   the impact row rather than leave it open.
 
-Recorded by WL-586 (`/hooks/cms` ingest, 029 §8.3):
+Recorded by WL-586 (`/hooks/cms` ingest, WL-SPEC-75):
 
 - `[P2]` **`ci` and `pipeline` webhook secrets are not wired into any
   deployment.** `LODE_CATALOG_WEBHOOK_SECRET` reaches a running server through
@@ -903,7 +903,7 @@ Recorded by WL-586 (`/hooks/cms` ingest, 029 §8.3):
   has gone unnoticed. Whoever wires the first real `ci` or `pipeline` emitter
   has to add the secret in the same change, or the emitter meets a 503.
 
-Recorded by WL-774 (decomposing spec 001 into plans):
+Recorded by WL-774 (decomposing WL-SPEC-74 into plans):
 
 - `[P2]` **A plan cannot declare a human-only task.** `model.Task` carries
   `HumanOnly` — "a task no unattended worker may pick up" — but
@@ -932,7 +932,7 @@ Recorded by WL-775 (delivery frames on the Progress page):
   still does not redraw its cell. Adding them is two map entries plus a decision
   about whether a reconcile sweep should pulse the page at all.
 
-Recorded by WL-566 (the document reviewer gate, 029 §7.3):
+Recorded by WL-566 (the document reviewer gate, WL-SPEC-75):
 
 - `[P3]` **A submitted plan gets an approvals row that never gates it.** The
   approval-on-submit rule materializes an awaiting row for every submitted

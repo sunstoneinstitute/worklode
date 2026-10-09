@@ -26,7 +26,7 @@ Draft the markdown — frontmatter included — in a scratch file, then:
 lode doc lint <file>                                # local lint: anchors, plan ## Tasks
 lode doc add --kind <spec-or-plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body, or a plan's at any status
-lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec/ADR in place (025 §8.4)
+lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec/ADR in place (WL-SPEC-77 §10)
 lode doc edit <ref> --file <file> --substantive  # same, judged substantive: reviewers are asked again
 lode doc revise <ref>                        # open a candidate revision on an accepted doc
 lode doc revise <ref> --file <file>          # update the open candidate's body
@@ -37,7 +37,7 @@ lode doc accept <ref>                        # owner-gated; a plan's accept mint
 lode doc transfer <ref> --to <actor>         # owner-gated; move ownership to another actor
 ```
 
-Read one back with `lode show <ref>` (`WL-SPEC-25`, `WL-SPEC-25#sec-9`, or
+Read one back with `lode show <ref>` (`WL-SPEC-77`, `WL-SPEC-77#sec-11`, or
 `-s <anchor>`), or `lode doc show <ref> --json` for the body plus parsed
 sections and edges. `lode show <ref> --inline` folds every in-force amendment
 and supersession into the section it acts on. `lode doc list`, `lode doc
@@ -48,8 +48,8 @@ unlike `lode doc lint <file>`, which only lints one local file.
 
 The scratch file is an editor buffer, not a copy of record — nothing reads
 it once the command above succeeds. `lode doc edit` replaces a draft's body,
-and a plan's at any status (plans are edited in place — 025 §9). On an
-accepted spec or ADR it is 025 §8.4's in-place amendment, and the server
+and a plan's at any status (plans are edited in place — WL-SPEC-77 §11). On an
+accepted spec or ADR it is WL-SPEC-77 §10's in-place amendment, and the server
 gates it mechanically: an edit that changes a `wl:`/`wlc:` term, a code
 span or fenced block, an acceptance-criteria section, the frontmatter
 `requires` list, or a section that open work already points at (§8.2) is
@@ -61,7 +61,7 @@ the sections it touched.
 
 **The backbone assigns the number, not you.** Never hand-create a file for a
 document, and never read the next number off filenames. The corpus lives in
-the backbone (055), so a draft that has no file anywhere still holds its
+the backbone (WL-SPEC-77 §16), so a draft that has no file anywhere still holds its
 number. `lode doc list` is the authority.
 
 ## Author rules, arrange them into specs
@@ -113,13 +113,13 @@ and `covers` — requirement refs, document/section references, or
 whole-document references selecting the requirements it builds, each a
 plain reference: a `covers` edge always means the plan builds the whole
 requirement, no levels — or
-`covers: NO-SPEC` (026 §4.3, valid only here) when nothing governs
+`covers: NO-SPEC` (WL-SPEC-78 §3.3, valid only here) when nothing governs
 it, never omitted, since an absent `covers` reads as a forgotten one. See
 `lode:splitting-specs-into-plans` for the cases that used to be expressed
 with a coverage level: splitting a rule the plan only partly builds,
 invariants, and informative rules.
 
-Keys are ontology property local names (specs 006/025/026), not a second
+Keys are ontology property local names (WL-SPEC-77, WL-SPEC-78, WL-SPEC-79), not a second
 vocabulary — a key with no term behind it means the ontology is missing one,
 not that you should invent one. Order them lifecycle → `covers` → `defers` →
 dependency → amendment → supersession:
@@ -130,14 +130,14 @@ dependency → amendment → supersession:
 | `issued` | spec, ADR | `YYYY-MM-DD` of first publication |
 | `covers` | plan | scalar or list of requirement refs (`WL-REQ-<n>`), spec-section references, or whole-document references this plan undertakes to build in full; a section or document entry skips invariants and informative rules, a direct ref to one is refused; `coverage:`/`fullCoverageWith:` are refused |
 | `implements` | plan | retired spelling of `covers`; still parses, reported as retired. A document carrying both is an error |
-| `defers` | plan | list of `{spec, to}`: a section this plan hands off, and the document expected to cover it (026 §5.3) |
+| `defers` | plan | list of `{spec, to}`: a section this plan hands off, and the document expected to cover it (WL-SPEC-78 §4.2) |
 | `requires` | any | list of references; plain dependency, no ordering semantics |
-| `blockedBy` | plan | list of plans whose whole execution runs before this one's (025 §5), declared on the later plan |
+| `blockedBy` | plan | list of plans whose whole execution runs before this one's (WL-SPEC-77 §8), declared on the later plan |
 | `isRequiredBy`, `blocks` | none | inverse spellings, not keys: a header carrying one is refused, naming `requires` or `blockedBy` (WL-SPEC-77 §8.1) |
 | `wasDerivedFrom` | spec | scalar reference (provenance) |
 | `amends`, `amendedBy`, `replaces`, `isReplacedBy` | none | not keys: a header carrying one is refused. Amendment and supersession are rule edges, see below |
 | `kind` | spec, ADR | `adr`, or absent for a spec — the resolver's document kind, distinct from a plan-task's `kind` (feature/bug/chore/design) below |
-| `artifact` | any | catalog address(es) (`bigquery://…`, `gs://…`) this document is verified by (029 §3.1); declares additively |
+| `artifact` | any | catalog address(es) (`bigquery://…`, `gs://…`) this document is verified by (WL-SPEC-75 §13.3); declares additively |
 
 A retired `task` key once named the lode task a plan's execution hung off; it
 still parses (plan bodies are stored verbatim) but nothing reads it — find a
@@ -148,8 +148,8 @@ plan's minted tasks with `lode task list --plan <plan>`.
 A reference names a document, and there is no file for it to point at.
 Resolution tries, in order: an **exact slug match** in the project (the bare
 slug from `lode doc add --slug`, e.g. `covers: execution-backbone`); the
-**`WL-SPEC-N` shorthand** (`<PROJECTKEY>-SPEC|ADR|PLAN-<n>`, 025 §14.3, e.g.
-`WL-SPEC-25`, `WL-ADR-7`, `WL-PLAN-7` — the only form that crosses projects,
+**`WL-SPEC-N` shorthand** (`<PROJECTKEY>-SPEC|ADR|PLAN-<n>`, WL-SPEC-78 §3.2, e.g.
+`WL-SPEC-77`, `WL-ADR-7`, `WL-PLAN-7` — the only form that crosses projects,
 e.g. `CMS-SPEC-4` from inside `WL`); then a **bare corpus number** (`25`, not
 `025`), only when nothing else matched and exactly one live spec or ADR
 carries it. Append `#sec-N` to any of these to narrow to a section.
@@ -180,7 +180,7 @@ it by hand. It is refused on an accepted document, for the reason below.
 **An anchor is frozen once its document is `accepted`.** A revision that
 renumbers a published anchor, or drops one without a replacing supersession,
 is refused at `lode doc revise --accept` — the backbone's own append-only
-rule (025 §7.2), not a linter you can skip. To insert a section between
+rule (WL-SPEC-77 §9), not a linter you can skip. To insert a section between
 `2.1` and `2.2` on an accepted document, use a **letter suffix**:
 `### 2.1a New section {#sec-2.1a}`, which takes no counter slot and tells a
 reader it was added after acceptance. Adding a genuinely *missing* anchor to
@@ -248,7 +248,7 @@ Prose: files to touch, the test that proves it. Then optional `- [ ]` steps.
 
 A task's **title is its declaration's identity**: titles must be unique
 within the plan, and accepting an edited plan mints only the declarations
-with no task yet, leaving every existing task alone (025 §9.2). Append a
+with no task yet, leaving every existing task alone (WL-SPEC-77 §11.2). Append a
 declaration to add work to an accepted plan; retitle one only to withdraw
 that task and declare a new one. Ordering across files (series parts, other
 plans) is the document-level `blockedBy` above, never a task
@@ -259,18 +259,18 @@ malformed task block is caught locally.
 coverage for work already built: it carries at least one `covers` or `defers`
 entry and no tasks at all, and accepting it mints nothing. Acceptance is still
 what puts the record in force, since the aggregate coverage query counts
-accepted plans only (026 §2.1). "No tasks at all" is exact — no `## Tasks`
+accepted plans only (WL-SPEC-78 §1). "No tasks at all" is exact — no `## Tasks`
 heading, and no heading opening with `Task`/`Tasks` followed by a number. An
 empty `## Tasks` section, or a `## Task 1` heading that missed the em-dash
 format above, is an authoring mistake and still fails both the lint and the
-accept (025 §9.2).
+accept (WL-SPEC-77 §11.2).
 
 ## After editing an accepted spec or plan, check what it invalidated
 
 **A minted task's body is a snapshot.** `lode doc accept` copies each
 declaration's prose into the task it mints and never looks again, so editing
 the document afterwards leaves every existing task carrying the old text.
-Re-accepting does not repair it: 025 §9.2 mints only declarations with no row
+Re-accepting does not repair it: WL-SPEC-77 §11.2 mints only declarations with no row
 yet and never mutates a body. Nothing reports the divergence, so the edit is
 not finished until you have walked it yourself:
 
@@ -307,11 +307,11 @@ to compare; a new rule version does not rewrite those snapshots.
 
 ## The `ns/` ontology
 
-`ns/` holds the `wl:` ontology extracted from specs 006/016/025/026 —
+`ns/` holds the `wl:` ontology extracted from WL-SPEC-77, WL-SPEC-78 and WL-SPEC-79 —
 `ontology.ttl` (classes, properties, axioms), `concept.ttl` (SKOS enums),
 `shapes.ttl` (SHACL) — the vocabulary the frontmatter keys come from and the
 parseable form; the specs' own Turtle blocks are illustrative and don't
-parse. `ns/` owns the shared schema, the specs own the rationale (025 §17):
+parse. `ns/` owns the shared schema, the specs own the rationale (WL-SPEC-77 §14):
 amend the spec first, then mirror the term here (`riot --validate
 ns/*.ttl`); never edit `wlc:TaskKind` apart from the migration and
 `validKinds`, which a test holds together.
@@ -324,25 +324,25 @@ constraint's value), so spelling says whether a term names schema or data.
 
 ## The spec / plan / task model
 
-Spec 025, as implemented by the document store.
+WL-SPEC-77, as implemented by the document store.
 
 - A **spec** is a durable document. Writing or revising one is an ordinary
-  claimable task (`kind = 'design'`, renamed from `spec` by 025 §10 and
+  claimable task (`kind = 'design'`, renamed from `spec` by WL-SPEC-77 §12 and
   widened to any design document) that closes on submission for review, not
   on acceptance, a status transition rather than a task state. "Is the spec
   implemented?" is a coverage query, never a task state — don't create
   long-lived umbrella tasks per spec.
 - A **plan** is an executable document; its execution is the set of tasks
-  minted when the plan is accepted. 025 §9.2 mints no root row above them,
+  minted when the plan is accepted. WL-SPEC-77 §11.2 mints no root row above them,
   grouping them by a reference to the plan document instead — never create a
   free-standing container task; container-ness is inferred from a task's
-  `child_of` children (004 §6.1).
-- **Groupings are queries, not rows** (025 §1): one plan's tasks = the tasks
+  `child_of` children (WL-SPEC-75 §5).
+- **Groupings are queries, not rows** (WL-SPEC-77 §1): one plan's tasks = the tasks
   referencing it, everything in a repo set = the project. No sprint concept,
   no container above a plan's tasks — order plans with `blockedBy`.
 - Spec → plan decomposition is always an explicit human act; skills may
   offer it, never perform it unasked.
-- **The prompt is minted, the act is not** (025 §15.4). `lode doc submit`
+- **The prompt is minted, the act is not** (WL-SPEC-75 §9.6). `lode doc submit`
   emits `wl:DocumentSubmitted` and moves no column — the open review task
   *is* "under review" — and accepting a spec emits `wl:DocumentAccepted`.
   The `doc-lifecycle` subscriber turns each into one task (`review` on
