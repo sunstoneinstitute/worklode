@@ -10,7 +10,7 @@ import (
 )
 
 // codexConfigPath resolves $CODEX_HOME/config.toml, the user-level file spec
-// 063 §3 requires Codex's OTel export configuration to live in. Unlike
+// WL-SPEC-73 §7.3 requires Codex's OTel export configuration to live in. Unlike
 // hooks.json, this file is not reinstalled per worktree -- both Worklode
 // install scopes write the same path, same as codexHooksPath.
 func codexConfigPath() (string, error) {
@@ -41,7 +41,7 @@ func codexExporterValue() map[string]any {
 // readCodexConfigFile reads path as generic TOML. A missing file is an
 // empty config, not an error -- installing before Codex has ever written one
 // is the common case. A file that exists but does not parse is returned as
-// an error and never rewritten (spec 024 acceptance 6, the same contract
+// an error and never rewritten (the same contract
 // codex.go's hooks.json reader holds).
 func readCodexConfigFile(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
@@ -103,7 +103,7 @@ func writeCodexConfigFile(path string, cfg map[string]any) error {
 // key already under [otel] (such as environment). Metrics and traces stay
 // off; only the log exporter Codex needs for completed-response token counts
 // is configured, and log_user_prompt is pinned false so no prompt content is
-// ever exported (spec 063 §3).
+// ever exported (WL-SPEC-73 §7.3).
 func installCodexTelemetry(path string) (string, error) {
 	cfg, err := readCodexConfigFile(path)
 	if err != nil {

@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// Milestone is one ordered container in a project (spec 029 §2). It stores
+// Milestone is one ordered container in a project (WL-SPEC-75 §13). It stores
 // identity, title, and ordering only; Progress is derived on read from its
 // tasks and its deliverables' reported state, never stored.
 type Milestone struct {
@@ -16,7 +16,7 @@ type Milestone struct {
 	Progress  MilestoneProgress `json:"progress"`
 }
 
-// MilestoneProgress is the derived query 029 §2 makes of a milestone's
+// MilestoneProgress is the derived query WL-SPEC-75 §13 makes of a milestone's
 // children. Closed and live follow the pinned buckets in the plan's global
 // constraints; ComputeMilestoneProgress is the only producer.
 type MilestoneProgress struct {

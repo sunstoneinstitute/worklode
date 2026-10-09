@@ -12,7 +12,7 @@ type TokenCounts struct {
 }
 
 // CostOverhead is the portion of a CostDay/CostTotals' combined figures that
-// came from usage with no task to bill to (spec 052): a main-checkout
+// came from usage with no task to bill to (WL-SPEC-73): a main-checkout
 // orchestration session, or a worktree whose lease the reporting actor no
 // longer held. Nested under its own "overhead" key on the wire rather than
 // flattened, so its fields cannot collide with the combined totals'.
@@ -74,7 +74,7 @@ type TaskCost struct {
 // TaskCostParams is the query string of GET /api/v1/tasks/{id}/cost?from=&to=&children=.
 // From and To are YYYY-MM-DD, inclusive on both ends; either may be omitted
 // for unbounded. Children widens the scope to the task's child_of
-// descendants (spec 025 §15.6, AC31).
+// descendants (WL-SPEC-77 §15, AC31).
 type TaskCostParams struct {
 	From     string `query:"from,omitempty"`
 	To       string `query:"to,omitempty"`

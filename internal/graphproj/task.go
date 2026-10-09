@@ -22,7 +22,7 @@ const (
 )
 
 // TaskTriples projects a backbone task row, plus its outgoing and incoming
-// edges, into the triples of spec 006 §11. It is subject-complete for the
+// edges, into the triples of WL-SPEC-79 §12. It is subject-complete for the
 // task's IRI: every triple returned has S == iri.Task(t.ID), and no triple
 // with any other subject is produced — a graph rebuilt task-by-task is a
 // faithful full projection only if each task's projection stays within its
@@ -91,7 +91,7 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 }
 
 // ProjectTriples projects a backbone project row into the triples of spec
-// 006 §11's Project node table: the type declaration and its title.
+// WL-SPEC-79 §12's Project node table: the type declaration and its title.
 func ProjectTriples(p model.Project) []Triple {
 	subj := iri.Project(p.ID)
 	return []Triple{

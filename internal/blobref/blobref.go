@@ -1,5 +1,5 @@
 // Package blobref finds and rewrites blob references in a markdown task
-// body (spec 021). Parsing is an AST walk rather than a regex: a hash in a
+// body (WL-SPEC-78). Parsing is an AST walk rather than a regex: a hash in a
 // code fence or a plain link is not a reference, and counting one as a
 // reference would keep its bytes alive forever.
 package blobref
@@ -141,7 +141,7 @@ func LocalImages(body string) []string {
 }
 
 // RemoteImages returns the body's http(s) image destinations, deduplicated
-// in document order. These are what import mirrors into blobs (spec 021 §12).
+// in document order. These are what import mirrors into blobs (WL-SPEC-78 §8.8).
 //
 // Markdown images only -- deliberately not the raw-HTML `<img src="https://…">`
 // that Extract also scans. ReplaceDestination moves *ast.Image destinations
@@ -173,7 +173,7 @@ func RemoteImages(body string) []string {
 //
 // A basename-derived alt (`![shot.png](dest)`) does not count as empty: it
 // is a worse default than real alt text, but a non-empty one, and Q021.1
-// keeps it as the fallback when `--alt` is not given (spec 021 §14, v2).
+// keeps it as the fallback when `--alt` is not given.
 // Only the true `![]()` case -- no attempt at alt text at all -- is flagged.
 func EmptyAltImages(body string) []string {
 	var out []string
@@ -194,7 +194,7 @@ func EmptyAltImages(body string) []string {
 }
 
 // imageTypes and videoTypes render in place in the web UI and
-// terminal-adjacent surfaces. Everything else is a download (spec 021 §5).
+// terminal-adjacent surfaces. Everything else is a download (WL-SPEC-78 §8.5).
 // Nothing is rejected on type: a core dump is a legitimate attachment, and an
 // allowlist buys nothing once non-embeddable types can only be served as
 // attachments.
@@ -235,7 +235,7 @@ func Embeddable(mediaType string) bool {
 
 // Video reports whether an embeddable media type is one of the video ones —
 // the blobs that embed as <video> rather than <img>, and the only ones a
-// poster frame is extracted for (spec 021 §5).
+// poster frame is extracted for (WL-SPEC-78 §8.5).
 func Video(mediaType string) bool {
 	return videoTypes[bareType(mediaType)]
 }
@@ -244,7 +244,7 @@ func Video(mediaType string) bool {
 // destination mapping names, splicing the source by byte offset: only the
 // destination token itself is replaced, so an image title, a link label, the
 // same path spelled in prose or inside a code fence, and a plain link to the
-// same file all survive verbatim. Spec 021 §7 keeps a linked local file
+// same file all survive verbatim. Spec WL-SPEC-78 §8.5 keeps a linked local file
 // linked -- `lode task attach` is the tool for those -- so only *ast.Image
 // destinations move.
 //

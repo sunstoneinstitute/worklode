@@ -14,19 +14,19 @@ import (
 // so the field set is closed: a key with no term behind it means the ontology
 // is missing one.
 //
-// This is transitional. Once documents live in the backbone (spec 025) the
+// This is transitional. Once documents live in the backbone (WL-SPEC-77) the
 // header goes away and these become columns, so the struct deliberately does
 // not grow an escape hatch for arbitrary keys.
 type Frontmatter struct {
 	Status         string       `yaml:"status,omitempty"`         // wl:status
 	Issued         string       `yaml:"issued,omitempty"`         // dct:issued
-	Covers         CoverageList `yaml:"covers,omitempty"`         // wl:covers — plans only, 026 §5
-	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; 026 §5.1
-	Defers         DeferralList `yaml:"defers,omitempty"`         // wl:defers — plans only, 026 §5.3
+	Covers         CoverageList `yaml:"covers,omitempty"`         // wl:covers — plans only, WL-SPEC-78 §4
+	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; WL-SPEC-78 §4
+	Defers         DeferralList `yaml:"defers,omitempty"`         // wl:defers — plans only, WL-SPEC-78 §4
 	Requires       RefList      `yaml:"requires,omitempty"`       // dct:requires
 	IsRequiredBy   RefList      `yaml:"isRequiredBy,omitempty"`   // dct:isRequiredBy
-	Blocks         RefList      `yaml:"blocks,omitempty"`         // plans only, 025 §5 — orders whole documents
-	BlockedBy      RefList      `yaml:"blockedBy,omitempty"`      // plans only, 025 §5
+	Blocks         RefList      `yaml:"blocks,omitempty"`         // plans only, WL-SPEC-77 §3 — orders whole documents
+	BlockedBy      RefList      `yaml:"blockedBy,omitempty"`      // plans only, WL-SPEC-77 §3
 	WasDerivedFrom string       `yaml:"wasDerivedFrom,omitempty"` // prov:wasDerivedFrom
 	// Amends, AmendedBy, Replaces and IsReplacedBy are retired keys
 	// (WL-SPEC-77 §7): amendment and supersession are rule edges. Nothing
@@ -36,14 +36,14 @@ type Frontmatter struct {
 	AmendedBy    AnchorMap `yaml:"amendedBy,omitempty"`
 	Replaces     AnchorMap `yaml:"replaces,omitempty"`
 	IsReplacedBy AnchorMap `yaml:"isReplacedBy,omitempty"`
-	// Task is the retired `task:` key (026 §5.2). Nothing reads it: a plan's
-	// tasks are the rows carrying its plan_doc (025 §9.2). It is still
+	// Task is the retired `task:` key (WL-SPEC-78 §4). Nothing reads it: a plan's
+	// tasks are the rows carrying its plan_doc (WL-SPEC-77 §11). It is still
 	// declared because the decoder rejects unknown fields and the bodies the
 	// backbone stores are verbatim and never rewritten, so every plan
 	// authored before acceptance minted tasks still carries the key.
 	Task     string  `yaml:"task,omitempty"`
-	Kind     string  `yaml:"kind,omitempty"`     // transitional, no term; 026 §4.2 — "adr" or absent (spec)
-	Artifact RefList `yaml:"artifact,omitempty"` // transitional, no term; catalog address(es) verifying this doc (029 §3.1) — URIs, not doc refs
+	Kind     string  `yaml:"kind,omitempty"`     // transitional, no term; WL-SPEC-78 §3 — "adr" or absent (spec)
+	Artifact RefList `yaml:"artifact,omitempty"` // transitional, no term; catalog address(es) verifying this doc (WL-SPEC-75 §13) — URIs, not doc refs
 
 	// raw is the header exactly as it appeared, fences and all, and inner
 	// the YAML between them. raw is emitted verbatim until a field is
@@ -53,7 +53,7 @@ type Frontmatter struct {
 }
 
 // CoveredSections is the sections a plan undertakes to realise, reading the
-// retired `implements` spelling when `covers` is absent (026 §5.1). Callers use
+// retired `implements` spelling when `covers` is absent (WL-SPEC-78 §4). Callers use
 // this rather than either field: a document carrying both is refused at write
 // time (store.rebuildEdges), so the precedence here never silently picks.
 func (f Frontmatter) CoveredSections() RefList {
@@ -119,7 +119,7 @@ func (c Coverage) isNoSpecScalar() bool {
 
 // MarshalYAML keeps the reserved no-governing-spec sentinel unqualified. It
 // has no section or coverage level to express, so the mapping form is invalid
-// under spec 026 even when an unrelated frontmatter edit triggers rendering.
+// under WL-SPEC-78 even when an unrelated frontmatter edit triggers rendering.
 func (c Coverage) MarshalYAML() (any, error) {
 	if c.isNoSpecScalar() {
 		return c.Spec, nil
@@ -194,7 +194,7 @@ func (c *CoverageList) UnmarshalYAML(n *yaml.Node) error {
 }
 
 // Deferral is a plan's explicit handoff of one spec section to a named
-// owner (026 §5.3): Spec is a reference with a #sec-N fragment, To the
+// owner (WL-SPEC-78 §4): Spec is a reference with a #sec-N fragment, To the
 // document whose plans are expected to cover it. There is no scalar
 // shorthand — a deferral without an owner is just an uncovered section,
 // which needs no syntax.
@@ -302,7 +302,7 @@ func (f *Frontmatter) render() string {
 }
 
 // jsonBytes re-encodes the frontmatter's inner YAML as JSON, so the backbone
-// can store it without a second parser (025 §16.3). YAML scalar timestamps
+// can store it without a second parser. YAML scalar timestamps
 // (e.g. "issued: 2026-01-01") are normalized to RFC3339
 // ("2026-01-01T00:00:00Z") in the process — the value is preserved, only its
 // lexical form changes.

@@ -10,7 +10,7 @@ import (
 )
 
 // Claim is one derived implementation claim: Component (derived from paths,
-// 025 §11.3 — never declared) satisfies Section, validated against Pinned.
+// WL-SPEC-77 §13 — never declared) satisfies Section, validated against Pinned.
 type Claim struct {
 	Component string
 	Section   string
@@ -24,7 +24,7 @@ type Claim struct {
 const componentPrefix = iri.IDNS + "component/"
 
 // Resolve derives the claim set for a repository. m is the repo's
-// components.yaml; nil means the single-component default (025 §11.4), an
+// components.yaml; nil means the single-component default (WL-SPEC-77 §13), an
 // implicit component whose IRI is the repo coordinates (unchanged when a
 // whole-repo components.yaml later declares it). Pass nil for both halves of
 // that default — no components.yaml, and one that declares no components.

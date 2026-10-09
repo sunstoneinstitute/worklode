@@ -1,6 +1,6 @@
 package model
 
-// ApprovalFlow is one named, versioned review flow (029 §7.2). Flows live in
+// ApprovalFlow is one named, versioned review flow (WL-SPEC-75 §13). Flows live in
 // instance configuration; a project stores the effective snapshot, so a later
 // configuration edit cannot silently change an open review.
 type ApprovalFlow struct {

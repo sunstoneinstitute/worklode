@@ -18,13 +18,13 @@ type Project struct {
 	Repos []RepoMapping `json:"repos"`
 	Focus []string      `json:"focus"`
 
-	// The approval flow governing the project (029 §7.2), so a reader can
+	// The approval flow governing the project (WL-SPEC-75 §13), so a reader can
 	// name it without unmarshalling the stored snapshot. Absent until a
 	// flow is applied.
 	ApprovalFlowName string `json:"approval_flow_name,omitempty"`
 	ApprovalFlowRev  string `json:"approval_flow_rev,omitempty"`
 
-	// Labels are free-form classification stamped at promotion (029 §1),
+	// Labels are free-form classification stamped at promotion (WL-SPEC-75 §13),
 	// e.g. kind=sunstone-story. Horizon is "bounded" or "standing"
 	// (migration 0074).
 	Labels  map[string]string `json:"labels"`
@@ -33,7 +33,7 @@ type Project struct {
 	// Settings is the small per-project override set behind the server-side
 	// key allowlist (increment 3 R9, migration 0084) — e.g. plan_tokens_soft
 	// and plan_tokens_hard (S6, S19). Never nil on the wire; an empty object
-	// means no overrides. json.RawMessage per value, not any (ADR 036 §8: an
+	// means no overrides. json.RawMessage per value, not any (WL-SPEC-73 §3.2a: an
 	// opaque stored payload passing through, not a shape this package states).
 	Settings map[string]json.RawMessage `json:"settings"`
 }
@@ -75,7 +75,7 @@ type CreateProjectInput struct {
 	Name string `json:"name"`
 	Key  string `json:"key"`
 
-	// Labels and Horizon are optional (029 §1); the schema default applies
+	// Labels and Horizon are optional (WL-SPEC-75 §13); the schema default applies
 	// when omitted (labels {}, horizon "standing"). Horizon lets the
 	// standing intake project be created with horizon: "standing" over
 	// the API.

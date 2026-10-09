@@ -107,7 +107,7 @@ func TestTodoUnplannedSectionsCollapse(t *testing.T) {
 		t.Fatalf("Todo: %v", err)
 	}
 	// One item for the document, not one per section: writing a plan is a
-	// single act and one plan covers many sections (026 §2.4).
+	// single act and one plan covers many sections (WL-SPEC-78 §1.2).
 	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="})
 	if items[0].Anchor != "" {
 		t.Errorf("Anchor = %q, want empty on a collapsed item", items[0].Anchor)
@@ -134,7 +134,7 @@ func TestTodoSkipsNonRequirements(t *testing.T) {
 	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1 plan= tasks="})
 }
 
-// A deferred section (026 §5.3, §2.1) emits no item: the item types are each
+// A deferred section (WL-SPEC-78 §4, §1.2) emits no item: the item types are each
 // discharged by an act this document's own plans can perform, and the next
 // act on a deferred section belongs to its named owner, not to writing a
 // plan here. This is the WL-290 regression case: before defers was indexed by
@@ -191,7 +191,7 @@ func TestTodoPlanDraftReplacesTheSectionGap(t *testing.T) {
 		t.Fatalf("Todo: %v", err)
 	}
 	// The collapsed gap ranks ahead of the document's plan items: nothing
-	// blocks writing a plan (026 §2.4).
+	// blocks writing a plan (WL-SPEC-78 §1.2).
 	checkItems(t, items, []string{
 		"unplanned " + todoSpecRef + "#sec-2 plan= tasks=",
 		"plan-draft " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=",
@@ -287,7 +287,7 @@ func TestTodoBlockedByUndischargedRequirement(t *testing.T) {
 }
 
 // A draft spec leads with the acceptance decision and still reports its
-// sections: the item ranks first, it does not replace the walk (026 §2.4).
+// sections: the item ranks first, it does not replace the walk (WL-SPEC-78 §1.2).
 func TestTodoDraftSpecLeadsWithAcceptanceItem(t *testing.T) {
 	draft := strings.Replace(twoSectionSpec, "status: accepted", "status: draft", 1)
 	docs := buildTodoCorpus(t, map[string]string{"001-example.md": draft}, nil)
@@ -578,7 +578,7 @@ func TestTodoRefForms(t *testing.T) {
 }
 
 // Offline never emits `blocked`: it is a statement about another plan's task
-// state, which is exactly what is unavailable (026 §2.4). An item's type must
+// state, which is exactly what is unavailable (WL-SPEC-78 §1.2). An item's type must
 // not depend on the caller's connectivity.
 func TestTodoOfflineNeverBlocked(t *testing.T) {
 	docs := buildTodoCorpus(t,
@@ -639,7 +639,7 @@ func TestTodoPlanRequiresCycle(t *testing.T) {
 }
 
 // A superseded requirement is spent, so it blocks nothing — the whole point
-// of reading `superseded` as discharging (026 §2.1).
+// of reading `superseded` as discharging (WL-SPEC-78 §1.2).
 func TestTodoSupersededRequirementDoesNotBlock(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},

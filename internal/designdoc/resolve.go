@@ -12,8 +12,7 @@ import (
 // fragment split every ref form allows, the grammar of the forms themselves,
 // and the errors a resolver reports. Resolution itself has two callers with
 // different corpora to match against — internal/cmd against the documents the
-// backbone serves, internal/store against the rows it holds (spec 026 §3, 025
-// §14.3) — so the grammar lives here, once, and each of them applies it.
+// backbone serves, internal/store against the rows it holds (WL-SPEC-77 §7a) — so the grammar lives here, once, and each of them applies it.
 
 // SplitFragment separates a trailing "#sec-..." fragment from ref, per 026
 // §4's "narrows any of them to an anchor". base is ref with the fragment (and
@@ -24,8 +23,8 @@ func SplitFragment(ref string) (base, section string) {
 	return base, section
 }
 
-// shorthandPattern is 025 §14.3's <KEY>-<TYPE>-<n> grammar, and
-// numberFormPattern is 026 §3's form 2: a document number, with or without
+// shorthandPattern is WL-SPEC-77 §7's <KEY>-<TYPE>-<n> grammar, and
+// numberFormPattern is WL-SPEC-78 §2's form 2: a document number, with or without
 // zero-padding, optionally followed by the rest of a slug. Both are anchored
 // end to end and expect a base — a ref with any fragment already removed.
 var (
@@ -33,8 +32,8 @@ var (
 	numberFormPattern = regexp.MustCompile(`^(\d+)(-.*)?$`)
 )
 
-// Shorthand is a parsed <KEY>-<TYPE>-<n> reference, e.g. "WL-SPEC-25".
-// Every document kind has one: 025 §14.3 gave plans none, and 029 §4 put them
+// Shorthand is a parsed <KEY>-<TYPE>-<n> reference, e.g. "WL-SPEC-77".
+// Every document kind has one: WL-SPEC-77 §7 gave plans none, and WL-SPEC-75 §13 put them
 // on their project's sequence like every other kind.
 type Shorthand struct {
 	Key    string // the project key the number is scoped to, e.g. "WL"
@@ -48,8 +47,8 @@ func (s Shorthand) Kind() string {
 	return strings.ToLower(s.Type)
 }
 
-// ParseShorthand parses base as the 025 §14.3 shorthand. It reports false when
-// base is some other ref form, which includes 026 §4.3's NO-SPEC sentinel:
+// ParseShorthand parses base as the WL-SPEC-77 §7 shorthand. It reports false when
+// base is some other ref form, which includes WL-SPEC-78 §3's NO-SPEC sentinel:
 // that names no document, so it is the caller's case to answer, not a
 // shorthand with an absent number.
 func ParseShorthand(base string) (Shorthand, bool) {
@@ -71,9 +70,9 @@ type NumberForm struct {
 	Rest   string // slug text after the number ("-design-documents"), "" when base was bare
 }
 
-// ParseNumberForm parses base as 026 §3's number form. A caller that resolves
+// ParseNumberForm parses base as WL-SPEC-78 §2's number form. A caller that resolves
 // only *bare* numbers checks Rest == "": a number-prefixed reference is a
-// filename, and matching "025-documents-2.md" to spec 025 on the shared prefix
+// filename, and matching "025-documents-2.md" to WL-SPEC-77 on the shared prefix
 // would name the wrong document rather than none.
 func ParseNumberForm(base string) (NumberForm, bool) {
 	m := numberFormPattern.FindStringSubmatch(base)
@@ -88,7 +87,7 @@ func ParseNumberForm(base string) (NumberForm, bool) {
 }
 
 // AmbiguousRefError reports a ref that matched more than one document. Error
-// lists every candidate's citable id (025 §14.3), one per line, so a caller
+// lists every candidate's citable id (WL-SPEC-77 §7), one per line, so a caller
 // printing it as-is hands the reader refs they can cite straight back.
 type AmbiguousRefError struct {
 	Ref        string
@@ -106,7 +105,7 @@ func (e *AmbiguousRefError) Error() string {
 }
 
 // UnresolvedError reports a shorthand ref naming a project this checkout has
-// no way to reach (026 §4.2 tier 3). It is deliberately not a defect: nothing
+// no way to reach (WL-SPEC-78 §3 tier 3). It is deliberately not a defect: nothing
 // in the referring repository can repair it.
 type UnresolvedError struct {
 	Key string
@@ -117,8 +116,8 @@ func (e *UnresolvedError) Error() string {
 }
 
 // KindMismatchError reports a ref whose <TYPE> token names one document kind
-// (spec or adr) while the document it resolved to is the other (026 §4.2).
-// Doc names the target by its citable id (025 §14.3), the identity a reader
+// (spec or adr) while the document it resolved to is the other (WL-SPEC-78 §3).
+// Doc names the target by its citable id (WL-SPEC-77 §7), the identity a reader
 // cites back.
 type KindMismatchError struct {
 	Doc  string
@@ -139,7 +138,7 @@ func kindArticle(kind string) string {
 	return "a " + kind
 }
 
-// RuleRefText is the rule arm of 025 §14.3's <KEY>-<TYPE>-<n> grammar
+// RuleRefText is the rule arm of WL-SPEC-77 §7's <KEY>-<TYPE>-<n> grammar
 // (12-spec-refactoring-design-tree.md S20, S64; WL-SPEC-77 §4): a design
 // rule's citable ref. Every kind shares one counter, so any infix resolves
 // any rule by its number: REQ, RULE, and CL, the pre-S64 spelling that
@@ -233,7 +232,7 @@ func FindSectionRefs(text string) []SectionRef {
 }
 
 // ErrNoSpec is returned for the NO-SPEC sentinel ref, or its equivalent
-// <KEY>-SPEC-0 (026 §4.3): the ref explicitly means "no governing spec",
+// <KEY>-SPEC-0 (WL-SPEC-78 §3): the ref explicitly means "no governing spec",
 // never a document, so the tier table of §4.2 never runs.
 var ErrNoSpec = errors.New("no governing spec")
 

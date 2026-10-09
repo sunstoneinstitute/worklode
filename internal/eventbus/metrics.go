@@ -9,7 +9,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// Metrics holds the subscriber-loop instruments (spec 025 §15.7). A nil
+// Metrics holds the subscriber-loop instruments (WL-SPEC-77 §15). A nil
 // *Metrics records nothing, so a loop can run without them.
 type Metrics struct {
 	processed *prometheus.CounterVec   // worklode_events_processed_total{subscriber,type,outcome}
@@ -41,13 +41,13 @@ func NewMetrics(reg prometheus.Registerer, st *store.Store) *Metrics {
 }
 
 // event counts one handled event. outcome is one of applied, suppressed or
-// error (025 §15.7); the caller passes nothing else.
+// error (WL-SPEC-77 §15); the caller passes nothing else.
 func (m *Metrics) event(subscriber, typ, outcome string) {
 	if m == nil {
 		return
 	}
 	if !KnownType(typ) {
-		typ = "other" // 025 §15.7: bounded label — the log also carries dotted vendor types.
+		typ = "other" // WL-SPEC-77 §15: bounded label — the log also carries dotted vendor types.
 	}
 	m.processed.WithLabelValues(subscriber, typ, outcome).Inc()
 }

@@ -1,7 +1,7 @@
 package model
 
 // SecretCatalogEntry is the wire form of one org secrets-catalog entry
-// (spec 017): a symbolic name mapped to a 1Password reference plus policy.
+// (WL-SPEC-74): a symbolic name mapped to a 1Password reference plus policy.
 type SecretCatalogEntry struct {
 	Name        string `json:"name"`
 	Ref         string `json:"ref"`

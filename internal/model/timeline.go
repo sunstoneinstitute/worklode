@@ -28,7 +28,7 @@ type TimelineResponse struct {
 //	released    Repo, Tag
 //
 // One flat struct rather than a per-type struct behind a payload object
-// (ADR 036 §8): the entries are flat on the wire, seven of the fields are
+// (WL-SPEC-73 §3.2a): the entries are flat on the wire, seven of the fields are
 // shared by two or more types, and Go has no sum type that would buy a
 // consumer exhaustiveness checking for the nesting it would cost. A consumer
 // switches on Type either way — the difference is only whether the fields it
@@ -38,7 +38,7 @@ type TimelineResponse struct {
 // not a shape this API declares: LogChange writes {"field","old","new"} for a
 // field update, {"field","names"} for materialized secrets, and
 // {"field":"edge","op","type","from","to"} for AddEdge/RemoveEdge, so there
-// is no one struct to decode it into (ADR 036 §3).
+// is no one struct to decode it into (WL-SPEC-73 §3.2a).
 type TimelineEntry struct {
 	At   time.Time `json:"at"`
 	Type string    `json:"type"`

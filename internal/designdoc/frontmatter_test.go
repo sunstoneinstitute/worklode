@@ -75,7 +75,7 @@ Body.
 // TestParseFrontmatterWholeFile keeps one assertion against a whole file read
 // off disk rather than an inline source, so a frontmatter block the parser
 // cannot read still fails a test. It reads the `lode doc import` fixture
-// corpus: the backbone owns design documents now (025 §5), so there is no
+// corpus: the backbone owns design documents now (WL-SPEC-77 §3), so there is no
 // shipped docs/specs tree to pin against.
 func TestParseFrontmatterWholeFile(t *testing.T) {
 	src, err := os.ReadFile("../cmd/testdata/import-corpus/specs/001-forward-spec.md")
@@ -107,7 +107,7 @@ func TestParseFrontmatterWholeFile(t *testing.T) {
 	}
 }
 
-// TestParseFrontmatterBlocks covers the document-level ordering keys (025 §5,
+// TestParseFrontmatterBlocks covers the document-level ordering keys (WL-SPEC-77 §3,
 // §9.3): a plan orders after another plan with `blocks`, and spells the
 // inverse `blockedBy`. Both take the scalar-or-list latitude every reference
 // list takes.
@@ -288,7 +288,7 @@ func TestFrontmatterNoSpecRemainsBareWhenOtherFieldChanges(t *testing.T) {
 	}
 }
 
-// TestCoveredSectionsReadsRetiredSpelling pins 026 §5.1: `implements` still
+// TestCoveredSectionsReadsRetiredSpelling pins WL-SPEC-78 §4: `implements` still
 // parses so a branch written before the rename merges, and CoveredSections
 // reports it without the caller knowing which spelling was on disk.
 func TestCoveredSectionsReadsRetiredSpelling(t *testing.T) {
@@ -312,7 +312,7 @@ func TestCoveredSectionsReadsRetiredSpelling(t *testing.T) {
 	}
 }
 
-// TestFrontmatterDefers pins 026 §5.3: a plan's handoff of a section to a
+// TestFrontmatterDefers pins WL-SPEC-78 §4: a plan's handoff of a section to a
 // named owner is a list of {spec, to} entries, with no scalar shorthand — a
 // deferral without an owner is just an uncovered section, which needs no
 // syntax.
@@ -341,7 +341,7 @@ defers:
 }
 
 // TestFrontmatterDefersRejectsBareScalar: a deferral without an owner is just
-// an uncovered section (026 §5.3), so unlike `covers`, `defers` has no scalar
+// an uncovered section (WL-SPEC-78 §4), so unlike `covers`, `defers` has no scalar
 // shorthand — a bare reference must fail to decode rather than silently mean
 // something.
 func TestFrontmatterDefersRejectsBareScalar(t *testing.T) {

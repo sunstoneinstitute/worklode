@@ -197,7 +197,7 @@ func TestGaps(t *testing.T) {
 	}
 }
 
-// --- 025 §11.5: coverage, stale and orphaned claims -------------------------
+// --- WL-SPEC-77 §13: coverage, stale and orphaned claims -------------------------
 //
 // Nothing projects wl:implements yet, so these fixtures are hand-loaded: the
 // point is that the query text cannot rot silently before the deriver exists.
@@ -227,7 +227,7 @@ func uniqueSlug(prefix string) string {
 // plantCoverage writes one document's canonical graph, one snapshot graph per
 // version, and one observed claims graph, in the shapes graphproj emits
 // (DocTriples/SectionTriples/DocVersionTriples) plus the RDF-1.2 claim shape
-// of 006 §3. It returns the document and component IRIs to filter on.
+// of WL-SPEC-79 §4. It returns the document and component IRIs to filter on.
 func plantCoverage(t *testing.T, slug string, versions []int, secs []fixtureSection, cls []fixtureClaim) (docIRI, compIRI string) {
 	t.Helper()
 	base := graphtest.Endpoint(t)
@@ -344,7 +344,7 @@ func TestSectionCoverageQueries(t *testing.T) {
 	}
 }
 
-// TestStaleClaimComparesVersionsNumerically is 025 §4.1's footgun: v3 and v10
+// TestStaleClaimComparesVersionsNumerically is WL-SPEC-77 §5's footgun: v3 and v10
 // sort backwards as strings ("10" < "3") and as IRIs (".../v10" < ".../v3"),
 // so a claim pinned at v9 only resolves right if dcat:version is compared as a
 // number. String ordering makes both comparisons false and this set empty.
@@ -398,10 +398,10 @@ func sparqlProxy(t *testing.T, oxigraphBase string) *httptest.Server {
 
 // plantDelivery writes the delivered-coverage fixture beside plantCoverage's
 // claim: the deliverables comp delivers, in a declared graph, and the runtime
-// nodes witnessing them, in an observed one. Both arms of 006 §9's witness
+// nodes witnessing them, in an observed one. Both arms of WL-SPEC-79 §8's witness
 // table are planted, each with a deployed case and a not-deployed one.
 //
-// Deliverable and Effect nodes have no projector yet (006 §9, WL-PLAN-118),
+// Deliverable and Effect nodes have no projector yet (WL-SPEC-79 §8, WL-PLAN-118),
 // so they are planted by hand here exactly as plantCoverage plants claims.
 func plantDelivery(t *testing.T, slug, compIRI string) {
 	t.Helper()
@@ -444,7 +444,7 @@ func plantDelivery(t *testing.T, slug, compIRI string) {
 
 // TestDeliveredCoverage is §11.5 row 5: a claim is delivered where the
 // component's deliverable is deployed, and nowhere else. The fixture covers
-// both arms of 006 §9's witness table (an Artifact a Deployment prov:used,
+// both arms of WL-SPEC-79 §8's witness table (an Artifact a Deployment prov:used,
 // and an Effect whose Deployment is the target itself), each with a deployed
 // and a not-deployed case, and the Artifact arm in two environments.
 func TestDeliveredCoverage(t *testing.T) {

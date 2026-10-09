@@ -4,7 +4,7 @@ import "time"
 
 // ClaimResponse is the response body of POST /api/v1/tasks/{id}/claim.
 // StalePlan is set to the plan document's slug when the task was minted from
-// a plan that is now stale (025 §8.6) — a flag, never a refusal.
+// a plan that is now stale (WL-SPEC-77 §10) — a flag, never a refusal.
 type ClaimResponse struct {
 	Lease     Lease  `json:"lease"`
 	Branch    string `json:"branch"`
@@ -53,7 +53,7 @@ type ClaimNextPick struct {
 	Project  string              `json:"project"`
 	Lease    *ClaimNextPickLease `json:"lease,omitempty"`
 	// StalePlan is the slug of the plan this task was minted from when that
-	// plan is stale (025 §8.6): the task text may predate an amendment to the
+	// plan is stale (WL-SPEC-77 §10): the task text may predate an amendment to the
 	// spec it covers. A flag on the pick, never a refusal to claim it.
 	StalePlan string `json:"stale_plan,omitempty"`
 }
@@ -81,7 +81,7 @@ type ClaimInput struct {
 // /api/v1/tasks/claim-next). Worktree is required unless DryRun is set;
 // TTLSeconds <= 0 means the server default. Kind narrows the candidate set
 // the same way Project does, and takes a comma-separated list of kinds so a
-// loop can restrict itself to its own tier (025 §8.8): empty matches every
+// loop can restrict itself to its own tier (WL-SPEC-77 §10): empty matches every
 // kind.
 type ClaimNextInput struct {
 	Project     string `json:"project"`
@@ -93,7 +93,7 @@ type ClaimNextInput struct {
 }
 
 // ReplanInput is the request body for Replan (POST /api/v1/work/replan):
-// hand a stale plan out as a claimed design task (025 §8.6, S28). Plan is
+// hand a stale plan out as a claimed design task (WL-SPEC-77 §10, S28). Plan is
 // optional; empty picks the oldest stale plan in Project.
 type ReplanInput struct {
 	Project    string `json:"project"`

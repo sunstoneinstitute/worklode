@@ -25,7 +25,7 @@ type Ref struct {
 	Ref string
 	// Deferral is the defers entry this reference came from, non-nil only
 	// when Rel is "defers": that relation alone carries a named owner
-	// (026 §5.3). It is a copy, so writing through it does not reach the
+	// (WL-SPEC-78 §4). It is a copy, so writing through it does not reach the
 	// frontmatter.
 	Deferral *Deferral
 }
@@ -33,7 +33,7 @@ type Ref struct {
 // ActingRels is the acting-direction relation set: the spellings that assert a
 // relation rather than restate its inverse. A consumer recording one row per
 // fact keeps these and drops the rest — writing both directions would double
-// every edge and let the two disagree (025 §14).
+// every edge and let the two disagree (WL-SPEC-77 §7).
 // Plan ordering is `blockedBy`, declared by the later plan (WL-SPEC-77 §8).
 var ActingRels = []string{"covers", "defers", "requires", "blockedBy", "wasDerivedFrom"}
 
@@ -44,7 +44,7 @@ var StoredRels = slices.Clone(ActingRels)
 
 // InverseOf maps each inverse-only spelling — the ones StoredRels excludes
 // because they merely restate an acting relation the other end declares
-// (025 §14.2) — to the acting relation it restates.
+// (WL-SPEC-77 §7) — to the acting relation it restates.
 //
 // A consumer checking "did the other end actually declare this back" reads
 // this map once rather than special-casing keys (WL-375); an inverse-only
@@ -86,11 +86,11 @@ func (f *Frontmatter) Refs() []Ref {
 			out = append(out, Ref{SrcAnchor: anchor, Rel: rel, Ref: ref, Deferral: def})
 		}
 	}
-	// covers reads the retired `implements` spelling too (026 §5.1).
+	// covers reads the retired `implements` spelling too (WL-SPEC-78 §4).
 	for _, entry := range f.CoverageEntries() {
 		add("", "covers", entry.Spec, nil)
 	}
-	// defers carries its owner with the reference (026 §5.3).
+	// defers carries its owner with the reference (WL-SPEC-78 §4).
 	for _, entry := range f.Defers {
 		add("", "defers", entry.Spec, &entry)
 	}

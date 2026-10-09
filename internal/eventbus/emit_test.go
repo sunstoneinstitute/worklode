@@ -144,7 +144,7 @@ func TestValidatePayloadRejectsUnknownProperty(t *testing.T) {
 }
 
 // A missing required per-type property fails at emit time, not just an
-// unknown one (025 §15.3).
+// unknown one (WL-SPEC-77 §15).
 func TestValidatePayloadRejectsMissingProperty(t *testing.T) {
 	keys := []string{"prov:atTime", "prov:wasAssociatedWith", "wl:subject", "wl:fromStatus"}
 	err := validatePayload(TypeDocumentAccepted, keys)

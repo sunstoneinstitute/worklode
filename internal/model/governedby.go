@@ -1,7 +1,7 @@
 package model
 
 // TaskGovernance is one governing rule of a task
-// (docs/specs2/12-spec-refactoring-design-tree.md S2, S10): the rule, the
+// (WL-SPEC-77): the rule, the
 // version the link was made against, and the rule's current version so a
 // reader can see when the governing text has moved on.
 type TaskGovernance struct {
