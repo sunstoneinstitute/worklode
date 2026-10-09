@@ -1,5 +1,4 @@
--- The design clause is renamed rule (docs/specs2/12-spec-refactoring-design-tree.md
--- S64): tables, columns, indexes, constraints and the sequence follow, and the
+-- The design clause is renamed rule: tables, columns, indexes, constraints and the sequence follow, and the
 -- project counter kind 'CL' becomes 'RULE'. Event rows keep their old names.
 BEGIN;
 

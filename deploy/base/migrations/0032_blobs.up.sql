@@ -15,8 +15,8 @@ CREATE TABLE blobs (
 );
 
 -- The reference graph. A blobs row with no row here is garbage; GC is
--- exactly that query (WL-SPEC-78). When spec 014 adds
--- section_blobs, the GC predicate grows a second NOT EXISTS clause -- that
+-- exactly that query (WL-SPEC-78). When a table such as
+-- section_blobs is added, the GC predicate grows a second NOT EXISTS clause -- that
 -- is the one place a new reference table has to touch.
 --
 -- embedded is DERIVED: reconciled from the parsed task body on every write,

@@ -1,5 +1,4 @@
--- Clause lineage edges (docs/specs2/12-spec-refactoring-design-tree.md S22):
--- widen clause_edges to carry the two lineage edge types a refactor writes.
+-- Clause lineage edges: widen clause_edges to carry the two lineage edge types a refactor writes.
 -- type gains supersededBy (a refactor's merge/withdraw result, one writer:
 -- lode clause supersede) and wasDerivedFrom (an ordinary manual edge, e.g.
 -- from a split). source gains refactor, the provenance of a supersededBy
