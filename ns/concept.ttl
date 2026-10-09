@@ -60,8 +60,14 @@ wlc:requirement a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "re
     skos:definition "A plan builds it once; a gap until an accepted plan covers it." .
 wlc:invariant a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "invariant" ;
     skos:definition "Binds every task in its project and is never finished; never covered, never a gap." .
+wlc:catalogue a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "catalogue" ;
+    skos:definition "A set of entries with one shape, each answering the same question; a plan builds its entries, checked by membership." .
+wlc:definition a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "definition" ;
+    skos:definition "One term, one meaning, in one scope; read through a context closure, never covered, never a gap." .
+wlc:principle a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "principle" ;
+    skos:definition "A design stance other rules refine; checkable only through its refiners, never covered, never a gap." .
 wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "informative" ;
-    skos:definition "Rationale or context, nothing to build or obey; never covered, never a gap." .
+    skos:definition "Retired (WL-SPEC-77 §4): reads as a principle until the §19.7 migration reclassifies it; stays in the CHECK until then." .
 
 
 # ---------------------------------------------------------------------------

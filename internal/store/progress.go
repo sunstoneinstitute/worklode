@@ -204,7 +204,7 @@ func (s *Store) progressSections(ctx context.Context, projectID string, specs ma
 	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT sec.doc_id, sec.anchor, sec.heading, sec.depth,
-       coalesce((SELECT bool_and(r.kind = 'informative')
+       coalesce((SELECT bool_and(r.kind NOT IN ('requirement', 'catalogue'))
                    FROM doc_rules dr JOIN rules r ON r.id = dr.rule_id
                   WHERE dr.doc_id = sec.doc_id AND dr.anchor = sec.anchor), false)
   FROM doc_sections sec
@@ -220,7 +220,7 @@ SELECT sec.doc_id, sec.anchor, sec.heading, sec.depth,
 	for rows.Next() {
 		var docID int64
 		var sec progress.Section
-		if err := rows.Scan(&docID, &sec.Anchor, &sec.Heading, &sec.Depth, &sec.Informative); err != nil {
+		if err := rows.Scan(&docID, &sec.Anchor, &sec.Heading, &sec.Depth, &sec.NotOwed); err != nil {
 			return fmt.Errorf("scan progress section: %w", err)
 		}
 		if spec := specs[docID]; spec != nil {

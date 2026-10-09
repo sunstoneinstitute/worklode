@@ -13,7 +13,8 @@ type Rule struct {
 	// requirement, "WL-RULE-12" otherwise (WL-SPEC-77 §4).
 	Ref    string `json:"ref"`
 	Number int64  `json:"number"`
-	// Kind is requirement, invariant or informative (WL-SPEC-77 §4).
+	// Kind is requirement, catalogue, invariant, definition or principle
+	// (WL-SPEC-77 §4). informative is retired and reads as a principle.
 	Kind    string `json:"kind"`
 	Status  string `json:"status"` // draft | accepted | superseded | withdrawn
 	Version int    `json:"version"`
@@ -85,7 +86,7 @@ type EditRuleInput struct {
 type RuleMetaInput struct {
 	Owner *string   `json:"owner,omitempty"`
 	Tags  *[]string `json:"tags,omitempty"`
-	Kind  *string   `json:"kind,omitempty"` // requirement | invariant | informative
+	Kind  *string   `json:"kind,omitempty"` // requirement | catalogue | invariant | definition | principle
 }
 
 // SupersedeEntry is one line of a refactor map (S24, R7): an old rule and
