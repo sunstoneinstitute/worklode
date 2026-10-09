@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
@@ -16,14 +17,94 @@ import (
 func newRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rule",
-		Short: "Design rules: show or list them, edit one, list its versions, link or unlink it to another",
+		Short: "Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another",
 	}
-	cmd.AddCommand(newRuleShowCmd(), newRuleListCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd())
+	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd())
 	return cmd
 }
 
 func init() {
 	rootCmd.AddCommand(newRuleCmd())
+}
+
+// newRuleAddCmd is `lode rule add`: a rule in the current project, arranged
+// in no document, at draft version 1 and owned by the caller (WL-SPEC-77
+// §19.2).
+func newRuleAddCmd() *cobra.Command {
+	var scope scopeFlags
+	var heading, file, kind string
+	var tags []string
+	cmd := &cobra.Command{
+		Use:   "add --heading <text> --file <body>",
+		Short: "Add a rule arranged in no document, as a draft owned by you",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(heading) == "" {
+				return errors.New("no heading: pass --heading <text>")
+			}
+			body, err := readBodyFile(cmd, file)
+			if err != nil {
+				return err
+			}
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			if sc.Project == "" {
+				return errNoProject
+			}
+			rule, raw, err := c.AddRule(cmd.Context(), model.AddRuleInput{
+				Project: sc.Project, Heading: strings.TrimSpace(heading), Body: body, Tags: tags, Kind: kind,
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.RuleRender(cmd.OutOrStdout(), rule)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&heading, "heading", "", "the rule's heading (required)")
+	cmd.Flags().StringVar(&file, "file", "", `file holding the rule's body ("-" for stdin) (required)`)
+	cmd.Flags().StringArrayVar(&tags, "tag", nil, "a tag for the rule; repeat for more")
+	cmd.Flags().StringVar(&kind, "kind", designdoc.RuleKindRequirement, "the rule's kind: "+strings.Join(designdoc.RuleKinds, ", "))
+	completeFlagValues(cmd, "kind", designdoc.RuleKinds)
+	addScopeFlags(cmd, &scope, "project id")
+	return cmd
+}
+
+// newRuleAcceptCmd is `lode rule accept <ref>`: the owner accepts the rule's
+// newest draft version.
+func newRuleAcceptCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:               "accept <ref>",
+		Short:             "Accept a rule's newest draft version (owner only)",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: ruleRefAt(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			rule, raw, err := c.AcceptRule(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.RuleRender(cmd.OutOrStdout(), rule)
+			return nil
+		},
+	}
 }
 
 func newRuleShowCmd() *cobra.Command {

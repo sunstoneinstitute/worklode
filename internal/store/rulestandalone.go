@@ -12,13 +12,6 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// standaloneRuleKinds are the kinds a new rule may take (WL-SPEC-77 §4);
-// informative is retired and only still resolves on read.
-var standaloneRuleKinds = []string{
-	designdoc.RuleKindRequirement, designdoc.RuleKindCatalogue, designdoc.RuleKindInvariant,
-	designdoc.RuleKindDefinition, designdoc.RuleKindPrinciple,
-}
-
 // AddRule creates a rule arranged in no document, at draft version 1,
 // owned by actor and numbered from the project's RULE counter (WL-SPEC-77
 // §19.2). Its references edges are derived from its text as on any version
@@ -32,8 +25,8 @@ func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string
 	if in.Kind == "" {
 		in.Kind = designdoc.RuleKindRequirement
 	}
-	if !slices.Contains(standaloneRuleKinds, in.Kind) {
-		return nil, fmt.Errorf("rule kind %q: must be one of %s: %w", in.Kind, strings.Join(standaloneRuleKinds, ", "), ErrInvalidInput)
+	if !slices.Contains(designdoc.RuleKinds, in.Kind) {
+		return nil, fmt.Errorf("rule kind %q: must be one of %s: %w", in.Kind, strings.Join(designdoc.RuleKinds, ", "), ErrInvalidInput)
 	}
 	extID, err := randomExternalID()
 	if err != nil {

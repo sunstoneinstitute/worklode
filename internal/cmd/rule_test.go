@@ -310,3 +310,48 @@ func TestParseSupersedeMap(t *testing.T) {
 		t.Fatal("empty left side did not error")
 	}
 }
+
+// TestRuleAddAndAcceptCommands: add posts the heading, body, tags, kind and
+// resolved project; accept posts to the rule's accept route.
+func TestRuleAddAndAcceptCommands(t *testing.T) {
+	var posted model.AddRuleInput
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		if r.URL.Path == "/api/v1/rules" {
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Fatalf("decode POST body: %v", err)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(model.Rule{Ref: "WL-RULE-7", Heading: "H", Kind: "invariant", Status: "draft", Version: 1})
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	file := filepath.Join(t.TempDir(), "body.md")
+	if err := os.WriteFile(file, []byte("Body.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runLode(t, "rule", "add", "--heading", "H", "--file", file, "--tag", "a", "--tag", "b", "--kind", "invariant", "--project", "cow")
+	if err != nil {
+		t.Fatalf("lode rule add: %v\noutput: %s", err, out)
+	}
+	want := model.AddRuleInput{Project: "cow", Heading: "H", Body: "Body.\n", Tags: []string{"a", "b"}, Kind: "invariant"}
+	if !reflect.DeepEqual(posted, want) {
+		t.Errorf("posted = %+v, want %+v", posted, want)
+	}
+	if !strings.Contains(out, "WL-RULE-7") {
+		t.Errorf("output = %q, want the rule ref", out)
+	}
+	if _, err := runLode(t, "rule", "accept", "WL-RULE-7"); err != nil {
+		t.Fatal(err)
+	}
+	if last := paths[len(paths)-1]; last != "POST /api/v1/rules/WL-RULE-7/accept" {
+		t.Errorf("accept called %s", last)
+	}
+	if _, err := runLode(t, "rule", "add", "--file", file, "--project", "cow"); err == nil || err.Error() != "no heading: pass --heading <text>" {
+		t.Errorf("add without heading: err = %v", err)
+	}
+}
