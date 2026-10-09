@@ -134,7 +134,11 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	// what distinguishes it from a plan-minted or a manually added one.
 	// The external id identifies the link, so a pull request pushed to twenty
 	// times leaves one task.governed row behind.
-	externalID := fmt.Sprintf("spec-reconciler-%s-%s", taskID, decl.String())
+	// The qualifier ("amended") does not change which rule is linked, so it
+	// stays out of the key.
+	linkDecl := decl
+	linkDecl.Qualifier = ""
+	externalID := fmt.Sprintf("spec-reconciler-%s-%s", taskID, linkDecl.String())
 	_, inserted, err := s.st.RecordEvent(ctx, watcherEventSource, externalID, "task.governed", notePayload,
 		func(tx *sql.Tx, _ int64) error {
 			planned, err := store.HasPlanGovernance(tx, taskID)
