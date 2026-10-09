@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // PullRequest is one GitHub pull request, correlated to at most one task.
@@ -438,16 +440,17 @@ func SetPRQueued(tx *sql.Tx, repo string, number int64, at *time.Time) error {
 	return nil
 }
 
-// UpsertBranchRules records the merge-queue rule last observed for a
-// repo/branch pair (WL-SPEC-66 §6.3), overwriting whatever was known before.
-func UpsertBranchRules(tx *sql.Tx, repo, branch string, mergeQueue bool, at time.Time) error {
+// UpsertBranchRules records the rules last observed for a repo/branch pair
+// (WL-SPEC-66 §6.3, WL-SPEC-72 §3), overwriting whatever was known before.
+func UpsertBranchRules(tx *sql.Tx, repo, branch string, mergeQueue, pullRequest bool, at time.Time) error {
 	_, err := tx.Exec(
-		`INSERT INTO repo_branch_rules (repo, branch, merge_queue, checked_at)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO repo_branch_rules (repo, branch, merge_queue, pull_request, checked_at)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (repo, branch) DO UPDATE SET
 		   merge_queue = excluded.merge_queue,
+		   pull_request = excluded.pull_request,
 		   checked_at = excluded.checked_at`,
-		repo, branch, mergeQueue, at.UTC(),
+		repo, branch, mergeQueue, pullRequest, at.UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert branch rules %s@%s: %w", repo, branch, err)
@@ -455,19 +458,26 @@ func UpsertBranchRules(tx *sql.Tx, repo, branch string, mergeQueue bool, at time
 	return nil
 }
 
-// BranchRules reports the merge-queue rule last observed for repo/branch.
-// known is false when no rule has been recorded yet, in which case
-// mergeQueue is meaningless.
-func (s *Store) BranchRules(ctx context.Context, repo, branch string) (mergeQueue bool, known bool, err error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT merge_queue FROM repo_branch_rules WHERE repo = $1 AND branch = $2`, repo, branch)
-	if err := row.Scan(&mergeQueue); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, false, nil
-		}
-		return false, false, fmt.Errorf("branch rules %s@%s: %w", repo, branch, err)
+// BranchRules returns the rules last observed for repo. The refresh loop
+// only writes a repo's default branch (see BranchRulesForRepos), so the row
+// is that branch's. ErrNotFound when nothing has been observed.
+func (s *Store) BranchRules(ctx context.Context, repo string) (model.RepoBranchRules, error) {
+	r := model.RepoBranchRules{Repo: repo}
+	var pr sql.NullBool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT branch, merge_queue, pull_request, checked_at FROM repo_branch_rules
+		 WHERE repo = $1 ORDER BY checked_at DESC LIMIT 1`, repo).
+		Scan(&r.Branch, &r.MergeQueue, &pr, &r.CheckedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return r, ErrNotFound
 	}
-	return mergeQueue, true, nil
+	if err != nil {
+		return r, fmt.Errorf("branch rules %s: %w", repo, err)
+	}
+	if pr.Valid {
+		r.PullRequest = &pr.Bool
+	}
+	return r, nil
 }
 
 // BranchRulesForRepos is the bulk form of BranchRules, keyed by repo only: the
