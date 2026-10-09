@@ -58,7 +58,7 @@ type Plan struct {
 	Doc      int64
 	Ref      string
 	Title    string
-	Status   string // draft | accepted | superseded
+	Status   string // draft | accepted | stale | withdrawn | superseded | spent
 	Owner    string // §3.2: the only actor who may accept it
 	Covers   []Cover
 	Requires []string
@@ -178,6 +178,8 @@ type planInfo struct {
 // Derive turns one project's facts into model.ProjectProgress, holding every
 // rule of §1.1 to §1.3.
 func Derive(in Input) model.ProjectProgress {
+	// A withdrawn plan covers nothing (WL-SPEC-85 §2); stale counts as accepted.
+	in.Plans = slices.DeleteFunc(slices.Clone(in.Plans), func(p Plan) bool { return p.Status == "withdrawn" })
 	plans := make(map[int64]planInfo, len(in.Plans))
 	for _, p := range in.Plans {
 		pi := planInfo{Plan: p, State: PlanState(p.Status, p.Tasks)}
