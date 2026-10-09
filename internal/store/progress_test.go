@@ -630,7 +630,7 @@ func TestProjectProgressInformativeSection(t *testing.T) {
 	}
 	got := map[string]bool{}
 	for _, sec := range in.Specs[0].Sections {
-		got[sec.Anchor] = sec.Informative
+		got[sec.Anchor] = sec.NotOwed
 	}
 	if want := map[string]bool{"sec-0": false, "sec-1": true, "sec-2": false}; !reflect.DeepEqual(got, want) {
 		t.Errorf("informative = %v, want %v", got, want)

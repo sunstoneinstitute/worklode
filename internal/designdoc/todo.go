@@ -312,8 +312,8 @@ func (w *todoWalk) emitDoc(docPath string) {
 	}
 	var unplanned []string
 	for _, sec := range d.Sections {
-		// Only a requirement is owed a plan (WL-SPEC-78 §1.7).
-		if sec.Kind != "" && sec.Kind != RuleKindRequirement {
+		// Only a covered kind is owed a plan (WL-SPEC-78 §1.7).
+		if sec.Kind != "" && !RuleKindCovered(sec.Kind) {
 			continue
 		}
 		if w.emitSection(docPath, sec) {

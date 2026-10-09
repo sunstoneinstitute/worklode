@@ -10,8 +10,9 @@ import (
 // subclassPattern finds wl:Event subclasses declared in ns/ontology.ttl, e.g.:
 //
 //	wl:DocumentSubmitted a owl:Class ;
+//	    skos:definition "document submission" ;
 //	    rdfs:subClassOf wl:Event ;
-var subclassPattern = regexp.MustCompile(`(?m)^(wl:\w+) a owl:Class ;\n\s+rdfs:subClassOf wl:Event\b`)
+var subclassPattern = regexp.MustCompile(`(?m)^(wl:\w+) a owl:Class ;\n(?:\s+skos:definition "[^"]*" ;\n)?\s+rdfs:subClassOf wl:Event\b`)
 
 // TestVocabMatchesOntology guards against vocab.go drifting from
 // ns/ontology.ttl: every wl:Event subclass declared there must be a key in

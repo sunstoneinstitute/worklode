@@ -34,8 +34,8 @@ func coversRules(tx *sql.Tx, project, ref string) (rules []int64, named bool, er
 		if err != nil {
 			return nil, false, fmt.Errorf("resolve covers %s: %w", ref, err)
 		}
-		if kind != designdoc.RuleKindRequirement {
-			return nil, true, fmt.Errorf("covers %s: %s is an %s rule, and a plan covers only requirements (WL-SPEC-78 §4.1): %w",
+		if !designdoc.RuleKindCovered(kind) {
+			return nil, true, fmt.Errorf("covers %s: %s is a %s rule, and a plan covers only requirements and catalogues (WL-SPEC-78 §4.1): %w",
 				ref, designdoc.FormatRuleRef(r.Key, r.Number, kind), kind, ErrInvalidInput)
 		}
 		return []int64{id}, true, nil
@@ -77,7 +77,7 @@ func coversRules(tx *sql.Tx, project, ref string) (rules []int64, named bool, er
 		return nil, false, err
 	}
 	for _, x := range all {
-		if x.kind == designdoc.RuleKindRequirement {
+		if designdoc.RuleKindCovered(x.kind) {
 			rules = append(rules, x.id)
 		}
 	}

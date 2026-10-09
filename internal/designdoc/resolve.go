@@ -145,16 +145,31 @@ func kindArticle(kind string) string {
 // accepted document text still carries. FormatRuleRef writes the kind's own.
 const RuleRefText = `([A-Z][A-Z0-9]{1,9})-(?:REQ|RULE|CL)-(\d+)`
 
-// RuleKindRequirement is the rule kind a plan covers and the store mints by
-// default (WL-SPEC-77 §4). The kinds are ns.Schemes["RuleKind"].
-const RuleKindRequirement = "requirement"
+// The rule kinds (WL-SPEC-77 §4), ns.Schemes["RuleKind"]. The store mints a
+// requirement by default. RuleKindInformative is retired and reads as a
+// principle until its rows are reclassified (§19.7).
+const (
+	RuleKindRequirement = "requirement"
+	RuleKindCatalogue   = "catalogue"
+	RuleKindInvariant   = "invariant"
+	RuleKindDefinition  = "definition"
+	RuleKindPrinciple   = "principle"
+	RuleKindInformative = "informative"
+)
+
+// RuleKindCovered reports whether a plan covers rules of this kind: a
+// requirement or a catalogue. Every other kind is never covered and never a
+// gap (WL-SPEC-77 §4).
+func RuleKindCovered(kind string) bool {
+	return kind == RuleKindRequirement || kind == RuleKindCatalogue
+}
 
 // FormatRuleRef prints a rule's ref with the infix of its kind: REQ for a
-// requirement, RULE for any other kind (WL-SPEC-77 §4). Every printed rule
-// ref goes through here, or through the store's SQL mirror of it.
+// covered kind, RULE for any other (WL-SPEC-77 §4). Every printed rule ref
+// goes through here, or through the store's SQL mirror of it.
 func FormatRuleRef(key string, number int64, kind string) string {
 	infix := "RULE"
-	if kind == RuleKindRequirement {
+	if RuleKindCovered(kind) {
 		infix = "REQ"
 	}
 	return fmt.Sprintf("%s-%s-%d", key, infix, number)

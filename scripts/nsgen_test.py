@@ -223,6 +223,18 @@ class TestEdges(unittest.TestCase):
         edges = nsgen.extract_edges(ONTOLOGY_TTL.read_text(encoding="utf-8"))
         self.assertIn(("task_edges", "dependsOn", WL + "dependsOn", WL + "blocks", False), edges)
 
+    def test_classes_and_edges_have_definitions(self):
+        """Every class and object property, minted or reused, carries a
+        skos:definition: the phrase the UI joins into "<subject> <verb> <object>"
+        (ns/ontology.ttl header)."""
+        triples = nsgen.Parser(ONTOLOGY_TTL.read_text(encoding="utf-8")).parse()
+        defined = {s for s, p, _ in triples if p == nsgen.SKOS + "definition"}
+        need = {s for s, p, o in triples
+                if (p == nsgen.RDF_TYPE and o in (nsgen.OWL + "Class", nsgen.OWL + "ObjectProperty"))
+                or p == WL + "edgeOrigin"}
+        need = {s for s in need if not s.startswith("_:")}  # anonymous union classes
+        self.assertEqual(sorted(need - defined), [])
+
     def assertRaisesTurtle(self, body, needle):
         with self.assertRaises(nsgen.TurtleError) as cm:
             nsgen.extract_edges(EDGE_PREAMBLE + body)

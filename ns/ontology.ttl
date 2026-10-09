@@ -14,6 +14,12 @@
 # literals and leave slashes unescaped in prefixed names (wlid:doc/spec-006).
 # SKOS concept schemes live in the sibling concept.ttl; SHACL shapes
 # (wl-shapes.ttl) are specified but not written.
+#
+# skos:definition is the readable form of a term, kept short so a stored edge
+# can be read as a sentence: on a class it is a lowercase noun phrase
+# ("task"), on an edge property a third-person verb phrase that joins subject
+# to object ("depends on"), so <class> <ref> + <definition> + <class> <ref>
+# reads "task WL-7 depends on task WL-9". rdfs:comment keeps the rationale.
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -45,11 +51,13 @@
 # ---------------------------------------------------------------------------
 
 wl:Component a owl:Class ;
+    skos:definition "component" ;
     wl:layer wlc:intent ;
     rdfs:comment """A software component — the atomic unit of the platform graph. Repo/project
         (doap:Project) is a coarser grouping via dct:hasPart.""" .
 
 wl:DesignDoc a owl:Class ;
+    skos:definition "design document" ;
     rdfs:subClassOf foaf:Document , prov:Entity ;
     wl:layer wlc:intent ;
     rdfs:comment """A statement of intent that stays true after implementation: what drift is
@@ -58,10 +66,12 @@ wl:DesignDoc a owl:Class ;
         prov:wasAttributedTo on documents, and all three have prov:Entity as their domain.""" .
 
 wl:Spec a owl:Class ;
+    skos:definition "spec" ;
     rdfs:subClassOf wl:DesignDoc ;
     wl:layer wlc:intent .
 
 wl:Section a owl:Class ;
+    skos:definition "section" ;
     rdfs:subClassOf foaf:Document ;
     wl:layer wlc:intent ;
     rdfs:comment """An addressable, individually linkable part of a DesignDoc. Stable for the life
@@ -70,6 +80,7 @@ wl:Section a owl:Class ;
         the document source (WL-SPEC-77).""" .
 
 wl:Plan a owl:Class ;
+    skos:definition "plan" ;
     rdfs:subClassOf foaf:Document , prov:Entity ;
     wl:layer wlc:execution ;
     rdfs:comment """An executable document: a bundle of task definitions with instructions
@@ -81,12 +92,14 @@ wl:Plan a owl:Class ;
         same reasoning, mirrored here by WL-SPEC-77""" .
 
 wl:Deliverable a owl:Class ;
+    skos:definition "deliverable" ;
     wl:layer wlc:intent ;
     rdfs:comment """A declared definition-of-done: the vertical join point where a Spec's ambition
         meets a running system. Declares its targets as dct:relation to an Artifact and an
         Environment, and its delivering Component via wl:deliveredBy (WL-SPEC-79).""" .
 
 wl:Effect a owl:Class ;
+    skos:definition "effect" ;
     rdfs:subClassOf wl:Deliverable ;
     wl:layer wlc:intent ;
     rdfs:comment """A deliverable whose definition-of-done is a state of an existing system, not the
@@ -98,6 +111,7 @@ wl:Effect a owl:Class ;
         rather than an attribute because the edges differ, not just the coordinates.""" .
 
 wl:AcceptedDeviation a owl:Class ;
+    skos:definition "accepted deviation" ;
     rdfs:subClassOf prov:Entity ;
     wl:layer wlc:intent ;
     rdfs:comment """A tolerated architectural deviation that drift queries suppress. Names the
@@ -112,6 +126,7 @@ wl:AcceptedDeviation a owl:Class ;
 # ---------------------------------------------------------------------------
 
 wl:Task a owl:Class ;
+    skos:definition "task" ;
     rdfs:subClassOf prov:Activity ;
     wl:layer wlc:execution ;
     rdfs:comment """A unit of work, projected read-only from the backbone. prov:Activity so a
@@ -124,12 +139,14 @@ wl:Task a owl:Class ;
         authored Task inconsistent.""" .
 
 wl:Project a owl:Class ;
+    skos:definition "project" ;
     wl:layer wlc:execution ;
     rdfs:comment """The umbrella for all work in a set of repositories — the backbone's projects
         table, verbatim. Unbounded. NB: doap:Project is a single repository; a wl:Project owns
         1..n of them (project_repos). Projection named graphs are anchored per Project.""" .
 
 wl:Issue a owl:Class ;
+    skos:definition "issue" ;
     rdfs:subClassOf prov:Entity ;
     wl:layer wlc:execution ;
     rdfs:comment """A tracker issue in a hosting provider, projected from VCS ingest and mirrored to
@@ -140,6 +157,7 @@ wl:Issue a owl:Class ;
         asserts prov:wasAttributedTo for the author.""" .
 
 wl:PullRequest a owl:Class ;
+    skos:definition "pull request" ;
     rdfs:subClassOf prov:Entity ;
     wl:layer wlc:execution ;
     rdfs:comment """A proposed change against a repository, projected from VCS ingest. Joins its
@@ -147,6 +165,7 @@ wl:PullRequest a owl:Class ;
         prov:Entity for the same reasons as wl:Issue.""" .
 
 wl:Skill a owl:Class ;
+    skos:definition "skill" ;
     wl:layer wlc:execution ;
     rdfs:comment """One org-wide agent skill: identity only — name, description and source-repo
         IRI — so a design document can pin it with wl:recommendsSkill. Content, versions and
@@ -155,6 +174,7 @@ wl:Skill a owl:Class ;
         that names it is the declared half (WL-SPEC-81). IRI is wlid:skill/<name>.""" .
 
 wl:Event a owl:Class ;
+    skos:definition "event" ;
     rdfs:subClassOf prov:Activity ;
     wl:layer wlc:execution ;
     rdfs:comment """A domain event in the backbone's append-only log (WL-SPEC-77): a state
@@ -164,12 +184,14 @@ wl:Event a owl:Class ;
         log, two populations).""" .
 
 wl:DocumentSubmitted a owl:Class ;
+    skos:definition "document submission" ;
     rdfs:subClassOf wl:Event ;
     wl:layer wlc:execution ;
     rdfs:comment """A draft document was handed to review (lode doc submit, WL-SPEC-77). Changes no
         document column: the open review task is 'under review' (WL-SPEC-77).""" .
 
 wl:DocumentAccepted a owl:Class ;
+    skos:definition "document acceptance" ;
     rdfs:subClassOf wl:Event ;
     wl:layer wlc:execution ;
     rdfs:comment """A document moved draft → accepted (WL-SPEC-77). Carries the status transition as
@@ -183,6 +205,7 @@ wl:DocumentAccepted a owl:Class ;
 # ---------------------------------------------------------------------------
 
 wl:Artifact a owl:Class ;
+    skos:definition "artifact" ;
     rdfs:subClassOf prov:Entity ;
     wl:layer wlc:runtime ;
     rdfs:seeAlso <https://spdx.org/rdf/3.0.1/terms/Software/Package> ;
@@ -191,6 +214,7 @@ wl:Artifact a owl:Class ;
         kinds differ in coordinates, not in the edges they carry.""" .
 
 wl:Build a owl:Class ;
+    skos:definition "build" ;
     rdfs:subClassOf prov:Activity ;
     wl:layer wlc:runtime ;
     rdfs:seeAlso <https://spdx.org/rdf/3.0.1/terms/Build/Build> ;
@@ -199,6 +223,7 @@ wl:Build a owl:Class ;
         later breaking change.""" .
 
 wl:Deployment a owl:Class ;
+    skos:definition "deployment" ;
     rdfs:subClassOf prov:Activity ;
     wl:layer wlc:runtime ;
     rdfs:comment """The rollout of an Artifact OR a Commit to one target in one Environment — a Flux
@@ -208,18 +233,21 @@ wl:Deployment a owl:Class ;
         target kind, target name); rollout history is v2.""" .
 
 wl:Environment a owl:Class ;
+    skos:definition "environment" ;
     wl:layer wlc:runtime ;
     rdfs:comment """A deployment stage. Deliberately parentless: no surveyed vocabulary models a
         deployment stage, and prov:Location is spatial in intent. The instance set is closed to dev
         and prod by SHACL, matching the normalisation the delivery handlers already enforce.""" .
 
 wl:Commit a owl:Class ;
+    skos:definition "commit" ;
     rdfs:subClassOf prov:Entity ;
     wl:layer wlc:runtime ;
     rdfs:comment """One commit on a repository's default branch. Promoted from v2 (WL-SPEC-79) because
         delivery resolution is defined in terms of commit coverage (WL-SPEC-79).""" .
 
 wl:RuntimeEvent a owl:Class ;
+    skos:definition "runtime event" ;
     rdfs:subClassOf prov:Activity ;
     wl:layer wlc:runtime ;
     rdfs:comment """An observed runtime incident affecting a deployed Artifact — a crashloop, an OOM
@@ -244,12 +272,14 @@ wl:RuntimeEvent a owl:Class ;
 # ---------------------------------------------------------------------------
 
 wl:governs a owl:ObjectProperty ;
+    skos:definition "governs the architecture of" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:DesignDoc ;
     rdfs:range wl:Component ;
     rdfs:comment "This design doc governs the architecture of that component." .
 
 wl:deliveredBy a owl:ObjectProperty ;
+    skos:definition "is delivered by" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Deliverable ;
     rdfs:range wl:Component ;
@@ -269,6 +299,7 @@ wl:artifact a owl:DatatypeProperty ;
         nothing (WL-SPEC-75).""" .
 
 wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "has status" ;
     wl:layer wlc:intent ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan wl:Section ) ] ;
     rdfs:range skos:Concept ;
@@ -277,6 +308,7 @@ wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
         Implementation is not a status — it is a coverage query over wl:implements (WL-SPEC-77).""" .
 
 wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "was last revised in" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Section ;
     rdfs:range wl:DesignDoc ;
@@ -289,12 +321,14 @@ wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;
         ?sec wl:lastRevisedIn/dcat:version ?n with ?n > 3.""" .
 
 wl:sanctionedBy a owl:ObjectProperty ;
+    skos:definition "is sanctioned by" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:AcceptedDeviation ;
     rdfs:range wl:DesignDoc ;
     rdfs:comment "The DesignDoc/ADR that authorises this accepted deviation." .
 
 wl:recommendsSkill a owl:ObjectProperty ;
+    skos:definition "recommends the skill" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:DesignDoc ;
     rdfs:range wl:Skill ;
@@ -304,6 +338,7 @@ wl:recommendsSkill a owl:ObjectProperty ;
         two.""" .
 
 wl:reviewer a owl:ObjectProperty ;
+    skos:definition "is reviewed by" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Component ;
     rdfs:range foaf:Agent ;
@@ -315,6 +350,7 @@ wl:reviewer a owl:ObjectProperty ;
 # ---------------------------------------------------------------------------
 
 wl:implements a owl:ObjectProperty ;
+    skos:definition "implements" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "doc_edges.implements" ;
     wl:layer wlc:execution ;
@@ -330,6 +366,7 @@ wl:implements a owl:ObjectProperty ;
         no wl:fullyImplements is minted.""" .
 
 wl:pinnedVersion a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "was validated against" ;
     wl:layer wlc:execution ;
     rdfs:range wl:DesignDoc ;
     rdfs:comment """The document version a wl:implements claim was validated against — the
@@ -347,6 +384,7 @@ wl:pinnedVersion a owl:ObjectProperty, owl:FunctionalProperty ;
         declaration itself is plain 1.1, and only emitted claim data uses the 1.2 syntax.""" .
 
 wl:produces a owl:ObjectProperty ;
+    skos:definition "produces" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Deliverable ;
@@ -360,6 +398,7 @@ wl:produces a owl:ObjectProperty ;
         wl:mirrors for the issue, the PR's own task binding for the PR.""" .
 
 wl:covers a owl:ObjectProperty ;
+    skos:definition "covers" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "doc_edges.covers" ;
     wl:layer wlc:execution ;
@@ -374,24 +413,30 @@ wl:covers a owl:ObjectProperty ;
 # --- Rules ---
 
 wl:Rule a owl:Class ;
+    skos:definition "rule" ;
     wl:layer wlc:intent ;
     rdfs:subClassOf wl:Section ;
     rdfs:comment "The lowest heading unit of a spec or ADR: the thing that carries an identity (WL-REQ-<n> or WL-RULE-<n>), a kind, a status, versions and edges (S8 to S11)." .
 
 wl:ruleKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "is of kind" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Rule ;
     rdfs:range skos:Concept ;
-    rdfs:comment """The rule's kind, from wlc:RuleKind: wlc:requirement, wlc:invariant or
-        wlc:informative (WL-SPEC-77). Only a requirement is covered by a plan; an invariant governs
-        every task in its project.""" .
+    rdfs:comment """The rule's kind, from wlc:RuleKind: wlc:requirement, wlc:catalogue,
+        wlc:invariant, wlc:definition or wlc:principle (WL-SPEC-77 §4). A plan covers
+        requirements and catalogues; an invariant governs every task in its project; a
+        definition and a principle are read through a rule's context closure (§4c).
+        wlc:informative is retired and reads as a principle until the migration (§19.7).""" .
 
 wl:Arrangement a owl:Class ;
+    skos:definition "arrangement" ;
     wl:layer wlc:intent ;
     rdfs:subClassOf wl:DesignDoc ;
     rdfs:comment "A document as an ordered selection of rules; it owns no text of its own (WL-SPEC-77)." .
 
 wl:arranges a owl:ObjectProperty ;
+    skos:definition "arranges" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Arrangement ;
     rdfs:range wl:Rule ;
@@ -404,14 +449,45 @@ wl:position a owl:DatatypeProperty ;
     rdfs:comment "1-based position of the rule in its arrangement." .
 
 wl:refines a owl:ObjectProperty ;
+    skos:definition "refines" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.refines" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
-    rdfs:comment "Subject narrows or details the object (S12)." .
+    rdfs:comment """Subject narrows the object, a principle or a wider rule. In the subject's
+        context closure (WL-SPEC-77 §4c).""" .
+
+wl:refinedBy a owl:ObjectProperty ;
+    skos:definition "is refined by" ;
+    wl:edgeOrigin wlc:inferred ;
+    wl:layer wlc:intent ;
+    owl:inverseOf wl:refines ;
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
+    rdfs:comment "Inferred from wl:refines, never stored (WL-SPEC-77 §8.1)." .
+
+wl:needs a owl:ObjectProperty ;
+    skos:definition "needs" ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "rule_edges.needs" ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
+    rdfs:comment """Subject cannot be applied without a fact or term the object states, and does
+        not narrow the object. In the subject's context closure (WL-SPEC-77 §4c).""" .
+
+wl:neededBy a owl:ObjectProperty ;
+    skos:definition "is needed by" ;
+    wl:edgeOrigin wlc:inferred ;
+    wl:layer wlc:intent ;
+    owl:inverseOf wl:needs ;
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
+    rdfs:comment "Inferred from wl:needs, never stored (WL-SPEC-77 §8.1)." .
 
 wl:constrains a owl:ObjectProperty ;
+    skos:definition "constrains" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.constrains" ;
     wl:layer wlc:intent ;
@@ -420,22 +496,37 @@ wl:constrains a owl:ObjectProperty ;
     rdfs:comment "Subject must hold whenever the object does; a task implementing the object must also satisfy the subject (S12)." .
 
 wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ;
+    skos:definition "conflicts with" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.conflictsWith" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
-    rdfs:comment "A recorded tension an architect chose to leave in place (S12)." .
+    rdfs:comment """Two rules state one fact with different values. A finding against the spec
+        until the rule that does not own the fact is fixed (WL-SPEC-77 §4c).""" .
 
 wl:references a owl:ObjectProperty ;
+    skos:definition "references" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.references" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
-    rdfs:comment "A textual pointer from the rule to another rule, derived from the rule text on every version and replaced with it (S26)." .
+    rdfs:comment """A textual pointer from the rule to another rule, derived from the rule text on
+        every version and replaced with it (S26), or written by hand for context that helps a
+        reader and is not needed to apply the rule. Outside the context closure (WL-SPEC-77 §4c).""" .
+
+wl:referencedBy a owl:ObjectProperty ;
+    skos:definition "is referenced by" ;
+    wl:edgeOrigin wlc:inferred ;
+    wl:layer wlc:intent ;
+    owl:inverseOf wl:references ;
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
+    rdfs:comment "Inferred from wl:references, never stored (WL-SPEC-77 §8.1)." .
 
 wl:defers a owl:ObjectProperty ;
+    skos:definition "defers" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "doc_edges.defers" ;
     wl:layer wlc:execution ;
@@ -448,6 +539,7 @@ wl:defers a owl:ObjectProperty ;
         doc_edges 'defers' row with the owner on the row (owner_doc or owner_external).""" .
 
 wl:amends a owl:ObjectProperty ;
+    skos:definition "amends" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.amends" ;
     wl:layer wlc:intent ;
@@ -458,6 +550,7 @@ wl:amends a owl:ObjectProperty ;
         `lode rule link A --amends B`. Documents do not amend each other.""" .
 
 wl:Deferral a owl:Class ;
+    skos:definition "deferral" ;
     wl:layer wlc:execution ;
     rdfs:comment """A qualified wl:defers: which document owns the handed-off Section. Reified
         beside the direct edge, never in place of it. The node names both ends itself
@@ -466,16 +559,19 @@ wl:Deferral a owl:Class ;
         sentence (WL-SPEC-78).""" .
 
 wl:deferringPlan a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "was declared by" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Deferral ;
     rdfs:range wl:Plan .
 
 wl:deferredSection a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "hands off" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Deferral ;
     rdfs:range wl:Section .
 
 wl:deferredTo a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "hands off to" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Deferral ;
     rdfs:range [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan ) ] ;
@@ -485,6 +581,7 @@ wl:deferredTo a owl:ObjectProperty, owl:FunctionalProperty ;
         plan covering the section (WL-SPEC-78).""" .
 
 wl:affects a owl:ObjectProperty ;
+    skos:definition "affects" ;
     wl:layer wlc:execution ;
     rdfs:range wl:Component ;
     rdfs:comment "A Task/Issue/PullRequest touches/changes that component." .
@@ -533,12 +630,14 @@ wl:unmatchedPath a owl:DatatypeProperty ;
     rdfs:comment "A repo-relative path prefix matched by no component in the repo's .worklode/components.yaml — a coverage gap (WL-SPEC-82). Subject is the repo (doap:Project) node; written only by the repo-layout deriver." .
 
 wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "is of kind" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range skos:Concept ;
     rdfs:comment "Kind of task; see wlc:TaskKind. A fixed enum, never free text." .
 
 wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;
+    skos:definition "depends on" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "task_edges.dependsOn" ;
     wl:layer wlc:execution ;
@@ -550,6 +649,7 @@ wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;
         reasoner, and CI/owlrl proves the closure. Type-homogeneous by ADR-0004.""" .
 
 wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
+    skos:definition "blocks" ;
     wl:edgeOrigin wlc:inferred ;
     wl:layer wlc:execution ;
     owl:inverseOf wl:dependsOn ;
@@ -558,6 +658,7 @@ wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
     rdfs:comment "This task blocks that task: inferred from wl:dependsOn, never stored. Transitive." .
 
 wl:blockedByPlan a owl:ObjectProperty, owl:TransitiveProperty ;
+    skos:definition "is ordered after" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "doc_edges.blockedBy" ;
     wl:layer wlc:execution ;
@@ -576,6 +677,7 @@ wl:blockedByPlan a owl:ObjectProperty, owl:TransitiveProperty ;
         `blockedBy` row from the later plan to the earlier one.""" .
 
 wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
+    skos:definition "is ordered before" ;
     wl:edgeOrigin wlc:inferred ;
     wl:layer wlc:execution ;
     owl:inverseOf wl:blockedByPlan ;
@@ -586,6 +688,7 @@ wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
         is A wl:blocksPlan B.""" .
 
 wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "duplicates" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "task_edges.duplicate_of" ;
     wl:layer wlc:execution ;
@@ -601,6 +704,7 @@ wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
         task's duplicates are a backwards traversal, not a second stored edge.""" .
 
 wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "follows up on" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "task_edges.follow_up_to" ;
     wl:layer wlc:execution ;
@@ -614,12 +718,14 @@ wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
         backwards traversal, not a second stored edge.""" .
 
 wl:plannedIn a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "was planned in" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Plan ;
     rdfs:comment "The plan whose acceptance minted this task (WL-SPEC-77; backbone tasks.plan_doc)." .
 
 wl:about a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "is about" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range foaf:Document ;
@@ -628,6 +734,7 @@ wl:about a owl:ObjectProperty, owl:FunctionalProperty ;
         the backbone.""" .
 
 wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "is in" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Project ;
@@ -636,6 +743,7 @@ wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;
         cleanly transitive. Projection named graphs are anchored per Project.""" .
 
 wl:requiresSkill a owl:ObjectProperty ;
+    skos:definition "requires the skill" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Skill ;
@@ -646,6 +754,7 @@ wl:requiresSkill a owl:ObjectProperty ;
         brief resolution unions the two.""" .
 
 wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;
+    skos:definition "mirrors" ;
     wl:layer wlc:execution ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( wl:Task wl:Issue ) ] ;
     rdfs:range  [ a owl:Class ; owl:unionOf ( wl:Task wl:Issue ) ] ;
@@ -657,17 +766,20 @@ wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;
         Issue).""" .
 
 wl:subject a owl:ObjectProperty ;
+    skos:definition "is about" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Event ;
     rdfs:comment """The thing the event is about (WL-SPEC-77). Range deliberately open: any
         backbone entity.""" .
 
 wl:fromStatus a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "moved from status" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:DocumentAccepted ; rdfs:range skos:Concept ;
     rdfs:comment "Status before the transition (a wlc: editorial status)." .
 
 wl:toStatus a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "moved to status" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:DocumentAccepted ; rdfs:range skos:Concept ;
     rdfs:comment "Status after the transition (a wlc: editorial status)." .
@@ -678,6 +790,7 @@ wl:toStatus a owl:ObjectProperty, owl:FunctionalProperty ;
 # ---------------------------------------------------------------------------
 
 wl:artifactKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "is of kind" ;
     wl:layer wlc:runtime ;
     rdfs:domain wl:Artifact ;
     rdfs:range skos:Concept ;
@@ -693,6 +806,7 @@ wl:digest a owl:DatatypeProperty ;
         interop is ever wanted.""" .
 
 wl:cutFrom a owl:ObjectProperty ;
+    skos:definition "was cut from" ;
     wl:layer wlc:runtime ;
     rdfs:domain wl:Artifact ;
     rdfs:range wl:Commit ;
@@ -705,24 +819,28 @@ wl:cutFrom a owl:ObjectProperty ;
         Plan→Section undertaking, and renamed for the fact rather than its consequence.""" .
 
 wl:toEnvironment a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "deploys to" ;
     wl:layer wlc:runtime ;
     rdfs:domain wl:Deployment ;
     rdfs:range wl:Environment ;
     rdfs:comment "The environment this deployment targets." .
 
 wl:deploymentStatus a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "has rollout status" ;
     wl:layer wlc:runtime ;
     rdfs:domain wl:Deployment ;
     rdfs:range skos:Concept ;
     rdfs:comment "Current rollout status; see wlc:DeploymentStatus." .
 
 wl:targetKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "targets a" ;
     wl:layer wlc:runtime ;
     rdfs:domain wl:Deployment ;
     rdfs:range skos:Concept ;
     rdfs:comment "Kind of deployment target; see wlc:DeployTargetKind." .
 
 wl:runtimeEventKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "is of kind" ;
     wl:layer wlc:runtime ;
     rdfs:domain wl:RuntimeEvent ;
     rdfs:range skos:Concept ;
@@ -752,30 +870,37 @@ wl:storedAs a owl:AnnotationProperty ;
 # domain on a shared term would type every subject in every graph.
 
 dct:requires wl:edgeOrigin wlc:declared ;
+    skos:definition "requires" ;
     wl:storedAs "doc_edges.requires" ;
     rdfs:comment "Declared between documents: the subject needs the object." .
 
 dct:isRequiredBy wl:edgeOrigin wlc:inferred ;
+    skos:definition "is required by" ;
     owl:inverseOf dct:requires ;
     rdfs:comment "Inferred from dct:requires, never stored." .
 
 prov:wasDerivedFrom wl:edgeOrigin wlc:declared ;
+    skos:definition "was derived from" ;
     wl:storedAs "doc_edges.wasDerivedFrom", "rule_edges.wasDerivedFrom" ;
     rdfs:comment "Declared on a document or rule derived from the object." .
 
 dct:replaces wl:edgeOrigin wlc:declared ;
+    skos:definition "supersedes" ;
     wl:storedAs "rule_edges.supersedes" ;
     rdfs:comment "Declared on wl:Rule supersession, new → old." .
 
 dct:isReplacedBy wl:edgeOrigin wlc:inferred ;
+    skos:definition "is superseded by" ;
     owl:inverseOf dct:replaces ;
     rdfs:comment "Inferred from dct:replaces, never stored." .
 
 dct:isPartOf wl:edgeOrigin wlc:declared ;
+    skos:definition "is part of" ;
     wl:storedAs "task_edges.child_of" ;
     rdfs:comment "Declared on a child task, pointing at its parent." .
 
 dct:hasPart wl:edgeOrigin wlc:inferred ;
+    skos:definition "contains" ;
     owl:inverseOf dct:isPartOf ;
     rdfs:comment "Inferred from dct:isPartOf, never stored." .
 

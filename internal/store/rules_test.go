@@ -533,6 +533,12 @@ func TestSetRuleMetaKindRefusedWhenCovered(t *testing.T) {
 	if err := set(1, "informative"); !errors.Is(err, ErrRuleCovered) {
 		t.Errorf("covered rule to informative: %v, want ErrRuleCovered", err)
 	}
+	if err := set(1, "principle"); !errors.Is(err, ErrRuleCovered) {
+		t.Errorf("covered rule to principle: %v, want ErrRuleCovered", err)
+	}
+	if err := set(1, "catalogue"); err != nil {
+		t.Errorf("covered rule to catalogue: %v", err)
+	}
 	if err := set(3, "informative"); err != nil {
 		t.Errorf("uncovered rule to informative: %v", err)
 	}

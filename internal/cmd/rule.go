@@ -142,6 +142,7 @@ func newRuleEditCmd() *cobra.Command {
 // order by edgeTypeFlags's resolver.
 var edgeTypeFlagTypes = []struct{ flag, typ string }{
 	{"refines", "refines"},
+	{"needs", "needs"},
 	{"constrains", "constrains"},
 	{"conflicts-with", "conflictsWith"},
 	{"references", "references"},
@@ -149,7 +150,7 @@ var edgeTypeFlagTypes = []struct{ flag, typ string }{
 	{"derived-from", "wasDerivedFrom"},
 }
 
-// edgeTypeFlags binds the six edge-type flags and returns a resolver that
+// edgeTypeFlags binds the seven edge-type flags and returns a resolver that
 // yields the wl: type and target of whichever one the caller set.
 // MarkFlagsOneRequired and MarkFlagsMutuallyExclusive guarantee exactly one
 // is set before RunE runs, so the resolver itself cannot fail. It checks
@@ -161,8 +162,8 @@ func edgeTypeFlags(cmd *cobra.Command) func() (typ, target string) {
 		v := cmd.Flags().String(e.flag, "", edgeFlagUsage[e.flag])
 		vals[e.flag] = v
 	}
-	cmd.MarkFlagsOneRequired("refines", "constrains", "conflicts-with", "references", "amends", "derived-from")
-	cmd.MarkFlagsMutuallyExclusive("refines", "constrains", "conflicts-with", "references", "amends", "derived-from")
+	cmd.MarkFlagsOneRequired("refines", "needs", "constrains", "conflicts-with", "references", "amends", "derived-from")
+	cmd.MarkFlagsMutuallyExclusive("refines", "needs", "constrains", "conflicts-with", "references", "amends", "derived-from")
 	return func() (string, string) {
 		for _, e := range edgeTypeFlagTypes {
 			if cmd.Flags().Changed(e.flag) {
@@ -177,6 +178,7 @@ func edgeTypeFlags(cmd *cobra.Command) func() (typ, target string) {
 // edgeTypeFlagTypes.
 var edgeFlagUsage = map[string]string{
 	"refines":        "rule this one narrows or details",
+	"needs":          "rule a reader of this one must also read (its context closure)",
 	"constrains":     "rule this one must hold alongside",
 	"conflicts-with": "rule this one is in recorded tension with",
 	"references":     "rule this one points at (a derived edge is written for you when the text names it)",
@@ -187,7 +189,7 @@ var edgeFlagUsage = map[string]string{
 func newRuleLinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "link <ref>",
-		Short: "Relate a rule to another: --refines, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>",
+		Short: "Relate a rule to another: --refines, --needs, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>",
 		Args:  cobra.ExactArgs(1),
 	}
 	typ := edgeTypeFlags(cmd)

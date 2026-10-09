@@ -89,6 +89,41 @@ func TestCoversStoresOnlyRequirements(t *testing.T) {
 	}
 }
 
+// TestCatalogueIsCoveredLikeARequirement: a catalogue prints with the REQ
+// infix and a plan covers it; a definition or principle prints with RULE and
+// is refused as a direct covers target (WL-SPEC-77 §4).
+func TestCatalogueIsCoveredLikeARequirement(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	// ruleDocV1: sec-1 is rule 1, sec-1.1 rule 2, sec-2 rule 3.
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	setRuleKind(t, s, 1, "catalogue")
+	setRuleKind(t, s, 2, "definition")
+	setRuleKind(t, s, 3, "principle")
+	for n, want := range map[int64]string{1: "P1-REQ-1", 2: "P1-RULE-2", 3: "P1-RULE-3"} {
+		if c, err := s.GetRule(ctx, "P1", n); err != nil || c.Ref != want {
+			t.Errorf("rule %d ref = %q (%v), want %s", n, c.Ref, err, want)
+		}
+	}
+	whole := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "whole", CreatedBy: "stig",
+		Body: coversPlanBody("P1-SPEC-1")})
+	if got := coveredRuleNumbers(t, s, whole.ID); !slices.Equal(got, []int64{1}) {
+		t.Errorf("whole document covers %v, want [1]", got)
+	}
+	direct := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "direct", CreatedBy: "stig",
+		Body: coversPlanBody("P1-RULE-1")})
+	if got := coveredRuleNumbers(t, s, direct.ID); !slices.Equal(got, []int64{1}) {
+		t.Errorf("direct catalogue covers %v, want [1]", got)
+	}
+	for _, ref := range []string{"P1-RULE-2", "P1-RULE-3"} {
+		_, err := createDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "d" + ref[len(ref)-1:], CreatedBy: "stig",
+			Body: coversPlanBody(ref)})
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("direct ref to %s: %v, want ErrInvalidInput", ref, err)
+		}
+	}
+}
+
 // TestNeedsPlanningReportsOnlyRequirements: a section whose rule is not a
 // requirement is never a planning gap (WL-SPEC-78 §1.3).
 func TestNeedsPlanningReportsOnlyRequirements(t *testing.T) {
