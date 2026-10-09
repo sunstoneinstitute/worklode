@@ -1,2 +1,23 @@
 current_project = "worklode"
 project_key = "WL"
+
+[gate]
+paths = [
+  "internal/api/router.go",
+  "internal/api/authz.go",
+  "internal/model/**",
+  "deploy/base/**",
+  "internal/hooks/**",
+  "internal/watcher/**",
+  "internal/eventbus/**",
+  "ns/*.ttl",
+  "plugins/**/skills/**",
+  "plugins/**/commands/**",
+]
+regex = [
+  # internal/cmd/** except _test.go
+  '^internal/cmd/(.*/)?[^/]*([^t]|[^s]t|[^e]st|[^t]est|[^_]test)\.go$',
+  # state machines and ranking in the store
+  '^internal/store/(tasks|taskblockers|taskkind|leases|ranking|planlifecycle|approvalflow|escalate|sweeper)\.go$',
+]
+trailer = "Spec:"
