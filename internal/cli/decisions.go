@@ -1,4 +1,4 @@
-// decisions.go is the client and the rendering for 025 §10.1's posed
+// decisions.go is the client and the rendering for WL-SPEC-77 §12's posed
 // question: the rows a task carries, addressed as <task>/<key>.
 package cli
 

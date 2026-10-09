@@ -7,7 +7,7 @@ import (
 )
 
 // newCriticalPathCmd wires `lode task critical-path [--task <id>]`; cycles
-// are findings, not silent drops (spec 007 §Cycle handling). --task narrows
+// are findings, not silent drops (WL-SPEC-82). --task narrows
 // the table to that task's row (its depth and fan-out), client-side, so
 // --json re-encodes the narrowed value rather than passing the server's body
 // through.

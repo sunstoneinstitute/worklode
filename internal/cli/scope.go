@@ -31,7 +31,7 @@ type Scope struct {
 }
 
 // ResolveScope returns the project a command run in dir should act on, per
-// docs/specs/019-project-scoping.md: repo config, then user config, then the
+// WL-SPEC-81 §6.1: repo config, then user config, then the
 // git remote, then unscoped.
 //
 // It never fails. A missing remote, an unreachable server, an unmapped repo,

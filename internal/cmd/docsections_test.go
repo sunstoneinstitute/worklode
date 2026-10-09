@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestDocSections covers `lode doc sections [number]` (055 §4): the optional
+// TestDocSections covers `lode doc sections [number]` (WL-SPEC-78 §1.5): the optional
 // argument reaches the server as the number query parameter, and the view
 // prints the citable <ref>#<anchor> beside the heading.
 func TestDocSections(t *testing.T) {

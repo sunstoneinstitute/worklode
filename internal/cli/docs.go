@@ -28,7 +28,7 @@ func (c *Client) ListDocs(ctx context.Context, p model.DocListParams) (model.Doc
 }
 
 // LintDocs calls GET /api/v1/docs/lint?project=: the corpus-wide report of
-// dangling frontmatter references (055 §4.1). project narrows the answer;
+// dangling frontmatter references (WL-SPEC-77 §16). project narrows the answer;
 // "" answers over every project the caller may read.
 func (c *Client) LintDocs(ctx context.Context, project string) ([]model.DocLintFinding, []byte, error) {
 	p := model.DocLintParams{Project: project}
@@ -42,7 +42,7 @@ func (c *Client) ResolveExternalCovers(ctx context.Context) (model.CoversResolve
 }
 
 // ListCorpusSections calls GET /api/v1/docs/sections: every section of every
-// spec and ADR in scope, in document order (055 §4). project narrows to one
+// spec and ADR in scope, in document order (WL-SPEC-78 §1.5). project narrows to one
 // project, "" to all of them; number narrows to one section number ("8.2")
 // or anchor ("sec-8.2") across the corpus, "" to every section.
 func (c *Client) ListCorpusSections(ctx context.Context, project, number string) ([]model.DocSectionRow, []byte, error) {
@@ -51,7 +51,7 @@ func (c *Client) ListCorpusSections(ctx context.Context, project, number string)
 }
 
 // ResolveDoc calls GET /api/v1/docs/resolve?ref=, returning the document a
-// reference names — an id or an exact slug (025 §14.3). The server owns the
+// reference names — an id or an exact slug (WL-SPEC-77 §7). The server owns the
 // grammar and its ambiguity rule, so a ref costs one indexed lookup rather
 // than a listing of the whole corpus, and a grammar extension needs no client
 // upgrade. A *ClientError with Status 404 means no document holds that ref;
@@ -70,7 +70,7 @@ func (c *Client) GetDoc(ctx context.Context, id int64) (model.DocDetail, []byte,
 }
 
 // ListDocVersions calls GET /api/v1/docs/{id}/versions: every version of a
-// document, newest first (025 §4.5).
+// document, newest first (WL-SPEC-77 §3).
 func (c *Client) ListDocVersions(ctx context.Context, id int64) ([]model.DocVersionSummary, []byte, error) {
 	return doJSON[[]model.DocVersionSummary](ctx, c, http.MethodGet, docPath(id, "/versions"), nil, "doc versions")
 }
@@ -82,7 +82,7 @@ func (c *Client) GetDocVersion(ctx context.Context, id int64, version int) (mode
 }
 
 // DocSectionReferrers calls GET /api/v1/docs/{id}/referrers?anchor=: the
-// open work pointing at one section of a document (025 §8.2). The anchor is
+// open work pointing at one section of a document (WL-SPEC-77 §10). The anchor is
 // required by the server — a referrer is a section-level fact.
 func (c *Client) DocSectionReferrers(ctx context.Context, id int64, anchor string) (model.DocReferrersResponse, []byte, error) {
 	p := model.DocReferrersParams{Anchor: anchor}
@@ -100,8 +100,8 @@ func (c *Client) UpdateDocBody(ctx context.Context, id int64, in model.UpdateDoc
 	return c.docWrite(ctx, http.MethodPut, docPath(id, "/body"), in)
 }
 
-// PatchDoc calls POST /api/v1/docs/{id}/patch: 025 §8.4's in-place amendment
-// of an accepted spec or ADR. The §8.3 rules that refuse one are the
+// PatchDoc calls POST /api/v1/docs/{id}/patch: WL-SPEC-77 §10's in-place amendment
+// of an accepted spec or ADR. The rules that refuse one are the
 // server's, and this client re-checks none of them — a second copy of the
 // gate here would be a copy that can drift — so a refusal arrives as the
 // message the server wrote.
@@ -137,7 +137,7 @@ func (c *Client) SetDocColumns(ctx context.Context, id int64, in model.DocColumn
 }
 
 // SubmitDoc calls POST /api/v1/docs/{id}/submit: the document enters review.
-// Submission is an event, not a status (025 §15.4), so nothing about the
+// Submission is an event, not a status (WL-SPEC-77 §9), so nothing about the
 // document changes and the response is the document as it stands. Submitting
 // the same version twice records one event and still answers 200.
 func (c *Client) SubmitDoc(ctx context.Context, id int64) (model.Doc, []byte, error) {
@@ -145,14 +145,14 @@ func (c *Client) SubmitDoc(ctx context.Context, id int64) (model.Doc, []byte, er
 }
 
 // AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's owner
-// may accept it (025 §7); anyone else gets 403. The response also carries the
-// tasks a plan's acceptance minted (025 §9.2); Tasks is empty for a spec or
+// may accept it (WL-SPEC-77 §9); anyone else gets 403. The response also carries the
+// tasks a plan's acceptance minted (WL-SPEC-77 §11.2); Tasks is empty for a spec or
 // ADR.
 func (c *Client) AcceptDoc(ctx context.Context, id int64) (model.AcceptDocResponse, []byte, error) {
 	return doJSON[model.AcceptDocResponse](ctx, c, http.MethodPost, docPath(id, "/accept"), nil, "doc accept")
 }
 
-// WithdrawDoc calls POST /api/v1/docs/{id}/withdraw: 025 §8.7's close verb,
+// WithdrawDoc calls POST /api/v1/docs/{id}/withdraw: WL-SPEC-77 §9's close verb,
 // taking an accepted or stale document out of the corpus with a justification.
 // Which statuses may be withdrawn is the server's rule; a draft or a
 // superseded document comes back as its 422.
@@ -176,8 +176,8 @@ func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (
 
 // DiscardDocRevision calls DELETE /api/v1/docs/{id}/revision, withdrawing the
 // open candidate without landing it and freeing the document's one candidate
-// slot. Either the document's owner or the revision's author may (025
-// §7.2); anyone else gets 403. The document itself is unchanged, and is what
+// slot. Either the document's owner or the revision's author may (WL-SPEC-77
+// §9); anyone else gets 403. The document itself is unchanged, and is what
 // the response carries.
 func (c *Client) DiscardDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodDelete, docPath(id, "/revision"), nil)
@@ -185,13 +185,13 @@ func (c *Client) DiscardDocRevision(ctx context.Context, id int64) (model.Doc, [
 
 // AcceptDocRevision calls POST /api/v1/docs/{id}/revision/accept, landing the
 // open candidate as the document's next version. A candidate that breaks the
-// 025 §6 anchor rules is refused with the violations named.
+// WL-SPEC-77 §6 anchor rules is refused with the violations named.
 func (c *Client) AcceptDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/revision/accept"), nil)
 }
 
 // AddDocNote calls POST /api/v1/docs/{id}/notes: one anchored, non-blocking
-// note against a section the document has (025 §8.5). The server refuses an
+// note against a section the document has (WL-SPEC-77 §10). The server refuses an
 // anchor the document does not carry and an empty body.
 func (c *Client) AddDocNote(ctx context.Context, id int64, in model.AddDocNoteInput) (model.DocNote, []byte, error) {
 	return doJSON[model.DocNote](ctx, c, http.MethodPost, docPath(id, "/notes"), in, "doc note")
@@ -203,22 +203,22 @@ func (c *Client) ListDocNotes(ctx context.Context, id int64) ([]model.DocNote, [
 	return doJSON[[]model.DocNote](ctx, c, http.MethodGet, docPath(id, "/notes"), nil, "doc notes")
 }
 
-// DeleteDoc calls DELETE /api/v1/docs/{id}: tombstone the document (044 §2).
+// DeleteDoc calls DELETE /api/v1/docs/{id}: tombstone the document (WL-SPEC-75 §12).
 // Like DeleteTask, the body goes out even with an empty justification; the
-// server owns the instance-environment rule (044 §3).
+// server owns the instance-environment rule (WL-SPEC-75 §12).
 func (c *Client) DeleteDoc(ctx context.Context, id int64, justification string) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodDelete, docPath(id, ""),
 		model.DeleteInput{Justification: justification})
 }
 
 // UndeleteDoc calls POST /api/v1/docs/{id}/undelete: clear the tombstone. No
-// justification on either instance environment (044 §3).
+// justification on either instance environment (WL-SPEC-75 §12).
 func (c *Client) UndeleteDoc(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/undelete"), nil)
 }
 
 // TransferDocOwner calls POST /api/v1/docs/{id}/owner: hands the document to
-// another actor (025 §7.3). The current owner or an admin may call it;
+// another actor (WL-SPEC-77 §9). The current owner or an admin may call it;
 // transferring to the actor that already owns the document is a legal no-op
 // that still answers 200 — what makes TransferDocs' retry-after-failure safe.
 func (c *Client) TransferDocOwner(ctx context.Context, id int64, owner string) (model.Doc, []byte, error) {
@@ -226,7 +226,7 @@ func (c *Client) TransferDocOwner(ctx context.Context, id int64, owner string) (
 }
 
 // SetDocReviewers calls POST /api/v1/docs/{id}/reviewers: replaces the
-// document's durable reviewer set wholesale (025 §7.3, WL-359). The current
+// document's durable reviewer set wholesale (WL-SPEC-77 §9, WL-359). The current
 // owner or an admin may call it, the same authority TransferDocOwner checks.
 func (c *Client) SetDocReviewers(ctx context.Context, id int64, reviewers []string) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/reviewers"), model.SetDocReviewersInput{Reviewers: reviewers})
@@ -236,7 +236,7 @@ func (c *Client) SetDocReviewers(ctx context.Context, id int64, reviewers []stri
 // (body cleared — the loop can cover hundreds of documents and none of them
 // need it) and the error transferring it hit, "" on success including the
 // already-owns-it no-op. No json tags: this crosses no HTTP boundary (ADR
-// 036 §2), so it carries no wire contract of its own — `lode doc transfer
+// WL-SPEC-73 §3.2a), so it carries no wire contract of its own — `lode doc transfer
 // --json`'s contract is internal/cmd's docTransferResult, built from this.
 type DocTransferOutcome struct {
 	Doc model.Doc
@@ -306,7 +306,7 @@ func DocTable(w io.Writer, docs []model.Doc) {
 
 // DocUnresolvedTable prints `lode doc list --unresolved`: DocTable's three
 // columns plus how long the document has sat untouched, which is the fact the
-// view is for — an accepted document nothing has executed (025 §8.7) is only
+// view is for — an accepted document nothing has executed (WL-SPEC-77 §9) is only
 // interesting once it is old. AGE is docs.updated_at against now, so the row
 // order (oldest first, the server's) reads down the column.
 func DocUnresolvedTable(w io.Writer, docs []model.Doc) {
@@ -408,7 +408,7 @@ func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc
 
 // DocLintTable prints `lode doc lint`'s corpus-wide dangling-reference
 // report: one row per finding — the source document by slug (a finding
-// carries no project key to build the 025 §14.3 shorthand from, unlike a
+// carries no project key to build the WL-SPEC-77 §7 shorthand from, unlike a
 // document listing), the section it was declared from, the edge type, and
 // what's wrong: the verbatim unresolved reference, or the anchor missing
 // from its resolved target.
@@ -535,7 +535,7 @@ func DocVersionRender(w io.Writer, v model.DocVersion, current int) {
 }
 
 // docStaleSuffix is what a reference to a stale document carries wherever one
-// is named: " (stale)", and "" for every other status. 025 §8.7 calls this a
+// is named: " (stale)", and "" for every other status. WL-SPEC-77 §9 calls this a
 // rendering rule rather than a workflow — nothing is refused because a
 // referenced document went stale, the reader is just told. One function so
 // the edge lines and the section list cannot spell the flag differently.
@@ -547,7 +547,7 @@ func docStaleSuffix(status string) string {
 }
 
 // docStatusBanner is the line `lode doc show` leads with for a document that
-// is not current (025 §8.7), and "" for an accepted one. It says what the
+// is not current (WL-SPEC-77 §9), and "" for an accepted one. It says what the
 // status costs the reader: a draft is not yet binding, stale text is owed a
 // re-plan, a superseded version has a newer one, and a withdrawn document is
 // not going to be executed at all.
@@ -568,7 +568,7 @@ func docStatusBanner(d model.Doc) string {
 }
 
 // docStaleCoverage maps each section anchor of a spec to the stale plans
-// covering it — 025 §8.7's stale-plan-covered section flag. It reads the
+// covering it — WL-SPEC-77 §9's stale-plan-covered section flag. It reads the
 // inbound `isCoveredBy` edges the detail already carries, whose near anchor is
 // the covered section and whose far end is the plan, so no second notion of
 // "which plan covers this section" is invented here.
@@ -592,7 +592,7 @@ func docStaleCoverage(edgesIn []model.DocEdge) map[string][]string {
 //
 // A stale or withdrawn document leads with a banner, and a spec's section
 // list gains a COVERED BY column naming each stale plan that covers a section
-// (025 §8.7). Both are rendering rules: nothing about reading the document
+// (WL-SPEC-77 §9). Both are rendering rules: nothing about reading the document
 // changes, the reader is told what the text is worth.
 func DocDetailRender(w io.Writer, d model.DocDetail) {
 	fmt.Fprintf(w, "%d  %s\n", d.ID, d.Title)
@@ -612,7 +612,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	}
 	fmt.Fprintf(w, "  owner:    %s\n", dash(d.Owner))
 	// Only when set: most documents predate the column or were authored
-	// outside a worktree, and a row of dashes is not worth the line (025 §12).
+	// outside a worktree, and a row of dashes is not worth the line (WL-SPEC-77 §13).
 	if d.GeneratedByTask != "" {
 		fmt.Fprintf(w, "  written by task: %s\n", d.GeneratedByTask)
 	}
@@ -683,13 +683,13 @@ func DocNoteRender(w io.Writer, d model.Doc, n model.DocNote) {
 }
 
 // docPatchedMarker is what a section amended in place since it was last
-// approved renders as (025 §7.3): one blockquoted line above the section's
+// approved renders as (WL-SPEC-77 §9): one blockquoted line above the section's
 // notes, so the reader sees which paragraph has not passed the gate.
 const docPatchedMarker = "> **patched** — approved text, amended in place since (WL-SPEC-77 §9)."
 
 // InlineDocNotes returns body with each note folded in under the section it is
-// anchored to, as a blockquoted one-liner (025 §8.5), and a patched marker
-// above them on every section sections says carries one (025 §7.3). Notes and
+// anchored to, as a blockquoted one-liner (WL-SPEC-77 §10), and a patched marker
+// above them on every section sections says carries one (WL-SPEC-77 §9). Notes and
 // marks anchored outside body — the common case when body is one section's
 // subtree — are left out rather than collected somewhere else: a note belongs
 // where it was left.
@@ -745,7 +745,7 @@ func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSect
 // document's slug and optional anchor — the id only when a read did not resolve the slug — or the external
 // reference an unresolved edge carries. A far end that has gone stale carries
 // docStaleSuffix, so a `requires` line says its target is owed a re-plan
-// (025 §8.7) without the reader following the reference to find out.
+// (WL-SPEC-77 §9) without the reader following the reference to find out.
 func docEdgeTarget(e model.DocEdge) string {
 	if e.ToDoc == 0 {
 		return cmp.Or(e.ToRule, e.ToExternal)
@@ -765,7 +765,7 @@ func docEdgeTarget(e model.DocEdge) string {
 	return name
 }
 
-// DocPatchRender confirms one in-place amendment (025 §8.4): what it changed
+// DocPatchRender confirms one in-place amendment (WL-SPEC-77 §10): what it changed
 // and how it was classified. A substantive one names the reviewers it just
 // reopened the document for, since that is the consequence the caller has to
 // know about; a non-substantive one says where its note went. reviewers is
@@ -773,7 +773,7 @@ func docEdgeTarget(e model.DocEdge) string {
 //
 // Accepted plans covering a changed section that nobody has claimed work from
 // are reported last. They block nothing: an intention against text that just
-// moved is §8.6's stale-marking business.
+// moved is WL-SPEC-77 §10's stale-marking business.
 func DocPatchRender(w io.Writer, d model.Doc, res model.DocPatchResult, reviewers []string) {
 	sections := "no anchored section"
 	if len(res.ChangedAnchors) > 0 {

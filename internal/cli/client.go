@@ -48,7 +48,7 @@ import (
 // A repo-local config file overrides current_project and project_key (and
 // server) per checkout — see findRepoConfig — which is how both are normally
 // set: one project per repository. worktree_dir is the one key this merge
-// deliberately excludes: it is repo-scoped only (spec 008 §6), read via
+// deliberately excludes: it is repo-scoped only (WL-SPEC-80 §3.3), read via
 // WorktreeDirFrom instead of through this struct — see WorktreeDir's doc.
 //
 // The token lives in the OS keychain, not the file. A legacy "token" key is
@@ -69,7 +69,7 @@ type Config struct {
 	CurrentProjectPath string
 
 	// ProjectKey is the current repo's design-doc project key ("WL"), used
-	// to resolve shorthand refs like "WL-SPEC-25" (spec 026 §4.2). Empty
+	// to resolve shorthand refs like "WL-SPEC-25" (WL-SPEC-78 §3.2). Empty
 	// when unset, which degrades shorthand resolution to tier 3 rather than
 	// failing.
 	ProjectKey string
@@ -77,7 +77,7 @@ type Config struct {
 	// WorktreeDir carries the worktree_dir key when Config is produced
 	// directly by parseConfig — which is how WorktreeDirFrom reads it. It is
 	// NOT populated by LoadConfig/loadConfigFrom: worktree_dir is scoped to
-	// the repo-local config only (spec 008 §6, "the checkout owns it"), so a
+	// the repo-local config only (WL-SPEC-80 §3.3, "the checkout owns it"), so a
 	// user-level setting must never reach here — see WorktreeDirFrom, which
 	// every consumer (the lifecycle commands, internal/hookrun's guard) uses
 	// instead of this field.
@@ -198,7 +198,7 @@ func ConfigOrigins(startDir string) (userPath string, userFound bool, repoPath s
 }
 
 // WorktreeDirFrom returns the worktree base directory configured for
-// startDir's repo (spec 008 §5.1): a repo-local .worklode/config.toml's
+// startDir's repo (WL-SPEC-80 §3.3): a repo-local .worklode/config.toml's
 // worktree_dir, with the LODE_WORKTREE_DIR env override applied on top, or ""
 // when neither is set. Deliberately keychain-free and independent of
 // LoadConfig/loadConfigFrom — it never touches the OS keychain or a token,
@@ -227,8 +227,8 @@ func WorktreeDirFrom(startDir string) string {
 // contract WorktreeDirFrom has, for a caller (internal/hookrun) that must
 // resolve a project ahead of a backbone call from a directory that is not
 // necessarily the process's own cwd. Returns "" when neither config sets
-// one. Does not attempt the git-remote tier of project resolution (spec 019
-// §_, ResolveScope) -- a caller that also wants that tier still needs
+// one. Does not attempt the git-remote tier of project resolution (WL-SPEC-81
+// §6.1, ResolveScope) -- a caller that also wants that tier still needs
 // ResolveScope with a real client.
 func CurrentProjectFrom(startDir string) string {
 	if repoPath, ok := findRepoConfig(startDir); ok {
@@ -333,7 +333,7 @@ func loadConfigFrom(startDir string) (Config, error) {
 		if cfg.CurrentProject != "" {
 			cfg.CurrentProjectPath = path
 		}
-		// worktree_dir is repo-scoped only (spec 008 §6); a user-level file
+		// worktree_dir is repo-scoped only (WL-SPEC-80 §3.3); a user-level file
 		// setting it must not leak into the merged Config — WorktreeDirFrom
 		// is the sole reader, and it never consults this path.
 		cfg.WorktreeDir = ""
@@ -421,7 +421,7 @@ func parseConfig(data string) (Config, error) {
 			cfg.RefLinks = &b
 		case "spec_corpus", "plan_corpus":
 			// Retired with the file corpus: documents live in the backbone
-			// (spec 025), and nothing reads these any more. Still accepted,
+			// (WL-SPEC-77 §16), and nothing reads these any more. Still accepted,
 			// and ignored, so a checkout whose config.toml has not dropped
 			// them yet does not fail every command on an unknown key.
 		default:
@@ -467,12 +467,12 @@ func (cfg *Config) merge(repo Config, path string) {
 		cfg.ProjectKey = repo.ProjectKey
 	}
 	// worktree_dir is deliberately NOT merged here: it is repo-scoped only
-	// (spec 008 §6) and read exclusively through WorktreeDirFrom, which never
+	// (WL-SPEC-80 §3.3) and read exclusively through WorktreeDirFrom, which never
 	// goes through loadConfigFrom/merge.
 }
 
 // SaveConfig stores the token through tokenStore — the OS keychain, or the 0600
-// token file on a machine with no keychain (spec 001 §8.5) — and writes only the
+// token file on a machine with no keychain (WL-SPEC-74 §8) — and writes only the
 // server URL to ~/.config/worklode/config.toml. Any legacy cleartext token in the
 // file is dropped. A failed store write is still returned as an error — the token
 // is never silently left only in config.toml — but the server is recorded anyway:

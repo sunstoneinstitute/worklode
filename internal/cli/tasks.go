@@ -200,10 +200,10 @@ func (c *Client) ReopenTask(ctx context.Context, id string) (model.Task, []byte,
 	return c.taskAction(ctx, id, "reopen")
 }
 
-// DeleteTask calls DELETE /api/v1/tasks/{id}: tombstone the task (044 §2).
+// DeleteTask calls DELETE /api/v1/tasks/{id}: tombstone the task (WL-SPEC-75 §12).
 // The body is sent even when justification is empty — it marshals to `{}`,
 // which the server reads as "none given". Whether that is acceptable depends
-// on the instance environment and is the server's call alone (044 §3), so
+// on the instance environment and is the server's call alone (WL-SPEC-75 §12), so
 // nothing is validated or prompted for here.
 func (c *Client) DeleteTask(ctx context.Context, id, justification string) (model.Task, []byte, error) {
 	return doJSON[model.Task](ctx, c, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id),
@@ -211,7 +211,7 @@ func (c *Client) DeleteTask(ctx context.Context, id, justification string) (mode
 }
 
 // UndeleteTask calls POST /api/v1/tasks/{id}/undelete: clear the tombstone.
-// No justification on either instance environment (044 §3).
+// No justification on either instance environment (WL-SPEC-75 §12).
 func (c *Client) UndeleteTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.taskAction(ctx, id, "undelete")
 }
@@ -347,7 +347,7 @@ func (c *Client) TaskCost(ctx context.Context, id string, children bool,
 }
 
 // MintTaskToken calls POST /api/v1/tasks/{id}/tokens: a task-scoped token
-// (001 §2.1). Zero values take the server defaults (actor "sandbox", the
+// (WL-SPEC-74 §2). Zero values take the server defaults (actor "sandbox", the
 // lease TTL).
 func (c *Client) MintTaskToken(ctx context.Context, taskID string, in model.TaskTokenInput) (model.TaskTokenResponse, []byte, error) {
 	return doJSON[model.TaskTokenResponse](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(taskID)+"/tokens", in, "task token")
@@ -557,7 +557,7 @@ func GovernanceRender(w io.Writer, indent string, gov []model.TaskGovernance) {
 	}
 }
 
-// StalePlanWarning prints 025 §8.6's claim-time flag, and nothing at all when
+// StalePlanWarning prints WL-SPEC-77 §10's claim-time flag, and nothing at all when
 // slug is empty. Shared by `lode work next`, `lode work resume` and `lode task
 // claim`, which is why the sentence lives here rather than in each of them.
 func StalePlanWarning(w io.Writer, slug string) {
@@ -571,7 +571,7 @@ func StalePlanWarning(w io.Writer, slug string) {
 // brief`, `lode work next` and `lode work status`. Each section is
 // omitted when empty.
 //
-// A blocking plan's status rides its line, which is where 025 §8.7's
+// A blocking plan's status rides its line, which is where WL-SPEC-77 §9's
 // brief-exclusion rule lands today: a brief inlines no document body, so the
 // only documents reaching an agent's context through it are these references,
 // and a stale plan is named "(stale)" rather than quietly cited. The doc

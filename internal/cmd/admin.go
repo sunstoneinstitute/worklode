@@ -64,7 +64,7 @@ func newTokenCmd() *cobra.Command {
 
 // newTokenAddCmd mints a bearer token: an actor-scoped one by default (POST
 // /api/v1/actors/{id}/tokens), or, with --task, a token bound to one task's
-// routes instead (001 §2.1, formerly `lode task token`) that expires with
+// routes instead (WL-SPEC-74 §2, formerly `lode task token`) that expires with
 // the task's lease.
 func newTokenAddCmd() *cobra.Command {
 	var actor, description, expiresAt, task string
@@ -118,7 +118,7 @@ func newTokenAddCmd() *cobra.Command {
 }
 
 // runTaskTokenAdd is `lode token add --task`'s body: mint a task-scoped
-// token (001 §2.1), the same request `lode task token` used to make.
+// token (WL-SPEC-74 §2), the same request `lode task token` used to make.
 func runTaskTokenAdd(cmd *cobra.Command, task, actor string, ttl time.Duration) error {
 	c, cfg, err := newAPIClientWithConfig()
 	if err != nil {
@@ -177,7 +177,7 @@ func newBlobCmd() *cobra.Command {
 	return cmd
 }
 
-// newBlobGCCmd runs both GC sweeps from spec 021 §11. --dry-run defaults to
+// newBlobGCCmd runs both GC sweeps from WL-SPEC-78 §8.7. --dry-run defaults to
 // true — running the real sweep should be a deliberate act, not the default
 // of a command an operator ran to see what would happen.
 func newBlobGCCmd() *cobra.Command {

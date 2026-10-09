@@ -50,7 +50,7 @@ components:
 }
 
 // TestDeriveDryRunPrintsImplementsTriples covers the third repo-local source
-// (WL-810, 025 §11.3): a present .worklode/implements.yaml resolves against
+// (WL-810, WL-SPEC-77 §13): a present .worklode/implements.yaml resolves against
 // the components manifest and renders as the repo-implements edge.
 func TestDeriveDryRunPrintsImplementsTriples(t *testing.T) {
 	root := t.TempDir()
@@ -124,7 +124,7 @@ components:
 }
 
 // TestDeriveImplementsResolutionErrorIsFatal: a claim whose path matches no
-// component is a publication error naming the offender (025 §11.3), not a
+// component is a publication error naming the offender (WL-SPEC-77 §13), not a
 // skip — an unattributable claim silently dropped is worse than a failed
 // derive.
 func TestDeriveImplementsResolutionErrorIsFatal(t *testing.T) {
@@ -318,7 +318,7 @@ func TestDeriveAllowEmptyReportsTheEmptyDocument(t *testing.T) {
 }
 
 // fakeOverviewServer stands up an HTTP server answering every request through
-// h, and points LODE_SERVER/LODE_TOKEN/HOME at it so the spec 007 commands
+// h, and points LODE_SERVER/LODE_TOKEN/HOME at it so the WL-SPEC-82 commands
 // build a client against it rather than the developer's own config.
 func fakeOverviewServer(t *testing.T, h func(*http.Request) (int, string)) {
 	t.Helper()

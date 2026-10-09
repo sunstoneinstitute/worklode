@@ -37,12 +37,12 @@ const (
 	shortcutGroupID = "shortcuts"
 )
 
-// shortcut is one of the top-level aliases 061 §1 L9 fixes: a nested command
+// shortcut is one of the top-level aliases WL-SPEC-81 §1 L9 fixes: a nested command
 // that also sits at the root because it runs many times per session. This
 // table is the only place a top-level alias is declared — no cobra `Aliases`
 // anywhere — and L9 closes the list at four entries: `next` (work next),
 // `status` (work status), `board` (task board), `overview` (project
-// overview). Adding a fifth requires amending 061 §1 L9. They are permanent
+// overview). Adding a fifth requires amending WL-SPEC-81 §1 L9. They are permanent
 // API, not compatibility aliases.
 type shortcut struct {
 	// target is the real command's path below the root, e.g. task board.

@@ -37,7 +37,7 @@ func deleteStub(t *testing.T) (*cli.Client, *struct{ Method, URI, Body string })
 
 // TestDeleteTaskRequest pins DELETE /api/v1/tasks/{id} and that the
 // justification travels in the body — including the empty one, which the
-// server (not this client) decides about (044 §3).
+// server (not this client) decides about (WL-SPEC-75 §12).
 func TestDeleteTaskRequest(t *testing.T) {
 	c, got := deleteStub(t)
 
@@ -56,7 +56,7 @@ func TestDeleteTaskRequest(t *testing.T) {
 	}
 
 	// A blank justification still sends a body: the CLI must not pre-validate
-	// it, and a dev instance accepts it (044 §3).
+	// it, and a dev instance accepts it (WL-SPEC-75 §12).
 	if _, _, err := c.DeleteTask(context.Background(), "WL-7", ""); err != nil {
 		t.Fatalf("DeleteTask with no justification: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestDeleteTaskRequest(t *testing.T) {
 }
 
 // TestUndeleteTaskRequest pins POST /api/v1/tasks/{id}/undelete, with no body
-// to justify anything (044 §3).
+// to justify anything (WL-SPEC-75 §12).
 func TestUndeleteTaskRequest(t *testing.T) {
 	c, got := deleteStub(t)
 
@@ -131,7 +131,7 @@ func TestUndeleteDocRequest(t *testing.T) {
 }
 
 // TestListFiltersDeletedSwitch pins that both list filters send deleted=true
-// only when asked. The flag is a switch server-side (044 §5) — tombstoned rows
+// only when asked. The flag is a switch server-side (WL-SPEC-75 §12) — tombstoned rows
 // replace the live ones — so an unset field must not leak the parameter.
 func TestListFiltersDeletedSwitch(t *testing.T) {
 	c, got := deleteStub(t)

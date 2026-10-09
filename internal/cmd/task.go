@@ -208,7 +208,7 @@ func runTaskEdge(cmd *cobra.Command, c *cli.Client, id, otherID, msg string, cal
 	return nil
 }
 
-// resolveBody returns the task body from --body / --body-file (spec 025 §18,
+// resolveBody returns the task body from --body / --body-file (WL-SPEC-77 §18,
 // the gh convention): bodyFile wins when set, with "-" reading stdin. Flag
 // exclusivity is enforced by cobra (MarkFlagsMutuallyExclusive), not here.
 func resolveBody(body, bodyFile string, stdin io.Reader) (string, error) {
@@ -441,7 +441,7 @@ func newTaskListCmd() *cobra.Command {
 }
 
 // resolveDeletedStatusFilter is resolveStatusFilter with `--deleted` folded
-// in. A tombstone is orthogonal to state (044 §1), so a deleted task keeps
+// in. A tombstone is orthogonal to state (WL-SPEC-75 §12), so a deleted task keeps
 // whatever state it had — and the default open-state filter would hide most
 // tombstones, which is the opposite of what someone asking for the deleted
 // list wants. So `--deleted` alone drops the state filter entirely; an
@@ -563,13 +563,13 @@ func runTaskShow(cmd *cobra.Command, arg string, usage bool) error {
 // taskShowUsageResult is `task show --usage`'s --json output: it splices two
 // already-serialized API responses (the task and its cost) together for
 // display. It never crosses the HTTP boundary itself, so it stays local to
-// the CLI rather than living in internal/model (ADR 036 §2).
+// the CLI rather than living in internal/model (WL-SPEC-73 §3.2a).
 type taskShowUsageResult struct {
 	Task json.RawMessage `json:"task"`
 	Cost json.RawMessage `json:"cost"`
 }
 
-// newTaskSkillsCmd is the read-only view of a task's pinned skills (061 §2.2,
+// newTaskSkillsCmd is the read-only view of a task's pinned skills (WL-SPEC-81 §2,
 // rule L6). The paired write is `lode task set skills <name…> <id>`.
 func newTaskSkillsCmd() *cobra.Command {
 	return &cobra.Command{
@@ -999,10 +999,10 @@ func newTaskSubmitCmd() *cobra.Command {
 
 // taskSetFields are the fields `lode task set` writes. The switch below
 // handles each one and this list names them, for the unknown-field error and
-// for completion (061 §1 L4): the field is an argument, so it completes.
+// for completion (WL-SPEC-81 §1 L4): the field is an argument, so it completes.
 var taskSetFields = []string{"state", "skills", "checklist"}
 
-// newTaskSetCmd is `lode task set <field> <value…> <id>` (061 §2.1): write one
+// newTaskSetCmd is `lode task set <field> <value…> <id>` (WL-SPEC-81 §2): write one
 // named field on a task. The field and the values are arguments, not part of
 // the verb, so this does not fit newTaskTransitionCmd.
 //
@@ -1118,9 +1118,9 @@ func newTaskAbandonCmd() *cobra.Command {
 		true, (*cli.Client).AbandonTask)
 }
 
-// newTaskDeleteCmd is `lode task delete` (044 §5): the narrow close for a row
+// newTaskDeleteCmd is `lode task delete` (WL-SPEC-75 §12): the narrow close for a row
 // that should not have existed. Whether the justification is required depends
-// on the instance environment and is the server's call (044 §3) — nothing is
+// on the instance environment and is the server's call (WL-SPEC-75 §12) — nothing is
 // validated or prompted for here, and the server's refusal is returned
 // unchanged because its message already names the environment.
 func newTaskDeleteCmd() *cobra.Command {
@@ -1167,7 +1167,7 @@ func newTaskDeleteCmd() *cobra.Command {
 
 // newTaskUndeleteCmd is `lode task undelete`: clear the tombstone. It takes no
 // justification on either instance — only hiding a record is worth making
-// someone stop and type (044 §3).
+// someone stop and type (WL-SPEC-75 §12).
 func newTaskUndeleteCmd() *cobra.Command {
 	return newTaskTransitionCmd("undelete <id>",
 		"Restore a deleted task, clearing its tombstone",
@@ -1238,7 +1238,7 @@ func newTaskBlockersCmd() *cobra.Command {
 }
 
 // newTaskFrontierCmd wires `lode task frontier`: the ranked ready set,
-// pre-sorted by the D9 ordering the backbone computes (spec 007 §3.4).
+// pre-sorted by the D9 ordering the backbone computes (WL-SPEC-82).
 func newTaskFrontierCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
@@ -1300,7 +1300,7 @@ func newTaskBriefCmd() *cobra.Command {
 }
 
 // newTaskCostCmd is `lode task cost <id>`: the tokens billed to a task (spec
-// 025 §15.6, AC31). Unlike `lode project show`, --days defaults to 0 (all
+// WL-SPEC-75 §9.6, AC31). Unlike `lode project show`, --days defaults to 0 (all
 // history) — a task's life is short, so there is no "recent window" to
 // default to.
 func newTaskCostCmd() *cobra.Command {
@@ -1469,7 +1469,7 @@ func newTaskDuplicateCmd() *cobra.Command {
 		"%s is now marked a duplicate of %s; it stays claimable until you close it",
 		(*cli.Client).Duplicate)
 	// The confirmation names the second half because the edge is provenance,
-	// not scheduling (004): marking costs nothing and gates nothing, so a
+	// not scheduling (WL-SPEC-75 §4): marking costs nothing and gates nothing, so a
 	// message that stopped at "is now marked" reads as if triage were done
 	// while `lode work next` is still handing the duplicate out.
 	//
@@ -1574,7 +1574,7 @@ func newTaskDecomposeCmd() *cobra.Command {
 // newTaskAttachCmd is `lode task attach`: upload one or more files and
 // reference them from a task. Images and videos (blobref.Embeddable) are
 // appended to the body as markdown so they render inline; everything else is
-// attached only (spec 021 §3).
+// attached only (WL-SPEC-78 §8.3).
 func newTaskAttachCmd() *cobra.Command {
 	var noEmbed bool
 	var alt string
@@ -1671,11 +1671,11 @@ func newTaskAttachCmd() *cobra.Command {
 }
 
 // embedMarkup renders the body fragment that makes a freshly uploaded blob
-// render in place (spec 021 §5, §9).
+// render in place (WL-SPEC-78 §8.5, §9).
 //
 // An image is markdown. A video cannot be — `![](…)` is an <img>, which shows
 // a video file as a broken image — so it is the raw <video> the sanitiser's
-// allowlist exists for (spec 021 §8), carrying the poster frame the upload
+// allowlist exists for (WL-SPEC-78 §8.6), carrying the poster frame the upload
 // extracted. Without that poster the element is a black rectangle until
 // someone presses play, which is a poor answer to "show me the bug".
 //
@@ -1699,7 +1699,7 @@ func embedMarkup(alt string, blob model.BlobResponse) string {
 
 // newTaskDetachCmd is `lode task detach`: clear an explicit reference from a
 // task to an already-uploaded blob. A row the body still embeds survives
-// with only its declared half cleared (spec 021 §3), so a still-embedded
+// with only its declared half cleared (WL-SPEC-78 §8.3), so a still-embedded
 // hash gets a warning rather than a silent no-op.
 func newTaskDetachCmd() *cobra.Command {
 	return &cobra.Command{
@@ -1734,7 +1734,7 @@ func newTaskDetachCmd() *cobra.Command {
 
 // newTaskEscalateCmd builds `lode task escalate`: the executor's report that
 // the design it is working from does not cover the case in front of it
-// (025 §8.1). It is worktree-bound like `lode work block`, because the task
+// (WL-SPEC-77 §10). It is worktree-bound like `lode work block`, because the task
 // being escalated is the one the caller is standing in, and it ends the same
 // way: the lease is released and the worktree stops carrying a task.
 func newTaskEscalateCmd() *cobra.Command {
@@ -1789,7 +1789,7 @@ func newTaskEscalateCmd() *cobra.Command {
 }
 
 // newTaskGapCmd builds `lode task gap`: log that the plan or spec does not
-// cover this case, without stopping to escalate it (025 §15.5). Unlike
+// cover this case, without stopping to escalate it (WL-SPEC-77 §10). Unlike
 // `lode task escalate`, the task's lease is untouched — this rung of the
 // ladder does not stop the executor. It is plumbing for the skill flow in
 // Task 9, so it renders nothing beyond a one-line confirmation.
@@ -1832,7 +1832,7 @@ func newTaskGapCmd() *cobra.Command {
 }
 
 // newTaskFixCmd builds `lode task fix`: log the fixer's start or finish of
-// closing a gap or escalation (025 §15.5). Like `lode task gap`, it leaves
+// closing a gap or escalation (WL-SPEC-77 §10). Like `lode task gap`, it leaves
 // the task's lease alone and is plumbing for Task 9's skill flow.
 func newTaskFixCmd() *cobra.Command {
 	var phase, tier, doc, outcome string

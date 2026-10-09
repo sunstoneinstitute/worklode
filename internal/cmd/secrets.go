@@ -15,7 +15,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 )
 
-// This file implements `lode secret`: the runtime surface of spec 017.
+// This file implements `lode secret`: the runtime surface of WL-SPEC-74 §10.
 // Values pass through exactly two places here — the pack command's inherited
 // environment (as the child of `op run`) and the exec command's child
 // environment. Neither is ever written, logged, or echoed.
@@ -196,7 +196,7 @@ func newSecretsPackCmd() *cobra.Command {
 					return err
 				}
 			}
-			// A re-run after the declaration narrowed (spec 017 §3,
+			// A re-run after the declaration narrowed (WL-SPEC-74 §10.4,
 			// re-materialization) replaces the manifest wholesale, and the
 			// manifest is the only authority purge has — keyring cannot
 			// enumerate. Drop the dropped names' items now or they outlive

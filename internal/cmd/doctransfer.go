@@ -17,7 +17,7 @@ import (
 // docTransferResult is `lode doc transfer --json`'s per-document contract.
 // It crosses no HTTP boundary — it is assembled here from N responses to
 // Task 3's owner endpoint — so it is named and declared in internal/cmd
-// rather than internal/model (ADR 036 §2's modeNamed carve-out for `--json`
+// rather than internal/model (WL-SPEC-73 §3.2a's modeNamed carve-out for `--json`
 // stdout contracts; see internal/model/modelrule_test.go).
 type docTransferResult struct {
 	Doc   model.Doc `json:"doc"`
@@ -25,7 +25,7 @@ type docTransferResult struct {
 }
 
 // newDocTransferCmd is `lode doc transfer`: POST /api/v1/docs/{id}/owner
-// (025 §7.3, added by an earlier task in this series) exposed as a command,
+// (WL-SPEC-77 §9, added by an earlier task in this series) exposed as a command,
 // plus the case the whole feature exists for — reassigning every document a
 // departed actor owns — as a client-side loop over the `--owner` list filter
 // (also an earlier task). There is no bulk transfer endpoint: the owner

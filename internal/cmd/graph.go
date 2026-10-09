@@ -37,7 +37,7 @@ func newGraphCmd() *cobra.Command {
 
 func init() { rootCmd.AddCommand(newGraphCmd()) }
 
-// newGraphQuarantinesCmd wires `lode graph quarantines` (061 §2.4, §5 rule
+// newGraphQuarantinesCmd wires `lode graph quarantines` (WL-SPEC-81 §2, §5 rule
 // 4): `graph projection` had exactly one child, `status`, which is pointless
 // depth under the single-child rule — flattened straight onto `graph`.
 func newGraphQuarantinesCmd() *cobra.Command {
@@ -72,8 +72,8 @@ func newGraphQuarantinesCmd() *cobra.Command {
 // command may use, and "export" is not in it; "triples" is a named view (L6),
 // the same pattern as the existing "graph quarantines".
 //
-// internal/graphproj already builds and serializes these triples (spec 006
-// §11) for the server-side projector; this command is the first thing that
+// internal/graphproj already builds and serializes these triples (WL-SPEC-79
+// §12) for the server-side projector; this command is the first thing that
 // writes them to a file or stdout instead.
 func newGraphTriplesCmd() *cobra.Command {
 	var scope scopeFlags
@@ -184,7 +184,7 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 	// implements.yaml is optional — most repos claim nothing. Its absence is
 	// normal and noted like a go-imports skip; a file that exists but fails to
 	// parse, or a claim that resolves to no component or a conflicting pin, is
-	// a publication error naming the offender (025 §11.3) — a claim silently
+	// a publication error naming the offender (WL-SPEC-77 §13) — a claim silently
 	// dropped is worse than a failed derive, so those are never downgraded to
 	// a note.
 	implPath := filepath.Join(root, ".worklode", "implements.yaml")
@@ -385,7 +385,7 @@ func newGraphDriftCmd() *cobra.Command {
 	return cmd
 }
 
-// newGraphGapsCmd wires `lode graph gaps` (spec 007 §3.2).
+// newGraphGapsCmd wires `lode graph gaps` (WL-SPEC-82).
 func newGraphGapsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "gaps",

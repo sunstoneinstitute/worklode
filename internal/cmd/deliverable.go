@@ -9,7 +9,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// newDeliverableCmd groups the deliverable subcommands (spec 029 §3.1): a
+// newDeliverableCmd groups the deliverable subcommands (WL-SPEC-75 §13.3): a
 // declared, checkable output of a project. Only the artifact-address form
 // exists so far — WL-582's label form adds a column and a --label flag on
 // top of this, nothing here has to be undone for that.
@@ -22,7 +22,7 @@ func newDeliverableCmd() *cobra.Command {
 	return cmd
 }
 
-// newDeliverableReportCmd files the state a person says they see (029 §3.2).
+// newDeliverableReportCmd files the state a person says they see (WL-SPEC-75 §13.3).
 // The deliverable stores no state either way: this writes user-reported
 // evidence, which the reads keep distinct from what an emitter observed.
 func newDeliverableReportCmd() *cobra.Command {

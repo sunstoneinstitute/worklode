@@ -12,7 +12,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 )
 
-// newGateCmd is the design authority gate (11-design-authority-gate.md): the
+// newGateCmd is the design authority gate (WL-SPEC-72): the
 // check CI runs on a pull request that touches a guarded path.
 func newGateCmd() *cobra.Command {
 	cmd := &cobra.Command{

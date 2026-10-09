@@ -12,8 +12,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
-// newRuleCmd is the design-rule entity group (12-spec-refactoring-design-tree.md
-// S14, S35). `lode rule show` and `lode show WL-REQ-<n>` read one rule.
+// newRuleCmd is the design-rule entity group. `lode rule show` and `lode show WL-REQ-<n>` read one rule.
 func newRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rule",
@@ -239,7 +238,7 @@ func newRuleUnlinkCmd() *cobra.Command {
 	return cmd
 }
 
-// newRuleSetCmd is `lode rule set`: owner and tags (S15). Each field
+// newRuleSetCmd is `lode rule set`: owner and tags. Each field
 // takes its own positional shape (owner one actor, tags any number), so the
 // field is a subcommand rather than a leading argument the way `project set`
 // groups its fields (WL-489). The kind is `lode rule set <ref> --kind <kind>`
@@ -359,7 +358,7 @@ func newRuleVersionsCmd() *cobra.Command {
 	}
 }
 
-// newRuleSupersedeCmd is `lode rule supersede --map <file>` (S24): the
+// newRuleSupersedeCmd is `lode rule supersede --map <file>`: the
 // refactor primitive. The map decides what applying it changes; this command
 // only reads and parses it and hands the entries to the store through the
 // API, the way every other write in this package defers the decision to the

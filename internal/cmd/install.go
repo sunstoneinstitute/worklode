@@ -37,7 +37,7 @@ type hookTargets struct {
 	statusLine bool
 	// skills is --skills: publish the local skill store into every
 	// registered adapter's skill directories. Independent of agents — it
-	// writes outside the hook config (spec 008 §3.2) and runs for every
+	// writes outside the hook config (WL-SPEC-80 §5.1) and runs for every
 	// registered adapter regardless of which ones agents names.
 	skills bool
 }
@@ -181,7 +181,7 @@ func unsupportedAgentError(id string) error {
 
 // resolveAgents turns the "auto" placeholder into the harnesses actually
 // configured for dir. Detecting none is a successful no-op, not an error: spec
-// 008 §4 writes nothing for a harness that is not there.
+// WL-SPEC-80 §5.1 writes nothing for a harness that is not there.
 func resolveAgents(agents []string, dir string) []string {
 	if len(agents) == 1 && agents[0] == agentAuto {
 		return harness.Detected(dir)
@@ -220,8 +220,8 @@ type installResult struct {
 	// Instructions is the shared block and root read pointers, not a
 	// per-harness integration: nil when there was no repo root to write to.
 	Instructions *instructionsResult `json:"instructions,omitempty"`
-	// Skills is one entry per --skills publish target (spec 008 acceptance
-	// 9), empty/omitted when --skills was not given.
+	// Skills is one entry per --skills publish target (WL-SPEC-80
+	// §5.2), empty/omitted when --skills was not given.
 	Skills []skillstore.PublishResult `json:"skills,omitempty"`
 }
 
@@ -238,7 +238,7 @@ type agentInstall struct {
 	Path  string   `json:"path"`
 	Bound []string `json:"bound,omitempty"`
 	// UnboundEvents names the Worklode events this harness could not bind
-	// (spec 024 acceptance 4). Coverage degrades to the git pre-commit
+	// (WL-SPEC-80 §5). Coverage degrades to the git pre-commit
 	// heartbeat, which the vcs stanza reports.
 	UnboundEvents []string `json:"unbound_events,omitempty"`
 	// Notes is adapter-specific advice the report must show, such as a
@@ -363,7 +363,7 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 	}
 
 	// The managed block is repo-level, not per-harness, so it is written once
-	// whatever the agent selection was (spec 008 §17.7). It anchors at the
+	// whatever the agent selection was (WL-SPEC-80 §5.3). It anchors at the
 	// *main* worktree, not dir's own root: AGENTS.md is a tracked file, so
 	// installing from a task worktree would otherwise dirty that task's branch
 	// with an unrelated change — a linked worktree inherits the main
@@ -386,7 +386,7 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 
 // skillTargets collects the union of every registered adapter's skill
 // directories — harness.IDs(), not just those detected or named by --agent:
-// acceptance 9 (spec 008) wants every doorway open from one command, the
+// WL-SPEC-80 §5.2 wants every doorway open from one command, the
 // links are inert for a harness that is not installed, and one installed
 // later then just works. Deduped by Dir, first-seen wins: today three of the
 // four adapters report ~/.agents/skills with PerSkill=false and claude-code
@@ -447,7 +447,7 @@ func installSkills(res *installResult, dir string) error {
 			// PublishPerSkill reports "linked" for an individual entry; a
 			// PerSkill target normalizes that to "per-skill" so reportInstall
 			// never claims the whole dir (e.g. ~/.claude/skills) was replaced
-			// with a symlink into the store (spec 008 §17.3).
+			// with a symlink into the store (WL-SPEC-80 §5.2).
 			if pr.Action == "linked" {
 				pr.Action = "per-skill"
 			}

@@ -186,8 +186,8 @@ func TestSecretsExecInjectsExactlyMaterializedNames(t *testing.T) {
 	keyring.MockInit()
 	t.Setenv("HOME", t.TempDir())
 	initSecretsWorktree(t, "WL-9")
-	// The operator's shell already exports one of the task's names. Spec 017
-	// §4 says the child gets the task's value, not this one.
+	// The operator's shell already exports one of the task's names. WL-SPEC-74
+	// §10.5 says the child gets the task's value, not this one.
 	t.Setenv("A_TOKEN", "stale-ambient")
 
 	for _, n := range []string{"A_TOKEN", "B_KEY"} {
@@ -233,8 +233,8 @@ func TestSecretsExecInjectsExactlyMaterializedNames(t *testing.T) {
 	}
 }
 
-// TestSecretsExecScrubsAmbientCredentials is 017 §4's acceptance criterion as
-// amended by ADR 050, run end to end: with the operator's shell exporting
+// TestSecretsExecScrubsAmbientCredentials is WL-SPEC-74 §10.5's acceptance criterion, run
+// end to end: with the operator's shell exporting
 // ANTHROPIC_API_KEY, `lode secret exec -- env` in a claimed worktree hands the
 // child the materialized names and the shell plumbing, and not that key.
 func TestSecretsExecScrubsAmbientCredentials(t *testing.T) {
