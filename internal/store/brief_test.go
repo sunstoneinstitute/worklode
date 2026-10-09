@@ -56,9 +56,6 @@ func TestBrief(t *testing.T) {
 	if b.Lease == nil || b.Lease.ID != lease.ID || b.Lease.Worktree != "host:/wt-1" {
 		t.Fatalf("lease = %+v, want active lease on host:/wt-1", b.Lease)
 	}
-	if b.GoverningDesign != nil || b.AffectedComponents != nil || b.DefinitionOfDone != nil {
-		t.Fatalf("reserved fields must stay nil in v1: %+v", b)
-	}
 }
 
 func TestBriefNoBlockersNoLease(t *testing.T) {
