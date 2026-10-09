@@ -1,4 +1,4 @@
-// progress_journey_test.go drives WL-SPEC-66's write journey end to end
+// progress_journey_test.go drives WL-SPEC-85's write journey end to end
 // through a live OIDC session, the way a person clicks through the cockpit:
 // log in as a spec's owner, accept its draft plan, rally the spec, confirm
 // the rally, then read it back off both the page and the JSON API (§8). It
@@ -22,7 +22,7 @@ import (
 
 // jsonPost drives one page-script write the way progress.js does: a
 // same-origin JSON POST carrying the X-Requested-With header beginJSONPost
-// requires (WL-SPEC-66 §4.2), plus the caller's session cookie.
+// requires (WL-SPEC-85 §5), plus the caller's session cookie.
 func jsonPost(t *testing.T, h http.Handler, path, session, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
@@ -37,7 +37,7 @@ func jsonPost(t *testing.T, h http.Handler, path, session, body string) *httptes
 	return rr
 }
 
-// TestProgressWriteJourney is WL-SPEC-66 §8's write journey: the owner logs
+// TestProgressWriteJourney is the Progress page's write journey: the owner logs
 // in, accepts their draft plan, assembles a rally around the spec it covers,
 // confirms it, and sees the rally active from both the page and the API.
 func TestProgressWriteJourney(t *testing.T) {

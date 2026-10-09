@@ -10,7 +10,7 @@
 // among the tasks it transitively holds, its fan-out, the oldest held task's
 // blocked-since), all computed in-memory over the ProjectWorkFacts
 // assembleProjectCockpit already fetched: no new queries, no storage, no
-// background loop (022: assembly stays observed only by
+// background loop (WL-SPEC-73 §6: assembly stays observed only by
 // worklode_cockpit_projection_requests_total).
 package api
 
@@ -28,8 +28,8 @@ import (
 
 // blockerRef is one direct blocker edge read off a ready-and-blocked task's
 // facts: either an open blocker task (from OpenBlockers) or an unfinished
-// blocking plan with no task yet minted to name (from BlockingPlans, 025
-// §9.3). id namespaces plan blockers as "plan:<docID>" — a form no real task
+// blocking plan with no task yet minted to name (from BlockingPlans, WL-SPEC-77
+// §11.3). id namespaces plan blockers as "plan:<docID>" — a form no real task
 // id takes — so the two kinds never collide as map keys.
 type blockerRef struct {
 	isPlan bool
@@ -70,7 +70,7 @@ type concernRoot struct {
 
 // rankedRoot is one root cause after det-v1's scoring, with the two scores
 // the evidence sentence also reports. The cockpit renders these as
-// SecondaryConcerns; the inbox (056 §3.3) reads root.held to place a task in
+// SecondaryConcerns; the inbox (WL-SPEC-82 §12) reads root.held to place a task in
 // its work buckets, which is why the ranking is exposed as roots and not
 // only as its rendered form.
 type rankedRoot struct {
@@ -302,7 +302,7 @@ func rootURL(r *concernRoot) string {
 // rootEvidence templates det-v1's evidence sentence from the computation
 // (§5/§6), e.g. "WL-66 (ready, unclaimed) has held 4 tasks for 7 days — WL-22
 // (high) -> WL-23, WL-49 -> WL-50." — never AI-produced, so its category
-// stays declared (spec 032 reserves recommended for that).
+// stays declared (WL-SPEC-82 reserves recommended for that).
 func rootEvidence(r *concernRoot, fanOut int, oldestAt, now time.Time) string {
 	return fmt.Sprintf("%s has held %s for %s — %s.",
 		rootHeader(r), pluralCount(fanOut, "task"), humanAge(now.Sub(oldestAt)), rootChain(r))

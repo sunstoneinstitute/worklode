@@ -1,5 +1,5 @@
 // ladder.go serves POST /api/v1/tasks/{id}/gap and POST /api/v1/tasks/{id}/fix
-// (025 §15.5): the escalation ladder's non-escalating rungs. Unlike
+// (WL-SPEC-77 §15): the escalation ladder's non-escalating rungs. Unlike
 // escalate.go's route, neither writes anything about the task itself — no
 // lease, no edge, no state change — so each handler validates its closed
 // label set and calls straight through to one store.RecordEvent call.
@@ -54,7 +54,7 @@ func (s *server) reportGap(w http.ResponseWriter, r *http.Request) {
 // reportFix handles POST /api/v1/tasks/{id}/fix: the fixer's start or finish
 // of a design fix. Phase picks which of fix.started/fix.finished lands, and
 // each phase's own required fields — a 422 on anything else, because the
-// funnel is only worth graphing if the label set is closed (025 §15.5).
+// funnel is only worth graphing if the label set is closed (WL-SPEC-77 §15).
 func (s *server) reportFix(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req model.FixTaskInput

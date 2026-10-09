@@ -1,4 +1,4 @@
-// rally.go derives what "add this spec to the rally" means (WL-SPEC-66
+// rally.go derives what "add this spec to the rally" means (WL-SPEC-85
 // §3.5): the tasks that drive one spec to completion, split into the ones
 // that already exist and the two kinds that have to be minted first. Pure,
 // like the rest of this package — the caller does every write.

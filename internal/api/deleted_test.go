@@ -1,7 +1,7 @@
 package api_test
 
 // deleted_test.go covers the cockpit's Deleted destination (deleted.go): the
-// page that lists spec 044's tombstones with the justification each delete
+// page that lists WL-SPEC-75's tombstones with the justification each delete
 // carried, and the two Restore buttons that undelete one.
 //
 // The tombstone write itself is covered by softdelete_test.go and the store;
@@ -23,7 +23,7 @@ import (
 
 // deleteBoth tombstones the fixture's task and document with a justification,
 // which is what a prod instance demands and a dev instance stores all the
-// same (044 §3).
+// same (WL-SPEC-75 §12).
 func deleteBoth(t *testing.T, f *deleteFixture, justification string) {
 	t.Helper()
 	body := model.DeleteInput{Justification: justification}
@@ -114,7 +114,7 @@ func TestDeletedPageRestoresTask(t *testing.T) {
 }
 
 // TestDeletedPageRestoresDoc is the document half. The two are separate
-// routes because they carry separate permissions (044 §5).
+// routes because they carry separate permissions (WL-SPEC-75 §12).
 func TestDeletedPageRestoresDoc(t *testing.T) {
 	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
@@ -216,7 +216,7 @@ func TestRestoreRefusesCrossOrigin(t *testing.T) {
 }
 
 // TestRestoreMetrics: a restore from the cockpit lands in both the delete
-// counter spec 044 §6 defines — under the same op="undelete" the API path
+// counter that tracks deletes — under the same op="undelete" the API path
 // records — and the form-submission counter every cockpit write records.
 func TestRestoreMetrics(t *testing.T) {
 	t.Parallel()

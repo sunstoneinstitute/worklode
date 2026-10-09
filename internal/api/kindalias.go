@@ -29,7 +29,7 @@ func (s *server) normalizeTaskKind(kind, surface string) string {
 }
 
 // normalizeTaskKindList applies normalizeTaskKind to each element of a
-// comma-separated kind filter (025 §8.8) and returns the normalised list,
+// comma-separated kind filter (WL-SPEC-77 §10) and returns the normalised list,
 // rejoined. ok is false when an element is not a task kind, and bad names
 // that element, so the caller's 422 can point at it rather than at the whole
 // list. An empty filter stays empty and is ok: it means "any kind".

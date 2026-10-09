@@ -63,9 +63,9 @@ type Config struct {
 	ClusterEnvMap         map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
 	// InstanceEnv (LODE_INSTANCE_ENV) is which kind of instance this is: "dev"
-	// or "prod", nothing else, empty meaning prod (039 §3). It is not
+	// or "prod", nothing else, empty meaning prod (WL-SPEC-73 §4.2). It is not
 	// ClusterEnvMap, which describes the deployments worklode observes. Today
-	// it decides only whether a delete must carry a justification (044 §3).
+	// it decides only whether a delete must carry a justification (WL-SPEC-75 §12).
 	// NewServer normalises and validates it, so an unrecognised value fails
 	// the boot rather than being read as either answer.
 	InstanceEnv string
@@ -118,7 +118,7 @@ type Config struct {
 
 	// ApprovalFlowsDir (LODE_APPROVAL_FLOWS_DIR) holds instance approval-flow
 	// overrides as *.json, layered over the shipped defaults by flow name
-	// (029 §7.2). Empty means defaults only. An unreadable or invalid file
+	// (WL-SPEC-75 §13.6). Empty means defaults only. An unreadable or invalid file
 	// there fails the boot: it changes what the server demands of a review,
 	// so a typo must not be read as a weaker requirement.
 	ApprovalFlowsDir string `env:"LODE_APPROVAL_FLOWS_DIR"`
@@ -135,7 +135,7 @@ type Config struct {
 
 	// OTLPUpstream is the cluster otel-gateway base URL the ingest route
 	// relays each stored log batch to, and OTLPUpstreamToken the bearer it
-	// presents (spec 071 §3). Both empty disables forwarding, which is the
+	// presents (WL-SPEC-80 §8.8). Both empty disables forwarding, which is the
 	// local development default: batches are still stored, nothing leaves
 	// the process.
 	OTLPUpstream      string `env:"LODE_OTLP_UPSTREAM"`
@@ -153,7 +153,7 @@ type Config struct {
 	DisableSkillMatching bool
 	// EmbeddingURL is a full OpenAI-compatible embeddings endpoint URL —
 	// in the default deployment a CPU sidecar, not a third-party API
-	// (040 §2.3). Unset: no dense arm, so search runs lexical-only and
+	// (WL-SPEC-79 §14). Unset: no dense arm, so search runs lexical-only and
 	// recommendations run pins plus lexical matches (§11).
 	EmbeddingURL string `env:"LODE_EMBEDDING_URL"`
 	// EmbeddingModel names the model sent to EmbeddingURL.
@@ -166,7 +166,7 @@ type Config struct {
 	// EmbeddingAPIKey authenticates against EmbeddingURL.
 	EmbeddingAPIKey string `env:"LODE_EMBEDDING_API_KEY"`
 	// EmbeddingQueryPrefix and EmbeddingDocumentPrefix are the model's
-	// asymmetric task instructions (040 §3), prepended per role. Both unset
+	// asymmetric task instructions (WL-SPEC-79 §14), prepended per role. Both unset
 	// is correct for a symmetric model and wrong for EmbeddingGemma, where
 	// the mismatch costs retrieval quality silently rather than erroring.
 	EmbeddingQueryPrefix    string `env:"LODE_EMBEDDING_QUERY_PREFIX"`
@@ -182,7 +182,7 @@ type Config struct {
 	// IndexInterval is how often the corpus convergence loop runs
 	// (LODE_INDEX_INTERVAL, default indexer.DefaultInterval). The loop runs
 	// with or without an embedding provider — with none it still writes the
-	// chunk text the lexical arm needs (040 §7, §11) — but only when the
+	// chunk text the lexical arm needs (WL-SPEC-79 §16, §17) — but only when the
 	// caller passes a BackgroundCtx.
 	IndexInterval time.Duration
 
@@ -194,7 +194,7 @@ type Config struct {
 	SpeechToTextAPIKey string `env:"LODE_ELEVENLABS_API_KEY"`
 	SpeechToTextURL    string `env:"LODE_ELEVENLABS_URL"`
 
-	// Blob storage (spec 021). Off unless BlobEndpoint and BlobBucket are
+	// Blob storage (WL-SPEC-78). Off unless BlobEndpoint and BlobBucket are
 	// both set: uploads then return 501 and every other surface behaves
 	// exactly as before, so a local docker-compose stack needs no bucket.
 	// Once they are set the access and secret keys are required too, and a
@@ -211,7 +211,7 @@ type Config struct {
 	BlobStoreForTest blobstore.Store
 
 	// MaxBlobBytesForTest lowers the upload cap from maxBlobBytes. Tests
-	// only, and deliberately not an operator knob: 100 MiB is spec 021 §5's
+	// only, and deliberately not an operator knob: 100 MiB is WL-SPEC-78 §8.5's
 	// number, and a test that wants to see the 413 should not have to spool
 	// 100 MiB to prove it. Zero means the real cap.
 	MaxBlobBytesForTest int64
@@ -246,7 +246,7 @@ type Config struct {
 	//
 	// A live client rather than a URL because serve.go already builds one for
 	// the projector: the endpoint, its OAuth client credentials and their
-	// token source are graphserver.FromEnv's business (spec 006 §11), and
+	// token source are graphserver.FromEnv's business (WL-SPEC-79 §12), and
 	// handing the server a URL would mean a second client with a second token
 	// source against the same endpoint. Nil disables the graph-backed reads
 	// (drift, gaps) and POST /api/v1/derive; the frontier and the critical
@@ -296,9 +296,9 @@ type server struct {
 	oidc *oidc.Verifier
 
 	// gh and tokenCipher are nil unless the GitHub App OAuth client is
-	// configured; reserved for the future account-link flow (spec 001 §9.3).
+	// configured; reserved for the future account-link flow (WL-SPEC-74 §9.2).
 	// Login never touches them — Keycloak is worklode's sole interactive
-	// login provider (spec 001 §3).
+	// login provider (WL-SPEC-74 §1.1).
 	gh          *githubauth.Client
 	tokenCipher *tokencrypt.Cipher
 
@@ -306,7 +306,7 @@ type server struct {
 	// when nil, addRepo skips done_state discovery.
 	appAuth *githubauth.AppAuth
 
-	// overview is spec 007's read surface (see overview.go). Always non-nil:
+	// overview is WL-SPEC-82's read surface (see overview.go). Always non-nil:
 	// the frontier and the critical path are computed from the backbone, so
 	// they answer on an instance with no graph configured. cfg.Graph being
 	// nil is what disables the graph-backed reads, inside the service.
@@ -325,7 +325,7 @@ type server struct {
 	// callers don't need it non-nil.
 	hookMetrics *hooks.Metrics
 
-	// otlpMetrics and otlpForward serve POST /otlp/v1/logs (spec 071 §1,
+	// otlpMetrics and otlpForward serve POST /otlp/v1/logs (WL-SPEC-80 §8.6,
 	// §3). Both are set in registerRoutes; otlpForward stays nil when no
 	// upstream is configured, which is what turns forwarding off — every
 	// *otlp.Forwarder and *otlp.Metrics method is nil-safe.
@@ -400,7 +400,7 @@ type server struct {
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
 
-	// blobs is the object-storage backend for spec 021's content-addressed
+	// blobs is the object-storage backend for WL-SPEC-78's content-addressed
 	// blobs, or nil when no bucket is configured — the blob endpoints then
 	// answer 501 and nothing else changes.
 	blobs blobstore.Store
@@ -457,14 +457,14 @@ type server struct {
 	homeRenders *prometheus.CounterVec
 
 	// runBoardRenders counts project run board page renders (GET
-	// /projects/{id}/work, 032 §8), by outcome (empty, rendered); see
+	// /projects/{id}/work), by outcome (empty, rendered); see
 	// runboard.go's runBoardPage and metrics.go's observeRunBoardRender.
 	// navWrap already counts the "work" destination by outcome — this one
 	// says whether the viewer landed on a board with any live work on it.
 	runBoardRenders *prometheus.CounterVec
 
-	// inboxRenders counts cross-project inbox page renders (GET /inbox, 056
-	// §3), by outcome (empty, rendered); see inbox.go's inboxPage and
+	// inboxRenders counts cross-project inbox page renders (GET /inbox, WL-SPEC-82
+	// §12), by outcome (empty, rendered); see inbox.go's inboxPage and
 	// metrics.go's observeInboxRender. navWrap already counts the "inbox"
 	// destination by outcome — this one says whether the viewer had anything
 	// waiting on them.
@@ -476,12 +476,12 @@ type server struct {
 	// These are the cockpit's form writes; the Progress page's script writes
 	// are counted by progressWrites.
 	formSubmissions *prometheus.CounterVec
-	// progressWrites counts the Progress page's script writes (066 §4.2), by
+	// progressWrites counts the Progress page's script writes (WL-SPEC-85 §5), by
 	// route and outcome; see webform.go and observeProgressWrite.
 	progressWrites *prometheus.CounterVec
 	// progressFragmentRenders counts the Progress page's row/summary fragment
-	// requests (GET .../progress/spec/{doc}, GET .../progress/summary, 066
-	// §5.2), by fragment (spec, summary) and outcome; see progress.go and
+	// requests (GET .../progress/spec/{doc}, GET .../progress/summary, WL-SPEC-85
+	// §6), by fragment (spec, summary) and outcome; see progress.go and
 	// observeProgressFragmentRender.
 	progressFragmentRenders *prometheus.CounterVec
 	// dictations counts POST /dictate outcomes (WL-299); see metrics.go.
@@ -502,7 +502,7 @@ type server struct {
 	// deliberately not labels: all three are unbounded.
 	milestoneChanges *prometheus.CounterVec
 
-	// referenceWrites counts entity_edges writes (spec 029 §5), by rel (see
+	// referenceWrites counts entity_edges writes (WL-SPEC-75 §13.4), by rel (see
 	// referenceRels) and outcome (ok, error); see references.go and
 	// observeReferenceWrite. The from/to ids are deliberately not labels:
 	// both are unbounded.
@@ -534,7 +534,7 @@ type server struct {
 	// by outcome; see observeApprovalFlowApply.
 	approvalFlowApplies *prometheus.CounterVec
 
-	// doc sync (spec 025 §15.7): runs by result, request duration, docs synced
+	// doc sync (WL-SPEC-77 §15): runs by result, request duration, docs synced
 	// by kind/outcome, and forced (--force) syncs accepted.
 
 	// localMerges counts tasks named in a local merge report, by result
@@ -567,7 +567,7 @@ type server struct {
 
 	// activityStreamsActive and activityStreamFramesSent are the same pair
 	// for the task page's Activity follow (GET /tasks/{id}/activity/events,
-	// spec 071 §4).
+	// WL-SPEC-80 §8.9).
 	activityStreamsActive    prometheus.Gauge
 	activityStreamFramesSent prometheus.Counter
 
@@ -576,7 +576,7 @@ type server struct {
 	// observeListExpansion.
 	listExpansions *prometheus.CounterVec
 
-	// blobUploads and blobServes count the two spec 021 blob endpoints by
+	// blobUploads and blobServes count the two WL-SPEC-78 blob endpoints by
 	// outcome; see blobs.go and observeBlobUpload/observeBlobServe. The
 	// generic http_requests_total cannot stand in: a dedup and a fresh store
 	// are both 200, and a "too large" and a rejected body are both 4xx, yet
@@ -622,7 +622,7 @@ type server struct {
 	// caller action.
 	taskBlobRefs *prometheus.CounterVec
 
-	// deletes counts spec 044's tombstone operations by entity, op and
+	// deletes counts WL-SPEC-75's tombstone operations by entity, op and
 	// outcome; see softdelete.go and observeDelete. http_requests_total cannot
 	// stand in for the outcome that matters: a prod instance refusing a
 	// justification-less delete and a delete of a row that does not exist are
@@ -638,7 +638,7 @@ type server struct {
 	// watching a request-shaped metric (WL-138).
 	kindAliasUses *prometheus.CounterVec
 
-	// overviewReads counts spec 007's five read endpoints by read and
+	// overviewReads counts WL-SPEC-82's five read endpoints by read and
 	// outcome, and deriveRuns counts each server-side deriver a POST
 	// /api/v1/derive ran, by source and outcome. See overview.go and
 	// observeOverviewRead/observeDeriveRun. http_requests_total cannot stand
@@ -658,13 +658,13 @@ type server struct {
 	// metrics.go's observeBriefReview.
 	briefReviews *prometheus.CounterVec
 
-	// probeReports counts POST /api/v1/artifact-reports (029 §3.2), by state
+	// probeReports counts POST /api/v1/artifact-reports (WL-SPEC-75 §13.3), by state
 	// (hooks.CatalogStates, or "invalid" for one that fails validation) and
 	// result (ok, duplicate, unrouted, invalid, error); see probe.go and
 	// observeProbeReport.
 	probeReports *prometheus.CounterVec
 
-	// deliverableReports counts user-reported deliverable state (029 §3.2),
+	// deliverableReports counts user-reported deliverable state (WL-SPEC-75 §13.3),
 	// by source (cli, web) and outcome (reported, invalid, not_found, error);
 	// see deliverables.go and observeDeliverableReport.
 	deliverableReports *prometheus.CounterVec
@@ -717,7 +717,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// /auth/login, and when no login provider is configured the UI stays open
 	// as in v1 — as one named decision rather than a silent passthrough (see
 	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The five
-	// global destinations (spec 056 §1, amending 032 §2) and the project-local
+	// global destinations (WL-SPEC-82 §2.1) and the project-local
 	// destinations below each record one
 	// worklode_web_navigation_requests_total observation via navWrap; the
 	// routes Home, Reviews and Deliveries kept after leaving that list record
@@ -746,7 +746,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /projects/{id}/progress/spec/{doc}", s.progressRowFragment)
 	r.web("GET /projects/{id}/progress/summary", s.progressSummaryFragment)
 	// Not navWrapped: the page script fetches it and reads JSON back, so it
-	// is never a navigated page (066 §4.2 rule 4), like /preview and /dictate.
+	// is never a navigated page (WL-SPEC-85 §5 rule 4), like /preview and /dictate.
 	r.web("POST /projects/{id}/progress/accept", s.progressAccept)
 	r.web("POST /projects/{id}/progress/plan", s.progressPlan)
 	r.web("POST /projects/{id}/progress/rally/add", s.progressRallyAdd)
@@ -776,7 +776,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /approvals/{id}", s.navWrap("reviews", s.approvalPage))
 	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("", "Deliveries",
 		"Publication, deployment, and operational delivery evidence arrive with WL-SPEC-75 §10 and §13.3.")))
-	// Knowledge is the document corpus: spec 032 §2 defines the destination
+	// Knowledge is the document corpus: WL-SPEC-82 §2 defines the destination
 	// as "documents and graph-backed expert views", and /docs is the half of
 	// it that exists. /knowledge stays as a redirect so the spec's own
 	// spelling of the URL resolves; it renders no page, so it records no
@@ -789,7 +789,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// so they are not navWrapped.
 	r.web("GET /tasks/{id}", s.taskPage)
 	r.web("GET /tasks/{id}/activity/events", s.taskActivityEvents)
-	// The document corpus (spec 025 §5) is read-only in the cockpit: writing
+	// The document corpus (WL-SPEC-77 §3) is read-only in the cockpit: writing
 	// a document is an authoring act performed through the API and the CLI,
 	// where the body — the artifact itself — comes from a file.
 	r.web("GET /docs", s.navWrap("knowledge", s.docsPage))
@@ -811,23 +811,23 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /projects/{proj}/{kind}/{n}/{ver}", s.projectEntityPage)
 	r.web("GET /rules/{ref}", s.ruleRefRedirect)
 	r.web("GET /{ref}", s.refShortcut)
-	// The drift board (spec 007) is the graph-backed half of Knowledge, so it
+	// The drift board (WL-SPEC-82) is the graph-backed half of Knowledge, so it
 	// marks that destination current rather than taking an eighth nav entry
 	// (see primaryNav's doc comment). Read-only: it renders no act.
 	r.web("GET /drift", s.navWrap("drift", s.driftPage))
-	// Deciding an approval is a web-session act (029 §7.3): the session's
+	// Deciding an approval is a web-session act (WL-SPEC-75 §13.6): the session's
 	// group claims are at most as old as the login that stored them, a bearer
 	// token's are as old as the token, and an open instance has no identity to
 	// attribute a decision to. requireSession is applied here, at
 	// registration, so no other route can reach the handler without it — and
 	// there is deliberately no CLI verb and no /api/v1 route for it.
 	r.web("POST /approvals/{id}/decide", s.navWrap("approval_decide", s.requireSession(permApprovalDecide, s.decideApproval)))
-	// The dependent owner's note on an open impact review (029 §7.1), the
+	// The dependent owner's note on an open impact review (WL-SPEC-75 §13.6), the
 	// other half of that lifecycle: written before a prior approver decides,
 	// and a web-session act for the same reason the decision is.
 	r.web("POST /approvals/{id}/note", s.navWrap("approval_note", s.requireSession(permApprovalNote, s.noteApproval)))
 	r.public("GET /assets/", s.assetHandler())
-	// The blob asset route (spec 021 §4). Neither an API route nor a web
+	// The blob asset route (WL-SPEC-78 §8.4). Neither an API route nor a web
 	// page: a browser <img> on a task page fetches it with a session cookie
 	// and an agent fetches it with a bearer token, so it takes either — see
 	// eitherGuard in authz.go and r.asset in router.go.
@@ -868,7 +868,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.publicFunc("GET /auth/cli/login", s.cliLogin)
 	r.publicFunc("POST /auth/cli/token", s.cliToken)
 
-	// Agent telemetry ingest (spec 071 §1). Not under /api/v1: the path is
+	// Agent telemetry ingest (WL-SPEC-80 §8.6). Not under /api/v1: the path is
 	// the OTLP convention, so a stock exporter reaches it with
 	// OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=<server>/otlp/v1/logs. Bearer auth
 	// like the rest of the agent surface.
@@ -968,7 +968,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/docs/{id}/undelete", s.undeleteDoc)
 
 	// Requiring and listing only. Deciding is web-session-gated
-	// (029 §7.3) and lives at POST /approvals/{id}/decide; see approvals.go.
+	// (WL-SPEC-75 §13.6) and lives at POST /approvals/{id}/decide; see approvals.go.
 	r.api("GET /api/v1/approvals", s.listApprovals)
 	r.api("POST /api/v1/approvals", s.requireApproval)
 
@@ -1052,7 +1052,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/whoami", s.whoami)
 	r.api("POST /api/v1/reconcile", s.reconcile)
 
-	// Spec 007's read surface (overview.go). The frontier and the critical
+	// WL-SPEC-82's read surface (overview.go). The frontier and the critical
 	// path answer from the backbone alone; drift and gaps need a graph and
 	// 503 without one. The derive POST is admin-only — it replaces org-wide
 	// named graphs.
@@ -1129,7 +1129,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// Normalised here as well as in serve.go, so an embedder that builds a
 	// Config in Go — every test in this package included — cannot end up with
 	// an unset or bogus environment. Empty becomes prod; anything but dev or
-	// prod refuses the boot (039 §3).
+	// prod refuses the boot (WL-SPEC-73 §4.2).
 	instanceEnv, err := ParseInstanceEnv(cfg.InstanceEnv)
 	if err != nil {
 		return nil, nil, err
@@ -1142,7 +1142,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 
 	// Instance configuration, read before anything serves: a flow decides
 	// what a review demands, so a bad file fails the boot (see the field).
-	// The 'worklode' actor owns every row the rules mint — 029 §7.2 credits
+	// The 'worklode' actor owns every row the rules mint — WL-SPEC-75 §13.6 credits
 	// the policy, not whoever filed the idea.
 	s.flows, err = LoadApprovalFlows(cfg.ApprovalFlowsDir)
 	if err != nil {
@@ -1190,7 +1190,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	}
 	s.appAuth = appAuth
 
-	// Spec 007's read surface, and the reader its server-side derivers need.
+	// WL-SPEC-82's read surface, and the reader its server-side derivers need.
 	// The service is always built — see the field comment — while the reader
 	// exists only when the GitHub App does.
 	s.overview = &overview.Service{Store: st, Graph: cfg.Graph}
@@ -1223,7 +1223,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			QueryPrefix: cfg.EmbeddingQueryPrefix, DocumentPrefix: cfg.EmbeddingDocumentPrefix,
 			Metrics: embedMetrics,
 		}
-		// index_chunks.embedding is vector(768) (040 §2.2), so a provider of
+		// index_chunks.embedding is vector(768) (WL-SPEC-79 §14), so a provider of
 		// any other width cannot store a single row. Refuse the boot rather
 		// than fail every write of every convergence pass.
 		if dim := s.embedder.Dim(); dim != store.IndexDim {
@@ -1270,7 +1270,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: fetch, Log: s.log}
 	}
 
-	// Blob storage (spec 021). The feature is off unless an endpoint and a
+	// Blob storage (WL-SPEC-78). The feature is off unless an endpoint and a
 	// bucket are both named; the injected store is the test path and wins, so
 	// a test never has to stand up an S3 endpoint to exercise the handlers.
 	// NewS3 then requires the credentials as well, so a half-configured
@@ -1356,7 +1356,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		go s.runSkillSync(s.bgCtx, "boot")
 	}
 
-	// The doc-lifecycle subscriber (025 §15.4). Gated on the caller having
+	// The doc-lifecycle subscriber (WL-SPEC-77 §15). Gated on the caller having
 	// passed a background context rather than on s.bgCtx, which defaults to
 	// context.Background(): the hundreds of tests that pass none stay
 	// loop-free, while serve.go passes the process shutdown context, so
@@ -1374,7 +1374,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if err := st.EnsureEventSubscriber(context.Background(), specReconcilerSubscriber); err != nil {
 			return nil, nil, fmt.Errorf("ensure %s subscriber: %w", specReconcilerSubscriber, err)
 		}
-		// The corpus convergence loop (040 §7), gated the same way and for
+		// The corpus convergence loop (WL-SPEC-79 §16), gated the same way and for
 		// the same reason: it is a background loop with no configuration of
 		// its own to switch it on. It runs with no embedding provider too,
 		// writing the chunk text the lexical arm needs (§11).
@@ -1383,7 +1383,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			Budget: s.chunkBudget,
 		}).Loop(cfg.BackgroundCtx, cfg.IndexInterval)
 
-		// The branch-rules refresh loop (WL-SPEC-66 §6.3). Also needs the
+		// The branch-rules refresh loop (WL-SPEC-85 §7). Also needs the
 		// App: with no GitHub credentials there is nothing to read, so the
 		// fact stays unknown and readers treat it as "no queue".
 		if appAuth != nil {
@@ -1391,7 +1391,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			go s.branchRulesLoop(cfg.BackgroundCtx)
 		}
 
-		// The OTLP forward loop (071 §3). Gated like the loops above; with
+		// The OTLP forward loop ((WL-SPEC-80 §8.8)). Gated like the loops above; with
 		// no upstream configured otlpForward is nil and Run returns at once.
 		go s.otlpForward.Run(cfg.BackgroundCtx)
 
@@ -1650,7 +1650,7 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
 	// A refusal about this row, not about the endpoint: the document accept
-	// and transfer gates (025 §7) admit only the owner, whatever role the
+	// and transfer gates (WL-SPEC-77 §9) admit only the owner, whatever role the
 	// caller holds. The message is the store's, because "someone else owns
 	// it" is what the caller has to act on.
 	case errors.Is(err, store.ErrForbidden):
@@ -1710,7 +1710,7 @@ func (s *server) recordEvent(ctx context.Context, source, eventType string, v an
 
 // recordTaskEvent is recordEvent for an event about one task: the payload is
 // v's JSON object with "task" set to the task id, the key every task-scoped
-// payload names its subject under (025 §15.2), so GET /api/v1/events
+// payload names its subject under (WL-SPEC-77 §15), so GET /api/v1/events
 // attributes the event without a second read of state_log. v may be nil for
 // an event whose payload is the attribution and nothing else.
 //

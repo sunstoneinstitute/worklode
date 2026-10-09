@@ -4,7 +4,7 @@
 // display strings — that is the next layer's job (rendering into
 // ui.HomeCard). It reads no store and no request; assembleHomeFacts is a
 // plain function over already-fetched inputs so it can be tested without a
-// database. Home's other half, the Morning Brief (032 §9), lives in
+// database. Home's other half, the Morning Brief (WL-SPEC-82 §11), lives in
 // morningbrief.go, where assembleMorningBrief is pure the same way.
 package api
 
