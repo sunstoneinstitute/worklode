@@ -55,3 +55,21 @@ func DeclaredEdges(table string) []string {
 	slices.Sort(out)
 	return out
 }
+
+// ConceptNS is the wlc: namespace of ns/concept.ttl.
+const ConceptNS = "https://worklode.io/ns/concept/"
+
+// IsConceptIRI reports whether iri names a scheme or a concept of
+// ns/concept.ttl: wlc: followed by a scheme's or a member's local name.
+func IsConceptIRI(iri string) bool {
+	local, ok := strings.CutPrefix(iri, ConceptNS)
+	if !ok || local == "" {
+		return false
+	}
+	for scheme, members := range Schemes {
+		if scheme == local || slices.Contains(members, local) {
+			return true
+		}
+	}
+	return false
+}
