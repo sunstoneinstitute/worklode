@@ -78,6 +78,24 @@ func actionOn(acts []ProgressAction, route string) *ProgressAction {
 	return nil
 }
 
+// TestProgressReviewActionRoute: Review opens a WL-SPEC-84 review through
+// 84's own route with the document as its body (WL-SPEC-85 §4), so an
+// enabled button never posts to a Progress-page route that does not exist.
+func TestProgressReviewActionRoute(t *testing.T) {
+	t.Parallel()
+	spec := model.ProgressSpec{Doc: 3, Ref: "WL-SPEC-66", Status: "accepted"}
+	act := actionOn(progressSpecActions(spec, "alice", true), "/api/v1/reviews")
+	if act == nil || act.Reason != "" || act.Body != `{"doc":3}` {
+		t.Fatalf("spec actions = %+v; want an enabled Review posting {\"doc\":3} to /api/v1/reviews",
+			progressSpecActions(spec, "alice", true))
+	}
+	plan := model.ProgressPlan{Doc: 4, Ref: "WL-PLAN-1", State: "accepted"}
+	if act := actionOn(progressPlanActions(plan, "alice", true), "/api/v1/reviews"); act == nil || act.Body != `{"doc":4}` {
+		t.Fatalf("plan actions = %+v; want Review posting {\"doc\":4} to /api/v1/reviews",
+			progressPlanActions(plan, "alice", true))
+	}
+}
+
 // TestProgressAcceptActionOnADraftSpec: §3.2 puts the button on a draft
 // spec's row as well as on a draft plan's line, on the same owner rule.
 func TestProgressAcceptActionOnADraftSpec(t *testing.T) {

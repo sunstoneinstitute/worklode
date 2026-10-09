@@ -216,7 +216,10 @@
       restore(true);
       if (msg && el) showError(el, msg);
     };
-    fetch(base() + "/" + a.getAttribute("data-route"), {
+    // A route is relative to the page unless it is absolute (Review's
+    // /api/v1/reviews, WL-SPEC-85 §4).
+    var route = a.getAttribute("data-route");
+    fetch(route.charAt(0) === "/" ? route : base() + "/" + route, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", "X-Requested-With": "lode-cockpit" },
