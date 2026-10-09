@@ -1,7 +1,7 @@
 ---
 name: consolidate-specs
 description: Consolidate a project's overlapping specs (old design docs, rewrites, mirrors, "as of" snapshots) into one current-state spec per subsystem, with owner review, parallel target agents and a final check before retiring the sources
-argument-hint: "[project or scope]"
+argument-hint: "[project key | doc refs | spec folder | subsystem]"
 disable-model-invocation: true
 ---
 
@@ -12,6 +12,16 @@ current-state set, one spec per subsystem. Most of the process applies to any sp
 details are in the last section.
 
 Scope for this run: $ARGUMENTS
+
+The scope is free text. Empty means every spec in the current project. Examples:
+
+```
+/lode:consolidate-specs DP                            # one Worklode project
+/lode:consolidate-specs DP-SPEC-12 DP-SPEC-25 DP-ADR-2  # specific documents
+/lode:consolidate-specs docs/specs/ docs/specs2/      # git specs not yet in Worklode
+/lode:consolidate-specs auth and deployment           # a subsystem, in words
+/lode:consolidate-specs DP, skip the MCP specs        # a scope plus an exclusion
+```
 
 ## Principles
 
