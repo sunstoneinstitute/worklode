@@ -30,8 +30,8 @@ func normalizeSection(s string) string {
 // cat-style (spec 026 §3). It backs every SPEC/ADR path through `lode show`
 // (show.go): the typed-id dispatch (expectedKind "", since resolveDocRef's
 // own <KEY>-<TYPE>-<n> shorthand form already kind-checks), and the
-// --spec/--adr/--kind flags via runDocShowByOrdinal (expectedKind "SPEC" or
-// "ADR").
+// --spec/--plan/--kind flags via runDocShowByOrdinal (expectedKind "SPEC" or
+// "PLAN").
 //
 // Documents come from the backbone, not from disk: the project scope is
 // resolved the usual way (config, else the git remote), GET /api/v1/docs
@@ -75,6 +75,9 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 		if err := checkDocKind(doc, expectedKind); err != nil {
 			return err
 		}
+	}
+	if notice := designdoc.RetiredADRNotice(ref, doc); notice != "" {
+		fmt.Fprintln(cmd.ErrOrStderr(), notice)
 	}
 
 	if refSection != "" && section != "" && refSection != section {

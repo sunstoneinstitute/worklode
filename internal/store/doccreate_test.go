@@ -116,7 +116,7 @@ func TestDocCreateAutoAssignsNumber(t *testing.T) {
 	}
 }
 
-// TestDocCreateAutoAssignsNumberPerKind: spec and ADR draw from separate
+// TestDocCreateAutoAssignsNumberPerKind: spec and plan draw from separate
 // sequences within the same project, per 025 §14.3's "own" per-kind count.
 func TestDocCreateAutoAssignsNumberPerKind(t *testing.T) {
 	t.Parallel()
@@ -125,11 +125,11 @@ func TestDocCreateAutoAssignsNumberPerKind(t *testing.T) {
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Slug: "kind-spec", Body: specBody, CreatedBy: "stig",
 	})
-	adr := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "adr", Slug: "kind-adr", Body: specBody, CreatedBy: "stig",
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "kind-plan", CreatedBy: "stig",
 	})
-	if spec.Number != 1 || adr.Number != 1 {
-		t.Fatalf("spec/adr numbers = %d/%d, want 1/1 (separate sequences)", spec.Number, adr.Number)
+	if spec.Number != 1 || plan.Number != 1 {
+		t.Fatalf("spec/plan numbers = %d/%d, want 1/1 (separate sequences)", spec.Number, plan.Number)
 	}
 }
 

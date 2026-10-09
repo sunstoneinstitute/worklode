@@ -26,7 +26,7 @@ Draft the markdown — frontmatter included — in a scratch file, then:
 lode doc lint <file>                                # local lint: anchors, plan ## Tasks
 lode doc add --kind <spec-or-plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body, or a plan's at any status
-lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec/ADR in place (WL-SPEC-77 §10)
+lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec in place (WL-SPEC-77 §10)
 lode doc edit <ref> --file <file> --substantive  # same, judged substantive: reviewers are asked again
 lode doc revise <ref>                        # open a candidate revision on an accepted doc
 lode doc revise <ref> --file <file>          # update the open candidate's body
@@ -49,7 +49,7 @@ unlike `lode doc lint <file>`, which only lints one local file.
 The scratch file is an editor buffer, not a copy of record — nothing reads
 it once the command above succeeds. `lode doc edit` replaces a draft's body,
 and a plan's at any status (plans are edited in place — WL-SPEC-77 §11). On an
-accepted spec or ADR it is WL-SPEC-77 §10's in-place amendment, and the server
+accepted spec it is WL-SPEC-77 §10's in-place amendment, and the server
 gates it mechanically: an edit that changes a `wl:`/`wlc:` term, a code
 span or fenced block, an acceptance-criteria section, the frontmatter
 `requires` list, or a section that open work already points at (§8.2) is
@@ -126,8 +126,8 @@ dependency → amendment → supersession:
 
 | Key | On | Meaning |
 |---|---|---|
-| `status` | spec, ADR | `draft`, `accepted`, or `superseded` (`proposed` is retired — a document under review stays `draft`) |
-| `issued` | spec, ADR | `YYYY-MM-DD` of first publication |
+| `status` | spec | `draft`, `accepted`, or `superseded` (`proposed` is retired — a document under review stays `draft`) |
+| `issued` | spec | `YYYY-MM-DD` of first publication |
 | `covers` | plan | scalar or list of requirement refs (`WL-REQ-<n>`), spec-section references, or whole-document references this plan undertakes to build in full; a section or document entry skips invariants and informative rules, a direct ref to one is refused; `coverage:`/`fullCoverageWith:` are refused |
 | `implements` | plan | retired spelling of `covers`; still parses, reported as retired. A document carrying both is an error |
 | `defers` | plan | list of `{spec, to}`: a section this plan hands off, and the document expected to cover it (WL-SPEC-78 §4.2) |
@@ -136,7 +136,6 @@ dependency → amendment → supersession:
 | `isRequiredBy`, `blocks` | none | inverse spellings, not keys: a header carrying one is refused, naming `requires` or `blockedBy` (WL-SPEC-77 §8.1) |
 | `wasDerivedFrom` | spec | scalar reference (provenance) |
 | `amends`, `amendedBy`, `replaces`, `isReplacedBy` | none | not keys: a header carrying one is refused. Amendment and supersession are rule edges, see below |
-| `kind` | spec, ADR | `adr`, or absent for a spec — the resolver's document kind, distinct from a plan-task's `kind` (feature/bug/chore/design) below |
 | `artifact` | any | catalog address(es) (`bigquery://…`, `gs://…`) this document is verified by (WL-SPEC-75 §13.3); declares additively |
 
 A retired `task` key once named the lode task a plan's execution hung off; it
@@ -148,11 +147,13 @@ plan's minted tasks with `lode task list --plan <plan>`.
 A reference names a document, and there is no file for it to point at.
 Resolution tries, in order: an **exact slug match** in the project (the bare
 slug from `lode doc add --slug`, e.g. `covers: execution-backbone`); the
-**`WL-SPEC-N` shorthand** (`<PROJECTKEY>-SPEC|ADR|PLAN-<n>`, WL-SPEC-78 §3.2, e.g.
-`WL-SPEC-77`, `WL-ADR-7`, `WL-PLAN-7` — the only form that crosses projects,
+**`WL-SPEC-N` shorthand** (`<PROJECTKEY>-SPEC|PLAN-<n>`, WL-SPEC-78 §3.2, e.g.
+`WL-SPEC-77`, `WL-PLAN-7` — the only form that crosses projects,
 e.g. `CMS-SPEC-4` from inside `WL`); then a **bare corpus number** (`25`, not
-`025`), only when nothing else matched and exactly one live spec or ADR
-carries it. Append `#sec-N` to any of these to narrow to a section.
+`025`), only when nothing else matched and exactly one live spec
+carries it. Append `#sec-N` to any of these to narrow to a section. The `adr`
+kind is retired: every former ADR is a spec, and a `<KEY>-ADR-<n>` ref
+resolves to that successor spec (WL-SPEC-77 §7a).
 
 **A filename does not resolve.** `042-secret-templates.md` is neither a slug
 nor a bare number — the trailing text after the digits makes matching it to
@@ -167,7 +168,7 @@ referring project can repair that one.)
 
 ## Section anchors
 
-Every numbered heading in a spec or ADR carries a `{#sec-N}` anchor —
+Every numbered heading in a spec carries a `{#sec-N}` anchor —
 `## 2. Lease lifecycle {#sec-2}`, `### 2.1 Renewal {#sec-2.1}`. Depth is
 capped at 3 levels (H2/H3/H4); a heading deeper than that is legal content
 but takes no number and no anchor — it belongs to its nearest anchored

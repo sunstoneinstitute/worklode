@@ -22,8 +22,8 @@ func TestListDocsByOwner(t *testing.T) {
 	createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
 	})
-	aliceAdr := createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "proj", Kind: "adr", Number: 1, Slug: "001-x", Body: docSpecBody,
+	alicePlan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "001-x",
 	})
 	bobSpec := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "spec", Number: 26, Slug: "026-x", Body: docSpecBody, Owner: "bob",
@@ -34,7 +34,7 @@ func TestListDocsByOwner(t *testing.T) {
 		want  []int64
 	}{
 		"by owner":      {"?owner=bob", []int64{bobSpec.ID}},
-		"owner+kind":    {"?owner=alice&kind=adr", []int64{aliceAdr.ID}},
+		"owner+kind":    {"?owner=alice&kind=plan", []int64{alicePlan.ID}},
 		"unknown owner": {"?owner=nobody", nil},
 	}
 	for name, tc := range cases {

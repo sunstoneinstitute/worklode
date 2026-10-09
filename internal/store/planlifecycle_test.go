@@ -142,12 +142,12 @@ func TestListDocsHidesTerminalPlans(t *testing.T) {
 	if len(all) != 1 || len(hidden) != 0 || len(byStatus) != 1 {
 		t.Fatalf("zero filter %d (want 1), hidden %d (want 0), by status %d (want 1)", len(all), len(hidden), len(byStatus))
 	}
-	adr := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "adr", Slug: "old", Body: ruleDocV1, CreatedBy: "stig"})
-	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET status = 'superseded' WHERE id = $1`, adr.ID); err != nil {
+	old := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "old", Body: ruleDocV1, CreatedBy: "stig"})
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET status = 'superseded' WHERE id = $1`, old.ID); err != nil {
 		t.Fatal(err)
 	}
-	if adrs, _ := s.ListDocs(t.Context(), DocFilter{Project: "p1", Kind: "adr", HideTerminal: true}); len(adrs) != 0 {
-		t.Fatalf("superseded ADR listed with HideTerminal: %d docs, want 0", len(adrs))
+	if specs, _ := s.ListDocs(t.Context(), DocFilter{Project: "p1", Kind: "spec", HideTerminal: true}); len(specs) != 1 {
+		t.Fatalf("superseded spec listed with HideTerminal: %d docs, want 1 (the draft)", len(specs))
 	}
 
 	// The terminal-plan hide is a default-listing rule, not a Deleted one: a
