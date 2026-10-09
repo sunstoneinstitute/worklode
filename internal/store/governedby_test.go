@@ -366,7 +366,7 @@ func equalStrings(a, b []string) bool {
 
 // TestGovernGateLeavesExistingLinkUntouched: a gate write on a rule an
 // architect already governed manually with a pin must not touch that link
-// (12-spec-refactoring-design-tree.md S51 — the gate only adds links).
+// (the gate only adds links).
 func TestGovernGateLeavesExistingLinkUntouched(t *testing.T) {
 	s := openDocStore(t)
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
