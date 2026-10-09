@@ -1,4 +1,4 @@
--- Which document's frontmatter put an edge row here (025 §5).
+-- Which document's frontmatter put an edge row here (WL-SPEC-77).
 --
 -- Until now the writer and the from end were the same document, so
 -- rebuildEdges could clear a document's declarations with

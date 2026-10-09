@@ -1,4 +1,4 @@
--- Deputy Crew designation (spec 029 §6.1): one Crew member per project may
+-- Deputy Crew designation (WL-SPEC-75): one Crew member per project may
 -- act with full lead authority when the lead does not act, without becoming
 -- lead — the accountable human stays the lead. Mirrors is_lead's shape: a
 -- column on the participant row, at most one true per project, and mutually

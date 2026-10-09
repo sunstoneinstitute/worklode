@@ -1,4 +1,4 @@
--- Data-catalog ingest (spec 029 §3.1, §3.2): a deliverable declares how it is
+-- Data-catalog ingest (WL-SPEC-75): a deliverable declares how it is
 -- verified — by address — and its state is reported by emitters, never
 -- asserted by a human closing a task. The catalog is the first such emitter,
 -- so it becomes a fourth signed ingest source beside github, flux and watcher.

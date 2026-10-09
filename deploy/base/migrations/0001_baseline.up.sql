@@ -1,4 +1,4 @@
--- Postgres baseline (spec 004 schema). All FKs ON DELETE RESTRICT unless noted.
+-- Postgres baseline (WL-SPEC-75 schema). All FKs ON DELETE RESTRICT unless noted.
 
 CREATE TABLE events (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

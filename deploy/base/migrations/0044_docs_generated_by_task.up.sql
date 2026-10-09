@@ -1,8 +1,8 @@
--- The task that authored a document (025 §12: prov:wasGeneratedBy).
+-- The task that authored a document (WL-SPEC-77: prov:wasGeneratedBy).
 --
 -- The links that already existed run task→doc: tasks.plan_doc (the plan whose
--- acceptance minted the task, 025 §9.2) and tasks.about_doc (the document a
--- review or design task was minted against, 025 §15.4). Neither records the
+-- acceptance minted the task, WL-SPEC-77) and tasks.about_doc (the document a
+-- review or design task was minted against, WL-SPEC-77). Neither records the
 -- case §12 is about — a task that authors a *new* document — so the ontology's
 -- claim that wlc:design's output "is reachable by prov:wasGeneratedBy"
 -- (ns/concept.ttl) had nothing behind it. This column is that edge, and the
