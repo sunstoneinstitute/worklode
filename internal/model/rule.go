@@ -155,6 +155,40 @@ type RuleClosureMember struct {
 	From    string `json:"from,omitempty"`
 }
 
+// RuleLint is GET /api/v1/projects/{id}/rules/lint: a project's corpus
+// measured against the targets of WL-SPEC-77 §4c. Rules counts the project's
+// draft and accepted rules; the closure spreads are over those rules.
+type RuleLint struct {
+	Project      string            `json:"project"`
+	Rules        int               `json:"rules"`
+	Specs        []RuleLintSpec    `json:"specs"`
+	ClosureRules RuleLintSpread    `json:"closure_rules"`
+	ClosureWords RuleLintSpread    `json:"closure_words"`
+	Findings     []RuleLintFinding `json:"findings"`
+}
+
+// RuleLintSpec is one live spec and the number of rules it arranges.
+type RuleLintSpec struct {
+	Spec  string `json:"spec"`
+	Rules int    `json:"rules"`
+}
+
+// RuleLintSpread is the median and 90th percentile (nearest rank) of a
+// closure measure.
+type RuleLintSpread struct {
+	Median int `json:"median"`
+	P90    int `json:"p90"`
+}
+
+// RuleLintFinding is one line of the report, naming its rule. Check is
+// one-context-edge (a report, not a verdict), undefined-term, conflict or
+// positional-reference.
+type RuleLintFinding struct {
+	Rule   string `json:"rule"`
+	Check  string `json:"check"`
+	Detail string `json:"detail"`
+}
+
 // AddRuleInput is the body of POST /api/v1/rules: a standalone rule,
 // arranged in no document, created at draft version 1 and owned by the
 // caller (WL-SPEC-77 §19.2). Kind is one of the five rule kinds and
