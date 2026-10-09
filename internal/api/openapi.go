@@ -52,7 +52,7 @@ type routeDoc struct {
 var routeDocs = mergeRouteDocs(
 	adminRouteDocs, agentsessionRouteDocs, approvalRouteDocs,
 	approvalflowRouteDocs, assignRouteDocs, blobRouteDocs, blobgcRouteDocs,
-	briefRouteDocs, checklistRouteDocs, cockpitRouteDocs, crewRouteDocs,
+	branchrulesRouteDocs, briefRouteDocs, checklistRouteDocs, cockpitRouteDocs, crewRouteDocs,
 	decisionRouteDocs, deliverableRouteDocs, docRouteDocs, escalateRouteDocs,
 	eventRouteDocs, eventstreamRouteDocs, governedbyRouteDocs, graphRouteDocs,
 	hierarchyRouteDocs, inboxImportRouteDocs, instructionRouteDocs,

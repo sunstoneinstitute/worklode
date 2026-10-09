@@ -999,6 +999,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects", s.listProjects)
 	// Literal segment, so Go's mux prefers it over the wildcard route below.
 	r.api("GET /api/v1/projects/resolve", s.resolveProjectByRemote)
+	r.api("GET /api/v1/repos/branch-rules", s.getBranchRules)
 	r.api("GET /api/v1/projects/{id}", s.getProject)
 	r.api("GET /api/v1/projects/{id}/cockpit", s.projectCockpit)
 	r.api("GET /api/v1/projects/{id}/rally", s.getProjectRally)

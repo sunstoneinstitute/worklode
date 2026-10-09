@@ -25,12 +25,14 @@ import (
 )
 
 // doctorCheck is one pass/fail line of the report. Fix is set only on
-// failure. Skipped checks (e.g. the worktree check outside a worktree, or a
-// server-side check with the server unreachable) count as neither.
+// failure or warning. Skipped checks (e.g. the worktree check outside a
+// worktree, or a server-side check with the server unreachable) count as
+// neither. A warning is OK (it does not fail the run) but names a fix.
 type doctorCheck struct {
 	Name    string `json:"name"`
 	OK      bool   `json:"ok"`
 	Skipped bool   `json:"skipped,omitempty"`
+	Warn    bool   `json:"warn,omitempty"`
 	Detail  string `json:"detail"`
 	Fix     string `json:"fix,omitempty"`
 }
@@ -41,6 +43,9 @@ func fail(name, detail, fix string) doctorCheck {
 }
 func skip(name, detail string) doctorCheck {
 	return doctorCheck{Name: name, OK: true, Skipped: true, Detail: detail}
+}
+func warn(name, detail, fix string) doctorCheck {
+	return doctorCheck{Name: name, OK: true, Warn: true, Detail: detail, Fix: fix}
 }
 
 // doctorReport is the --json form of `lode doctor`'s whole run. Named
@@ -188,9 +193,8 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 	// already get this for free through cli.LoadConfig's own walk-up).
 	root, inRepo := worktree.Root(dir)
 
-	// 5. The design authority gate's table parses (11 §3). Whether the
-	// repository also requires pull requests is not checked here yet: the
-	// store knows branch rules but no API route exposes them.
+	// 5. The design authority gate's table parses, and a gated repo's
+	// default branch requires pull requests (WL-SPEC-72 §3).
 	switch {
 	case !inRepo:
 		checks = append(checks, skip("gate", "not in a git repository"))
@@ -201,7 +205,8 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 		case !enabled:
 			checks = append(checks, skip("gate", "not enabled (no [gate] table)"))
 		default:
-			checks = append(checks, pass("gate", fmt.Sprintf("%d path patterns, %d regex, trailer %q; PR requirement not checked", len(gcfg.Paths), len(gcfg.Regex), gcfg.Trailer)))
+			checks = append(checks, pass("gate", fmt.Sprintf("%d path patterns, %d regex, trailer %q", len(gcfg.Paths), len(gcfg.Regex), gcfg.Trailer)))
+			checks = append(checks, checkGatePRs(ctx, c, gitRemoteOrigin(ctx, root), serverReachable))
 		}
 	}
 
@@ -257,6 +262,36 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 	checks = append(checks, checkEdgeAgent(ctx, edgeAgentHealthURL))
 
 	return checks
+}
+
+// checkGatePRs reports whether a gated repo's default branch requires pull
+// requests, from the branch rules the server last observed through the
+// GitHub App. Anything short of a recorded answer is "unknown", never a pass
+// or a warning. GitHub's rules endpoint covers rulesets only, so a PR
+// requirement set by classic branch protection reads as not required.
+func checkGatePRs(ctx context.Context, c *cli.Client, remote string, serverReachable bool) doctorCheck {
+	const name = "gate-prs"
+	if remote == "" {
+		return skip(name, "unknown: no origin remote")
+	}
+	if !serverReachable {
+		return skip(name, "unknown: server unreachable")
+	}
+	rules, err := c.BranchRules(ctx, remote)
+	var ce *cli.ClientError
+	switch {
+	case errors.As(err, &ce) && ce.Status == http.StatusNotFound:
+		return skip(name, "unknown: the server has no branch rules recorded for this repo")
+	case err != nil:
+		return skip(name, "unknown: "+err.Error())
+	case rules.PullRequest == nil:
+		return skip(name, "unknown: "+rules.Repo+"@"+rules.Branch+" rules recorded before the PR rule was read")
+	case *rules.PullRequest:
+		return pass(name, rules.Repo+"@"+rules.Branch+" requires pull requests")
+	default:
+		return warn(name, rules.Repo+"@"+rules.Branch+" rulesets do not require pull requests; the gate runs on pull requests only",
+			"add a ruleset with \"Require a pull request before merging\" on "+rules.Branch)
+	}
 }
 
 // leaseGone answers "has this task's lease gone away?" for a local caller,
@@ -371,6 +406,8 @@ func newDoctorCmd() *cobra.Command {
 					switch {
 					case c.Skipped:
 						mark = "skip"
+					case c.Warn:
+						mark = "warn"
 					case !c.OK:
 						mark = "FAIL"
 					}

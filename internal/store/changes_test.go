@@ -881,57 +881,60 @@ func TestSetPRQueuedRoundTrip(t *testing.T) {
 	}
 }
 
-// TestBranchRulesRoundTrip covers WL-SPEC-66 §6.3: an unknown repo/branch
-// reports known=false, and UpsertBranchRules's second write overwrites the
-// first rather than erroring on the (repo, branch) primary key.
+// TestBranchRulesRoundTrip covers WL-SPEC-66 §6.3 and WL-SPEC-72 §3: an
+// unknown repo is ErrNotFound, and UpsertBranchRules's second write
+// overwrites the first rather than erroring on the (repo, branch) key.
 func TestBranchRulesRoundTrip(t *testing.T) {
 	t.Parallel()
 	s := openChangesStore(t)
+	const repo = "sunstoneinstitute/demo"
 
-	mergeQueue, known, err := s.BranchRules(t.Context(), "sunstoneinstitute/demo", "main")
-	if err != nil {
-		t.Fatalf("BranchRules on unknown pair: %v", err)
-	}
-	if known {
-		t.Fatalf("BranchRules on unknown pair: got known=true, mergeQueue=%v", mergeQueue)
+	if _, err := s.BranchRules(t.Context(), repo); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("BranchRules on unknown repo: err = %v, want ErrNotFound", err)
 	}
 
-	tx, err := s.db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := UpsertBranchRules(tx, "sunstoneinstitute/demo", "main", true, changesTestNow); err != nil {
-		t.Fatal(err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
+	upsert := func(queue, pr bool, at time.Time) {
+		t.Helper()
+		tx, err := s.db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := UpsertBranchRules(tx, repo, "main", queue, pr, at); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	mergeQueue, known, err = s.BranchRules(t.Context(), "sunstoneinstitute/demo", "main")
+	upsert(true, true, changesTestNow)
+	got, err := s.BranchRules(t.Context(), repo)
 	if err != nil {
 		t.Fatalf("BranchRules: %v", err)
 	}
-	if !known || !mergeQueue {
-		t.Fatalf("BranchRules after upsert: got known=%v mergeQueue=%v, want true true", known, mergeQueue)
+	if got.Branch != "main" || !got.MergeQueue || got.PullRequest == nil || !*got.PullRequest {
+		t.Fatalf("BranchRules after upsert = %+v, want main, queue, PR required", got)
 	}
 
-	// A later observation overwrites the rule for the same repo/branch.
-	tx, err = s.db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := UpsertBranchRules(tx, "sunstoneinstitute/demo", "main", false, changesTestNow.Add(time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
-
-	mergeQueue, known, err = s.BranchRules(t.Context(), "sunstoneinstitute/demo", "main")
+	// A later observation overwrites the rules for the same repo/branch.
+	upsert(false, false, changesTestNow.Add(time.Hour))
+	got, err = s.BranchRules(t.Context(), repo)
 	if err != nil {
 		t.Fatalf("BranchRules after re-upsert: %v", err)
 	}
-	if !known || mergeQueue {
-		t.Fatalf("BranchRules after re-upsert: got known=%v mergeQueue=%v, want true false", known, mergeQueue)
+	if got.MergeQueue || got.PullRequest == nil || *got.PullRequest {
+		t.Fatalf("BranchRules after re-upsert = %+v, want no queue, PR not required", got)
+	}
+
+	// A row written before pull_request was observed reads as unknown.
+	if _, err := s.db.Exec(`UPDATE repo_branch_rules SET pull_request = NULL WHERE repo = $1`, repo); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.BranchRules(t.Context(), repo)
+	if err != nil {
+		t.Fatalf("BranchRules on unobserved PR rule: %v", err)
+	}
+	if got.PullRequest != nil {
+		t.Fatalf("PullRequest = %v, want nil (unknown)", *got.PullRequest)
 	}
 }

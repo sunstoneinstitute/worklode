@@ -2,15 +2,20 @@
 // know whether a PR's base branch runs a merge queue — it decides both the
 // position line's wording and whether the merge button queues or merges — and
 // it must never ask GitHub while rendering. So worklode reads the fact through
-// the App on its own schedule and stores it.
+// the App on its own schedule and stores it. The same read records whether
+// the branch requires pull requests, which `lode doctor` reads through
+// GET /api/v1/repos/branch-rules (WL-SPEC-72 §3).
 
 package api
 
 import (
 	"context"
 	"database/sql"
+	"net/http"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -77,7 +82,7 @@ func (s *server) refreshBranchRules(ctx context.Context) {
 }
 
 // refreshRepoBranchRules records whether one repo's default branch runs a
-// merge queue.
+// merge queue and requires pull requests.
 func (s *server) refreshRepoBranchRules(ctx context.Context, repo string) error {
 	ctx, cancel := context.WithTimeout(ctx, branchRulesTimeout)
 	defer cancel()
@@ -91,12 +96,43 @@ func (s *server) refreshRepoBranchRules(ctx context.Context, repo string) error 
 		return err
 	}
 	s.observeGitHubCall("branch_rules")
-	mergeQueue, err := s.appAuth.BranchRules(ctx, repo, branch)
+	mergeQueue, pullRequest, err := s.appAuth.BranchRules(ctx, repo, branch)
 	if err != nil {
 		return err
 	}
 	now := s.st.Now()
 	return s.st.Tx(ctx, func(tx *sql.Tx) error {
-		return store.UpsertBranchRules(tx, repo, branch, mergeQueue, now)
+		return store.UpsertBranchRules(tx, repo, branch, mergeQueue, pullRequest, now)
 	})
+}
+
+// getBranchRules handles GET /api/v1/repos/branch-rules?remote=<url>: the
+// stored branch rules for the repo the remote names. 404 when nothing has
+// been observed for it, so a caller can say "unknown" rather than guess.
+func (s *server) getBranchRules(w http.ResponseWriter, r *http.Request) {
+	var params model.RepoBranchRulesParams
+	if err := readQuery(r, &params); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	repo, err := repourl.Normalize(params.Remote)
+	if err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	rules, err := s.st.BranchRules(r.Context(), repo)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rules)
+}
+
+// branchrulesRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
+var branchrulesRouteDocs = map[string]routeDoc{
+	"GET /api/v1/repos/branch-rules": {
+		summary:   "Get the rules last observed on a repo's default branch",
+		responses: map[int]any{http.StatusOK: model.RepoBranchRules{}},
+		params:    model.RepoBranchRulesParams{},
+	},
 }
