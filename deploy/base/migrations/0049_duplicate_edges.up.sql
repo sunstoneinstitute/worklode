@@ -1,4 +1,4 @@
--- The fourth task edge (004 §1.3): "A duplicate_of B" records that A is the
+-- The fourth task edge (WL-SPEC-75): "A duplicate_of B" records that A is the
 -- same request as B, which is the canonical one. Provenance only, exactly like
 -- follow_up_to -- it gates no claim, confers no parent-hood, and absorbs
 -- nothing from A into B, so no existing query changes: every one of them is

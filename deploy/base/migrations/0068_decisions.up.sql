@@ -1,5 +1,5 @@
 -- 0066 shipped task_decisions with task_id as the primary key and none of
--- 025 §10.1's per-question columns (key, position, group, question, context,
+-- WL-SPEC-77's per-question columns (key, position, group, question, context,
 -- decided_by), so it could hold one decision per task and could not address a
 -- row as <task>/<key>. Nothing writes it yet, so the fix is to replace it
 -- with the table the spec names.

@@ -1,4 +1,4 @@
--- References across projects (029 §5). Containment never crosses a project
+-- References across projects (WL-SPEC-75). Containment never crosses a project
 -- boundary; these references do, which is why the ends are (kind, id) pairs
 -- with no project column and no FK — each side's per-kind table carries
 -- identity, and there is deliberately no unified entities table.
