@@ -9,24 +9,24 @@ specs, plans, docs, or other prose in this repo.
 
 Worklode is Sunstone's org-wide work tracker and coordination layer for
 multi-agent, multi-repo work. It ships as six Go executables from one module
-(053 §1): `lode` (CLI), `lode-hook` and `lode-statusline` (short-lived agent
+(WL-SPEC-73 §3.1): `lode` (CLI), `lode-hook` and `lode-statusline` (short-lived agent
 hot paths), and `lode-server`, `lode-watch`, `lode-migrate` (operator side),
 backed by Postgres with an append-only event log for provenance. The old
 subcommand shims (hook, statusline, serve, watch, migrate) were removed
-after the first split release shipped (053 §3, WL-319).
+after the first split release shipped (WL-SPEC-73 §3.4, WL-319).
 
-**Design documents live in the backbone, not in this tree (055).** Specs,
-ADRs and plans are rows in Postgres, read and written through `lode doc`.
-`lode doc list --kind spec` is the map; `lode show WL-SPEC-4` starts you on
-the execution backbone. `lode search <query>` ranks documents, tasks and
-skills together when you know what you are looking for but not where it is
-(040 §9).
+**Design documents live in the backbone, not in this tree (WL-SPEC-77).**
+Specs, ADRs and plans are rows in Postgres, read and written through `lode
+doc`. `docs/specs.md` is the map of the fifteen specs; `lode show WL-SPEC-75`
+starts you on the execution backbone. `lode search <query>` ranks documents,
+tasks and skills together when you know what you are looking for but not where
+it is (WL-SPEC-79 §17).
 
 **To read what a spec says, use `lode show <ref> --inline`.** That folds every
 in-force amendment and supersession into the text, attributed to the section it
-came from. A bare `lode show WL-SPEC-4` gives you what 004 said when it was
-written; four other specs have amended it since. For a targeted read, use the
-native selector (`lode show WL-SPEC-8 --inline --section sec-14`) rather than
+came from. A bare `lode show WL-SPEC-75` gives you what the spec said when it was
+written, without the amendments folded in. For a targeted read, use the
+native selector (`lode show WL-SPEC-80 --inline --section sec-8`) rather than
 filtering rendered output with `sed`; use `lode doc show <ref> --json` for
 structured section and edge metadata. Write with `lode doc add` and `lode doc
 edit`; an accepted document is changed by `lode doc revise`, never in place.
@@ -73,7 +73,7 @@ and carries a procedure that spans files or has no single path. The skills:
   invocations. `docs/agent-surfaces.md` is the register of those surfaces and
   the checklist for keeping them true; it also holds the rules for adding and
   retiring a skill. Naming a new or renamed command follows the nine rules in
-  `internal/cmd/CLAUDE.md`'s "Naming" section (`WL-SPEC-61`).
+  `internal/cmd/CLAUDE.md`'s "Naming" section (`WL-SPEC-81`).
 
 ## Commands
 
@@ -152,14 +152,14 @@ files, `lode-hook`'s list of hook names, `lode work next`'s no-work guidance.
 — a hand-built tabwriter, a hand-formatted timestamp — but it is a tripwire,
 not the rule; this paragraph is.
 
-**One model, not one per package (ADR 036).** Every shape that crosses the
+**One model, not one per package (WL-SPEC-73 §3.2a).** Every shape that crosses the
 HTTP boundary — entities, response projections, request bodies — is declared
 once in `internal/model` (stdlib imports only). `internal/store` scans into
 it, `internal/api` serializes it, `internal/cli` decodes it, `internal/ui`
 embeds it. Field names are wire names (`Project`, not `ProjectID`). Only three
 kinds of type stay package-local: `internal/ui` view types, `internal/store`
 scan plumbing, and `internal/api` transport internals (`Subject`, sessions,
-route guards). Anything else needs an amendment to 036, not a new struct.
+route guards). Anything else needs an amendment to WL-SPEC-73 §3.2a, not a new struct.
 `internal/model/modelrule_test.go` enforces this and names what it rejects;
 `deps_test.go` keeps the package a stdlib-only leaf. Read the failure message
 before working around either.
@@ -171,11 +171,11 @@ a route the table does not name or a table entry no route uses, so a new
 endpoint cannot ship unguarded. `internal/api/authz.go` holds the policy: a
 per-request `Subject`, a `grants` table of permission → roles, and a
 default-deny `Decide`. There is no RBAC model yet — the two roles are the
-`user`/`admin` Keycloak already syncs (001 §9.2) — so add real roles by editing
+`user`/`admin` Keycloak already syncs (WL-SPEC-74 §3) — so add real roles by editing
 that table, never by adding a check inside a handler. A page-script write such
 as the Progress page's goes through one more gate on top of that table's
-permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-SPEC-66
-§4.2), which enforces same-origin, the page's `X-Requested-With` header, a
+permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-SPEC-85
+§5), which enforces same-origin, the page's `X-Requested-With` header, a
 JSON body, and an actor taken from the session rather than the request.
 Every `/api/v1` row also has a `routeDoc` (request body, success and
 distinct-error responses, query parameters) in the `internal/api` file
@@ -214,27 +214,25 @@ documents, tasks and skills (`internal/corpusindex` chunks a subject on its
 own section anchors, `internal/indexer` is the background convergence loop
 that keeps `index_chunks` agreeing with the corpus, and `store.Search` runs
 both retrieval arms — dense over pgvector, lexical over a `simple` tsvector —
-fused by reciprocal rank behind `GET /api/v1/search` and `lode search`, spec
-040), and `internal/eventbus`
+fused by reciprocal rank behind `GET /api/v1/search` and `lode search`,
+WL-SPEC-79 §15), and `internal/eventbus`
 (offset-tracked subscribers over the events log, read via `lode event tail
---follow` and by the project Progress page's live stream, WL-SPEC-66 §5.1).
+--follow` and by the project Progress page's live stream, WL-SPEC-85 §6).
 Its one subscriber, `doc-lifecycle`, mints the review and planning
-tasks a document's lifecycle calls for (025 §15.4) — triggered by
+tasks a document's lifecycle calls for (WL-SPEC-75 §9.6) — triggered by
 submitting a document (`lode doc submit`) or accepting a spec, and minting
-the task is not doing the review or the planning it asks for (025 §7): the
+the task is not doing the review or the planning it asks for (WL-SPEC-77 §9): the
 rules are a pure function in `internal/watcher`, the executor that feeds them
 is `internal/api/docwatch.go`, and `NewServer` starts the loop only when the
-caller passes a `BackgroundCtx`. The project Progress page (spec 066) says how
+caller passes a `BackgroundCtx`. The project Progress page (WL-SPEC-85) says how
 much of each spec exists and what moves it next: `internal/progress` is the
 pure derivation — plan state, section state, spec grouping, next act — from
 one `store.ProjectProgress` read, recomputed per request and never stored, and
 `internal/api/progress.go`, `internal/ui/progress.templ` and `lode doc
 progress` are the three readers of it.
 
-The backbone (this repo, Postgres) owns execution facts and — once spec 025 is
-implemented — design-document artifacts; derived architecture facts and the
-queryable view of both belong to the data-platform knowledge graph (specs
-006/025), which receives documents by projection. No fact has two owners —
+The backbone (this repo, Postgres) owns execution facts and — design-document artifacts; derived architecture facts and the
+queryable view of both belong to the data-platform knowledge graph (WL-SPEC-79), which receives documents by projection. No fact has two owners —
 keep new state on the right side of that split.
 
 ## Conventions
@@ -317,7 +315,7 @@ for the accuracy bar that copy is also held to.
 Server-side changes that add an HTTP endpoint, background loop, outbound
 call, or store operation with meaningful outcomes must add or extend
 `worklode_*` Prometheus metrics in the owning package, with tests. Follow the
-conventions in `WL-SPEC-22` (Prometheus metrics): nil-safe metrics
+conventions in `WL-SPEC-73 §6` (Prometheus metrics): nil-safe metrics
 struct in the owning package's `metrics.go`, `prometheus.Registerer`
 threaded from `serve.go`, bounded label values, `worklode_` prefix.
 
