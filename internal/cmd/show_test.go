@@ -1220,3 +1220,35 @@ func TestShowPlanFlagKeylessStillChecksKind(t *testing.T) {
 		t.Fatalf("show --spec 14 output = %q; want the fixture verbatim", out)
 	}
 }
+
+// TestShowRuleClosure covers `lode show WL-REQ-1 --closure` reading GET
+// /api/v1/rules/{ref}/closure and printing each member with the edge that
+// reached it, and --closure on a non-rule being refused (WL-SPEC-77 §4c).
+func TestShowRuleClosure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/rules/WL-REQ-1/closure" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"rule":"WL-REQ-1","words":5,"members":[
+			{"ref":"WL-REQ-1","kind":"requirement","heading":"Root","words":3},
+			{"ref":"WL-RULE-4","kind":"definition","heading":"Term","words":2,"edge":"needs","from":"WL-REQ-1"}]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	out, err := runLode(t, "show", "WL-REQ-1", "--closure")
+	if err != nil {
+		t.Fatalf("lode show WL-REQ-1 --closure: %v\noutput: %s", err, out)
+	}
+	for _, want := range []string{"WL-REQ-1", "Root", "WL-RULE-4", "definition", "Term", "needs WL-REQ-1", "5 words"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("closure output missing %q:\n%s", want, out)
+		}
+	}
+	if _, err := runLode(t, "show", "WL-12", "--closure"); err == nil || !strings.Contains(err.Error(), "--closure applies only to rules") {
+		t.Errorf("--closure on a task: err = %v", err)
+	}
+}

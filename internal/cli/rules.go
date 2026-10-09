@@ -123,6 +123,32 @@ func (c *Client) GetRuleVersion(ctx context.Context, ref string, version int) (m
 	return doJSON[model.Rule](ctx, c, http.MethodGet, fmt.Sprintf("/api/v1/rules/%s/versions/%d", url.PathEscape(ref), version), nil, "rule")
 }
 
+// GetRuleClosure calls GET /api/v1/rules/{ref}/closure.
+func (c *Client) GetRuleClosure(ctx context.Context, ref string) (model.RuleClosure, []byte, error) {
+	return doJSON[model.RuleClosure](ctx, c, http.MethodGet, "/api/v1/rules/"+url.PathEscape(ref)+"/closure", nil, "rule closure")
+}
+
+// RuleClosureTable prints `lode show <rule> --closure`: one row per closure
+// member with the edge that first reached it, then the total word count.
+func RuleClosureTable(w io.Writer, c model.RuleClosure) {
+	tbl := newTable(
+		column{header: "REF"},
+		column{header: "KIND"},
+		column{header: "WORDS"},
+		column{header: "VIA"},
+		titleColumn("HEADING"),
+	)
+	for _, m := range c.Members {
+		via := "-"
+		if m.Edge != "" {
+			via = m.Edge + " " + m.From
+		}
+		tbl.add(m.Ref, m.Kind, strconv.Itoa(m.Words), via, m.Heading)
+	}
+	tbl.flush(w)
+	fmt.Fprintf(w, "\n%d rules, %d words\n", len(c.Members), c.Words)
+}
+
 // RuleVersionsTable lists a rule's versions, newest first: the `lode
 // rule versions` view.
 func RuleVersionsTable(w io.Writer, vs []model.RuleVersion) {

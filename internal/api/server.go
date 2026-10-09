@@ -941,6 +941,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/rules/{id}", s.getRule)
 	r.api("PUT /api/v1/rules/{id}", s.editRule)
 	r.api("PATCH /api/v1/rules/{id}", s.patchRule)
+	r.api("GET /api/v1/rules/{id}/closure", s.getRuleClosure)
 	r.api("GET /api/v1/rules/{id}/versions", s.listRuleVersions)
 	r.api("GET /api/v1/rules/{id}/versions/{n}", s.getRuleVersion)
 	r.api("POST /api/v1/rules/{id}/edges", s.linkRule)
