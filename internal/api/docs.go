@@ -553,18 +553,18 @@ func docSelectorFrom(p model.DocListParams) (docListSelector, error) {
 			return docListSelector{}, fmt.Errorf("older_than_days must be a non-negative integer, got %d", p.OlderThanDays)
 		}
 		if !sel.unresolved {
-			return docListSelector{}, errors.New("older_than_days applies to unresolved=true only (025 §8.7)")
+			return docListSelector{}, errors.New("older_than_days applies to unresolved=true only (WL-SPEC-77 §9)")
 		}
 	}
 
 	derived := []docDerivedSelector{
-		{sel.needsPlanning, "needs_planning", "accepted", "026 §2.1",
+		{sel.needsPlanning, "needs_planning", "accepted", "WL-SPEC-77 §13",
 			func(k string) bool { return k == "spec" }, "spec"},
-		{sel.needsExecution, "needs_execution", "accepted", "026 §2.1",
+		{sel.needsExecution, "needs_execution", "accepted", "WL-SPEC-77 §13",
 			func(k string) bool { return k == "plan" }, "plan"},
-		{sel.bareSuperseded, "bare_superseded", "superseded", "025 §6",
+		{sel.bareSuperseded, "bare_superseded", "superseded", "WL-SPEC-77 §4",
 			func(k string) bool { return k == "spec" || k == "adr" }, "spec or adr"},
-		{sel.unresolved, "unresolved", "accepted", "025 §8.7",
+		{sel.unresolved, "unresolved", "accepted", "WL-SPEC-77 §9",
 			func(k string) bool { return k == "spec" || k == "plan" }, "spec or plan"},
 	}
 	var on []string
@@ -576,10 +576,10 @@ func docSelectorFrom(p model.DocListParams) (docListSelector, error) {
 	if len(on) > 1 {
 		if len(on) == 2 && on[0] == "needs_planning" && on[1] == "needs_execution" {
 			return docListSelector{}, errors.New(
-				"needs_planning and needs_execution select disjoint kinds; pass one (026 §2.1)")
+				"needs_planning and needs_execution select disjoint kinds; pass one (WL-SPEC-77 §13)")
 		}
 		return docListSelector{}, fmt.Errorf(
-			"%s are mutually exclusive selectors; pass one (025 §6, 026 §2)", strings.Join(on, " and "))
+			"%s are mutually exclusive selectors; pass one (WL-SPEC-77 §13)", strings.Join(on, " and "))
 	}
 	for _, c := range derived {
 		if !c.on {
@@ -709,7 +709,7 @@ func (s *server) listDocReferrers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p.Anchor == "" {
-		writeErr(w, http.StatusBadRequest, "anchor is required: a referrer names one section (025 §8.2)")
+		writeErr(w, http.StatusBadRequest, "anchor is required: a referrer names one section (WL-SPEC-77 §4)")
 		return
 	}
 	refs, err := s.st.DocSectionReferrers(r.Context(), id, p.Anchor)

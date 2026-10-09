@@ -305,7 +305,7 @@ func readImportDoc(file, defaultKind string) (importDoc, error) {
 		m := importLeadingNumber.FindStringSubmatch(name)
 		if m == nil {
 			return importDoc{}, fmt.Errorf(
-				"%s has no leading corpus number: a %s is identified by its number (025 §14.3)", file, d.kind)
+				"%s has no leading corpus number: a %s is identified by its number (WL-SPEC-77 §7)", file, d.kind)
 		}
 		// The regexp matched digits, so the conversion cannot fail.
 		d.number, _ = strconv.Atoi(m[1])
@@ -519,7 +519,7 @@ func printUnresolvedRefs(w io.Writer, refs []unresolvedRef) {
 		fmt.Fprintf(w, "%d reference(s) resolve to no document in this project; kept verbatim\n", dangling)
 	}
 	if sentinels > 0 {
-		fmt.Fprintf(w, "%d plan(s) declare %s; kept verbatim, no target expected (026 §4.3)\n",
+		fmt.Fprintf(w, "%d plan(s) declare %s; kept verbatim,\n",
 			sentinels, noSpecSentinel)
 	}
 }

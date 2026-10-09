@@ -276,7 +276,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 		return nil, err
 	}
 	if kind != "plan" && status != "draft" {
-		return nil, fmt.Errorf("doc %d is %s: revise it instead of editing the body (025 §7): %w",
+		return nil, fmt.Errorf("doc %d is %s: revise it instead of editing the body (WL-SPEC-77 §9): %w",
 			id, status, ErrInvalidInput)
 	}
 
@@ -401,7 +401,7 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		// Only a plan can be stale, so no other kind reaches this branch.
 		if d.status != "draft" && d.status != "accepted" && d.status != "stale" {
 			return nil, nil, fmt.Errorf(
-				"doc %d is %s: a plan is accepted from draft, re-accepted while accepted, or re-accepted out of stale (025 §8.6, §9.2): %w",
+				"doc %d is %s: a plan is accepted from draft, re-accepted while accepted, or re-accepted out of stale (WL-SPEC-77 §9, §9.2): %w",
 				id, d.status, ErrInvalidInput)
 		}
 		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
@@ -549,7 +549,7 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 	// Saying "not draft" would send the caller looking for the wrong problem.
 	if kind == "plan" && status == "stale" {
 		return false, fmt.Errorf(
-			"doc %d is stale and was already accepted at version %d: edit the plan, so re-accepting it clears the mark (025 §8.6): %w",
+			"doc %d is stale and was already accepted at version %d: edit the plan, so re-accepting it clears the mark (WL-SPEC-77 §9): %w",
 			id, version, ErrInvalidInput)
 	}
 	if status != "draft" {

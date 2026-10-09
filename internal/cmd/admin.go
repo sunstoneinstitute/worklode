@@ -112,7 +112,7 @@ func newTokenAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&actor, "actor", "", "actor id to mint the token for (required, unless --task: agent actor to act as, default sandbox)")
 	cmd.Flags().StringVar(&description, "description", "", "human-readable note about this token's purpose")
 	cmd.Flags().StringVar(&expiresAt, "expires-at", "", "RFC3339 expiry (default: never expires)")
-	cmd.Flags().StringVar(&task, "task", "", "mint a task-scoped token bound to this task instead (001 §2.1)")
+	cmd.Flags().StringVar(&task, "task", "", "mint a task-scoped token bound to this task instead (WL-SPEC-74 §2)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "task-scoped token lifetime, e.g. 2h (default: the lease TTL; max 24h; --task only)")
 	return cmd
 }

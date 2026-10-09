@@ -233,7 +233,7 @@ func TestProgressOverAMintedPlan(t *testing.T) {
 	if !strings.Contains(body, `data-route="rally/add"`) {
 		t.Fatalf("progress page has no Rally button:\n%s", body)
 	}
-	const reviewReason = `data-reason="Review surface (spec 059) not yet built"`
+	const reviewReason = `data-reason="Review surface (WL-SPEC-84) not yet built"`
 	if got := strings.Count(body, `data-route="review"`); got != 2 {
 		t.Fatalf("progress page has %d Review buttons, want 2 (the spec row and the plan line):\n%s", got, body)
 	}

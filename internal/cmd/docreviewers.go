@@ -24,7 +24,7 @@ func newDocReviewersCmd() *cobra.Command {
 		Use:               "reviewers <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Show a document's assigned reviewer set",
-		Long: "Show the durable reviewer set spec 025 §7.3 assigns to a document\n" +
+		Long: "Show the durable reviewer set WL-SPEC-77 §9 assigns to a document\n" +
 			"(WL-359) — independent of any one revision, and what `lode approval\n" +
 			"request` reads when it opens an awaiting lane per reviewer.\n\n" +
 			"Prints the current set and who still owes a review on the document's\n" +

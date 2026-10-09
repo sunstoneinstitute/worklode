@@ -25,10 +25,10 @@ func newDocTodoCmd() *cobra.Command {
 		ValidArgsFunction: docRefAt(0),
 		Short:             "What is left before a spec is fully implemented",
 		Long: `Join a spec's planning gap, its unexecuted plans, and the ordering
-between them into one work list (026 §2.5).
+between them into one work list.
 
 <ref> is any reference §4 resolves: a slug, a bare number, or the
-WL-SPEC-25 shorthand. Every item is typed by the act that discharges
+WL-SPEC-77 shorthand. Every item is typed by the act that discharges
 it — writing a plan (unplanned), a human accepting one
 (plan-draft), executing one (unexecuted), or landing the plan that holds
 it up (blocked).

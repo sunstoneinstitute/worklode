@@ -115,7 +115,7 @@ func Deleted(v DeletedView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><p class=\"muted small\">A deleted task or document is hidden from every other page, never removed: its events, edges and artifacts stay valid, and restoring it puts it back where it was (spec 044 §2).</p></div></section><section class=\"card\"><div class=\"hd\"><h3>Tasks</h3></div><div class=\"bd\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><p class=\"muted small\">A deleted task or document is hidden from every other page, never removed: its events, edges and artifacts stay valid, and restoring it puts it back where it was (WL-SPEC-75 §12).</p></div></section><section class=\"card\"><div class=\"hd\"><h3>Tasks</h3></div><div class=\"bd\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
