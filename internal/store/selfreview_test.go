@@ -163,3 +163,49 @@ func TestSelfReviewPolicyReportsStampedFlow(t *testing.T) {
 		t.Error("allowed = false, want true: the flow allows self-review of docs")
 	}
 }
+
+// TestSelfReviewableApprovals (WL-1003): the Reviews queue lists an awaiting
+// approval as the actor's own when they authored the entity and the project's
+// flow allows self-review of its kind — the same rule DecideApproval applies.
+func TestSelfReviewableApprovals(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t) // project "horndb", actor "stig"
+	if err := s.CreateActor(t.Context(), "ada", "human", "Ada", false); err != nil {
+		t.Fatal(err)
+	}
+	doc := docForApproval(t, s, "self-reviewable", 301) // created_by "stig"
+	tx := mustBegin(t, s)
+	id := openApprovalID(t, tx, "doc", DocEntityID(doc.ID), "rev1", "")
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.SelfReviewableApprovals(t.Context(), "stig")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[id] {
+		t.Errorf("approval %d self-reviewable with no flow stamped", id)
+	}
+
+	tx = mustBegin(t, s)
+	stampFlow(t, tx, "doc")
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = s.SelfReviewableApprovals(t.Context(), "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if !got[id] {
+		t.Errorf("approval %d not self-reviewable for its author under a doc self_review flow", id)
+	}
+	if got, err = s.SelfReviewableApprovals(t.Context(), "ada"); err != nil {
+		t.Fatal(err)
+	}
+	if got[id] {
+		t.Errorf("approval %d self-reviewable for ada, who did not author it", id)
+	}
+	if got, err = s.SelfReviewableApprovals(t.Context(), ""); err != nil || len(got) != 0 {
+		t.Errorf("anonymous viewer: got %v, %v; want nothing", got, err)
+	}
+}

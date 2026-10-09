@@ -323,7 +323,7 @@ func pages(t *testing.T) map[string]string {
 		}),
 		"approvals": Approvals(ApprovalsView{
 			Page: PageProps{Title: "Reviews"},
-			Rows: []ApprovalRow{{
+			Groups: []ApprovalGroup{{Heading: "Waiting on you", Rows: []ApprovalRow{{
 				ID: 12, Kind: "pr", EntityID: "sunstoneinstitute/worklode#242",
 				Title:  "Make the narrow-width reflow check runnable, so the WCAG fixes are measured",
 				URL:    "https://github.com/sunstoneinstitute/worklode/pull/242",
@@ -340,7 +340,7 @@ func pages(t *testing.T) map[string]string {
 				Title: longTitle, URL: "/projects/worklode/deliverables",
 				Lane: "methodology/science-lead", ProjectID: "worklode",
 				ProjectName: "Worklode backbone", Age: "1d ago",
-			}},
+			}}}},
 		}),
 		"approvaldetail": ApprovalDetail(ApprovalDetailView{
 			Page: PageProps{Title: "worklode: pr sunstoneinstitute/worklode#242"},

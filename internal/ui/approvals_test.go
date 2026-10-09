@@ -15,7 +15,7 @@ func TestApprovalsQueueMixesKinds(t *testing.T) {
 	var b strings.Builder
 	err := Approvals(ApprovalsView{
 		Page: PageProps{Title: "Reviews"},
-		Rows: []ApprovalRow{{
+		Groups: []ApprovalGroup{{Heading: "Waiting on you", Rows: []ApprovalRow{{
 			ID: 12, Kind: "pr", EntityID: "sunstoneinstitute/worklode#242",
 			Title: "Approvals for documents", URL: "https://github.com/x/y/pull/242",
 			TaskID: "WL-355", ProjectID: "worklode", ProjectName: "Worklode backbone",
@@ -30,7 +30,7 @@ func TestApprovalsQueueMixesKinds(t *testing.T) {
 			Title: "Methodology", URL: "/projects/worklode/deliverables",
 			Lane: "methodology/science-lead", ProjectID: "worklode",
 			ProjectName: "Worklode backbone", Age: "1d ago",
-		}},
+		}}}},
 	}).Render(context.Background(), &b)
 	if err != nil {
 		t.Fatalf("render Approvals: %v", err)
