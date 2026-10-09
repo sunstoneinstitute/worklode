@@ -198,10 +198,11 @@ func deriveReferences(tx *sql.Tx, project string, ruleID int64, text string) err
 			continue
 		}
 		var id int64
-		// A plan contains no rules, so a ref to a plan anchor names none.
+		// A plan contains no rules, so a ref to a plan anchor names none, and
+		// a spec heading is not a rule (WL-SPEC-77 §19.1).
 		err = tx.QueryRow(
 			`SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
-			  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan'`, docID, r.Anchor).Scan(&id)
+			  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan' AND dc.rule_id IS NOT NULL`, docID, r.Anchor).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}

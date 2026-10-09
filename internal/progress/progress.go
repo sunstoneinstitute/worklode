@@ -49,9 +49,9 @@ type Section struct {
 	Anchor  string
 	Heading string
 	Depth   int
-	// NotOwed is true when the section has rules and none is of a covered
-	// kind (requirement, catalogue). Such a section is not owed (WL-SPEC-85 §2,
-	// WL-SPEC-77 §4).
+	// NotOwed is true when the section is a spec heading, or has rules and
+	// none is of a covered kind (requirement, catalogue). Such a section is
+	// not owed (WL-SPEC-85 §2, WL-SPEC-77 §4, §19.1).
 	NotOwed bool
 }
 
