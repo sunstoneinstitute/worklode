@@ -52,6 +52,9 @@ type shortcut struct {
 	build func() *cobra.Command
 	// reason is why L9 grants this command a shortcut.
 	reason string
+	// argTarget, when set, is the command the shortcut runs instead when
+	// given an argument: `lode status <id>` runs `task show --status <id>`.
+	argTarget []string
 }
 
 var shortcuts = []shortcut{
@@ -61,7 +64,9 @@ var shortcuts = []shortcut{
 	// next is how an agent enters Worklode mode: run once per task claimed.
 	{target: []string{"work", "next"}, build: newNextCmd, reason: "run many times per session"},
 	// status is the standing "where am I" check, run constantly during work.
-	{target: []string{"work", "status"}, build: newStatusCmd, reason: "run many times per session"},
+	// With a task id it is the same check on a named task.
+	{target: []string{"work", "status"}, build: newStatusShortcutCmd, reason: "run many times per session",
+		argTarget: []string{"task", "show", "--status"}},
 	// overview is the one-screen roll-up, read many times per session.
 	{target: []string{"project", "overview"}, build: newProjectOverviewCmd, reason: "read many times per session"},
 }
@@ -192,4 +197,21 @@ func printRaw(cmd *cobra.Command, raw []byte) {
 	if raw[len(raw)-1] != '\n' {
 		fmt.Fprintln(out)
 	}
+}
+
+// newStatusShortcutCmd builds `lode status`: `work status` with no argument,
+// `task show --status <id>` with one.
+func newStatusShortcutCmd() *cobra.Command {
+	cmd := newStatusCmd()
+	cmd.Use = "status [<task>]"
+	cmd.Long = cmd.Short + ". Given a task, show that task's status header instead (lode task show --status <task>)."
+	cmd.Args = cobra.MaximumNArgs(1)
+	cmd.ValidArgsFunction = taskIDAt(0)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 1 {
+			return runTaskStatus(cmd, args[0])
+		}
+		return runStatus(cmd)
+	}
+	return cmd
 }
