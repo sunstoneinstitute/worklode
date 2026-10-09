@@ -216,5 +216,5 @@ configMapGenerator:
       - migrations/0101_retire-adr-kind.down.sql
       - migrations/0102_rule-kinds-needs.up.sql
       - migrations/0102_rule-kinds-needs.down.sql
-      - migrations/NEW-spec-headings.up.sql
-      - migrations/NEW-spec-headings.down.sql
+      - migrations/0103_spec-headings.up.sql
+      - migrations/0103_spec-headings.down.sql
