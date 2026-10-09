@@ -1,8 +1,8 @@
-// approvalflow.go is spec 029 §7.2's write side: the effective flow snapshot a
+// approvalflow.go is WL-SPEC-75 §13.6's write side: the effective flow snapshot a
 // project is stamped with, and the 'awaiting' rows that snapshot demands.
 // Everything here is tx-scoped, so the apply and the deliverable-created path
 // materialize inside the same event transaction that records what happened
-// (021 §4). The read-side rules — which flow matches, which lanes an entity
+// (WL-SPEC-78 §8.4). The read-side rules — which flow matches, which lanes an entity
 // owes — are pure functions in approval_rules.go.
 
 package store
@@ -18,7 +18,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// FlowActorID owns every approval row a flow rule mints (029 §7.2): the rule
+// FlowActorID owns every approval row a flow rule mints (WL-SPEC-75 §13.6): the rule
 // inserted them, and crediting the policy to whichever human filed the idea
 // would misstate who did what.
 const FlowActorID = "worklode"
@@ -70,7 +70,7 @@ func ProjectApprovalFlow(tx *sql.Tx, projectID string) (*model.ApprovalFlowSnaps
 }
 
 // SelfReviewPolicy reports what the approval detail page has to say about
-// self-review on one approval (WL-SPEC-75 §13.6, 032 §7): the stamped flow's
+// self-review on one approval (WL-SPEC-75 §13.6, WL-SPEC-82 §9): the stamped flow's
 // name and rev, which the page names beside a self-reviewed decision, and
 // whether that flow permits self-review.
 func (s *Store) SelfReviewPolicy(ctx context.Context, kind, entityID string) (
@@ -101,7 +101,7 @@ func (s *Store) SelfReviewPolicy(ctx context.Context, kind, entityID string) (
 // demands of one entity, lane-keyed and idempotent. required_actor comes
 // from the reviewer template (snap.Reviewers[lane]) when set, else the
 // row carries the lane's required_role. created_by is the system
-// 'worklode' actor: the rule inserted these rows (029 §7.2). New
+// 'worklode' actor: the rule inserted these rows (WL-SPEC-75 §13.6). New
 // deliverable rows bind subject_revision ” — nothing designated yet.
 // Returns how many rows were actually inserted.
 func MaterializeForEntity(tx *sql.Tx, now time.Time,
@@ -130,7 +130,7 @@ func MaterializeForEntity(tx *sql.Tx, now time.Time,
 
 // MaterializeForProject runs MaterializeForEntity over the project's
 // existing deliverables — the backfill an apply performs so a flow stamped
-// after creation still materializes every requirement (029 §7.1: the
+// after creation still materializes every requirement (WL-SPEC-75 §13.6: the
 // requirement is a visible row, whenever it became a requirement).
 func MaterializeForProject(tx *sql.Tx, now time.Time,
 	projectID string, snap model.ApprovalFlowSnapshot) (int, error) {

@@ -92,7 +92,7 @@ func TestDeleteTaskTombstonesClosesLeaseAndLogs(t *testing.T) {
 		t.Fatalf("DeleteTask: %v", err)
 	}
 
-	// Fetching by id still succeeds and renders the tombstone (044 §4).
+	// Fetching by id still succeeds and renders the tombstone (WL-SPEC-75 §12).
 	got, err := s.GetTask(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("GetTask after delete: %v", err)
@@ -322,7 +322,7 @@ func TestDeletedBlockerDoesNotBlock(t *testing.T) {
 		t.Fatalf("Claim on the unblocked task: %v", err)
 	}
 
-	// The edge itself survives, so undelete restores the block (044 §4).
+	// The edge itself survives, so undelete restores the block (WL-SPEC-75 §12).
 	if err := undeleteTask(t, s, blocker.ID); err != nil {
 		t.Fatalf("UndeleteTask: %v", err)
 	}
@@ -480,7 +480,7 @@ func TestListDocsHidesDeletedAndDeletedFilterShowsOnlyThem(t *testing.T) {
 	}
 }
 
-// TestDeletedTaskClosedIsStateOnly pins 044 §1's "the tombstone is orthogonal
+// TestDeletedTaskClosedIsStateOnly pins WL-SPEC-75 §12's "the tombstone is orthogonal
 // to state": Closed keeps meaning delivered-or-abandoned, so a tombstoned draft
 // answers false. Folding "deleted" into taskClosed would put "closed": true on
 // the wire for a row that never even reached ready.
@@ -506,7 +506,7 @@ func TestDeletedTaskClosedIsStateOnly(t *testing.T) {
 		t.Fatal("GetTask on a deleted task: Tombstone is nil")
 	}
 	if got.Closed {
-		t.Fatal("a tombstoned draft reports Closed true; the tombstone is orthogonal to state (044 §1)")
+		t.Fatal("a tombstoned draft reports Closed true; the tombstone is orthogonal to state (WL-SPEC-75 §12)")
 	}
 
 	// The other half: deleting does not *un*-close an abandoned task either.
@@ -641,7 +641,7 @@ func taskState(t *testing.T, s *Store, id string) string {
 	return task.State
 }
 
-// TestDeletedDocReleasesSlugAndNumber covers the workflow 044 §0 names as the
+// TestDeletedDocReleasesSlugAndNumber covers the workflow WL-SPEC-75 §12 names as the
 // reason delete exists: a wrong corpus number or a duplicate import is fixed by
 // deleting and re-creating, which an unconditional unique index would refuse
 // with a collision against a row the operator cannot see.
@@ -678,7 +678,7 @@ func TestDeletedDocReleasesSlugAndNumber(t *testing.T) {
 		}
 	}
 
-	// The tombstone is still reachable by id — 044 §4's `lode show`.
+	// The tombstone is still reachable by id — WL-SPEC-75 §12's `lode show`.
 	if _, err := s.GetDoc(ctx, gone.ID); err != nil {
 		t.Fatalf("GetDoc on the tombstone: %v", err)
 	}
@@ -706,7 +706,7 @@ func TestDeletedDocStillResolvesWhenNothingReplacedIt(t *testing.T) {
 
 // TestRepointExternalEdgesSkipsDeletedDocs: the sweep finds referring
 // documents for the caller rather than being named by them, which is the case
-// 044 §4 says a tombstone stops. It must not rewrite a hidden document's edges
+// WL-SPEC-75 §12 says a tombstone stops. It must not rewrite a hidden document's edges
 // or log an `edges` change against it.
 func TestRepointExternalEdgesSkipsDeletedDocs(t *testing.T) {
 	t.Parallel()

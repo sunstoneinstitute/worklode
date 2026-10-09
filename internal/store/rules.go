@@ -26,9 +26,8 @@ type ruleRow struct {
 	depth   int
 }
 
-// syncRules makes a document's rules agree with its parsed source
-// (12-spec-refactoring-design-tree.md S8 to S11, S20). Every anchored section
-// is a design rule; changed text rewrites the rule's draft version or, once
+// syncRules makes a document's rules agree with its parsed source.
+// Every anchored section is a design rule; changed text rewrites the rule's draft version or, once
 // that version is accepted, becomes its next version; anything else is a new
 // rule numbered from the project's RULE counter. The arrangement
 // (doc_rules) is rewritten in section order. Plans never reach here:
@@ -515,9 +514,8 @@ func (s *Store) GetRuleVersion(ctx context.Context, projectKey string, number in
 }
 
 // EditRule writes a rule's new heading and body by regenerating the
-// arranging document's body around it (12-spec-refactoring-design-tree.md
-// S13, S14, S35). A draft document is written through UpdateDocBody, so
-// syncRules rewrites the rule's draft version in place. An accepted
+// arranging document's body around it. A draft document is written through
+// UpdateDocBody, so syncRules rewrites the rule's draft version in place. An accepted
 // document is written through its candidate revision, opened here when none
 // is open; the rule's next version appears when the revision lands. A
 // plan contains no rules, so the rule writes through the spec or ADR that

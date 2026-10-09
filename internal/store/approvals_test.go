@@ -491,7 +491,7 @@ func TestListAwaitingApprovals(t *testing.T) {
 	}
 }
 
-// TestListAwaitingApprovalsCoversEveryKind: 029 §7.2's queue is one fact
+// TestListAwaitingApprovalsCoversEveryKind: WL-SPEC-75 §13.6's queue is one fact
 // family over every governed entity, so the reader correlates a deliverable
 // and a task the same way it already correlates a PR and a doc — each to its
 // own project, none of them dropped for want of a task in between.
@@ -624,7 +624,7 @@ func docForApproval(t *testing.T, s *Store, slug string, number int) *model.Doc 
 
 // assignDocReviewers runs SetDocReviewers through RecordDocEvent, the way
 // the API will, as "stig" — docForApproval's CreatedBy, so the default owner
-// (025 §7.3's authority for this call).
+// (WL-SPEC-77 §9's authority for this call).
 func assignDocReviewers(t *testing.T, s *Store, docID int64, reviewers []string) {
 	t.Helper()
 	_, _, err := s.RecordDocEvent(t.Context(), "set_reviewers", "cli",
@@ -660,7 +660,7 @@ func TestSetDocReviewersDedupes(t *testing.T) {
 	}
 }
 
-// TestRequestDocApprovalOpensOneLanePerReviewer is 025 §7.3's reviewer set:
+// TestRequestDocApprovalOpensOneLanePerReviewer is WL-SPEC-77 §9's reviewer set:
 // every assigned reviewer gets an own awaiting row on the same revision, and
 // stays assigned across a later revision — WL-359's durable set, read fresh
 // each call rather than named by the caller. Migration 0038's key allowed
@@ -1014,8 +1014,8 @@ func seedApprovalRow(t *testing.T, s *Store, entityKind, entityID, subjectRevisi
 	return id
 }
 
-// TestListInboxReviews: 056 §3.1's org-wide read, oldest first, no
-// membership predicate (that lives in the pure assembly per §3.3).
+// TestListInboxReviews: WL-SPEC-82 §12's org-wide read, oldest first, no
+// membership predicate (that lives in the pure assembly per WL-SPEC-82 §12).
 func TestListInboxReviews(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t) // project "horndb" (key HDB), actor "stig"
@@ -1104,7 +1104,7 @@ func TestListInboxReviews(t *testing.T) {
 	}
 }
 
-// TestHasInboxItems: 056 §4's existence check, one subtest per branch the
+// TestHasInboxItems: WL-SPEC-82 §2.3's existence check, one subtest per branch the
 // brief names, each proving that branch alone (no other qualifying item for
 // the actor under test) rather than just an incidental true/false.
 func TestHasInboxItems(t *testing.T) {
@@ -1342,7 +1342,7 @@ func TestHasInboxItems(t *testing.T) {
 		}
 	})
 
-	// 056 §3.1 bucket 3: an actor owns a review when they authored the PR
+	// WL-SPEC-82 §12 bucket 3: an actor owns a review when they authored the PR
 	// and somebody else is the required reviewer.
 	t.Run("owned review, someone else required", func(t *testing.T) {
 		t.Parallel()
@@ -1379,7 +1379,7 @@ func TestHasInboxItems(t *testing.T) {
 	})
 
 	// WL-664 regression: a NULL required_actor means nobody else is
-	// deciding, so 056 §3.1's "owned" rule does not hold -- assembleInbox
+	// deciding, so WL-SPEC-82 §12's "owned" rule does not hold -- assembleInbox
 	// would place this row in no bucket at all, and HasInboxItems must
 	// agree.
 	t.Run("authored review with no required reviewer", func(t *testing.T) {
@@ -1422,7 +1422,7 @@ func mustWorklodeActor(t *testing.T, s *Store) {
 	}
 }
 
-// TestApprovalLanesAreIndependentRows is 029 §7.2's point: two lanes of one
+// TestApprovalLanesAreIndependentRows is WL-SPEC-75 §13.6's point: two lanes of one
 // revision are two rows, not one row that the second insert deduplicates
 // away.
 func TestApprovalLanesAreIndependentRows(t *testing.T) {
@@ -1524,7 +1524,7 @@ func openApprovalID(t *testing.T, tx *sql.Tx, kind, entityID, revision, lane str
 }
 
 // TestDecideRefusesUndesignatedRevision: a decision binds the immutable
-// revision the actor actually saw (029 §7.1), so a row that names none has
+// revision the actor actually saw (WL-SPEC-75 §13.6), so a row that names none has
 // nothing to bind. Until something designates one, the row is a visible gap
 // in the queue, not a decidable item.
 func TestDecideRefusesUndesignatedRevision(t *testing.T) {
@@ -1547,7 +1547,7 @@ func TestDecideRefusesUndesignatedRevision(t *testing.T) {
 	}
 }
 
-// TestDecideSelfApprovalByCreatedBy is 029 §7.1's refusal for the three kinds
+// TestDecideSelfApprovalByCreatedBy is WL-SPEC-75 §13.6's refusal for the three kinds
 // that record their author as an actor id: created_by is the author, and it
 // compares to the decider directly — no GitHub login stands in between. An
 // unknown author (NULL created_by) proves nothing, so it must not refuse. A
@@ -1664,7 +1664,7 @@ func mustResolve(t *testing.T, tx *sql.Tx, id int64, state string, now time.Time
 	}
 }
 
-// TestDesignateRevisionMintsCandidateAfterDecision is 029 §7.1's "only
+// TestDesignateRevisionMintsCandidateAfterDecision is WL-SPEC-75 §13.6's "only
 // decided history exists" branch: the approved row keeps its exact revision
 // and a fresh awaiting candidate opens at the new one, inheriting the role
 // requirement the decided row carried.

@@ -685,7 +685,7 @@ func TestRallyMemberCountSkipsTombstoned(t *testing.T) {
 	}
 }
 
-// --- the draft rally (WL-SPEC-66 §3.5) --------------------------------------
+// --- the draft rally (WL-SPEC-85 §4) --------------------------------------
 
 // rallyTx runs one rally write through RecordEvent, the way the Progress
 // page's routes will.
@@ -769,7 +769,7 @@ func TestOneDraftRallyPerProject(t *testing.T) {
 	}
 }
 
-// TestAddRallyMembers: adding is set-like (066 §3.5). A task named twice in
+// TestAddRallyMembers: adding is set-like (WL-SPEC-85 §4). A task named twice in
 // one call, or already in the rally from an earlier add, joins once.
 func TestAddRallyMembers(t *testing.T) {
 	t.Parallel()
