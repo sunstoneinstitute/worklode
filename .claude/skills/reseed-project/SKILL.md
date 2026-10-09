@@ -95,7 +95,7 @@ COMMIT;
    keeps each file's frontmatter status verbatim, wires edges in a second pass,
    and is safe to re-run: an unchanged slug is left alone, a drifted body is
    updated in place where that is legal (plans, draft specs/ADRs), and a
-   drifted accepted spec/ADR is reported on stderr for `lode doc revise`.
+   drifted accepted spec is reported on stderr for `lode doc revise`.
    Stating a status needs the admin-only `doc.import` permission. Import
    mints nothing.
 2. **Mint the unexecuted plans' tasks.** For each plan the §1 audit found

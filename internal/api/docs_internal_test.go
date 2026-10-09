@@ -25,7 +25,6 @@ func TestDocSelectorFromValid(t *testing.T) {
 		"needs_execution restates kind and status": "needs_execution=true&kind=plan&status=accepted",
 		"bare_superseded alone":                    "bare_superseded=true",
 		"bare_superseded with kind=spec":           "bare_superseded=true&kind=spec",
-		"bare_superseded with kind=adr":            "bare_superseded=true&kind=adr",
 		"bare_superseded restates status":          "bare_superseded=true&status=superseded",
 		"no selector at all":                       "kind=plan&status=draft",
 		// status=all names no status (increment 3 S5's terminal-plan
@@ -60,7 +59,7 @@ func TestDocSelectorFromConflicts(t *testing.T) {
 		"needs_execution with draft":          {"needs_execution=true&status=draft", "status=accepted"},
 		"needs_execution with spec kind":      {"needs_execution=true&kind=spec", "kind=plan"},
 		"bare_superseded with draft":          {"bare_superseded=true&status=draft", "status=superseded"},
-		"bare_superseded with plan kind":      {"bare_superseded=true&kind=plan", "kind=spec or adr"},
+		"bare_superseded with plan kind":      {"bare_superseded=true&kind=plan", "kind=spec"},
 		"bare_superseded and needs_planning":  {"bare_superseded=true&needs_planning=true", "mutually exclusive"},
 		"bare_superseded and needs_execution": {"bare_superseded=true&needs_execution=true", "mutually exclusive"},
 		"unparseable bare_superseded":         {"bare_superseded=maybe", "bare_superseded"},

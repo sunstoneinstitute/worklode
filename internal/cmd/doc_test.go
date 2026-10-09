@@ -337,7 +337,7 @@ func TestDocFileFlagRejectsEmptyPath(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 
-	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "adr",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--number", "902", "--slug", "empty-file-adr", "--file", ""); err == nil {
 		t.Fatal(`doc add --file "": want error, got nil`)
 	}
@@ -413,13 +413,13 @@ func TestDocLifecycle(t *testing.T) {
 	idArg := strconv.FormatInt(id, 10)
 
 	// add: non-json prints a table with the id and title.
-	out, err = runLode(t, "doc", "add", "--project", "proj", "--kind", "adr",
-		"--number", "1", "--slug", "test-adr", "--file", specFile)
+	out, err = runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
+		"--number", "2", "--slug", "test-adr", "--file", specFile)
 	if err != nil {
 		t.Fatalf("doc add (table): %v\noutput: %s", err, out)
 	}
 	// The kind is in the ref now, not a column of its own.
-	if !strings.Contains(out, "Test Document") || !strings.Contains(out, "PROJ-ADR-1") {
+	if !strings.Contains(out, "Test Document") || !strings.Contains(out, "PROJ-SPEC-2") {
 		t.Errorf("doc add table output = %q, want it to mention the title and the ref", out)
 	}
 
@@ -485,9 +485,9 @@ func TestDocLifecycle(t *testing.T) {
 	// accept: non-json reports the new status.
 	// (accept is a one-shot transition; re-derive a fresh accepted doc for
 	// the table-output check instead of accepting this one twice.)
-	adrOut, err := runLode(t, "doc", "list", "--project", "proj", "--kind", "adr", "--json")
+	adrOut, err := runLode(t, "doc", "list", "--project", "proj", "--status", "draft", "--json")
 	if err != nil {
-		t.Fatalf("doc list --kind adr: %v\noutput: %s", err, adrOut)
+		t.Fatalf("doc list --status draft: %v\noutput: %s", err, adrOut)
 	}
 	var adrListed struct {
 		Docs []model.Doc `json:"docs"`
@@ -496,7 +496,7 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("decode doc list %q: %v", adrOut, err)
 	}
 	if len(adrListed.Docs) != 1 {
-		t.Fatalf("doc list --kind adr: got %d docs, want 1", len(adrListed.Docs))
+		t.Fatalf("doc list --status draft: got %d docs, want 1", len(adrListed.Docs))
 	}
 	adrID := strconv.FormatInt(adrListed.Docs[0].ID, 10)
 	out, err = runLode(t, "doc", "accept", adrID)
@@ -675,10 +675,9 @@ func TestDocListSelectorConflicts(t *testing.T) {
 		"execution with draft":           {[]string{"--needs-execution", "--status", "draft"}, "accepted"},
 		"execution with spec kind":       {[]string{"--needs-execution", "--kind", "spec"}, "plan"},
 		"bare-superseded with draft":     {[]string{"--bare-superseded", "--status", "draft"}, "superseded"},
-		"bare-superseded with plan kind": {[]string{"--bare-superseded", "--kind", "plan"}, "spec or adr"},
+		"bare-superseded with plan kind": {[]string{"--bare-superseded", "--kind", "plan"}, "implies --kind spec"},
 		"bare-superseded and planning":   {[]string{"--bare-superseded", "--needs-planning"}, "none of the others can be"},
 		"unresolved with draft":          {[]string{"--unresolved", "--status", "draft"}, "accepted"},
-		"unresolved with adr kind":       {[]string{"--unresolved", "--kind", "adr"}, "spec or plan"},
 		"unresolved and planning":        {[]string{"--unresolved", "--needs-planning"}, "none of the others can be"},
 		"older-than without unresolved":  {[]string{"--older-than", "30d"}, "--unresolved only"},
 		"older-than nonsense":            {[]string{"--unresolved", "--older-than", "a month"}, "whole number of days"},
@@ -698,13 +697,11 @@ func TestDocListSelectorConflicts(t *testing.T) {
 
 // TestCheckDocSelectorsAllowsBareSuperseded: --bare-superseded accepts no
 // restatement, or one that agrees with what it implies — status=superseded
-// and kind spec or adr, unlike --needs-planning/--needs-execution's single
-// implied kind.
+// and kind spec.
 func TestCheckDocSelectorsAllowsBareSuperseded(t *testing.T) {
 	for name, c := range map[string]struct{ kind, status string }{
 		"no restatement":    {"", ""},
 		"kind spec":         {"spec", ""},
-		"kind adr":          {"adr", ""},
 		"status superseded": {"", "superseded"},
 		"both restated":     {"spec", "superseded"},
 	} {
@@ -881,9 +878,9 @@ func TestDocListByOwner(t *testing.T) {
 		"--slug", "alice-spec", "--file", specFile); err != nil {
 		t.Fatalf("doc add (alice spec): %v", err)
 	}
-	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "adr",
-		"--slug", "alice-adr", "--file", specFile); err != nil {
-		t.Fatalf("doc add (alice adr): %v", err)
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "plan",
+		"--slug", "alice-adr", "--file", writeDocFile(t, "# Alice plan\n")); err != nil {
+		t.Fatalf("doc add (alice plan): %v", err)
 	}
 	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "bob-spec", "--owner", "bob", "--file", specFile); err != nil {
@@ -904,15 +901,15 @@ func TestDocListByOwner(t *testing.T) {
 		t.Fatalf("doc list --owner bob = %+v, want just bob's doc", listed.Docs)
 	}
 
-	out, err = runLode(t, "doc", "list", "--project", "proj", "--owner", "alice", "--kind", "adr", "--json")
+	out, err = runLode(t, "doc", "list", "--project", "proj", "--owner", "alice", "--kind", "plan", "--json")
 	if err != nil {
-		t.Fatalf("doc list --owner alice --kind adr: %v\noutput: %s", err, out)
+		t.Fatalf("doc list --owner alice --kind plan: %v\noutput: %s", err, out)
 	}
 	if err := json.Unmarshal([]byte(out), &listed); err != nil {
 		t.Fatalf("decode doc list %q: %v", out, err)
 	}
 	if len(listed.Docs) != 1 || listed.Docs[0].Slug != "alice-adr" {
-		t.Fatalf("doc list --owner alice --kind adr = %+v, want just alice-adr", listed.Docs)
+		t.Fatalf("doc list --owner alice --kind plan = %+v, want just alice-adr", listed.Docs)
 	}
 
 	out, err = runLode(t, "doc", "list", "--project", "proj", "--owner", "carol", "--json")
@@ -1097,8 +1094,8 @@ func TestDocAddRecordsWorktreeTask(t *testing.T) {
 	// The same command outside any worktree records no task and still creates
 	// the document — an ad hoc author is not refused (migration 0044).
 	t.Chdir(t.TempDir())
-	out, err = runLode(t, "doc", "add", "--project", "proj", "--kind", "adr",
-		"--number", "1", "--slug", "test-adr", "--file", file, "--json")
+	out, err = runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
+		"--number", "2", "--slug", "test-adr", "--file", file, "--json")
 	if err != nil {
 		t.Fatalf("doc add outside a worktree: %v\noutput: %s", err, out)
 	}

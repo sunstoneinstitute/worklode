@@ -57,10 +57,6 @@ wl:DesignDoc a owl:Class ;
         prov:wasGeneratedBy (§12, the task that wrote it), prov:wasRevisionOf and
         prov:wasAttributedTo (§4) on documents, and all three have prov:Entity as their domain.""" .
 
-wl:ADR a owl:Class ;
-    rdfs:subClassOf wl:DesignDoc ;
-    wl:layer wlc:intent .
-
 wl:Spec a owl:Class ;
     rdfs:subClassOf wl:DesignDoc ;
     wl:layer wlc:intent .
@@ -238,9 +234,6 @@ wl:RuntimeEvent a owl:Class ;
 [] a owl:AllDisjointClasses ;
    owl:members ( wl:Component wl:DesignDoc wl:Plan wl:Section wl:Task wl:Deliverable wl:Project
                  wl:Skill ) .
-
-[] a owl:AllDisjointClasses ;
-   owl:members ( wl:ADR wl:Spec ) .
 
 [] a owl:AllDisjointClasses ;
    owl:members ( wl:Artifact wl:Build wl:Deployment wl:Environment wl:Commit wl:RuntimeEvent ) .

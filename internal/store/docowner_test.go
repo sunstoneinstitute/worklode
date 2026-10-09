@@ -22,8 +22,8 @@ func TestDocFilterByOwner(t *testing.T) {
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
 	})
-	stigAdr := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "adr", Number: 1, Slug: "001-x", Body: specBody, CreatedBy: "stig",
+	stigPlan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "001-x", CreatedBy: "stig",
 	})
 	adaSpec := mustCreateDoc(t, s, DocInput{
 		Project: "p2", Kind: "spec", Number: 25, Slug: "025-y", Body: specBody, CreatedBy: "ada",
@@ -37,12 +37,12 @@ func TestDocFilterByOwner(t *testing.T) {
 		t.Fatalf("owner=stig: got %d docs, want 2", len(docs))
 	}
 
-	docs, err = s.ListDocs(t.Context(), DocFilter{Owner: "stig", Kind: "adr"})
+	docs, err = s.ListDocs(t.Context(), DocFilter{Owner: "stig", Kind: "plan"})
 	if err != nil {
 		t.Fatalf("ListDocs: %v", err)
 	}
-	if len(docs) != 1 || docs[0].ID != stigAdr.ID {
-		t.Fatalf("owner=stig,kind=adr = %+v, want just the ADR", docs)
+	if len(docs) != 1 || docs[0].ID != stigPlan.ID {
+		t.Fatalf("owner=stig,kind=plan = %+v, want just the plan", docs)
 	}
 
 	docs, err = s.ListDocs(t.Context(), DocFilter{Owner: "ada", Project: "p2"})

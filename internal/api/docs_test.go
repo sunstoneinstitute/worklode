@@ -435,7 +435,7 @@ func TestCreateDocRejectsBadInput(t *testing.T) {
 	}{
 		"unknown kind": {model.CreateDocInput{
 			Project: "proj", Kind: "memo", Number: 1, Slug: "s", Body: docSpecBody,
-		}, http.StatusUnprocessableEntity, "must be spec, adr, or plan"},
+		}, http.StatusUnprocessableEntity, "must be spec or plan"},
 		"missing slug": {model.CreateDocInput{
 			Project: "proj", Kind: "spec", Number: 1, Body: docSpecBody,
 		}, http.StatusUnprocessableEntity, "slug is required"},
@@ -1255,7 +1255,7 @@ func TestListDocsSelectorConflicts(t *testing.T) {
 		"execution with draft":         {"needs_execution=true&status=draft", "accepted"},
 		"execution with spec kind":     {"needs_execution=true&kind=spec", "plan"},
 		"bare superseded with draft":   {"bare_superseded=true&status=draft", "superseded"},
-		"bare superseded with plan":    {"bare_superseded=true&kind=plan", "spec or adr"},
+		"bare superseded with plan":    {"bare_superseded=true&kind=plan", "kind=spec"},
 		"bare superseded and planning": {"bare_superseded=true&needs_planning=true", "mutually exclusive"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -1536,7 +1536,7 @@ func TestCreateDocRecordsAuthoringTask(t *testing.T) {
 	// No worktree, no authoring task, and the create still lands: a human in
 	// the cockpit and an agent working ad hoc both author documents.
 	unauthored := createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "proj", Kind: "adr", Number: 51, Slug: "051-x", Body: docSpecBody,
+		Project: "proj", Kind: "spec", Number: 51, Slug: "051-x", Body: docSpecBody,
 	})
 	if unauthored.GeneratedByTask != "" {
 		t.Errorf("generated_by_task = %q, want empty for a create carrying no task",

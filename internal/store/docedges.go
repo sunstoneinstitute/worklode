@@ -750,11 +750,16 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	}
 
 	if sh, ok := designdoc.ParseShorthand(base); ok {
+		// A retired <KEY>-ADR-<n> names the spec that took its place
+		// (WL-SPEC-77 §7a); no row has kind adr any more.
+		match, args := `d.kind = $2 AND d.number = $3`, []any{sh.Key, sh.Kind(), sh.Number}
+		if sh.Type == "ADR" {
+			match, args = `d.former_adr = $2`, []any{sh.Key, sh.Number}
+		}
 		err := tx.QueryRow(
 			`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
-			  WHERE p.key = $1 AND d.kind = $2 AND d.number = $3
-			  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`,
-			sh.Key, sh.Kind(), sh.Number).Scan(&id)
+			  WHERE p.key = $1 AND `+match+`
+			  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`, args...).Scan(&id)
 		if err == nil {
 			return id, true, nil
 		}
@@ -789,13 +794,13 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	return 0, false, nil
 }
 
-// docsByNumber returns up to two spec/ADR ids in project with the given corpus
+// docsByNumber returns up to two spec ids in project with the given corpus
 // number, restricted to one liveness class. Two is all resolveDocRef needs: it
 // resolves exactly one match and calls anything more ambiguous.
 func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]int64, error) {
 	rows, err := tx.Query(
 		`SELECT id FROM docs
-		  WHERE project_id = $1 AND number = $2 AND kind IN ('spec','adr')
+		  WHERE project_id = $1 AND number = $2 AND kind = 'spec'
 		    AND `+liveness+`
 		  ORDER BY id LIMIT 2`, project, number)
 	if err != nil {

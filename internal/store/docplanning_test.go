@@ -1119,7 +1119,7 @@ func TestDocBareSupersededRules(t *testing.T) {
 	}
 
 	// kind narrows on the arranging document, project on the rule.
-	for _, tc := range []struct{ project, kind string }{{"p1", "adr"}, {"p2", ""}} {
+	for _, tc := range []struct{ project, kind string }{{"p1", "plan"}, {"p2", ""}} {
 		got, err := s.BareSupersededRules(t.Context(), tc.project, tc.kind)
 		if err != nil {
 			t.Fatalf("BareSupersededRules(%q, %q): %v", tc.project, tc.kind, err)
