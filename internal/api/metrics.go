@@ -320,9 +320,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		reg.MustRegister(&dbStatsCollector{stats: s.st.Stats})
 	}
 	// githubCalls counts the GitHub API calls worklode makes itself: the
-	// branch-rules refresh on its own schedule, and the three §3.6 makes for
-	// a Progress page merge act. op is a fixed set of call sites
-	// (branch_rules, pr_node_id, enqueue_pr, merge_pr), never a repo or a
+	// branch-rules refresh on its own schedule, and the calls a Progress page
+	// merge act makes. op is a fixed set of call sites (branch_rules,
+	// pr_node_id, enqueue_pr, merge_method, merge_pr), never a repo or a
 	// URL, so the cardinality is bounded by the code.
 	s.githubCalls = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_github_calls_total",

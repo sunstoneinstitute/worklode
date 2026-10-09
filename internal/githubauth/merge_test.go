@@ -16,8 +16,9 @@ import (
 // installation lookup, the token mint, the pull request, its REST merge, and
 // GraphQL. mergeStatus and graphQLError make it refuse.
 type mergeFixture struct {
-	mergeStatus  int    // status for PUT .../merge (0 means 200)
-	graphQLError string // when set, /graphql answers 200 with this error
+	mergeStatus  int            // status for PUT .../merge (0 means 200)
+	graphQLError string         // when set, /graphql answers 200 with this error
+	repo         map[string]any // GET /repos/acme/app reply
 
 	mu     sync.Mutex
 	calls  []string
@@ -44,6 +45,8 @@ func (f *mergeFixture) start(t *testing.T) *AppAuth {
 		case "/app/installations/42/access_tokens":
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(map[string]any{"token": "ghs_test"})
+		case "/repos/acme/app":
+			json.NewEncoder(w).Encode(f.repo)
 		case "/repos/acme/app/pulls/7":
 			json.NewEncoder(w).Encode(map[string]any{"number": 7, "node_id": "PR_node7"})
 		case "/repos/acme/app/pulls/7/merge":
@@ -184,5 +187,28 @@ func TestMergePRRefused(t *testing.T) {
 	}
 	if ghErr.Message != "Pull Request is not mergeable" {
 		t.Errorf("message = %q, want GitHub's", ghErr.Message)
+	}
+}
+
+// The method is the first of squash, merge, rebase the repository allows.
+func TestMergeMethod(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		repo map[string]any
+		want string
+	}{
+		{map[string]any{"allow_squash_merge": true, "allow_merge_commit": true, "allow_rebase_merge": true}, "squash"},
+		{map[string]any{"allow_merge_commit": true, "allow_rebase_merge": true}, "merge"},
+		{map[string]any{"allow_rebase_merge": true}, "rebase"},
+		{map[string]any{}, ""},
+	} {
+		f := &mergeFixture{repo: tc.repo}
+		got, err := f.start(t).MergeMethod(context.Background(), "acme/app")
+		if err != nil {
+			t.Fatalf("MergeMethod(%v): %v", tc.repo, err)
+		}
+		if got != tc.want {
+			t.Errorf("MergeMethod(%v) = %q, want %q", tc.repo, got, tc.want)
+		}
 	}
 }

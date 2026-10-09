@@ -149,13 +149,40 @@ func (a *AppAuth) EnqueuePR(ctx context.Context, repo, nodeID string) error {
 	return nil
 }
 
-// MergePR merges a pull request through the REST merge endpoint. An empty
-// method leaves the choice to GitHub, which uses the repository's default.
-//
-// ponytail: worklode does not read which merge methods the repository
-// allows; a repository that forbids the default answers with its own message
-// and the page shows it. Read allow_squash_merge and friends here if that
-// refusal ever becomes routine.
+// MergeMethod is the merge method MergePR should use on repo: the first of
+// squash, merge, rebase that the repository allows (WL-SPEC-85 §4). A
+// repository that reports none of them gets "", which leaves the choice to
+// GitHub.
+func (a *AppAuth) MergeMethod(ctx context.Context, repo string) (string, error) {
+	path, err := repoPath(repo)
+	if err != nil {
+		return "", err
+	}
+	token, err := a.InstallationToken(ctx, repo)
+	if err != nil {
+		return "", err
+	}
+	var r struct {
+		Squash bool `json:"allow_squash_merge"`
+		Merge  bool `json:"allow_merge_commit"`
+		Rebase bool `json:"allow_rebase_merge"`
+	}
+	if err := githubCall(ctx, http.MethodGet, a.BaseURL+"/repos/"+path, "Bearer "+token, nil, &r); err != nil {
+		return "", err
+	}
+	switch {
+	case r.Squash:
+		return "squash", nil
+	case r.Merge:
+		return "merge", nil
+	case r.Rebase:
+		return "rebase", nil
+	}
+	return "", nil
+}
+
+// MergePR merges a pull request through the REST merge endpoint with method
+// (see MergeMethod). An empty method leaves the choice to GitHub.
 func (a *AppAuth) MergePR(ctx context.Context, repo string, number int64, method string) error {
 	url, err := a.prURL(repo, number)
 	if err != nil {
