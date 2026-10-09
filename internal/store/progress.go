@@ -150,7 +150,8 @@ SELECT d.id, coalesce(d.number, 0), d.title, d.status, d.updated_at,
 	return out, nil
 }
 
-// progressPlanDocs reads the project's live plans, or — when specs is
+// progressPlanDocs reads the project's live plans (withdrawn ones cover
+// nothing, WL-SPEC-85 §2), or — when specs is
 // non-empty — only the ones with a covers edge into at least one of them.
 // A plan covering none of the requested specs contributes nothing to their
 // derivation (progress.Derive matches covers by spec id), so leaving it out
@@ -160,7 +161,8 @@ func (s *Store) progressPlanDocs(ctx context.Context, projectID string, specs []
 SELECT d.id, coalesce(d.number, 0), d.title, d.status, coalesce(p.key, ''), coalesce(d.owner, '')
   FROM docs d
   JOIN projects p ON p.id = d.project_id
- WHERE d.project_id = $1 AND d.kind = 'plan' AND d.deleted_at IS NULL`
+ WHERE d.project_id = $1 AND d.kind = 'plan' AND d.deleted_at IS NULL
+   AND d.status <> 'withdrawn'`
 	args := []any{projectID}
 	if len(specs) > 0 {
 		query += ` AND EXISTS (
