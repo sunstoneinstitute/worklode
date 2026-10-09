@@ -616,7 +616,11 @@ func TestProjectProgressSkipsWithdrawnPlans(t *testing.T) {
 func TestProjectProgressInformativeSection(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
-	seedProgressCorpus(t, s)
+	// No plan: an accepted plan's cover keeps a rule a requirement (WL-SPEC-77 §4).
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 66, Slug: "066-progress",
+		Body: progressSpecBody, CreatedBy: "stig",
+	})
 	// progressSpecBody arranges sec-0, sec-1, sec-2 as rules 1, 2, 3.
 	setRuleKind(t, s, 2, "informative")
 
