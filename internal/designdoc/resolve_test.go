@@ -34,7 +34,7 @@ func TestParseShorthand(t *testing.T) {
 		{"CMS1-SPEC-7", Shorthand{Key: "CMS1", Type: "SPEC", Number: 7}, true},
 		{"NO-SPEC", Shorthand{}, false},                                    // the sentinel is not a shorthand
 		{"wl-spec-25", Shorthand{}, false},                                 // the key is upper case
-		{"WL-PLAN-1", Shorthand{Key: "WL", Type: "PLAN", Number: 1}, true}, // 029 §4
+		{"WL-PLAN-1", Shorthand{Key: "WL", Type: "PLAN", Number: 1}, true}, // WL-SPEC-75 §13
 		{"W-SPEC-1", Shorthand{}, false},                                   // key is at least two characters
 		{"WL-SPEC-25#sec-2", Shorthand{}, false},                           // fragment must be split off first
 		{"025-documents", Shorthand{}, false},

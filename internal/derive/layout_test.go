@@ -49,7 +49,7 @@ func initGitRepo(t *testing.T, root string, add ...string) {
 	}
 }
 
-// TestLayoutTriplesTrackedFilesOnly is the determinism contract of spec 007
+// TestLayoutTriplesTrackedFilesOnly is the determinism contract of WL-SPEC-82
 // §2 ("Same inputs -> same triples"): running a build must not change the
 // derived document. Untracked files — ignored build output above all — are
 // not the repo's layout, so they are neither a coverage gap nor an input to

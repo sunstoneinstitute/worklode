@@ -1,7 +1,7 @@
 // Package safefetch performs outbound HTTP GETs on attacker-influenced URLs.
 //
 // Threat model: importing a GitHub issue body mirrors the images it references
-// (spec 021 §12), so the URL is chosen by whoever filed the issue. An
+// (WL-SPEC-78 §8.8), so the URL is chosen by whoever filed the issue. An
 // unguarded fetch is an SSRF primitive against everything the server can reach
 // — cloud metadata, cluster-internal services, Postgres. The guard is
 // https-only, a label-aligned host allowlist, the default port, a table of
@@ -128,7 +128,7 @@ func New(allowedHosts []string, maxBytes int64) *Fetcher {
 // The scoping is per host, not per fetch, because the allowlist is wider than
 // the set of hosts a credential belongs to: mirroring fetches from github.com
 // and githubusercontent.com, and the GitHub App token belongs to neither in
-// full (021 §12). A blanket "attach to every fetch" option would hand the
+// full (WL-SPEC-78 §8.8). A blanket "attach to every fetch" option would hand the
 // token to whichever host the attacker-chosen URL named.
 func (f *Fetcher) WithBearer(authHosts []string, token string) *Fetcher {
 	c := *f

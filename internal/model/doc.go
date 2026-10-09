@@ -6,24 +6,24 @@ import (
 	"time"
 )
 
-// Doc is a backbone design document (025 §5): a spec, an ADR, or a plan.
+// Doc is a backbone design document (WL-SPEC-77 §3): a spec, an ADR, or a plan.
 // Number is the project's per-kind ordinal, auto-assigned unless the caller
-// reserved one explicitly (029 §4); Issued is the frontmatter's ISO date of
-// first publication (dct:issued, 025 §14) and is "" when unset, the body
+// reserved one explicitly (WL-SPEC-75 §13); Issued is the frontmatter's ISO date of
+// first publication (dct:issued, WL-SPEC-77 §7) and is "" when unset, the body
 // being the authority for it as for Title; Owner defaults to the creator
 // and is what the accept gate checks.
 type Doc struct {
 	ID      int64  `json:"id"`
 	Project string `json:"project"`
 	// ProjectKey is the project's key ("WL"), the first segment of the
-	// 025 §14.3 shorthand a reader cites ("WL-SPEC-29"). Project carries the
+	// WL-SPEC-77 §7 shorthand a reader cites ("WL-SPEC-75"). Project carries the
 	// project id ("worklode"), which the shorthand is not built from, so
 	// rendering a document's formatted id needs this alongside it. Stamped at
 	// the API boundary rather than scanned: it is the project's fact, not the
 	// document's, and joining it into every doc query would put it in two
 	// GROUP BY clauses to serve one column. Empty on a store-side value.
 	ProjectKey string `json:"project_key,omitempty"`
-	// Ref is the document's citable id ("WL-SPEC-29", 025 §14.3), the same
+	// Ref is the document's citable id ("WL-SPEC-75", WL-SPEC-77 §7), the same
 	// <KEY>-<KIND>-<N> shorthand task.ID uses for tasks ("WL-7"). Stamped
 	// alongside ProjectKey, from which it is built (FormatRef); empty on a
 	// store-side value that never passed through the API boundary.
@@ -38,7 +38,7 @@ type Doc struct {
 	Issued    string `json:"issued"` // YYYY-MM-DD, "" when unset
 	Owner     string `json:"owner"`
 	CreatedBy string `json:"created_by"`
-	// GeneratedByTask is the task that authored this document (025 §12,
+	// GeneratedByTask is the task that authored this document (WL-SPEC-77 §13,
 	// projected as prov:wasGeneratedBy), "" when no task did — a cockpit
 	// author, an agent outside a claimed worktree, a corpus import. Distinct
 	// from CreatedBy, which names the actor rather than the unit of work, and
@@ -46,10 +46,10 @@ type Doc struct {
 	GeneratedByTask string    `json:"generated_by_task"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
-	// Tombstone carries the delete record (044 §2) and is nil on a live
+	// Tombstone carries the delete record (WL-SPEC-75 §12) and is nil on a live
 	// document. See Task.Tombstone.
 	Tombstone *Tombstone `json:"tombstone,omitempty"`
-	// Reviewers is the durable reviewer set 025 §7.3 assigns to this
+	// Reviewers is the durable reviewer set WL-SPEC-77 §9 assigns to this
 	// document (WL-359) — independent of any one revision, unlike the
 	// per-revision approvals RequestDocApproval opens against it. Populated
 	// only by GetDoc: a ListDocs row leaves it nil, since joining it onto
@@ -67,10 +67,10 @@ type Doc struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-// FormatRef builds a document's citable id: <KEY>-<KIND>-<N>, the 025 §14.3
-// shorthand as widened by 029 §4 — "WL-SPEC-29", "WL-ADR-43", "WL-PLAN-7".
+// FormatRef builds a document's citable id: <KEY>-<KIND>-<N>, the WL-SPEC-77 §7
+// shorthand as widened by WL-SPEC-75 §13 — "WL-SPEC-75", "WL-ADR-43", "WL-PLAN-7".
 // An unknown ProjectKey degrades to the unqualified "SPEC-29" rather than
-// guessing one; a document with no Number at all predates 029 §4's backfill
+// guessing one; a document with no Number at all predates WL-SPEC-75 §13's backfill
 // and renders as its kind.
 func (d Doc) FormatRef() string {
 	if d.Number == 0 {
@@ -83,9 +83,9 @@ func (d Doc) FormatRef() string {
 	return d.ProjectKey + "-" + ref
 }
 
-// DocSection is one addressable section of a spec or ADR (025 §3). Plans have
+// DocSection is one addressable section of a spec or ADR (WL-SPEC-77 §4). Plans have
 // none. Anchor is the identity and is frozen once Published; LastRevisedIn is
-// the document version whose accept last changed the section (025 §4.4).
+// the document version whose accept last changed the section (WL-SPEC-77 §5).
 type DocSection struct {
 	Anchor        string `json:"anchor"`
 	Number        string `json:"number"` // "4.1a", "" for an unnumbered heading
@@ -95,7 +95,7 @@ type DocSection struct {
 	LastRevisedIn int    `json:"last_revised_in"`
 	Published     bool   `json:"published"`
 	// Patched marks a section a substantive in-place amendment changed since
-	// the document was last approved as a whole (025 §8.4). It survives every
+	// the document was last approved as a whole (WL-SPEC-77 §10). It survives every
 	// later section rebuild until the reviewers settle the document again.
 	Patched bool `json:"patched"`
 	// Kind is the kind of the rule arranged at the section's anchor
@@ -106,7 +106,7 @@ type DocSection struct {
 // DocSectionRow is one section of one document as the cross-corpus listing
 // returns it (GET /api/v1/docs/sections): the section, plus enough of its
 // document to cite it. It is what `scripts/secindex.py` used to write into
-// docs/specs/index.yaml before the file corpus went away (055 §4).
+// docs/specs/index.yaml before the file corpus went away (WL-SPEC-77 §16).
 //
 // Ref is stamped at the API boundary from DocKind and DocNumber, the way
 // Doc.Ref is, and is "" on a store-side value.
@@ -158,7 +158,7 @@ type DocVersionRule struct {
 	Anchor      string `json:"anchor"`
 }
 
-// DocRevision is a document's open candidate revision (025 §7.2): a copy of
+// DocRevision is a document's open candidate revision (WL-SPEC-77 §9): a copy of
 // the accepted body being edited against a stable document identity. At most
 // one exists per document, and the accepted version stays authoritative until
 // it lands.
@@ -172,7 +172,7 @@ type DocRevision struct {
 }
 
 // DocNote is one anchored, non-blocking note on a document section
-// (025 §8.5): a single body against a frozen anchor, linked to the task and
+// (WL-SPEC-77 §10): a single body against a frozen anchor, linked to the task and
 // the agent session that raised it. It blocks nothing and settles nothing —
 // there is no thread and no resolve state, deliberately; a note is a remark
 // left where it applies, and the review surface that gates a document is the
@@ -202,7 +202,7 @@ type AddDocNoteInput struct {
 	Session string `json:"session,omitempty"`
 }
 
-// DocEdge is one typed link between documents (025 §14), always stated from
+// DocEdge is one typed link between documents (WL-SPEC-77 §7), always stated from
 // the point of view of the document being read: FromAnchor is the near end,
 // ToDoc and ToAnchor the far end — in DocDetail's Edges and EdgesIn alike. An
 // anchor is "" when that end of the edge is the whole document rather than one
@@ -233,7 +233,7 @@ type AddDocNoteInput struct {
 //
 // ToStatus is the far end's document status, resolved in the same query as
 // its slug. It is what lets a render flag a reference to a document that has
-// gone stale or been withdrawn (025 §8.7) without a request per edge; empty
+// gone stale or been withdrawn (WL-SPEC-77 §9) without a request per edge; empty
 // on an unresolved ToExternal edge, which names no row to read a status from.
 //
 // ToRule is an outbound covers edge's target rule ("WL-RULE-12"): a covers
@@ -262,7 +262,7 @@ type DocEdge struct {
 }
 
 // DocReferrer is one piece of open work pointing at a document section
-// (025 §8.2) — the fact a patch of that section has to answer to. Kind is
+// (WL-SPEC-77 §10) — the fact a patch of that section has to answer to. Kind is
 // "doc", "rule" or "task"; Ref is the citable id (a document's slug, a
 // rule's WL-RULE-<n>, a task's id); Title is the rule's heading for a rule;
 // Rel is the relation doing the pointing: the document's own edge type, the
@@ -271,7 +271,7 @@ type DocEdge struct {
 //
 // A covering plan appears through its claimed tasks rather than as a
 // document of its own: an accepted plan nobody has claimed work from states
-// an intention, not open work, and is 025 §8.6's stale-marking business.
+// an intention, not open work, and is WL-SPEC-77 §10's stale-marking business.
 type DocReferrer struct {
 	Kind  string `json:"kind"` // doc | rule | task
 	Ref   string `json:"ref"`
@@ -287,7 +287,7 @@ type DocReferrersResponse struct {
 }
 
 // CreateDocInput is the request body for POST /api/v1/docs. Number is omitted
-// for a plan, which carries no corpus number (025 §14.3); Owner defaults to
+// for a plan, which carries no corpus number (WL-SPEC-77 §7); Owner defaults to
 // the caller, who is then the only actor that can accept the document.
 //
 // Status is the corpus importer's field: a caller holding doc.import (admin)
@@ -303,7 +303,7 @@ type CreateDocInput struct {
 	Body    string `json:"body"`
 	Owner   string `json:"owner,omitempty"`
 	Status  string `json:"status,omitempty"`
-	// GeneratedByTask names the task authoring the document (025 §12). The
+	// GeneratedByTask names the task authoring the document (WL-SPEC-77 §13). The
 	// CLI fills it from the worktree lease it is standing in; it is omitted
 	// when the caller is bound to no task, which leaves the document with no
 	// authoring task rather than refusing the create.
@@ -311,14 +311,14 @@ type CreateDocInput struct {
 }
 
 // TransferDocOwnerInput is the request body for POST /api/v1/docs/{id}/owner
-// (025 §7.3): the current owner or an admin hands the document to another
+// (WL-SPEC-77 §9): the current owner or an admin hands the document to another
 // actor, so one whose owner has left the org is not stuck unacceptable.
 type TransferDocOwnerInput struct {
 	Owner string `json:"owner"`
 }
 
 // WithdrawDocInput is the request body for POST /api/v1/docs/{id}/withdraw
-// (025 §8.7): the close verb that takes an accepted or stale document out of
+// (WL-SPEC-77 §9): the close verb that takes an accepted or stale document out of
 // the corpus without pretending anything replaced it. Justification is why,
 // and is recorded on the doc.withdrawn event — a document that will never be
 // executed is worth a sentence saying so.
@@ -368,7 +368,7 @@ type DocColumnsInput struct {
 }
 
 // PatchDocInput is the request body for POST /api/v1/docs/{id}/patch: the
-// 025 §8.4 in-place amendment of an accepted spec or ADR. Body is the whole
+// WL-SPEC-77 §10 in-place amendment of an accepted spec or ADR. Body is the whole
 // markdown source, headerless like UpdateDocBodyInput's.
 //
 // Substantive is the caller's own judgment (§8.3 leaves it to them once the
@@ -388,7 +388,7 @@ type PatchDocInput struct {
 	IfVersion   int    `json:"if_version,omitempty"`
 }
 
-// DocPatchResult is what an in-place amendment did (025 §8.4).
+// DocPatchResult is what an in-place amendment did (WL-SPEC-77 §10).
 // Classification is "substantive" or "non-substantive"; RuleFired is "judged"
 // on a substantive patch and "none" on a clean non-substantive one — a patch
 // a mechanical rule fires on is refused rather than returned.
@@ -413,7 +413,7 @@ type DocPatchResponse struct {
 }
 
 // DocDetail is the wire form of GET /api/v1/docs/{id}: the document plus the
-// rows derived from its body. Sections is empty for a plan (025 §9); Edges
+// rows derived from its body. Sections is empty for a plan (WL-SPEC-77 §11); Edges
 // leaves the document and EdgesIn points at it, each carrying its inverse
 // type. Revision is the open candidate revision, null when none is open.
 type DocDetail struct {
@@ -422,7 +422,7 @@ type DocDetail struct {
 	Edges    []DocEdge    `json:"edges"`
 	EdgesIn  []DocEdge    `json:"edges_in"`
 	Revision *DocRevision `json:"revision"`
-	// Notes are the document's anchored notes (025 §8.5), in the order they
+	// Notes are the document's anchored notes (WL-SPEC-77 §10), in the order they
 	// were left. Nil when it has none, which is the ordinary case.
 	Notes []DocNote `json:"notes,omitempty"`
 	// Amendments are the amends edges onto the rules this document's
@@ -440,7 +440,7 @@ type DocAmendment struct {
 
 // DocRef is a minimal reference to a document — enough to name and link it
 // without carrying its body. It is how a task's brief reports the plans
-// ordered before that task's plan (025 §9.3).
+// ordered before that task's plan (WL-SPEC-77 §11).
 type DocRef struct {
 	ID     int64  `json:"id"`
 	Slug   string `json:"slug"`
@@ -461,12 +461,12 @@ type DocSectionGap struct {
 }
 
 // DocPlanningGap names the sections of one accepted spec that no accepted or
-// superseded plan discharges, each classified by why (026 §2.1). It is keyed
+// superseded plan discharges, each classified by why (WL-SPEC-78 §1.2). It is keyed
 // by document id rather than embedding the document, so GET /api/v1/docs
 // answers with one listing shape whatever selector produced it.
 //
 // Sections is the spec's current section count, so a caller can render the
-// "2/9" ratio 026 §2.1 shows without a second request.
+// "2/9" ratio WL-SPEC-78 §1.2 shows without a second request.
 type DocPlanningGap struct {
 	Doc      int64           `json:"doc"`
 	Sections int             `json:"sections"`
@@ -474,7 +474,7 @@ type DocPlanningGap struct {
 }
 
 // BareRule is a withdrawn rule no rule supersedes: a section retired with no
-// successor (WL-SPEC-77 §6). Doc (a "WL-SPEC-4" ref) and Anchor name the
+// successor (WL-SPEC-77 §6). Doc (a "WL-SPEC-75" ref) and Anchor name the
 // first live document arranging it, both empty when none does.
 type BareRule struct {
 	Rule    string `json:"rule"`
@@ -546,14 +546,14 @@ type DocListResponse struct {
 // AcceptDocResponse is the response body of POST /api/v1/docs/{id}/accept.
 // It embeds Doc so every existing field stays at the top level — a spec or
 // ADR accept is byte-identical to before — and adds Tasks, the tasks a
-// plan's acceptance minted (025 §9.2); omitted and nil for a spec or ADR.
+// plan's acceptance minted (WL-SPEC-77 §11); omitted and nil for a spec or ADR.
 type AcceptDocResponse struct {
 	Doc
 	Tasks []Task `json:"tasks,omitempty"`
 }
 
 // DocListParams is the query string of GET /api/v1/docs. NeedsPlanning,
-// NeedsExecution, BareSuperseded (026 §2) and Unresolved (025 §8.7) are
+// NeedsExecution, BareSuperseded (WL-SPEC-78 §1.2) and Unresolved (WL-SPEC-77 §9) are
 // derived selectors, not plain filters: each implies a kind and a status,
 // and the server refuses a Kind or Status that contradicts it, or more than
 // one selector at once.
@@ -566,17 +566,17 @@ type DocListParams struct {
 	NeedsExecution bool   `query:"needs_execution,omitempty"`
 	BareSuperseded bool   `query:"bare_superseded,omitempty"`
 	// Unresolved selects the accepted specs and plans nothing has executed
-	// (025 §8.7). OlderThanDays narrows it to those untouched for at least
+	// (WL-SPEC-77 §9). OlderThanDays narrows it to those untouched for at least
 	// that many days and is meaningless without it — the server refuses the
 	// pair rather than ignoring it.
 	Unresolved    bool `query:"unresolved,omitempty"`
 	OlderThanDays int  `query:"older_than_days,omitempty"`
-	// Deleted switches the list to tombstoned documents (044 §5): they
+	// Deleted switches the list to tombstoned documents (WL-SPEC-75 §12): they
 	// replace the live ones rather than joining them, so a list never mixes
 	// the two.
 	Deleted bool `query:"deleted,omitempty"`
 	// HasNotes narrows to documents carrying at least one anchored note
-	// (025 §8.5). The server answers it with one EXISTS; nothing here
+	// (WL-SPEC-77 §10). The server answers it with one EXISTS; nothing here
 	// filters a listing client-side.
 	HasNotes bool `query:"has_notes,omitempty"`
 	// HideTerminal hides withdrawn, superseded and spent documents (12 S5).
@@ -587,7 +587,7 @@ type DocListParams struct {
 
 // DocResolveParams is the query string of GET /api/v1/docs/resolve.
 type DocResolveParams struct {
-	// Ref is the document reference to resolve (025 §14.3): an id, an exact
+	// Ref is the document reference to resolve (WL-SPEC-77 §7): an id, an exact
 	// slug, or the <KEY>-<TYPE>-<n> grammar. Required.
 	Ref string `query:"ref,omitempty"`
 }
@@ -610,7 +610,7 @@ type DocSectionsParams struct {
 
 // DocReferrersParams is the query string of GET /api/v1/docs/{id}/referrers.
 type DocReferrersParams struct {
-	// Anchor names the one section a referrer points at (025 §8.2).
+	// Anchor names the one section a referrer points at (WL-SPEC-77 §10).
 	// Required.
 	Anchor string `query:"anchor,omitempty"`
 }
@@ -629,5 +629,5 @@ func DocCanonicalURL(d Doc) string {
 
 // DocPageURL is the fallback cockpit page path for a document with no number
 // to build a shorthand from: a tombstone, whose slug may be reused, and any row
-// predating 029 §4's backfill.
+// predating WL-SPEC-75 §13's backfill.
 func DocPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }

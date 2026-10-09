@@ -1,7 +1,7 @@
 package designdoc
 
 // refresolve.go is the pure document-reference resolver `lode show` and the
-// cockpit's /docs/ref/ redirect share (WL-129, WL-301): the 026 §3 ref
+// cockpit's /docs/ref/ redirect share (WL-129, WL-301): the WL-SPEC-78 §2 ref
 // grammar matched against the backbone's document rows. Moved here from
 // internal/cmd so both the CLI and internal/api resolve one grammar.
 
@@ -18,11 +18,11 @@ import (
 
 // ResolveRef resolves ref against docs — the documents the backbone
 // serves — and returns the one it names plus the section its "#sec-..."
-// fragment narrowed to (026 §3, 025 §14.3). projectKey is the current repo's
+// fragment narrowed to (WL-SPEC-77 §7a). projectKey is the current repo's
 // key ("WL"), or "" when unknown.
 //
 // It is a pure function so the whole ref grammar is table-testable without a
-// server. Forms are tried in the order 026 §3 documents:
+// server. Forms are tried in the order WL-SPEC-78 §2 documents:
 //
 //  1. a path — matched by its basename, which is the document's slug;
 //  2. a document number, optionally with slug text after it;
@@ -33,7 +33,7 @@ import (
 // A form that matches nothing falls through to the next, which is how a bare
 // filename ("014-foo.md") still resolves by number. Every kind is a candidate
 // by slug and by shorthand; a bare number reaches specs and ADRs only, since
-// 029 §4 puts plans on a sequence of their own (see form 2).
+// WL-SPEC-75 §13 puts plans on a sequence of their own (see form 2).
 func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, error) {
 	base, section := SplitFragment(ref)
 	candidates := docs
@@ -53,7 +53,7 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 	// Form 2: document number / slug prefix. A number-led slug
 	// ("001-zero-trust-gateway", "014-foo.md") names the document whose slug
 	// it is; documents that merely share the leading number — a plan on its
-	// own 029 §4 sequence, another project's spec — are not candidates
+	// own WL-SPEC-75 §13 sequence, another project's spec — are not candidates
 	// (WL-358: the union of the two criteria reported them as a bogus
 	// ambiguity). The number match is the fallback that still serves a bare
 	// number and a ref whose slug text drifted from the document's current
@@ -61,13 +61,13 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 	// several is not the drifted slug of any of them, so reporting them as
 	// this ref's candidates is the same bogus ambiguity by another route
 	// (WL-358 again: "001-zero-trust-gateway" resolved against a corpus that
-	// does not hold it listed that corpus's spec 001 and plan 1). None of
+	// does not hold it listed that corpus's WL-SPEC-74 and plan 1). None of
 	// them bears the name asked for, so the ref names no document.
 	//
-	// A *bare* number reaches specs and ADRs only, the kinds 026 §3 calls a
-	// "spec number". Plans sit on a sequence of their own (029 §4), so plan
-	// 25 and spec 025 share a number by construction, and including them made
-	// "025 §10" — the way the corpus writes a reference — ambiguous for every
+	// A *bare* number reaches specs and ADRs only, the kinds WL-SPEC-78 §2 calls a
+	// "spec number". Plans sit on a sequence of their own (WL-SPEC-75 §13), so plan
+	// 25 and WL-SPEC-77 share a number by construction, and including them made
+	// "WL-SPEC-77 §12" — the way the corpus writes a reference — ambiguous for every
 	// such pair. internal/store's docsByNumber restricts the same way; the
 	// two resolvers have to agree. A plan is named by its slug or by
 	// WL-PLAN-25. The drifted-slug fallback above keeps every kind: there the
@@ -115,8 +115,8 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 		if projectKey == "" || sh.Key != projectKey {
 			return model.Doc{}, "", &UnresolvedError{Key: sh.Key}
 		}
-		// Numbers are unique per kind, not per corpus: 029 §4 gives each kind
-		// its own project sequence, so WL-PLAN-1 and WL-SPEC-1 both exist. Narrow
+		// Numbers are unique per kind, not per corpus: WL-SPEC-75 §13 gives each kind
+		// its own project sequence, so WL-PLAN-1 and WL-SPEC-74 both exist. Narrow
 		// by kind only when the number alone is ambiguous, so a single near-miss
 		// still reaches CheckDocKind and its mismatch error rather than
 		// disappearing into a not-found.
@@ -139,9 +139,9 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 	return model.Doc{}, "", NotFoundRefError(ref)
 }
 
-// CheckDocKind enforces 025 §14.3's <TYPE> token, as widened by 029 §4 to
+// CheckDocKind enforces WL-SPEC-77 §7's <TYPE> token, as widened by WL-SPEC-75 §13 to
 // every kind ("SPEC", "ADR" or "PLAN"), against the document's own kind
-// (026 §4.2). It is the one implementation of the mismatch rule — the
+// (WL-SPEC-78 §3). It is the one implementation of the mismatch rule — the
 // shorthand form calls it, and so does runDocShow for the --spec/--adr flags,
 // which reach a document through the number form and would otherwise go
 // unchecked.
@@ -157,7 +157,7 @@ func matchRefKind(docs []model.Doc, kind string) []model.Doc {
 	return filterRefDocs(docs, func(d model.Doc) bool { return d.Kind == kind })
 }
 
-// NotFoundError is 026 §4.2's tier-1 miss: the ref is well-formed and names
+// NotFoundError is WL-SPEC-78 §3's tier-1 miss: the ref is well-formed and names
 // nothing in the candidate set. It is typed rather than a fmt.Errorf so a
 // caller resolving against one project's documents can tell "no such
 // document" — worth widening the search for — from an ambiguity or a kind
@@ -168,7 +168,7 @@ func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("ref %q names no document in the backbone", e.Ref)
 }
 
-// NotFoundRefError returns 026 §4.2's tier-1 miss for ref.
+// NotFoundRefError returns WL-SPEC-78 §3's tier-1 miss for ref.
 func NotFoundRefError(ref string) error { return &NotFoundError{Ref: ref} }
 
 // LooksLikePath reports whether base is shaped like ref form 1: it names a
@@ -196,7 +196,7 @@ func filterRefDocs(docs []model.Doc, keep func(model.Doc) bool) []model.Doc {
 }
 
 // numberedRefDocs is every document a bare corpus number can name: spec and
-// ADR, the kinds whose number the corpus writes as "025 §10". See form 2.
+// ADR, the kinds whose number the corpus writes as "WL-SPEC-77 §12". See form 2.
 func numberedRefDocs(docs []model.Doc) []model.Doc {
 	return filterRefDocs(docs, func(d model.Doc) bool { return d.Kind != "plan" })
 }
@@ -221,7 +221,7 @@ func matchRefSlugPrefix(docs []model.Doc, prefix string) []model.Doc {
 // deduped by id — a document can match through both criteria of the number
 // form — and sorted by slug so an AmbiguousRefError reads the same every run.
 //
-// Candidates are named by their citable id (025 §14.3), because the reader's
+// Candidates are named by their citable id (WL-SPEC-77 §7), because the reader's
 // next move after an ambiguity is to cite one of them, and a bare number is
 // ambiguous precisely when the project differs — the fact only the id carries.
 func finishRef(ref string, matches []model.Doc, section string) (model.Doc, string, error) {

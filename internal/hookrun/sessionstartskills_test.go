@@ -72,7 +72,7 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 		t.Fatalf("content at match location %s = %q, %v; want %q", matchLoc, got, err, diagContent)
 	}
 
-	// Project-scope delivery (spec 008 §17.3): the worktree now carries
+	// Project-scope delivery (WL-SPEC-80 §5.2): the worktree now carries
 	// .agents/skills/<name> resolving to the store version dir, so a
 	// harness opened in wtDir reads this task's skills without a `lode
 	// install`.
@@ -126,7 +126,7 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 }
 
 // TestSessionStartSkillsWorktreeLinkPreservesForeignFile covers the
-// ownership discipline linkWorktreeSkill must not skip (spec 008 §18 row
+// ownership discipline linkWorktreeSkill must not skip (WL-SPEC-80 §5.6 row
 // 4): a plain file sitting at .agents/skills/<name> before session-start —
 // something Worklode did not create — must survive untouched, with a
 // warning explaining why that skill was not linked, rather than being

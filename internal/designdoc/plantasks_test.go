@@ -497,7 +497,7 @@ Nothing here.
 	}
 }
 
-// TestPlanMintableKindsMatchLiveKindSet guards the invariant 025 §9.1 wants:
+// TestPlanMintableKindsMatchLiveKindSet guards the invariant WL-SPEC-77 §11 wants:
 // the plan-mintable kind subset cannot silently drift from the live kind set.
 // ns.TaskKinds is that set — generated from ns/concept.ttl's wlc:TaskKind
 // scheme, which the tasks.kind CHECK constraint and internal/api's validKinds
@@ -525,7 +525,7 @@ func TestPlanMintableKindsMatchLiveKindSet(t *testing.T) {
 }
 
 // TestPlanTasksDuplicateTitles: a title is a declaration's identity across a
-// re-accept (025 §9.2), so two declarations spelled the same way are refused
+// re-accept (WL-SPEC-77 §11), so two declarations spelled the same way are refused
 // at the parse rather than resolved by a coin flip at the mint.
 func TestPlanTasksDuplicateTitles(t *testing.T) {
 	d := mustParsePlan(t, `## Tasks
@@ -562,7 +562,7 @@ Second.
 
 // TestIsCoverageOnlyPlan: a plan that records coverage for work already built
 // has no "## Tasks" section to mint from, and accepting it is the only way its
-// claims count (026 §2.1). The near misses — an empty "## Tasks" heading, and a
+// claims count (WL-SPEC-78 §1.2). The near misses — an empty "## Tasks" heading, and a
 // plan claiming nothing at all — stay PlanTasks' error.
 func TestIsCoverageOnlyPlan(t *testing.T) {
 	const coversFront = `---

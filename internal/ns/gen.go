@@ -2,7 +2,7 @@
 
 // Package ns exposes the concept schemes of ns/concept.ttl as Go values.
 //
-// ns/ owns the shared schema (025 §17), so an enum change is a change to the
+// ns/ owns the shared schema (WL-SPEC-77 §14), so an enum change is a change to the
 // Turtle first, then `scripts/nsgen.py` to regenerate, then the migration
 // that moves the matching CHECK constraint — in one commit.
 package ns
@@ -10,7 +10,7 @@ package ns
 // Schemes is every wlc: concept scheme, keyed by its local name, members
 // sorted. Most schemes have no Go caller; they are here so
 // internal/store/nsenums_test.go can hold each one against the CHECK
-// constraint that is supposed to list it, which is the leg of 025 §17 that
+// constraint that is supposed to list it, which is the leg of WL-SPEC-77 §14 that
 // nothing else checks.
 var Schemes = map[string][]string{
 	"ArtifactKind":     {"binary", "docker_image", "git_tag", "pypi"},

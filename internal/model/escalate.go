@@ -1,7 +1,7 @@
 package model
 
 // EscalateTaskInput is the request body for POST /api/v1/tasks/{id}/escalate
-// (025 §8.1): the executor reports that the design it is working from does not
+// (WL-SPEC-77 §10): the executor reports that the design it is working from does not
 // cover the case in front of it.
 //
 // To is "plan" or "spec" and says which tier owes the fix. Doc is a document

@@ -59,7 +59,7 @@ func TestLayoutDir(t *testing.T) {
 		t.Errorf("Dir = %q, want %q", got, want)
 	}
 	// The layout is flat: a "/" from a namespaced template is flattened to
-	// "-" rather than nesting a directory (spec 008 §5.1).
+	// "-" rather than nesting a directory (WL-SPEC-80 §3.3).
 	if got, want := l.Dir("/repo", "team/WL-7-x"), "/repo/.worktrees/team-WL-7-x"; got != want {
 		t.Errorf("Dir = %q, want %q", got, want)
 	}
@@ -123,7 +123,7 @@ func TestLayoutParseDir(t *testing.T) {
 	}{
 		{"default", def, "/repo/.worktrees/WL-7-fix-the-thing", "WL-7", true},
 		{"bare id", def, "/repo/.worktrees/WL-7", "WL-7", true},
-		// The layout is flat (spec 008 §5.1): only a directory immediately
+		// The layout is flat (WL-SPEC-80 §3.3): only a directory immediately
 		// below the base is a worktree root. Anything deeper is a path INSIDE
 		// one, which the hook guards reach only via worktree.Root — never as a
 		// worktree root itself.
@@ -759,7 +759,7 @@ func TestDefaultBranch(t *testing.T) {
 // WorktreeRootOf accepts a path inside a worktree, which is what a recorded
 // working directory usually is, and trims it back to the worktree root. The
 // guard TaskID uses rejects anything deeper than one segment below the base,
-// so classifying usage needs this looser reading (spec 052 §3).
+// so classifying usage needs this looser reading.
 func TestWorktreeRootOfTrimsToTheWorktreeRoot(t *testing.T) {
 	l, err := worktree.NewLayout(".worktrees")
 	if err != nil {

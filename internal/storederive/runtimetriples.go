@@ -40,7 +40,7 @@ func artifactCoordinate(a store.Artifact) (name, artifactIRI string) {
 	return name, iri.Artifact(a.Kind, name, a.Version)
 }
 
-// ArtifactTriples projects one artifacts row (006 §11.1). The commit edge is
+// ArtifactTriples projects one artifacts row (WL-SPEC-79 §12). The commit edge is
 // guarded: target_commitish is frequently a branch name, and minting a
 // commit IRI from one would create a plausible, permanently wrong node —
 // emit prov:wasDerivedFrom only when source_sha resolves via known. An
@@ -71,7 +71,7 @@ func ArtifactTriples(a store.Artifact, known CommitKnown) []graphproj.Triple {
 
 // DeploymentTriples projects one deployments row. artifact is the row
 // deployments.artifact_id resolves to, nil when unset, in which case prov:used
-// is simply absent rather than invented (006 §11.1, §15 question 11 — the
+// is simply absent rather than invented (the
 // column stayed null until registry_package ingest began minting docker_image
 // artifacts, and stays null for any repo whose GitHub App lacks the
 // subscription).
@@ -131,8 +131,8 @@ func CommitTriples(host, repo, sha string) []graphproj.Triple {
 
 // ReleaseCutFromTriples projects one release_frontiers row joined to its
 // main_commits sha: the release's git_tag artifact wl:cutFrom the frontier
-// commit (006 §11.1 — release_frontiers projects as an edge, not a node;
-// the property was spelled wl:covers until 026 §6.1 took that name for the
+// commit (WL-SPEC-79 §12 — release_frontiers projects as an edge, not a node;
+// the property was spelled wl:covers until WL-SPEC-78 §4.6 took that name for the
 // Plan→Section undertaking). repo is "owner/name" (GitHub full_name); a
 // malformed repo projects nothing.
 func ReleaseCutFromTriples(repo, tag, sha string) []graphproj.Triple {
@@ -150,7 +150,7 @@ func ReleaseCutFromTriples(repo, tag, sha string) []graphproj.Triple {
 // targetKindConcept maps a deployments.target_kind DB value to its concept
 // id. The DB stores 'pypi' for the target kind, but the concept is
 // wlc:pypi_target — the artifact kind and target kind are different concepts
-// that share a name in the relational schema (006 §6).
+// that share a name in the relational schema (WL-SPEC-79 §5).
 func targetKindConcept(dbKind string) string {
 	if dbKind == "pypi" {
 		return "pypi_target"

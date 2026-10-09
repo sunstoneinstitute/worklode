@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// ReplayResult is one reconcile replay run's report (spec 013 §2.1). It is
+// ReplayResult is one reconcile replay run's report (WL-SPEC-80 §10.3). It is
 // the "replay" section of the POST /api/v1/reconcile response body, so ADR
 // 036 puts it here rather than in internal/hooks.
 // Truncated and ErrorsOmitted report the two caps the run works under: the
@@ -20,9 +20,9 @@ type ReplayResult struct {
 	ErrorsOmitted int      `json:"errors_omitted,omitempty"`
 }
 
-// WhoAmI is the response of GET /api/v1/whoami (spec 013): the calling
+// WhoAmI is the response of GET /api/v1/whoami (WL-SPEC-80): the calling
 // actor's identity, as internal/api resolves it from the request's Subject
-// and internal/cli decodes it back — one declaration per ADR 036, not a
+// and internal/cli decodes it back — one declaration per WL-SPEC-73 §3.2a, not a
 // same-shaped struct in each package.
 type WhoAmI struct {
 	ID    string `json:"id"`
@@ -31,7 +31,7 @@ type WhoAmI struct {
 }
 
 // RepoDoctor is one mapped repo's ingestion health, from GET
-// /api/v1/repos/doctor (spec 013 §lode project health). AppInstalled is nil
+// /api/v1/repos/doctor (WL-SPEC-80 §lode project health). AppInstalled is nil
 // when the check could not run — no GitHub App configured, GitHub unreachable
 // or erroring, or the report's time budget spent before this repo's turn —
 // which is different from "not installed". AppError says which, and is set
@@ -95,9 +95,9 @@ type ReconcileResponse struct {
 	PollError   string        `json:"poll_error,omitempty"`
 }
 
-// PollResult is one reconcile poll run's report (spec 013 engine 2). Like
+// PollResult is one reconcile poll run's report (WL-SPEC-80 engine 2). Like
 // ReplayResult it is a section of the POST /api/v1/reconcile response body,
-// so ADR 036 puts it here rather than in internal/reconcile. Repaired is what
+// so WL-SPEC-73 §3.2a puts it here rather than in internal/reconcile. Repaired is what
 // the run observed, not what it changed — see `lode task reconcile --help`.
 type PollResult struct {
 	RunID      string       `json:"run_id"`

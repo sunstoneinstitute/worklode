@@ -4,7 +4,7 @@ import "time"
 
 // RepoBranchRules is the response body of GET /api/v1/repos/branch-rules:
 // the rules last observed on a mapped repo's default branch, flattened
-// across every GitHub ruleset that applies (WL-SPEC-66 §6.3, WL-SPEC-72 §3).
+// across every GitHub ruleset that applies (WL-SPEC-82 §15.6, WL-SPEC-72 §3).
 type RepoBranchRules struct {
 	Repo       string `json:"repo"`
 	Branch     string `json:"branch"`

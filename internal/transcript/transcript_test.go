@@ -42,8 +42,8 @@ func TestParse(t *testing.T) {
 		opts  Options
 		want  []Bucket
 		// wantTotalInput, when set, asserts that Input summed across every
-		// returned bucket still equals this value — the invariant spec 052 §3
-		// promises for an existing Options{Root: root} caller: cwd only
+		// returned bucket still equals this value — the invariant
+		// promised for an existing Options{Root: root} caller: cwd only
 		// splits a merged bucket into finer-grained rows, it never changes
 		// the total tokens that caller sees.
 		wantTotalInput *int64
@@ -142,7 +142,7 @@ func TestParse(t *testing.T) {
 {"type":"assistant","cwd":"/tmp/.worktrees/xyz","timestamp":"2026-07-19T10:02:00Z","message":{"id":"msg_3","model":"claude-opus-5","usage":{"input_tokens":400,"output_tokens":0}}}
 {"type":"assistant","timestamp":"2026-07-19T10:03:00Z","message":{"id":"msg_4","model":"claude-opus-5","usage":{"input_tokens":8,"output_tokens":0}}}
 `,
-			// cwd is now part of the bucketing key (spec 052 §3), so the three
+			// cwd is now part of the bucketing key, so the three
 			// kept entries — three distinct raw cwds, including the cwd-less
 			// one — land in three buckets instead of merging into one. The
 			// sibling worktree /tmp/.worktrees/xyz is still excluded by Root
@@ -161,7 +161,7 @@ func TestParse(t *testing.T) {
 					Cwd: "/tmp/.worktrees/x/sub", Usage: Usage{Input: 2},
 				},
 			},
-			// The invariant spec 052 §3 promises: an existing Options{Root:
+			// The invariant: an existing Options{Root:
 			// root} caller's total is unchanged by cwd-splitting — only the
 			// sibling worktree's 400 tokens are dropped by Root filtering.
 			wantTotalInput: int64Ptr(11),

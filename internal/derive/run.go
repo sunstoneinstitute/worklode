@@ -1,4 +1,4 @@
-// Package derive implements spec 007's observed-layer derivers. Every
+// Package derive implements WL-SPEC-82's observed-layer derivers. Every
 // deriver is a pure function producing the complete N-Triples document for
 // its source; Run performs the shared contract — idempotent, full-replace,
 // cheap to re-run, confined to one observed/* named graph.
@@ -19,7 +19,7 @@ import (
 )
 
 // Branch is the fixed graph-server branch the work graph lives on — the
-// same value as projector.Branch (spec 006 §13.2 item 5).
+// same value as projector.Branch (WL-SPEC-79 §13 item 5).
 const Branch = "main"
 
 // unsafeInIRI are the characters an N-Triples/SPARQL IRIREF may not contain;
@@ -37,7 +37,7 @@ func checkGraphIRI(graphIRI string) error {
 }
 
 // Result reports one deriver run. It is an alias: the shape crosses the HTTP
-// boundary, so ADR 036 declares it once, in internal/model.
+// boundary, so WL-SPEC-73 §3.2a declares it once, in internal/model.
 type Result = model.DeriveResult
 
 // ErrWouldEmptyGraph is returned when a run holding no triples would replace
@@ -87,7 +87,7 @@ func storedHash(ctx context.Context, c *graphserver.Client, graphIRI string) (st
 // subset, so the rendered document is the payload as-is) by the payload plus
 // a triple recording the new hash. Embedding the hash in the PUT body keeps
 // the write a single atomic operation and works against graph-server's
-// GSP-plus-read-only-SPARQL surface (spec 009) — no SPARQL Update is ever
+// GSP-plus-read-only-SPARQL surface — no SPARQL Update is ever
 // needed. Run never touches any graph other than graphIRI.
 //
 // A payload with no triples is the one case where full-replace is held back:

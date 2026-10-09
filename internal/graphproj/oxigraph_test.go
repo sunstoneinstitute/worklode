@@ -67,7 +67,7 @@ func TestNSVocabularyParses(t *testing.T) {
 	}
 }
 
-// TestProjectGraphReplaceRoundTrip proves 006 §11's write mechanism: a
+// TestProjectGraphReplaceRoundTrip proves WL-SPEC-79 §12's write mechanism: a
 // project's graph is replaced whole, so a re-projection leaves exactly one
 // value per functional property, and another project's graph is untouched.
 func TestProjectGraphReplaceRoundTrip(t *testing.T) {
@@ -171,7 +171,7 @@ func TestDependsOnPath(t *testing.T) {
 // sections (anchor -> version that last revised it) the way a real
 // projection run would: DocTriples/SectionTriples into the document's
 // DeclaredGraph, DocVersionTriples for each version into its own
-// DeclaredVersionGraph (025 §4.1). d.Version is the last entry of versions,
+// DeclaredVersionGraph (WL-SPEC-77 §5). d.Version is the last entry of versions,
 // so DocTriples emits dcat:hasCurrentVersion at it. Returns the run-unique
 // doc key the caller builds query IRIs from.
 func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revisedIn map[string]int) string {
@@ -215,7 +215,7 @@ func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revise
 	return key
 }
 
-// stalenessQuery is 025 §4.4's query shape verbatim: a claim pinned at pin
+// stalenessQuery is WL-SPEC-77 §5's query shape verbatim: a claim pinned at pin
 // is stale for any section whose wl:lastRevisedIn snapshot's dcat:version
 // exceeds pin, compared as xsd:integer rather than as strings or IRIs. ?g
 // and ?vg are unbound — the query does not know in advance which graph
@@ -244,7 +244,7 @@ SELECT ?sec WHERE {
 }`, iri.Term("lastRevisedIn"), DCATVersion, pin)
 }
 
-// TestOxigraphStalenessQuery proves 025 §4.4's staleness query: a claim
+// TestOxigraphStalenessQuery proves WL-SPEC-77 §5's staleness query: a claim
 // pinned at v1 is stale against any section last revised after v1. sec-a
 // (revised in v1) is current at that pin; sec-b (revised in v2) is stale.
 func TestOxigraphStalenessQuery(t *testing.T) {
@@ -258,7 +258,7 @@ func TestOxigraphStalenessQuery(t *testing.T) {
 	}
 }
 
-// TestOxigraphStalenessQueryNumericComparison proves 025 §4.1's footgun: v3
+// TestOxigraphStalenessQueryNumericComparison proves WL-SPEC-77 §5's footgun: v3
 // and v10 sort backwards both as strings ("10" < "3") and as their
 // DocVersion IRIs (".../v10" < ".../v3"), so a claim pinned at v9 only
 // resolves correctly if dcat:version is compared as a number. sec-old
@@ -278,7 +278,7 @@ func TestOxigraphStalenessQueryNumericComparison(t *testing.T) {
 
 // TestOxigraphCurrentVersionRoundTrip proves dcat:hasCurrentVersion on the
 // canonical document node joins to its target snapshot's own dcat:version
-// literal (025 §4.1) — the join a pinned-claim reader leans on to resolve
+// literal (WL-SPEC-77 §5) — the join a pinned-claim reader leans on to resolve
 // "current" to a version number.
 func TestOxigraphCurrentVersionRoundTrip(t *testing.T) {
 	base := graphtest.Endpoint(t)

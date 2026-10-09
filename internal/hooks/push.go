@@ -77,7 +77,7 @@ func (a *applier) applyPush(tx *sql.Tx, eventID int64, repo, defaultBranch strin
 	}
 	// Report and carry on: a partial commit list still attributes what it
 	// does contain, and dropping the delivery would lose that too. The
-	// commits we never saw are recoverable only by reconciliation (spec 013).
+	// commits we never saw are recoverable only by reconciliation (WL-SPEC-80).
 	if p.truncated() {
 		a.metrics.truncatedPushDelivery()
 		a.log.Warn("push payload truncated; some commits were not attributed",
@@ -170,7 +170,7 @@ func applyMainPush(tx *sql.Tx, eventID int64, repo string, now time.Time, p push
 	}
 	// A push transitions a set of tasks and the transitions record no event
 	// of their own, so this event is the only record of which tasks moved
-	// (WL-SPEC-66 §5.1).
+	// (WL-SPEC-82 §15.5).
 	if len(movedIDs) > 0 {
 		return store.MergeEventPayload(tx, eventID, map[string]any{"tasks": movedIDs})
 	}

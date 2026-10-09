@@ -1,9 +1,9 @@
-// Package eventbus implements spec 025 §15: typed domain-event emission and
+// Package eventbus implements WL-SPEC-77 §15: typed domain-event emission and
 // the offset-tracked subscriber loop over the store's events table.
 package eventbus
 
-// Hand-mirrored from ns/ontology.ttl (spec 025 §15.2).
-// TODO(025 §17): fold into scripts/nsgen.py output when the codegen lands.
+// Hand-mirrored from ns/ontology.ttl (WL-SPEC-77 §15).
+// TODO(WL-SPEC-77 §14): fold into scripts/nsgen.py output when the codegen lands.
 // vocab_test.go holds the mirror together.
 const (
 	TypeDocumentSubmitted = "wl:DocumentSubmitted"
@@ -18,7 +18,7 @@ var baseProperties = []string{
 // payloadProperties maps each event type to its additional allowed payload
 // properties. Emit-time validation (emit.go) enforces membership; there is
 // deliberately no CHECK on events.type — the log also holds vendor webhook
-// deliveries with dotted types (025 §15.2).
+// deliveries with dotted types (WL-SPEC-77 §15).
 var payloadProperties = map[string][]string{
 	TypeDocumentSubmitted: {},
 	TypeDocumentAccepted:  {"wl:fromStatus", "wl:toStatus"},
