@@ -1,4 +1,4 @@
--- Spec 029 §7.2: the project stores the *effective snapshot* of its
+-- WL-SPEC-75: the project stores the *effective snapshot* of its
 -- approval flow, so a later instance-configuration edit cannot silently
 -- change an open review. approval_flow is the full snapshot (flow plus the
 -- project reviewer template); name and rev are denormalized for listing

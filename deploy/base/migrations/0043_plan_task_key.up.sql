@@ -1,4 +1,4 @@
--- Record which plan declaration a minted task came from (025 §9.2).
+-- Record which plan declaration a minted task came from (WL-SPEC-77).
 --
 -- Re-accepting an accepted plan mints the declarations that have no row yet
 -- and leaves every existing row alone, so the accept transaction needs a key

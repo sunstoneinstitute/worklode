@@ -1,4 +1,4 @@
--- Spec 025 §15: total order for the event log. txid records the writing
+-- WL-SPEC-77: total order for the event log. txid records the writing
 -- transaction; readers take only rows below the commit horizon
 -- (pg_snapshot_xmin), so a transaction that commits late can never surface
 -- an id behind a subscriber's offset. xid8 is 64-bit: no wraparound
@@ -20,7 +20,7 @@
 ALTER TABLE events ADD COLUMN txid xid8 NOT NULL DEFAULT pg_current_xact_id();
 CREATE INDEX events_txid_id ON events (txid, id);
 
--- Spec 025 §15.1: the durable half of a consumer group, one row per
+-- WL-SPEC-77: the durable half of a consumer group, one row per
 -- subscriber. Offsets are event ids: monotonic positions, not counts —
 -- aborted transactions leave holes and nothing depends on contiguity.
 CREATE TABLE event_subscribers (

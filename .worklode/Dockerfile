@@ -4,10 +4,10 @@
 #
 #   docker build -f .worklode/Dockerfile -t worklode-agent .
 #
-# This precedes spec 038's docker/base + docker/generic split (038 §3.1) —
+# This precedes WL-SPEC-73's docker/base + docker/generic split —
 # neither that family nor scripts/bootstrap.sh exists yet. This file is a
 # standalone image for now; fold it into docker/generic once those land,
-# per 038 §3's "an image whose contents disagree with bootstrap.sh is a
+# per WL-SPEC-73's "an image whose contents disagree with bootstrap.sh is a
 # defect in the image."
 
 FROM golang:1.26

@@ -1,5 +1,4 @@
--- Clause graph (docs/specs2/12-spec-refactoring-design-tree.md S10, S12,
--- S15, S26): typed edges between clauses, a pinned version on a governing
+-- Clause graph: typed edges between clauses, a pinned version on a governing
 -- link, and an owner and tags on a clause.
 
 -- One row per edge. type is the wl: property; source says whether an

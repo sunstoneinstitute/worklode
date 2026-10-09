@@ -3,7 +3,7 @@
 -- and the self-approval check degrades to "cannot refuse" on NULL.
 ALTER TABLE pull_requests ADD COLUMN author text;
 
--- Spec 029 §7.1: one table, every approval. A missing approval is a visible
+-- WL-SPEC-75: one table, every approval. A missing approval is a visible
 -- 'awaiting' row. entity_kind is unconstrained text: 'pr' is the only value
 -- this plan writes; part 2 adds documents/deliverables/tasks without a
 -- migration. The UNIQUE key is §7.1's (entity_kind, entity_id,

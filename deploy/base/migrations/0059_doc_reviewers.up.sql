@@ -1,4 +1,4 @@
--- WL-359: spec 025 §7.3's durable reviewer set had no storage. The
+-- WL-359: WL-SPEC-77's durable reviewer set had no storage. The
 -- per-revision decision state (awaiting/approved/...) already lives in
 -- `approvals` (0057); this is the assignment itself, independent of any one
 -- revision — the fact §8.2's in-place amendment needs, since a `review`

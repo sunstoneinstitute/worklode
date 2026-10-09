@@ -1,4 +1,4 @@
--- Specs and ADRs join the per-project ordinal counters (029 §4), the wider
+-- Specs and ADRs join the per-project ordinal counters (WL-SPEC-75), the wider
 -- cutover 0053's comment named as separate work. A spec or ADR may still take
 -- an explicit number -- reserving one, or a corpus import preserving the
 -- number already in a filename -- but the default is now the same

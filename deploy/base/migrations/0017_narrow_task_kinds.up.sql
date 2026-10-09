@@ -1,6 +1,6 @@
--- Narrow the task kind enum to the six kinds of spec 025 §10, every one of
+-- Narrow the task kind enum to the six kinds of WL-SPEC-77, every one of
 -- which names a nature of work. Container-ness is inferred from child_of edges
--- (004 §6.1), so no kind stands for it. Ships with the validKinds and
+-- (WL-SPEC-75), so no kind stands for it. Ships with the validKinds and
 -- wlc:TaskKind edits in the same commit, which TestTaskKindsAgreeAcrossSources
 -- holds together.
 --

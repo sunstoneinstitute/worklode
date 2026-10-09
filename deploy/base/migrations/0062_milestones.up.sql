@@ -1,4 +1,4 @@
--- Milestones (spec 029 §2): project → milestone → {task, deliverable}.
+-- Milestones (WL-SPEC-75): project → milestone → {task, deliverable}.
 -- Progress is derived from contained work, never stored on the milestone.
 CREATE TABLE milestones (
     id          text PRIMARY KEY,

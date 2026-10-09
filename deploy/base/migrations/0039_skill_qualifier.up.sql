@@ -1,4 +1,4 @@
--- Skill identity becomes plugin-qualified: <plugin>:<name> (spec 037 §4).
+-- Skill identity becomes plugin-qualified: <plugin>:<name> (WL-SPEC-81).
 -- One bare name is not org-unique — two plugins under one plugins/*/skills/*
 -- source legitimately ship the same skill name, and skills_name_unique made
 -- the second one lose arbitrarily.
