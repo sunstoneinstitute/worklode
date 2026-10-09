@@ -227,3 +227,29 @@ func TestRuleClosureAPI(t *testing.T) {
 		t.Errorf("unknown rule: %d", rr.Code)
 	}
 }
+
+// TestAddAndAcceptRule: POST /api/v1/rules creates an unarranged draft rule
+// owned by the caller; POST .../accept accepts it once, and an unknown kind
+// is 422 (WL-SPEC-77 §19.2).
+func TestAddAndAcceptRule(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	rr := doReq(t, h, http.MethodPost, "/api/v1/rules", token, model.AddRuleInput{Project: projID, Heading: "Alone", Body: "Text.", Kind: "invariant"})
+	var c model.Rule
+	decodeInto(t, rr, &c)
+	if rr.Code != http.StatusCreated || c.Ref != "WL-RULE-1" || c.Status != "draft" || c.Owner == "" || len(c.ArrangedIn) != 0 {
+		t.Fatalf("add: status %d, rule %+v", rr.Code, c)
+	}
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/rules", token, model.AddRuleInput{Project: projID, Heading: "X", Kind: "bogus"}); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("bogus kind: status %d, want 422", rr.Code)
+	}
+	rr = doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/accept", token, nil)
+	decodeInto(t, rr, &c)
+	if rr.Code != http.StatusOK || c.Status != "accepted" {
+		t.Errorf("accept: status %d, rule %+v", rr.Code, c)
+	}
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/rules/WL-RULE-1/accept", token, nil); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("second accept: status %d, want 422", rr.Code)
+	}
+}
