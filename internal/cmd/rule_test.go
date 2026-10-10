@@ -424,3 +424,59 @@ func TestRuleArrangeAndUnarrangeCommands(t *testing.T) {
 		t.Error("--after with --under did not error")
 	}
 }
+
+// TestRuleTermsCommand covers `lode rule terms --project <p>`: it reads the
+// project's terms route and prints each slug with its rule.
+func TestRuleTermsCommand(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/projects/cow/terms" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]model.Term{{Slug: "edge-agent", Rule: model.Rule{Ref: "WL-RULE-7", Status: "accepted", Heading: "Edge Agent",
+			ConceptIRI: "https://worklode.io/ns/concept/runtime"}}})
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	out, err := runLode(t, "rule", "terms", "--project", "cow")
+	if err != nil {
+		t.Fatalf("lode rule terms: %v\noutput: %s", err, out)
+	}
+	for _, want := range []string{"SLUG", "edge-agent", "WL-RULE-7", "Edge Agent", "https://worklode.io/ns/concept/runtime"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output = %q; want %q", out, want)
+		}
+	}
+}
+
+// TestRuleSetConcept: --concept sends the IRI, and --concept "" sends an
+// empty one, which clears it.
+func TestRuleSetConcept(t *testing.T) {
+	var got []model.RuleMetaInput
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in model.RuleMetaInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			t.Fatalf("decode PATCH body: %v", err)
+		}
+		got = append(got, in)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(model.Rule{Ref: "WL-RULE-1"})
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	const iri = "https://worklode.io/ns/concept/requirement"
+	for _, arg := range []string{iri, ""} {
+		if out, err := runLode(t, "rule", "set", "WL-RULE-1", "--concept", arg); err != nil {
+			t.Fatalf("lode rule set --concept %q: %v\noutput: %s", arg, err, out)
+		}
+	}
+	if len(got) != 2 || got[0].Concept == nil || *got[0].Concept != iri || got[0].Kind != nil ||
+		got[1].Concept == nil || *got[1].Concept != "" {
+		t.Errorf("patched = %+v", got)
+	}
+}

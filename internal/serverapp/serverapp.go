@@ -24,7 +24,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-type Options struct{ DSN, Listen, AdminListen, DocDepthLimit string }
+type Options struct{ DSN, Listen, AdminListen, DocDepthLimit, GlossaryProject string }
 
 const shutdownTimeout = 10 * time.Second
 
@@ -73,6 +73,9 @@ func Run(ctx context.Context, opts Options) error {
 			return fmt.Errorf("LODE_DOC_STALENESS_DAYS: want an integer >= 1, got %q", v)
 		}
 		storeOpts = append(storeOpts, store.WithDocStalenessDays(days))
+	}
+	if opts.GlossaryProject != "" {
+		storeOpts = append(storeOpts, store.WithGlossaryProject(opts.GlossaryProject))
 	}
 	st, err := store.Open(opts.DSN, storeOpts...)
 	if err != nil {

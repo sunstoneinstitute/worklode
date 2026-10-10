@@ -62,7 +62,7 @@ var routeDocs = mergeRouteDocs(
 	reconcileRouteDocs, referenceRouteDocs, replanRouteDocs, ruleRouteDocs,
 	ruleedgeRouteDocs, rulesupersedeRouteDocs, runtimeRouteDocs,
 	searchRouteDocs, secretRouteDocs, skillRouteDocs, softdeleteRouteDocs,
-	taskRouteDocs, taskblockerRouteDocs, tasktokenRouteDocs,
+	taskRouteDocs, termRouteDocs, taskblockerRouteDocs, tasktokenRouteDocs,
 	timelineRouteDocs,
 )
 

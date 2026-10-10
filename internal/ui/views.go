@@ -1184,6 +1184,16 @@ type RuleView struct {
 	Current bool
 }
 
+// TermView is a definition rule's term page (WL-SPEC-77 §4d).
+type TermView struct {
+	Page PageProps
+	Term model.Term
+	// BodyHTML is Term.Rule.Body rendered and sanitised the way RuleView's is.
+	BodyHTML template.HTML
+	// RuleURL is the definition rule's own page, /projects/<proj>/rule/<n>.
+	RuleURL string
+}
+
 // RuleArrangementRow is one document arranging the rule, with the href
 // of its section.
 type RuleArrangementRow struct {
