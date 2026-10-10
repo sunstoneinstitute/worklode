@@ -1,6 +1,6 @@
 ---
 name: writing-docs
-description: Use when creating or editing a Worklode spec, rule or plan, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc add", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "arrange rules", "edit a rule", "governedBy", "amend a spec", "supersede a rule", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use lode:splitting-specs-into-plans instead.
+description: Use when creating or editing a Worklode spec, rule or plan, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc add", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "add a rule", "lode rule add", "arrange rules", "edit a rule", "governedBy", "amend a spec", "supersede a rule", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use lode:splitting-specs-into-plans instead.
 ---
 
 # Authoring specs and plans
@@ -13,7 +13,9 @@ reading order, depth and anchors. A plan is governed by the rules its `covers`
 entries reach and declares the tasks that undertake them; its prose creates
 no rules. Accepting the plan gives its minted tasks governing rule links.
 
-Write document bodies with `lode doc`, and edit one rule with `lode rule edit`.
+**Design work starts from rules** (WL-SPEC-77 §19.6). Find the rules a change
+touches, change them with `lode rule`, and touch a spec only to change its
+arrangement. Write plans, and a new spec's first draft, with `lode doc`.
 This skill covers authoring syntax. For rule inspection, versions, pins,
 lineage and refactor maps, read the `lode:worklode` skill's
 `references/specs-and-docs.md`.
@@ -66,16 +68,39 @@ number. `lode doc list` is the authority.
 
 ## Author rules, arrange them into specs
 
-Write each anchored section as a rule that can be read on its own: state the
-requirement and keep its rationale and exceptions beside it. Reference other
-rules by ref when they constrain it. Use the arranging spec for context and
-reading order; a plan carries the implementation steps.
+Write each rule so it can be read on its own: state the requirement and keep
+its rationale and exceptions beside it. Reference other rules by ref when they
+constrain it. The arranging spec gives context and reading order; a plan
+carries the implementation steps.
 
 ```bash
-lode rule list --doc <spec-ref> --json       # inspect rule identities before and after editing
-lode show <rule-ref>                         # requirement and where it is arranged
-lode rule edit <rule-ref> --file <body-file> # body under its heading, optional --heading
+lode search <query>                          # find the spec sections a change touches
+lode rule list --doc <spec-ref>              # a spec's arrangement, in order
+lode show <rule-ref> --closure               # a rule and the context it needs
+lode rule add --heading <text> --file <body> [--kind <kind>] [--tag <t>]  # new draft rule, arranged in no spec
+lode rule edit <rule-ref> --file <body>      # rewrites the draft, or adds the next draft; --heading
+lode rule accept <rule-ref>                  # owner only; every accepted spec arranging it moves to it
+lode rule arrange <spec> <rule-ref>          # place it; --after or --under <ref|sec-N>, --anchor sec-N
+lode rule unarrange <spec> <rule-ref>        # take it out of the spec; the rule stays
 ```
+
+Withdraw, split or merge rules with `lode rule link` and `lode rule supersede`
+(see "Amendment and supersession" below). Removing a rule from a spec does not
+withdraw it.
+
+Specs arranging a rule show its accepted version, with a pending marker,
+until the owner runs `lode rule accept`. A draft rule version is mutable;
+accepted text is preserved in version history.
+
+A spec write (`lode doc add`, `lode doc edit`, `lode doc revise --file`) is an
+editing convenience that writes rules. `lode doc show <ref> --editable` prints
+each anchored heading with its rule ref, `## 3. Leases {#sec-3 rule=WL-REQ-12}`,
+and the write accepts that form back: the heading arranges that rule there,
+and changed text under it is a rule edit. A heading with no `rule=` matches the
+spec's own rules by anchor and heading, then heading alone, then anchor alone;
+an unmatched one becomes a new rule. A rule the write leaves out is
+unarranged, not withdrawn. Copying text into a new spec without `rule=` does
+not establish shared identity.
 
 Every rule has exactly one kind, and each kind states one obligation
 (WL-SPEC-77 §4). The kind sets its ref's infix:
@@ -151,20 +176,10 @@ then the instance's; a project definition that narrows an instance term
 `refines` it. `lode rule lint [--project <id>]` reports closure sizes,
 undefined terms, conflicts and positional references.
 
-The store assigns rule refs when new anchored sections are written. Existing
-rules match by anchor and heading, then heading alone, then anchor alone.
-Check the arrangement after moving or renaming sections; copying text into a
-new spec does not establish shared identity. `lode rule edit` writes only the
-rule: it rewrites a draft version or adds the next draft. Specs arranging the
-rule keep showing its accepted version, with a pending marker, until the owner
-runs `lode rule accept`, which bumps every accepted spec arranging it. A draft
-rule version is mutable; accepted text is preserved in version history.
-
 Use `spec` for new durable design, including rationale previously written as
 an ADR. Existing ADR references remain valid. Preserve accepted section
-anchors even though the rule has its own identity. To withdraw, split or merge
-rules, use the explicit lineage/refactor procedure in the reference above;
-removing prose alone does not redirect task governance.
+anchors even though the rule has its own identity. Removing prose alone does
+not redirect task governance.
 
 ## Frontmatter is mandatory
 
@@ -253,9 +268,8 @@ linked it.
 
 ## Amendment and supersession
 
-Use a rule edit or a candidate spec revision when changing the owning spec's
-requirement. Documents do not amend or replace each other: rules do
-(WL-SPEC-77 §4). A header carrying `amends`, `amendedBy`, `replaces` or
+Change a requirement with `lode rule edit`. Documents do not amend or replace
+each other: rules do (WL-SPEC-77 §4). A header carrying `amends`, `amendedBy`, `replaces` or
 `isReplacedBy` is refused.
 
 **Amending** changes how a rule is read without replacing its text.
@@ -273,11 +287,12 @@ with no successor.
 
 ## Declaring a plan's tasks
 
-A plan's `covers` names requirement refs, spec sections, or whole documents.
-The store resolves each entry to requirements when the plan is written and
-stores a `covers` edge from the plan to each one, then gives every minted
-task `governedBy` links to that set. The project's accepted invariants govern
-every task as well, derived when the task is read. Verify the result with
+A plan's `covers` names requirement refs (`WL-REQ-<n>`). Spec sections and
+whole documents are shorthand for the requirements under them. The store
+resolves each entry to requirements when the plan is written and stores a
+`covers` edge from the plan to each one, then gives every minted task
+`governedBy` links to that set. The project's accepted invariants govern every
+task as well, derived when the task is read. Verify the result with
 `lode rule list --doc <plan-ref>` and `lode show <task-id> --json`.
 
 A plan body carries exactly one `## Tasks` section, holding nothing but one

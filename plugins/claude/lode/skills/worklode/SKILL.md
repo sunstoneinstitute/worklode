@@ -170,8 +170,10 @@ Every rule has one kind (`lode rule set <ref> --kind <kind>`):
 | Kind | Ref | Means |
 |---|---|---|
 | `requirement` | `WL-REQ-12` | a plan builds it once; a planning gap until an accepted plan covers it |
+| `catalogue` | `WL-REQ-12` | a set of entries with one shape; a plan builds its entries |
 | `invariant` | `WL-RULE-12` | binds every task in its project and is never finished |
-| `informative` | `WL-RULE-12` | rationale or context, nothing to build or obey |
+| `definition` | `WL-RULE-12` | one term, one meaning, in one scope |
+| `principle` | `WL-RULE-12` | a stance other rules `refine` |
 
 All kinds share one counter, so `WL-REQ-12`, `WL-RULE-12` and the old
 `WL-CL-12` name the same rule. Output prints the infix of the rule's current
@@ -183,14 +185,17 @@ mints no rules. Acceptance mints tasks governed by those rules. Governance
 follows the newest rule text unless pinned; reorganising a document does not
 complete or rewrite those tasks. Coverage remains a query over plans and work.
 
-Read the arrangement with `lode rule list --doc <spec-ref>` and a rule with
-`lode show <rule-ref>`. Read a spec with `lode show <ref> --inline` to include
-in-force document amendments and supersessions. A bare read returns its
-current stored body; `--version` selects a historical version. Accepted
-section anchors remain stable, and `covers` uses document/section refs, each
-a plain reference — a `covers` edge always means the plan builds the whole
-rule, no levels. Use `spec` for new design documents; existing ADRs stay
-readable. Frontmatter, rule editing, governance, and refactor mechanics:
+Design work starts from rules (WL-SPEC-77 §19.6). Find them with `lode search`
+or `lode rule list --doc <spec-ref>`, read one with `lode show <rule-ref>`,
+change them with `lode rule add`, `edit`, `link` and `supersede`, and touch a
+spec only to change its arrangement (`lode rule arrange`, `unarrange`).
+
+Read a spec with `lode show <ref> --inline` to include in-force amendments and
+supersessions; `--version` selects a historical version. Accepted section
+anchors remain stable. A plan's `covers` names rule refs, with document and
+section refs as shorthand for the rules under them; a `covers` edge always
+means the plan builds the whole rule, no levels. Use `spec` for new design
+documents; existing ADRs stay readable. Frontmatter, rule editing, governance, and refactor mechanics:
 `references/specs-and-docs.md`.
 
 Writing/revising a doc is itself an ordinary task (`kind: design`) that
@@ -210,8 +215,8 @@ the `worklode` skill before filing or finding a task, and before creating or
 reading a spec, rule, or plan.
 
 Specs arrange rules. Plans and their tasks are governed by rules. These live in the
-Worklode backbone. Read a spec with `lode show <ref> --inline`; create a
-document with `lode doc add`. When a
+Worklode backbone. Read a spec with `lode show <ref> --inline`; change design
+through its rules (`lode rule`); create a plan with `lode doc add`. When a
 general-purpose planning skill says to save a design doc or plan under
 `docs/` (`superpowers:brainstorming` and `superpowers:writing-plans` both
 do), that path is a scratch buffer — the document is the `lode doc` row, and

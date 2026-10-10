@@ -1,8 +1,10 @@
 # Specs, rules and plans: the document model
 
 Deep reference for the `worklode` skill. Documents live *in the backbone*
-(WL-SPEC-77). Use `lode doc` for document bodies and `lode rule` for individual
-rules. Scratch files are editor buffers.
+(WL-SPEC-77). Design work starts from rules (WL-SPEC-77 §19.6): find them
+with `lode search` or `lode rule list`, change them with `lode rule`, and touch
+a spec only to change its arrangement. Use `lode doc` for plans and a new
+spec's first draft. Scratch files are editor buffers.
 
 ## Kinds and lifecycle
 
@@ -51,19 +53,28 @@ text creates a new draft version, preserving the accepted version.
 ## Reading and changing rules
 
 ```bash
+lode search <query>                          # rank docs, tasks and skills; a spec hit names a section
 lode rule list --doc <spec-ref>              # spec arrangement; --doc <plan-ref> lists governing rules
 lode show <rule-ref> --json                  # text, arrangements, governed tasks and edges
 lode rule versions <rule-ref>
 lode show <rule-ref> --version <n>
+lode rule add --heading <text> --file <body> [--kind <kind>] [--tag <t>]  # new draft rule in no spec
 lode rule edit <rule-ref> --file <body-file> # text under the heading; optional --heading
+lode rule arrange <spec> <rule-ref>          # --after or --under <ref|sec-N>, --anchor sec-N
+lode rule unarrange <spec> <rule-ref>        # out of the spec, not withdrawn
 ```
 
-Create rules by writing anchored spec sections through `lode doc`. The store
-assigns their refs. On a later document write it matches existing rules in
-three passes: anchor and heading, heading alone, then anchor alone. Each rule
-can match once. An unmatched section creates a rule. Replacing text at the
-same anchor can therefore revise the existing rule; it does not declare that
-rule withdrawn. Check identities after a structural edit.
+A rule exists without a spec: plans cover it, tasks are governed by it, and
+any number of specs may arrange it. Arranging writes the spec in place when
+it is a draft, and into its candidate revision when it is accepted.
+
+A spec write through `lode doc` also writes rules. `lode doc show <ref>
+--editable` prints each anchored heading with its rule ref (`{#sec-3
+rule=WL-REQ-12}`); written back, that heading arranges the named rule and
+changed text under it is a rule edit. A heading with no `rule=` matches the
+spec's own rules by anchor and heading, then heading alone, then anchor alone,
+and an unmatched one creates a rule. A rule the write leaves out is
+unarranged, not withdrawn.
 
 A rule edit writes only the rule (WL-SPEC-77 §19.4): it rewrites the draft
 version, or adds the next version as a draft when the newest is accepted. It
@@ -124,7 +135,7 @@ oversized closures, conflicts and positional references.
 `lode rule unlink` removes a manually written link. References in rule text
 also produce derived `references` edges; edit the text to change those.
 
-A split starts with a spec edit creating the narrower rule, then
+A split starts with `lode rule add` creating the narrower rule, then
 `lode rule link <new-ref> --derived-from <old-ref>` records its origin.
 A merge edits the surviving rule to absorb the other text. Record successors
 with a map, one line per old rule: `<old-ref> -> <successor-ref> ...`.
@@ -147,7 +158,7 @@ arrangements, stale plans and governed tasks after a refactor.
 ```bash
 lode doc lint <file>                                       # local lint before creating/editing
 lode doc add --kind spec --slug <slug> --file <file>       # creates a draft spec
-lode doc edit <ref> --file <file>                    # replace a draft's body
+lode doc edit <ref> --file <file>                    # replace a draft's body; on a spec, writes its rules
 lode doc revise <ref> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it
 lode doc revise <ref> --discard                      # withdraw it without landing: owner or its author
 lode doc submit <ref>                                # records a review event; mints a review task

@@ -80,6 +80,16 @@ block, preserves any other prose, and leaves the conditional root pointers.
 The install JSON's `instructions.shared_md` reports the shared block action;
 `agents_md` and `claude_md` report pointers in `AGENTS.md` and `CLAUDE.md`.
 
+## Authoring guidance starts from rules
+
+Every surface that teaches design authoring (root `CLAUDE.md`, the
+`lode:writing-docs` skill, the `lode:worklode` skill and its
+`references/specs-and-docs.md`) says the same thing (WL-SPEC-77 §19.6): find
+the affected rules with `lode search` or `lode rule list`, change them with
+`lode rule add`, `edit`, `link` and `supersede`, change a spec only to change
+its arrangement, and name rule refs in a plan's `covers`. A new surface that
+teaches authoring says it too.
+
 ## When the CLI changes
 
 Adding, renaming or removing a command; changing a flag; changing a `--json`
