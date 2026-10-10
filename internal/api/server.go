@@ -955,6 +955,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)
 	r.api("POST /api/v1/docs/{id}/edges", s.linkDocEdge)
 	r.api("DELETE /api/v1/docs/{id}/edges", s.unlinkDocEdge)
+	r.api("POST /api/v1/docs/{id}/rules", s.arrangeRule)
+	r.api("DELETE /api/v1/docs/{id}/rules/{rule}", s.unarrangeRule)
 	r.api("PATCH /api/v1/docs/{id}", s.setDocColumns)
 	r.api("POST /api/v1/docs/{id}/submit", s.submitDoc)
 	r.api("POST /api/v1/docs/{id}/accept", s.acceptDoc)

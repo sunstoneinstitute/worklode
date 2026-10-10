@@ -40,7 +40,7 @@ tell an adjective from a verb or a view from an action.
   `tail`, `gc`, `link`, `dismiss`, `serve`, `listen`, `next`, `resume`,
   `attach`, `detach`, `assign`, `block`, `govern`, `parent`, `duplicate`,
   `request`, `pack`, `note`, `escalate`, `gap`, `fix`, `withdraw`, `report`,
-  `check`, `supersede`.
+  `check`, `supersede`, `arrange`.
 - **L4** — Verbs are imperative verbs. No adjectives: `task ready` becomes
   `task publish`. No hyphenated verbs, with exceptions named in WL-SPEC-81
   §5 allowlist. `set` is a verb like any other: the field it writes is an

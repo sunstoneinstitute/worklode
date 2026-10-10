@@ -200,3 +200,15 @@ type AddRuleInput struct {
 	Tags    []string `json:"tags,omitempty"`
 	Kind    string   `json:"kind,omitempty"`
 }
+
+// ArrangeRuleInput is the body of POST /api/v1/docs/{id}/rules: place an
+// existing rule in a spec (WL-SPEC-77 §19.3). After and Under each name a
+// rule ref or a section anchor of the spec, at most one of them; with
+// neither the rule goes last. Anchor defaults to the next free number at
+// that position.
+type ArrangeRuleInput struct {
+	Rule   string `json:"rule"`
+	After  string `json:"after,omitempty"`
+	Under  string `json:"under,omitempty"`
+	Anchor string `json:"anchor,omitempty"`
+}

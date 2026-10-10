@@ -330,3 +330,10 @@ func splitLines(s string) []span {
 	}
 	return out
 }
+
+// NewSection is a section built to be inserted into Document.Sections. Its
+// heading renders in house style ending in a newline, and body follows it
+// verbatim.
+func NewSection(level int, number, title, anchor, body string) *Section {
+	return &Section{Level: level, Number: number, Title: title, Anchor: anchor, Body: body, term: "\n"}
+}
