@@ -836,6 +836,9 @@ func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, erro
 	if err != nil {
 		return nil, err
 	}
+	if err := renderDocList(ctx, s.db, matches); err != nil {
+		return nil, err
+	}
 	var live []model.Doc
 	for _, d := range matches {
 		if d.Tombstone == nil {
