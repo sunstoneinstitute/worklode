@@ -68,8 +68,9 @@ func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string
 }
 
 // AcceptRule accepts a rule's newest draft version (WL-SPEC-77 §19.2).
-// Acceptance is the owner's act: a rule with no owner, or another owner, is
-// ErrForbidden. A rule whose newest version is not a draft is
+// Acceptance is the owner's act. A rule with no owner of its own is owned by
+// the owner of the lowest-id spec arranging it. No owner at all, or another
+// owner, is ErrForbidden. A rule whose newest version is not a draft is
 // ErrBadTransition.
 //
 // Every spec arranging the rule moves to the accepted version, an accepted
@@ -100,12 +101,20 @@ func (s *Store) AcceptRule(ctx context.Context, projectKey string, number int64,
 		var status, project string
 		var owner sql.NullString
 		var version int
-		if err := tx.QueryRow(`SELECT status, owner, version, project_id FROM rules WHERE id = $1 FOR NO KEY UPDATE`, id).
+		// A rule with no owner of its own is owned by the owner of the
+		// lowest-id spec arranging it, resolved here and never stored.
+		if err := tx.QueryRow(`
+			SELECT r.status, coalesce(r.owner, (
+			         SELECT d.owner FROM doc_rules dr JOIN docs d ON d.id = dr.doc_id
+			          WHERE dr.rule_id = r.id AND d.kind = 'spec' AND d.owner IS NOT NULL
+			          ORDER BY d.id LIMIT 1)),
+			       r.version, r.project_id
+			  FROM rules r WHERE r.id = $1 FOR NO KEY UPDATE OF r`, id).
 			Scan(&status, &owner, &version, &project); err != nil {
 			return fmt.Errorf("read rule %s: %w", ref, err)
 		}
 		if !owner.Valid {
-			return fmt.Errorf("rule %s has no owner to accept it: %w", ref, ErrForbidden)
+			return fmt.Errorf("rule %s has no owner and no arranging spec with one; set one with lode rule set owner %s <actor>: %w", ref, ref, ErrForbidden)
 		}
 		if actor == "" || owner.String != actor {
 			return fmt.Errorf("rule %s is owned by %s, not %s: %w", ref, owner.String, actor, ErrForbidden)
