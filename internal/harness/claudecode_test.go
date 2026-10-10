@@ -96,6 +96,9 @@ func TestClaudeInstallWritesBindings(t *testing.T) {
 	if got := HookCommands(settings, "Stop"); len(got) != 1 || got[0] != "lode-hook heartbeat" {
 		t.Fatalf("Stop commands: %v", got)
 	}
+	if got := HookCommands(settings, "SubagentStart"); len(got) != 1 || got[0] != "lode-hook subagent-start" {
+		t.Fatalf("SubagentStart commands: %v", got)
+	}
 	// PostToolUse is matched on a tool name, so it costs nothing per
 	// ordinary tool call.
 	got := HookCommands(settings, "PostToolUse")
