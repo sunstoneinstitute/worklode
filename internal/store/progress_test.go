@@ -20,15 +20,15 @@ status: draft
 
 # Progress
 
-## 0. Why {#sec-0}
+## 1. Why {#sec-1}
 
 Why body.
 
-## 1. Scope {#sec-1}
+## 2. Scope {#sec-2}
 
 Scope body.
 
-## 2. Model {#sec-2}
+## 3. Model {#sec-3}
 
 Model body.
 `
@@ -37,9 +37,9 @@ Model body.
 const progressPlanBody = `---
 status: draft
 covers:
-  - 066-progress.md#sec-0
   - 066-progress.md#sec-1
   - 066-progress.md#sec-2
+  - 066-progress.md#sec-3
 ---
 
 # Progress plan
@@ -125,7 +125,7 @@ func TestProjectProgress(t *testing.T) {
 	if spec.Status != "draft" || spec.Owner != "stig" {
 		t.Errorf("spec Status/Owner = %q/%q, want draft/stig", spec.Status, spec.Owner)
 	}
-	wantAnchors := []string{"sec-0", "sec-1", "sec-2"}
+	wantAnchors := []string{"sec-1", "sec-2", "sec-3"}
 	if len(spec.Sections) != len(wantAnchors) {
 		t.Fatalf("got %d sections, want %d", len(spec.Sections), len(wantAnchors))
 	}
@@ -621,7 +621,7 @@ func TestProjectProgressInformativeSection(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 66, Slug: "066-progress",
 		Body: progressSpecBody, CreatedBy: "stig",
 	})
-	// progressSpecBody arranges sec-0, sec-1, sec-2 as rules 1, 2, 3.
+	// progressSpecBody arranges sec-1, sec-2, sec-3 as rules 1, 2, 3.
 	setRuleKind(t, s, 2, "informative")
 
 	in, err := s.ProjectProgress(t.Context(), "p1", nil)
@@ -632,7 +632,7 @@ func TestProjectProgressInformativeSection(t *testing.T) {
 	for _, sec := range in.Specs[0].Sections {
 		got[sec.Anchor] = sec.NotOwed
 	}
-	if want := map[string]bool{"sec-0": false, "sec-1": true, "sec-2": false}; !reflect.DeepEqual(got, want) {
+	if want := map[string]bool{"sec-1": false, "sec-2": true, "sec-3": false}; !reflect.DeepEqual(got, want) {
 		t.Errorf("informative = %v, want %v", got, want)
 	}
 }

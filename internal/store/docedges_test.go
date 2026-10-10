@@ -190,7 +190,7 @@ func TestReplaceDocEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDoc: %v", err)
 	}
-	if after.Version != 1 || after.Status != "accepted" || after.Body != noHeader(t, planBody) {
+	if after.Version != 1 || after.Status != "accepted" || plain(after.Body) != noHeader(t, planBody) {
 		t.Errorf("doc = {version:%d status:%s}, want the source untouched at version 1",
 			after.Version, after.Status)
 	}

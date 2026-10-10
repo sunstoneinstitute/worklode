@@ -110,7 +110,7 @@ func UnlinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 func (s *Store) ListDocAmendments(ctx context.Context, docID int64) ([]model.DocAmendment, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT dr.anchor, `+ruleRefSQL("p", "r")+`, `+ruleRefSQL("ap", "ar")+`
-		   FROM doc_rules dr
+		   FROM doc_entries dr
 		   JOIN docs d ON d.id = dr.doc_id
 		   JOIN rules r ON r.id = dr.rule_id
 		   JOIN projects p ON p.id = r.project_id
@@ -201,7 +201,7 @@ func deriveReferences(tx *sql.Tx, project string, ruleID int64, text string) err
 		// A plan contains no rules, so a ref to a plan anchor names none, and
 		// a spec heading is not a rule (WL-REQ-1295).
 		err = tx.QueryRow(
-			`SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
+			`SELECT dc.rule_id FROM doc_entries dc JOIN docs d ON d.id = dc.doc_id
 			  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan' AND dc.rule_id IS NOT NULL`, docID, r.Anchor).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue

@@ -144,7 +144,6 @@ func newRuleArrangeCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&in.After, "after", "", "place it after this rule or section anchor, at the same depth")
 	cmd.Flags().StringVar(&in.Under, "under", "", "place it as the last child of this rule or section anchor")
-	cmd.Flags().StringVar(&in.Anchor, "anchor", "", "its anchor (sec-N); defaults to the next free number at that position")
 	cmd.MarkFlagsMutuallyExclusive("after", "under")
 	return cmd
 }

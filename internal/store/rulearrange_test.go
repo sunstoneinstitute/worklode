@@ -43,7 +43,7 @@ func docBody(t *testing.T, s *Store, id int64) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return d.Body
+	return plain(d.Body)
 }
 
 func ruleCount(t *testing.T, s *Store) int {
@@ -107,9 +107,9 @@ func TestArrangeRuleAcrossSpecs(t *testing.T) {
 		t.Errorf("under: body\n%s", body)
 	}
 
-	// Accepted spec A, after P1-REQ-1 whose next sibling is sec-2: a letter
-	// suffix, after the subtree, in the candidate only.
-	if anchor, err = arrangeRule(t, s, a.ID, model.ArrangeRuleInput{Rule: "P1-REQ-4", After: "P1-REQ-1"}); err != nil || anchor != "sec-1a" {
+	// Accepted spec A, after P1-REQ-1 and its subtree, in the candidate
+	// only: it takes sec-2 and the old sec-2 renumbers to sec-3 (WL-REQ-165).
+	if anchor, err = arrangeRule(t, s, a.ID, model.ArrangeRuleInput{Rule: "P1-REQ-4", After: "P1-REQ-1"}); err != nil || anchor != "sec-2" {
 		t.Fatalf("after on accepted: anchor %s, err %v", anchor, err)
 	}
 	if len(arrangementOf(t, s, a.ID)) != 3 {
@@ -119,7 +119,7 @@ func TestArrangeRuleAcrossSpecs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(rev.Body, "B.\n\n## 1a. Own {#sec-1a}\n\nX.\n## 2. Two") {
+	if !strings.Contains(rev.Body, "B.\n\n## 2. Own {#sec-2}\n\nX.\n## 3. Two") {
 		t.Errorf("candidate body:\n%s", rev.Body)
 	}
 	if _, err := acceptRevision(t, s, a.ID, "stig"); err != nil {
@@ -128,8 +128,8 @@ func TestArrangeRuleAcrossSpecs(t *testing.T) {
 	assertArrangement(t, arrangementOf(t, s, a.ID), []arranged{
 		{0, 2, 1, 1, "sec-1", "accepted"},
 		{1, 3, 2, 1, "sec-1.1", "accepted"},
-		{2, 2, 4, 1, "sec-1a", "accepted"},
-		{3, 2, 3, 1, "sec-2", "accepted"},
+		{2, 2, 4, 1, "sec-2", "accepted"},
+		{3, 2, 3, 1, "sec-3", "accepted"},
 	})
 	if n := ruleCount(t, s); n != 4 {
 		t.Errorf("landing the revision minted a rule: %d rules, want 4", n)
@@ -142,22 +142,30 @@ func TestArrangeRuleAcrossSpecs(t *testing.T) {
 	if body := docBody(t, s, b.ID); strings.Contains(body, "Two") {
 		t.Errorf("spec B still renders the unarranged rule:\n%s", body)
 	}
-	if body := docBody(t, s, a.ID); !strings.Contains(body, "## 2. Two {#sec-2}\n\nC.\n") {
+	if body := docBody(t, s, a.ID); !strings.Contains(body, "## 3. Two {#sec-3}\n\nC.\n") {
 		t.Errorf("spec A lost the rule:\n%s", body)
 	}
 	if err := unarrangeRule(t, s, b.ID, "P1-REQ-3"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unarranging twice: %v, want ErrNotFound", err)
 	}
 
-	// Unarranging from accepted A lands with the revision, past the anchor
-	// freeze, and leaves a standalone accepted rule.
+	// Unarranging from accepted A lands with the revision, is substantive
+	// (one review task), and leaves a standalone accepted rule.
 	if err := unarrangeRule(t, s, a.ID, "P1-REQ-3"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := acceptRevision(t, s, a.ID, "stig"); err != nil {
 		t.Fatal(err)
 	}
-	if body := docBody(t, s, a.ID); strings.Contains(body, "sec-2") {
+	var reviews int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM tasks WHERE kind = 'review' AND about_doc = $1`, a.ID).Scan(&reviews); err != nil {
+		t.Fatal(err)
+	}
+	if reviews != 1 {
+		t.Errorf("review tasks after unarranging from an accepted spec = %d, want 1", reviews)
+	}
+	if body := docBody(t, s, a.ID); strings.Contains(body, "Two") {
 		t.Errorf("spec A still renders the unarranged rule:\n%s", body)
 	}
 	r, err = s.GetRule(ctx, "P1", 3)
@@ -174,8 +182,8 @@ func TestArrangeRuleAcrossSpecs(t *testing.T) {
 func TestUnarrangeRuleRefusesArrangedChildren(t *testing.T) {
 	s := openDocStore(t)
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
-	if err := unarrangeRule(t, s, d.ID, "P1-REQ-1"); !errors.Is(err, ErrInvalidInput) {
-		t.Errorf("unarrange with children: %v, want ErrInvalidInput", err)
+	if err := unarrangeRule(t, s, d.ID, "P1-REQ-1"); !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "P1-REQ-2") {
+		t.Errorf("unarrange with children: %v, want ErrInvalidInput naming P1-REQ-2", err)
 	}
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "p", CreatedBy: "stig",
 		Body: "---\nstatus: draft\n---\n# Plan\n"})

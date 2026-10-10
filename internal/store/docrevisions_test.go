@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,7 +52,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocVersion(1): %v", err)
 	}
-	if v1.Body != noHeader(t, planMintBody) {
+	if plain(v1.Body) != noHeader(t, planMintBody) {
 		t.Errorf("GetDocVersion(1).Body = %q, want the pre-edit body", v1.Body)
 	}
 
@@ -59,7 +60,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocVersion(2): %v", err)
 	}
-	if v2.Body != noHeader(t, edited) {
+	if plain(v2.Body) != noHeader(t, edited) {
 		t.Errorf("GetDocVersion(2).Body = %q, want the current body", v2.Body)
 	}
 
@@ -92,7 +93,7 @@ func TestDocVersionsRevisionAccept(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("doc_versions rows = %+v, want 1 row", rows)
 	}
-	if rows[0].version != 1 || rows[0].body != noHeader(t, specBody) {
+	if rows[0].version != 1 || plain(rows[0].body) != noHeader(t, specBody) {
 		t.Errorf("snapshot = %+v, want version 1 of the accepted body", rows[0])
 	}
 
@@ -100,7 +101,7 @@ func TestDocVersionsRevisionAccept(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocVersion(1): %v", err)
 	}
-	if v1.Body != noHeader(t, specBody) {
+	if plain(v1.Body) != noHeader(t, specBody) {
 		t.Errorf("GetDocVersion(1).Body = %q, want the pre-revision body", v1.Body)
 	}
 }
@@ -126,7 +127,7 @@ func TestDocVersionsDraftEditSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocVersion(1): %v", err)
 	}
-	if v1.Body != noHeader(t, specBody) {
+	if plain(v1.Body) != noHeader(t, specBody) {
 		t.Errorf("GetDocVersion(1).Body = %q, want the overwritten draft body", v1.Body)
 	}
 	versions, err := s.ListDocVersions(t.Context(), doc.ID)
@@ -157,7 +158,7 @@ func TestDocReviseOpensOneCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDocRevision: %v", err)
 	}
-	if rev.Body != noHeader(t, specBody) {
+	if plain(rev.Body) != noHeader(t, specBody) {
 		t.Error("candidate body is not a copy of the accepted body")
 	}
 	if rev.CreatedBy != "ada" {
@@ -218,10 +219,10 @@ func TestDocUpdateRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rev.Body != noHeader(t, revisedSpecBody) {
+	if plain(rev.Body) != noHeader(t, revisedSpecBody) {
 		t.Error("candidate body not swapped")
 	}
-	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Body != noHeader(t, specBody) {
+	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || plain(got.Body) != noHeader(t, specBody) {
 		t.Fatal("the accepted body must stay authoritative throughout (WL-SPEC-77 §9)")
 	}
 
@@ -310,7 +311,7 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DiscardRevision: %v", err)
 	}
-	if back.Version != 1 || back.Body != noHeader(t, specBody) {
+	if back.Version != 1 || plain(back.Body) != noHeader(t, specBody) {
 		t.Errorf("returned doc = version %d, want the accepted version untouched", back.Version)
 	}
 
@@ -321,14 +322,14 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rev.CreatedBy != "stig" || rev.Body != noHeader(t, specBody) {
+	if rev.CreatedBy != "stig" || plain(rev.Body) != noHeader(t, specBody) {
 		t.Errorf("revision = %+v, want a fresh copy of the accepted body opened by stig", rev)
 	}
 	got, err := s.GetDoc(t.Context(), doc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Version != 1 || got.Body != noHeader(t, specBody) {
+	if got.Version != 1 || plain(got.Body) != noHeader(t, specBody) {
 		t.Errorf("doc = version %d, want the accepted version untouched by a discard", got.Version)
 	}
 }
@@ -421,10 +422,10 @@ func TestDocDiscardRevisionLogsTheWithdrawnBody(t *testing.T) {
 	}
 }
 
-// TestDocAcceptRevisionRejectsRemovedPublishedAnchor: the one invariant that
-// survives into draft (WL-REQ-170) — an anchor the accepted version published
-// may not disappear.
-func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
+// TestDocAcceptRevisionUnarrangesOmittedRule: a candidate that leaves out
+// a rule unarranges it (WL-REQ-1297): the accept lands, the rule is no
+// longer arranged, and the landing mints one review task for the spec.
+func TestDocAcceptRevisionUnarrangesOmittedRule(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
@@ -436,50 +437,52 @@ func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
 	if err := updateRevision(t, s, doc.ID, shortened); err != nil {
 		t.Fatalf("UpdateRevision: %v", err)
 	}
-
-	_, err := acceptRevision(t, s, doc.ID, "stig")
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	if _, err := acceptRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
 	}
-	if !strings.Contains(err.Error(), "sec-2.1") || !strings.Contains(err.Error(), "append-only") {
-		t.Errorf("err = %v, want the SectionDiff violation naming sec-2.1", err)
+	if secs := docSections(t, s, doc.ID); len(secs) != 2 {
+		t.Errorf("sections = %+v, want sec-2.1 gone", secs)
 	}
-	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Version != 1 {
-		t.Fatalf("doc = %+v, %v; want the accepted version untouched", got, err)
+	var reviews int
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM tasks WHERE kind = 'review' AND about_doc = $1`, doc.ID).Scan(&reviews); err != nil {
+		t.Fatal(err)
+	}
+	if reviews != 1 {
+		t.Errorf("review tasks = %d, want 1", reviews)
 	}
 }
 
-// TestDocAcceptRevisionRejectsRenumber: anchors are immutable, so an accepted
-// section is never renumbered (WL-REQ-167 rule 3). Renumbering while keeping the
-// anchor — "## 3. … {#sec-2}" — is a lintAnchors defect and never reaches the
-// diff, so the renumber arrives here the other way: the anchor moves with the
-// number and sec-2 reads as removed. Its twin below covers the form that does
-// reach rule 3.
-func TestDocAcceptRevisionRejectsRenumber(t *testing.T) {
+// TestDocAcceptRevisionAcceptsRenumber: numbers and anchors are derived
+// (WL-REQ-165), so a candidate that renumbers a section is accepted and the
+// section renders at its derived number with the same rule.
+func TestDocAcceptRevisionAcceptsRenumber(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
+	before := sectionRules(t, s, doc.ID)
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
 		t.Fatalf("ReviseDoc: %v", err)
 	}
-	renumbered := strings.Replace(revisedSpecBody, "## 2. Model {#sec-2}", "## 3. Model {#sec-3}", 1)
+	renumbered := strings.Replace(specBody, "## 2. Model {#sec-2}", "## 3. Model {#sec-3}", 1)
 	if err := updateRevision(t, s, doc.ID, renumbered); err != nil {
 		t.Fatalf("UpdateRevision: %v", err)
 	}
-
-	_, err := acceptRevision(t, s, doc.ID, "stig")
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	got, err := acceptRevision(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
 	}
-	if !strings.Contains(err.Error(), "sec-2") {
-		t.Errorf("err = %v, want it to name sec-2", err)
+	if !strings.Contains(got.Body, "## 2. Model (P1-REQ-2) {#sec-2}") {
+		t.Errorf("body:\n%s\nwant Model at its derived number", got.Body)
+	}
+	if after := sectionRules(t, s, doc.ID); !reflect.DeepEqual(after, before) {
+		t.Errorf("rules by anchor = %v, want %v", after, before)
 	}
 }
 
-// TestDocAcceptRevisionRejectsDroppedNumber: dropping a section's number while
-// keeping its anchor passes lintAnchors — which only compares a number it has
-// — and so reaches rule 3 as an actual renumber, "2" to "".
-func TestDocAcceptRevisionRejectsDroppedNumber(t *testing.T) {
+// TestDocAcceptRevisionAcceptsDroppedNumber: a heading that drops its number
+// but keeps a numbered anchor is still numbered from its place.
+func TestDocAcceptRevisionAcceptsDroppedNumber(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
@@ -490,14 +493,34 @@ func TestDocAcceptRevisionRejectsDroppedNumber(t *testing.T) {
 	if err := updateRevision(t, s, doc.ID, unnumbered); err != nil {
 		t.Fatalf("UpdateRevision: %v", err)
 	}
+	got, err := acceptRevision(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+	if !strings.Contains(got.Body, "## 2. Model (P1-REQ-2) {#sec-2}") {
+		t.Errorf("body:\n%s\nwant Model numbered 2", got.Body)
+	}
+}
 
-	_, err := acceptRevision(t, s, doc.ID, "stig")
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("err = %v, want ErrInvalidInput", err)
+// sectionRules maps each anchor of doc's current arrangement to its rule.
+func sectionRules(t *testing.T, s *Store, docID int64) map[string]int64 {
+	t.Helper()
+	rows, err := s.db.QueryContext(t.Context(),
+		`SELECT anchor, coalesce(rule_id, 0) FROM doc_entries WHERE doc_id = $1`, docID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), `sec-2: renumbered from "2" to ""`) {
-		t.Errorf("err = %v, want the rule 3 violation naming both numbers", err)
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var a string
+		var r int64
+		if err := rows.Scan(&a, &r); err != nil {
+			t.Fatal(err)
+		}
+		out[a] = r
 	}
+	return out
 }
 
 // TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval: the append-only gate
@@ -552,8 +575,9 @@ func TestDocAcceptRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcceptRevision: %v", err)
 	}
-	if updated.Body != noHeader(t, revisedSpecBody) {
-		t.Error("body not swapped")
+	// The inserted 2a lands at its derived number (WL-REQ-165).
+	if want := strings.Replace(noHeader(t, revisedSpecBody), "## 2a. Inserted {#sec-2a}", "## 3. Inserted {#sec-3}", 1); plain(updated.Body) != want {
+		t.Errorf("body:\n%s\nwant:\n%s", plain(updated.Body), want)
 	}
 	if updated.Version != 2 {
 		t.Errorf("version = %d, want 2", updated.Version)
@@ -562,7 +586,7 @@ func TestDocAcceptRevision(t *testing.T) {
 		t.Errorf("status = %q, want accepted", updated.Status)
 	}
 
-	want := map[string]int{"sec-1": 1, "sec-2": 2, "sec-2.1": 1, "sec-2a": 2}
+	want := map[string]int{"sec-1": 1, "sec-2": 2, "sec-2.1": 1, "sec-3": 2}
 	secs := docSections(t, s, doc.ID)
 	if len(secs) != len(want) {
 		t.Fatalf("sections = %+v, want %d", secs, len(want))
