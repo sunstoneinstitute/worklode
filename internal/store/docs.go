@@ -165,6 +165,9 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if err != nil {
 		return nil, err
 	}
+	if err := checkSpecHeadings(in.Kind, parsed.doc); err != nil {
+		return nil, err
+	}
 	fm := parsed.doc.Frontmatter
 	parsed.doc.Frontmatter = nil
 	body := strings.TrimLeft(string(parsed.doc.Bytes()), "\n")
@@ -287,7 +290,7 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 			id, status, ErrInvalidInput)
 	}
 
-	parsed, err := parseDocBody(kind, body)
+	parsed, err := parseSpecWrite(kind, body)
 	if err != nil {
 		return nil, err
 	}
@@ -740,6 +743,37 @@ func parseDocBody(kind, body string) (parsedDoc, error) {
 		return parsedDoc{}, errStoredHeader
 	}
 	return p, nil
+}
+
+// parseSpecWrite parses a body a writer is about to store: parseDocBody plus
+// the spec write gate, checkSpecHeadings.
+func parseSpecWrite(kind, body string) (parsedDoc, error) {
+	p, err := parseDocBody(kind, body)
+	if err != nil {
+		return p, err
+	}
+	return p, checkSpecHeadings(kind, p.doc)
+}
+
+// checkSpecHeadings is WL-SPEC-77 §19.1's write gate: a spec carries rules,
+// spec headings and template text, so a heading within the anchor depth
+// that has no anchor is refused, quoted. A deeper heading is content of the
+// rule above it. Plans are exempt.
+func checkSpecHeadings(kind string, doc *designdoc.Document) error {
+	if kind == "plan" {
+		return nil
+	}
+	var bad []string
+	for _, sec := range doc.Sections {
+		if sec.Anchor == "" && sec.Level <= docDepthLimit {
+			bad = append(bad, strconv.Quote(strings.TrimRight(sec.Heading(), "\r\n")))
+		}
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	return fmt.Errorf("a spec heading at depth %d or less needs an anchor (WL-SPEC-77 §19.1); anchor it, make it deeper, or remove it: %s: %w",
+		docDepthLimit, strings.Join(bad, ", "), ErrInvalidInput)
 }
 
 // parseDocSource parses body and rejects what the schema cannot express: an
