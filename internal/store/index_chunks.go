@@ -170,9 +170,14 @@ func (s *Store) ReplaceSubjectChunks(ctx context.Context, subj ChunkSubject, chu
 // the whole skill dir; docs and tasks have no such column, so the hash is
 // taken over exactly the text and metadata the chunker feeds the index,
 // including the header fields (a task's kind and state are embedded and
-// lexically indexed, so changing one must re-index).
+// lexically indexed, so changing one must re-index). A spec's text is
+// rendered from its arranged rule versions (WL-SPEC-77 §19.5), so their text
+// is part of its hash: a rule edit or accept changes no docs column.
 var liveHashSQL = map[string]string{
-	SubjectDoc:   `md5(d.title || E'\n' || d.body)`,
+	SubjectDoc: `md5(d.title || E'\n' || d.body || coalesce((
+	    SELECT string_agg(coalesce(x.heading, v.heading) || E'\n' || coalesce(v.body, ''), E'\n' ORDER BY x.position)
+	      FROM doc_rules x LEFT JOIN rule_versions v ON v.rule_id = x.rule_id AND v.version = x.rule_version
+	     WHERE x.doc_id = d.id), ''))`,
 	SubjectTask:  `md5(t.kind || E'\n' || t.state || E'\n' || t.title || E'\n' || coalesce(t.body, ''))`,
 	SubjectSkill: `v.content_hash`,
 }

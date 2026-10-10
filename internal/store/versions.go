@@ -18,10 +18,22 @@ import (
 // doc_versions, doc_edge_versions and doc_rule_versions, then increments
 // docs.version and returns the new version. Call it before any other write of
 // the edit, so the snapshot holds the version being replaced.
+//
+// The snapshot holds the rendered text (WL-SPEC-77 §19.5), so a version keeps
+// what it showed even where a draft rule version it arranged is rewritten in
+// place later.
 func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
+	var body string
+	if err := tx.QueryRow(`SELECT body FROM docs WHERE id = $1`, docID).Scan(&body); err != nil {
+		return 0, fmt.Errorf("read doc %d before version bump: %w", docID, err)
+	}
+	texts, err := arrangedTexts(context.Background(), tx, "doc_rules", "x.doc_id = $1", docID)
+	if err != nil {
+		return 0, err
+	}
 	if _, err := tx.Exec(
 		`INSERT INTO doc_versions (doc_id, version, body, title, issued, created_at)
-		 SELECT id, version, body, title, issued, updated_at FROM docs WHERE id = $1`, docID,
+		 SELECT id, version, $2, title, issued, updated_at FROM docs WHERE id = $1`, docID, renderBody(body, texts[docID]),
 	); err != nil {
 		return 0, fmt.Errorf("snapshot doc %d before version bump: %w", docID, err)
 	}

@@ -483,6 +483,13 @@ func lockDoc(tx *sql.Tx, id int64) (lockedDoc, error) {
 		return lockedDoc{}, fmt.Errorf("load doc %d: %w", id, err)
 	}
 	d.owner = owner.String
+	if d.kind != "plan" {
+		texts, err := arrangedTexts(context.Background(), tx, "doc_rules", "x.doc_id = $1", id)
+		if err != nil {
+			return lockedDoc{}, err
+		}
+		d.body = renderBody(d.body, texts[id])
+	}
 	return d, nil
 }
 
@@ -932,7 +939,7 @@ func getDocTx(tx *sql.Tx, id int64) (*model.Doc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get doc %d: %w", id, err)
 	}
-	return d, nil
+	return d, renderDocs(context.Background(), tx, d)
 }
 
 // GetDoc looks up one document by id. Returns ErrNotFound if it does not
@@ -947,6 +954,9 @@ func (s *Store) GetDoc(ctx context.Context, id int64) (*model.Doc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get doc %d: %w", id, err)
 	}
+	if err := renderDocs(ctx, s.db, d); err != nil {
+		return nil, err
+	}
 	if d.Reviewers, err = s.docReviewersCtx(ctx, id); err != nil {
 		return nil, err
 	}
@@ -957,7 +967,10 @@ func (s *Store) GetDoc(ctx context.Context, id int64) (*model.Doc, error) {
 }
 
 // ListDocs returns the matching documents in corpus order: kind, then number
-// (plans, which have none, last within their kind), then slug.
+// (plans, which have none, last within their kind), then slug. A spec's Body
+// is the stored body, not its rendered text (WL-SPEC-77 §19.5): no list
+// reader uses it, and rendering the corpus on every list would parse every
+// spec. Read the text with GetDoc.
 func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) {
 	// WL-SPEC-75 §12: a tombstoned document is out of every list by default.
 	where := "deleted_at IS NULL"
@@ -1040,6 +1053,11 @@ func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out m
 			out.Issued = issued.Time.Format(docDateLayout)
 		}
 		out.CreatedAt = out.CreatedAt.UTC()
+		texts, err := arrangedTexts(ctx, s.db, "doc_rules", "x.doc_id = $1", id)
+		if err != nil {
+			return model.DocVersion{}, err
+		}
+		out.Body = renderBody(out.Body, texts[id])
 		if out.Edges, _, err = s.ListDocEdges(ctx, id); err != nil {
 			return model.DocVersion{}, err
 		}
@@ -1069,6 +1087,18 @@ func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out m
 		out.Issued = issued.Time.Format(docDateLayout)
 	}
 	out.CreatedAt = out.CreatedAt.UTC()
+	// A past version shows the rule versions it arranged then (WL-SPEC-77
+	// §19.4), not the ones its rules have moved to since.
+	// A draft rule version may have been rewritten since, so only accepted
+	// ones are read back; the snapshot body holds the draft text as shown.
+	texts, err := arrangedTexts(ctx, s.db, "doc_rule_versions",
+		`x.doc_id = $1 AND x.version = $2 AND (x.rule_id IS NULL OR EXISTS (
+		     SELECT 1 FROM rules r WHERE r.id = x.rule_id AND (r.version > x.rule_version OR r.status <> 'draft')))`,
+		id, version)
+	if err != nil {
+		return model.DocVersion{}, err
+	}
+	out.Body = renderBody(out.Body, texts[id])
 	if out.Edges, err = s.docEdgeSnapshot(ctx, id, version); err != nil {
 		return model.DocVersion{}, err
 	}
@@ -1207,7 +1237,7 @@ func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, er
 	if err != nil {
 		return nil, fmt.Errorf("resolve doc subject %q: %w", iri, err)
 	}
-	return d, nil
+	return d, renderDocs(ctx, s.db, d)
 }
 
 // DocIDsBySubjectIRI resolves a batch of wl:subject IRIs to row ids in one

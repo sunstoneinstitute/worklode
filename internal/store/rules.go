@@ -132,7 +132,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		case m == nil:
 			id, version, err = insertRule(tx, project, sec.Title, sec.Body)
 			minted = true
-		case m.heading != sec.Title || m.body != sec.Body:
+		case m.heading != sec.Title || !sameRuleBody(m.body, sec.Body):
 			id, version, err = reviseRule(tx, m.id, sec.Title, sec.Body)
 		default:
 			id, version = m.id, m.version
@@ -140,7 +140,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		if err != nil {
 			return false, err
 		}
-		if m == nil || m.heading != sec.Title || m.body != sec.Body {
+		if m == nil || m.heading != sec.Title || !sameRuleBody(m.body, sec.Body) {
 			changed = append(changed, changedRule{id, sec.Title + "\n" + sec.Body})
 		}
 		if _, err := tx.Exec(
