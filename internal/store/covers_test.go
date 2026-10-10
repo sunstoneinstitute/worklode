@@ -567,7 +567,7 @@ func TestSpecHeadingArrangesNoRule(t *testing.T) {
 	}
 	rows, err := s.db.QueryContext(t.Context(),
 		`SELECT dr.anchor, coalesce(dr.heading, ''), r.number
-		   FROM doc_rules dr LEFT JOIN rules r ON r.id = dr.rule_id
+		   FROM doc_entries dr LEFT JOIN rules r ON r.id = dr.rule_id
 		  WHERE dr.doc_id = $1 ORDER BY dr.position`, spec.ID)
 	if err != nil {
 		t.Fatal(err)

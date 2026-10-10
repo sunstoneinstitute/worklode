@@ -24,12 +24,15 @@ import (
 //
 // The trailing dot after the number is optional because the house style is
 // "1." at the top level and "1.1" below it; it is not captured either way.
+// A rule heading as rendered carries the rule's ref between text and anchor,
+// "## 4. Title (WL-REQ-165) {#sec-4}", which is not part of the title.
 // The anchor may carry the editable form's rule ref, "{#sec-3 rule=WL-RULE-12}"
 // (WL-REQ-1299).
 var heading = regexp.MustCompile(
 	`^(?P<hashes>#{2,6})[ \t]+` +
 		`(?:(?P<num>\d+(?:\.\d+)*[a-z]?)\.?[ \t]+)?` +
 		`(?P<text>.*?)` +
+		`(?:[ \t]+\((?P<ref>[A-Z][A-Z0-9]*-(?:REQ|RULE)-\d+)\))?` +
 		`(?:[ \t]*\{#(?P<anchor>[\w.\-]+)(?:[ \t]+rule=(?P<rule>[\w\-]+))?\})?` +
 		`[ \t]*$`)
 
@@ -60,6 +63,9 @@ type Section struct {
 	// Anchor is the Quarto anchor without its "#" ("sec-4.1a"), or empty
 	// when the heading carries none.
 	Anchor string
+	// Ref is the rule ref a rendered heading prints after its title
+	// ("WL-REQ-165"), or empty (WL-REQ-1299).
+	Ref string
 	// Rule is the rule ref the editable form names in the anchor attribute
 	// ("WL-RULE-12"), or empty (WL-REQ-1299). Ignored without an Anchor.
 	Rule string
@@ -84,7 +90,7 @@ type Section struct {
 	// fields directly and there is no dirty flag to forget to set.
 	origLevel                         int
 	origNumber, origTitle, origAnchor string
-	origRule                          string
+	origRule, origRef                 string
 }
 
 // Parse reads a design document from src.
@@ -110,6 +116,7 @@ func Parse(src []byte) (*Document, error) {
 			Title:      h.text,
 			Anchor:     h.anchor,
 			Rule:       h.rule,
+			Ref:        h.ref,
 			Index:      len(d.Sections),
 			raw:        raw,
 			term:       terminatorOf(raw),
@@ -118,6 +125,7 @@ func Parse(src []byte) (*Document, error) {
 			origTitle:  h.text,
 			origAnchor: h.anchor,
 			origRule:   h.rule,
+			origRef:    h.ref,
 		}
 		d.Sections = append(d.Sections, sec)
 	}
@@ -240,7 +248,7 @@ func (s *Section) writeSource(b *strings.Builder) {
 // editing one section never reformats its neighbours.
 func (s *Section) headingSource() string {
 	if s.Level == s.origLevel && s.Number == s.origNumber &&
-		s.Title == s.origTitle && s.Anchor == s.origAnchor {
+		s.Title == s.origTitle && s.Anchor == s.origAnchor && s.Ref == s.origRef {
 		if s.Rule == s.origRule || s.Anchor == "" {
 			return s.raw
 		}
@@ -267,13 +275,13 @@ func Editable(src string, rules map[string]string) string {
 		return src
 	}
 	for _, sec := range d.Sections {
-		sec.Rule = rules[sec.Anchor]
+		sec.Rule, sec.Ref = rules[sec.Anchor], ""
 	}
 	return string(d.Bytes())
 }
 
-// StripRuleRefs is src with the rule ref removed from every heading's anchor
-// attribute: the stored form of a body written in the editable form
+// StripRuleRefs is src with the rule ref removed from every heading, the
+// anchor attribute's and the one a rendered heading prints: the stored form of a body written in the editable form
 // (WL-REQ-1299). Every other byte is kept, and src that does not parse
 // is returned unchanged.
 func StripRuleRefs(src string) string {
@@ -282,7 +290,7 @@ func StripRuleRefs(src string) string {
 		return src
 	}
 	for _, sec := range d.Sections {
-		sec.Rule = ""
+		sec.Rule, sec.Ref = "", ""
 	}
 	return string(d.Bytes())
 }
@@ -302,6 +310,9 @@ func (s *Section) renderHeading() string {
 		b.WriteByte(' ')
 	}
 	b.WriteString(s.Title)
+	if s.Ref != "" {
+		b.WriteString(" (" + s.Ref + ")")
+	}
 	if s.Anchor != "" {
 		b.WriteByte(' ')
 		b.WriteString(s.anchorSource())
@@ -325,7 +336,7 @@ func terminatorOf(raw string) string {
 type hit struct {
 	start, end                int // span of the heading line, terminator included
 	hashes, num, text, anchor string
-	rule                      string
+	rule, ref                 string
 }
 
 // scanHeadings finds every ATX heading outside fenced code, in order.
@@ -355,8 +366,9 @@ func scanHeadings(body string) []hit {
 			hashes: m[1],
 			num:    m[2],
 			text:   m[3],
-			anchor: m[4],
-			rule:   m[5],
+			ref:    m[4],
+			anchor: m[5],
+			rule:   m[6],
 		})
 	}
 	return hits

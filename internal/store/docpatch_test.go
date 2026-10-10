@@ -136,7 +136,7 @@ func TestPatchDocRuleSplit(t *testing.T) {
 				if getErr != nil {
 					t.Fatal(getErr)
 				}
-				if after.Version != 1 || after.Body != noHeader(t, patchSpecBody) {
+				if after.Version != 1 || plain(after.Body) != noHeader(t, patchSpecBody) {
 					t.Errorf("refused patch still moved the document: version %d", after.Version)
 				}
 				return

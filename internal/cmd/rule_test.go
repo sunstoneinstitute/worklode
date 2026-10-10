@@ -405,10 +405,10 @@ func TestRuleArrangeAndUnarrangeCommands(t *testing.T) {
 	t.Setenv("LODE_SERVER", srv.URL)
 	t.Setenv("LODE_TOKEN", "test-token")
 
-	if out, err := runLode(t, "rule", "arrange", "7", "WL-REQ-3", "--under", "sec-2", "--anchor", "sec-2.4"); err != nil {
+	if out, err := runLode(t, "rule", "arrange", "7", "WL-REQ-3", "--under", "sec-2"); err != nil {
 		t.Fatalf("lode rule arrange: %v\noutput: %s", err, out)
 	}
-	if want := (model.ArrangeRuleInput{Rule: "WL-REQ-3", Under: "sec-2", Anchor: "sec-2.4"}); posted != want {
+	if want := (model.ArrangeRuleInput{Rule: "WL-REQ-3", Under: "sec-2"}); posted != want {
 		t.Errorf("posted = %+v, want %+v", posted, want)
 	}
 	if _, err := runLode(t, "rule", "unarrange", "7", "WL-REQ-3"); err != nil {

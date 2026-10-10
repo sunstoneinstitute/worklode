@@ -31,7 +31,8 @@ type ruleRow struct {
 // prior rule matches it, a spec heading row (WL-REQ-1295); changed text rewrites the rule's draft version or, once
 // that version is accepted, becomes its next version; anything else is a new
 // rule numbered from the project's RULE counter. The arrangement
-// (doc_rules) is rewritten in section order. Plans never reach here:
+// (doc_rules) is rewritten in section order, each entry storing its depth
+// and, when unnumbered, its slug (WL-REQ-165). Plans never reach here:
 // rebuildSectionsFrom returns before calling it.
 //
 // Matching a section to a prior rule runs in three priority passes over
@@ -48,14 +49,14 @@ type ruleRow struct {
 // match (or none) does the second walk, in document order, bump/keep rules
 // and write doc_rules positions. minted reports whether a new rule was
 // inserted.
-func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, err error) {
+func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable string) (minted bool, derive func() error, err error) {
 	var project string
 	if err := tx.QueryRow(`SELECT project_id FROM docs WHERE id = $1`, docID).Scan(&project); err != nil {
-		return false, fmt.Errorf("project of doc %d: %w", docID, err)
+		return false, nil, fmt.Errorf("project of doc %d: %w", docID, err)
 	}
-	prior, err := arrangedRules(tx, docID)
+	prior, err := arrangedRules(tx, priorTable, docID)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	byAnchor := map[string]*ruleRow{}
 	byHeading := map[string][]*ruleRow{}
@@ -66,23 +67,25 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 	claimed := map[int64]bool{}
 	match := make([]*ruleRow, len(doc.Sections))
 
-	// Pass 0: a heading naming its rule (the editable form, WL-SPEC-77
-	// §19.5) arranges that rule, from this spec or any other.
+	// Pass 0: a heading naming its rule (the editable form's rule=, or the
+	// ref a rendered heading prints, WL-REQ-1299) arranges that rule, from
+	// this spec or any other.
 	for i, sec := range doc.Sections {
-		if sec.Anchor == "" || sec.Rule == "" {
+		ref := namedRef(sec)
+		if sec.Anchor == "" || ref == "" {
 			continue
 		}
-		c, err := namedRule(tx, prior, sec.Rule)
+		c, err := namedRule(tx, prior, ref)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 		if !slices.ContainsFunc(prior, func(r ruleRow) bool { return r.id == c.id }) || c.heading != sec.Title || !sameRuleBody(c.body, sec.Body) {
-			if err := refuseWithdrawnRule(tx, c.id, sec.Rule); err != nil {
-				return false, err
+			if err := refuseWithdrawnRule(tx, c.id, ref); err != nil {
+				return false, nil, err
 			}
 		}
 		if claimed[c.id] {
-			return false, fmt.Errorf("%s names %s, which an earlier heading already arranges: %w", sec.Anchor, sec.Rule, ErrInvalidInput)
+			return false, nil, fmt.Errorf("%s names %s, which an earlier heading already arranges: %w", sec.Anchor, ref, ErrInvalidInput)
 		}
 		match[i], claimed[c.id] = c, true
 	}
@@ -118,14 +121,15 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 	}
 
 	if _, err := tx.Exec(`DELETE FROM doc_rules WHERE doc_id = $1`, docID); err != nil {
-		return false, fmt.Errorf("clear arrangement of doc %d: %w", docID, err)
+		return false, nil, fmt.Errorf("clear arrangement of doc %d: %w", docID, err)
 	}
 	// changed collects the rules this write inserted or revised, so their
-	// references can be derived once every doc_rules row below has been
-	// written. Deriving inline in this loop would miss a ref into the same
-	// document: the section it names has no arrangement row yet (forward) or
-	// its own derivation already ran (backward), so it would resolve through
-	// an empty or stale doc_rules and drop the edge every time (S26).
+	// references can be derived once the whole arrangement and its section
+	// anchors are written (derive, which the caller runs). Deriving inline in
+	// this loop would miss a ref into the same document: the section it
+	// names has no arrangement row yet (forward) or its own derivation
+	// already ran (backward), so it would resolve through an empty or stale
+	// arrangement and drop the edge every time (S26).
 	type changedRule struct {
 		id   int64
 		text string
@@ -139,9 +143,9 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		m := match[i]
 		if m == nil && isSpecHeading(doc.Sections, i) {
 			if _, err := tx.Exec(
-				`INSERT INTO doc_rules (doc_id, position, heading, depth, anchor) VALUES ($1, $2, $3, $4, $5)`,
-				docID, position, sec.Title, sec.Level, sec.Anchor); err != nil {
-				return false, fmt.Errorf("arrange heading %s in doc %d: %w", sec.Anchor, docID, err)
+				`INSERT INTO doc_rules (doc_id, position, heading, depth, slug) VALUES ($1, $2, $3, $4, $5)`,
+				docID, position, sec.Title, sec.Level, entrySlug(sec)); err != nil {
+				return false, nil, fmt.Errorf("arrange heading %s in doc %d: %w", sec.Anchor, docID, err)
 			}
 			position++
 			continue
@@ -158,16 +162,16 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 			id, version = m.id, m.version
 		}
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 		if m == nil || m.heading != sec.Title || !sameRuleBody(m.body, sec.Body) {
 			changed = append(changed, changedRule{id, sec.Title + "\n" + sec.Body})
 		}
 		if _, err := tx.Exec(
-			`INSERT INTO doc_rules (doc_id, position, rule_id, rule_version, depth, anchor)
+			`INSERT INTO doc_rules (doc_id, position, rule_id, rule_version, depth, slug)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			docID, position, id, version, sec.Level, sec.Anchor); err != nil {
-			return false, fmt.Errorf("arrange rule %d in doc %d: %w", id, docID, err)
+			docID, position, id, version, sec.Level, entrySlug(sec)); err != nil {
+			return false, nil, fmt.Errorf("arrange rule %d in doc %d: %w", id, docID, err)
 		}
 		position++
 	}
@@ -182,17 +186,37 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		  WHERE dr.doc_id = $1 AND r.id = dr.rule_id
 		    AND dr.rule_version < CASE WHEN r.status = 'draft' THEN r.version - 1 ELSE r.version END`,
 		docID); err != nil {
-		return false, fmt.Errorf("move doc %d to accepted rule versions: %w", docID, err)
+		return false, nil, fmt.Errorf("move doc %d to accepted rule versions: %w", docID, err)
 	}
-	for _, c := range changed {
-		if err := deriveReferences(tx, project, c.id, c.text); err != nil {
-			return false, err
+	return minted, func() error {
+		for _, c := range changed {
+			if err := deriveReferences(tx, project, c.id, c.text); err != nil {
+				return err
+			}
+			if err := checkTermSlug(tx, c.id); err != nil {
+				return err
+			}
 		}
-		if err := checkTermSlug(tx, c.id); err != nil {
-			return false, err
-		}
+		return nil
+	}, nil
+}
+
+// namedRef is the rule a heading names: its rule= attribute, else the ref
+// a rendered heading prints.
+func namedRef(sec *designdoc.Section) string {
+	if sec.Rule != "" {
+		return sec.Rule
 	}
-	return minted, nil
+	return sec.Ref
+}
+
+// entrySlug is the slug an entry stores for sec: its anchor when that is
+// not a section number, which makes the entry unnumbered (WL-REQ-165).
+func entrySlug(sec *designdoc.Section) any {
+	if designdoc.IsSlug(sec.Anchor) {
+		return sec.Anchor
+	}
+	return nil
 }
 
 // namedRule is the rule a rule= heading names: the prior arrangement's row
@@ -254,13 +278,14 @@ func isSpecHeading(secs []*designdoc.Section, i int) bool {
 		secs[i+1].Anchor != "" && secs[i+1].Level > secs[i].Level
 }
 
-// arrangedRules reads a document's current arrangement with each rule's
-// arranged version text, in position order. Spec headings carry no rule and
-// are left out.
-func arrangedRules(tx *sql.Tx, docID int64) ([]ruleRow, error) {
+// arrangedRules reads a document's arrangement from table (doc_entries, the
+// current one, or doc_revision_rules, its candidate's) with each rule's
+// arranged version text and anchor, in position order. Spec headings carry
+// no rule and are left out.
+func arrangedRules(tx *sql.Tx, table string, docID int64) ([]ruleRow, error) {
 	rows, err := tx.Query(
-		`SELECT dc.rule_id, dc.rule_version, cv.heading, cv.body, dc.anchor, dc.depth
-		   FROM doc_rules dc
+		`SELECT dc.rule_id, dc.rule_version, cv.heading, cv.body, coalesce(dc.anchor, ''), dc.depth
+		   FROM `+table+` dc
 		   JOIN rule_versions cv ON cv.rule_id = dc.rule_id AND cv.version = dc.rule_version
 		  WHERE dc.doc_id = $1
 		  ORDER BY dc.position`, docID)
@@ -540,8 +565,8 @@ func (s *Store) ruleArrangements(ctx context.Context, ids []int64) (map[int64][]
 		return out, nil
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT dc.rule_id, dc.doc_id, p.key, d.kind, d.number, dc.anchor, dc.position, dc.depth, dc.rule_version
-		   FROM doc_rules dc
+		`SELECT dc.rule_id, dc.doc_id, p.key, d.kind, d.number, coalesce(dc.anchor, ''), dc.position, dc.depth, dc.rule_version
+		   FROM doc_entries dc
 		   JOIN docs d ON d.id = dc.doc_id
 		   JOIN projects p ON p.id = d.project_id
 		  WHERE dc.rule_id = ANY($1)

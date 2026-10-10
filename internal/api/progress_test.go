@@ -19,15 +19,15 @@ status: draft
 
 # Progress
 
-## 0. Why {#sec-0}
+## 1. Why {#sec-1}
 
 Why body.
 
-## 1. Scope {#sec-1}
+## 2. Scope {#sec-2}
 
 Scope body.
 
-## 2. Model {#sec-2}
+## 3. Model {#sec-3}
 
 Model body.
 `
@@ -38,9 +38,9 @@ Model body.
 const progressPlanBody = `---
 status: draft
 covers:
-  - 066-progress.md#sec-0
   - 066-progress.md#sec-1
   - 066-progress.md#sec-2
+  - 066-progress.md#sec-3
 ---
 
 # Progress plan

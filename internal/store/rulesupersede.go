@@ -275,7 +275,7 @@ func ruleAtAnchor(tx *sql.Tx, docID int64, anchor string) (int64, bool, error) {
 	}
 	var id int64
 	err := tx.QueryRow(
-		`SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
+		`SELECT dc.rule_id FROM doc_entries dc JOIN docs d ON d.id = dc.doc_id
 		  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan' AND dc.rule_id IS NOT NULL`, docID, anchor).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, nil
