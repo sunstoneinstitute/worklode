@@ -9,21 +9,38 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
 
-// NoneReasons is 11 §4's closed list of "how" changes a Spec: none trailer
+// NoneReasons is WL-REQ-7's closed list of "how" changes a Spec: none trailer
 // may cite. "fix" is in the list but is refused without a cited ref.
 var NoneReasons = []string{"fix", "refactor", "perf", "copy", "tests", "build", "config"}
 
 // ErrNoTrailer is returned by Find when no line starts with the key.
 var ErrNoTrailer = errors.New("no trailer")
 
-// Declaration is one parsed trailer line (11 §4). Exactly one of Rule,
-// Section and None is set.
+// Declaration is one parsed trailer line (WL-REQ-7). Exactly one of Rule and
+// None is set.
 type Declaration struct {
-	Rule      *designdoc.RuleRef    // Spec: WL-REQ-456
-	Section   *designdoc.SectionRef // Spec: WL-REQ-88 (transitional, S52)
-	None      string                // Spec: none <reason>: the reason
-	Qualifier string                // "", "amended", or a NoneReasons word on a cited ref
-	Line      string                // the line as written, trimmed
+	Rule      *designdoc.RuleRef // Spec: WL-REQ-456
+	None      string             // Spec: none <reason>: the reason
+	Qualifier string             // "", "amended", or a NoneReasons word on a cited ref
+	Line      string             // the line as written, trimmed
+}
+
+// SectionError is the refusal of a section value (WL-REQ-7): section numbers
+// change with a spec's arrangement, a rule ref does not. Rule is the ref the
+// section resolves to when a caller could ask the server; the message falls
+// back to the command that reads it.
+type SectionError struct {
+	Line    string
+	Section designdoc.SectionRef
+	Rule    string
+}
+
+func (e *SectionError) Error() string {
+	sh := e.Section.Shorthand
+	if e.Rule != "" {
+		return fmt.Sprintf("%q names a section; cite the rule instead: Spec: %s", e.Line, e.Rule)
+	}
+	return fmt.Sprintf("%q names a section; cite its rule ref instead, read it with `lode show %s-%s-%d#%s`", e.Line, sh.Key, sh.Type, sh.Number, e.Section.Anchor)
 }
 
 // String renders the declaration in its canonical trailer form, without the
@@ -31,15 +48,10 @@ type Declaration struct {
 // prints as FormatRuleRef does for an unknown kind; the form doubles as the
 // reconciler's idempotency key, which a kind change must not move.
 func (d Declaration) String() string {
-	var ref string
-	switch {
-	case d.None != "":
+	if d.None != "" {
 		return "none " + d.None
-	case d.Rule != nil:
-		ref = designdoc.FormatRuleRef(d.Rule.Key, d.Rule.Number, "")
-	case d.Section != nil:
-		ref = fmt.Sprintf("%s-%s-%d %s", d.Section.Shorthand.Key, d.Section.Shorthand.Type, d.Section.Shorthand.Number, d.Section.Anchor)
 	}
+	ref := designdoc.FormatRuleRef(d.Rule.Key, d.Rule.Number, "")
 	if d.Qualifier != "" {
 		ref += " " + d.Qualifier
 	}
@@ -47,7 +59,7 @@ func (d Declaration) String() string {
 }
 
 // Find scans text line by line and parses the first line that starts with
-// key. A later Spec: line is ignored: one declaration per body (11 §4).
+// key. A later Spec: line is ignored: one declaration per body (WL-REQ-7).
 func Find(key, text string) (Declaration, error) {
 	for _, line := range strings.Split(text, "\n") {
 		d, matched, err := ParseLine(key, line)
@@ -71,14 +83,14 @@ func ParseLine(key, line string) (d Declaration, matched bool, err error) {
 	d.Line = line
 	fields := strings.Fields(rest)
 	if len(fields) == 0 {
-		return d, true, fmt.Errorf("%q names nothing: a rule ref, a section ref, or none <reason>", line)
+		return d, true, fmt.Errorf("%q names nothing: a rule ref (WL-REQ-<n>) or none <reason>", line)
 	}
 	if fields[0] == "none" {
 		if len(fields) != 2 || !slices.Contains(NoneReasons, fields[1]) {
 			return d, true, fmt.Errorf("%q: none takes one reason from %s", line, strings.Join(NoneReasons, ", "))
 		}
 		if fields[1] == "fix" {
-			return d, true, fmt.Errorf("%q: a fix cites the section it restores (11 §4)", line)
+			return d, true, fmt.Errorf("%q: a fix cites the rule it restores, Spec: WL-REQ-<n> fix (WL-REQ-7)", line)
 		}
 		d.None = fields[1]
 		return d, true, nil
@@ -90,17 +102,15 @@ func ParseLine(key, line string) (d Declaration, matched bool, err error) {
 	base, anchor, hasAnchor := strings.Cut(fields[0], "#")
 	sh, ok := designdoc.ParseShorthand(base)
 	if !ok {
-		return d, true, fmt.Errorf("%q: %q is not a rule ref, a section ref or none", line, fields[0])
+		return d, true, fmt.Errorf("%q: %q is not a rule ref (WL-REQ-<n>) or none", line, fields[0])
 	}
-	fields = fields[1:]
+	if !hasAnchor && len(fields) > 1 && strings.HasPrefix(fields[1], "sec-") {
+		anchor, hasAnchor = fields[1], true
+	}
 	if !hasAnchor {
-		if len(fields) == 0 || !strings.HasPrefix(fields[0], "sec-") {
-			return d, true, fmt.Errorf("%q: a section ref needs its anchor, %s-%s-%d sec-N", line, sh.Key, sh.Type, sh.Number)
-		}
-		anchor, fields = fields[0], fields[1:]
+		return d, true, fmt.Errorf("%q: %s names a document, not a rule: cite a rule ref (WL-REQ-<n>)", line, base)
 	}
-	d.Section = &designdoc.SectionRef{Shorthand: sh, Anchor: anchor}
-	return qualified(d, fields)
+	return d, true, &SectionError{Line: line, Section: designdoc.SectionRef{Shorthand: sh, Anchor: anchor}}
 }
 
 // qualified attaches the optional qualifier after a cited ref: "amended", or
@@ -118,10 +128,12 @@ func qualified(d Declaration, fields []string) (Declaration, bool, error) {
 
 // Input is what the gate decides on: the repo-relative paths a change
 // touches, and the texts that may carry the trailer, PR body first, then
-// commit messages newest first.
+// commit messages newest first. ResolveSection, when set, names the rule
+// ref a refused section value resolves to, or "" when it cannot.
 type Input struct {
-	Changed []string
-	Texts   []string
+	Changed        []string
+	Texts          []string
+	ResolveSection func(designdoc.SectionRef) string
 }
 
 // Verdict is a passing check: which guarded paths changed and, when any
@@ -131,7 +143,7 @@ type Verdict struct {
 	Declaration *Declaration
 }
 
-// Check applies 11 §3 and §4 offline: no guarded path changed, or a valid
+// Check applies WL-REQ-8 offline: no guarded path changed, or a valid
 // trailer is present. The error names the guarded paths and the reason.
 func Check(cfg Config, in Input) (Verdict, error) {
 	g, err := cfg.Guards()
@@ -150,9 +162,13 @@ func Check(cfg Config, in Input) (Verdict, error) {
 	d, err := Find(cfg.Trailer, strings.Join(in.Texts, "\n"))
 	switch {
 	case errors.Is(err, ErrNoTrailer):
-		return v, fmt.Errorf("guarded paths changed (%s) and no %s trailer names the design rule this change makes true (11 §4)",
+		return v, fmt.Errorf("guarded paths changed (%s) and no %s trailer names the rule this change makes true (WL-REQ-7)",
 			strings.Join(v.Guarded, ", "), cfg.Trailer)
 	case err != nil:
+		var se *SectionError
+		if errors.As(err, &se) && in.ResolveSection != nil {
+			se.Rule = in.ResolveSection(se.Section)
+		}
 		return v, fmt.Errorf("guarded paths changed (%s): %w", strings.Join(v.Guarded, ", "), err)
 	}
 	v.Declaration = &d

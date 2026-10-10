@@ -16,12 +16,11 @@ import (
 )
 
 // specReconcilerSubscriber is the eventbus subscriber that turns a Spec:
-// trailer into a governing link (12-spec-refactoring-design-tree.md S4, S18;
-// 11-design-authority-gate.md §4).
+// trailer into a governing link (WL-REQ-1552).
 const specReconcilerSubscriber = "spec-reconciler"
 
 // reconcilerOutcomes is the bounded label set of worklode_spec_reconciler_total.
-var reconcilerOutcomes = []string{"linked", "no_task", "no_trailer", "malformed", "none", "planned", "unknown_target", "already"}
+var reconcilerOutcomes = []string{"linked", "no_task", "no_trailer", "malformed", "section", "none", "planned", "unknown_target", "already"}
 
 // reconcilerMetrics counts what the subscriber did with each event. Nil-safe.
 type reconcilerMetrics struct {
@@ -52,8 +51,8 @@ var errReconcileSkip = errors.New("spec-reconciler: skip")
 
 // handleSpecReconcile reads the GitHub pull_request.* and push events the
 // hooks record, finds the task the branch names, and governs it by the
-// rule the Spec: trailer cites when no plan governs it (S51). Section refs
-// are accepted until the per-project switch lands (S52). The task.governed
+// rule the Spec: trailer cites when no plan governs it (WL-REQ-1552). A
+// section value names no rule and is counted and logged. The task.governed
 // event's external id identifies the link the trailer asks for, so every
 // later delivery carrying the same trailer for the same task collides with
 // it and is counted as already governed.
@@ -95,7 +94,7 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 		ref, _ := payload["ref"].(string)
 		taskID = store.TaskIDFromRef(strings.TrimPrefix(ref, "refs/heads/"))
 		commits, _ := payload["commits"].([]any)
-		// Newest first: the final commit's trailer wins (11 §4).
+		// Newest first: the final commit's trailer wins (WL-REQ-7).
 		for i := len(commits) - 1; i >= 0; i-- {
 			c, ok := commits[i].(map[string]any)
 			if !ok {
@@ -116,6 +115,10 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	case errors.Is(err, gate.ErrNoTrailer):
 		s.reconcilerMetrics.Outcome("no_trailer")
 		return eventbus.OutcomeSuppressed, nil
+	case errors.As(err, new(*gate.SectionError)):
+		s.log.Warn("spec-reconciler: trailer names a section, not a rule", "event", ev.ID, "task", taskID, "err", err)
+		s.reconcilerMetrics.Outcome("section")
+		return eventbus.OutcomeSuppressed, nil
 	case err != nil:
 		s.log.Warn("spec-reconciler: malformed trailer", "event", ev.ID, "task", taskID, "err", err)
 		s.reconcilerMetrics.Outcome("malformed")
@@ -130,38 +133,21 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	// events.source is "watcher": like doc-lifecycle's mints, this event is
 	// the system inferring a link, not a raw webhook delivery (there is no
 	// "gate" value in events_source_check). The link itself still records
-	// source "gate" on task_governed_by below (migration 0087), which is
-	// what distinguishes it from a plan-minted or a manually added one.
-	// The external id identifies the link, so a pull request pushed to twenty
-	// times leaves one task.governed row behind.
-	// The id is keyed on the resolved rule, so a qualifier or a rule ref vs
-	// the section ref of the same rule is the same link.
-	// A section ref on a spec heading names every rule grouped under it
-	// (WL-REQ-1295), so the task is governed by each.
-	var ruleIDs []int64
+	// source "gate" on task_governed_by below, which is what distinguishes
+	// it from a plan-minted or a manually added one. The external id is
+	// keyed on the resolved rule, so a pull request pushed to twenty times,
+	// or a trailer that differs only by its qualifier, leaves one
+	// task.governed row behind.
+	var ruleID int64
 	err = s.st.Tx(ctx, func(tx *sql.Tx) error {
 		var err error
-		if decl.Rule != nil {
-			var id int64
-			id, err = store.RuleIDByRef(tx, decl.Rule.Key, decl.Rule.Number)
-			ruleIDs = []int64{id}
-		} else {
-			ruleIDs, err = store.RulesAtSection(tx, *decl.Section)
-		}
+		ruleID, err = store.RuleIDByRef(tx, decl.Rule.Key, decl.Rule.Number)
 		return err
 	})
-	if errors.Is(err, store.ErrNotFound) {
-		s.log.Warn("spec-reconciler: trailer names nothing", "event", ev.ID, "task", taskID, "spec", decl.String(), "err", err)
-		s.reconcilerMetrics.Outcome("unknown_target")
-		return eventbus.OutcomeSuppressed, nil
-	}
-	if err != nil {
-		return eventbus.OutcomeError, fmt.Errorf("spec-reconciler: event %d: %w", ev.ID, err)
-	}
-	linked := false
-	for _, ruleID := range ruleIDs {
+	if err == nil {
 		externalID := fmt.Sprintf("spec-reconciler-%s-%d", taskID, ruleID)
-		_, inserted, err := s.st.RecordEvent(ctx, watcherEventSource, externalID, "task.governed", notePayload,
+		var inserted bool
+		_, inserted, err = s.st.RecordEvent(ctx, watcherEventSource, externalID, "task.governed", notePayload,
 			func(tx *sql.Tx, _ int64) error {
 				planned, err := store.HasPlanGovernance(tx, taskID)
 				if err != nil {
@@ -173,23 +159,21 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 				}
 				return store.Govern(tx, taskID, ruleID, "gate", false)
 			})
-		switch {
-		case errors.Is(err, errReconcileSkip):
-			s.reconcilerMetrics.Outcome(outcome)
-			return eventbus.OutcomeSuppressed, nil
-		case errors.Is(err, store.ErrNotFound):
-			s.log.Warn("spec-reconciler: trailer names nothing", "event", ev.ID, "task", taskID, "spec", decl.String(), "err", err)
-			s.reconcilerMetrics.Outcome("unknown_target")
-			return eventbus.OutcomeSuppressed, nil
-		case err != nil:
-			return eventbus.OutcomeError, fmt.Errorf("spec-reconciler: event %d: %w", ev.ID, err)
+		if err == nil && !inserted {
+			outcome = "already"
 		}
-		linked = linked || inserted
 	}
-	if !linked {
-		s.reconcilerMetrics.Outcome("already")
+	switch {
+	case errors.Is(err, errReconcileSkip):
+	case errors.Is(err, store.ErrNotFound):
+		s.log.Warn("spec-reconciler: trailer names nothing", "event", ev.ID, "task", taskID, "spec", decl.String(), "err", err)
+		outcome = "unknown_target"
+	case err != nil:
+		return eventbus.OutcomeError, fmt.Errorf("spec-reconciler: event %d: %w", ev.ID, err)
+	}
+	s.reconcilerMetrics.Outcome(outcome)
+	if outcome != "linked" {
 		return eventbus.OutcomeSuppressed, nil
 	}
-	s.reconcilerMetrics.Outcome("linked")
 	return eventbus.OutcomeApplied, nil
 }
