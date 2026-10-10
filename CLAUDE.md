@@ -32,8 +32,15 @@ came from. A bare `lode show WL-SPEC-75` gives you what the spec said when it wa
 written, without the amendments folded in. For a targeted read, use the
 native selector (`lode show WL-SPEC-80 --inline --section sec-8`) rather than
 filtering rendered output with `sed`; use `lode doc show <ref> --json` for
-structured section and edge metadata. Write with `lode doc add` and `lode doc
-edit`; an accepted document is changed by `lode doc revise`, never in place.
+structured section and edge metadata.
+
+**Design work changes rules, not spec text** (WL-SPEC-77 §19.6). Find the
+affected rules with `lode search` or `lode rule list --doc <spec>`, then change
+them with `lode rule add`, `lode rule edit`, `lode rule link` and `lode rule
+supersede`. Touch a spec only to change its arrangement (`lode rule arrange`,
+`lode rule unarrange`). A plan's `covers` names rule refs. `lode doc add` and
+`lode doc edit` still create plans and specs; the `lode:writing-docs` skill
+covers both.
 `docs/follow-ups.md` holds known non-blocking gaps — check it before filing
 something as new.
 
