@@ -218,5 +218,5 @@ configMapGenerator:
       - migrations/0102_rule-kinds-needs.down.sql
       - migrations/0103_spec-headings.up.sql
       - migrations/0103_spec-headings.down.sql
-      - migrations/NEW-doc-revision-rules.up.sql
-      - migrations/NEW-doc-revision-rules.down.sql
+      - migrations/0104_doc-revision-rules.up.sql
+      - migrations/0104_doc-revision-rules.down.sql
