@@ -33,7 +33,7 @@ means touching each link. A component never queries: if a template needs a
 fact it lacks, the fix is a field on the view type and a line in
 `render.go` — never an import of `internal/api` (a dependency cycle) and
 never a store call from a template. View types embed `internal/model`
-types only (WL-SPEC-73 §3.2a) — never `internal/store` ones — matching the
+types only (WL-RULE-1349) — never `internal/store` ones — matching the
 dependency line above.
 
 **Honest empty states** — the rule the cockpit is built on, and the
@@ -103,7 +103,7 @@ a fixture reading `Title: "t"` reflows perfectly and proves nothing.
 
 The check needs a Chrome-family browser and finds one on PATH or in a
 Playwright/Puppeteer cache; `LODE_NARROW_BROWSER` overrides. With none on the
-machine it says so and exits 0 — CI does not install a browser (WL-SPEC-82 §4),
+machine it says so and exits 0 — CI does not install a browser (WL-REQ-335),
 so `internal/ui/narrow_test.go` pins each fix it has produced as a stylesheet or
 markup fact instead, and that is what `make test` runs.
 

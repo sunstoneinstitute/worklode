@@ -84,7 +84,7 @@ The install JSON's `instructions.shared_md` reports the shared block action;
 
 Every surface that teaches design authoring (root `CLAUDE.md`, the
 `lode:writing-docs` skill, the `lode:worklode` skill and its
-`references/specs-and-docs.md`) says the same thing (WL-SPEC-77 §19.6): find
+`references/specs-and-docs.md`) says the same thing (WL-REQ-1300): find
 the affected rules with `lode search` or `lode rule list`, change them with
 `lode rule add`, `edit`, `link` and `supersede`, change a spec only to change
 its arrangement, and name rule refs in a plan's `covers`. A new surface that
@@ -123,7 +123,7 @@ retired task-kind spelling the server still accepts as a deprecated alias, but
 agent docs must not use it.
 
 The two claim surfaces — `lode work next` and `lode task claim --next` — take
-a comma-separated list of kinds (025 §8.8), and their usage names only the six
+a comma-separated list of kinds (WL-REQ-171), and their usage names only the six
 a ranked pick can hand out, since a decision and a rally are never in the ready
 set. The drift test splits a list value and checks each element, so
 `--kind design,spike,review` in a skill is checked the same way a single kind
@@ -140,7 +140,7 @@ A rename leaves old spellings behind in the corpus. **They stay.** A spec states
 what was decided; a spent plan records what someone did. Rewriting either to use
 today's spelling makes it describe a decision that was not taken or an execution
 that did not happen, and the git history that would have shown the substitution
-is one more diff to read past. Spec 061 §2 states the same rule from the other
+is one more diff to read past. WL-REQ-306 states the same rule from the other
 end: command names appearing incidentally in a spec are illustration, not
 specification.
 
@@ -158,7 +158,7 @@ Rule refs follow the same rule. A rule is a `requirement` or `catalogue` (a
 plan builds it), an `invariant` (it binds every task in its project), a
 `definition` (one term) or a `principle` (a stance other rules refine), and its
 ref prints with its kind's infix: `WL-REQ-<n>` for a requirement or catalogue,
-`WL-RULE-<n>` otherwise (WL-SPEC-77 §4). Agent-facing examples
+`WL-RULE-<n>` otherwise (WL-REQ-165). Agent-facing examples
 show `WL-REQ-<n>` where the rule is a requirement. Stored text keeps
 `WL-RULE-<n>` and `WL-CL-<n>`, which still resolve by number. The kinds are
 explained in the `lode:writing-docs` skill.
