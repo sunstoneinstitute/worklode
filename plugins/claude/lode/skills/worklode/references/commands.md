@@ -75,7 +75,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --project, --repo
 - `lode doc set` — Set one field on a document, e.g. `lode doc set reviewers alice bob rev-spec`
 - `lode doc show` — Show a document: its body, sections, and edges
-  Flags: --version
+  Flags: --editable, --version
 - `lode doc submit` — Submit a document for review (records a review event; the document's status does not change)
 - `lode doc todo` — What is left before a spec is fully implemented
   Flags: --deps

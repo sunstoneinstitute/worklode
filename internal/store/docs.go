@@ -268,11 +268,11 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 // snapshot and before the arrangement is rebuilt, so a row it adds to
 // doc_rules is matched by syncRules without entering the prior version.
 func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVersion int, eventID int64, pin func(*sql.Tx) error) (*model.Doc, error) {
-	var kind, status string
+	var kind, status, stored string
 	var version int
 	err := tx.QueryRow(
-		`SELECT kind, status, version FROM docs WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&kind, &status, &version)
+		`SELECT kind, status, version, body FROM docs WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&kind, &status, &version, &stored)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
@@ -290,6 +290,11 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 	parsed, err := parseDocBody(kind, body)
 	if err != nil {
 		return nil, err
+	}
+	// A spec's editable form fed back unchanged writes nothing (WL-SPEC-77
+	// §19.5).
+	if kind != "plan" && pin == nil && storedBody(kind, body) == stored {
+		return getDocTx(tx, id)
 	}
 	if kind == "plan" {
 		if err := checkPlanTasksMinted(tx, id, parsed.doc); err != nil {
@@ -309,7 +314,7 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 	ts := now.UTC().Truncate(time.Second)
 
 	if _, err := tx.Exec(
-		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`, id, body, ts,
+		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`, id, storedBody(kind, body), ts,
 	); err != nil {
 		return nil, fmt.Errorf("update doc %d body: %w", id, err)
 	}
@@ -708,6 +713,16 @@ type parsedDoc struct {
 var errStoredHeader = fmt.Errorf(
 	"a stored body carries no header: set metadata with `lode doc edit --title/--issued` and edges with `lode doc link` (WL-SPEC-77 §7): %w",
 	ErrInvalidInput)
+
+// storedBody is body as docs.body keeps it: a spec written in the editable
+// form loses its rule= attributes once syncRules has read them (WL-SPEC-77
+// §19.5). A plan is stored as written.
+func storedBody(kind, body string) string {
+	if kind == "plan" {
+		return body
+	}
+	return designdoc.StripRuleRefs(body)
+}
 
 // parseDocBody parses a stored body: parseDocSource, refusing a header.
 func parseDocBody(kind, body string) (parsedDoc, error) {

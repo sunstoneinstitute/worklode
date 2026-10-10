@@ -66,9 +66,24 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 	claimed := map[int64]bool{}
 	match := make([]*ruleRow, len(doc.Sections))
 
+	// Pass 0: a heading naming its rule (the editable form, WL-SPEC-77
+	// §19.5) arranges that rule, from this spec or any other.
+	for i, sec := range doc.Sections {
+		if sec.Anchor == "" || sec.Rule == "" {
+			continue
+		}
+		c, err := namedRule(tx, prior, sec.Rule)
+		if err != nil {
+			return false, err
+		}
+		if claimed[c.id] {
+			return false, fmt.Errorf("%s names %s, which an earlier heading already arranges: %w", sec.Anchor, sec.Rule, ErrInvalidInput)
+		}
+		match[i], claimed[c.id] = c, true
+	}
 	// Pass 1: anchor and heading both match.
 	for i, sec := range doc.Sections {
-		if sec.Anchor == "" {
+		if sec.Anchor == "" || match[i] != nil {
 			continue
 		}
 		if c := byAnchor[sec.Anchor]; c != nil && !claimed[c.id] && c.heading == sec.Title {
@@ -173,6 +188,30 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		}
 	}
 	return minted, nil
+}
+
+// namedRule is the rule a rule= heading names: the prior arrangement's row
+// when the spec already arranges it, else the rule at the version a newly
+// arranged rule shows (ArrangeRule).
+func namedRule(tx *sql.Tx, prior []ruleRow, ref string) (*ruleRow, error) {
+	id, err := ruleByRefString(tx, ref)
+	if err != nil {
+		return nil, err
+	}
+	for i := range prior {
+		if prior[i].id == id {
+			return &prior[i], nil
+		}
+	}
+	c := &ruleRow{id: id}
+	if err := tx.QueryRow(
+		`SELECT v.version, v.heading, v.body FROM rules r
+		   JOIN rule_versions v ON v.rule_id = r.id
+		    AND v.version = CASE WHEN r.status = 'draft' AND r.version > 1 THEN r.version - 1 ELSE r.version END
+		  WHERE r.id = $1`, id).Scan(&c.version, &c.heading, &c.body); err != nil {
+		return nil, fmt.Errorf("read rule %s: %w", ref, err)
+	}
+	return c, nil
 }
 
 // isSpecHeading reports whether section i is a spec heading (WL-SPEC-77
