@@ -1163,14 +1163,20 @@ func (a appendScan) Scan(dest ...any) error {
 
 // ListDocSections returns a document's sections in document order. A plan
 // carries none (WL-SPEC-77 §11), which is an empty result rather than an error.
+// A section's heading is the one its arranged entry shows, and Pending names
+// a newer draft version of its rule (WL-SPEC-77 §19.4).
 func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSection, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT s.anchor, coalesce(s.number,''), s.heading, s.depth, s.position, s.last_revised_in,
-		        s.published, s.patched,
-		        CASE WHEN dr.heading IS NOT NULL THEN 'heading' ELSE coalesce(r.kind, '') END
+		`SELECT s.anchor, coalesce(s.number,''), coalesce(dr.heading, v.heading, s.heading), s.depth, s.position,
+		        s.last_revised_in, s.published, s.patched,
+		        CASE WHEN dr.heading IS NOT NULL THEN 'heading' ELSE coalesce(r.kind, '') END,
+		        coalesce(`+ruleRefSQL("p", "r")+`, ''),
+		        CASE WHEN r.status = 'draft' AND r.version > dr.rule_version THEN r.version ELSE 0 END
 		   FROM doc_sections s
 		   LEFT JOIN doc_rules dr ON dr.doc_id = s.doc_id AND dr.anchor = s.anchor
 		   LEFT JOIN rules r ON r.id = dr.rule_id
+		   LEFT JOIN projects p ON p.id = r.project_id
+		   LEFT JOIN rule_versions v ON v.rule_id = dr.rule_id AND v.version = dr.rule_version
 		  WHERE s.doc_id = $1 ORDER BY s.position`, docID)
 	if err != nil {
 		return nil, fmt.Errorf("list sections of doc %d: %w", docID, err)
@@ -1178,7 +1184,8 @@ func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSe
 	return collectRows(rows, fmt.Sprintf("list sections of doc %d", docID), func(r rowScanner) (model.DocSection, error) {
 		var sec model.DocSection
 		if err := r.Scan(&sec.Anchor, &sec.Number, &sec.Heading, &sec.Depth,
-			&sec.Position, &sec.LastRevisedIn, &sec.Published, &sec.Patched, &sec.Kind); err != nil {
+			&sec.Position, &sec.LastRevisedIn, &sec.Published, &sec.Patched, &sec.Kind,
+			&sec.Rule, &sec.Pending); err != nil {
 			return model.DocSection{}, err
 		}
 		return sec, nil
