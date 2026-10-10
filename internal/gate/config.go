@@ -21,11 +21,14 @@ const DefaultTrailer = "Spec:"
 
 // Config is the [gate] table of .worklode/config.toml (WL-REQ-6). Paths are
 // globstar patterns, Regex is for what a glob cannot say, Trailer is the key
-// the PR body or commit message must carry.
+// the PR body or commit message must carry. Exempt names the paths whose
+// added lines the citation test of WL-REQ-1791 skips: code that handles
+// anchors, and its tests.
 type Config struct {
 	Paths   []string `toml:"paths"`
 	Regex   []string `toml:"regex"`
 	Trailer string   `toml:"trailer"`
+	Exempt  []string `toml:"exempt"`
 }
 
 // Load reads the [gate] table from repoRoot/.worklode/config.toml. ok is

@@ -274,14 +274,15 @@ func expireLease(t *testing.T, st *store.Store, taskID string) {
 }
 
 // offerScanContext runs session-start from dir and returns the
-// additionalContext it emitted ("" when it emitted nothing).
+// additionalContext it emitted past the citation instruction every checkout
+// gets ("" when there is nothing more).
 func offerScanContext(t *testing.T, dir string) string {
 	t.Helper()
 	stdout, _ := runSessionStart(t, dir, "s-scan")
 	if stdout == "" {
 		return ""
 	}
-	return additionalContext(t, stdout)
+	return strings.TrimPrefix(strings.TrimPrefix(additionalContext(t, stdout), citeRulesContext), "\n\n")
 }
 
 // runHookOutput drives one hook invocation and returns what it wrote, failing

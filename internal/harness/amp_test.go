@@ -78,7 +78,7 @@ func TestAmpEventsAndCeiling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if want := []Event{SessionEnd, WorktreeEnter}; !reflect.DeepEqual(hi.Unbound, want) {
+	if want := []Event{SubagentStart, SessionEnd, WorktreeEnter}; !reflect.DeepEqual(hi.Unbound, want) {
 		t.Fatalf("unbound = %v, want %v", hi.Unbound, want)
 	}
 	if !strings.Contains(strings.Join(hi.Notes, "\n"), "session-end") {

@@ -20,13 +20,14 @@ type Event string
 
 const (
 	SessionStart  Event = "session-start"
+	SubagentStart Event = "subagent-start"
 	SessionEnd    Event = "session-end"
 	Heartbeat     Event = "heartbeat"
 	WorktreeEnter Event = "worktree-enter"
 )
 
 // AllEvents is the fixed order reports use.
-var AllEvents = []Event{SessionStart, SessionEnd, Heartbeat, WorktreeEnter}
+var AllEvents = []Event{SessionStart, SubagentStart, SessionEnd, Heartbeat, WorktreeEnter}
 
 // What an install or uninstall did to one location. A status line is a
 // personal choice, so both directions refuse to touch one that is not ours;

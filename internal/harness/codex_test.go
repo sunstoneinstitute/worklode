@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -84,8 +85,8 @@ func TestCodexInstallUninstallRoundTrip(t *testing.T) {
 	if want := filepath.Join(home, "hooks.json"); hi.Path != want {
 		t.Fatalf("path = %s, want %s", hi.Path, want)
 	}
-	if len(hi.Unbound) != 1 || hi.Unbound[0] != WorktreeEnter {
-		t.Fatalf("unbound = %v; want [worktree-enter]", hi.Unbound)
+	if !reflect.DeepEqual(hi.Unbound, []Event{SubagentStart, WorktreeEnter}) {
+		t.Fatalf("unbound = %v; want [subagent-start worktree-enter]", hi.Unbound)
 	}
 	if len(hi.Bound) != 4 {
 		t.Fatalf("bound = %v; want the four codex events", hi.Bound)

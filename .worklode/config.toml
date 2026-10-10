@@ -27,3 +27,10 @@ regex = [
 # A section value (WL-SPEC-72 sec-4) is refused; `lode show <doc>#sec-N`
 # names the rule at that section.
 trailer = "Spec:"
+# Added lines here are skipped by the rule-ref citation test (WL-REQ-1791):
+# code that parses or renders section anchors, and its tests and fixtures.
+exempt = [
+  "internal/designdoc/**",
+  "internal/gate/**",
+  "**/testdata/**",
+]

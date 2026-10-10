@@ -13,4 +13,8 @@ claiming a task:
 
 The claimed task's brief carries the work itself; this block only says how to
 reach it.
+
+Cite a rule by its ref (`WL-REQ-<n>`, `WL-RULE-<n>`) in code comments, commit
+messages, pull request bodies and docs, never by a spec section number, which
+changes when the spec is rearranged.
 <!-- worklode:end -->

@@ -33,9 +33,10 @@ const (
 	agentsBlockEnd   = "<!-- worklode:end -->"
 )
 
-// agentsBlock is the two facts an agent needs before a brief exists (WL-SPEC-80
-// §5.3): that this repo is Worklode-tracked, and how work is entered.
-// Deliberately short — the task brief, not this file, carries task context.
+// agentsBlock is what an agent needs before a brief exists (WL-REQ-277): that
+// this repo is Worklode-tracked, how work is entered, and that rules are cited
+// by ref (WL-REQ-1791). Deliberately short — the task brief, not this file,
+// carries task context.
 const agentsBlock = agentsBlockBegin + `
 ## Worklode
 
@@ -51,6 +52,10 @@ claiming a task:
 
 The claimed task's brief carries the work itself; this block only says how to
 reach it.
+
+Cite a rule by its ref (` + "`WL-REQ-<n>`, `WL-RULE-<n>`" + `) in code comments, commit
+messages, pull request bodies and docs, never by a spec section number, which
+changes when the spec is rearranged.
 ` + agentsBlockEnd + "\n"
 
 // instructionsResult reports shared content and root pointer changes.

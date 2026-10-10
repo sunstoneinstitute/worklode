@@ -9,8 +9,9 @@
 //     does nothing.
 //   - Worklode NEVER fails the event. Every backbone call runs under a short
 //     timeout and any error (no config, network, 4xx/5xx) is downgraded to a
-//     stderr warning; the hook still exits 0. The only non-zero exit is the
-//     child's own exit code when daisy-chaining (see Run).
+//     stderr warning; the hook still exits 0. The non-zero exits are the
+//     child's own exit code when daisy-chaining (see Run) and the commit-msg
+//     citation check, which refuses by design (WL-REQ-1722).
 package hookrun
 
 import (
@@ -229,10 +230,11 @@ type Event struct {
 // handleOTelHeaders).
 var events = []Event{
 	{"session-start", "Renew the lease, open the agent session, inject the brief."},
+	{"subagent-start", "Inject the instruction to cite rules by ref into a subagent."},
 	{"heartbeat", "Report the session as still alive (at most once a minute)."},
 	{"session-end", "Close the agent session on this worktree's lease."},
 	{"pre-commit", "Push the lease TTL out on commit; never blocks the commit."},
-	{"commit-msg", "Stamp the Worklode-Task trailer into a commit made in a task worktree."},
+	{"commit-msg", "Refuse a message citing a spec section; stamp the Worklode-Task trailer in a task worktree."},
 	{"post-merge", "Report a merge that landed on the default branch in this clone."},
 	{"post-commit", "Same, for the squash and conflict-resolution merges post-merge never sees."},
 	{"worktree-create", "Auto-resume the task's lease when its worktree is created."},
@@ -259,7 +261,8 @@ func EventNames() []string {
 // (guarded, never-failing) action for the event, and — regardless of whether
 // that action did anything — runs the --next downstream command if present,
 // replaying the original payload on its stdin and propagating its exit code.
-// Without --next it always returns 0.
+// Without --next it returns 0, except when commit-msg refuses a message that
+// cites a spec section (WL-REQ-1791): then it returns 1 and runs no --next.
 //
 // otel-headers is answered before any of that, without reading opts.Stdin at
 // all: it is a credential helper Claude Code invokes for its own purposes,
@@ -277,6 +280,9 @@ func Run(ctx context.Context, opts Options) int {
 	payload := normalizePayload(opts.Harness, raw)
 	dir := resolveDir(payload)
 	l := layoutFor(opts, dir)
+	if opts.Event == "commit-msg" && refuseSectionCitations(ctx, opts, dir) {
+		return 1
+	}
 	dispatch(ctx, opts, payload, dir, l)
 
 	if len(opts.Next) > 0 {
@@ -310,6 +316,8 @@ func dispatch(ctx context.Context, opts Options, p Payload, dir string, l worktr
 	switch opts.Event {
 	case "session-start":
 		handleSessionStart(ctx, opts, p, dir, l)
+	case "subagent-start":
+		emitContext(opts, "SubagentStart", citeRulesContext)
 	case "session-end":
 		handleSessionEnd(ctx, opts, p, dir, l)
 	case "pre-commit":
@@ -494,7 +502,9 @@ func purgeSecrets(opts Options, taskID string) {
 // --- event handlers ---------------------------------------------------------
 
 func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
-	hint := refLinkHint(dir)
+	// The citation instruction goes into every checkout's context, whatever
+	// else fails (WL-REQ-1791).
+	hint := joinContext(citeRulesContext, refLinkHint(dir))
 	root, taskID, ok := leasedWorktree(l, dir)
 	if !ok {
 		if root != "" {
@@ -506,11 +516,13 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	}
 	c, identity, ok := clientAndIdentity(opts, root)
 	if !ok {
+		emitSessionContext(opts, hint)
 		return
 	}
 	brief, err := fetchBrief(ctx, c, taskID)
 	if err != nil {
 		warn(opts, "fetch brief for %s: %v", taskID, err)
+		emitSessionContext(opts, hint)
 		return
 	}
 
@@ -584,6 +596,12 @@ func refLinkHint(dir string) string {
 // looks like JSON but fails its schema, so the envelope must stay exactly
 // these two fields — see WL-REQ-278 before adding a third.
 func emitSessionContext(opts Options, text string) {
+	emitContext(opts, "SessionStart", text)
+}
+
+// emitContext is emitSessionContext for any event whose output carries
+// additionalContext: event is the hookEventName the envelope names.
+func emitContext(opts Options, event, text string) {
 	if text == "" {
 		return
 	}
@@ -593,7 +611,7 @@ func emitSessionContext(opts Options, text string) {
 	case "copilot":
 		// No verified consumer; see above.
 	default:
-		emitAdditionalContext(opts.Stdout, text)
+		emitAdditionalContext(opts.Stdout, event, text)
 	}
 }
 
@@ -1042,12 +1060,13 @@ func pathFromToolInput(raw json.RawMessage) string {
 
 // --- Claude Code output -----------------------------------------------------
 
-// emitAdditionalContext writes a SessionStart additionalContext object to
-// stdout — the documented way a session-start hook injects context.
-func emitAdditionalContext(w io.Writer, text string) {
+// emitAdditionalContext writes an additionalContext object for event to
+// stdout — the documented way a session-start or subagent-start hook injects
+// context.
+func emitAdditionalContext(w io.Writer, event, text string) {
 	out := map[string]any{
 		"hookSpecificOutput": map[string]any{
-			"hookEventName":     "SessionStart",
+			"hookEventName":     event,
 			"additionalContext": text,
 		},
 	}
