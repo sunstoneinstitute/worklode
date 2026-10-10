@@ -288,3 +288,35 @@ func TestArrangeRuleShowsAcceptedVersion(t *testing.T) {
 		t.Errorf("sections = %+v, want sec-2 pending v2 of P1-REQ-3", secs)
 	}
 }
+
+// TestAcceptRuleOwnedByArrangingSpec: a rule minted from a spec section has
+// no owner of its own, so the owner of the lowest-id spec arranging it
+// accepts it (WL-SPEC-77 §19.2). The owner of a later arranging spec is
+// refused, and an unarranged rule with no owner is refused naming the fix.
+func TestAcceptRuleOwnedByArrangingSpec(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+	b := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "b", CreatedBy: "ada",
+		Body: "---\nstatus: draft\n---\n# B\n\n## 1. Own {#sec-1}\n\nX.\n"})
+	if _, err := arrangeRule(t, s, b.ID, model.ArrangeRuleInput{Rule: "P1-REQ-3"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AcceptRule(ctx, "P1", 3, false, "ada"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("later spec's owner accept: %v, want ErrForbidden", err)
+	}
+	if _, err := s.AcceptRule(ctx, "P1", 3, false, "stig"); err != nil {
+		t.Fatalf("first spec's owner accept: %v", err)
+	}
+
+	r, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "Loose", Body: "B."}, "stig")
+	if err != nil {
+		t.Fatal(err)
+	}
+	num := r.Number
+	setRuleOwner(t, s, "P1", num, "")
+	_, err = s.AcceptRule(ctx, "P1", num, false, "stig")
+	if !errors.Is(err, ErrForbidden) || !strings.Contains(err.Error(), "lode rule set owner") {
+		t.Errorf("unarranged ownerless accept: %v, want ErrForbidden naming lode rule set owner", err)
+	}
+}
