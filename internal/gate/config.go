@@ -1,5 +1,4 @@
-// Package gate is the design authority gate (11-design-authority-gate.md §3,
-// §4; 12-spec-refactoring-design-tree.md S4, S29, S30): which changed paths
+// Package gate is the design authority gate (WL-REQ-6, WL-REQ-7): which changed paths
 // ask for a Spec: trailer, and what a trailer may say. It is pure so the CLI
 // (in CI, offline) and the server's reconciler parse the same thing.
 package gate
@@ -20,7 +19,7 @@ import (
 // table names none.
 const DefaultTrailer = "Spec:"
 
-// Config is the [gate] table of .worklode/config.toml (11 §3). Paths are
+// Config is the [gate] table of .worklode/config.toml (WL-REQ-6). Paths are
 // globstar patterns, Regex is for what a glob cannot say, Trailer is the key
 // the PR body or commit message must carry.
 type Config struct {
@@ -30,7 +29,7 @@ type Config struct {
 }
 
 // Load reads the [gate] table from repoRoot/.worklode/config.toml. ok is
-// false when the file or the table is absent: the gate is off (11 §3,
+// false when the file or the table is absent: the gate is off (WL-REQ-6,
 // "Without a [gate] table nothing runs").
 func Load(repoRoot string) (Config, bool, error) {
 	data, err := os.ReadFile(filepath.Join(repoRoot, ".worklode", "config.toml"))
