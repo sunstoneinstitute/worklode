@@ -13,7 +13,7 @@ import (
 
 // blockerRelation is "(blocked, blocker)" over open blockers: the from_task of
 // a 'blocks' edge, and the open tasks of a plan ordered before the blocked
-// task's plan (WL-SPEC-77 §11). It is openBlockers' body with the blocked task left
+// task's plan (WL-REQ-172). It is openBlockers' body with the blocked task left
 // free instead of bound to one id, so the two surfaces cannot disagree about
 // what blocks what — including on what "open" means, which is taskClosed in
 // both.

@@ -16,9 +16,9 @@ import (
 
 // ReviseDoc opens a candidate revision against an accepted spec or ADR: a copy
 // of the current body to edit while the accepted version stays authoritative
-// (WL-SPEC-77 §9). One candidate at a time.
+// (WL-REQ-170). One candidate at a time.
 //
-// Plans are edited in place with UpdateDocBody (WL-SPEC-77 §11) and drafts are edited
+// Plans are edited in place with UpdateDocBody (WL-REQ-172) and drafts are edited
 // in place because there is nothing to revise against; both are
 // ErrInvalidInput.
 func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) error {
@@ -41,7 +41,7 @@ func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 }
 
 // openRevision inserts document id's candidate revision, starting from body
-// and the live edge set (WL-SPEC-77 §3). ErrRevisionExists when one is open.
+// and the live edge set (WL-REQ-164). ErrRevisionExists when one is open.
 func openRevision(tx *sql.Tx, now time.Time, id int64, body, actorID string) error {
 	if _, err := tx.Exec(
 		`INSERT INTO doc_revisions (doc_id, body, created_by, created_at) VALUES ($1, $2, $3, $4)`,
@@ -52,7 +52,7 @@ func openRevision(tx *sql.Tx, now time.Time, id int64, body, actorID string) err
 		}
 		return fmt.Errorf("open revision of doc %d: %w", id, err)
 	}
-	// The candidate starts from the live edge set (WL-SPEC-77 §3).
+	// The candidate starts from the live edge set (WL-REQ-164).
 	if _, err := tx.Exec(
 		`INSERT INTO doc_revision_edges
 		   (doc_id, from_anchor, type, to_doc, to_anchor, to_external, to_rule, owner_doc, owner_external)
@@ -60,7 +60,7 @@ func openRevision(tx *sql.Tx, now time.Time, id int64, body, actorID string) err
 		   FROM doc_edges WHERE from_doc = $1`, id); err != nil {
 		return fmt.Errorf("copy edges of doc %d into its revision: %w", id, err)
 	}
-	// And from the live arrangement (WL-SPEC-77 §19.3).
+	// And from the live arrangement (WL-REQ-1297).
 	if _, err := tx.Exec(
 		`INSERT INTO doc_revision_rules (doc_id, position, rule_id, rule_version, heading, depth, anchor)
 		 SELECT doc_id, position, rule_id, rule_version, heading, depth, anchor
@@ -106,7 +106,7 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 }
 
 // DiscardRevision withdraws a document's open candidate revision without
-// landing it — the close-without-merging half of the pull request WL-SPEC-77 §9
+// landing it — the close-without-merging half of the pull request WL-REQ-170
 // says a revision structurally is. Deleting the row frees the
 // one-candidate-per-document slot, so the next ReviseDoc succeeds immediately
 // instead of hitting ErrRevisionExists. ErrNotFound if no revision is open.
@@ -163,7 +163,7 @@ func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID 
 }
 
 // AcceptRevision lands a document's open candidate revision: it runs the
-// WL-SPEC-77 §6 constraint check against the accepted version and, when clean, swaps
+// WL-REQ-167 constraint check against the accepted version and, when clean, swaps
 // the body, bumps the version, rebuilds sections, lands the candidate's own
 // edge set (title and issued are columns, untouched by the body), stamps
 // last_revised_in on exactly the changed anchors, publishes every anchor the
@@ -171,7 +171,7 @@ func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID 
 // (supersedeRetiredDocs), and consumes the candidate — one transaction, owner-gated like AcceptDoc.
 //
 // The append-only rule protects the anchors the accepted version *published*
-// (WL-SPEC-77 §9), so a never-published row that disappears is legal; renumbering
+// (WL-REQ-170), so a never-published row that disappears is legal; renumbering
 // and excess depth are violations regardless.
 func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
 	d, err := lockDoc(tx, id)
@@ -213,7 +213,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	// An anchor whose rule the candidate unarranged leaves on purpose
-	// (WL-SPEC-77 §19.3); the freeze still holds every other anchor.
+	// (WL-REQ-1297); the freeze still holds every other anchor.
 	dropped, err := unarrangedAnchors(tx, id)
 	if err != nil {
 		return nil, err
@@ -226,7 +226,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	}
 
 	ts := now.UTC().Truncate(time.Second)
-	// Snapshot the version this accept replaces (WL-SPEC-77 §3) and move to the
+	// Snapshot the version this accept replaces (WL-REQ-164) and move to the
 	// next one, before any other write.
 	version, err := bumpDocVersion(tx, id)
 	if err != nil {
@@ -258,7 +258,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		}
 	}
 
-	// WL-SPEC-77 §6 rule 5: last_revised_in moves on exactly the sections whose
+	// WL-REQ-167 rule 5: last_revised_in moves on exactly the sections whose
 	// content changed. Touching it elsewhere invalidates valid claims.
 	if len(diff.Changed) > 0 {
 		if _, err := tx.Exec(
@@ -270,8 +270,8 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		}
 	}
 
-	// WL-SPEC-77 §9: a landed revision is a reviewed replacement for the text the
-	// WL-SPEC-77 §10 marks were on, so nothing here is still "approved text, modified
+	// WL-REQ-170: a landed revision is a reviewed replacement for the text the
+	// WL-REQ-171 marks were on, so nothing here is still "approved text, modified
 	// since". The section rebuild carries the flag forward deliberately — one
 	// patch must not clear another's mark — so this is where it ends.
 	if err := ClearPatchedSections(tx, id, version); err != nil {
@@ -303,7 +303,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 
 // dropOmittedRevisionRules unarranges from document id's candidate every rule
 // the candidate text leaves out: neither a heading at its anchor nor a rule=
-// heading naming it (WL-SPEC-77 §19.5). The candidate body keeps its rule=
+// heading naming it (WL-REQ-1299). The candidate body keeps its rule=
 // attributes until it lands, where syncRules reads them. A rule= heading
 // naming a withdrawn rule the candidate does not arrange yet is refused.
 func dropOmittedRevisionRules(tx *sql.Tx, id int64, doc *designdoc.Document) error {
@@ -397,10 +397,10 @@ func landRevisionEdges(tx *sql.Tx, id int64) error {
 	return nil
 }
 
-// checkAnchorFreeze applies WL-SPEC-77 §6's anchor rules to a diff between a
+// checkAnchorFreeze applies WL-REQ-167's anchor rules to a diff between a
 // document's accepted text and the text about to replace it: append-only
 // anchors, no renumbering, no anchor past the depth limit. Both publication
-// paths run it — an accepted revision and an WL-SPEC-77 §10 in-place patch — since an
+// paths run it — an accepted revision and an WL-REQ-171 in-place patch — since an
 // in-place amendment relaxes nothing about the freeze. what names the act in
 // the refusal message (e.g. "revision of doc 25 cannot be accepted").
 //
@@ -410,7 +410,7 @@ func landRevisionEdges(tx *sql.Tx, id int64) error {
 // anchors in place, so the caller's later reads see the same set the refusal
 // was decided on.
 func checkAnchorFreeze(what string, diff *designdoc.SectionDiff, prior map[string]priorSection) error {
-	// Lowering the limit is one-way-safe by construction (WL-SPEC-77 §4): the check
+	// Lowering the limit is one-way-safe by construction (WL-REQ-165): the check
 	// re-runs at every publication, so a too-deep anchor the accepted version
 	// already published is refused here. It gets its own wording — the fix is
 	// to raise the limit back, not to restructure the document.
@@ -466,7 +466,7 @@ func (s *Store) GetDocRevision(ctx context.Context, id int64) (*model.DocRevisio
 // owner or the revision's author. Wider than checkDocOwner on purpose:
 // accepting is the maintainer's act, but closing a proposal without merging it
 // is also the proposer's, which is what lets ReviseDoc stay open to any
-// doc.write holder (WL-SPEC-77 §9's pull-request analogy).
+// doc.write holder (WL-REQ-170's pull-request analogy).
 //
 // An empty actorID matches nobody, including a revision or document whose own
 // column is empty.

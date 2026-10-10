@@ -301,7 +301,7 @@ func TestListProjectWorkFactsReleasedLeaseAbsent(t *testing.T) {
 }
 
 // TestListProjectWorkFactsPlanBlocked: a task held by a plan-to-plan ordering
-// edge (WL-SPEC-77 §11) is blocked on the cockpit too, and names the blocking plan's
+// edge (WL-REQ-172) is blocked on the cockpit too, and names the blocking plan's
 // open tasks — the ready set, Claim and the board must not disagree about what
 // is pickable.
 func TestListProjectWorkFactsPlanBlocked(t *testing.T) {

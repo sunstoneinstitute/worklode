@@ -1,4 +1,4 @@
--- Coverage levels are retired (WL-SPEC-77 §4, WL-SPEC-78 §1.3, §4.1): a
+-- Coverage levels are retired (WL-REQ-165, WL-REQ-187, WL-REQ-203): a
 -- covers edge means the plan builds the whole rule. The level data is read
 -- here before its columns go.
 --
@@ -36,7 +36,7 @@ UPDATE doc_edge_versions
 
 -- The WL-928 classification, one row per rule; rule_no is NULL for an entry
 -- naming no rule. The last row is not in the TSV: WL-PLAN-140's
--- WL-SPEC-32 §3 entry was listed as N3 there and is N2 (WL-928 F6).
+-- WL-REQ-337 entry was listed as N3 there and is N2 (WL-928 F6).
 CREATE TEMP TABLE coverage_class (plan_ref text, target text, rule_no bigint, class text) ON COMMIT DROP;
 INSERT INTO coverage_class VALUES
     ('DP-PLAN-1', 'DP-SPEC-1#sec-0', NULL, 'N1'),
@@ -404,7 +404,7 @@ ALTER TABLE doc_edge_versions DROP COLUMN coverage, DROP COLUMN completed_with;
 
 -- covered_rules is every rule a covers edge reaches: its to_rule and,
 -- transitively, each rule that supersedes a reached rule, so a successor
--- counts as covered when a predecessor was (WL-SPEC-77 §4). supersedes runs
+-- counts as covered when a predecessor was (WL-REQ-165). supersedes runs
 -- new -> old (from_rule is the successor).
 CREATE VIEW covered_rules AS
 WITH RECURSIVE walk (edge_id, plan_id, rule_id) AS (

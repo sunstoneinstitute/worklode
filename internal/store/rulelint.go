@@ -12,7 +12,7 @@ import (
 )
 
 // positionalRefRE matches a reference by position, which a rule may not make
-// (WL-SPEC-77 §4c test 2).
+// (WL-REQ-1367 test 2).
 var positionalRefRE = regexp.MustCompile(`§|(?i)\bsection\s+\d+|\babove\b|\bbelow\b`)
 
 // lintRule is one rule as the lint reads it.
@@ -186,7 +186,7 @@ func (s *Store) ruleLint(ctx context.Context, projectID string) (*model.RuleLint
 }
 
 // convertedHeadings appends one converted-heading finding per rule the
-// WL-SPEC-77 §19.7 migration turned into a spec heading in projectID, so an
+// WL-REQ-1301 migration turned into a spec heading in projectID, so an
 // owner can check where its covers edges and governedBy links went.
 func (s *Store) convertedHeadings(ctx context.Context, projectID string, out *model.RuleLint) error {
 	rows, err := s.db.QueryContext(ctx,

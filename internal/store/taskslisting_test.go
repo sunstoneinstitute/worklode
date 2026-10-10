@@ -90,7 +90,7 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 }
 
 // TestListTasksOrderMatchesModelCompareTaskIDs pins taskListOrder's SQL
-// ORDER BY to model.CompareTaskIDs (WL-SPEC-81 §3 S3): a project key matches
+// ORDER BY to model.CompareTaskIDs (WL-REQ-307 S3): a project key matches
 // ^[A-Z][A-Z0-9]{1,9}$ and never contains '-', so split_part(id,'-',1) is
 // always the key and CAST(split_part(id,'-',2) AS INTEGER) the numeric
 // suffix, making the two orderings equivalent by construction. That argument
@@ -125,7 +125,7 @@ func TestListTasksOrderMatchesModelCompareTaskIDs(t *testing.T) {
 
 // TestListTasksFilterByPlanDoc: TaskFilter.PlanDoc narrows to exactly the
 // tasks minted from one plan document — the query that is the plan's task
-// set (WL-SPEC-77 §11). A task with no plan_doc is unaffected either way.
+// set (WL-REQ-172). A task with no plan_doc is unaffected either way.
 func TestListTasksFilterByPlanDoc(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -143,7 +143,7 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 
 	// PlanTaskKey travels with PlanDoc: a CHECK constraint holds the pair
 	// together, because a minted task must say which declaration it covers
-	// (WL-SPEC-77 §11).
+	// (WL-REQ-172).
 	inA1 := defaultTaskInput()
 	inA1.PlanDoc, inA1.PlanTaskKey = planA, "A first"
 	a1 := createTask(t, s, taskTestNow, inA1)

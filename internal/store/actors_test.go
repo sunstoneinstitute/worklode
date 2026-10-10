@@ -342,7 +342,7 @@ func TestUpsertHumanActor(t *testing.T) {
 }
 
 // TestUpsertHumanActorSyncsGitHubExpectation asserts github_username is
-// re-synced on every login exactly like the admin flag (WL-SPEC-74 §4.3): the
+// re-synced on every login exactly like the admin flag (WL-REQ-53): the
 // first upsert with a github_username persists it, and a later login without
 // the attribute clears it back to NULL (round-tripped as "").
 func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {

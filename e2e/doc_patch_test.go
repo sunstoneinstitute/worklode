@@ -1,6 +1,6 @@
 //go:build e2e
 
-// doc_patch_test.go drives 025 §7.3's reviewer gate and §8.4's in-place
+// doc_patch_test.go drives WL-REQ-170's reviewer gate and WL-REQ-171's in-place
 // amendment path end to end over public surfaces only: the two lanes a
 // document's reviewer set opens, the accept those lanes refuse until both
 // approve, a non-substantive patch and the note that records it, a patch a
@@ -404,7 +404,7 @@ func TestDocPatch(t *testing.T) {
 	author := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: authorTok.Token})
 
 	// 1. A draft spec with both reviewers assigned. Submitting it is the
-	// observation that it is ready to be read (025 §7); opening the lanes is
+	// observation that it is ready to be read (WL-REQ-170); opening the lanes is
 	// the separate request-approval act, since the reviewer set is durable
 	// and the lanes are per version.
 	doc, _, err := author.CreateDoc(ctx, model.CreateDocInput{

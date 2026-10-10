@@ -8,7 +8,7 @@ import (
 
 // The per-actor budget for POST /otlp/v1/logs (WL-863): 120 batches a
 // minute, bursting 30. The only other bound on task_activity growth is the
-// seven-day purge (WL-SPEC-80 §8.6), so a looping exporter would otherwise grow
+// seven-day purge (WL-REQ-1234), so a looping exporter would otherwise grow
 // the table and burn decode CPU unchecked. A Claude Code session exports on
 // a 5s schedule, so the sustained rate carries roughly ten concurrent
 // sessions per actor and the burst absorbs a reconnect.

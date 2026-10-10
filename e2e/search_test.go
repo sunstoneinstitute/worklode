@@ -30,7 +30,7 @@ import (
 
 // --- the stub embedding provider ----------------------------------------
 //
-// Spec 040 §2.3's default deployment is an OpenAI-compatible sidecar, so the
+// WL-REQ-859's default deployment is an OpenAI-compatible sidecar, so the
 // test stands one up rather than injecting a Go provider: the server reaches
 // it over HTTP through internal/embed exactly as it reaches a real one. It is
 // environment, like the Postgres this suite already needs — not a store write.
@@ -107,7 +107,7 @@ func stubEmbeddings(t *testing.T) *httptest.Server {
 
 // --- the corpus -----------------------------------------------------------
 
-// searchSpecBody is the fixture spec 040 §0 argues from, written out as a real
+// searchSpecBody is the fixture WL-REQ-854 argues from, written out as a real
 // document. sec-1 is what a semantic query has to find; sec-2 and sec-3 are
 // the ranking inversion: sec-2 is prose *about* parents and children and wins
 // the dense arm on the query `child_of`, while sec-3 is the section that

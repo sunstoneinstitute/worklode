@@ -12,11 +12,11 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// glossarySlug is the slug of a project's glossary spec (WL-SPEC-77 §4d).
+// glossarySlug is the slug of a project's glossary spec (WL-REQ-1368).
 const glossarySlug = "glossary"
 
 // WithGlossaryProject names the project whose glossary spec is the
-// instance glossary (WL-SPEC-77 §4d). Without it the instance has none.
+// instance glossary (WL-REQ-1368). Without it the instance has none.
 // serverapp passes it from --glossary-project / LODE_GLOSSARY_PROJECT.
 func WithGlossaryProject(projectID string) Option {
 	return func(s *Store) { s.glossaryProject = projectID }
@@ -77,7 +77,7 @@ func (s *Store) instanceTerms(ctx context.Context) ([]model.Term, error) {
 	return out, nil
 }
 
-// ResolveTerm resolves a term slug inside a project (WL-SPEC-77 §4d): the
+// ResolveTerm resolves a term slug inside a project (WL-REQ-1368): the
 // project's own definition first, then the instance glossary's. The term
 // carries the definition's full detail and every needs edge into it.
 // ErrNotFound when neither defines it.
@@ -129,7 +129,7 @@ func (s *Store) findTerm(ctx context.Context, projectID, slug string) (*model.Te
 }
 
 // checkTermSlug refuses a live definition whose term slug is empty or is
-// already another live definition's in the same project (WL-SPEC-77 §4d).
+// already another live definition's in the same project (WL-REQ-1368).
 // Any other rule passes. Called after a write that makes a rule a
 // definition or changes a heading.
 func checkTermSlug(tx *sql.Tx, ruleID int64) error {

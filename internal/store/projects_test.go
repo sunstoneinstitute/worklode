@@ -531,7 +531,7 @@ func TestCreateProjectDuplicateID(t *testing.T) {
 	}
 }
 
-// TestProjectMetadataRoundTrip covers WL-SPEC-75 §13.1's labels/horizon columns
+// TestProjectMetadataRoundTrip covers WL-REQ-119's labels/horizon columns
 // (migration 0074): SetProjectMetadata writes inside a caller-owned tx, and
 // GetProject reads back what was committed.
 func TestProjectMetadataRoundTrip(t *testing.T) {

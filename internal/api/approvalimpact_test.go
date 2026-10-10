@@ -16,7 +16,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// These tests cover the impact review lifecycle's web half (WL-SPEC-75 §13.6): the
+// These tests cover the impact review lifecycle's web half (WL-REQ-124): the
 // dependent owner's note on POST /approvals/{id}/note, and the prior
 // approver's decision through the existing decide route.
 
@@ -160,7 +160,7 @@ func TestImpactNoteRefusesWithoutSession(t *testing.T) {
 }
 
 // TestImpactDecideByPriorApprover: the impact question goes to whoever
-// approved the dependent (WL-SPEC-75 §13.6) and travels the ordinary decide route.
+// approved the dependent (WL-REQ-124) and travels the ordinary decide route.
 // Anyone else is refused, which is what keeps the first half from passing
 // for the wrong reason.
 func TestImpactDecideByPriorApprover(t *testing.T) {

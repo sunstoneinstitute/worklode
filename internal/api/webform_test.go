@@ -49,7 +49,7 @@ func kindSelect(t *testing.T, main string) string {
 
 // TestNewTaskFormRenders checks the form offers every field the task needs,
 // and that every kind it offers is one the API would accept — the form and
-// validKinds cannot drift apart (WL-SPEC-77 §12).
+// validKinds cannot drift apart (WL-REQ-176).
 func TestNewTaskFormRenders(t *testing.T) {
 	t.Parallel()
 	st, h, _ := newTestServer(t)
@@ -482,7 +482,7 @@ func TestCreateDeliverableFromFormRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestDeliverableFormOffersNoStateControl pins WL-SPEC-75 §13.3: the form asks
+// TestDeliverableFormOffersNoStateControl pins WL-RULE-121: the form asks
 // for a declaration, never for a state a person could assert.
 func TestDeliverableFormOffersNoStateControl(t *testing.T) {
 	t.Parallel()

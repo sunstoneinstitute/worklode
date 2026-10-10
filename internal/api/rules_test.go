@@ -34,7 +34,7 @@ func TestPatchRuleKindCovered(t *testing.T) {
 // TestGetRule reads a rule over the API by its ref, and answers 400 for
 // a malformed ref and 404 for one that doesn't resolve. WL-REQ-1, WL-RULE-1
 // and WL-CL-1 name the same rule, and the ref printed carries the infix of
-// the rule's current kind, which PATCH sets (WL-SPEC-77 §4).
+// the rule's current kind, which PATCH sets (WL-REQ-165).
 func TestGetRule(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -73,7 +73,7 @@ func TestGetRule(t *testing.T) {
 // TestRuleEditAndVersionsAPI edits a rule through the API on a draft
 // document, again after acceptance (a draft version the spec does not show
 // until its owner accepts it), then reads its version history back
-// (WL-SPEC-77 §19.4).
+// (WL-REQ-1298).
 func TestRuleEditAndVersionsAPI(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -219,7 +219,7 @@ func TestListRules(t *testing.T) {
 }
 
 // TestRuleClosureAPI: GET /rules/{id}/closure returns the rule and what it
-// needs, 400 for a malformed ref and 404 for an unknown one (WL-SPEC-77 §4c).
+// needs, 400 for a malformed ref and 404 for an unknown one (WL-REQ-1367).
 func TestRuleClosureAPI(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -244,7 +244,7 @@ func TestRuleClosureAPI(t *testing.T) {
 
 // TestAddAndAcceptRule: POST /api/v1/rules creates an unarranged draft rule
 // owned by the caller; POST .../accept accepts it once, and an unknown kind
-// is 422 (WL-SPEC-77 §19.2).
+// is 422 (WL-REQ-1296).
 func TestAddAndAcceptRule(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -269,7 +269,7 @@ func TestAddAndAcceptRule(t *testing.T) {
 }
 
 // TestRuleLintAPI: GET /projects/{id}/rules/lint reports the project's rules
-// and 404s an unknown project (WL-SPEC-77 §4c).
+// and 404s an unknown project (WL-REQ-1367).
 func TestRuleLintAPI(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -291,7 +291,7 @@ func TestRuleLintAPI(t *testing.T) {
 
 // TestArrangeAndUnarrangeRule: POST /api/v1/docs/{id}/rules arranges a rule
 // from another spec, DELETE .../rules/{rule} removes it, and the rule reads
-// back arranged in one spec again (WL-SPEC-77 §19.3).
+// back arranged in one spec again (WL-REQ-1297).
 func TestArrangeAndUnarrangeRule(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)

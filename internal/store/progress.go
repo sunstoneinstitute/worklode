@@ -38,7 +38,7 @@ var deliveredRankStates = func() string {
 // dropped where it cannot be resolved to a section (covers).
 //
 // specs narrows the read to those spec ids and the plans that cover at
-// least one of them — the row/summary fragments (WL-SPEC-85 §6) ask for
+// least one of them — the row/summary fragments (WL-REQ-1339) ask for
 // one spec at a time rather than the whole project. Every downstream read
 // (sections, planning tasks, edges, tasks) then scopes itself to the docs
 // progressDocs actually returned, so the narrowing holds all the way down
@@ -94,7 +94,7 @@ func (s *Store) ProjectProgress(ctx context.Context, projectID string, specs []i
 // progressDocs reads the project's live specs and plans, rendering each ref
 // through model.Doc.FormatRef — the same formatter cli.DocRef uses. When
 // specs is non-empty, only those spec ids and the plans that cover at least
-// one of them are read (WL-SPEC-85 §6's fragment case); an empty specs
+// one of them are read (WL-REQ-1339's fragment case); an empty specs
 // reads every live spec and plan of the project, as this always did.
 func (s *Store) progressDocs(ctx context.Context, projectID string, specs []int64) (
 	specDocs map[int64]*progress.Spec, plans map[int64]*progress.Plan, err error) {
@@ -151,7 +151,7 @@ SELECT d.id, coalesce(d.number, 0), d.title, d.status, d.updated_at,
 }
 
 // progressPlanDocs reads the project's live plans (withdrawn ones cover
-// nothing, WL-SPEC-85 §2), or — when specs is
+// nothing, WL-REQ-1335), or — when specs is
 // non-empty — only the ones with a covers edge into at least one of them.
 // A plan covering none of the requested specs contributes nothing to their
 // derivation (progress.Derive matches covers by spec id), so leaving it out
@@ -237,7 +237,7 @@ SELECT sec.doc_id, sec.anchor, sec.heading, sec.depth,
 // for the project rather than OpenTaskForDoc per spec. Same rule as
 // OpenTaskForDoc (kind design, about_doc the spec, not closed, oldest first),
 // so the link the page draws names the task POST .../progress/plan would
-// return (WL-SPEC-85 §4).
+// return (WL-REQ-1337).
 func (s *Store) progressPlanningTasks(ctx context.Context, projectID string, specs map[int64]*progress.Spec) error {
 	ids := slices.Collect(maps.Keys(specs))
 	if len(ids) == 0 {
@@ -522,7 +522,7 @@ SELECT count(*) FROM task_edges e
 	return landed, nil
 }
 
-// DraftRallyBand reads the project's draft rally as WL-SPEC-85 §4's
+// DraftRallyBand reads the project's draft rally as WL-REQ-1337's
 // footer shows it — member count and the number of specs those members come
 // from — or nil when the project has none. Landed is left at zero: a draft
 // rally ranks nothing, so nothing in it has landed under it.
@@ -549,7 +549,7 @@ func (s *Store) DraftRallyBand(ctx context.Context, projectID string) (*model.Ra
 
 // rallySpecCount counts the distinct specs a rally's members work on: the
 // specs covered by the plan each member was minted from or is about, plus the
-// specs a member names directly (WL-SPEC-85 §4's planning task does). A member that
+// specs a member names directly (WL-REQ-1337's planning task does). A member that
 // resolves to no spec — a task filed by hand into the rally — counts for
 // none, which is honest: the footer says how many specs are represented, not
 // how many members lack one.
@@ -581,7 +581,7 @@ SELECT count(*) FROM (
 }
 
 // ProgressRef maps tasks and documents to the project and specs the
-// Progress page shows them under (WL-SPEC-85 §6): a task through its
+// Progress page shows them under (WL-REQ-1339): a task through its
 // plan_doc or about_doc to the specs that plan covers, a plan through its
 // covers edges, a spec to itself.
 type ProgressRef struct {
@@ -812,7 +812,7 @@ SELECT t.id, r.id, r.title, r.state
 
 // progressRefRallyBand builds one rally's band the way progressRally and
 // DraftRallyBand do, branching on the rally's own state: draft counts specs
-// (WL-SPEC-85 §4's footer), anything else counts landed members (WL-SPEC-85 §3's bar).
+// (WL-REQ-1337's footer), anything else counts landed members (WL-REQ-1336's bar).
 func (s *Store) progressRefRallyBand(ctx context.Context, info progressRefRallyInfo) (*model.RallyBand, error) {
 	members, err := s.RallyMemberCount(ctx, info.id)
 	if err != nil {
@@ -828,8 +828,8 @@ func (s *Store) progressRefRallyBand(ctx context.Context, info progressRefRallyI
 }
 
 // ProjectHasSpecs reports whether the project has at least one live spec —
-// the fact WL-SPEC-85 §3 makes the Progress sidebar entry and the route
-// itself conditional on (WL-SPEC-82 §6: a surface appears when the project has
+// the fact WL-REQ-1336 makes the Progress sidebar entry and the route
+// itself conditional on (WL-REQ-341: a surface appears when the project has
 // facts for it).
 func (s *Store) ProjectHasSpecs(ctx context.Context, projectID string) (bool, error) {
 	var exists bool

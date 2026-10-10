@@ -1,4 +1,4 @@
-// escalate.go is the client and the view for `lode task escalate` (WL-SPEC-77 §10).
+// escalate.go is the client and the view for `lode task escalate` (WL-REQ-171).
 package cli
 
 import (

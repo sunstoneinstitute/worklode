@@ -1,6 +1,6 @@
 // browser.go decides whether this machine can launch a browser, and how.
 // `lode login` needs the answer up front: when no browser can be opened it
-// falls back to manual mode (WL-SPEC-74 §7.2) instead of failing.
+// falls back to manual mode (WL-REQ-58) instead of failing.
 package cli
 
 import (

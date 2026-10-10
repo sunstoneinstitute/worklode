@@ -43,7 +43,7 @@ type PullRequest struct {
 	HeadSHA        string
 	// Author is the PR's GitHub login (store.PullRequest.Author). Setting it
 	// from this first read matters: leaving it empty would let a PR sit with
-	// a NULL author — and therefore an unrefusable self-approval (WL-SPEC-75 §13)
+	// a NULL author — and therefore an unrefusable self-approval (WL-REQ-118)
 	// — until some later webhook delivery fills it in (WL-244).
 	Author string
 }

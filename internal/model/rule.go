@@ -10,24 +10,24 @@ type Rule struct {
 	Project    string `json:"project"`
 	ProjectKey string `json:"project_key"`
 	// Ref is the citable id with its kind's infix: "WL-REQ-12" for a
-	// requirement, "WL-RULE-12" otherwise (WL-SPEC-77 §4).
+	// requirement, "WL-RULE-12" otherwise (WL-REQ-165).
 	Ref    string `json:"ref"`
 	Number int64  `json:"number"`
 	// Kind is requirement, catalogue, invariant, definition or principle
-	// (WL-SPEC-77 §4). informative is retired and reads as a principle.
+	// (WL-REQ-165). informative is retired and reads as a principle.
 	Kind    string `json:"kind"`
 	Status  string `json:"status"` // draft | accepted | superseded | withdrawn
 	Version int    `json:"version"`
 	Heading string `json:"heading"`
 	Body    string `json:"body"`
 	// ConceptIRI is the ns/concept.ttl concept a definition defines, empty
-	// when it names none (WL-SPEC-77 §4d).
+	// when it names none (WL-REQ-1368).
 	ConceptIRI string `json:"concept_iri"`
 	// ArrangedIn lists the documents whose current arrangement holds this
 	// rule, and at which version, position and depth.
 	ArrangedIn []RuleArrangement `json:"arranged_in"`
 	// CoveredBy lists the plans covering this rule, directly or through a
-	// rule it supersedes (WL-SPEC-77 §4). GetRule fills it; a list leaves it
+	// rule it supersedes (WL-REQ-165). GetRule fills it; a list leaves it
 	// empty.
 	CoveredBy []RulePlan `json:"covered_by"`
 	// GovernedTasks are the tasks this rule governs (S2), newest link first.
@@ -77,7 +77,7 @@ type RuleTask struct {
 // EditRuleInput is the body of PUT /api/v1/rules/{id}: the rule's new
 // heading and body. Both replace what is stored: a draft version is
 // rewritten in place, an accepted one gets the next version as a draft
-// (WL-SPEC-77 §19.4).
+// (WL-REQ-1298).
 type EditRuleInput struct {
 	Heading string `json:"heading"`
 	Body    string `json:"body"`
@@ -85,7 +85,7 @@ type EditRuleInput struct {
 
 // AcceptRuleInput is the optional body of POST /api/v1/rules/{id}/accept.
 // Substantive is the author's judgment that the version is substantive
-// (WL-SPEC-77 §10), which applies the gates when no mechanical check does.
+// (WL-REQ-171), which applies the gates when no mechanical check does.
 type AcceptRuleInput struct {
 	Substantive bool `json:"substantive,omitempty"`
 }
@@ -103,7 +103,7 @@ type RuleMetaInput struct {
 
 // SupersedeEntry is one line of a refactor map (S24, R7): an old rule and
 // the rules that continue it. Each ref is "WL-RULE-12" or a section ref,
-// "WL-SPEC-75#sec-2". An empty New withdraws the old rule with no successor.
+// "WL-REQ-79". An empty New withdraws the old rule with no successor.
 type SupersedeEntry struct {
 	Old string   `json:"old"`
 	New []string `json:"new"`
@@ -147,7 +147,7 @@ type RuleListParams struct {
 
 // RuleClosure is GET /api/v1/rules/{id}/closure: a rule and every rule
 // reachable from it over refines and needs, in breadth-first order
-// (WL-SPEC-77 §4c). Members[0] is the rule itself. Words is the sum of the
+// (WL-REQ-1367). Members[0] is the rule itself. Words is the sum of the
 // members' body word counts.
 type RuleClosure struct {
 	Rule    string              `json:"rule"`
@@ -168,7 +168,7 @@ type RuleClosureMember struct {
 }
 
 // RuleLint is GET /api/v1/projects/{id}/rules/lint: a project's corpus
-// measured against the targets of WL-SPEC-77 §4c. Rules counts the project's
+// measured against the targets of WL-REQ-1367. Rules counts the project's
 // draft and accepted rules; the closure spreads are over those rules.
 type RuleLint struct {
 	Project      string            `json:"project"`
@@ -196,7 +196,7 @@ type RuleLintSpread struct {
 // one-context-edge or converted-heading (reports, not verdicts),
 // undefined-term, conflict, positional-reference or unresolved-ref (a rule
 // ref in the rule's text that names no rule). A converted-heading finding
-// names a rule the WL-SPEC-77 §19.7 migration deleted.
+// names a rule the WL-REQ-1301 migration deleted.
 type RuleLintFinding struct {
 	Rule   string `json:"rule"`
 	Check  string `json:"check"`
@@ -205,7 +205,7 @@ type RuleLintFinding struct {
 
 // AddRuleInput is the body of POST /api/v1/rules: a standalone rule,
 // arranged in no document, created at draft version 1 and owned by the
-// caller (WL-SPEC-77 §19.2). Kind is one of the five rule kinds and
+// caller (WL-REQ-1296). Kind is one of the five rule kinds and
 // defaults to requirement.
 type AddRuleInput struct {
 	Project string   `json:"project"`
@@ -216,7 +216,7 @@ type AddRuleInput struct {
 }
 
 // ArrangeRuleInput is the body of POST /api/v1/docs/{id}/rules: place an
-// existing rule in a spec (WL-SPEC-77 §19.3). After and Under each name a
+// existing rule in a spec (WL-REQ-1297). After and Under each name a
 // rule ref or a section anchor of the spec, at most one of them; with
 // neither the rule goes last. Anchor defaults to the next free number at
 // that position.

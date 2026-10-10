@@ -9,7 +9,7 @@ import (
 )
 
 // InvalidateOnProviderChange nulls every stored vector when p is not the
-// provider they were computed with, and records p as the new one (WL-SPEC-79 §16).
+// provider they were computed with, and records p as the new one (WL-REQ-260).
 // Re-indexing on content change alone cannot recover from a swap: a subject
 // whose content did not change is never re-indexed, and vectors from two
 // models are not comparable — at two widths they make every query error

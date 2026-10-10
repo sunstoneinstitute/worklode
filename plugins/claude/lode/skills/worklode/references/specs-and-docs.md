@@ -1,7 +1,7 @@
 # Specs, rules and plans: the document model
 
 Deep reference for the `worklode` skill. Documents live *in the backbone*
-(WL-SPEC-77). Design work starts from rules (WL-SPEC-77 §19.6): find them
+(WL-SPEC-77). Design work starts from rules (WL-REQ-1300): find them
 with `lode search` or `lode rule list`, change them with `lode rule`, and touch
 a spec only to change its arrangement. Use `lode doc` for plans and a new
 spec's first draft. Scratch files are editor buffers.
@@ -76,7 +76,7 @@ spec's own rules by anchor and heading, then heading alone, then anchor alone,
 and an unmatched one creates a rule. A rule the write leaves out is
 unarranged, not withdrawn.
 
-A rule edit writes only the rule (WL-SPEC-77 §19.4): it rewrites the draft
+A rule edit writes only the rule (WL-REQ-1298): it rewrites the draft
 version, or adds the next version as a draft when the newest is accepted. It
 works for a rule arranged in no spec or in several. A spec shows each rule at
 its newest accepted version and marks a pending draft. `lode rule accept

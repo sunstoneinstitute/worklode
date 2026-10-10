@@ -59,7 +59,7 @@ func selectMode(f modeFacts) cockpitMode {
 	return modeOperations
 }
 
-// modeFactsForProject remains all-false until Part 2 stores WL-SPEC-82 §7
+// modeFactsForProject remains all-false until Part 2 stores WL-REQ-342
 // promotion and Enter Research decisions. A current project is therefore an
 // ordinary Operations project; query parameters are intentionally absent.
 func modeFactsForProject(store.Project) modeFacts { return modeFacts{} }
@@ -310,7 +310,7 @@ func buildNextDecision(p *store.Project) *model.CockpitDecision {
 // unreleased lease (f.Lease, already filtered by ListProjectWorkFacts to
 // released_at IS NULL) whose holder is an agent actor — a human or service
 // lease is real, technical evidence of who is touching the task, but is
-// never surfaced as a delegate or Crew member (WL-SPEC-82 §8).
+// never surfaced as a delegate or Crew member (WL-REQ-343).
 func mapWorkItem(f store.ProjectWorkFact, blocked bool, resolveActor func(string) (*store.Actor, error)) (model.CockpitWorkItem, error) {
 	t := f.Task
 

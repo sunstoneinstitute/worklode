@@ -27,7 +27,7 @@ Model body.
 
 // TestDocNoteRendersInline: `lode doc note <ref>#sec-N` leaves a note, and
 // `lode show <ref> -s sec-N` renders it under that section rather than in a
-// list of its own (WL-SPEC-77 §10).
+// list of its own (WL-REQ-171).
 func TestDocNoteRendersInline(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -81,7 +81,7 @@ func TestDocNoteAnchorRequired(t *testing.T) {
 }
 
 // TestDocNoteBodyFile: --body-file reads the note from a file, and from stdin
-// for "-", the same convention `lode task edit --body-file` follows (WL-SPEC-77 §18).
+// for "-", the same convention `lode task edit --body-file` follows (WL-REQ-182).
 func TestDocNoteBodyFile(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

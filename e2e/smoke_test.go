@@ -629,7 +629,7 @@ func primaryNavRegion(t *testing.T, body string) string {
 // since the e2e server runs without a session — no board framing), Work
 // carries the project name and the crashloop failure (the org-wide board,
 // now the task-oriented destination — see docs/specs/032-project-cockpit.md
-// §2), the project's own run board (032 §8) loads at its route, and the
+// §2), the project's own run board (WL-REQ-1343) loads at its route, and the
 // task page loads. Home's Morning Brief is the same degradation seen from
 // the other side: no session means no brief and a refused POST
 // /home/reviewed. It also proves spec 056 end to end: the shared shell's
@@ -656,7 +656,7 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 		t.Fatalf("home page still renders the retired board framing %q:\n%s", "Current work", body)
 	}
 
-	// The Morning Brief's boundary (032 §9) is per actor, and this stack has
+	// The Morning Brief's boundary (WL-REQ-346) is per actor, and this stack has
 	// no login provider: open mode renders no brief at all, and the mutation
 	// that would move a boundary is refused. The GET after the refusal is how
 	// the absence of a cursor row shows on a public surface.

@@ -185,7 +185,7 @@ func TestBumpRuleVersionSnapshotsEdges(t *testing.T) {
 
 // TestBumpDocVersionSnapshotsSpecHeadings: a spec heading row is carried into
 // doc_rule_versions and read back as an entry with Heading set and no rule
-// (WL-SPEC-77 §19.1).
+// (WL-REQ-1295).
 func TestBumpDocVersionSnapshotsSpecHeadings(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)

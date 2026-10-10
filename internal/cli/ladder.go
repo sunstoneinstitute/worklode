@@ -1,5 +1,5 @@
 // ladder.go is the client and the view for `lode task gap` and `lode task
-// fix` (WL-SPEC-77 §10): the escalation ladder's non-escalating rungs.
+// fix` (WL-REQ-171): the escalation ladder's non-escalating rungs.
 package cli
 
 import (

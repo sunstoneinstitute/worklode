@@ -13,7 +13,7 @@ import (
 )
 
 // TestDocVersionsPlanBodyEdit: editing a plan's body snapshots the version it
-// leaves into doc_versions before overwriting it (WL-SPEC-77 §3), and
+// leaves into doc_versions before overwriting it (WL-REQ-164), and
 // ListDocVersions/GetDocVersion serve the archived and the current version
 // off that split.
 func TestDocVersionsPlanBodyEdit(t *testing.T) {
@@ -69,7 +69,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 }
 
 // TestDocVersionsRevisionAccept: landing a revision snapshots the accepted
-// version it replaces (WL-SPEC-77 §3).
+// version it replaces (WL-REQ-164).
 func TestDocVersionsRevisionAccept(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -144,7 +144,7 @@ func TestDocVersionsDraftEditSnapshots(t *testing.T) {
 }
 
 // TestDocReviseOpensOneCandidate: a revision copies the accepted body to edit,
-// and a second open revision is refused (WL-SPEC-77 §9, one candidate per doc).
+// and a second open revision is refused (WL-REQ-170, one candidate per doc).
 func TestDocReviseOpensOneCandidate(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -169,7 +169,7 @@ func TestDocReviseOpensOneCandidate(t *testing.T) {
 	}
 }
 
-// TestDocRevisePlanRejected: plans are edited in place (WL-SPEC-77 §11), never revised.
+// TestDocRevisePlanRejected: plans are edited in place (WL-REQ-172), never revised.
 func TestDocRevisePlanRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -243,7 +243,7 @@ func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
 }
 
 // TestDocDiscardRevisionStanding: the owner and the revision's author may
-// each withdraw an open candidate; a third party may not (WL-SPEC-77 §9).
+// each withdraw an open candidate; a third party may not (WL-REQ-170).
 //
 // mustAcceptedSpec's documents are created by stig, and CreateDoc defaults the
 // owner to the creator, so stig is the owner throughout and ada is the
@@ -422,7 +422,7 @@ func TestDocDiscardRevisionLogsTheWithdrawnBody(t *testing.T) {
 }
 
 // TestDocAcceptRevisionRejectsRemovedPublishedAnchor: the one invariant that
-// survives into draft (WL-SPEC-77 §9) — an anchor the accepted version published
+// survives into draft (WL-REQ-170) — an anchor the accepted version published
 // may not disappear.
 func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
 	t.Parallel()
@@ -450,7 +450,7 @@ func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
 }
 
 // TestDocAcceptRevisionRejectsRenumber: anchors are immutable, so an accepted
-// section is never renumbered (WL-SPEC-77 §6 rule 3). Renumbering while keeping the
+// section is never renumbered (WL-REQ-167 rule 3). Renumbering while keeping the
 // anchor — "## 3. … {#sec-2}" — is a lintAnchors defect and never reaches the
 // diff, so the renumber arrives here the other way: the anchor moves with the
 // number and sec-2 reads as removed. Its twin below covers the form that does
@@ -501,7 +501,7 @@ func TestDocAcceptRevisionRejectsDroppedNumber(t *testing.T) {
 }
 
 // TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval: the append-only gate
-// protects anchors the accepted version published (WL-SPEC-77 §9), not every row.
+// protects anchors the accepted version published (WL-REQ-170), not every row.
 // An unpublished anchor on an accepted document is what a corpus import
 // leaves behind, and dropping one is legal.
 func TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval(t *testing.T) {
@@ -623,7 +623,7 @@ func TestDocAcceptRevisionStampsEveryChangedSection(t *testing.T) {
 // database. Section.Body stops at the next heading of any level, so a diff
 // over bodies alone would accept this revision as touching nothing and leave
 // every coverage claim against sec-2 falsely fresh — the silent-staleness half
-// of WL-SPEC-77 §6 rule 5.
+// of WL-REQ-167 rule 5.
 func TestDocAcceptRevisionStampsAnchorlessSubheadingEdit(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -713,7 +713,7 @@ func TestDocAcceptRevisionWrongStatus(t *testing.T) {
 
 // TestDocAcceptRevisionSupersedesRetiredDoc: landing a revision supersedes
 // a document whose rules are all withdrawn and superseded by the revised
-// document's rules (WL-SPEC-77 §9). Withdrawing the rules alone moves nothing.
+// document's rules (WL-REQ-170). Withdrawing the rules alone moves nothing.
 func TestDocAcceptRevisionSupersedesRetiredDoc(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -905,7 +905,7 @@ func TestDiscardDeletesCandidateEdges(t *testing.T) {
 }
 
 // TestRevisionEdgeTypeCheckMatchesDeclared holds doc_revision_edges' type
-// CHECK to the declared doc_edges set in ns/ (WL-SPEC-77 §8.1).
+// CHECK to the declared doc_edges set in ns/ (WL-REQ-1288).
 func TestRevisionEdgeTypeCheckMatchesDeclared(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)

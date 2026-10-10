@@ -9,22 +9,22 @@ specs, plans, docs, or other prose in this repo.
 
 Worklode is Sunstone's org-wide work tracker and coordination layer for
 multi-agent, multi-repo work. It ships as six Go executables from one module
-(WL-SPEC-73 §3.1): `lode` (CLI), `lode-hook` and `lode-statusline` (short-lived agent
+(WL-REQ-15): `lode` (CLI), `lode-hook` and `lode-statusline` (short-lived agent
 hot paths), and `lode-server`, `lode-watch`, `lode-migrate` (operator side),
 backed by Postgres with an append-only event log for provenance. The old
 subcommand shims (hook, statusline, serve, watch, migrate) were removed
-after the first split release shipped (WL-SPEC-73 §3.4, WL-319).
+after the first split release shipped (WL-REQ-18, WL-319).
 
 **Design documents live in the backbone, not in this tree (WL-SPEC-77).**
 Specs and plans are rows in Postgres, read and written through `lode
 doc`. `docs/specs.md` is the map of the fifteen specs; `lode show WL-SPEC-75`
 starts you on the execution backbone. `lode search <query>` ranks documents,
 tasks and skills together when you know what you are looking for but not where
-it is (WL-SPEC-79 §17).
+it is (WL-REQ-261).
 A spec arranges rules of five kinds (requirement, catalogue, invariant,
 definition, principle) linked by `refines`, `needs` and `references`; a rule is
 sized to be applied with its context closure alone (`lode show <rule> --closure`,
-WL-SPEC-77 §4c).
+WL-REQ-1367).
 
 **To read what a spec says, use `lode show <ref> --inline`.** That folds every
 in-force amendment and supersession into the text, attributed to the section it
@@ -34,7 +34,7 @@ native selector (`lode show WL-SPEC-80 --inline --section sec-8`) rather than
 filtering rendered output with `sed`; use `lode doc show <ref> --json` for
 structured section and edge metadata.
 
-**Design work changes rules, not spec text** (WL-SPEC-77 §19.6). Find the
+**Design work changes rules, not spec text** (WL-REQ-1300). Find the
 affected rules with `lode search` or `lode rule list --doc <spec>`, then change
 them with `lode rule add`, `lode rule edit`, `lode rule link` and `lode rule
 supersede`. Touch a spec only to change its arrangement (`lode rule arrange`,
@@ -163,14 +163,14 @@ files, `lode-hook`'s list of hook names, `lode work next`'s no-work guidance.
 — a hand-built tabwriter, a hand-formatted timestamp — but it is a tripwire,
 not the rule; this paragraph is.
 
-**One model, not one per package (WL-SPEC-73 §3.2a).** Every shape that crosses the
+**One model, not one per package (WL-RULE-1349).** Every shape that crosses the
 HTTP boundary — entities, response projections, request bodies — is declared
 once in `internal/model` (stdlib imports only). `internal/store` scans into
 it, `internal/api` serializes it, `internal/cli` decodes it, `internal/ui`
 embeds it. Field names are wire names (`Project`, not `ProjectID`). Only three
 kinds of type stay package-local: `internal/ui` view types, `internal/store`
 scan plumbing, and `internal/api` transport internals (`Subject`, sessions,
-route guards). Anything else needs an amendment to WL-SPEC-73 §3.2a, not a new struct.
+route guards). Anything else needs an amendment to WL-RULE-1349, not a new struct.
 `internal/model/modelrule_test.go` enforces this and names what it rejects;
 `deps_test.go` keeps the package a stdlib-only leaf. Read the failure message
 before working around either.
@@ -182,7 +182,7 @@ a route the table does not name or a table entry no route uses, so a new
 endpoint cannot ship unguarded. `internal/api/authz.go` holds the policy: a
 per-request `Subject`, a `grants` table of permission → roles, and a
 default-deny `Decide`. There is no RBAC model yet — the two roles are the
-`user`/`admin` Keycloak already syncs (WL-SPEC-74 §3) — so add real roles by editing
+`user`/`admin` Keycloak already syncs (WL-REQ-49) — so add real roles by editing
 that table, never by adding a check inside a handler. A page-script write such
 as the Progress page's goes through one more gate on top of that table's
 permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-SPEC-85
@@ -226,13 +226,13 @@ own section anchors, `internal/indexer` is the background convergence loop
 that keeps `index_chunks` agreeing with the corpus, and `store.Search` runs
 both retrieval arms — dense over pgvector, lexical over a `simple` tsvector —
 fused by reciprocal rank behind `GET /api/v1/search` and `lode search`,
-WL-SPEC-79 §15), and `internal/eventbus`
+WL-REQ-259), and `internal/eventbus`
 (offset-tracked subscribers over the events log, read via `lode event tail
---follow` and by the project Progress page's live stream, WL-SPEC-85 §6).
+--follow` and by the project Progress page's live stream, WL-REQ-1339).
 Its one subscriber, `doc-lifecycle`, mints the review and planning
-tasks a document's lifecycle calls for (WL-SPEC-75 §9.6) — triggered by
+tasks a document's lifecycle calls for (WL-REQ-109) — triggered by
 submitting a document (`lode doc submit`) or accepting a spec, and minting
-the task is not doing the review or the planning it asks for (WL-SPEC-77 §9): the
+the task is not doing the review or the planning it asks for (WL-REQ-170): the
 rules are a pure function in `internal/watcher`, the executor that feeds them
 is `internal/api/docwatch.go`, and `NewServer` starts the loop only when the
 caller passes a `BackgroundCtx`. The project Progress page (WL-SPEC-85) says how
@@ -328,7 +328,7 @@ for the accuracy bar that copy is also held to.
 Server-side changes that add an HTTP endpoint, background loop, outbound
 call, or store operation with meaningful outcomes must add or extend
 `worklode_*` Prometheus metrics in the owning package, with tests. Follow the
-conventions in `WL-SPEC-73 §6` (Prometheus metrics): nil-safe metrics
+conventions in `WL-REQ-32` (Prometheus metrics): nil-safe metrics
 struct in the owning package's `metrics.go`, `prometheus.Registerer`
 threaded from `serve.go`, bounded label values, `worklode_` prefix.
 

@@ -1,4 +1,4 @@
-// terms.go serves definition rules as terms (WL-SPEC-77 §4d): the term page
+// terms.go serves definition rules as terms (WL-REQ-1368): the term page
 // at /projects/{proj}/term/{slug} and the project's term list. A term's
 // rule keeps its own page at /projects/{proj}/rule/{n}.
 

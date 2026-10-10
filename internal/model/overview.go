@@ -2,7 +2,7 @@ package model
 
 // The WL-SPEC-82 read surface: drift, gaps, the frontier mirror and the
 // estimate-free critical path. internal/overview computes these,
-// internal/api serializes them and internal/cli decodes them, so WL-SPEC-73 §3.2a
+// internal/api serializes them and internal/cli decodes them, so WL-RULE-1349
 // puts the one declaration here.
 
 // DriftEdge is one dct:requires edge present in exactly one layer.
@@ -33,7 +33,7 @@ type GapList struct {
 	Gaps []Gap `json:"gaps"`
 }
 
-// Claim is one wl:implements edge (WL-SPEC-77 §13): a component's claim that its
+// Claim is one wl:implements edge (WL-REQ-177): a component's claim that its
 // code satisfies a section.
 type Claim struct {
 	Component string `json:"component"`
@@ -41,7 +41,7 @@ type Claim struct {
 }
 
 // DeliveredClaim is one wl:implements claim shown live: the environment the
-// claiming component's deliverable is deployed to (WL-SPEC-77 §13 row 5). One row
+// claiming component's deliverable is deployed to (WL-REQ-177 row 5). One row
 // per environment, so a claim live in two of them appears twice.
 type DeliveredClaim struct {
 	Component   string `json:"component"`
@@ -106,7 +106,7 @@ type DriftParams struct {
 	Acknowledged bool `query:"acknowledged,omitempty"`
 }
 
-// Overview is the one-screen roll-up. The WL-SPEC-77 §13 coverage reads land here
+// Overview is the one-screen roll-up. The WL-REQ-177 coverage reads land here
 // as totals: the per-document rows are DocCoverage, and summing them keeps the
 // roll-up one screen whatever the corpus size.
 type Overview struct {
@@ -122,7 +122,7 @@ type Overview struct {
 	StaleClaims     int `json:"stale_claims"`
 	OrphanedClaims  int `json:"orphaned_claims"`
 	// DeliveredClaims counts (claim, environment) pairs a deliverable is
-	// deployed in. Zero until Deliverable nodes are projected (WL-SPEC-79 §8).
+	// deployed in. Zero until Deliverable nodes are projected (WL-REQ-243).
 	DeliveredClaims int           `json:"delivered_claims"`
 	FrontierSize    int           `json:"frontier_size"`
 	Cycles          [][]string    `json:"cycles,omitempty"`
@@ -138,7 +138,7 @@ type OverviewParams struct {
 
 // DeriveResult reports one deriver run (WL-SPEC-82). internal/derive aliases
 // this as derive.Result; the shape is declared here because a handler
-// serializes it (WL-SPEC-73 §3.2a).
+// serializes it (WL-RULE-1349).
 type DeriveResult struct {
 	Graph   string `json:"graph"`
 	Hash    string `json:"hash"`

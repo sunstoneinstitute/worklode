@@ -50,7 +50,7 @@ components:
 }
 
 // TestDeriveDryRunPrintsImplementsTriples covers the third repo-local source
-// (WL-810, WL-SPEC-77 §13): a present .worklode/implements.yaml resolves against
+// (WL-810, WL-REQ-177): a present .worklode/implements.yaml resolves against
 // the components manifest and renders as the repo-implements edge.
 func TestDeriveDryRunPrintsImplementsTriples(t *testing.T) {
 	root := t.TempDir()
@@ -124,7 +124,7 @@ components:
 }
 
 // TestDeriveImplementsResolutionErrorIsFatal: a claim whose path matches no
-// component is a publication error naming the offender (WL-SPEC-77 §13), not a
+// component is a publication error naming the offender (WL-REQ-177), not a
 // skip — an unattributable claim silently dropped is worse than a failed
 // derive.
 func TestDeriveImplementsResolutionErrorIsFatal(t *testing.T) {

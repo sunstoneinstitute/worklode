@@ -79,7 +79,7 @@ func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Tim
 
 // ReportProjectSessionUsage calls POST /api/v1/projects/{id}/session-usage:
 // report one session's complete usage across the project, every task it
-// billed plus the remainder, replaced together (WL-SPEC-73 §8.2).
+// billed plus the remainder, replaced together (WL-REQ-40).
 func (c *Client) ReportProjectSessionUsage(ctx context.Context, projectID string, in model.ProjectSessionUsageInput) error {
 	_, err := c.do(ctx, http.MethodPost,
 		"/api/v1/projects/"+url.PathEscape(projectID)+"/session-usage", in)
@@ -132,7 +132,7 @@ func (c *Client) Reconcile(ctx context.Context, in model.ReconcileInput) (model.
 }
 
 // AddCrewMember calls POST /api/v1/projects/{id}/participants, adding one
-// role-labelled Crew member (WL-SPEC-75 §13.5). An empty role means "member";
+// role-labelled Crew member (WL-REQ-123). An empty role means "member";
 // the returned member carries every role that actor holds on the project,
 // not just the one just added. Deputy marks the member as the project's one
 // deputy; it is mutually exclusive with lead.
@@ -143,7 +143,7 @@ func (c *Client) AddCrewMember(ctx context.Context, project, actor, role string,
 }
 
 // ListCrew calls GET /api/v1/projects/{id}/participants: every member of a
-// project's Crew (WL-SPEC-75 §13.5), lead-first then by when they were added.
+// project's Crew (WL-REQ-123), lead-first then by when they were added.
 // An empty roster is an empty slice, not nil.
 func (c *Client) ListCrew(ctx context.Context, project string) ([]model.CrewMember, []byte, error) {
 	resp, raw, err := doJSON[model.ParticipantListResponse](ctx, c, http.MethodGet,

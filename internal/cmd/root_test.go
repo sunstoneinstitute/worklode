@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestShortcuts holds WL-SPEC-81 §1 L9: the top-level aliases are exactly the ones
+// TestShortcuts holds WL-REQ-305 L9: the top-level aliases are exactly the ones
 // the `shortcuts` table names, each one resolving to a real nested command,
 // and the table is the only place a top-level alias is declared.
 func TestShortcuts(t *testing.T) {

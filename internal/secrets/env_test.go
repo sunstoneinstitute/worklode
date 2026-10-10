@@ -8,7 +8,7 @@ import (
 
 func TestCredentialShaped(t *testing.T) {
 	denied := []string{
-		// The names WL-SPEC-74 §10.5 names outright.
+		// The names WL-REQ-72 names outright.
 		"ANTHROPIC_API_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
 		"AWS_SESSION_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS",
 		// Namespaces whose non-credential members select a credential.
@@ -49,8 +49,8 @@ func TestCredentialShaped(t *testing.T) {
 	}
 }
 
-// TestChildEnvStripsAmbientCredentials is the acceptance criterion (WL-SPEC-74 §10.5, as
-// amended by WL-SPEC-74 §10.5): a child of `lode secret exec` sees its materialized
+// TestChildEnvStripsAmbientCredentials is the acceptance criterion (WL-REQ-72, as
+// amended by WL-REQ-72): a child of `lode secret exec` sees its materialized
 // names plus the shell plumbing, and never the operator's ambient credentials.
 func TestChildEnvStripsAmbientCredentials(t *testing.T) {
 	parent := []string{

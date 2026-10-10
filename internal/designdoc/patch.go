@@ -64,7 +64,7 @@ func ChangedAnchors(old, new *Document) []string {
 // sections between old and new: ns-term, surface-token and
 // acceptance-criteria. The referrer rule is a corpus query and lives in the
 // store (WL-PLAN-109 Task 3), not here. A new dependency is an edge, written
-// through `lode doc link` onto the candidate revision (WL-SPEC-77 §7).
+// through `lode doc link` onto the candidate revision (WL-REQ-168).
 func MechanicalFindings(old, new *Document) []Finding {
 	var findings []Finding
 

@@ -1,4 +1,4 @@
-// Package progress derives the WL-SPEC-85 §2 progress model — plan state,
+// Package progress derives the WL-REQ-1335 progress model — plan state,
 // section state, spec grouping, and the next act — from typed facts about a
 // project's specs, plans and tasks. Every function is a pure function: no
 // I/O, no clock, no imports beyond stdlib and internal/model. Derive never
@@ -38,7 +38,7 @@ type Spec struct {
 	Owner   string
 	Updated time.Time
 	// PlanningTask is the open design task about this spec, when one exists
-	// (WL-SPEC-77 §15). §3.4 shows it instead of the Plan button; the derivation
+	// (WL-RULE-179). §3.4 shows it instead of the Plan button; the derivation
 	// itself never reads it.
 	PlanningTask string
 	Sections     []Section
@@ -51,7 +51,7 @@ type Section struct {
 	Depth   int
 	// NotOwed is true when the section is a spec heading, or has rules and
 	// none is of a covered kind (requirement, catalogue). Such a section is
-	// not owed (WL-SPEC-85 §2, WL-SPEC-77 §4, §19.1).
+	// not owed (WL-REQ-1335, WL-REQ-165, WL-REQ-1295).
 	NotOwed bool
 }
 
@@ -128,7 +128,7 @@ func PlanState(status string, tasks []Task) string {
 	case "draft":
 		return "draft"
 	case "superseded", "spent":
-		return "built" // WL-SPEC-78 §1.2; spent is increment 3 R4's finished plan
+		return "built" // WL-REQ-186; spent is increment 3 R4's finished plan
 	}
 	var landed, active, unstarted int
 	for _, t := range tasks {
@@ -182,7 +182,7 @@ type planInfo struct {
 // Derive turns one project's facts into model.ProjectProgress, holding every
 // rule of §1.1 to §1.3.
 func Derive(in Input) model.ProjectProgress {
-	// A withdrawn plan covers nothing (WL-SPEC-85 §2); stale counts as accepted.
+	// A withdrawn plan covers nothing (WL-REQ-1335); stale counts as accepted.
 	in.Plans = slices.DeleteFunc(slices.Clone(in.Plans), func(p Plan) bool { return p.Status == "withdrawn" })
 	plans := make(map[int64]planInfo, len(in.Plans))
 	for _, p := range in.Plans {

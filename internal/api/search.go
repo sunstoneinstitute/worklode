@@ -1,5 +1,5 @@
 // search.go is the HTTP surface over the corpus index's hybrid search
-// (WL-SPEC-79 §17). The retrieval and its metrics live in store.Search; this handler
+// (WL-REQ-261). The retrieval and its metrics live in store.Search; this handler
 // only parses the query, embeds it, and reports how it actually answered
 // (§11): a missing or failing embedding provider degrades every mode to
 // lexical rather than erroring or returning nothing.

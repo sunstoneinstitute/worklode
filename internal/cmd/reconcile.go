@@ -1,5 +1,5 @@
 // lode task reconcile: repair task and spec activity the ingestion path
-// missed (WL-SPEC-80 §10.3). Operator command; the server does the work.
+// missed (WL-REQ-297). Operator command; the server does the work.
 
 package cmd
 

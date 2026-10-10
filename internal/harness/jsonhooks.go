@@ -56,7 +56,7 @@ func bindingEvent(b hookBinding) Event {
 
 // eventsFor reads a binding table the other way round: the command a binding
 // runs names the Worklode event, so an adapter's event table cannot restate —
-// and so cannot drift from — what install actually writes (WL-SPEC-80 §5).
+// and so cannot drift from — what install actually writes (WL-REQ-274).
 func eventsFor(bindings []hookBinding) map[Event][]string {
 	out := map[Event][]string{}
 	for _, b := range bindings {

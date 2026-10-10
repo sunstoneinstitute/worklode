@@ -1,4 +1,4 @@
--- Specs become templates (WL-SPEC-77 §19.7, §19.1). Two steps:
+-- Specs become templates (WL-REQ-1301, WL-REQ-1295). Two steps:
 --
 -- 1. Every arranged rule whose text was always empty becomes a spec heading
 --    at the same position, anchor and depth. Its covers edges and governedBy

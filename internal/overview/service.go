@@ -222,7 +222,7 @@ func (s *Service) Roll(ctx context.Context, projectID string) (*model.Overview, 
 	return o, nil
 }
 
-// rollCoverage adds the WL-SPEC-77 §13 reads to the roll-up. Coverage is per
+// rollCoverage adds the WL-REQ-177 reads to the roll-up. Coverage is per
 // document in the query and summed here: the roll-up is one screen, so it
 // carries the corpus ratio and leaves the per-document rows to Coverage's
 // callers.

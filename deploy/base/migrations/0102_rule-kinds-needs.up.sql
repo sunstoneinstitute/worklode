@@ -1,6 +1,6 @@
 -- Rule kinds catalogue, definition and principle, and the needs edge
--- (WL-SPEC-77 §4, §4c, §8.1). informative stays valid until its rows are
--- reclassified (§19.7).
+-- (WL-REQ-165, WL-REQ-1367, WL-REQ-1288). informative stays valid until its rows are
+-- reclassified (WL-REQ-1301).
 BEGIN;
 
 ALTER TABLE rules DROP CONSTRAINT rules_kind_check;

@@ -9,12 +9,12 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// searchKinds are the subject kinds GET /api/v1/search indexes (WL-SPEC-79 §17).
+// searchKinds are the subject kinds GET /api/v1/search indexes (WL-REQ-261).
 var searchKinds = []string{"doc", "task", "skill"}
 
-// newSearchCmd builds `lode search`, the corpus-wide hybrid search (WL-SPEC-79 §17).
+// newSearchCmd builds `lode search`, the corpus-wide hybrid search (WL-REQ-261).
 //
-// It is one of the two cross-entity readers WL-SPEC-81 §1 L7 puts at the top level:
+// It is one of the two cross-entity readers WL-REQ-305 L7 puts at the top level:
 // it answers over documents, tasks and skills at once, so no
 // `lode <entity> <verb>` spelling (L1) is true of it. `lode show` is the
 // other, and the split is what the caller supplies — show resolves one known

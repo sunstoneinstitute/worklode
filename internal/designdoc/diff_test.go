@@ -116,7 +116,7 @@ func TestCompareSections(t *testing.T) {
 			wantChanged: []string{"sec-1"},
 		},
 		{
-			// WL-SPEC-77 §4: an anchorless heading is content within sec-4, so an
+			// WL-REQ-165: an anchorless heading is content within sec-4, so an
 			// edit confined to it is an edit to sec-4. Section.Body alone stops
 			// at the next heading of any level and would report no change,
 			// leaving claims against sec-4 falsely fresh.
@@ -135,7 +135,7 @@ func TestCompareSections(t *testing.T) {
 		{
 			// The heading text of an anchorless subheading is content too, so
 			// renaming it changes its ancestor — unlike rewording an anchored
-			// heading, which is explicitly not a change (WL-SPEC-77 §4).
+			// heading, which is explicitly not a change (WL-REQ-165).
 			name: "anchorless subheading renamed changes its anchored ancestor",
 			accepted: "# Spec\n\n" +
 				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
@@ -391,7 +391,7 @@ func TestTitle(t *testing.T) {
 	}
 }
 
-// TestDepthViolations pins the candidate-only WL-SPEC-77 §4 rule: which anchors it
+// TestDepthViolations pins the candidate-only WL-REQ-165 rule: which anchors it
 // fires on, the sorted order it reports them in, and that an anchorless or
 // duplicate-suppressed heading never participates.
 func TestDepthViolations(t *testing.T) {

@@ -71,7 +71,7 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	}
 	// Decoded into map[string]any rather than a named struct: GitHub's
 	// payload is a foreign schema internal/model does not own, and
-	// internal/model/modelrule_test.go (WL-SPEC-73 §3.2a) holds internal/api to no
+	// internal/model/modelrule_test.go (WL-RULE-1349) holds internal/api to no
 	// json-tagged struct at all — internal/hooks is where such shapes are
 	// named, for the raw webhook delivery this event was recorded from.
 	var payload map[string]any
@@ -137,7 +137,7 @@ func (s *server) handleSpecReconcile(ctx context.Context, ev store.Event) (event
 	// The id is keyed on the resolved rule, so a qualifier or a rule ref vs
 	// the section ref of the same rule is the same link.
 	// A section ref on a spec heading names every rule grouped under it
-	// (WL-SPEC-77 §19.1), so the task is governed by each.
+	// (WL-REQ-1295), so the task is governed by each.
 	var ruleIDs []int64
 	err = s.st.Tx(ctx, func(tx *sql.Tx) error {
 		var err error

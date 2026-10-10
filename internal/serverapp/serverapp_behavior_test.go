@@ -209,7 +209,7 @@ func TestGraphClientFromEnv(t *testing.T) {
 }
 
 // TestRunRejectsBadInstanceEnv: LODE_INSTANCE_ENV is validated before the
-// store is opened (WL-SPEC-73 §4.2), like LODE_WEB_OPEN and LODE_CLUSTER_ENV_MAP, so an
+// store is opened (WL-REQ-22), like LODE_WEB_OPEN and LODE_CLUSTER_ENV_MAP, so an
 // operator sees the typo in the setting rather than a connection error. The
 // DSN below is deliberately unreachable: if the check ever moved after
 // store.Open, this test would fail with a connection error instead.

@@ -148,7 +148,7 @@ func TestMirrorDedupesIdenticalBytes(t *testing.T) {
 // its bytes end up behind an <img src>, so anything that cannot render in
 // place is not stored. Mirroring it would buy a hosting primitive for
 // attacker-supplied content and still render as a broken image; left alone,
-// the remote reference renders as nothing (WL-SPEC-78 §8.6).
+// the remote reference renders as nothing (WL-REQ-231).
 func TestMirrorSkipsNonImage(t *testing.T) {
 	t.Parallel()
 	st := store.OpenTestStore(t)

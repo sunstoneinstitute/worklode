@@ -15,7 +15,7 @@ const (
 // ParseInstanceEnv validates a LODE_INSTANCE_ENV value, returning the
 // environment to run as.
 //
-// Empty means prod, because the failure modes are asymmetric (WL-SPEC-73 §4.2): a prod
+// Empty means prod, because the failure modes are asymmetric (WL-REQ-22): a prod
 // instance that silently believes it is dev drops decision records from the
 // org's real data, while a dev instance that believes it is prod asks for a
 // justification nobody needed. The permissive setting is the one an operator

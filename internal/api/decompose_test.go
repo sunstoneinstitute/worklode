@@ -20,7 +20,7 @@ func TestDecomposeEndpoint(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
-	// The response names the parent, and WL-SPEC-75 §13.2 / WL-SPEC-75 §5 leave its kind
+	// The response names the parent, and WL-REQ-120 / WL-REQ-88 leave its kind
 	// untouched — the child_of edges are what make it a container.
 	gotParent := got["parent"].(map[string]any)
 	if gotParent["kind"] != "feature" || gotParent["id"] != id {

@@ -74,7 +74,7 @@ func (s *s3Store) Put(ctx context.Context, key string, r io.Reader, size int64, 
 		// No user metadata: PutObjectInput.Metadata serialises as
 		// x-amz-meta-<key>, which no browser reads, so it cannot carry
 		// Content-Security-Policy or X-Content-Type-Options. Content-Disposition
-		// on the presigned URL is what carries the serving hardening (WL-SPEC-78 §8.6).
+		// on the presigned URL is what carries the serving hardening (WL-REQ-231).
 	})
 	if err != nil {
 		return fmt.Errorf("put %s: %w", key, err)

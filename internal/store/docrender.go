@@ -11,7 +11,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// docrender.go assembles a spec's text on read (WL-SPEC-77 §19.5): each
+// docrender.go assembles a spec's text on read (WL-REQ-1299): each
 // arranged entry shows the heading and body of the rule version its
 // arrangement row holds, and every span outside the entries is the template
 // text docs.body stores. docs.body keeps each entry's heading line as the
@@ -145,7 +145,7 @@ func insertMissingEntries(doc *designdoc.Document, texts map[string]arrangedText
 
 // specTemplate is body with the text of every section anchored at one of
 // rules removed and its heading line kept as the entry's placeholder: the
-// template docs.body holds for a spec (WL-SPEC-77 §19.1). The migration that
+// template docs.body holds for a spec (WL-REQ-1295). The migration that
 // introduced it carries the same cut in SQL (spec_template). A body that
 // does not parse is returned unchanged.
 func specTemplate(body string, rules map[string]bool) string {

@@ -1,8 +1,8 @@
 // approvals.go serves the approval surfaces a CLI token may reach:
 // requesting review on a document, filing an ad-hoc requirement on any
-// governed target (WL-SPEC-75 §13.6), and reading the awaiting queue.
+// governed target (WL-REQ-124), and reading the awaiting queue.
 //
-// Deciding is deliberately absent. WL-SPEC-75 §13.6 makes approving a web UI act —
+// Deciding is deliberately absent. WL-REQ-124 makes approving a web UI act —
 // the OIDC session's group claims are fresh, a 30-day CLI token's are not —
 // so the only decision route is POST /approvals/{id}/decide, gated by
 // requireSession in webform.go. Adding a /api/v1 decide route here would
@@ -20,7 +20,7 @@ import (
 
 // requestDocApproval handles POST /api/v1/docs/{id}/request-approval: opens
 // one awaiting lane per reviewer in the document's durable reviewer set
-// (WL-SPEC-77 §9, assigned separately via POST /api/v1/docs/{id}/reviewers —
+// (WL-REQ-170, assigned separately via POST /api/v1/docs/{id}/reviewers —
 // WL-359) on its current version. Re-requesting at the same version adds
 // only the lanes that are missing, so a caller who has just added a
 // reviewer can simply run this again.
@@ -61,7 +61,7 @@ func (s *server) requestDocApproval(w http.ResponseWriter, r *http.Request) {
 }
 
 // setDocReviewers handles POST /api/v1/docs/{id}/reviewers: replaces the
-// document's durable reviewer set wholesale (WL-SPEC-77 §9, WL-359) — the owner
+// document's durable reviewer set wholesale (WL-REQ-170, WL-359) — the owner
 // or an admin's call, same authority as transferDocOwner checks. Unlike
 // request-approval this opens no approval lanes itself; it only changes what
 // the next request-approval call reads.
@@ -86,14 +86,14 @@ func (s *server) setDocReviewers(w http.ResponseWriter, r *http.Request) {
 	s.writeDoc(w, r, id)
 }
 
-// requireApproval handles POST /api/v1/approvals: WL-SPEC-75 §13.6's "ad-hoc
+// requireApproval handles POST /api/v1/approvals: WL-REQ-124's "ad-hoc
 // requirements can be added to any governed target". A flow mints rows from
 // project policy; this files one by hand, on the same table, so the queue
 // reads both without knowing which is which.
 //
 // Filing is not deciding. A bearer token reaches this route — an agent or a
 // CI job may say "this needs review" — while deciding stays a web-session act
-// (WL-SPEC-75 §13.6, see the file header). created_by is the requesting actor, not
+// (WL-REQ-124, see the file header). created_by is the requesting actor, not
 // the 'worklode' system actor: a human filed this policy, and only
 // rule-created rows belong to worklode (store.FlowActorID).
 //
@@ -171,10 +171,10 @@ func textPtr(s string) *string {
 	return &s
 }
 
-// listApprovals handles GET /api/v1/approvals: the awaiting queue (WL-SPEC-75 §13.6)
+// listApprovals handles GET /api/v1/approvals: the awaiting queue (WL-REQ-124)
 // as JSON, the same rows the cockpit's /reviews page renders. Read-only.
 // Excludes a pr-kind row whose PR has since closed (WL-663): tasks carry no
-// review requirement by default (WL-SPEC-75 §13.6), so a closed, unreviewed PR is
+// review requirement by default (WL-REQ-124), so a closed, unreviewed PR is
 // not an outstanding requirement, just an ingest artifact nobody can act on
 // any more.
 //

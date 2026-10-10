@@ -56,7 +56,7 @@ func (r *recorder) snapshot() []int64 {
 }
 
 // recordTestEvents appends n events with a dotted (non-vocabulary) type, so
-// the metrics tests exercise the "other" type label (WL-SPEC-77 §15).
+// the metrics tests exercise the "other" type label (WL-RULE-179).
 func recordTestEvents(t *testing.T, ctx context.Context, s *store.Store, prefix string, n int) []int64 {
 	t.Helper()
 	ids := make([]int64, 0, n)
@@ -153,7 +153,7 @@ func loopOptions(s *store.Store, name string, h Handler) Options {
 }
 
 // TestLoopDeliversInOrderAndAcks: the loop hands every event to the handler
-// in id order and acks the batch (WL-SPEC-77 §15).
+// in id order and acks the batch (WL-RULE-179).
 func TestLoopDeliversInOrderAndAcks(t *testing.T) {
 	s := store.OpenTestStore(t)
 	ctx := t.Context()
@@ -180,7 +180,7 @@ func TestLoopDeliversInOrderAndAcks(t *testing.T) {
 }
 
 // TestLoopSingleConsumer: one subscriber has exactly one active consumer
-// (WL-SPEC-77 §15). The standby idles on the lock and takes over when the holder
+// (WL-RULE-179). The standby idles on the lock and takes over when the holder
 // exits, resuming at last_acked_offset — it must not replay acked events.
 func TestLoopSingleConsumer(t *testing.T) {
 	s := store.OpenTestStore(t)
@@ -369,7 +369,7 @@ func TestLoopRedeliversAfterHandlerError(t *testing.T) {
 	}
 }
 
-// TestLoopMetrics asserts the WL-SPEC-77 §15 instruments: the processed counter
+// TestLoopMetrics asserts the WL-RULE-179 instruments: the processed counter
 // with a bounded type label, the batch-duration histogram, and the lag gauge
 // (up with events pending, back to zero once the loop catches up).
 func TestLoopMetrics(t *testing.T) {
@@ -415,7 +415,7 @@ func TestMetricsNilSafe(t *testing.T) {
 }
 
 // TestMetricsBoundsTypeLabel: a known vocabulary type is kept, anything else
-// collapses to "other" (WL-SPEC-77 §15).
+// collapses to "other" (WL-RULE-179).
 func TestMetricsBoundsTypeLabel(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := NewMetrics(reg, nil)

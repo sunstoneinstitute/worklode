@@ -82,7 +82,7 @@ func TestDeclareArtifactIsIdempotent(t *testing.T) {
 
 // TestOpenDeclarationsForArtifactPerKindOpenness covers the three declarer
 // kinds and the openness predicate each one gets. A deliverable is always
-// open (WL-SPEC-75 §13.3 leaves it no state to be closed by); a task uses taskClosed,
+// open (WL-RULE-121 leaves it no state to be closed by); a task uses taskClosed,
 // so an abandoned one and one at its repo's done_state drop out while an
 // in_progress one stays; a doc drops out only at superseded, because an
 // accepted spec is still the live declaration.
@@ -155,7 +155,7 @@ func TestDocFrontmatterDeclaresArtifact(t *testing.T) {
 		t.Fatalf("after create: open declarations = %+v, want one doc %s", got, docID)
 	}
 
-	// A body edit carries no header and undeclares nothing (WL-SPEC-77 §7).
+	// A body edit carries no header and undeclares nothing (WL-REQ-168).
 	if _, err := updateDocBody(t, s, doc.ID, "# Spec 9 — Artifact spec\n\nMore.\n"); err != nil {
 		t.Fatalf("update body: %v", err)
 	}

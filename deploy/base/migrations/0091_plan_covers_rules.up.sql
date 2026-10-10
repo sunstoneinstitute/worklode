@@ -1,4 +1,4 @@
--- A plan's covers edge runs from the plan to a rule (WL-SPEC-77 §3, §4, §8).
+-- A plan's covers edge runs from the plan to a rule (WL-REQ-164, WL-REQ-165, WL-REQ-169).
 -- A plan contains no rules, so its doc_rules rows go. Existing covers edges
 -- are resolved the way a plan write resolves them: a section-scoped edge to
 -- the rule at that anchor, a whole-document edge to every rule the document
@@ -63,7 +63,7 @@ DELETE FROM doc_rules dr USING docs d WHERE d.id = dr.doc_id AND d.kind = 'plan'
 
 -- covered_rules is every rule a covers edge reaches: its to_rule and,
 -- transitively, each rule that supersedes a reached rule, so a successor
--- counts as covered when a predecessor was (WL-SPEC-77 §4). This is the one
+-- counts as covered when a predecessor was (WL-REQ-165). This is the one
 -- place coverage follows supersession; every coverage read goes through it.
 -- supersedes runs new -> old (from_rule is the successor).
 CREATE VIEW covered_rules AS

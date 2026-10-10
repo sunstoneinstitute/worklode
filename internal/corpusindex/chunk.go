@@ -1,5 +1,5 @@
 // Package corpusindex chunks a doc, task, or skill into the embeddable units
-// WL-SPEC-79 §14 defines, and composes the context header each one carries. It
+// WL-REQ-254 defines, and composes the context header each one carries. It
 // is pure: no store, no HTTP, no DB — internal/store calls it with rows it
 // already has and writes what comes back.
 package corpusindex
@@ -13,8 +13,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// Budget is the chunk sizing (WL-SPEC-79 §14). It derives from the embedding
-// model's declared context window (07 §14.4); nothing here carries a model's
+// Budget is the chunk sizing (WL-REQ-254). It derives from the embedding
+// model's declared context window (WL-REQ-257); nothing here carries a model's
 // window as a constant.
 type Budget struct {
 	// Runes is a chunk's ceiling, header included.
@@ -42,7 +42,7 @@ var DefaultBudget = BudgetFor(2048)
 // lexical indexing concatenates them, and only Text is ever returned to a
 // caller as an excerpt.
 type Chunk struct {
-	// Anchor is the frozen section anchor (WL-SPEC-77 §4) a doc sub-chunk
+	// Anchor is the frozen section anchor (WL-REQ-165) a doc sub-chunk
 	// inherits from its section. "" for tasks, skills, and any doc chunk
 	// that names no real anchor (a plan heading, an unstructured fallback).
 	Anchor string
@@ -85,7 +85,7 @@ func windowed(b Budget, anchor, header, text string, start int) []Chunk {
 
 // ChunkDoc splits a spec or ADR into one chunk per section (§4.2): sections
 // carries every doc_sections row for doc, in whatever order the caller has
-// them. A plan (sections empty, WL-SPEC-77 §11) chunks on its own ##/### headings
+// them. A plan (sections empty, WL-REQ-172) chunks on its own ##/### headings
 // instead, anchor always "", falling back to fixed windows when the body has
 // no heading structure at all — which also covers a spec or ADR somehow
 // carrying none.
@@ -119,7 +119,7 @@ func chunkSections(b Budget, doc model.Doc, sections []model.DocSection, parsed 
 	for i := range min(len(ordered), len(parsed.Sections)) {
 		sec := ordered[i]
 		if sec.Kind == "heading" {
-			continue // a spec heading has no text; the rules under it carry their own header (WL-SPEC-77 §19.1)
+			continue // a spec heading has no text; the rules under it carry their own header (WL-REQ-1295)
 		}
 		header := DocHeader(doc, sec.Number, sec.Heading)
 		chunks := windowed(b, sec.Anchor, header, parsed.Sections[i].Body, next[sec.Anchor])
@@ -132,7 +132,7 @@ func chunkSections(b Budget, doc model.Doc, sections []model.DocSection, parsed 
 // chunkPlan chunks a plan on every heading designdoc.Parse finds — in
 // practice ## and ###, the only depths a plan uses (WL-PLAN-2's "## Tasks" /
 // "### Task N — ..." convention) — plus any leading preamble, each with an
-// empty anchor since plans carry none (WL-SPEC-77 §11). Every chunk here shares that
+// empty anchor since plans carry none (WL-REQ-172). Every chunk here shares that
 // one empty anchor, so next is a single running counter rather than a map.
 func chunkPlan(b Budget, doc model.Doc, parsed *designdoc.Document) []Chunk {
 	var out []Chunk

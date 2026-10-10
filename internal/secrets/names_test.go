@@ -18,7 +18,7 @@ func TestValidName(t *testing.T) {
 	}
 }
 
-// TestValidNameDeniesLoaderSensitive covers WL-SPEC-74 §10.1: names that satisfy the
+// TestValidNameDeniesLoaderSensitive covers WL-REQ-68: names that satisfy the
 // grammar but redirect how a `lode secret exec` child loads code.
 func TestValidNameDeniesLoaderSensitive(t *testing.T) {
 	denied := []string{

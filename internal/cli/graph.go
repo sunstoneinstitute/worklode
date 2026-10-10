@@ -21,7 +21,7 @@ func (c *Client) ProjectGraph(ctx context.Context, projectID string) (model.Proj
 
 // ProjectionFailures calls GET /api/v1/graph/projection/failures: the
 // projects the knowledge-graph projector has quarantined, oldest failure
-// first (WL-SPEC-79 §12).
+// first (WL-REQ-251).
 func (c *Client) ProjectionFailures(ctx context.Context) (model.ProjectionFailureListResponse, []byte, error) {
 	return doJSON[model.ProjectionFailureListResponse](ctx, c, http.MethodGet, "/api/v1/graph/projection/failures", nil, "projection failure list")
 }

@@ -27,10 +27,10 @@ func denseSkillHits(t *testing.T, s *Store, ctx context.Context, query []float32
 	return hits
 }
 
-// TestIndexChunksHasBothIndexes is the other half of WL-SPEC-79 §14.5: the
+// TestIndexChunksHasBothIndexes is the other half of WL-REQ-258: the
 // fixed width buys an HNSW index the 016 schema could not have, and the
 // lexical arm is only cheap because of the GIN index over tsv. Both are what
-// make WL-SPEC-79 §15's two arms one statement rather than two scans, and neither is
+// make WL-REQ-259's two arms one statement rather than two scans, and neither is
 // visible from any query result — a dropped index changes the plan, not the
 // answer, so nothing else would notice.
 func TestIndexChunksHasBothIndexes(t *testing.T) {
@@ -54,7 +54,7 @@ func TestIndexChunksHasBothIndexes(t *testing.T) {
 	}
 }
 
-// TestReplaceSubjectChunksWrongWidth is WL-SPEC-79 §14.5: the vector(768)
+// TestReplaceSubjectChunksWrongWidth is WL-REQ-258: the vector(768)
 // typmod is what refuses a wrong-shaped vector, not a Go length check. 016
 // had no typmod and needed the guard in the store; 0061 moved the invariant
 // into the column, so this asserts Postgres does the refusing.
@@ -139,7 +139,7 @@ func TestReplaceSubjectChunksEmptyClears(t *testing.T) {
 	}
 }
 
-// TestReplaceSubjectChunksNilVectors is WL-SPEC-79 §17: an instance with no
+// TestReplaceSubjectChunksNilVectors is WL-REQ-261: an instance with no
 // embedding provider still writes chunk rows, text and all, with a null
 // embedding. Those rows must be invisible to the dense arm and present in
 // the table.
@@ -242,7 +242,7 @@ func TestVectorLiteral(t *testing.T) {
 	}
 }
 
-// TestClearAllChunkVectors covers the provider-change path (WL-SPEC-79 §16): every
+// TestClearAllChunkVectors covers the provider-change path (WL-REQ-260): every
 // vector is invalidated at once, and the rows survive so the lexical arm
 // keeps serving while the next convergence pass rebuilds them.
 func TestClearAllChunkVectors(t *testing.T) {
@@ -282,7 +282,7 @@ func TestClearAllChunkVectors(t *testing.T) {
 }
 
 // TestIndexChunksCascadeOnTaskDelete pins the FK cascade that lets the index
-// carry no tombstones (WL-SPEC-79 §14): dropping a subject drops its chunks.
+// carry no tombstones (WL-REQ-254): dropping a subject drops its chunks.
 func TestIndexChunksCascadeOnTaskDelete(t *testing.T) {
 	t.Parallel()
 	s := OpenTestStore(t)
@@ -343,7 +343,7 @@ func TestIndexChunksOneSubjectCheck(t *testing.T) {
 	}
 }
 
-// TestStaleSubjectsConverges is WL-SPEC-79 §16: a never-indexed subject is
+// TestStaleSubjectsConverges is WL-REQ-260: a never-indexed subject is
 // stale, an edited one goes stale again, and a second pass over an unchanged
 // corpus finds nothing.
 func TestStaleSubjectsConverges(t *testing.T) {
@@ -393,10 +393,10 @@ func TestStaleSubjectsConverges(t *testing.T) {
 	}
 }
 
-// TestStaleSubjectsNeedVectors is the other half of WL-SPEC-79 §16: invalidation
+// TestStaleSubjectsNeedVectors is the other half of WL-REQ-260: invalidation
 // nulls vectors without touching the text or its hash, so a row with no
 // vector has to count as needing work — but only on an instance that has a
-// provider to compute one with (WL-SPEC-79 §17).
+// provider to compute one with (WL-REQ-261).
 func TestStaleSubjectsNeedVectors(t *testing.T) {
 	t.Parallel()
 	s := OpenTestStore(t)
@@ -433,7 +433,7 @@ func TestStaleSubjectsNeedVectors(t *testing.T) {
 }
 
 // TestStaleSubjectsSkills covers the skill arm: skill_versions.content_hash
-// is the live hash, and a soft-deleted skill is never stale (WL-SPEC-79 §14) — its
+// is the live hash, and a soft-deleted skill is never stale (WL-REQ-254) — its
 // chunk rows are deleted by the caller, not filtered at query time.
 func TestStaleSubjectsSkills(t *testing.T) {
 	t.Parallel()

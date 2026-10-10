@@ -35,7 +35,7 @@ func seedDocNoteTask(t *testing.T, s *Store, id string) {
 	}
 }
 
-// TestDocNoteAnchored covers WL-SPEC-77 §10's whole surface: a note lands against a
+// TestDocNoteAnchored covers WL-REQ-171's whole surface: a note lands against a
 // section the document actually has, carrying the task, session and actor that
 // raised it; an anchor the document does not have, an empty body, and a plan
 // (which has no sections at all) are each refused.
@@ -82,7 +82,7 @@ func TestDocNoteAnchored(t *testing.T) {
 		t.Errorf("note with an empty body err = %v, want ErrInvalidInput", err)
 	}
 
-	// A plan carries no sections (WL-SPEC-77 §11), so no anchor on it can be real.
+	// A plan carries no sections (WL-REQ-172), so no anchor on it can be real.
 	plan := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "noted-plan", Body: planMintBody, CreatedBy: "stig",
 	})

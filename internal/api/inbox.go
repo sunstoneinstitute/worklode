@@ -1,4 +1,4 @@
-// inbox.go assembles the cross-project inbox page (WL-SPEC-82 §12): what is
+// inbox.go assembles the cross-project inbox page (WL-REQ-347): what is
 // waiting on the signed-in actor, in the six buckets §3.2 fixes the order of.
 // The derivation is pure — everything it reads is fetched by the caller and
 // handed in — so the bucket rules and the §3.3 ordering are testable without
@@ -19,7 +19,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
-// inboxPage handles GET /inbox (WL-SPEC-82 §12): the cross-project inbox, what
+// inboxPage handles GET /inbox (WL-REQ-347): the cross-project inbox, what
 // is waiting on the signed-in actor across every project they belong to.
 // With no actor — LODE_WEB_OPEN, or no login provider configured — it
 // renders the honest signed-out empty state without fetching anything: no
@@ -96,7 +96,7 @@ type inboxInputs struct {
 // same six buckets.
 var activeTaskStates = map[string]bool{"ready": true, "in_progress": true, "in_review": true}
 
-// assembleInbox derives WL-SPEC-82 §12's six buckets in order. Work buckets rank by
+// assembleInbox derives WL-REQ-347's six buckets in order. Work buckets rank by
 // rankConcernRoots over the full facts slice, filtered to membership
 // afterwards — never before (§3.3). nil when every bucket is empty. Each item
 // carries the text and href the page renders.

@@ -1,4 +1,4 @@
-// progress.js drives the Progress page (WL-SPEC-85 §3): it expands a
+// progress.js drives the Progress page (WL-REQ-1336): it expands a
 // spec row, and it owns the page's tooltips.
 //
 // Expansion is one class. Every row's detail block is already in the document;
@@ -6,15 +6,15 @@
 // expanding costs no request and no markup. A click that lands on a link is
 // left alone — the reference is the row's only link and it has to stay one.
 //
-// An action is a two-step button (WL-SPEC-85 §4). The first click never
+// An action is a two-step button (WL-REQ-1337). The first click never
 // writes: it swaps the button's own content for the act named in full with
 // Confirm and Cancel, at the width measured before the swap, so nothing on
 // the page moves. Cancel, Escape, or a click elsewhere puts the button back.
-// Confirm posts through the page-script write gate (WL-SPEC-85 §5) and the button is
+// Confirm posts through the page-script write gate (WL-REQ-1338) and the button is
 // busy until the reply. The confirmation step is a mis-click guard and
 // nothing more; what stands between a hostile page and a write is that gate.
 //
-// The page follows its project's event stream (WL-SPEC-85 §6) and redraws
+// The page follows its project's event stream (WL-REQ-1339) and redraws
 // from server-rendered fragments: a frame naming a spec swaps that spec's row
 // and detail, and any frame refreshes the band, counts, bar and footer. The
 // page derives nothing from a frame — it re-reads what the server renders — so
@@ -67,7 +67,7 @@
   var pinnedEl = null; // the element a pinned tooltip came from, re-found after a swap
 
   // show fills the tooltip from the element's data-tip. A pinned one also
-  // takes the element's act, if it has one: WL-SPEC-85 §4's merge button is rendered
+  // takes the element's act, if it has one: WL-REQ-1337's merge button is rendered
   // beside the task cell and hidden, and a copy of it lives in the tooltip
   // for as long as the pin does. Only a pinned tooltip takes the pointer, so
   // a button in a hovering one could never be pressed anyway.
@@ -155,14 +155,14 @@
     restore(true);
   });
 
-  // --- actions (WL-SPEC-85 §4) -------------------------------------------------------
+  // --- actions (WL-REQ-1337) -------------------------------------------------------
 
   var armed = null; // the button currently showing its confirmation
   var sending = null; // the button whose write is in flight; every button ignores clicks
 
   // arm turns a button into its confirmation in place. The width is pinned to
   // what the button measured as a button, and the confirmation is laid over
-  // it, so the row keeps its geometry through both steps (WL-SPEC-85 §6).
+  // it, so the row keeps its geometry through both steps (WL-REQ-1339).
   function arm(a) {
     a.dataset.label = a.textContent;
     a.style.width = a.getBoundingClientRect().width + "px";
@@ -217,7 +217,7 @@
       if (msg && el) showError(el, msg);
     };
     // A route is relative to the page unless it is absolute (Review's
-    // /api/v1/reviews, WL-SPEC-85 §4).
+    // /api/v1/reviews, WL-REQ-1337).
     var route = a.getAttribute("data-route");
     fetch(route.charAt(0) === "/" ? route : base() + "/" + route, {
       method: "POST",
@@ -253,7 +253,7 @@
     }, 5000);
   }
 
-  // --- live updates (WL-SPEC-85 §6) ---------------------------------------------------
+  // --- live updates (WL-REQ-1339) ---------------------------------------------------
 
   // Every route this page reads or writes hangs off the page's own path, so
   // one base is all the script needs to know about where it is.
@@ -277,7 +277,7 @@
   // Frames arrive one per backbone event, so a single transition can produce
   // several in a row. A burst is coalesced into one fetch per named spec and
   // one summary fetch. wantTasks carries along which task(s) named a given
-  // spec in the burst, so the row that spec swaps into can pulse them (WL-SPEC-85 §6).
+  // spec in the burst, so the row that spec swaps into can pulse them (WL-REQ-1339).
   var wantRows = {};
   var wantTasks = {};
   var wantSummary = false;
@@ -324,7 +324,7 @@
   // pinned tooltip's target, and a confirmation the row is in the middle of.
   // A spec the page does not show yet joins the end of its group instead.
   // tasks names which task(s) an event just named for this spec, so the
-  // fresh row can flash them (WL-SPEC-85 §6); it is empty on a summary-only refresh.
+  // fresh row can flash them (WL-REQ-1339); it is empty on a summary-only refresh.
   function swapRow(doc, html, tasks) {
     var frag = parse(html);
     var row = frag.querySelector(".prog-row");
@@ -355,7 +355,7 @@
     touch(row, detail, tasks);
 
     // The swap is always in place; only the move between groups waits for the
-    // pointer to leave the list (WL-SPEC-85 §6).
+    // pointer to leave the list (WL-REQ-1339).
     var holder = row.closest("section[data-group]");
     if (holder && holder.getAttribute("data-group") !== row.getAttribute("data-group")) {
       if (overList) deferred[doc] = true;
@@ -363,7 +363,7 @@
     }
   }
 
-  // touch is WL-SPEC-85 §6's activity feedback: the row that just swapped flashes
+  // touch is WL-REQ-1339's activity feedback: the row that just swapped flashes
   // along its left edge, and any task cell a frame named pulses within it.
   // Both classes come off on animationend (app.tailwind.css keeps that event
   // firing under prefers-reduced-motion too, just with no motion in it), so a
@@ -489,8 +489,8 @@
     else location.reload();
   }
 
-  // WL-SPEC-85 §6's second fragment. Each piece is replaced by its content, never by
-  // its container: the band, the counts and the footer hold WL-SPEC-85 §6's fixed
+  // WL-REQ-1339's second fragment. Each piece is replaced by its content, never by
+  // its container: the band, the counts and the footer hold WL-REQ-1339's fixed
   // heights, and the reconnect note lives in the band.
   function swapSummary(html) {
     var frag = parse(html);
@@ -535,9 +535,9 @@
     });
   }
 
-  // The stream itself (WL-SPEC-85 §6). EventSource reconnects on its own and resumes
+  // The stream itself (WL-REQ-1339). EventSource reconnects on its own and resumes
   // from Last-Event-ID, so a drop needs no retry logic here: only the note in
-  // the band, and the one full refresh that follows the reconnect (WL-SPEC-85 §6).
+  // the band, and the one full refresh that follows the reconnect (WL-REQ-1339).
   var dropped = false;
   var stream = new EventSource(base() + "/events");
 

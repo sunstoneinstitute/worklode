@@ -305,7 +305,7 @@ func TestDeriveSort(t *testing.T) {
 }
 
 // TestDeriveWithdrawnAndStale: a withdrawn plan covers nothing; a stale plan
-// counts as accepted (WL-SPEC-85 §2).
+// counts as accepted (WL-REQ-1335).
 func TestDeriveWithdrawnAndStale(t *testing.T) {
 	in := Input{
 		Specs: []Spec{{Doc: 1, Ref: "WL-SPEC-1", Sections: []Section{{Anchor: "a"}, {Anchor: "b"}}}},

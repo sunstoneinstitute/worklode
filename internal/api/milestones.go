@@ -1,4 +1,4 @@
-// milestones.go serves WL-SPEC-75 §13.2's milestone over the JSON API: one
+// milestones.go serves WL-REQ-120's milestone over the JSON API: one
 // ordered container in a project, holding tasks and deliverables. There is no
 // cockpit form for it — the cockpit stays read-mostly here, and the promotion
 // transaction is what mints a project's default set in bulk.
@@ -165,7 +165,7 @@ func milestoneDeleteAction(cascade bool) string {
 }
 
 // milestonesPage handles GET /projects/{id}/milestones, the project-local
-// Milestones destination (WL-SPEC-75 §13.2, WL-SPEC-82 §4): every milestone as a
+// Milestones destination (WL-REQ-120, WL-REQ-335): every milestone as a
 // section, in position order, with the children its progress was derived
 // from. It loads the project header first, so an unknown project 404s the
 // same way every other project route does.
@@ -196,7 +196,7 @@ func (s *server) milestonesPageView(ctx context.Context, project ui.CockpitProje
 	if err != nil {
 		return ui.MilestonesView{}, err
 	}
-	// One read per milestone: references cross project boundaries (WL-SPEC-75 §13.4),
+	// One read per milestone: references cross project boundaries (WL-REQ-122),
 	// so they are not in ListMilestoneChildren's project-scoped result.
 	// ponytail: a project holds a handful of milestones; batch it if that
 	// stops being true.

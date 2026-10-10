@@ -1,5 +1,5 @@
 // blobgc.go implements POST /api/v1/blobs/gc: the two garbage-collection
-// sweeps WL-SPEC-78 §8.7 defines over content-addressed blobs. Admin-only (see
+// sweeps WL-REQ-232 defines over content-addressed blobs. Admin-only (see
 // permBlobAdmin in authz.go) — a sweep deletes data on every actor's behalf,
 // which is instance administration, not ordinary blob authoring.
 package api
@@ -15,11 +15,11 @@ import (
 )
 
 // defaultGCGrace keeps both sweeps clear of uploads in flight: the upload
-// path writes the object before the row (WL-SPEC-78 §8.5), so a blob or object
+// path writes the object before the row (WL-REQ-230), so a blob or object
 // seconds old may legitimately have no reference or index row yet.
 const defaultGCGrace = 24 * time.Hour
 
-// blobGC runs both sweeps from WL-SPEC-78 §8.7.
+// blobGC runs both sweeps from WL-REQ-232.
 func (s *server) blobGC(w http.ResponseWriter, r *http.Request) {
 	if s.blobs == nil {
 		writeErr(w, http.StatusNotImplemented, "blob storage is not configured")

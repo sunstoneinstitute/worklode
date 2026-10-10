@@ -10,15 +10,15 @@ import (
 )
 
 // TypeDocStale is events.type of the sweeper crossing a document into the
-// stale status (WL-SPEC-77 §9). Like TypeDocPatched, it is a dotted backbone type
+// stale status (WL-REQ-170). Like TypeDocPatched, it is a dotted backbone type
 // with no ns/ mirror: the sweeper that emits it and the rule below that
-// consumes it both live outside this package's purity boundary (WL-SPEC-75 §9.6).
+// consumes it both live outside this package's purity boundary (WL-REQ-109).
 const TypeDocStale = "doc.stale"
 
-// ruleGroomOnStale is the "rule" metric label for the WL-SPEC-77 §9 groom mint.
+// ruleGroomOnStale is the "rule" metric label for the WL-REQ-170 groom mint.
 const ruleGroomOnStale = "groom-on-stale"
 
-// StaleInput is everything the WL-SPEC-77 §9 clock consults for one document. An
+// StaleInput is everything the WL-REQ-170 clock consults for one document. An
 // alias for internal/staleness.Input: the calculation moved to that leaf
 // package so internal/store's sweeper can call it without an import cycle
 // (internal/watcher imports internal/eventbus, which imports

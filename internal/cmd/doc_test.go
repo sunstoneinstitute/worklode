@@ -21,7 +21,7 @@ import (
 const docTestBody = "# Test Document\n\nSome body text.\n"
 
 // docPlanMintBody is a well-formed plan in the mintable ## Tasks format
-// (WL-SPEC-77 §11.1): two definitions, no blockers, for the CLI's plan-accept and
+// (WL-REQ-173): two definitions, no blockers, for the CLI's plan-accept and
 // `task list --plan` tests.
 const docPlanMintBody = `---
 status: draft
@@ -110,7 +110,7 @@ func TestDocEditMissingFile(t *testing.T) {
 }
 
 // TestDocEditRefusesHeader: a body file opening with a header is refused
-// before any request (WL-SPEC-77 §7).
+// before any request (WL-REQ-168).
 func TestDocEditRefusesHeader(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "body.md")
 	if err := os.WriteFile(file, []byte("---\nstatus: draft\n---\n\n# T\n"), 0o644); err != nil {
@@ -198,7 +198,7 @@ func TestDocReviseFileAndAcceptMutuallyExclusive(t *testing.T) {
 	}
 }
 
-// --- doc ref resolution (WL-SPEC-77 §7; needs a real server) -----------------
+// --- doc ref resolution (WL-REQ-168; needs a real server) -----------------
 
 func TestResolveDocIDNumeric(t *testing.T) {
 	_, c := lifecycleTestServer(t)
@@ -270,7 +270,7 @@ func TestResolveDocIDAmbiguousSlug(t *testing.T) {
 }
 
 // TestDocAcceptBySlugPrintsMintedTasks: `lode doc accept <slug>` resolves the
-// ref and, for a plan, reports the minted task ids (WL-SPEC-77 §11.2).
+// ref and, for a plan, reports the minted task ids (WL-REQ-174).
 func TestDocAcceptBySlugPrintsMintedTasks(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -290,7 +290,7 @@ func TestDocAcceptBySlugPrintsMintedTasks(t *testing.T) {
 
 // TestDocSubmitBySlug: `lode doc submit <slug>` resolves the ref, reports the
 // document it submitted, and leaves the document's status alone — submission
-// is an event, not a status (WL-SPEC-77 §9).
+// is an event, not a status (WL-REQ-170).
 func TestDocSubmitBySlug(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -371,7 +371,7 @@ func TestDocFileFlagRejectsEmptyPath(t *testing.T) {
 }
 
 // TestDocAddAutoAssignsNumber: omitting --number for a spec/ADR gets the next
-// free number for its (project, kind) rather than refusing (WL-SPEC-77 §7).
+// free number for its (project, kind) rather than refusing (WL-REQ-168).
 func TestDocAddAutoAssignsNumber(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -658,11 +658,11 @@ func TestDocVersionsCmd(t *testing.T) {
 	}
 }
 
-// --- list selectors (WL-SPEC-78 §1.2) --------------------------------------------
+// --- list selectors (WL-REQ-186) --------------------------------------------
 
 // TestDocListSelectorConflicts: each derived selector implies a kind and a
 // status, so a contradicting filter is refused locally, before any round trip
-// (WL-SPEC-78 §1.2). The server refuses the same combinations; this just spares the
+// (WL-REQ-186). The server refuses the same combinations; this just spares the
 // request.
 func TestDocListSelectorConflicts(t *testing.T) {
 	for name, c := range map[string]struct {
@@ -773,7 +773,7 @@ status: draft
 `
 
 // docPlanCoveringSec1DefersSec2 covers sec-1 and defers sec-2 to owner-spec
-// (WL-SPEC-78 §4.2), for the deferred-gap rendering case in
+// (WL-REQ-204), for the deferred-gap rendering case in
 // TestDocListNeedsPlanningAndExecution.
 const docPlanCoveringSec1DefersSec2 = `---
 status: draft
@@ -799,7 +799,7 @@ Do it.
 
 // TestDocListNeedsPlanningAndExecution: both selectors reach the server and
 // render — the spec with its gap anchors, including a deferred one carrying
-// its owner (WL-SPEC-78 §4.2), and the plan with its open task.
+// its owner (WL-REQ-204), and the plan with its open task.
 func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -987,7 +987,7 @@ covers:
 	}
 }
 
-// --- lode doc lint <file> (the local pre-accept lint, WL-SPEC-77 §18) -----------
+// --- lode doc lint <file> (the local pre-accept lint, WL-REQ-182) -----------
 
 func TestDocLintFile(t *testing.T) {
 	cases := map[string]struct {
@@ -1063,7 +1063,7 @@ func TestDocLintFileMissingFile(t *testing.T) {
 	}
 }
 
-// TestDocAddRecordsWorktreeTask walks the whole chain WL-SPEC-77 §13 needs: `lode
+// TestDocAddRecordsWorktreeTask walks the whole chain WL-REQ-177 needs: `lode
 // worktree next` binds a worktree to a task, and a `lode doc add` run from inside that
 // worktree records the binding on the document. The CLI reads the task the
 // same way every other worktree-aware command does, so claiming into a
@@ -1104,7 +1104,7 @@ func TestDocAddRecordsWorktreeTask(t *testing.T) {
 	}
 }
 
-// TestDocWithdrawAndUnresolved is WL-SPEC-77 §9's two verbs end to end: an
+// TestDocWithdrawAndUnresolved is WL-REQ-170's two verbs end to end: an
 // accepted spec nothing has executed shows in `doc list --unresolved` with
 // its age, `doc withdraw` closes it, and it leaves the set. A draft is
 // refused, since deleting is what a draft gets.
@@ -1226,7 +1226,7 @@ func TestDocResolve(t *testing.T) {
 
 // TestDocShowEditable: --editable names each rule in its heading, plain show
 // does not, and feeding the editable form back to doc edit changes nothing
-// (WL-SPEC-77 §19.5).
+// (WL-REQ-1299).
 func TestDocShowEditable(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

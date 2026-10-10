@@ -8,7 +8,7 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-// home.templ renders the Home project list (WL-SPEC-82 §11, first slice): the
+// home.templ renders the Home project list (WL-REQ-346, first slice): the
 // actor's tiered project cards in "actor" mode, every project by last
 // activity with no role badge or signal in "open" mode (no actor —
 // LODE_WEB_OPEN, or a login provider not yet configured), or the honest
@@ -115,7 +115,7 @@ func Home(v HomeView) templ.Component {
 	})
 }
 
-// homeCard renders one project card as a single link (WL-SPEC-82 §4:
+// homeCard renders one project card as a single link (WL-REQ-335:
 // keyboard-operable, no nested interactive elements) carrying identity, the
 // optional role badge and signal line, the counts strip (label text plus
 // number, never colour alone), the crew row, and the last-activity line.

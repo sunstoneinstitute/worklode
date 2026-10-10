@@ -1,4 +1,4 @@
-// Hierarchy resolver: the single place the WL-SPEC-75 §5.3 roll-up table lives.
+// Hierarchy resolver: the single place the WL-REQ-90 roll-up table lives.
 // Progress (closed/total) is derived on read in hierarchy.go; closure is
 // stored as real transitions, attributed to the triggering event, by
 // ResolveHierarchy. Transition itself calls the resolver, so every state
@@ -14,7 +14,7 @@ import (
 )
 
 // childState is one direct child as the roll-up sees it: its state, and
-// whether it counts as closed. Closedness is per repo (taskClosed, WL-SPEC-75 §4)
+// whether it counts as closed. Closedness is per repo (taskClosed, WL-REQ-87)
 // and so cannot be read off the state alone — a merged child in a repo that
 // gates on released has not finished delivering.
 type childState struct {
@@ -22,7 +22,7 @@ type childState struct {
 	Closed bool
 }
 
-// containerTarget returns the state the WL-SPEC-75 §5.3 roll-up table implies
+// containerTarget returns the state the WL-REQ-90 roll-up table implies
 // for a task with the given direct children, or "" when no roll-up applies. A
 // task with no children never moves: it is an ordinary task and stays where it
 // is. All-abandoned rolls up to abandoned rather than merged — treating
@@ -61,10 +61,10 @@ func containerTarget(children []childState) string {
 }
 
 // ResolveHierarchy moves parentID to the state its children imply, per the
-// WL-SPEC-75 §5.3 roll-up table, inside the given transaction. A draft parent is
+// WL-REQ-90 roll-up table, inside the given transaction. A draft parent is
 // left alone: draft -> ready is a manual publish, not a roll-up. A task with
 // no children is left alone by containerTarget, which is what keeps this a
-// no-op for an ordinary task now that container-ness is inferred (WL-SPEC-75 §13.2)
+// no-op for an ordinary task now that container-ness is inferred (WL-REQ-120)
 // rather than declared.
 //
 // A closed parent whose children reopened routes through ready, the only edge
@@ -72,7 +72,7 @@ func containerTarget(children []childState) string {
 // Both transitions carry the triggering child's eventID, which is the correct
 // attribution for a derived move.
 //
-// A tombstoned parent is left alone (WL-SPEC-75 §12): its edges survive the delete, so
+// A tombstoned parent is left alone (WL-REQ-117): its edges survive the delete, so
 // a live child transitioning would otherwise move — and emit events against —
 // a row nothing can see.
 func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64) error {
@@ -121,7 +121,7 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 
 // childStates returns parentID's direct child_of children — state plus the
 // per-repo closed verdict — in no particular order, since containerTarget only
-// counts them. Tombstoned children are not children for this purpose (WL-SPEC-75 §12),
+// counts them. Tombstoned children are not children for this purpose (WL-REQ-117),
 // so deleting the last unfinished one closes the parent — DeleteTask re-runs
 // this resolver for exactly that reason. Closedness comes from the same
 // taskClosed predicate the blocking queries and ChildProgress use, so a roll-up

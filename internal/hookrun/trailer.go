@@ -11,7 +11,7 @@ import (
 )
 
 // trailerToken is the label of the commit trailer that binds a commit to a
-// task (WL-SPEC-75 §1). store.TaskIDFromBody reads it back off the message;
+// task (WL-REQ-77). store.TaskIDFromBody reads it back off the message;
 // this is the only thing that writes it.
 const trailerToken = "Worklode-Task"
 

@@ -11,7 +11,7 @@ import (
 // one bare name is not org-unique: two plugins under a single
 // plugins/*/skills/* source legitimately ship the same skill name, and
 // whichever synced second used to lose to a UNIQUE (name) constraint
-// (WL-SPEC-81 §7.4). The qualifier comes from the plugin manifest at sync time; this
+// (WL-REQ-321). The qualifier comes from the plugin manifest at sync time; this
 // file is the read side, turning whatever a pin was written as back into a
 // row.
 
@@ -42,7 +42,7 @@ func (r SkillRefResolution) ambiguousErr() error {
 }
 
 // ResolveSkillRefs resolves each ref in order, deduped to first occurrence.
-// A ref resolves by three rules, tried in order (WL-SPEC-81 §7.4):
+// A ref resolves by three rules, tried in order (WL-REQ-321):
 //
 //  1. the qualified name, <plugin>:<name> — exact and authoritative;
 //  2. a bare name matching exactly one skill;

@@ -821,7 +821,7 @@ func TestReviewsForPRs(t *testing.T) {
 	}
 }
 
-// TestSetPRQueuedRoundTrip covers WL-SPEC-85 §7: queued_at is scanned back
+// TestSetPRQueuedRoundTrip covers WL-REQ-1340: queued_at is scanned back
 // through GetPR after being set, and clears back to nil.
 func TestSetPRQueuedRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -881,7 +881,7 @@ func TestSetPRQueuedRoundTrip(t *testing.T) {
 	}
 }
 
-// TestBranchRulesRoundTrip covers WL-SPEC-85 §7 and WL-SPEC-72 §3: an
+// TestBranchRulesRoundTrip covers WL-REQ-1340 and WL-REQ-6: an
 // unknown repo is ErrNotFound, and UpsertBranchRules's second write
 // overwrites the first rather than erroring on the (repo, branch) key.
 func TestBranchRulesRoundTrip(t *testing.T) {

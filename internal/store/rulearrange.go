@@ -16,7 +16,7 @@ import (
 
 // editableSpec is the text a rule arrangement writes and the table holding
 // its arrangement: a draft spec's own body and doc_rules, or an accepted
-// spec's candidate revision and doc_revision_rules (WL-SPEC-77 §19.3).
+// spec's candidate revision and doc_revision_rules (WL-REQ-1297).
 type editableSpec struct {
 	id       int64
 	text     string
@@ -90,7 +90,7 @@ func ruleByRefString(tx *sql.Tx, ref string) (int64, error) {
 	return RuleIDByRef(tx, r.Key, r.Number)
 }
 
-// ArrangeRule places an existing rule in a spec (WL-SPEC-77 §19.3): its
+// ArrangeRule places an existing rule in a spec (WL-REQ-1297): its
 // newest accepted version's heading and body (a first draft's, when none is
 // accepted, §19.4) are written into the spec's editable
 // text at the chosen position and anchor, and the spec's arrangement holds
@@ -161,7 +161,7 @@ func ArrangeRule(tx *sql.Tx, now time.Time, docID int64, in model.ArrangeRuleInp
 }
 
 // UnarrangeRule removes a rule from a spec without withdrawing it
-// (WL-SPEC-77 §19.3): its section leaves the spec's editable text and its
+// (WL-REQ-1297): its section leaves the spec's editable text and its
 // arrangement row goes. A rule left in no spec is a standalone rule. A rule
 // with anchored sections under it is refused, since they would fall under
 // whatever precedes it.
@@ -221,7 +221,7 @@ func endLine(text string) string {
 // section at, its heading level and its anchor. After puts it after the
 // named section's subtree at the same depth, Under as the named section's
 // last child, and neither at the end at the top level. The default anchor is
-// the next free number there (WL-SPEC-77 §4): the next integer at the end of
+// the next free number there (WL-REQ-165): the next integer at the end of
 // a sibling list, a letter suffix between two siblings.
 func placeRule(tx *sql.Tx, e editableSpec, d *designdoc.Document, in model.ArrangeRuleInput) (idx, level int, anchor string, err error) {
 	if in.After != "" && in.Under != "" {

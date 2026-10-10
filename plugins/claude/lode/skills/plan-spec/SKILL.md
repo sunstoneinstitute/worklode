@@ -9,7 +9,7 @@ allowed-tools: Bash(lode *) Bash(git *)
 Invocation arguments: $ARGUMENTS
 
 The first argument is the id of the `design` task to plan under. Accepting a
-spec mints one (spec 025 §15.4); `lode task list --kind design` finds it if the
+spec mints one (WL-RULE-179); `lode task list --kind design` finds it if the
 user did not name one.
 
 **Step 1, before reading or writing anything: claim the task.**
@@ -21,7 +21,7 @@ lode task claim <design-task-id> --json
 Claiming first is not bookkeeping. Agent sessions hang off leases, a lease
 binds a task to a worktree, and each turn bills to the worktree it ran in
 (spec 012 §4) — so planning done in the main checkout, which holds no lease,
-is spent tokens nobody can attribute (025 §15.6). Claiming also gets planning
+is spent tokens nobody can attribute (WL-RULE-179). Claiming also gets planning
 the brief, the secrets and the hook wiring every other kind of work gets,
 which is the better reason. Tokens spent before the claim — the exploration
 that decided which task to pick up — stay unattributed by design.
@@ -54,7 +54,7 @@ lode doc add --kind plan --slug <slug> --file <path>
 ```
 
 **Step 4: accept the plans.** `lode doc accept <id>` mints each plan's task set
-in the accepting transaction (025 §9.2), which is what turns a written plan
+in the accepting transaction (WL-REQ-172), which is what turns a written plan
 into claimable work. Only the document's owner may accept it. Acceptance also
 links each minted task to the rules governing the plan. Check `lode rule list --doc <plan-ref>`
 and a minted task's `governed_by` with `lode show <task-id> --json`.

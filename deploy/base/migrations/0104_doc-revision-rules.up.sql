@@ -1,4 +1,4 @@
--- A candidate revision carries its own arrangement (WL-SPEC-77 §19.3), shaped
+-- A candidate revision carries its own arrangement (WL-REQ-1297), shaped
 -- like doc_rules, so arranging or unarranging a rule in an accepted spec
 -- lands with the revision. Open candidates start from their document's
 -- current arrangement.

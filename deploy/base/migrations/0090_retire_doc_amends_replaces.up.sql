@@ -1,4 +1,4 @@
--- Documents no longer amend or replace each other (WL-SPEC-77 §8):
+-- Documents no longer amend or replace each other (WL-REQ-169):
 -- amendment and supersession are rule_edges rows. The document-level rows go,
 -- and the doc_edges type CHECK stops admitting them. doc_coverage_completed_with
 -- cascades off doc_edges.

@@ -32,8 +32,8 @@ the requirements in its scope and skips invariants and informative rules,
 and a direct ref to an invariant or informative rule is refused. The key is
 `covers`, not `implements`: a plan writes no code, so it claims nothing.
 `wl:implements` is a component's claim that its code meets a section
-(WL-SPEC-77 §13); a plan undertakes, and its minted tasks discharge that
-(WL-SPEC-78 §4.1). A `covers` entry always means the plan builds the whole
+(WL-REQ-177); a plan undertakes, and its minted tasks discharge that
+(WL-REQ-203). A `covers` entry always means the plan builds the whole
 requirement: there are no coverage levels, and `coverage:`/`fullCoverageWith:` are
 refused on write.
 
@@ -58,7 +58,7 @@ A rule's kind is set with `lode rule set <rule-ref> --kind <kind>`.
 If a rule is still a requirement but only states a constraint, reclassify it
 before planning rather than leaving it as a gap no plan will close.
 
-Use it for a standing rule such as the old 032 §11's "end-to-end tests drive the HTTP
+Use it for a standing rule such as the old WL-REQ-788's "end-to-end tests drive the HTTP
 UI and API surfaces and do not write directly to the store": an invariant
 governs every part while being built by none of them, and it needs no
 `covers` entry to do so.
@@ -75,12 +75,12 @@ informative rule is never a gap), over accepted-or-superseded plans covering its
 - a draft plan covers it → **plan-draft**, reported as a gap until the plan
   is accepted;
 - no plan covers it, and a plan `defers` it to a named owner → **deferred**,
-  owner named (WL-SPEC-78 §1.3);
+  owner named (WL-REQ-187);
 - no plan names it at all → **unplanned**.
 
 The backbone runs that query — `lode doc list --needs-planning --json` returns
 each accepted spec's uncovered anchors already classified `plan-draft`,
-`deferred` or `unplanned` (with the deferral's `owner`; WL-SPEC-78 §1.3), so
+`deferred` or `unplanned` (with the deferral's `owner`; WL-REQ-187), so
 "which sections has nobody planned" needs no reading of plans at all.
 
 ### Validator contract
@@ -97,7 +97,7 @@ kept as an external reference instead, which is a silently unplanned section,
 so check `lode doc show <slug> --json` for `edges` you expected.
 
 Note the layer this sits in: **planning** coverage is declared intent on a plan.
-WL-SPEC-77 §13's `<component> wl:implements <section>` is **implementation** coverage,
+WL-REQ-177's `<component> wl:implements <section>` is **implementation** coverage,
 observed from `.worklode/implements.yaml`. Different question, different owner.
 
 ## 2. Choosing the split
@@ -198,7 +198,7 @@ reference syntax: the `lode:writing-docs` skill's "Declaring a plan's
 tasks" section, which also covers how a document is created. A series
 part restarts task numbering at 1; ordering across parts is a document-level
 edge, never a task number. Declare it with `blockedBy:` on the later part;
-`blocks:` is refused (WL-SPEC-77 §8.1). The named part must already resolve,
+`blocks:` is refused (WL-REQ-1288). The named part must already resolve,
 so create the earlier part first.
 
 Constraints a plan inherits in the worklode repo itself — state them once in

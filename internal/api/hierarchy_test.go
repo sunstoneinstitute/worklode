@@ -6,7 +6,7 @@ import (
 )
 
 // createContainer creates a task that will take children, through the API,
-// and returns its id. Since WL-SPEC-75 §13.2 there is no container kind to declare.
+// and returns its id. Since WL-REQ-120 there is no container kind to declare.
 func createContainer(t *testing.T, h http.Handler, token, project, title string) string {
 	t.Helper()
 	got := createTaskViaAPI(t, h, token, map[string]any{
@@ -16,7 +16,7 @@ func createContainer(t *testing.T, h http.Handler, token, project, title string)
 }
 
 // TestCreateTaskRejectsContainerKind pins that no kind declares container-ness
-// at the HTTP edge (WL-SPEC-77 §12): container-ness is inferred from child_of edges, so
+// at the HTTP edge (WL-REQ-176): container-ness is inferred from child_of edges, so
 // validKinds admits nothing structural and the create is a 422.
 func TestCreateTaskRejectsContainerKind(t *testing.T) {
 	t.Parallel()
@@ -101,7 +101,7 @@ func TestTaskDetailProgress(t *testing.T) {
 	}
 }
 
-// TestCreateTaskUnderOrdinaryParent pins WL-SPEC-75 §13.2 on the create path: any
+// TestCreateTaskUnderOrdinaryParent pins WL-REQ-120 on the create path: any
 // ordinary task may be a parent, so what used to be a 422 ("parent must be an
 // container") is now the supported way to file a child.
 func TestCreateTaskUnderOrdinaryParent(t *testing.T) {

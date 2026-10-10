@@ -8,7 +8,7 @@ import (
 
 // listProjectionFailures handles GET /api/v1/graph/projection/failures: the
 // projects the knowledge-graph projector has quarantined, oldest failure
-// first (WL-SPEC-79 §12).
+// first (WL-REQ-251).
 //
 // Read-only and derived: the rows are the projector's own record of debt it
 // still owes, so there is nothing here to correct through this surface. A

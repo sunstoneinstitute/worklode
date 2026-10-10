@@ -20,30 +20,30 @@ import (
 type Frontmatter struct {
 	Status         string       `yaml:"status,omitempty"`         // wl:status
 	Issued         string       `yaml:"issued,omitempty"`         // dct:issued
-	Covers         CoverageList `yaml:"covers,omitempty"`         // wl:covers — plans only, WL-SPEC-78 §4
-	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; WL-SPEC-78 §4
-	Defers         DeferralList `yaml:"defers,omitempty"`         // wl:defers — plans only, WL-SPEC-78 §4
+	Covers         CoverageList `yaml:"covers,omitempty"`         // wl:covers — plans only, WL-RULE-202
+	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; WL-RULE-202
+	Defers         DeferralList `yaml:"defers,omitempty"`         // wl:defers — plans only, WL-RULE-202
 	Requires       RefList      `yaml:"requires,omitempty"`       // dct:requires
 	IsRequiredBy   RefList      `yaml:"isRequiredBy,omitempty"`   // dct:isRequiredBy
-	Blocks         RefList      `yaml:"blocks,omitempty"`         // plans only, WL-SPEC-77 §3 — orders whole documents
-	BlockedBy      RefList      `yaml:"blockedBy,omitempty"`      // plans only, WL-SPEC-77 §3
+	Blocks         RefList      `yaml:"blocks,omitempty"`         // plans only, WL-REQ-164 — orders whole documents
+	BlockedBy      RefList      `yaml:"blockedBy,omitempty"`      // plans only, WL-REQ-164
 	WasDerivedFrom string       `yaml:"wasDerivedFrom,omitempty"` // prov:wasDerivedFrom
 	// Amends, AmendedBy, Replaces and IsReplacedBy are retired keys
-	// (WL-SPEC-77 §7): amendment and supersession are rule edges. Nothing
+	// (WL-REQ-168): amendment and supersession are rule edges. Nothing
 	// reads them, and a new write carrying one is refused (RetiredRelKeys).
 	// They stay declared, like Task, because stored bodies keep their text.
 	Amends       AnchorMap `yaml:"amends,omitempty"`
 	AmendedBy    AnchorMap `yaml:"amendedBy,omitempty"`
 	Replaces     AnchorMap `yaml:"replaces,omitempty"`
 	IsReplacedBy AnchorMap `yaml:"isReplacedBy,omitempty"`
-	// Task is the retired `task:` key (WL-SPEC-78 §4). Nothing reads it: a plan's
-	// tasks are the rows carrying its plan_doc (WL-SPEC-77 §11). It is still
+	// Task is the retired `task:` key (WL-RULE-202). Nothing reads it: a plan's
+	// tasks are the rows carrying its plan_doc (WL-REQ-172). It is still
 	// declared because the decoder rejects unknown fields and the bodies the
 	// backbone stores are verbatim and never rewritten, so every plan
 	// authored before acceptance minted tasks still carries the key.
 	Task     string  `yaml:"task,omitempty"`
-	Kind     string  `yaml:"kind,omitempty"`     // transitional, no term; WL-SPEC-78 §3 — "adr" or absent (spec)
-	Artifact RefList `yaml:"artifact,omitempty"` // transitional, no term; catalog address(es) verifying this doc (WL-SPEC-75 §13) — URIs, not doc refs
+	Kind     string  `yaml:"kind,omitempty"`     // transitional, no term; WL-REQ-198 — "adr" or absent (spec)
+	Artifact RefList `yaml:"artifact,omitempty"` // transitional, no term; catalog address(es) verifying this doc (WL-REQ-118) — URIs, not doc refs
 
 	// raw is the header exactly as it appeared, fences and all, and inner
 	// the YAML between them. raw is emitted verbatim until a field is
@@ -53,7 +53,7 @@ type Frontmatter struct {
 }
 
 // CoveredSections is the sections a plan undertakes to realise, reading the
-// retired `implements` spelling when `covers` is absent (WL-SPEC-78 §4). Callers use
+// retired `implements` spelling when `covers` is absent (WL-RULE-202). Callers use
 // this rather than either field: a document carrying both is refused at write
 // time (store.rebuildEdges), so the precedence here never silently picks.
 func (f Frontmatter) CoveredSections() RefList {
@@ -107,7 +107,7 @@ type Coverage struct {
 }
 
 // Plain reports whether the entry is a bare reference. The `coverage` and
-// `fullCoverageWith` keys are retired (WL-SPEC-78 §4.5): they still parse, and
+// `fullCoverageWith` keys are retired (WL-REQ-207): they still parse, and
 // a write carrying either is refused.
 func (c Coverage) Plain() bool {
 	return !c.levelKey && (c.Coverage == "" || c.Coverage == "full") && len(c.FullCoverageWith) == 0
@@ -194,7 +194,7 @@ func (c *CoverageList) UnmarshalYAML(n *yaml.Node) error {
 }
 
 // Deferral is a plan's explicit handoff of one spec section to a named
-// owner (WL-SPEC-78 §4): Spec is a reference with a #sec-N fragment, To the
+// owner (WL-RULE-202): Spec is a reference with a #sec-N fragment, To the
 // document whose plans are expected to cover it. There is no scalar
 // shorthand — a deferral without an owner is just an uncovered section,
 // which needs no syntax.
@@ -213,7 +213,7 @@ type AnchorMap map[string]RefList
 
 // RetiredRelKeys names the retired amendment and supersession keys the header
 // carries, in key order. A write carrying any is refused; a stored body
-// carrying them is read as if they were absent (WL-SPEC-77 §7).
+// carrying them is read as if they were absent (WL-REQ-168).
 func (f *Frontmatter) RetiredRelKeys() []string {
 	if f == nil {
 		return nil

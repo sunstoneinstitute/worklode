@@ -107,7 +107,7 @@ func TestTodoUnplannedSectionsCollapse(t *testing.T) {
 		t.Fatalf("Todo: %v", err)
 	}
 	// One item for the document, not one per section: writing a plan is a
-	// single act and one plan covers many sections (WL-SPEC-78 §1.2).
+	// single act and one plan covers many sections (WL-REQ-186).
 	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="})
 	if items[0].Anchor != "" {
 		t.Errorf("Anchor = %q, want empty on a collapsed item", items[0].Anchor)
@@ -123,7 +123,7 @@ func TestTodoUnplannedSectionsCollapse(t *testing.T) {
 }
 
 // A section whose rule is not a requirement is owed no plan and yields no
-// item (WL-SPEC-78 §1.7).
+// item (WL-REQ-191).
 func TestTodoSkipsNonRequirements(t *testing.T) {
 	docs := buildTodoCorpus(t, map[string]string{"001-example.md": twoSectionSpec}, nil)
 	docs[0].Sections[1].Kind = "invariant"
@@ -134,7 +134,7 @@ func TestTodoSkipsNonRequirements(t *testing.T) {
 	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1 plan= tasks="})
 }
 
-// A deferred section (WL-SPEC-78 §4, §1.2) emits no item: the item types are each
+// A deferred section (WL-RULE-202, WL-REQ-186) emits no item: the item types are each
 // discharged by an act this document's own plans can perform, and the next
 // act on a deferred section belongs to its named owner, not to writing a
 // plan here. This is the WL-290 regression case: before defers was indexed by
@@ -191,7 +191,7 @@ func TestTodoPlanDraftReplacesTheSectionGap(t *testing.T) {
 		t.Fatalf("Todo: %v", err)
 	}
 	// The collapsed gap ranks ahead of the document's plan items: nothing
-	// blocks writing a plan (WL-SPEC-78 §1.2).
+	// blocks writing a plan (WL-REQ-186).
 	checkItems(t, items, []string{
 		"unplanned " + todoSpecRef + "#sec-2 plan= tasks=",
 		"plan-draft " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=",
@@ -287,7 +287,7 @@ func TestTodoBlockedByUndischargedRequirement(t *testing.T) {
 }
 
 // A draft spec leads with the acceptance decision and still reports its
-// sections: the item ranks first, it does not replace the walk (WL-SPEC-78 §1.2).
+// sections: the item ranks first, it does not replace the walk (WL-REQ-186).
 func TestTodoDraftSpecLeadsWithAcceptanceItem(t *testing.T) {
 	draft := strings.Replace(twoSectionSpec, "status: accepted", "status: draft", 1)
 	docs := buildTodoCorpus(t, map[string]string{"001-example.md": draft}, nil)
@@ -325,7 +325,7 @@ func TestTodoDraftSpecAcceptanceItemIsFirst(t *testing.T) {
 }
 
 // The retired `replaces` and `isReplacedBy` keys a stored body may still
-// carry drop nothing: the parser ignores them (WL-SPEC-77 §7).
+// carry drop nothing: the parser ignores them (WL-REQ-168).
 func TestTodoRetiredReplacesKeysDropNothing(t *testing.T) {
 	spec := strings.Replace(twoSectionSpec, "issued: 2026-01-01",
 		"issued: 2026-01-01\nisReplacedBy:\n  \"#sec-2\":\n    - 002-replacer.md#sec-1", 1)
@@ -578,7 +578,7 @@ func TestTodoRefForms(t *testing.T) {
 }
 
 // Offline never emits `blocked`: it is a statement about another plan's task
-// state, which is exactly what is unavailable (WL-SPEC-78 §1.2). An item's type must
+// state, which is exactly what is unavailable (WL-REQ-186). An item's type must
 // not depend on the caller's connectivity.
 func TestTodoOfflineNeverBlocked(t *testing.T) {
 	docs := buildTodoCorpus(t,
@@ -639,7 +639,7 @@ func TestTodoPlanRequiresCycle(t *testing.T) {
 }
 
 // A superseded requirement is spent, so it blocks nothing — the whole point
-// of reading `superseded` as discharging (WL-SPEC-78 §1.2).
+// of reading `superseded` as discharging (WL-REQ-186).
 func TestTodoSupersededRequirementDoesNotBlock(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
@@ -794,7 +794,7 @@ func TestTodoUnplannedDetail(t *testing.T) {
 }
 
 // A draft plan beside an accepted, executed one leaves the section
-// plan-draft (WL-SPEC-78 §1.3): the pending act is accepting it.
+// plan-draft (WL-REQ-187): the pending act is accepting it.
 func TestTodoDraftBesideExecutedPlan(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},

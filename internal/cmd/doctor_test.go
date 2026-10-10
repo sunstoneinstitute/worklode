@@ -287,7 +287,7 @@ func materialized(t *testing.T, taskID string) bool {
 
 // TestDoctorSweepsSecretsForGoneLeases: the lease-expiry sweeper is
 // server-side and cannot reach a laptop keystore, so `lode doctor` is what
-// reaps a worktree that was abandoned rather than removed (WL-SPEC-74 §10.4). A task
+// reaps a worktree that was abandoned rather than removed (WL-REQ-71). A task
 // the backbone answers for definitively — no lease, or gone entirely — is
 // purged; one with a live lease is left alone.
 func TestDoctorSweepsSecretsForGoneLeases(t *testing.T) {
@@ -371,7 +371,7 @@ func TestDoctorNeverPurgesOnUncertainty(t *testing.T) {
 	}
 }
 
-// TestCheckGatePRs covers the gate-prs decision (WL-SPEC-72 §3): a recorded
+// TestCheckGatePRs covers the gate-prs decision (WL-REQ-6): a recorded
 // PR rule passes, a recorded absence warns without failing the run, and
 // anything short of a recorded answer is an "unknown" skip.
 func TestCheckGatePRs(t *testing.T) {

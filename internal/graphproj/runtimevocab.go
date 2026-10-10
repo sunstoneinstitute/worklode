@@ -5,7 +5,7 @@ package graphproj
 // grammar wants host-qualified, owner/repo-split coordinates.
 const GitHubHost = "github.com"
 
-// External vocabulary the runtime projection reuses (WL-SPEC-79 §4 table),
+// External vocabulary the runtime projection reuses (WL-REQ-239 table),
 // extending the constants task.go declares. wl: terms resolve through
 // iri.Term, wlc: concepts through iri.Concept — never hardcoded.
 const (

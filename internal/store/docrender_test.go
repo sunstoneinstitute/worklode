@@ -74,7 +74,7 @@ func TestRenderBodyInsertsMissingEntries(t *testing.T) {
 
 // TestSpecWriteStoresTemplate: a spec write keeps template text and each
 // entry's heading line in docs.body and moves rule text out of it; reads
-// render the full text back (WL-SPEC-77 §19.1, §19.5).
+// render the full text back (WL-REQ-1295, WL-REQ-1299).
 func TestSpecWriteStoresTemplate(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -107,7 +107,7 @@ func TestSpecWriteStoresTemplate(t *testing.T) {
 
 // TestSpecWriteGate: a spec write is refused when it carries a heading
 // within the anchor depth that has no anchor, naming it; a deeper one is
-// rule content, and a plan is exempt (WL-SPEC-77 §19.1).
+// rule content, and a plan is exempt (WL-REQ-1295).
 func TestSpecWriteGate(t *testing.T) {
 	s := openDocStore(t)
 	bad := "Intro.\n\n## 1. One {#sec-1}\n\nA.\n\n## Sources\n\nA list.\n"

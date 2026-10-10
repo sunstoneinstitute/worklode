@@ -32,7 +32,7 @@ func (c *Catalog) Get(name string) (Entry, bool) {
 // Resolve maps a task's declared names to catalog entries: the baseline set
 // (every baseline entry, declared or not), the consent set (declared,
 // non-baseline), and declared names missing from the catalog. A missing name
-// is a warning at the ceremony, never a failure (WL-SPEC-74 §10.8).
+// is a warning at the ceremony, never a failure (WL-REQ-75).
 func (c *Catalog) Resolve(declared []string) (baseline, consented []Entry, missing []string) {
 	for _, e := range c.Entries {
 		if e.Baseline {

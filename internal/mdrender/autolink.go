@@ -1,9 +1,9 @@
 // Reference autolinking (WL-301, WL-305): plain-text mentions of a design
 // document become links to the cockpit's resolving redirect, /docs/ref/<ref>,
 // which sends the browser to /docs/<id> and lets it carry the #sec fragment
-// across the redirect. Three spellings are linked — the WL-SPEC-77 §7 shorthand
+// across the redirect. Three spellings are linked — the WL-REQ-168 shorthand
 // (WL-SPEC-74, with an optional #sec-10), the keyword form ("spec 042 §10",
-// "ADR 048"), and the bare corpus form ("WL-SPEC-77 §7") — because those are the
+// "ADR 048"), and the bare corpus form ("WL-REQ-168") — because those are the
 // ways the corpus actually writes references.
 //
 // A bare task id (WL-129, COW-7) links straight to /tasks/<id>. There is no
@@ -74,8 +74,8 @@ const HomeParam = "p"
 const taskRefPrefix = "/tasks/"
 
 // The reference spellings, tried in order. A trailing sentence dot is
-// trimmed off a match in code, not in pattern, so "WL-SPEC-77 §7." links as
-// "WL-SPEC-77 §7".
+// trimmed off a match in code, not in pattern, so "WL-REQ-168." links as
+// "WL-REQ-168".
 var (
 	// WL-SPEC-74, WL-ADR-7, optionally #sec-10 / #sec-3.1a.
 	shorthandRef = regexp.MustCompile(`\b[A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+(?:#sec-[0-9A-Za-z._-]+)?`)
@@ -84,7 +84,7 @@ var (
 	ruleRefRe = regexp.MustCompile(`\b` + designdoc.RuleRefText + `\b`)
 	// spec 042 §10, ADR 048 §2, Spec 25 — keyword, number, optional §.
 	keywordRef = regexp.MustCompile(`\b(?:[Ss]pec|ADR|[Aa]dr)\s(\d{1,4})(?:\s?§\s?([0-9][0-9A-Za-z.]*))?`)
-	// WL-SPEC-77 §7 — a bare number only when the § makes it unmistakably a ref.
+	// WL-REQ-168 — a bare number only when the § makes it unmistakably a ref.
 	bareRef = regexp.MustCompile(`\b(\d{1,4})\s?§\s?([0-9][0-9A-Za-z.]*)`)
 	// WL-129, COW-7 — the key is captured so it can be checked against the
 	// live project-key set, which is the only thing separating a task id from
@@ -131,8 +131,8 @@ func NewProjectKeys(keys []string) ProjectKeys {
 }
 
 // For returns a copy scoped to home, the key of the project whose body is
-// being rendered. A bare corpus number ("WL-SPEC-75 §13") is a per-project sequence
-// (WL-SPEC-75 §13), so the same number names a different document in every project;
+// being rendered. A bare corpus number ("WL-REQ-118") is a per-project sequence
+// (WL-REQ-118), so the same number names a different document in every project;
 // without a home key the redirect resolves org-wide and reports an ambiguity
 // (WL-723). The fingerprint is remixed so a body cached under one home is
 // never served under another.

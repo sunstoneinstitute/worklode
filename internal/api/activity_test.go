@@ -20,7 +20,7 @@ import (
 
 // otlpLogsBody builds a one-resource OTLP/JSON log batch carrying two
 // records. An empty task leaves out worklode.task.id: the unattributed case
-// that is forwarded but never stored (WL-SPEC-80 §8.6).
+// that is forwarded but never stored (WL-REQ-1234).
 func otlpLogsBody(task string) []byte {
 	res := `{"key":"service.name","value":{"stringValue":"claude-code"}},` +
 		`{"key":"session.id","value":{"stringValue":"sess-1"}}`
@@ -307,7 +307,7 @@ func TestIngestOTLPLogsRefusesOversizedBody(t *testing.T) {
 	}
 }
 
-// --- the task page's Activity card and its stream (WL-SPEC-80 §8.9) -------------
+// --- the task page's Activity card and its stream (WL-REQ-1237) -------------
 
 // activityRecorder cancels the request's context once the stream body holds
 // the awaited text. A follow never ends on its own, so a synchronous

@@ -22,7 +22,7 @@
 // permApprovalDecide (routeGuards), so reaching any of them is a policy
 // decision made in authz.go, not something these handlers re-check. The
 // decide route carries one gate more — requireSession, applied at
-// registration — because WL-SPEC-75 §13.6 makes deciding an approval a web-session
+// registration — because WL-REQ-124 makes deciding an approval a web-session
 // act rather than something a long-lived bearer token can do.
 package api
 
@@ -178,14 +178,14 @@ func (s *server) beginFormPost(w http.ResponseWriter, r *http.Request, form stri
 // for the 422 re-render; the plain GET pages go through it too, so the
 // content type and the Content-Security-Policy are set in one place — every
 // templ page renders through here, and a task body is untrusted markup
-// (WL-SPEC-78 §8.6), so a page that skipped the policy would be the one that
+// (WL-REQ-231), so a page that skipped the policy would be the one that
 // needs it.
 //
 // It is also where the admin flag every page reads via ui.WithAdmin/isAdmin
 // is set, from the same Subject the route guards used — one read per request,
 // so no page recomputes roles.
 //
-// It is also the one place WL-SPEC-82 §2.3's inbox indicator is computed: when
+// It is also the one place WL-REQ-333's inbox indicator is computed: when
 // the request names an actor, one HasInboxItems call decides the flag every
 // page's top bar reads via ui.WithInboxDot/inboxDot, before rendering. No
 // other call site computes it — that is what makes "once per request"
@@ -327,7 +327,7 @@ func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFor
 		}
 		created = t
 		// Same reason as POST /api/v1/tasks': the id is minted inside this
-		// transaction, after the payload was marshalled (WL-SPEC-77 §15).
+		// transaction, after the payload was marshalled (WL-RULE-179).
 		return store.AttributeEventToTask(tx, eventID, t.ID)
 	}); err != nil {
 		return nil, err
@@ -417,7 +417,7 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 }
 
 // reportDeliverableFromForm handles POST /deliverables/{id}/report: the
-// Report control on a deliverable row (WL-SPEC-75 §13.3). Deliverable ids are globally
+// Report control on a deliverable row (WL-RULE-121). Deliverable ids are globally
 // unique, so the route needs no project segment; the redirect back to the
 // project's deliverables page reads the project off the deliverable instead.
 //
@@ -470,7 +470,7 @@ func formMessage(msg string) string {
 	return strings.ToUpper(msg[:1]) + msg[1:] + "."
 }
 
-// --- approvals (WL-SPEC-75 §13.6) ----------------------------------------------
+// --- approvals (WL-REQ-124) ----------------------------------------------
 
 // decideApproval handles POST /approvals/{id}/decide, the cockpit's one
 // decision act. It is registered behind requireSession, so the subject here
@@ -545,7 +545,7 @@ func decideReturn(want string) string {
 }
 
 // noteApproval handles POST /approvals/{id}/note, the dependent owner's note
-// on an open impact review (WL-SPEC-75 §13.6): what the upstream change means for
+// on an open impact review (WL-REQ-124): what the upstream change means for
 // this entity, written down before a prior approver decides whether their
 // approval still holds. Registered behind requireSession like the decide
 // route, and it 303s back to the detail page the note is read on.
@@ -607,7 +607,7 @@ func (s *server) approvalActErr(w http.ResponseWriter, err error) {
 	}
 }
 
-// --- page-script writes (WL-SPEC-85 §5) -----------------------------------
+// --- page-script writes (WL-REQ-1338) -----------------------------------
 
 // maxJSONPost caps a page-script write body at 64 KiB. These bodies name
 // documents and plans; nothing legitimate approaches the cap.
@@ -623,7 +623,7 @@ const (
 )
 
 // sameOriginFetch is sameOriginForm's strict twin for script-issued writes
-// (WL-SPEC-85 §5 rule 2): where the form guard accepts Sec-Fetch-Site: none
+// (WL-REQ-1338 rule 2): where the form guard accepts Sec-Fetch-Site: none
 // because a person may submit a form from a bookmark, a fetch has no such
 // case — "none" is a user-typed navigation, which a fetch never is.
 func (s *server) sameOriginFetch(r *http.Request) bool {
@@ -633,7 +633,7 @@ func (s *server) sameOriginFetch(r *http.Request) bool {
 	return s.originAllowed(r)
 }
 
-// beginJSONPost is the write gate for page-script requests (WL-SPEC-85 §5): POST,
+// beginJSONPost is the write gate for page-script requests (WL-REQ-1338): POST,
 // strictly same-origin, the page's custom header, a JSON body, and the
 // session's actor. It answers the refusal itself and returns ok false; the
 // caller then returns. body is decoded into dst, which may be nil for a

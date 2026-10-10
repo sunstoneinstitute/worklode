@@ -10,7 +10,7 @@
 // among the tasks it transitively holds, its fan-out, the oldest held task's
 // blocked-since), all computed in-memory over the ProjectWorkFacts
 // assembleProjectCockpit already fetched: no new queries, no storage, no
-// background loop (WL-SPEC-73 §6: assembly stays observed only by
+// background loop (WL-REQ-32: assembly stays observed only by
 // worklode_cockpit_projection_requests_total).
 package api
 
@@ -70,7 +70,7 @@ type concernRoot struct {
 
 // rankedRoot is one root cause after det-v1's scoring, with the two scores
 // the evidence sentence also reports. The cockpit renders these as
-// SecondaryConcerns; the inbox (WL-SPEC-82 §12) reads root.held to place a task in
+// SecondaryConcerns; the inbox (WL-REQ-347) reads root.held to place a task in
 // its work buckets, which is why the ranking is exposed as roots and not
 // only as its rendered form.
 type rankedRoot struct {

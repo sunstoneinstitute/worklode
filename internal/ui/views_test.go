@@ -145,7 +145,7 @@ func TestHomeOpenModeZeroProjects(t *testing.T) {
 }
 
 // TestDeliverableChipFollowsReportedState pins the page's one substantive
-// judgment: a deliverable stores no state (WL-SPEC-75 §13.3), so the chip is
+// judgment: a deliverable stores no state (WL-RULE-121), so the chip is
 // whatever the newest evidence reported about the declared address, and
 // "Declared" only while nothing has reported one.
 func TestDeliverableChipFollowsReportedState(t *testing.T) {
@@ -170,7 +170,7 @@ func TestDeliverableChipFollowsReportedState(t *testing.T) {
 // user-reported and one unreported row: the observed one shows its state and
 // the time the emitter reported and nothing about provenance, the
 // user-reported one is labelled as such, the unreported one still says
-// Declared, and every row carries its own Report control (WL-SPEC-75 §13.3).
+// Declared, and every row carries its own Report control (WL-RULE-121).
 func TestDeliverablesPageShowsTheReport(t *testing.T) {
 	reportedAt := time.Date(2026, 8, 19, 9, 12, 0, 0, time.UTC)
 	var b strings.Builder
@@ -326,7 +326,7 @@ func morningBriefFixture() *MorningBriefView {
 	}
 }
 
-// TestHomeMorningBrief pins WL-SPEC-82 §11's judgment bar: NeedsYou first
+// TestHomeMorningBrief pins WL-REQ-346's judgment bar: NeedsYou first
 // and strongest, routine collapsed to one line with no per-event rendering,
 // and the review form wired to /home/reviewed.
 func TestHomeMorningBrief(t *testing.T) {

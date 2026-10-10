@@ -49,7 +49,7 @@ func TestCheckSpoolWritableLeavesNothingBehind(t *testing.T) {
 	}
 }
 
-// TestContentDisposition covers the header WL-SPEC-78 §8.2 promises. The name is
+// TestContentDisposition covers the header WL-REQ-227 promises. The name is
 // caller-controlled, so the interesting rows are the hostile ones: what
 // matters is that every one of them still parses back to exactly the name we
 // meant to serve, and that none of them can add a header.
@@ -112,7 +112,7 @@ func TestContentDisposition(t *testing.T) {
 }
 
 // TestBlobURL: a reference addresses its blob by hash and carries its own
-// name, since the name is per-reference and the route is per-blob (WL-SPEC-78 §8.2).
+// name, since the name is per-reference and the route is per-blob (WL-REQ-227).
 func TestBlobURL(t *testing.T) {
 	t.Parallel()
 	const hash = "9f2ac1"

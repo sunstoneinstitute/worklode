@@ -91,9 +91,9 @@ func TestNewServerRequiresPublicURLWhenOIDC(t *testing.T) {
 }
 
 // TestNewServerAcceptsGitHubWithoutOrg asserts NewServer succeeds with the
-// dormant GitHub App OAuth client configured (WL-SPEC-74 §9.2) and no org
+// dormant GitHub App OAuth client configured (WL-REQ-64) and no org
 // setting: the org-membership guard that used to gate the GitHub login flow
-// is gone along with that flow (WL-SPEC-74 §1.1).
+// is gone along with that flow (WL-RULE-46).
 func TestNewServerAcceptsGitHubWithoutOrg(t *testing.T) {
 	t.Parallel()
 	st := newTestStore(t)
@@ -164,7 +164,7 @@ func TestOIDCTokenExchangeMintsToken(t *testing.T) {
 		t.Fatalf("actor = %+v", a)
 	}
 
-	// provisionActor stores the full email and groups claims (WL-SPEC-75 §13.5).
+	// provisionActor stores the full email and groups claims (WL-REQ-123).
 	got, err := st.GetActor(context.Background(), "bob")
 	if err != nil {
 		t.Fatalf("get actor: %v", err)
@@ -207,7 +207,7 @@ func TestOIDCTokenExchangeAdminSyncsOnAndOff(t *testing.T) {
 }
 
 // TestOIDCTokenExchangeSyncsGitHubUsername asserts github_username is
-// re-synced on every login exactly like the admin flag (WL-SPEC-74 §4.3): a
+// re-synced on every login exactly like the admin flag (WL-REQ-53): a
 // login carrying github_username sets it, and a later login without the
 // claim clears it back to empty while still succeeding (201).
 func TestOIDCTokenExchangeSyncsGitHubUsername(t *testing.T) {

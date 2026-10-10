@@ -50,7 +50,7 @@ wlc:DesignDocStatusOrder a skos:OrderedCollection ;
 
 
 # ---------------------------------------------------------------------------
-# Rule kind — the rules.kind CHECK (WL-SPEC-77 §4). The kind sets the ref's
+# Rule kind — the rules.kind CHECK (WL-REQ-165). The kind sets the ref's
 # infix: WL-REQ-<n> for a requirement, WL-RULE-<n> otherwise.
 # ---------------------------------------------------------------------------
 
@@ -67,7 +67,7 @@ wlc:definition a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "def
 wlc:principle a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "principle" ;
     skos:definition "A design stance other rules refine; checkable only through its refiners, never covered, never a gap." .
 wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "informative" ;
-    skos:definition "Retired (WL-SPEC-77 §4): reads as a principle until the §19.7 migration reclassifies it; stays in the CHECK until then." .
+    skos:definition "Retired (WL-REQ-165): reads as a principle until the §19.7 migration reclassifies it; stays in the CHECK until then." .
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ wlc:runtime a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runt
 
 
 # ---------------------------------------------------------------------------
-# Edge origin — the wl:edgeOrigin tag on every edge property (WL-SPEC-77 §8.1).
+# Edge origin — the wl:edgeOrigin tag on every edge property (WL-REQ-1288).
 # ---------------------------------------------------------------------------
 
 wlc:EdgeOrigin a skos:ConceptScheme ; skos:prefLabel "Edge origin" .

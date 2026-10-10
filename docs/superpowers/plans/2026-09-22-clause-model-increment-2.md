@@ -40,7 +40,7 @@ Deferred to later increments, stated so no reviewer reports them missing: named 
 - `internal/cmd` decides, `internal/cli` renders. `internal/cli` never imports cobra.
 - `internal/ui` depends only on stdlib, `internal/model` and templ. After editing a `.templ` file run `templ generate` from the repo root and commit the generated `_templ.go`.
 - Migrations: the next number is whatever `./scripts/check-migrations.sh` accepts (0083 at planning time). Add the pair to `deploy/base/kustomization.yaml` in the same commit. The down file fully reverses the up. Read `deploy/base/AGENTS.md` first.
-- `ns/*.ttl` must parse: `riot --validate ns/*.ttl` (riot is installed at `/opt/homebrew/bin/riot`). The spec is amended before the ontology mirrors it (025 §17).
+- `ns/*.ttl` must parse: `riot --validate ns/*.ttl` (riot is installed at `/opt/homebrew/bin/riot`). The spec is amended before the ontology mirrors it (WL-REQ-178).
 - Prose in `docs/specs2/` follows the `lode:anti-smartass` plain-language style: no em dashes, no "X, not Y" antithesis.
 - Commit messages: imperative subject, no Co-authored-by or any self-reference.
 - Feature-stem file naming: the edge code lives in `model/clauseedge.go`, `store/clauseedges.go`, `api/clauseedges.go`, `cli/clauseedges.go`, `cmd/clause.go` (existing group). Owner and tags extend the existing clause files. Pinning extends the existing governedby files.

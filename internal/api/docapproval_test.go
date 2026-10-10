@@ -57,7 +57,7 @@ func setReviewers(t *testing.T, h http.Handler, token string, docID int64, revie
 	}
 }
 
-// TestRequestDocApprovalOpensOneLanePerReviewer: WL-SPEC-77 §9's reviewer set is
+// TestRequestDocApprovalOpensOneLanePerReviewer: WL-REQ-170's reviewer set is
 // several open rows on one revision, not one row with several names.
 func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
 	t.Parallel()
@@ -231,7 +231,7 @@ func TestListApprovalsServesBothEntityKinds(t *testing.T) {
 }
 
 // TestNoDecideRouteOnTheJSONAPI is the guard this whole change exists inside:
-// WL-SPEC-75 §13.6 makes deciding a web UI act because a session's group claims are
+// WL-REQ-124 makes deciding a web UI act because a session's group claims are
 // fresh and a 30-day CLI token's are not. A decide route reachable with a
 // bearer token would defeat that, so the absence is asserted rather than
 // merely intended.

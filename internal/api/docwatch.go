@@ -16,7 +16,7 @@ import (
 )
 
 // docLifecycleSubscriber is the subscriber name this server consumes the log
-// under (WL-SPEC-77 §15). It is the offset row `lode event seek` addresses, so it
+// under (WL-RULE-179). It is the offset row `lode event seek` addresses, so it
 // is a name in the operator's vocabulary, not an implementation detail.
 const docLifecycleSubscriber = "doc-lifecycle"
 
@@ -35,7 +35,7 @@ const watcherActorID = "watcher"
 //     the triggering event's id ("doc-lifecycle:<rule>:<event-id>"), so a
 //     redelivered event collides on the constraint. RecordEvent then returns
 //     the existing id and skips apply entirely — which is what makes the
-//     mint happen once, with no side-effect table to keep in step (WL-SPEC-77 §15).
+//     mint happen once, with no side-effect table to keep in step (WL-RULE-179).
 //   - Layer 2, the open-task guard: a genuinely new event (a later version,
 //     hence a different id) still mints nothing while an open task of that
 //     kind already references the document. That is internal/watcher's
@@ -46,7 +46,7 @@ const watcherActorID = "watcher"
 // same outstanding work.
 const watcherEventSource = "watcher"
 
-// handleDocLifecycle is the doc-lifecycle subscriber of WL-SPEC-77 §15: it
+// handleDocLifecycle is the doc-lifecycle subscriber of WL-RULE-179: it
 // parses the event, fetches the guard facts, lets the pure rules decide
 // (internal/watcher), and performs whatever they return. The action event's
 // payload carries prov:wasInformedBy back to the triggering event, so the
@@ -62,14 +62,14 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 	default:
 		// The vendor/webhook population of the log passes through
 		// untouched: it carries dotted types (push, pod.crashloop, …;
-		// WL-SPEC-77 §15) that are not RDF and that these rules say nothing
+		// WL-RULE-179) that are not RDF and that these rules say nothing
 		// about. Acking them is what keeps the offset moving.
 		return eventbus.OutcomeApplied, nil
 	}
 
 	// Every error path below returns OutcomeApplied alongside the error:
 	// Run ignores the outcome whenever the error is non-nil (it counts
-	// outcome="error" itself), and WL-SPEC-77 §15 forbids a handler from
+	// outcome="error" itself), and WL-RULE-179 forbids a handler from
 	// returning OutcomeError.
 	var payload map[string]any
 	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
@@ -147,7 +147,7 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 // whose timeline the absence of a mint belongs on, and the metric already
 // counts it. A suppression with one notes the absorbed event on that task,
 // so the timeline of the open design task shows the acceptances it stands
-// for rather than losing them (WL-SPEC-77 §15).
+// for rather than losing them (WL-RULE-179).
 func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *model.Doc, act watcher.Action) error {
 	if act.Suppressed {
 		if act.NoteTask == "" {
@@ -180,7 +180,7 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 	// The payload names the rule and the document; the minted task id is
 	// added by store.AttributeEventToTask inside apply, because RecordEvent
 	// marshals the payload before the transaction opens and the id is
-	// allocated from the project counter inside it (WL-SPEC-77 §15). CreateTask
+	// allocated from the project counter inside it (WL-RULE-179). CreateTask
 	// also writes a state_log row for the new task attributed to this event,
 	// so "why does this task exist" reads task → task.created event →
 	// prov:wasInformedBy → the document event from either direction.
@@ -219,8 +219,8 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 	return nil
 }
 
-// materializeDocApproval performs the approval-on-submit rule (WL-SPEC-77 §9,
-// WL-SPEC-75 §13.6): one unlaned 'awaiting' approvals row bound to the submitted
+// materializeDocApproval performs the approval-on-submit rule (WL-REQ-170,
+// WL-REQ-124): one unlaned 'awaiting' approvals row bound to the submitted
 // version, which the /reviews queue lists and AcceptDoc refuses to accept
 // past. Requirement rows for named reviewers are RequestDocApproval's
 // business; they take their own lane on the same (kind, id, version) and do
@@ -301,5 +301,5 @@ func payloadStrings(v any) []string {
 	return out
 }
 
-// eventIRI renders WL-SPEC-77 §15's identifier for one event row.
+// eventIRI renders WL-RULE-179's identifier for one event row.
 func eventIRI(id int64) string { return iri.CURIE(iri.Event(id)) }

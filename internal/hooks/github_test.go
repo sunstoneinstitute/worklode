@@ -1120,7 +1120,7 @@ func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 	}
 }
 
-// TestPROpenedMaterializesAwaitingApproval: WL-SPEC-75 §13 — the requirement is a
+// TestPROpenedMaterializesAwaitingApproval: WL-REQ-118 — the requirement is a
 // row, not an absence, so a task-correlated PR opening leaves an awaiting
 // approval bound to its head sha, naming the requested reviewer when that
 // login maps to an actor. A redelivery conflicts and writes nothing.
@@ -1216,7 +1216,7 @@ func TestReviewApprovedResolvesApproval(t *testing.T) {
 }
 
 // TestReviewCommentedLeavesApprovalAwaiting: a comment is not a decision.
-// The row stays visible as waiting on someone (WL-SPEC-75 §13).
+// The row stays visible as waiting on someone (WL-REQ-118).
 func TestReviewCommentedLeavesApprovalAwaiting(t *testing.T) {
 	e := newEnv(t)
 	taskID := e.seedTask(t)
@@ -1232,7 +1232,7 @@ func TestReviewCommentedLeavesApprovalAwaiting(t *testing.T) {
 	}
 }
 
-// TestChangesRequestedThenReviewRequestedReopens: WL-SPEC-75 §13's re-request edge.
+// TestChangesRequestedThenReviewRequestedReopens: WL-REQ-118's re-request edge.
 // The reviewer is unknown when the PR opens and only becomes an actor later,
 // so the re-request also fills the required_actor the open ingest could not.
 func TestChangesRequestedThenReviewRequestedReopens(t *testing.T) {
@@ -1269,7 +1269,7 @@ func TestChangesRequestedThenReviewRequestedReopens(t *testing.T) {
 	}
 }
 
-// TestSynchronizeRebindsOpenApproval: WL-SPEC-75 §13 — a push to the PR branch
+// TestSynchronizeRebindsOpenApproval: WL-REQ-118 — a push to the PR branch
 // designates the new head on the still-open review row rather than opening
 // a second one.
 func TestSynchronizeRebindsOpenApproval(t *testing.T) {
@@ -1298,7 +1298,7 @@ func TestSynchronizeRebindsOpenApproval(t *testing.T) {
 // TestSynchronizeAfterApprovedOpensCandidateRow: once a review has decided
 // the PR, a later push cannot quietly keep the stale approval standing in
 // for the new head — it opens a new, visibly unreviewed awaiting row, and
-// leaves the decided row exactly as the reviewer saw it (WL-SPEC-75 §13).
+// leaves the decided row exactly as the reviewer saw it (WL-REQ-118).
 func TestSynchronizeAfterApprovedOpensCandidateRow(t *testing.T) {
 	e := newEnv(t)
 	taskID := e.seedTask(t)
@@ -1325,7 +1325,7 @@ func TestSynchronizeAfterApprovedOpensCandidateRow(t *testing.T) {
 	}
 }
 
-// TestSynchronizeUncorrelatedWritesNothing: WL-SPEC-75 §13 — a synchronize on a PR
+// TestSynchronizeUncorrelatedWritesNothing: WL-REQ-118 — a synchronize on a PR
 // that names no task has no task to hold up, and failing to correlate must
 // never fail the delivery.
 func TestSynchronizeUncorrelatedWritesNothing(t *testing.T) {

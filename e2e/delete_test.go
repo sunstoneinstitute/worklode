@@ -94,7 +94,7 @@ func TestDeleteOnProdInstanceRequiresJustification(t *testing.T) {
 	}
 
 	// 1. A prod instance refuses a delete carrying no justification, and says
-	// so as a validation failure rather than a malformed request (044 §5).
+	// so as a validation failure rather than a malformed request (WL-REQ-117).
 	if _, _, err := c.DeleteTask(ctx, task.ID, ""); err == nil {
 		t.Fatal("delete without justification on prod: want an error, got nil")
 	} else if status := clientErrStatus(t, err); status != http.StatusUnprocessableEntity {
@@ -134,7 +134,7 @@ func TestDeleteOnProdInstanceRequiresJustification(t *testing.T) {
 	}
 
 	// 4. It is out of the default list and is the whole of the deleted list
-	// (044 §4, §5 — --deleted is a switch, not an addition).
+	// (WL-REQ-117 — --deleted is a switch, not an addition).
 	live, _, err := c.ListTasks(ctx, model.TaskListParams{Project: "del"})
 	if err != nil {
 		t.Fatalf("list tasks: %v", err)
@@ -152,7 +152,7 @@ func TestDeleteOnProdInstanceRequiresJustification(t *testing.T) {
 
 	// 5. Reading it by id still works and shows the tombstone: an id an agent
 	// already holds must not report "not found" when the truth is "deleted,
-	// by this person, for this reason" (044 §4).
+	// by this person, for this reason" (WL-REQ-117).
 	detail, _, err := c.GetTask(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("get deleted task: %v", err)
@@ -186,7 +186,7 @@ func TestDeleteOnProdInstanceRequiresJustification(t *testing.T) {
 
 // TestDeleteOnDevInstanceNeedsNoJustification is the same act on a dev
 // instance, where the row is noise and nobody should be made to explain it
-// (044 §3). The tombstone is otherwise identical.
+// (WL-REQ-117). The tombstone is otherwise identical.
 func TestDeleteOnDevInstanceNeedsNoJustification(t *testing.T) {
 	ctx := context.Background()
 	c, done := deleteFixture(t, api.InstanceDev)
@@ -214,7 +214,7 @@ func TestDeleteOnDevInstanceNeedsNoJustification(t *testing.T) {
 	}
 
 	// A justification given on dev is stored exactly as one given on prod:
-	// the environment gates the demand, not the mechanism (044 §3).
+	// the environment gates the demand, not the mechanism (WL-REQ-117).
 	other, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "del", Title: "Also re-seeded", Priority: "medium", Kind: "chore",
 	})

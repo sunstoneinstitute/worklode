@@ -214,7 +214,7 @@ func TestResolveDocRefTier1Miss(t *testing.T) {
 	}
 }
 
-// Since WL-SPEC-75 §13.4 a plan carries a number like every other kind, so a ref reaches
+// Since WL-REQ-122 a plan carries a number like every other kind, so a ref reaches
 // it: the corpus has one name space, not one for the kinds `lode show` used to
 // render and another for plans.
 func TestResolveDocRefResolvesPlans(t *testing.T) {
@@ -243,7 +243,7 @@ func TestResolveDocRefKindMismatch(t *testing.T) {
 }
 
 // TestResolveDocRefRetiredADR: a <KEY>-ADR-<n> names the spec that took the
-// retired ADR's place, and only that ref form gets the notice (WL-SPEC-77 §7a).
+// retired ADR's place, and only that ref form gets the notice (WL-REQ-1357).
 func TestResolveDocRefRetiredADR(t *testing.T) {
 	docs := []model.Doc{
 		{ID: 1, ProjectKey: "WL", Kind: "spec", Number: 30, FormerADR: 2, Slug: "0002-decision"},
@@ -295,7 +295,7 @@ func TestCheckDocKind(t *testing.T) {
 }
 
 // WL-358: a number-led slug names the document whose slug it is. Other
-// documents that merely share its number — a plan on its own WL-SPEC-75 §13.4 sequence,
+// documents that merely share its number — a plan on its own WL-REQ-122 sequence,
 // another kind's number — are not candidates, and the union of the two
 // criteria used to report them as a bogus ambiguity.
 func TestResolveDocRefNumberLedSlugBeatsSharedNumber(t *testing.T) {
@@ -323,7 +323,7 @@ func TestResolveDocRefNumberLedSlugBeatsSharedNumber(t *testing.T) {
 		t.Errorf("ID = %d, want 27", got.ID)
 	}
 
-	// A bare number names the spec: a plan sits on its own WL-SPEC-75 §13.4 sequence, so
+	// A bare number names the spec: a plan sits on its own WL-REQ-122 sequence, so
 	// plan 1 shares the number with spec 001 by construction and reporting
 	// that as an ambiguity would break every spec section link in the corpus.
 	got, _, err = resolveDocRef(docs, "EA", "1")
@@ -375,7 +375,7 @@ func TestResolveDocRefForeignNumberLedSlugIsNotFound(t *testing.T) {
 		t.Fatalf("foreign number-led slug: err = %v, want *NotFoundError", err)
 	}
 
-	// A bare number names the spec: plan 26 sits on its own WL-SPEC-75 §13.4 sequence
+	// A bare number names the spec: plan 26 sits on its own WL-REQ-122 sequence
 	// and shares the number by construction, which used to make every
 	// "<spec> §N" link the corpus writes ambiguous.
 	got, _, err := resolveDocRef(docs, "WL", "26")

@@ -1,5 +1,5 @@
 -- A superseded document or rule version keeps its edges and its arrangement
--- (WL-SPEC-77 §3). bumpDocVersion and bumpRuleVersion (internal/store
+-- (WL-REQ-164). bumpDocVersion and bumpRuleVersion (internal/store
 -- versions.go) copy the live rows here before moving the version. No type
 -- CHECK: a snapshot keeps what was valid when it was taken.
 BEGIN;

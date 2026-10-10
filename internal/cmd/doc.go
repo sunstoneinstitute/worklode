@@ -31,7 +31,7 @@ var docKinds = []string{"spec", "plan"}
 // pinned to the docs.status CHECK constraint by internal/store.
 var docStatusValues = append(slices.Clone(ns.DesignDocStatuses), "all")
 
-// resolveDocID resolves a document reference to its id (WL-SPEC-77 §7): a
+// resolveDocID resolves a document reference to its id (WL-REQ-168): a
 // positive integer is the id itself, taken without a round trip; anything
 // else goes to GET /api/v1/docs/resolve. It is the one resolver both `lode
 // doc <ref>`'s verbs and `lode task list`'s `--plan`/`--about` call, so the
@@ -39,7 +39,7 @@ var docStatusValues = append(slices.Clone(ns.DesignDocStatuses), "all")
 //
 // The grammar itself is the server's (WL-358): exact slug match, the refusal
 // of an ambiguous ref, the fallback to tombstoned documents that `lode doc
-// undelete <slug>` needs, and — on a slug miss — the full WL-SPEC-78 §2 grammar
+// undelete <slug>` needs, and — on a slug miss — the full WL-REQ-192 grammar
 // `lode show` resolves, `<KEY>-<TYPE>-<n>` shorthand included. What is left
 // here is the numeric shortcut, because an id needs no lookup to become an
 // id, and naming the ref in the 404: the server's "not found" says nothing
@@ -112,7 +112,7 @@ func init() {
 // advisory side — it tells you the anchors disagree — and this is the side
 // that fixes them, only when asked. A write that silently rewrote an author's
 // numbering would be the wrong default for a corpus where a section number is
-// an address other documents pin (WL-SPEC-77 §4).
+// an address other documents pin (WL-REQ-165).
 func renumberAnchors(body string) (string, error) {
 	doc, err := designdoc.Parse([]byte(body))
 	if err != nil {
@@ -158,7 +158,7 @@ func newDocAddCmd() *cobra.Command {
 			if sc.Project == "" {
 				return errNoProject
 			}
-			// The task this document is being written under (WL-SPEC-77 §13). Empty
+			// The task this document is being written under (WL-REQ-177). Empty
 			// outside a bound worktree, which records no authoring task
 			// rather than refusing the create — a human in the cockpit and an
 			// agent working ad hoc both author documents legitimately.
@@ -278,7 +278,7 @@ func newDocListCmd() *cobra.Command {
 
 // parseDayDuration reads `--older-than`: a whole number of days, with or
 // without the "d" suffix ("30d", "30"). Days rather than time.ParseDuration's
-// units because WL-SPEC-77 §9's clock counts in days and "720h" is nobody's way of
+// units because WL-REQ-170's clock counts in days and "720h" is nobody's way of
 // saying a month. "" is no bound, and returns 0.
 func parseDayDuration(s string) (int, error) {
 	s = strings.TrimSpace(s)
@@ -293,9 +293,9 @@ func parseDayDuration(s string) (int, error) {
 }
 
 // checkDocSelectors refuses a --kind or --status that contradicts one of the
-// derived selectors (WL-SPEC-78 §1.2, §2.4; WL-SPEC-77 §9): each implies a status, and
+// derived selectors (WL-REQ-186, WL-RULE-196; WL-REQ-170): each implies a status, and
 // needs-planning, needs-execution and bare-superseded each imply a single
-// kind (bare-superseded is spec: a plan carries no sections, WL-SPEC-77 §6 rule 2)
+// kind (bare-superseded is spec: a plan carries no sections, WL-REQ-167 rule 2)
 // while unresolved implies spec or plan. A contradicting restatement would make the
 // conjunction always empty, which would read as "nothing to plan"; only a
 // contradiction is refused, restating the implied value is fine. The server
@@ -342,7 +342,7 @@ func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareS
 // and designdoc.DepthViolations), reused rather than restated. The rest of the
 // accept-time diff needs a prior version, which a file on disk does not have.
 //
-// The depth limit is server configuration (WL-SPEC-77 §4) and no server is involved
+// The depth limit is server configuration (WL-REQ-165) and no server is involved
 // here, so this checks the compiled default and says so: it is advisory
 // pre-flight, and the server it posts to is the authority.
 func lintDocFile(doc *designdoc.Document) []string {
@@ -363,7 +363,7 @@ func lintDocFile(doc *designdoc.Document) []string {
 // isPlanFile reports whether the file identifies itself as a plan. There is no
 // server round trip here, so the frontmatter is the only evidence: an explicit
 // `kind: plan`, or one of the keys only a plan carries — `covers`/`implements`
-// (WL-SPEC-78 §4) and the plan-ordering `blocks`/`blockedBy` (WL-SPEC-77 §3). A file that
+// (WL-RULE-202) and the plan-ordering `blocks`/`blockedBy` (WL-REQ-164). A file that
 // says nothing is not treated as a plan: skipping the plan-task check is
 // better than guessing one onto a spec whose "## Tasks" heading is prose.
 func isPlanFile(doc *designdoc.Document) bool {
@@ -375,12 +375,12 @@ func isPlanFile(doc *designdoc.Document) bool {
 		len(fm.Blocks) > 0 || len(fm.BlockedBy) > 0
 }
 
-// newDocLintCmd is `lode doc lint` (WL-SPEC-81 §2 renamed `doc anchors`
-// to this name; WL-SPEC-77 §16 independently gave the same name to the corpus-wide
+// newDocLintCmd is `lode doc lint` (WL-REQ-306 renamed `doc anchors`
+// to this name; WL-REQ-180 independently gave the same name to the corpus-wide
 // check below — the two land here as one command, dispatched on whether a
 // file argument is given, rather than colliding).
 //
-// With a file argument, it is the author's local pre-accept lint (WL-SPEC-77 §18): it parses a markdown file and reports every anchor defect the
+// With a file argument, it is the author's local pre-accept lint (WL-REQ-182): it parses a markdown file and reports every anchor defect the
 // backbone would refuse — duplicate anchors, an anchor disagreeing with its
 // heading number, and a section deeper than designdoc.DepthLimit — plus, for
 // a plan, the errors designdoc.PlanTasks reports. No server is involved, so
@@ -505,7 +505,7 @@ type docLintFileReport struct {
 
 // newDocShowCmd reads back one document: body, sections, and edges. WL-SPEC-81
 // §1 (L7) requires every entity to keep its own typed "show", superseding
-// WL-SPEC-78 §2's rule that "show" stay exclusive to `lode show`.
+// WL-REQ-192's rule that "show" stay exclusive to `lode show`.
 //
 // The split with `lode show` is settled (WL-129): both read the backbone,
 // and a slug names the same document in either. `lode show` is the rendered
@@ -569,7 +569,7 @@ func newDocShowCmd() *cobra.Command {
 	return cmd
 }
 
-// newDocVersionsCmd lists a document's version history (WL-SPEC-77 §3): its
+// newDocVersionsCmd lists a document's version history (WL-REQ-164): its
 // current version and every one it has superseded, newest first.
 func newDocVersionsCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -601,12 +601,12 @@ func newDocVersionsCmd() *cobra.Command {
 	return cmd
 }
 
-// newDocReferrersCmd is `lode doc referrers <ref>#sec-N` (WL-SPEC-77 §10): the
+// newDocReferrersCmd is `lode doc referrers <ref>#sec-N` (WL-REQ-171): the
 // open work pointing at one section — an accepted document whose text names
 // it, a rule that amends or supersedes its rule, and the claimed, unfinished
 // tasks of the plans that cover it. It is
 // what a fixer reads before patching accepted text, and the same query the
-// WL-SPEC-77 §10 patch gate runs.
+// WL-REQ-171 patch gate runs.
 //
 // The fragment is required. A referrer is a fact about one section, so a
 // whole-document ref has no answer rather than a broader one.
@@ -647,7 +647,7 @@ func newDocReferrersCmd() *cobra.Command {
 // newDocSectionsCmd is `lode doc sections [number]` (L6: a named view is a
 // noun): the cross-corpus section listing that `scripts/secindex.py` used to
 // write into docs/specs/index.yaml before the file corpus went away
-// (WL-SPEC-78 §1.5). `lode doc show` answers for one document; this answers across
+// (WL-REQ-189). `lode doc show` answers for one document; this answers across
 // the corpus.
 //
 // With no argument it lists every section in scope — the project's own by
@@ -655,7 +655,7 @@ func newDocReferrersCmd() *cobra.Command {
 // document defines §N of anything", matching a section number ("8.2") or an
 // anchor ("sec-8.2").
 //
-// This is the listing half of WL-SPEC-78 §1.5. A wider view (`--with-drafts`,
+// This is the listing half of WL-REQ-189. A wider view (`--with-drafts`,
 // `--show-dropped`, and a footer summarising the sections superseded) is
 // unimplemented, so every section of every live document is listed, whatever its status.
 func newDocSectionsCmd() *cobra.Command {
@@ -695,7 +695,7 @@ func newDocSectionsCmd() *cobra.Command {
 
 // newDocEditCmd is `lode doc edit <ref>`: one verb over two writes, chosen by
 // what the document is. A draft or a plan is replaced in place; an accepted
-// spec goes through WL-SPEC-77 §10's in-place amendment, which the server
+// spec goes through WL-REQ-171's in-place amendment, which the server
 // gates mechanically. Nothing here re-checks those gates — a refusal
 // is the server's message, verbatim — so the CLI cannot drift from the rule.
 //
@@ -746,11 +746,11 @@ func newDocEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// WL-SPEC-77 §6 freezes a published anchor, so renumbering one is the
+			// WL-REQ-167 freezes a published anchor, so renumbering one is the
 			// one thing this flag must not do. Refusing is the whole of the
 			// support for an accepted document: there is no safe subset to
 			// renumber, and a silent rewrite would break every inbound
-			// reference. Insert with a letter suffix (WL-SPEC-77 §4) instead.
+			// reference. Insert with a letter suffix (WL-REQ-165) instead.
 			if updateAnchors {
 				if detail.Status == "accepted" || detail.Status == "superseded" {
 					return fmt.Errorf("--update-section-anchors: %s is %s, and WL-SPEC-77 §4 freezes a published anchor; insert a lettered section (2.1a) instead",
@@ -817,7 +817,7 @@ func newDocEditCmd() *cobra.Command {
 }
 
 // setDocColumns is `lode doc edit --title/--issued`: PATCH /api/v1/docs/{id}
-// with the fields named, which the body no longer states (WL-SPEC-77 §7).
+// with the fields named, which the body no longer states (WL-REQ-168).
 func setDocColumns(cmd *cobra.Command, c *cli.Client, id int64, setTitle bool, title string, setIssued bool, issued string) error {
 	var in model.DocColumnsInput
 	if setTitle {
@@ -840,7 +840,7 @@ func setDocColumns(cmd *cobra.Command, c *cli.Client, id int64, setTitle bool, t
 
 // docEdgeFlags are the relation flags `lode doc link` and `lode doc unlink`
 // take, each naming the target ref, mapped to the stored edge type
-// (WL-SPEC-77 §8.1).
+// (WL-REQ-1288).
 var docEdgeFlags = []struct{ flag, typ, usage string }{
 	{"covers", "covers", "the plan covers this spec section (ref#sec-N) or spec"},
 	{"defers", "defers", "the plan defers this spec section (ref#sec-N) to --owner"},
@@ -861,7 +861,7 @@ func newDocUnlinkCmd() *cobra.Command {
 
 // newDocEdgeCmd builds `lode doc link` and `lode doc unlink`: one relation
 // flag names the edge's type and target, and the server decides where the
-// write lands (WL-SPEC-77 §3).
+// write lands (WL-REQ-164).
 func newDocEdgeCmd(use, short string,
 	write func(*cli.Client, context.Context, int64, model.DocEdgeInput) (model.DocDetail, []byte, error)) *cobra.Command {
 	targets := make([]string, len(docEdgeFlags))
@@ -917,7 +917,7 @@ func newDocEdgeCmd(use, short string,
 	return cmd
 }
 
-// newDocNoteCmd is `lode doc note <ref>#sec-N` (WL-SPEC-77 §10): leave one anchored
+// newDocNoteCmd is `lode doc note <ref>#sec-N` (WL-REQ-171): leave one anchored
 // remark on a section. It blocks nothing, settles nothing, and needs no reply
 // — the note is read by whoever next renders that section, and the document
 // goes on exactly as it was.
@@ -1022,7 +1022,7 @@ func newDocAcceptCmd() *cobra.Command {
 }
 
 // newDocSubmitCmd puts a document up for review. Submission is an event, not a
-// status (WL-SPEC-77 §9): the document does not move, and what the event means —
+// status (WL-REQ-170): the document does not move, and what the event means —
 // minting a review task, say — is the doc-lifecycle watcher's to decide.
 func newDocSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -1054,13 +1054,13 @@ func newDocSubmitCmd() *cobra.Command {
 	return cmd
 }
 
-// newDocWithdrawCmd is `lode doc withdraw` (WL-SPEC-77 §9): the close verb that
+// newDocWithdrawCmd is `lode doc withdraw` (WL-REQ-170): the close verb that
 // makes full resolution reachable. An accepted or stale document that will
 // not be executed and that nothing replaces leaves the corpus here, with a
 // justification on the event.
 //
 // Distinct from `lode doc delete`, which hides a row that should not have
-// existed (WL-SPEC-75 §12). A withdrawal is a decision about work that was agreed and
+// existed (WL-REQ-117). A withdrawal is a decision about work that was agreed and
 // then abandoned: the document stays readable and keeps its number.
 func newDocWithdrawCmd() *cobra.Command {
 	var justification string
@@ -1101,11 +1101,11 @@ func newDocWithdrawCmd() *cobra.Command {
 	return cmd
 }
 
-// newDocDeleteCmd is `lode doc delete` (WL-SPEC-75 §12): tombstone a document that
+// newDocDeleteCmd is `lode doc delete` (WL-REQ-117): tombstone a document that
 // should not have existed — a wrong corpus number, a duplicate import. The
 // row and its events survive; only the ways of finding it stop. Whether the
 // justification is required depends on the instance environment and is the
-// server's call (WL-SPEC-75 §12), so nothing is validated or prompted for here.
+// server's call (WL-REQ-117), so nothing is validated or prompted for here.
 func newDocDeleteCmd() *cobra.Command {
 	var justification string
 	cmd := &cobra.Command{
@@ -1148,7 +1148,7 @@ func newDocDeleteCmd() *cobra.Command {
 
 // newDocUndeleteCmd clears a document's tombstone. No justification on either
 // instance — only hiding a record is worth making someone stop and type
-// (WL-SPEC-75 §12).
+// (WL-REQ-117).
 func newDocUndeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "undelete <ref>",
@@ -1183,7 +1183,7 @@ func newDocUndeleteCmd() *cobra.Command {
 }
 
 // newDocReviseCmd is one command over the four candidate-revision verbs
-// (WL-SPEC-77 §9): bare opens a candidate, --file updates its body, --accept lands
+// (WL-REQ-170): bare opens a candidate, --file updates its body, --accept lands
 // it as the document's next version, --discard withdraws it without landing.
 // The three flags are mutually exclusive — landing a body written in the same
 // breath would skip the read a candidate revision exists for, and discarding

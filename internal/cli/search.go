@@ -15,7 +15,7 @@ import (
 
 // Search calls GET /api/v1/search. The response reports how it was actually
 // answered: an instance with no embedding provider answers provider "none"
-// and real lexical hits rather than an error (WL-SPEC-79 §17).
+// and real lexical hits rather than an error (WL-REQ-261).
 func (c *Client) Search(ctx context.Context, p model.SearchParams) (model.SearchResponse, []byte, error) {
 	return doJSON[model.SearchResponse](ctx, c, http.MethodGet, withParams("/api/v1/search", p), nil, "search results")
 }
@@ -40,9 +40,9 @@ func (c *Client) DocRefs(ctx context.Context, project string) map[int64]string {
 	return refs
 }
 
-// SearchTable prints one line per hit in the WL-SPEC-79 §17 form:
+// SearchTable prints one line per hit in the WL-REQ-261 form:
 //
-//	WL-SPEC-25 §15.2  0.032  The ordered log
+//	WL-RULE-179  0.032  The ordered log
 //
 // The first column is an address the reader can act on — a document
 // reference and its frozen section anchor, a task id, a qualified skill name
@@ -84,7 +84,7 @@ func searchAddress(h model.SearchHit, docRefs map[int64]string) string {
 		addr = h.Title
 	}
 	if h.Anchor != "" {
-		// Anchors are stored as "sec-15.2" (WL-SPEC-77 §4) and cited as §15.2.
+		// Anchors are stored as "sec-15.2" (WL-REQ-165) and cited as §15.2.
 		addr += " §" + strings.TrimPrefix(h.Anchor, "sec-")
 	}
 	return addr
@@ -92,7 +92,7 @@ func searchAddress(h model.SearchHit, docRefs map[int64]string) string {
 
 // SearchNotice writes the one line a degraded instance owes the caller: with
 // no embedding provider every mode falls back to the lexical arm, and the
-// results are real but narrower (WL-SPEC-79 §17). Callers put it on stderr, since
+// results are real but narrower (WL-REQ-261). Callers put it on stderr, since
 // the search itself succeeded. Nothing is written for a healthy instance.
 func SearchNotice(w io.Writer, resp model.SearchResponse) {
 	if resp.Provider != "none" {

@@ -1,7 +1,7 @@
 // Package skillsync ingests skill directories from configured git source
 // repos into the backbone: parse SKILL.md frontmatter, content-hash the dir,
 // and archive it. Its job ends at the upserted row — the convergence loop in
-// internal/indexer chunks and embeds what it finds (WL-SPEC-79 §16).
+// internal/indexer chunks and embeds what it finds (WL-REQ-260).
 package skillsync
 
 import (
@@ -66,7 +66,7 @@ func (sy *Syncer) log() *slog.Logger {
 // on one repo should not leave the rest unsynced — so the returned Summary
 // covers whatever did sync alongside the joined errors. Nothing here embeds:
 // a changed skill is stale to the convergence loop by its content hash, and
-// the next pass indexes it (WL-SPEC-79 §16).
+// the next pass indexes it (WL-REQ-260).
 func (sy *Syncer) SyncAll(ctx context.Context, sources []Source) (Summary, error) {
 	var sum Summary
 	var errs []error

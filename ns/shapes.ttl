@@ -13,7 +13,7 @@
 # renumbered, and wl:lastRevisedIn is set only on sections that changed — are
 # diffs between the current and candidate version graphs, evaluated at
 # publication (WL-SPEC-77). The anchor-depth limit is likewise a publication check
-# against a server setting. Only the superseded-section explanation (WL-SPEC-77 §6) is a
+# against a server setting. Only the superseded-section explanation (WL-REQ-167) is a
 # single-graph constraint, and it is below.
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
@@ -91,11 +91,11 @@ wl:SectionShape a sh:NodeShape ;
     sh:or (
         [ sh:not [ sh:property [ sh:path wl:status ; sh:hasValue wlc:superseded ] ] ]
         # The path reads the declared direction, so the shape holds whether or
-        # not a producer emitted the inverse (WL-SPEC-77 §8.1).
+        # not a producer emitted the inverse (WL-REQ-1288).
         [ sh:property [ sh:path [ sh:inversePath dct:replaces ] ; sh:minCount 1 ] ]
         [ sh:property [ sh:path dct:description ; sh:minCount 1 ] ]
     ) ;
-    sh:message "A superseded Section needs a successor that dct:replaces it, or a dct:description saying why it went away (WL-SPEC-77 §6)." .
+    sh:message "A superseded Section needs a successor that dct:replaces it, or a dct:description saying why it went away (WL-REQ-167)." .
 
 wl:DeliverableShape a sh:NodeShape ;
     # Targets wl:Effect too: sh:targetClass follows rdfs:subClassOf*.

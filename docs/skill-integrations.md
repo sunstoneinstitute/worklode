@@ -54,7 +54,7 @@ is about to be deleted is worse than none. The authoring path in this repo is
 themselves.
 
 **What `lode` gives us.** Not the git → backbone sync this brief was drafted
-against: `lode doc sync` and `POST /api/v1/docs/sync` were deleted, and the old 025 §16
+against: `lode doc sync` and `POST /api/v1/docs/sync` were deleted, and the old WL-REQ-708
 and §5.1 are withdrawn. What shipped instead is the authoring surface of WL-SPEC-77, with
 the backbone — not git — as the place a document lives:
 
@@ -64,7 +64,7 @@ the backbone — not git — as the place a document lives:
   body, sections and edges.
 - `lode doc import` — the one-shot, admin-gated corpus walker that seeded the
   backbone from git. A migration, not a standing sync.
-- `lode show WL-SPEC-77#sec-11` — renders a section, resolving the ref against
+- `lode show WL-REQ-172` — renders a section, resolving the ref against
   the backbone rather than local files, so it works in a checkout holding no
   documents on disk.
 - API: `POST /api/v1/docs`, `GET /api/v1/docs`, `GET /api/v1/docs/{id}`,
@@ -78,7 +78,7 @@ Both gaps this brief named have since closed. There is a CLI read path from the
 backbone — `lode doc show`, and `lode show` reading through the same API — and
 there is an authoring path, so "write a lode spec" no longer means "write a
 file and sync it". The corpus of record has since moved too: `docs/specs/` and
-`docs/plans/` were deleted under WL-SPEC-77 §16, and the backbone is the only copy.
+`docs/plans/` were deleted under WL-REQ-180, and the backbone is the only copy.
 
 ## 2. Skill inventory and conflicts
 
@@ -148,7 +148,7 @@ candidate pool, with a score threshold and a compressed per-skill
 representation before anything enters the agent's context. A worked
 Postgres/pgvector + pgx implementation is in `~/notes/Notes/2026-08-17.md`.
 
-WL-SPEC-81 §7's schema is a partial start rather than a foundation: `skill_embeddings`
+WL-RULE-317's schema is a partial start rather than a foundation: `skill_embeddings`
 chunks by `(skill_id, chunk_index)`, but there is no FTS index for the lexical
 path, and the `embedding` column deliberately carries no dimension typmod —
 which makes it an unindexed exact scan, so there is no HNSW index either and
@@ -228,7 +228,7 @@ one it holds, and the server answers with a not-modified equivalent. The doc
 type already has a `version` field, so this generalises to task and plan bodies
 as a single mechanism rather than a doc-specific optimisation. The triplicate
 this brief warned about is gone — `model.Doc` is now the one declaration, per
-WL-SPEC-73 §3.2a — so there is a home to build on. Specified in WL-SPEC-81 §8.
+WL-RULE-1349 — so there is a home to build on. Specified in WL-RULE-322.
 
 **Grilling writes back.** Confirmed: a settled design tree is exactly the input
 to a document, and losing it to the transcript is the current waste. The
@@ -245,7 +245,7 @@ maps onto it directly — a round is a review round, a question is a block, an
 answer is an anchored comment, and a question resolved without a comment takes
 its recommendation. That last property is what pays: twelve questions with nine
 good recommendations cost three comments. Crit is a separate install, so the
-skill detects it and falls back to terminal rounds. Specified in WL-SPEC-81 §8.4.
+skill detects it and falls back to terminal rounds. Specified in WL-REQ-326.
 
 **Deliverables:** vendored `grilling` patched with the fact-source section and
 the write-back contract; `lode doc fetch` with the conditional-fetch mechanism
@@ -343,7 +343,7 @@ shipped; the first three do not exist yet.
    and routable. What is missing is the qualifier itself: it has to come from
    the nearest `.claude-plugin/plugin.json`, because one source repo holds many
    plugins, and the scanner drops every file above skill-dir depth so the
-   manifest never reaches the store today (WL-SPEC-81 §8.3). This is a prerequisite for shipping any skill
+   manifest never reaches the store today (WL-REQ-325). This is a prerequisite for shipping any skill
    whose name matches an upstream one.
 2. **`lode doc fetch` with conditional refetch** (§4), generalised to a
    `version`/`generation` column on editable storage objects.
@@ -352,7 +352,7 @@ shipped; the first three do not exist yet.
 4. ~~**A lode-first document authoring path** (§5) — create and edit specs and
    plans through the API, and the amendment that permits it.~~ Shipped:
    `POST /api/v1/docs` and the lifecycle routes behind `lode doc add`/`edit`/
-   `submit`/`accept`/`revise`, with the old 025 §16 withdrawn.
+   `submit`/`accept`/`revise`, with the old WL-REQ-708 withdrawn.
 
 ## 8. Open questions
 
@@ -366,7 +366,7 @@ shipped; the first three do not exist yet.
    and model-invocable, so it will fire next to whatever the
    writing-agent-instructions remix becomes unless that overlap is designed
    away.
-4. **Does the org skill registry (WL-SPEC-81 §7) distribute these, or only the plugin?**
+4. **Does the org skill registry (WL-RULE-317) distribute these, or only the plugin?**
    The registry is the org-wide discovery surface; a skill that only makes
    sense inside a Worklode repo may belong in the plugin, in the registry, or
    in both with the registry as discovery.
@@ -375,7 +375,7 @@ shipped; the first three do not exist yet.
 
 ## 9. Proposed spec split
 
-**The first spec was written as 037**, now folded into WL-SPEC-81 §8. The second is unwritten.
+**The first spec was written as 037**, now folded into WL-RULE-322. The second is unwritten.
 
 - **First spec — vendored design skills.** The vendoring mechanism and drift
   check, the §2.1 remixes, `lode install`'s version pinning and suppression
@@ -401,8 +401,8 @@ authoring path.
   `internal/api/router.go`, `internal/designdoc/resolve.go`
 - `internal/skillsync/skillsync.go`, `internal/skillhash/skillhash.go`,
   `deploy/base/migrations/0007_skills.up.sql`
-- WL-SPEC-77 §14; WL-SPEC-78 §3; WL-SPEC-80 §7; WL-SPEC-81 §7;
-  WL-SPEC-73 §3.2a
+- WL-REQ-178; WL-REQ-198; WL-REQ-283; WL-RULE-317;
+  WL-RULE-1349
 - `docs/authoring-design-docs.md`
 - `~/notes/Notes/2026-08-17.md` — hybrid retrieval (FTS + pgvector, RRF in one
   query, cross-encoder rerank) for §2.2

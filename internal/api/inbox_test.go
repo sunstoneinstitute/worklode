@@ -193,10 +193,10 @@ func TestPromoteUnknownParentIs404(t *testing.T) {
 	}
 }
 
-// TestPromoteUnderOrdinaryParent pins WL-SPEC-75 §5 on the promote path: any
+// TestPromoteUnderOrdinaryParent pins WL-REQ-88 on the promote path: any
 // ordinary task may be a parent, since checkHierarchy requires no particular
 // kind, so promoting under one is filed rather than rejected. The remaining
-// WL-SPEC-75 §5 invariants (one project, one parent, no cycle, depth cap) still
+// WL-REQ-88 invariants (one project, one parent, no cycle, depth cap) still
 // reject through the ErrInvalidInput -> 422 mapping.
 func TestPromoteUnderOrdinaryParent(t *testing.T) {
 	t.Parallel()

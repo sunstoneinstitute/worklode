@@ -61,7 +61,7 @@ type EvidenceReference struct {
 }
 
 // CockpitDecision is the project's curated "Next decision" card (migration
-// 0013). Named apart from the WL-SPEC-77 §12 Decision (a task's posed
+// 0013). Named apart from the WL-REQ-176 Decision (a task's posed
 // question) — the two are unrelated concepts that happened to share a name.
 type CockpitDecision struct {
 	Title            string              `json:"title"`

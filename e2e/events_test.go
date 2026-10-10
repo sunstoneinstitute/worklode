@@ -47,12 +47,12 @@ func pollEventListE2E(t *testing.T, ctx context.Context, c *cli.Client, f model.
 // EventListParams.Limit.
 func intPtr(n int) *int { return &n }
 
-// TestEventLog proves the ordered event log (spec 025 §15) end to end
+// TestEventLog proves the ordered event log (WL-RULE-179) end to end
 // through public surfaces only: a real signed GitHub webhook delivery
 // becomes a row a real API client can read back with its vendor type and
-// source intact (025 §15.2's "one log, two populations"), the subscriber and
+// source intact (WL-RULE-179's "one log, two populations"), the subscriber and
 // seek surfaces answer correctly (including the admin-only guard on seek),
-// and the live SSE stream (025 §18) delivers a delivery made while it is
+// and the live SSE stream (WL-REQ-182) delivers a delivery made while it is
 // open — admin-only, with a plain 403 for an agent token.
 func TestEventLog(t *testing.T) {
 	ctx := context.Background()
@@ -90,7 +90,7 @@ func TestEventLog(t *testing.T) {
 	agent := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: tok.Token})
 
 	// 2. Deliver one signed GitHub push webhook to the default branch, and
-	// read it back as the admin: its vendor type ("push", 025 §15.2's own
+	// read it back as the admin: its vendor type ("push", WL-RULE-179's own
 	// example of a dotted vendor type) and source ("github") must survive
 	// the round trip through the shared log.
 	deliverGitHub(t, srv.URL, "push", "e2e-events-push-1", map[string]any{

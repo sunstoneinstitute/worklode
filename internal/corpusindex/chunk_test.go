@@ -109,7 +109,7 @@ func TestChunkDocSectionOrderFollowsPosition(t *testing.T) {
 	}
 }
 
-// TestChunkDocPlanHeadings asserts a plan (no sections passed, WL-SPEC-77 §11)
+// TestChunkDocPlanHeadings asserts a plan (no sections passed, WL-REQ-172)
 // chunks on its ##/### headings with an empty anchor.
 func TestChunkDocPlanHeadings(t *testing.T) {
 	body := "# A Plan\n\nIntro text.\n\n" +
@@ -165,7 +165,7 @@ func TestChunkDocPlanUnstructuredFallsBackToWindows(t *testing.T) {
 }
 
 // TestChunkDocPlanIndexUniquePerAnchor pins the fix for the duplicate-key
-// regression a plan triggers: every plan chunk shares anchor "", so WL-SPEC-79 §14's
+// regression a plan triggers: every plan chunk shares anchor "", so WL-REQ-254's
 // (doc_id, anchor, chunk_index) unique index requires Index to keep counting
 // across headings rather than restart at 0 for each one.
 func TestChunkDocPlanIndexUniquePerAnchor(t *testing.T) {
@@ -291,7 +291,7 @@ func TestBudgetFor(t *testing.T) {
 }
 
 // TestChunkDocSkipsSpecHeadings: a spec heading has no text, so it gets no
-// chunk and the rule under it keeps its own body (WL-SPEC-77 §19.1).
+// chunk and the rule under it keeps its own body (WL-REQ-1295).
 func TestChunkDocSkipsSpecHeadings(t *testing.T) {
 	body := "# Spec\n\n## 1 A {#sec-1}\n\n### 1.1 B {#sec-1.1}\n\nb body\n"
 	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: body}

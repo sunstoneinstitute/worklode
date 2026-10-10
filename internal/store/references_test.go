@@ -80,7 +80,7 @@ func refuse(t *testing.T, s *Store, fromKind, from, toKind, to, rel string, want
 
 // TestCreateEntityEdgeShapes checks referenceShapes' validation order (rel
 // vocabulary, then end kinds, then both ends existing), the PK-violation
-// mapping to ErrReferenceExists, and that CreatedAt is stamped (WL-SPEC-75 §13.4).
+// mapping to ErrReferenceExists, and that CreatedAt is stamped (WL-REQ-122).
 func TestCreateEntityEdgeShapes(t *testing.T) {
 	t.Parallel()
 	st, mID, dID, tID := referenceStore(t)

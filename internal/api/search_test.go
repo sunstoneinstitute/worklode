@@ -13,7 +13,7 @@ import (
 )
 
 // seedChunk writes one chunk for subj, text-only when vec is nil (the
-// lexical arm only, matching a no-provider instance, WL-SPEC-79 §17).
+// lexical arm only, matching a no-provider instance, WL-REQ-261).
 func seedChunk(t *testing.T, st *store.Store, subj store.ChunkSubject, text string, vec []float32) {
 	t.Helper()
 	if subj.ContentHash == "" {
@@ -38,7 +38,7 @@ func TestSearchGuard(t *testing.T) {
 	}
 }
 
-// TestSearchDegraded covers WL-SPEC-79 §17: a no-provider instance still serves
+// TestSearchDegraded covers WL-REQ-261: a no-provider instance still serves
 // real lexical results, and an explicit mode=dense degrades the same way.
 func TestSearchDegraded(t *testing.T) {
 	t.Parallel()
@@ -203,7 +203,7 @@ func TestSearchProviderConfigured(t *testing.T) {
 }
 
 // TestSearchProviderFailing checks that a failing embedding provider
-// degrades to lexical rather than 5xx-ing the whole search (WL-SPEC-79 §17).
+// degrades to lexical rather than 5xx-ing the whole search (WL-REQ-261).
 func TestSearchProviderFailing(t *testing.T) {
 	t.Parallel()
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

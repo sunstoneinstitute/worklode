@@ -50,7 +50,7 @@ Every section above is already built; this plan only records that.
 // TestDocAcceptCoverageOnlyPlanMintsNothing: a plan that records coverage for
 // work already built declares no tasks at all, and accepting it is the only way
 // its claims reach the aggregate coverage query, which reads accepted-or-
-// superseded plans only (WL-SPEC-78 §1.2). It accepts, and mints nothing.
+// superseded plans only (WL-REQ-186). It accepts, and mints nothing.
 func TestDocAcceptCoverageOnlyPlanMintsNothing(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -150,7 +150,7 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 
 // TestDocAcceptPlanInvariant: before accept, no task carries the plan's id;
 // after, the count equals the definition count; a second accept of the same
-// body mints nothing, so the set can never double-mint (WL-SPEC-77 §11 AC2).
+// body mints nothing, so the set can never double-mint (WL-REQ-172 AC2).
 func TestDocAcceptPlanInvariant(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -172,7 +172,7 @@ func TestDocAcceptPlanInvariant(t *testing.T) {
 	}
 
 	// Re-accepting an unedited plan is a no-op, not a refusal: every
-	// declaration already has a row, so there is nothing to mint (WL-SPEC-77 §11).
+	// declaration already has a row, so there is nothing to mint (WL-REQ-172).
 	_, again, err := acceptDoc(t, s, doc.ID, "stig")
 	if err != nil {
 		t.Fatalf("second accept: %v", err)
@@ -214,7 +214,7 @@ func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
 		t.Fatalf("edge %s -> %s type = %q, want blocks", task1, task2, edgeType)
 	}
 
-	// Minted tasks start ready (WL-SPEC-77 §11), so the ready-set check below already
+	// Minted tasks start ready (WL-REQ-172), so the ready-set check below already
 	// exercises blockedCondition rather than any draft-state filter.
 	if !isBlocked(t, s, task2) {
 		t.Fatalf("IsBlocked(%s): want true while task1 open", task2)
@@ -251,7 +251,7 @@ func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
 
 // TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations: an accepted plan stays
 // freely mutable, so re-accepting one mints the declarations that have no row
-// yet and leaves every existing row alone (WL-SPEC-77 §11) — including a row whose
+// yet and leaves every existing row alone (WL-REQ-172) — including a row whose
 // declaration's prose changed, and one that has since moved past ready. The
 // new task's declared blockedBy is wired even though its blocker was minted
 // by the first accept.
@@ -320,7 +320,7 @@ func TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations(t *testing.T) {
 
 // TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp: an edit that adds no
 // declaration — prose rewritten under an existing one — leaves the re-accept
-// with nothing to mint, and that is a success rather than an error (WL-SPEC-77 §11).
+// with nothing to mint, and that is a success rather than an error (WL-REQ-172).
 func TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -361,7 +361,7 @@ func TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp(t *testing.T) {
 
 // TestDocAcceptPlanReAcceptNeverRemintsDeletedTask: a soft-deleted task keeps
 // its declaration's key, so the withdrawal survives the next re-accept
-// (WL-SPEC-77 §11 — withdrawing work is a task transition, and re-acceptance leaves
+// (WL-REQ-172 — withdrawing work is a task transition, and re-acceptance leaves
 // existing rows alone).
 func TestDocAcceptPlanReAcceptNeverRemintsDeletedTask(t *testing.T) {
 	t.Parallel()
@@ -389,7 +389,7 @@ func TestDocAcceptPlanReAcceptNeverRemintsDeletedTask(t *testing.T) {
 
 // TestDocUpdateBodyMintedPlanRequiresReadableTasks: once a plan has minted
 // tasks, a body edit that leaves its ## Tasks section unreadable is refused at
-// the write rather than surfacing as drift at the next accept (WL-SPEC-77 §11). The
+// the write rather than surfacing as drift at the next accept (WL-REQ-172). The
 // body does not move.
 func TestDocUpdateBodyMintedPlanRequiresReadableTasks(t *testing.T) {
 	t.Parallel()
@@ -424,7 +424,7 @@ func TestDocUpdateBodyMintedPlanRequiresReadableTasks(t *testing.T) {
 
 // TestDocUpdateBodyUnmintedPlanTasksUnchecked: the readable-## Tasks rule
 // binds only once something is minted. A draft plan is written a paragraph at
-// a time, and an accepted plan that minted nothing is WL-SPEC-77 §11's historical
+// a time, and an accepted plan that minted nothing is WL-REQ-172's historical
 // import; neither has a task set to drift from.
 func TestDocUpdateBodyUnmintedPlanTasksUnchecked(t *testing.T) {
 	t.Parallel()
@@ -447,8 +447,8 @@ func TestDocUpdateBodyUnmintedPlanTasksUnchecked(t *testing.T) {
 }
 
 // TestDocUpdateBodyPlanBumpsVersion: a plan is edited in place rather than
-// revised (WL-SPEC-77 §11), so its body edit is the next version of the document —
-// which is what lets the acceptance event of WL-SPEC-77 §15, keyed on IRI and version,
+// revised (WL-REQ-172), so its body edit is the next version of the document —
+// which is what lets the acceptance event of WL-RULE-179, keyed on IRI and version,
 // tell a re-accept after an edit from a retry of the same accept.
 func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
 	t.Parallel()
@@ -645,7 +645,7 @@ Do it.
 }
 
 // TestDocAcceptPlanWrongActorForbidden: acceptance is the owner's act,
-// exactly as for a spec (WL-SPEC-77 §9); a forbidden accept mints nothing.
+// exactly as for a spec (WL-REQ-170); a forbidden accept mints nothing.
 func TestDocAcceptPlanWrongActorForbidden(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -723,7 +723,7 @@ func TestDocNeedsPlanningReportsUncoveredSections(t *testing.T) {
 
 // TestDocNeedsPlanningFullyCoveredSpecOmitted: every section named by some
 // accepted plan takes the spec out of the set, and two plans naming the same
-// section is legal and unremarked (WL-SPEC-78 §1.2).
+// section is legal and unremarked (WL-REQ-186).
 func TestDocNeedsPlanningFullyCoveredSpecOmitted(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -737,7 +737,7 @@ func TestDocNeedsPlanningFullyCoveredSpecOmitted(t *testing.T) {
 	}
 }
 
-// TestDocNeedsPlanningDraftSpecNotOwedPlanning: WL-SPEC-78 §1.2 — a draft spec is not
+// TestDocNeedsPlanningDraftSpecNotOwedPlanning: WL-REQ-186 — a draft spec is not
 // yet a planning gap.
 func TestDocNeedsPlanningDraftSpecNotOwedPlanning(t *testing.T) {
 	t.Parallel()
@@ -754,7 +754,7 @@ func TestDocNeedsPlanningDraftSpecNotOwedPlanning(t *testing.T) {
 
 // TestDocNeedsPlanningDraftPlanDoesNotCover: a draft plan has not yet
 // undertaken work, so its covers edges discharge nothing and each section it
-// covers is plan-draft (WL-SPEC-78 §1.3).
+// covers is plan-draft (WL-REQ-187).
 func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -770,7 +770,7 @@ func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
 
 // TestDocNeedsPlanningDraftBesideAcceptedIsPlanDraft: a section covered by
 // more than one plan is planned only once every covering plan is accepted
-// (WL-SPEC-78 §1.3).
+// (WL-REQ-187).
 func TestDocNeedsPlanningDraftBesideAcceptedIsPlanDraft(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -786,7 +786,7 @@ func TestDocNeedsPlanningDraftBesideAcceptedIsPlanDraft(t *testing.T) {
 
 // TestDocNeedsPlanningWholeDocumentEntryCoversEveryRule: a covers entry with
 // no fragment resolves, when the plan is written, to one edge per rule the
-// document contains (WL-SPEC-77 §4), so it discharges every section present
+// document contains (WL-REQ-165), so it discharges every section present
 // then.
 func TestDocNeedsPlanningWholeDocumentEntryCoversEveryRule(t *testing.T) {
 	t.Parallel()
@@ -801,7 +801,7 @@ func TestDocNeedsPlanningWholeDocumentEntryCoversEveryRule(t *testing.T) {
 }
 
 // TestDocNeedsPlanningNoSpecSentinelCoversNothing: `covers: NO-SPEC` resolves
-// to no document (WL-SPEC-78 §3), so it lands in to_external and contributes
+// to no document (WL-REQ-198), so it lands in to_external and contributes
 // nothing — no special case needed. The plan itself is never a planning gap.
 func TestDocNeedsPlanningNoSpecSentinelCoversNothing(t *testing.T) {
 	t.Parallel()
@@ -848,7 +848,7 @@ func TestDocNeedsPlanningScopesToProject(t *testing.T) {
 
 // TestDocNeedsPlanningSupersededPlanDischarges: the discharging set is
 // accepted or superseded — a superseded plan is one that was accepted and
-// then carried out (WL-SPEC-77 §11), so it still discharges the section it covered.
+// then carried out (WL-REQ-172), so it still discharges the section it covered.
 func TestDocNeedsPlanningSupersededPlanDischarges(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -863,11 +863,11 @@ func TestDocNeedsPlanningSupersededPlanDischarges(t *testing.T) {
 	}
 }
 
-// --- NeedsPlanning defers classification (WL-SPEC-78 §1.2, §4) -----------------
+// --- NeedsPlanning defers classification (WL-REQ-186, WL-RULE-202) -----------------
 
 // TestDocNeedsPlanningDeferredSectionReportsOwner: an accepted plan's defers
 // entry reports the section "deferred" with its owner's slug; a section no
-// plan names at all stays "unplanned" (WL-SPEC-78 §1.2, §4).
+// plan names at all stays "unplanned" (WL-REQ-186, WL-RULE-202).
 func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -884,7 +884,7 @@ func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
 	}
 }
 
-// TestDocNeedsPlanningTwoDeferralOwnersAggregated: WL-SPEC-78 §4's one-owner rule is
+// TestDocNeedsPlanningTwoDeferralOwnersAggregated: WL-RULE-202's one-owner rule is
 // per plan, so two plans may defer one section to two owners. The report
 // aggregates them deterministically, comma-joined without a space — the CLI
 // joins anchors with spaces, so a spaced separator would split the token.
@@ -911,7 +911,7 @@ func TestDocNeedsPlanningTwoDeferralOwnersAggregated(t *testing.T) {
 // TestDocNeedsPlanningDeferralDeliveredByCoveringPlan: a deferral is
 // delivered by any plan discharging the section, not only by the named owner
 // — once a second accepted plan covers the section, it disappears
-// from the gaps the same as any other discharged section (WL-SPEC-78 §1.2).
+// from the gaps the same as any other discharged section (WL-REQ-186).
 func TestDocNeedsPlanningDeferralDeliveredByCoveringPlan(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -949,7 +949,7 @@ func TestDocNeedsPlanningPlanDraftOutranksDeferred(t *testing.T) {
 }
 
 // TestDocNeedsPlanningDraftPlanDeferralIgnored: a draft plan has not yet
-// undertaken work, so its defers entries classify nothing (WL-SPEC-78 §1.2).
+// undertaken work, so its defers entries classify nothing (WL-REQ-186).
 func TestDocNeedsPlanningDraftPlanDeferralIgnored(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -967,7 +967,7 @@ func TestDocNeedsPlanningDraftPlanDeferralIgnored(t *testing.T) {
 }
 
 // TestDocNeedsPlanningSupersededPlanDeferralCounts: the deferring set is
-// accepted or superseded, never draft (WL-SPEC-78 §4) — a superseded plan's
+// accepted or superseded, never draft (WL-RULE-202) — a superseded plan's
 // deferral stands, being spent does not deliver a handoff the plan never
 // made.
 func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
@@ -988,7 +988,7 @@ func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
 }
 
 // TestDocNeedsPlanningDeferralOwnerExternalVerbatim: an owner reference this
-// project cannot resolve is reported verbatim (WL-SPEC-78 §4).
+// project cannot resolve is reported verbatim (WL-RULE-202).
 func TestDocNeedsPlanningDeferralOwnerExternalVerbatim(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1059,7 +1059,7 @@ func TestDocNeedsExecutionDraftPlanOmitted(t *testing.T) {
 
 // TestDocNeedsExecutionUnmintedAcceptedPlanOmitted: the only accepted plans
 // with no task set are the importer's spent plans, which are not pending work
-// — the deliberate departure from WL-SPEC-77 §18's "unminted or unfinished".
+// — the deliberate departure from WL-REQ-182's "unminted or unfinished".
 func TestDocNeedsExecutionUnmintedAcceptedPlanOmitted(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1094,7 +1094,7 @@ func TestDocNeedsExecutionScopesToProjectAndKind(t *testing.T) {
 	}
 }
 
-// --- BareSupersededRules (WL-SPEC-77 §6 rule 2, WL-SPEC-77 §6) --------------------
+// --- BareSupersededRules (WL-REQ-167 rule 2, WL-REQ-167) --------------------
 
 // TestDocBareSupersededRules: a withdrawn rule no rule supersedes is
 // reported with the section arranging it; a withdrawn rule with a successor,

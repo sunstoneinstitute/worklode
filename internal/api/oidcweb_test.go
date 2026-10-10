@@ -103,7 +103,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	}
 
 	// The callback's provisionActor call carries the githubUsername claim
-	// onto the actor (WL-SPEC-74 §4.3).
+	// onto the actor (WL-REQ-53).
 	a, err := st.GetActor(context.Background(), "grace")
 	if err != nil {
 		t.Fatalf("get actor: %v", err)
@@ -214,7 +214,7 @@ func TestGitHubLoginRoutesRemoved(t *testing.T) {
 
 // TestLoginTarget asserts loginTarget always sends unauthenticated users to
 // Keycloak, regardless of whether the dormant GitHub App OAuth client (s.gh,
-// WL-SPEC-74 §9.2) is configured.
+// WL-REQ-64) is configured.
 func TestLoginTarget(t *testing.T) {
 	t.Parallel()
 	// Without the GitHub App OAuth client configured (s.gh nil).

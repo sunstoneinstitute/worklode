@@ -86,7 +86,7 @@ func (c *Client) DetachBlob(ctx context.Context, id, hash string) error {
 	return err
 }
 
-// BlobGC runs both garbage-collection sweeps (WL-SPEC-78 §8.7). graceHours is
+// BlobGC runs both garbage-collection sweeps (WL-REQ-232). graceHours is
 // pointer-typed on the wire so an admin can pass 0 deliberately (tests, or a
 // deployment confident nothing is mid-upload) without it reading as "use the
 // server default".

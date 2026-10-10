@@ -1,4 +1,4 @@
-// WL-SPEC-75 §13.6's explicit impact review, end to end: the fan-out a
+// WL-REQ-124's explicit impact review, end to end: the fan-out a
 // designation triggers on the entities governed by what moved, the dependent
 // owner's note, and the prior approver's decision.
 
@@ -218,7 +218,7 @@ func TestImpactDecideReopenMintsReviewRow(t *testing.T) {
 }
 
 // TestImpactDecideRefusesNonPriorApprover: only someone who approved the
-// dependent may say whether their own decision still holds (WL-SPEC-75 §13.6).
+// dependent may say whether their own decision still holds (WL-REQ-124).
 func TestImpactDecideRefusesNonPriorApprover(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)

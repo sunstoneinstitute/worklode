@@ -20,12 +20,12 @@ import (
 // carrying a Quarto anchor: "## 4.1a Title {#sec-4.1a}". Ported from
 // scripts/secfmt.py, which is what the pre-commit hook enforces — the two
 // must agree on what a section is. H1 is excluded deliberately: it is the
-// document title, not an addressable section (WL-SPEC-77 §4).
+// document title, not an addressable section (WL-REQ-165).
 //
 // The trailing dot after the number is optional because the house style is
 // "1." at the top level and "1.1" below it; it is not captured either way.
 // The anchor may carry the editable form's rule ref, "{#sec-3 rule=WL-RULE-12}"
-// (WL-SPEC-77 §19.5).
+// (WL-REQ-1299).
 var heading = regexp.MustCompile(
 	`^(?P<hashes>#{2,6})[ \t]+` +
 		`(?:(?P<num>\d+(?:\.\d+)*[a-z]?)\.?[ \t]+)?` +
@@ -61,7 +61,7 @@ type Section struct {
 	// when the heading carries none.
 	Anchor string
 	// Rule is the rule ref the editable form names in the anchor attribute
-	// ("WL-RULE-12"), or empty (WL-SPEC-77 §19.5). Ignored without an Anchor.
+	// ("WL-RULE-12"), or empty (WL-REQ-1299). Ignored without an Anchor.
 	Rule string
 	// Body is the source between this heading and the next heading of any
 	// level, so a section's Body excludes its subsections' text.
@@ -188,7 +188,7 @@ func (d *Document) SectionByAnchor(anchor string) *Section {
 
 // Subtree returns the source text of the section anchored anchor, together
 // with every section nested under it, and reports whether that anchor exists.
-// It is the cut `lode show --section` prints (WL-SPEC-78 §2: a section is always its
+// It is the cut `lode show --section` prints (WL-REQ-192: a section is always its
 // whole subtree).
 //
 // The same round-trip guarantee Bytes rests on applies here: for an unedited
@@ -258,7 +258,7 @@ func (s *Section) anchorSource() string {
 	return "{#" + s.Anchor + "}"
 }
 
-// Editable is src in the editable form (WL-SPEC-77 §19.5): each heading
+// Editable is src in the editable form (WL-REQ-1299): each heading
 // anchored at a key of rules carries that rule ref, "{#sec-3 rule=WL-REQ-12}".
 // Every other byte is kept, and src that does not parse is returned unchanged.
 func Editable(src string, rules map[string]string) string {
@@ -274,7 +274,7 @@ func Editable(src string, rules map[string]string) string {
 
 // StripRuleRefs is src with the rule ref removed from every heading's anchor
 // attribute: the stored form of a body written in the editable form
-// (WL-SPEC-77 §19.5). Every other byte is kept, and src that does not parse
+// (WL-REQ-1299). Every other byte is kept, and src that does not parse
 // is returned unchanged.
 func StripRuleRefs(src string) string {
 	d, err := Parse([]byte(src))

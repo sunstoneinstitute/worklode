@@ -14,7 +14,7 @@ import (
 )
 
 // PlanTask is one task definition in a plan document's ## Tasks section —
-// the plan task format WL-SPEC-77 §11 mints from (docs/authoring-design-docs.md
+// the plan task format WL-REQ-172 mints from (docs/authoring-design-docs.md
 // carries the canonical definition).
 type PlanTask struct {
 	Number    int
@@ -28,7 +28,7 @@ type PlanTask struct {
 
 // planTaskHeadingRE matches a task subsection heading's Title (the heading
 // text with hashes, number and anchor already stripped by Parse): "Task 1 —
-// Short imperative title". The em dash is part of the format (WL-SPEC-77 §11);
+// Short imperative title". The em dash is part of the format (WL-REQ-172);
 // hyphens and en dashes are near misses, not accepted alternatives.
 var planTaskHeadingRE = regexp.MustCompile(`^Task\s+(\d+)\s+—\s+(.+)$`)
 
@@ -58,7 +58,7 @@ type planTaskFence struct {
 // each opening with a yaml metadata fence (kind required; priority, skills,
 // blockedBy optional). Validation errors name the task; the numbers run
 // 1, 2, 3… in document order without gaps, and blockedBy must be acyclic
-// (WL-SPEC-77 §11).
+// (WL-REQ-172).
 func PlanTasks(d *Document) ([]PlanTask, error) {
 	var sections []*Section
 	for _, sec := range d.Sections {
@@ -234,7 +234,7 @@ func checkPlanTaskNumbering(defs []PlanTask) error {
 }
 
 // checkPlanTaskTitles enforces that no two declarations in one plan share a
-// title. The title is a declaration's identity across a re-accept (WL-SPEC-77 §11):
+// title. The title is a declaration's identity across a re-accept (WL-REQ-172):
 // it is what the minted task records, and what says whether a declaration
 // already has a row. Two declarations spelled the same way would have one
 // identity between them, so the ambiguity is refused at the parse rather than
@@ -332,7 +332,7 @@ func findBlockedByCycle(defs []PlanTask) []int {
 // mints nothing: no "## Tasks" heading at all, but at least one covers or
 // defers entry. Accepting such a plan is what puts its claims in force, since
 // the aggregate coverage query reads accepted-or-superseded plans only
-// (WL-SPEC-78 §1.2) — a retroactive backfill of work already built has nothing to
+// (WL-REQ-186) — a retroactive backfill of work already built has nothing to
 // mint and would otherwise be stuck in draft forever.
 //
 // The absence has to be total, because "declares no tasks" and "declares them
@@ -353,7 +353,7 @@ func IsCoverageOnlyPlan(d *Document) bool {
 
 // DeclaresNoTasks is IsCoverageOnlyPlan's body half: no "## Tasks" heading and
 // no heading reaching for the task format. The store asks it of a stored
-// body, whose coverage is in doc_edges rather than a header (WL-SPEC-77 §7).
+// body, whose coverage is in doc_edges rather than a header (WL-REQ-168).
 func DeclaresNoTasks(d *Document) bool {
 	for _, sec := range d.Sections {
 		title := strings.TrimSpace(sec.Title)
@@ -368,7 +368,7 @@ func DeclaresNoTasks(d *Document) bool {
 }
 
 // taskishHeadingRE matches a heading reaching for the task-declaration format
-// of WL-SPEC-77 §11 — anything opening with "Task" followed by a number. It is
+// of WL-REQ-172 — anything opening with "Task" followed by a number. It is
 // deliberately looser than planTaskHeadingRE: its job is to spot a plan that
 // meant to declare tasks and got the spelling wrong, so that IsCoverageOnlyPlan
 // leaves it to PlanTasks' error rather than accepting it as minting nothing.

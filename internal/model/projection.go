@@ -3,14 +3,14 @@ package model
 import "time"
 
 // ProjectionFailure is one project quarantined by the knowledge-graph
-// projector (WL-SPEC-79 §12): graph-server would not take its graph, and the
+// projector (WL-REQ-251): graph-server would not take its graph, and the
 // global watermark has moved on past the transaction that made it dirty, so
 // this row is the only remaining record that the project still owes a
 // projection.
 //
 // It crosses the HTTP boundary because
 // worklode_graph_projection_quarantined_projects can only say how many
-// projects are stuck — WL-SPEC-73 §6 keeps the project set out of a label, since it
+// projects are stuck — WL-REQ-32 keeps the project set out of a label, since it
 // is not closed — and the log line naming the one that just failed has
 // scrolled away by the time anyone asks.
 type ProjectionFailure struct {

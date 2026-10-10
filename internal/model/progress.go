@@ -54,7 +54,7 @@ type ProgressSpec struct {
 	// button is offered on a draft spec and enabled only for its owner.
 	Status string `json:"status"`
 	Owner  string `json:"owner,omitempty"`
-	// PlanningTask is the open design task about this spec (WL-SPEC-77 §15's
+	// PlanningTask is the open design task about this spec (WL-RULE-179's
 	// planning task), when one exists. The row shows it as a link instead of
 	// §3.4's Plan button, which mints exactly that task.
 	PlanningTask string            `json:"planning_task,omitempty"`
@@ -126,7 +126,7 @@ type ProgressAcceptInput struct {
 
 // ProgressAcceptResponse is the reply to POST /projects/{id}/progress/accept
 // (WL-SPEC-82 §15.3): the document that was accepted, the status it now
-// carries, and how many tasks the acceptance minted (WL-SPEC-77 §11 — zero for a
+// carries, and how many tasks the acceptance minted (WL-REQ-172 — zero for a
 // spec or ADR). The page applies none of it; it re-reads the row from the
 // backbone (§3.1).
 type ProgressAcceptResponse struct {

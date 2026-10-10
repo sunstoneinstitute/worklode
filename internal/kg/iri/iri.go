@@ -1,4 +1,4 @@
-// Package iri is the single owner of the IRI grammar of WL-SPEC-79 §10:
+// Package iri is the single owner of the IRI grammar of WL-REQ-246:
 // namespaces, the instance grammar and named graphs. Callers never
 // concatenate IRIs themselves (§10.4). Constructors are pure concatenation:
 // no validation, no error return. Slashes inside a local id are permitted
@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// Namespace roots (WL-SPEC-79 §10). Untyped constants so callers can build
+// Namespace roots (WL-REQ-246). Untyped constants so callers can build
 // prefixes directly, e.g. iri.IDNS + "task/".
 const (
 	Base      = "https://worklode.io/ns/"
@@ -57,7 +57,7 @@ func Component(slug string) string {
 	return IDNS + "component/" + slug
 }
 
-// DocKey returns a design document's key (WL-SPEC-79 §10.2):
+// DocKey returns a design document's key (WL-REQ-247):
 // <kind>-<project>-<nnn>, the number zero-padded to three digits.
 // Project-qualified because document numbers are unique only per project.
 // Every document, section, version and declared-graph IRI is built on it.
@@ -70,33 +70,33 @@ func Doc(key string) string {
 	return IDNS + "doc/" + key
 }
 
-// Event returns the IRI of one event-log row (WL-SPEC-79 §10.3).
+// Event returns the IRI of one event-log row (WL-REQ-248).
 func Event(id int64) string {
 	return IDNS + "event/" + strconv.FormatInt(id, 10)
 }
 
 // CURIE abbreviates an instance IRI to its wlid: form, the form event
-// payloads and task bodies store (WL-SPEC-79 §10.3).
+// payloads and task bodies store (WL-REQ-248).
 func CURIE(instance string) string {
 	return "wlid:" + strings.TrimPrefix(instance, IDNS)
 }
 
 // Section returns the IRI of an addressable design-document section
-// (WL-SPEC-77 §4): id/section/<doc-key>/<anchor>. The anchor is assigned at first
+// (WL-REQ-165): id/section/<doc-key>/<anchor>. The anchor is assigned at first
 // publication and never changes, so the IRI is as durable as the document's.
 func Section(docKey, anchor string) string {
 	return IDNS + "section/" + docKey + "/" + anchor
 }
 
 // DocVersion returns the immutable versioned sibling IRI of a design
-// document (WL-SPEC-77 §5): id/doc/<doc-key>/v<n>. Everything links to the canonical
+// document (WL-REQ-166): id/doc/<doc-key>/v<n>. Everything links to the canonical
 // Doc IRI by default; versioned IRIs appear only in pinned claims.
 func DocVersion(docKey string, version int) string {
 	return IDNS + "doc/" + docKey + "/v" + strconv.Itoa(version)
 }
 
 // Claim returns the IRI of the reifier node for one wl:implements claim
-// (WL-SPEC-77 §13). RDF 1.2 annotates an asserted edge by linking a reifier to the
+// (WL-REQ-177). RDF 1.2 annotates an asserted edge by linking a reifier to the
 // edge's triple term with rdf:reifies, and the reifier here must be an IRI:
 // graphproj.Document replaces a whole named graph and has to render
 // byte-identical output for the same claim set, which a blank node's
@@ -125,13 +125,13 @@ func PR(host, owner, repo string, number int64) string {
 	return IDNS + fmt.Sprintf("pr/%s/%s/%s/%d", host, owner, repo, number)
 }
 
-// Artifact returns the instance IRI of a built artifact (WL-SPEC-79 §10),
+// Artifact returns the instance IRI of a built artifact (WL-REQ-246),
 // kind-first to mirror the (kind, name, version) natural key.
 func Artifact(kind, name, version string) string {
 	return IDNS + "artifact/" + kind + "/" + name + "/" + version
 }
 
-// Deployment returns the instance IRI of a deployment (WL-SPEC-79 §10), mirroring
+// Deployment returns the instance IRI of a deployment (WL-REQ-246), mirroring
 // the (environment, target_kind, target_name) natural key.
 func Deployment(env, targetKind, targetName string) string {
 	return IDNS + "deployment/" + env + "/" + targetKind + "/" + targetName
@@ -142,7 +142,7 @@ func Environment(name string) string {
 	return IDNS + "environment/" + name
 }
 
-// Commit returns the instance IRI of a repo-hosted commit (WL-SPEC-79 §10).
+// Commit returns the instance IRI of a repo-hosted commit (WL-REQ-246).
 func Commit(host, owner, repo, sha string) string {
 	return IDNS + "commit/" + host + "/" + owner + "/" + repo + "/" + sha
 }
@@ -153,7 +153,7 @@ func Commit(host, owner, repo, sha string) string {
 func DeclaredGraph(docKey string) string { return GraphNS + "declared/" + docKey }
 
 // DeclaredVersionGraph returns the named graph holding one immutable
-// document version (WL-SPEC-77 §5): graph/declared/<doc-key>/v<n>. Sibling of
+// document version (WL-REQ-166): graph/declared/<doc-key>/v<n>. Sibling of
 // DeclaredGraph, which stays the document's mutable canonical graph.
 func DeclaredVersionGraph(docKey string, version int) string {
 	return DeclaredGraph(docKey) + "/v" + strconv.Itoa(version)
@@ -161,7 +161,7 @@ func DeclaredVersionGraph(docKey string, version int) string {
 
 // ObservedGraph returns the org-global named graph of a backbone-derived
 // deriver source — computed server-side over all-repo state by a single
-// writer: pr-affects, deploy, repo-implements (WL-SPEC-77 §13). Repo-local sources
+// writer: pr-affects, deploy, repo-implements (WL-REQ-177). Repo-local sources
 // use RepoObservedGraph instead; WL-SPEC-82 §16.1 owns the split.
 func ObservedGraph(source string) string { return GraphNS + "observed/" + source }
 

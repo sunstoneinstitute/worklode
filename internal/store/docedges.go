@@ -42,7 +42,7 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id int64, edges []model.DocEdgeInp
 	return logDocChange(tx, id, eventID, map[string]string{"field": "edges"})
 }
 
-// LinkDocEdge adds one edge to document docID (WL-SPEC-77 §3, §8). Where it
+// LinkDocEdge adds one edge to document docID (WL-REQ-164, WL-REQ-169). Where it
 // lands depends on the document: a plan moves to its next version first
 // (bumpDocVersion) and writes doc_edges; a draft spec or ADR writes doc_edges
 // in place; an accepted one writes its candidate revision's edge set, opening
@@ -105,7 +105,7 @@ func changeDocEdge(tx *sql.Tx, now time.Time, docID int64, in model.DocEdgeInput
 // edgeRefFromInput checks one caller-named edge and turns it into the
 // docEdgeRef a header entry would have produced. The type must be a declared
 // doc_edges type with a writer; an inverse spelling is refused naming the
-// type to declare instead (WL-SPEC-77 §8.1).
+// type to declare instead (WL-REQ-1288).
 func edgeRefFromInput(in model.DocEdgeInput) (docEdgeRef, error) {
 	typ := strings.TrimSpace(in.Type)
 	if acting, ok := designdoc.InverseOf[typ]; ok {
@@ -175,7 +175,7 @@ func deleteEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef, 
 
 // docEdgeRef is one frontmatter reference before resolution. ref is verbatim,
 // fragment included; fromAnchor is "" for a document-level edge. owner carries
-// a defers entry's named owner, verbatim (WL-SPEC-78 §4); every other relation
+// a defers entry's named owner, verbatim (WL-RULE-202); every other relation
 // leaves it empty.
 type docEdgeRef struct {
 	fromAnchor string
@@ -219,7 +219,7 @@ func resolveOwner(tx *sql.Tx, project, ref string) (ownerRef, error) {
 // rebuildEdges replaces the edges a document's frontmatter declares. It
 // deletes and re-inserts, so doc_edges_unique is satisfied across calls.
 // Every row it writes runs from this document, so it clears exactly the rows
-// whose from end is this document (WL-SPEC-77 §8).
+// whose from end is this document (WL-REQ-169).
 //
 // A header carrying an inverse spelling (`blocks`, `isRequiredBy`) is
 // refused: only the acting direction is stored, and the header naming it is
@@ -231,15 +231,15 @@ func resolveOwner(tx *sql.Tx, project, ref string) (ownerRef, error) {
 // one edge, and inserting both would abort a legal document on a raw unique
 // violation.
 //
-// A covers entry is a plain reference (WL-SPEC-78 §4.1, §4.5): the retired
+// A covers entry is a plain reference (WL-REQ-203, WL-REQ-207): the retired
 // `coverage:` and `fullCoverageWith:` keys are refused. It is stored as one
-// edge per rule it resolves to (coversRules, WL-SPEC-77 §4), so a section
+// edge per rule it resolves to (coversRules, WL-REQ-165), so a section
 // entry writes an edge for the rule at its anchor and each rule under it, and
 // a whole-document entry one for each rule the document contains, requirements
 // only. Nested entries overlap: the plan's covered set is their union. An
 // entry naming no rule keeps its reference in to_external.
 //
-// A defers edge (WL-SPEC-78 §4) is checked, not merely written: the from end must
+// A defers edge (WL-RULE-202) is checked, not merely written: the from end must
 // be a plan, the `spec` reference must carry a `#sec-N` fragment (a
 // whole-document deferral would silently defer sections not yet written), the
 // owner must be named, must carry no fragment (an owner is a document), and
@@ -254,7 +254,7 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 }
 
 // declareDocArtifacts records a header's artifact key. It is not an edge — it
-// declares the catalog address(es) this document is verified by (WL-SPEC-75 §13.3),
+// declares the catalog address(es) this document is verified by (WL-RULE-121),
 // which is what routes a /hooks/catalog delivery to it (WL-255). Declarations
 // are additive and idempotent: removing the key from a later body does not
 // undeclare, the same as every other declaration surface.
@@ -433,7 +433,7 @@ func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
 	switch {
 	case e.typ == "covers":
 		// A covers edge runs from the plan to each rule the entry
-		// resolves to (WL-SPEC-77 §4); an entry naming no rule keeps its
+		// resolves to (WL-REQ-165); an entry naming no rule keeps its
 		// reference verbatim.
 		rules := resolvedCovers[e.ref]
 		for _, r := range rules {
@@ -503,13 +503,13 @@ func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, owner 
 // document was already re-pointed when that document was created. Tombstoned
 // referring documents are skipped: the sweep finds them for the caller rather
 // than being named by them, and marking one `touched` would log a change
-// against a row nothing can see (WL-SPEC-75 §12).
+// against a row nothing can see (WL-REQ-117).
 //
 // Collapsing two spellings of one target onto one row can collide with
 // doc_edges_unique, so a candidate whose re-pointed tuple another row already
 // holds is deleted instead of updated. Where the surviving row and the deleted
 // one disagree on a defers owner, the lower-id row wins — which rebuildEdges
-// would instead have refused as a contradiction (WL-SPEC-78 §4). That disagreement
+// would instead have refused as a contradiction (WL-RULE-202). That disagreement
 // is deliberately not ErrInvalidInput here: it lives in *another* document's
 // frontmatter, and failing this document's creation for it would wedge an
 // import on an unrelated defect.
@@ -669,27 +669,27 @@ func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string
 // on the resolved row rather than on the reference text.
 //
 // The inverse spellings (designdoc.InverseOf) are what StoredRels leaves out:
-// one row read backward is the inverse (WL-SPEC-77 §7), and rebuildEdges refuses a
+// one row read backward is the inverse (WL-REQ-168), and rebuildEdges refuses a
 // header carrying one.
 //
 // Plan ordering is `blockedBy`, written by the later plan: a numbered plan
 // series is authored forward, so part 3 knows it follows part 2 while part 2
-// may be accepted and spent by then (WL-SPEC-77 §8).
+// may be accepted and spent by then (WL-REQ-169).
 //
-// covers reads the retired `implements` spelling too (WL-SPEC-78 §4).
+// covers reads the retired `implements` spelling too (WL-RULE-202).
 //
 // defers carries its named owner beside the ref as docEdgeRef.owner rather
 // than a separate walk; rebuildEdges resolves it and stores it on the edge
-// row (WL-SPEC-78 §4).
+// row (WL-RULE-202).
 //
 // The implements edge *type* is a different subject: a component's evidence
-// about its own code (WL-SPEC-78 §4.6), declared in `.worklode/implements.yaml`. That
-// is WL-SPEC-77 §13 machinery, and it is not built — so no writer emits the type here
+// about its own code (WL-REQ-208), declared in `.worklode/implements.yaml`. That
+// is WL-REQ-177 machinery, and it is not built — so no writer emits the type here
 // or anywhere else. The doc_edges CHECK admitting a value is not the same as
 // something producing it; TestDocEdgeTypesWithoutWriter pins that gap so it is
 // not re-diagnosed as a defect (WL-132).
 //
-// blockedBy orders whole plan documents (WL-SPEC-77 §3, §11); it projects as
+// blockedBy orders whole plan documents (WL-REQ-164, WL-REQ-172); it projects as
 // wl:blockedByPlan.
 func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 	var out []docEdgeRef
@@ -706,12 +706,12 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 // resolveDocRef finds the document that base names, base being a reference
 // with any "#…" fragment already removed.
 //
-// Three forms are tried, in order: the slug, WL-SPEC-77 §7's <KEY>-<TYPE>-<n>
+// Three forms are tried, in order: the slug, WL-REQ-168's <KEY>-<TYPE>-<n>
 // shorthand, and a bare corpus number. The number form must match exactly one
 // spec or ADR — a project can hold a spec 25 and an ADR 25, and a reference
 // that cannot say which resolves to neither.
 //
-// Distance decides the scope, as WL-SPEC-77 §7 does: the slug and bare-number
+// Distance decides the scope, as WL-REQ-168 does: the slug and bare-number
 // forms are same-project only, because a filename or a corpus number means
 // nothing outside the corpus that mints it, so a cross-corpus reference in
 // either form belongs in to_external. The shorthand is the one form that
@@ -719,7 +719,7 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 // projects_key_format makes projects.key unique and excludes SPEC/ADR, so the
 // key alone identifies the corpus and the middle token can never be one.
 //
-// WL-SPEC-78 §3's NO-SPEC sentinel needs no case of its own: it matches none of the
+// WL-REQ-198's NO-SPEC sentinel needs no case of its own: it matches none of the
 // three forms, so it falls through to to_external, which is where a
 // `covers: NO-SPEC` declaration belongs.
 //
@@ -729,7 +729,7 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 // tombstone must not shadow the document that replaced it, and — in the number
 // arm — must not count as the rival that makes a live corpus number ambiguous.
 // The fallback is what keeps a reference to a deleted document resolvable at
-// all, which WL-SPEC-75 §12 needs for `lode show`.
+// all, which WL-REQ-117 needs for `lode show`.
 func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	base = strings.TrimSuffix(path.Base(base), ".md")
 	if base == "" || base == "." {
@@ -751,7 +751,7 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 
 	if sh, ok := designdoc.ParseShorthand(base); ok {
 		// A retired <KEY>-ADR-<n> names the spec that took its place
-		// (WL-SPEC-77 §7a); no row has kind adr any more.
+		// (WL-REQ-1357); no row has kind adr any more.
 		match, args := `d.kind = $2 AND d.number = $3`, []any{sh.Key, sh.Kind(), sh.Number}
 		if sh.Type == "ADR" {
 			match, args = `d.former_adr = $2`, []any{sh.Key, sh.Number}
@@ -809,7 +809,7 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 	return scanColumn[int64](rows, "docs by number")
 }
 
-// ResolveDocRef resolves a document reference to its row (WL-SPEC-77 §7): a
+// ResolveDocRef resolves a document reference to its row (WL-REQ-168): a
 // positive integer is the id itself, anything else is matched against slugs,
 // exact match only — corpus-number and SPEC/ADR shorthand resolution stay
 // unbuilt. The rule lives here, beside the data, so resolving a ref costs one
@@ -819,7 +819,7 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 // Slugs are unique per project, not globally, so a slug naming documents in
 // two projects is ErrInvalidInput rather than an arbitrary pick; the caller
 // disambiguates with a numeric id. A slug matching no live document falls
-// back to the tombstoned ones — WL-SPEC-75 §12 keeps a deleted row addressable, and
+// back to the tombstoned ones — WL-REQ-117 keeps a deleted row addressable, and
 // `lode doc undelete <slug>` has no other way to name it. Live documents win
 // outright, since the fallback applies only when no live document matched, so
 // a tombstone never shadows a live document.
@@ -859,7 +859,7 @@ func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, erro
 	}
 }
 
-// LintDocs reports the corpus's dangling frontmatter references (WL-SPEC-77 §16):
+// LintDocs reports the corpus's dangling frontmatter references (WL-REQ-180):
 // every doc_edges target or defers owner that stayed unresolved
 // (to_external or owner_external set) after rebuildEdges last ran, plus every doc_edges row
 // that resolved but whose to_anchor names no row in the target document's
@@ -871,9 +871,9 @@ func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, erro
 // unresolved one once its target is created — so this is a read of what
 // stands right now, not a defect in what was written. A reference is never
 // refused for staying unresolved; it went unreported before this, which is
-// the gap WL-SPEC-77 §16 closes.
+// the gap WL-REQ-180 closes.
 //
-// The `NO-SPEC` sentinel (WL-SPEC-78 §3) is not a finding: every other resolver
+// The `NO-SPEC` sentinel (WL-REQ-198) is not a finding: every other resolver
 // in this codebase (designdoc.PlanTasks, designdoc.Coverage,
 // designdoc.ResolveRef) treats a base ref of exactly "NO-SPEC" as the
 // deliberate "no governing spec" marker rather than a dangling reference,
@@ -882,7 +882,7 @@ func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, erro
 // Deleted documents (docs.deleted_at IS NOT NULL) are excluded on both
 // ends: a tombstoned referrer's edges are hidden the way ListDocEdges
 // already hides them, and a tombstoned target is not reported as a
-// missing-anchor defect — WL-SPEC-75 §12 leaves it addressable by id, not by a
+// missing-anchor defect — WL-REQ-117 leaves it addressable by id, not by a
 // section that still has to resolve.
 func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFinding, error) {
 	rows, err := s.db.QueryContext(ctx,

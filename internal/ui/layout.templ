@@ -2,7 +2,7 @@ package ui
 
 // layout.templ is the application shell every page renders through: the
 // document head, skip link, the sticky top bar — brand link, global
-// navigation, inbox icon, theme toggle and avatar, one row (WL-SPEC-82 §2.1) —
+// navigation, inbox icon, theme toggle and avatar, one row (WL-REQ-331) —
 // and the .shell each page's content fills via { children... }. Global pages
 // have one content column; project pages add a left sidebar for
 // project-local navigation. Both put the page's one <main id="main-content">
@@ -13,7 +13,7 @@ package ui
 // substrate (no hx-* behavior yet); the inline theme script
 // toggles data-theme on <html>, honoring the OS colour-scheme on first click.
 //
-// The inbox icon (WL-SPEC-82 §2.3) links to /inbox on every page and carries a
+// The inbox icon (WL-REQ-333) links to /inbox on every page and carries a
 // small alert-toned dot when inboxDot(ctx) is true. ctx is a templ-provided
 // implicit, not a Go parameter of Page: renderWeb (internal/api/webform.go)
 // computes the has-items flag once per request, before rendering, and
@@ -21,13 +21,13 @@ package ui
 // every nested component (internal/ui/context.go).
 //
 // Below 880px the top bar wraps: brand and controls keep the first row and
-// nav.global takes a full-width row beneath them, so the narrow behaviour WL-SPEC-82 §4
+// nav.global takes a full-width row beneath them, so the narrow behaviour WL-REQ-335
 // requires carries over in its new position. nav.global and nav.local stay
 // the exact same landmark elements (never duplicated — the aria-current
 // invariant is "never two for the whole document", and zero on a page that is
 // not a destination). The nav row keeps its three primary destinations and a
 // "More" button; the two secondary ones (Intake, Knowledge) expand below it.
-// nav.local becomes a project drawer. Flex `order` keeps WL-SPEC-82 §2.1's DOM
+// nav.local becomes a project drawer. Flex `order` keeps WL-REQ-331's DOM
 // order while grouping the menu.
 // nav.local hides entirely below 880px and reappears as a full sheet when the
 // project header's menu button opens it. Both toggles, plus the shared
@@ -174,9 +174,9 @@ templ menuIcon() {
 
 // primaryNav is the Primary nav landmark carrying the five global
 // destinations in the exact order
-// WL-SPEC-82 §2.1 requires (Ideas,
+// WL-REQ-331 requires (Ideas,
 // Intake, Projects, Work, Knowledge), marking the one matching active as both
-// aria-current="page" and .active. §1 amends WL-SPEC-82 §2: Home, Reviews and
+// aria-current="page" and .active. §1 amends WL-REQ-331: Home, Reviews and
 // Deliveries left the list, keeping their routes and pages. Page renders this
 // inside the top bar, so global navigation is reachable everywhere from one
 // row. Project-scoped pages, and the pages that are no longer destinations,
@@ -185,9 +185,9 @@ templ menuIcon() {
 // The trailing "More" button only shows below 880px (see this file's header
 // comment); it has no destination of its own.
 //
-// Knowledge lands on /docs: WL-SPEC-82 §2 defines that destination as
+// Knowledge lands on /docs: WL-REQ-331 defines that destination as
 // "documents and graph-backed expert views", and the document corpus is the
-// half of it this backbone holds (WL-SPEC-77 §3). The graph-backed views join it
+// half of it this backbone holds (WL-REQ-164). The graph-backed views join it
 // there when they exist rather than taking a destination of their own.
 templ primaryNav(active string) {
 	<nav aria-label="Primary" class="global" id="global-nav">
@@ -288,23 +288,23 @@ templ modePillIcon() {
 	<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"></path></svg>
 }
 
-// localNav renders the project-local destinations in WL-SPEC-82 §2.2's order
+// localNav renders the project-local destinations in WL-REQ-332's order
 // (Overview, Crew, Work, Deliverables, Reviews, Decisions,
 // Documents, Activity), marking the item matching active as
 // aria-current="page".
 //
 // Progress sits after Work and only when the project has a spec — WL-SPEC-85
-// §8 adds it to WL-SPEC-82 §2.2's list, and a project with no spec has no Progress page
+// §8 adds it to WL-REQ-332's list, and a project with no spec has no Progress page
 // (its route 404s), so linking to it would be a dead entry.
 //
 // Milestones sits between Crew and Work, ahead of that list: a milestone
-// contains both work and deliverables (WL-SPEC-75 §13.2), so it reads before both
-// lists. WL-SPEC-82 §2 is owed the same amendment Deleted is (docs/follow-ups.md).
+// contains both work and deliverables (WL-REQ-120), so it reads before both
+// lists. WL-REQ-331 is owed the same amendment Deleted is (docs/follow-ups.md).
 //
-// Deleted follows them, outside that order deliberately: it is WL-SPEC-75 §12's
+// Deleted follows them, outside that order deliberately: it is WL-REQ-117's
 // tombstone review rather than one of its destinations, and it is last
 // because a deleted row is the rarest thing anyone comes here to read. Spec
-// WL-SPEC-82 §2's list is owed an amendment naming it (docs/follow-ups.md).
+// WL-REQ-331's list is owed an amendment naming it (docs/follow-ups.md).
 templ localNav(p CockpitProject, active string) {
 	@navLink("/projects/"+p.ID, "Overview", "overview", active)
 	@navLink("/projects/"+p.ID+"/crew", "Crew", "crew", active)

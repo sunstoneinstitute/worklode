@@ -48,7 +48,7 @@ func TestCrewTableFallsBackToActorID(t *testing.T) {
 	}
 }
 
-// TestDocRefFormsTheShorthand: a spec or ADR renders as the WL-SPEC-77 §7
+// TestDocRefFormsTheShorthand: a spec or ADR renders as the WL-REQ-168
 // shorthand a person cites; a plan, which carries no number and so has no
 // shorthand, renders as its kind alone; and a document whose project key did
 // not reach the client degrades to the unqualified form rather than printing a
@@ -103,9 +103,9 @@ func TestDocTableIsRefStatusTitle(t *testing.T) {
 	}
 }
 
-// TestDocTableRendersEveryKindTheSameWay: WL-SPEC-75 §13.4 puts every kind on its
+// TestDocTableRendersEveryKindTheSameWay: WL-REQ-122 puts every kind on its
 // project's sequence, so a plan reads as WL-PLAN-7 beside WL-SPEC-29 rather
-// than as the bare kind word it showed while WL-SPEC-77 §7 gave it no number.
+// than as the bare kind word it showed while WL-REQ-168 gave it no number.
 func TestDocTableRendersEveryKindTheSameWay(t *testing.T) {
 	var b strings.Builder
 	DocTable(&b, []model.Doc{
@@ -143,7 +143,7 @@ func TestDocPlanningTableLeadsWithRef(t *testing.T) {
 }
 
 // TestDocPlanningTableAnnotatesAnchorsWithCoverage: the ANCHORS column
-// renders each gap as anchor(coverage), matching WL-SPEC-78 §1.2's sample output
+// renders each gap as anchor(coverage), matching WL-REQ-186's sample output
 // line.
 func TestDocPlanningTableAnnotatesAnchorsWithCoverage(t *testing.T) {
 	var b strings.Builder
@@ -754,9 +754,9 @@ func TestBriefRenderOmitsSkillsSectionWhenEmpty(t *testing.T) {
 	}
 }
 
-// TestBriefRenderRendersBlockingPlans: the plans holding a task (WL-SPEC-77 §11.3) are
+// TestBriefRenderRendersBlockingPlans: the plans holding a task (WL-REQ-175) are
 // rendered even when they have minted no task to list under "blocked by", and
-// each carries its status — which is where WL-SPEC-77 §9's brief-exclusion rule
+// each carries its status — which is where WL-REQ-170's brief-exclusion rule
 // lands, since a stale plan reaching an agent's context has to say so.
 func TestBriefRenderRendersBlockingPlans(t *testing.T) {
 	var buf bytes.Buffer

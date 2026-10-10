@@ -15,7 +15,7 @@ import (
 )
 
 // fixtureChunk is one chunk of a fixture subject. A nil vec indexes the text
-// for the lexical arm only, the way a no-provider instance writes it (WL-SPEC-79 §17).
+// for the lexical arm only, the way a no-provider instance writes it (WL-REQ-261).
 type fixtureChunk struct {
 	anchor string
 	header string
@@ -24,7 +24,7 @@ type fixtureChunk struct {
 }
 
 // seedChunks writes one subject's chunks. chunk_index runs per anchor, as
-// WL-SPEC-79 §14 requires.
+// WL-REQ-254 requires.
 func seedChunks(t *testing.T, s *Store, subj ChunkSubject, cs ...fixtureChunk) {
 	t.Helper()
 	var (
@@ -85,7 +85,7 @@ func seedSearchSkill(t *testing.T, s *Store, name string) int64 {
 	return sk.ID
 }
 
-// TestSearchFusesArmRankings is WL-SPEC-79 §15's worked example.
+// TestSearchFusesArmRankings is WL-REQ-259's worked example.
 // The dense arm puts the section that defines
 // `child_of` third; the lexical arm puts it first; fusion has to put it
 // first. The mode=dense half is the "and the test fails when the lexical arm
@@ -169,7 +169,7 @@ func TestSearchFusesArmRankings(t *testing.T) {
 	}
 }
 
-// TestSearchPoolsPerSubjectBeforeRanking is WL-SPEC-79 §15: a long document with
+// TestSearchPoolsPerSubjectBeforeRanking is WL-REQ-259: a long document with
 // many mediocre chunks must not outrank a short exact match. It can only hold
 // because each arm max-pools per subject before it ranks — fusing chunk
 // rankings would give the long document eight shares of the score.
@@ -218,7 +218,7 @@ func TestSearchPoolsPerSubjectBeforeRanking(t *testing.T) {
 	}
 }
 
-// TestSearchLexicalConfigIsSimple is WL-SPEC-79 §15. Under `english`, `child_of`
+// TestSearchLexicalConfigIsSimple is WL-REQ-259. Under `english`, `child_of`
 // stems to `child` and the query matches prose reading "the child task of a
 // parent". Under `simple` it does not, and it does match a chunk containing
 // the identifier. This test is what stops someone "fixing" the configuration.
@@ -243,7 +243,7 @@ func TestSearchLexicalConfigIsSimple(t *testing.T) {
 	}
 }
 
-// TestSearchHeaderOutranksBody pins the setweight pair in WL-SPEC-79 §14: the context
+// TestSearchHeaderOutranksBody pins the setweight pair in WL-REQ-254: the context
 // header is weight A and the chunk body weight B, so under ts_rank_cd a term
 // in the header ranks above the same term in a body.
 func TestSearchHeaderOutranksBody(t *testing.T) {
@@ -274,7 +274,7 @@ func TestSearchHeaderOutranksBody(t *testing.T) {
 	}
 }
 
-// TestSearchFilters covers WL-SPEC-79 §15: kind and project narrow both arms, and
+// TestSearchFilters covers WL-REQ-259: kind and project narrow both arms, and
 // the project filter keeps chunks carrying no project — which is how the
 // org-wide skill registry stays visible from inside a project-scoped search.
 func TestSearchFilters(t *testing.T) {
@@ -332,7 +332,7 @@ func TestSearchFilters(t *testing.T) {
 	}
 }
 
-// TestSearchWithoutVectorIsLexicalOnly is WL-SPEC-79 §17: an instance with no
+// TestSearchWithoutVectorIsLexicalOnly is WL-REQ-261: an instance with no
 // embedding provider serves real lexical results rather than an empty set.
 func TestSearchWithoutVectorIsLexicalOnly(t *testing.T) {
 	t.Parallel()
@@ -390,7 +390,7 @@ func TestSearchRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestSearchMetrics covers WL-SPEC-79 §17's search instruments, including the one
+// TestSearchMetrics covers WL-REQ-261's search instruments, including the one
 // that matters operationally: an arm that ran and offered nothing.
 func TestSearchMetrics(t *testing.T) {
 	t.Parallel()

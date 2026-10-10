@@ -958,7 +958,7 @@ func TestInstallHooksAutoDetectsFromASubdirectory(t *testing.T) {
 }
 
 // A repo with no harness configured for it or the user writes nothing and
-// succeeds — WL-SPEC-80 §5.1 row 1 — but says so rather than going silent.
+// succeeds — WL-REQ-275 row 1 — but says so rather than going silent.
 func TestInstallHooksAutoDetectsNothing(t *testing.T) {
 	root := initGitRepo(t)
 	isolateHarnessConfig(t)
@@ -984,7 +984,7 @@ func TestInstallHooksAutoDetectsNothing(t *testing.T) {
 }
 
 // An explicitly named harness installs even when nothing would detect it:
-// asking for it is the detection signal (WL-SPEC-80 §5.1).
+// asking for it is the detection signal (WL-REQ-275).
 func TestInstallHooksNamedAgentInstallsUndetected(t *testing.T) {
 	root := initGitRepo(t)
 	isolateHarnessConfig(t)
@@ -1123,7 +1123,7 @@ func TestReportInstallSaysNothingWasBoundWhenNothingWas(t *testing.T) {
 
 // TestInstallSkillsPublishesAllDoorways drives installHooks with --skills'
 // equivalent (targets.skills) directly, so it needs no server and no
-// Postgres. It pins WL-SPEC-80 §5.2: one store copy reaches Codex,
+// Postgres. It pins WL-REQ-276: one store copy reaches Codex,
 // Copilot, Amp and Claude Code's skill directories, none of them ever list
 // the store's hash directory as if it were a skill.
 func TestInstallSkillsPublishesAllDoorways(t *testing.T) {
@@ -1198,7 +1198,7 @@ func TestInstallSkillsPublishesAllDoorways(t *testing.T) {
 	// The Claude Code target is PerSkill: its first-run action must read
 	// "per-skill", never "linked" — "linked" would misreport the whole
 	// user-owned ~/.claude/skills dir as replaced by a symlink into the
-	// store, exactly what WL-SPEC-80 §5.2 forbids doing.
+	// store, exactly what WL-REQ-276 forbids doing.
 	var sawClaudeSkills bool
 	for _, s := range res.Skills {
 		if s.Path != claudeSkillsDir {

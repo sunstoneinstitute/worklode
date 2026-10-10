@@ -416,10 +416,10 @@ func TestProgressDraftPlanAction(t *testing.T) {
 	}
 }
 
-// TestProgressReviewActionDisabled: POST /api/v1/reviews (WL-SPEC-84 §6) is
+// TestProgressReviewActionDisabled: POST /api/v1/reviews (WL-REQ-1323) is
 // not in today's routeGuards, so hasReviewSurface reports false and every
 // spec row and plan line renders its Review button, pointed at that route,
-// disabled with that reason (WL-SPEC-85 §4). The enabled shape, once a route lands, is
+// disabled with that reason (WL-REQ-1337). The enabled shape, once a route lands, is
 // TestHasReviewSurfaceOnceRegistered's, in internal/api's own package —
 // this test only holds today's rendering to today's table.
 func TestProgressReviewActionDisabled(t *testing.T) {

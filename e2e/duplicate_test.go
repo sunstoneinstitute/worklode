@@ -14,7 +14,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// TestDuplicateLoop exercises 004 §1.3's duplicate_of end-to-end through
+// TestDuplicateLoop exercises WL-REQ-87's duplicate_of end-to-end through
 // public surfaces only: a triager marks the second filing of a request as a
 // duplicate of the canonical one, both directions render on the task pages,
 // the marking absorbs nothing and gates nothing, and a duplicate names only

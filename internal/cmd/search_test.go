@@ -94,7 +94,7 @@ func hitsOfEveryKind() model.SearchResponse {
 	}
 }
 
-// TestSearchRendersTheAddressLine covers the WL-SPEC-79 §17 rendering: a document hit
+// TestSearchRendersTheAddressLine covers the WL-REQ-261 rendering: a document hit
 // is addressed by its reference and frozen section anchor, a task by its id,
 // a skill by its qualified name — and the query reaches the server as one
 // string with the project scope attached.
@@ -193,7 +193,7 @@ func TestSearchJSON(t *testing.T) {
 
 // TestSearchDegradedProviderIsANotice: an instance with no embedding provider
 // answers lexically. That is a one-line notice on stderr and a zero exit,
-// with the hits it did find on stdout (WL-SPEC-79 §17).
+// with the hits it did find on stdout (WL-REQ-261).
 func TestSearchDegradedProviderIsANotice(t *testing.T) {
 	stub := &searchStub{resp: model.SearchResponse{
 		Provider: "none", Mode: "lexical",

@@ -57,7 +57,7 @@ func ruleCount(t *testing.T, s *Store) int {
 
 // TestArrangeRuleAcrossSpecs: one rule arranged in two specs shows the same
 // text in both; unarranging it from one leaves the other intact, and
-// unarranging it from both leaves a standalone rule (WL-SPEC-77 §19.3). A
+// unarranging it from both leaves a standalone rule (WL-REQ-1297). A
 // draft spec is written in place; an accepted one through its candidate
 // revision, landing on accept.
 func TestArrangeRuleAcrossSpecs(t *testing.T) {
@@ -185,7 +185,7 @@ func TestUnarrangeRuleRefusesArrangedChildren(t *testing.T) {
 }
 
 // editableBody is spec id's text in the editable form `lode doc show
-// --editable` prints (WL-SPEC-77 §19.5).
+// --editable` prints (WL-REQ-1299).
 func editableBody(t *testing.T, s *Store, id int64) string {
 	t.Helper()
 	secs, err := s.ListDocSections(context.Background(), id)
@@ -214,7 +214,7 @@ func rawDocBody(t *testing.T, s *Store, id int64) string {
 // no rule; a rule= heading copied from another spec arranges the shared rule
 // and text changed under it is a rule edit; an unmarked new heading mints a
 // rule; a rule left out is unarranged, not withdrawn. On an accepted spec the
-// same write goes through the candidate revision (WL-SPEC-77 §19.5).
+// same write goes through the candidate revision (WL-REQ-1299).
 func TestEditableFormWritesRules(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -304,7 +304,7 @@ func TestEditableFormWritesRules(t *testing.T) {
 // TestEditableFormRefusesWithdrawnRule: a rule= heading naming a withdrawn
 // rule is refused with its successors named, on a draft edit and on a
 // candidate revision; naming the successor is accepted. A spec that already
-// arranges the withdrawn rule round-trips it unchanged (WL-SPEC-77 §19.5).
+// arranges the withdrawn rule round-trips it unchanged (WL-REQ-1299).
 func TestEditableFormRefusesWithdrawnRule(t *testing.T) {
 	s := openDocStore(t)
 	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})

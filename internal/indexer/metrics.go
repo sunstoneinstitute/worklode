@@ -8,7 +8,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// Metrics holds the convergence loop's instruments (WL-SPEC-79 §17). A nil *Metrics
+// Metrics holds the convergence loop's instruments (WL-REQ-261). A nil *Metrics
 // records nothing, so an Indexer built without a registry still runs.
 type Metrics struct {
 	chunks        *prometheus.GaugeVec
@@ -25,7 +25,7 @@ type Metrics struct {
 var outcomes = []string{"ok", "error"}
 
 // NewMetrics registers the index instruments on reg. Both label values are
-// bounded — subject_kind by index_chunks' CHECK (WL-SPEC-79 §14.5), outcome by the pair
+// bounded — subject_kind by index_chunks' CHECK (WL-REQ-258), outcome by the pair
 // above — so no id ever reaches a label (022).
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{

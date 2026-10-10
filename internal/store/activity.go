@@ -12,7 +12,7 @@ import (
 
 // AppendTaskActivity inserts rows in one statement, skipping any row whose
 // task id does not exist (a stale stamp on an already-deleted or unknown
-// task must not fail the whole batch, WL-SPEC-80 §8.6). Returns the number of
+// task must not fail the whole batch, WL-REQ-1234). Returns the number of
 // rows actually inserted. An empty slice issues no query.
 //
 // WITH ORDINALITY plus ORDER BY is what makes the ids follow the batch
@@ -65,7 +65,7 @@ func (s *Store) AppendTaskActivity(ctx context.Context, rows []model.TaskActivit
 const taskActivityColumns = `id, task_id, actor_id, agent, session_id, at, event, attrs`
 
 // TaskActivity returns a page of one task's activity log, ordered by the
-// cursor semantics WL-SPEC-80 §8.9 defines: after == 0 is the newest limit rows,
+// cursor semantics WL-REQ-1237 defines: after == 0 is the newest limit rows,
 // newest first, for the initial page; after > 0 is rows with id > after,
 // oldest of that set first, for polling a live stream forward.
 func (s *Store) TaskActivity(ctx context.Context, taskID string, after int64, limit int) ([]model.TaskActivity, error) {
@@ -111,7 +111,7 @@ func scanTaskActivity(rows *sql.Rows) ([]model.TaskActivity, error) {
 	return out, rows.Err()
 }
 
-// PurgeTaskActivity deletes rows past their retention window (WL-SPEC-80 §8.7):
+// PurgeTaskActivity deletes rows past their retention window (WL-REQ-1235):
 // a closed task's rows older than 2 hours, or any task's rows older than 7
 // days regardless of state (assumption A1 — an open task should not
 // accumulate unbounded rows). Called as a third sweeper step alongside

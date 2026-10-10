@@ -40,7 +40,7 @@ func ladderTestSetup(t *testing.T) (model.Task, model.Doc, *cli.Client) {
 
 // TestTaskGapCommandRecordsWithoutReleasingLease: `lode task gap` reports the
 // gap and leaves the task's lease alone — unlike `lode task escalate`, this
-// rung does not stop the executor (WL-SPEC-77 §10).
+// rung does not stop the executor (WL-REQ-171).
 func TestTaskGapCommandRecordsWithoutReleasingLease(t *testing.T) {
 	task, doc, c := ladderTestSetup(t)
 

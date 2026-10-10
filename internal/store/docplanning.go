@@ -14,7 +14,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// acceptPlanDoc is AcceptDoc's plan branch (WL-SPEC-77 §11): parse the plan body's
+// acceptPlanDoc is AcceptDoc's plan branch (WL-REQ-172): parse the plan body's
 // ## Tasks declarations, mint one draft task per declaration that has no row
 // yet with plan_doc set to id, wire the newly minted tasks' blockedBy numbers
 // as blocks edges, then flip the document to accepted — all inside the
@@ -29,12 +29,12 @@ import (
 // declaration and adding another: a minted task is execution fact and outlives
 // its declaration, so nothing here deletes a task whose declaration is gone.
 //
-// Accepting a stale plan runs the same code and is how WL-SPEC-77 §10's mark clears:
+// Accepting a stale plan runs the same code and is how WL-REQ-171's mark clears:
 // the re-planning edit bumped the plan's version and may have added
 // declarations, so the mint pass above picks those up and the status flip
 // below records stale -> accepted like any other move.
 //
-// Plans carry no sections and no anchors (WL-SPEC-77 §11), so none of the spec/ADR
+// Plans carry no sections and no anchors (WL-REQ-172), so none of the spec/ADR
 // branch's section or diff machinery runs here: there is nothing to publish
 // and no depth gate to evaluate. d.status is already known draft, accepted or
 // stale — AcceptDoc checks it before branching.
@@ -45,7 +45,7 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	}
 	// A coverage-only plan declares no tasks and mints none: its whole content
 	// is the coverage it records for work already built, and accepting it is
-	// what puts those claims in force (WL-SPEC-78 §1.2). Everything below runs over an
+	// what puts those claims in force (WL-REQ-186). Everything below runs over an
 	// empty definition set and is a no-op.
 	defs, err := designdoc.PlanTasks(parsed.doc)
 	if err != nil {
@@ -143,7 +143,7 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 }
 
 // plantaskRows reads a plan's minted task set as declaration title -> task id
-// (WL-SPEC-77 §11): what acceptPlanDoc matches declarations against, and what
+// (WL-REQ-172): what acceptPlanDoc matches declarations against, and what
 // checkPlanTasksMinted uses to decide whether a body edit has a task set to
 // stay consistent with.
 //
@@ -204,18 +204,18 @@ func (s *Store) PlanTaskIDs(ctx context.Context, docID int64) (map[string]string
 
 // checkPlanTasksMinted refuses a plan body edit that would leave a plan whose
 // tasks are already minted without the valid ## Tasks section a re-accept has
-// to read (WL-SPEC-77 §11). Without it an accepted plan's declarations could be
+// to read (WL-REQ-172). Without it an accepted plan's declarations could be
 // rewritten into something unparseable, and the drift between the document and
 // its task set would surface only at the next accept — or never.
 //
 // It binds only once something has been minted. A draft plan is written a
 // paragraph at a time and its ## Tasks section is legitimately incomplete
 // until the accept gate reads it, and an accepted plan that minted nothing is
-// WL-SPEC-77 §11's historical import, which never had a task set to stay consistent
+// WL-REQ-172's historical import, which never had a task set to stay consistent
 // with.
 //
 // What it does not refuse is a declaration that disappeared or was retitled.
-// WL-SPEC-77 §11 is explicit that a minted task outlives its declaration — withdrawing
+// WL-REQ-172 is explicit that a minted task outlives its declaration — withdrawing
 // work is a task transition, not a document edit — so an edit that drops one
 // leaves the row alone, and one that retitles it declares a task the next
 // re-accept mints. Only the ambiguity a re-accept cannot resolve is an error,
@@ -237,7 +237,7 @@ func checkPlanTasksMinted(tx *sql.Tx, id int64, doc *designdoc.Document) error {
 }
 
 // checkPlanOrdering enforces that a blockedBy edge runs between two *distinct*
-// plan documents (WL-SPEC-77 §3): it orders plan against plan, and
+// plan documents (WL-REQ-164): it orders plan against plan, and
 // planBlockedCondition reads its to end as the blocking plan's whole task set. An
 // unresolved reference is refused too — nothing here can say it names a plan,
 // and a to_external ordering edge would gate nothing while looking like it
@@ -386,8 +386,8 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // does. A superseded plan is spent (accepted, then executed) and discharges
 // what it covered. A covers edge runs from the plan to a rule and claims
 // every section arranging the rule or a rule superseding it (the
-// covered_sections view, WL-SPEC-77 §4). Only a section whose rule is a
-// requirement is counted or reported (WL-SPEC-78 §1.3).
+// covered_sections view, WL-REQ-165). Only a section whose rule is a
+// requirement is counted or reported (WL-REQ-187).
 //
 // An unplanned section reports the strongest outcome that applies:
 // "plan-draft" when a draft plan covers it, "deferred" when an accepted or
@@ -395,7 +395,7 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // slug, or the reference verbatim when it did not resolve), "unplanned"
 // otherwise. A draft plan's deferral classifies nothing. `covers: NO-SPEC`
 // resolves to no rule and falls out of the join, and a tombstoned document
-// participates on neither end (WL-SPEC-75 §12).
+// participates on neither end (WL-REQ-117).
 func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`WITH cov AS (
@@ -476,15 +476,15 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 // live task that is not closed. project narrows the answer; "" answers over
 // every project. "Closed" is taskClosed's notion, shared with the ready set and
 // the blocks predicate, so the three cannot drift on what done means; a
-// tombstoned task is out on top of that (WL-SPEC-75 §12), matching planUnfinished.
+// tombstoned task is out on top of that (WL-REQ-117), matching planUnfinished.
 //
-// This departs from WL-SPEC-77 §18's "unminted or unfinished" deliberately, as the
+// This departs from WL-REQ-182's "unminted or unfinished" deliberately, as the
 // 2026-08-03 plan-acceptance plan records: the accepted plans with no task set
 // at all are the importer's *spent* plans, which must not be reported as
-// pending work. The ordering need WL-SPEC-77 §18's "unminted" arm served is covered by
+// pending work. The ordering need WL-REQ-182's "unminted" arm served is covered by
 // the plan-to-plan blocks predicate (planBlockedCondition).
 //
-// A declaration added to an accepted plan and not yet re-accepted (WL-SPEC-77 §11)
+// A declaration added to an accepted plan and not yet re-accepted (WL-REQ-172)
 // is invisible here, because whether one exists is a fact about the body and
 // not about any row. Re-accepting the plan is what makes it visible; nothing
 // SQL can see says it is owed.
@@ -517,7 +517,7 @@ func (s *Store) RecordPlanTasksMinted(n int) {
 
 // isCoverageOnlyPlan is designdoc.IsCoverageOnlyPlan over a stored plan: the
 // body declares no tasks and the plan holds a covers or defers edge, which is
-// where its coverage lives once the body carries no header (WL-SPEC-77 §7).
+// where its coverage lives once the body carries no header (WL-REQ-168).
 func isCoverageOnlyPlan(tx *sql.Tx, id int64, doc *designdoc.Document) (bool, error) {
 	if !designdoc.DeclaresNoTasks(doc) {
 		return false, nil

@@ -1,4 +1,4 @@
-// activity.js follows one task's activity log (WL-SPEC-80 §8.9). Each frame's
+// activity.js follows one task's activity log (WL-REQ-1237). Each frame's
 // data is the <li> the server rendered, so the page inserts it verbatim and
 // builds no markup of its own — an inserted row can never disagree with a
 // reloaded one.

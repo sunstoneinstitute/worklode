@@ -127,7 +127,7 @@ func TestResolve(t *testing.T) {
 		{"doc.reviewers_changed", doc(21), Touch{Doc: 21, Kind: "doc"}, "api/approvals.go"},
 		{"doc.deleted", doc(22), Touch{Doc: 22, Kind: "doc"}, "api/softdelete.go"},
 		// The two typed events name their subject by IRI and nothing else
-		// (WL-SPEC-77 §15), so the touch carries the IRI for the reader to resolve.
+		// (WL-RULE-179), so the touch carries the IRI for the reader to resolve.
 		{"wl:DocumentSubmitted", map[string]any{"wl:subject": "wlid:doc/spec-worklode-066"},
 			Touch{DocIRI: "wlid:doc/spec-worklode-066", Kind: "doc"},
 			"eventbus.Emit from api/docs.go submitDoc"},

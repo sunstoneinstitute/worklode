@@ -13,7 +13,7 @@ import (
 
 // PRRef is the slice of a task-bound pull request this deriver needs. Shaped
 // like store.PRRef but declared here so the CLI-safe half of the derivers
-// does not import the store (WL-SPEC-73 §3.2, WL-324); the API caller converts.
+// does not import the store (WL-REQ-16, WL-324); the API caller converts.
 type PRRef struct {
 	Repo   string
 	Number int64

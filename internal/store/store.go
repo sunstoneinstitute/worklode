@@ -25,11 +25,11 @@ type Store struct {
 	nowFn   func() time.Time
 	metrics *storeMetrics
 	// docStalenessDays is the instance default staleness threshold
-	// sweepStaleDocs applies (WL-SPEC-77 §9) when a document's project sets no
+	// sweepStaleDocs applies (WL-REQ-170) when a document's project sets no
 	// override (projects.doc_staleness_days). WithDocStalenessDays changes it.
 	docStalenessDays int
 	// glossaryProject is the project whose glossary spec is the instance
-	// glossary (WL-SPEC-77 §4d); empty means none. WithGlossaryProject sets it.
+	// glossary (WL-REQ-1368); empty means none. WithGlossaryProject sets it.
 	glossaryProject string
 }
 

@@ -8,7 +8,7 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-// term.templ renders a definition rule as a term (WL-SPEC-77 §4d): the
+// term.templ renders a definition rule as a term (WL-REQ-1368): the
 // meaning, where it resolved from, its concept IRI, and the rules that
 // need it. Read-only, like the rule page.
 func Term(v TermView) templ.Component {

@@ -12,7 +12,7 @@ import (
 
 // handBuilt matches a Go string literal that starts a wlid: IRI with a path,
 // e.g. "wlid:actor/" or "wlid:doc/%s": a caller concatenating an IRI
-// instead of calling this package (WL-SPEC-79 §10.4).
+// instead of calling this package (WL-REQ-249).
 var handBuilt = regexp.MustCompile(`"wlid:[a-z]`)
 
 func TestNoHandBuiltIRIs(t *testing.T) {

@@ -9,12 +9,12 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// Retrieval constants from WL-SPEC-79 §15. None is a caller's knob: the floor
+// Retrieval constants from WL-REQ-259. None is a caller's knob: the floor
 // and the candidate depth shape what each arm offers fusion, and k is the
 // constant from the original RRF formulation.
 const (
 	// searchDenseFloor is the cosine similarity below which the dense arm
-	// stops offering candidates (WL-SPEC-79 §15, from 016). It is a candidate filter on
+	// stops offering candidates (WL-REQ-259, from 016). It is a candidate filter on
 	// that arm only, never a threshold on the fused score — after fusion the
 	// score is a rank-reciprocal sum, and comparing that to 0.35 would be a
 	// category error.
@@ -29,11 +29,11 @@ const (
 	searchExcerptRunes = 400
 )
 
-// SearchQuery is one retrieval request over the corpus index (WL-SPEC-79 §15).
+// SearchQuery is one retrieval request over the corpus index (WL-REQ-259).
 //
 // Vector is the query text already embedded by the caller — the store does no
 // embedding — and nil means the dense arm does not run at all. That is the
-// no-provider instance (WL-SPEC-79 §17): it serves real lexical results rather than an
+// no-provider instance (WL-REQ-261): it serves real lexical results rather than an
 // empty set.
 type SearchQuery struct {
 	Text   string
@@ -42,21 +42,21 @@ type SearchQuery struct {
 	Kinds []string
 	// Project scopes the search. Chunks carrying no project stay visible —
 	// that disjunct is what keeps org-wide skills findable from inside a
-	// project-scoped search (WL-SPEC-79 §15).
+	// project-scoped search (WL-REQ-259).
 	Project string
 	Limit   int
 	// Mode is hybrid (default), dense or lexical.
 	Mode string
 }
 
-// searchSQL is the whole of WL-SPEC-79 §15 in one statement: two arms ranked
+// searchSQL is the whole of WL-REQ-259 in one statement: two arms ranked
 // independently, then fused by reciprocal rank.
 //
 // Both arms pool by subject *before* ranking, and that is not cosmetic. RRF
 // gives every row in a ranked list a share of the score, so fusing chunk
 // rankings would let a long document accumulate mass by placing eight
 // mediocre chunks in the top 50 and outrank a short document that answered
-// the question exactly once (WL-SPEC-79 §15).
+// the question exactly once (WL-REQ-259).
 //
 // Each arm is switched by a bound boolean rather than by assembling a
 // different query per mode, so all three modes run the statement a reader has
@@ -146,7 +146,7 @@ SELECT f.subject_kind,
  LIMIT $7`
 
 // Search runs the two retrieval arms over index_chunks and returns their
-// fused ranking, best first (WL-SPEC-79 §15). Neither arm is primary and neither is a
+// fused ranking, best first (WL-REQ-259). Neither arm is primary and neither is a
 // fallback: mode=dense and mode=lexical run one arm each and return its own
 // ranking, for comparing the two on a real query.
 func (s *Store) Search(ctx context.Context, q SearchQuery) ([]model.SearchHit, error) {
@@ -202,7 +202,7 @@ func (s *Store) Search(ctx context.Context, q SearchQuery) ([]model.SearchHit, e
 	s.metrics.searchDuration(mode, time.Since(start))
 
 	// An arm that ran and offered nothing is the failure this spec is most
-	// exposed to (WL-SPEC-79 §17): a silently broken tsv degrades the system into the
+	// exposed to (WL-REQ-261): a silently broken tsv degrades the system into the
 	// dense-only setup the design rejects, and nothing else would notice. No rows at
 	// all means both arms came back empty, since fusion drops nothing.
 	if dense && denseN == 0 {
@@ -251,7 +251,7 @@ func (q SearchQuery) normalize() (string, error) {
 	return mode, nil
 }
 
-// searchModes is the bounded label set for the search metrics (WL-SPEC-79 §17).
+// searchModes is the bounded label set for the search metrics (WL-REQ-261).
 var searchModes = []string{model.SearchHybrid, model.SearchDense, model.SearchLexical}
 
 func validSearchMode(mode string) bool { return slices.Contains(searchModes, mode) }

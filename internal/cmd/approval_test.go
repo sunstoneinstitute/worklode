@@ -8,7 +8,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// TestApprovalHasNoDecisionCommand is the CLI half of WL-SPEC-75 §13.6: approving is
+// TestApprovalHasNoDecisionCommand is the CLI half of WL-REQ-124: approving is
 // a web UI act because an OIDC session's group claims are fresh and a 30-day
 // CLI token's are not. `lode approval` therefore offers add, request and list
 // and nothing else, and the absence is asserted so a later "for convenience"

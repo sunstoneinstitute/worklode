@@ -187,7 +187,7 @@ func TestNewServerLoadsApprovalFlows(t *testing.T) {
 	}
 }
 
-// --- applying a flow (WL-SPEC-75 §13.6) ---------------------------------------
+// --- applying a flow (WL-REQ-124) ---------------------------------------
 
 // flowApproval is one materialized row, read straight from the table: the
 // awaiting queue's joins do not carry deliverable-kind rows yet (WL-719).
@@ -246,7 +246,7 @@ func createDeliverableNamed(t *testing.T, h http.Handler, token, project, name s
 	return id
 }
 
-// TestApplyFlowStampsSnapshotAndBackfills is WL-SPEC-75 §13.6's apply act: the
+// TestApplyFlowStampsSnapshotAndBackfills is WL-REQ-124's apply act: the
 // project carries the flow it was stamped with, the deliverables it already
 // held owe the lanes that flow demands, a named reviewer replaces the lane's
 // role, and applying the same flow again is idempotent in rows while still

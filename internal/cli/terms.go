@@ -10,7 +10,7 @@ import (
 )
 
 // ListTerms calls GET /api/v1/projects/{id}/terms: the project's
-// definition rules with their term slugs (WL-SPEC-77 §4d).
+// definition rules with their term slugs (WL-REQ-1368).
 func (c *Client) ListTerms(ctx context.Context, project string) ([]model.Term, []byte, error) {
 	return doJSON[[]model.Term](ctx, c, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/terms", nil, "terms")
 }

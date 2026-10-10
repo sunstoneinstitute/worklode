@@ -280,7 +280,7 @@ func TestRuleVersionsAndGovernedTasks(t *testing.T) {
 
 // TestEditRuleDraftRewritesInPlace: editing a draft rule rewrites its draft
 // version in place, and the draft document arranging it renders the new text
-// with only that section changed (WL-SPEC-77 §19.4).
+// with only that section changed (WL-REQ-1298).
 func TestEditRuleDraftRewritesInPlace(t *testing.T) {
 	s := openDocStore(t)
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
@@ -312,7 +312,7 @@ func TestEditRuleDraftRewritesInPlace(t *testing.T) {
 // TestEditRuleAcceptedAddsDraftVersion: editing an accepted rule adds its
 // next version as a draft and opens no revision; the accepted spec keeps
 // showing the accepted text and marks the pending draft, and a second edit
-// rewrites that draft in place (WL-SPEC-77 §19.4).
+// rewrites that draft in place (WL-REQ-1298).
 func TestEditRuleAcceptedAddsDraftVersion(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -588,7 +588,7 @@ func TestListRules(t *testing.T) {
 
 // TestSyncRulesKeepsMatchedHeadingShell: a section that loses its text keeps
 // the rule it matched rather than turning into a spec heading, so specs whose
-// heading shells are still rules stay arranged until the WL-SPEC-77 §19.7
+// heading shells are still rules stay arranged until the WL-REQ-1301
 // migration converts them.
 func TestSyncRulesKeepsMatchedHeadingShell(t *testing.T) {
 	s := openDocStore(t)

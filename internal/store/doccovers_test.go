@@ -6,7 +6,7 @@ import (
 )
 
 // TestDocCoversRejections covers the covers defects a single header settles
-// on its own (WL-SPEC-78 §4, WL-SPEC-78 §4.5): the key on a document that is not a
+// on its own (WL-RULE-202, WL-REQ-207): the key on a document that is not a
 // plan, both spellings of it at once, an entry naming no spec, and the
 // retired `coverage` and `fullCoverageWith` keys.
 func TestDocCoversRejections(t *testing.T) {

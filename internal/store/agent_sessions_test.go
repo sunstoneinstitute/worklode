@@ -23,7 +23,7 @@ func insertRawSession(t *testing.T, s *Store, leaseID int64, agent, sessionID st
 
 // sessionRowID reads the surrogate primary key of the session addressed by
 // its natural key. The store returns model.AgentSession, which does not carry
-// the row id (WL-SPEC-73 §3.2a); a test that needs to prove two calls hit the same row
+// the row id (WL-RULE-1349); a test that needs to prove two calls hit the same row
 // asks the database directly.
 func sessionRowID(t *testing.T, s *Store, leaseID int64, agent, sessionID string) int64 {
 	t.Helper()

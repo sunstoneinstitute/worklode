@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// mode says how much of the WL-SPEC-73 §3.2a rule set a scanned package is held to.
+// mode says how much of the WL-RULE-1349 rule set a scanned package is held to.
 type mode int
 
 const (
@@ -49,7 +49,7 @@ var scanned = map[string]mode{
 // allowed lists the json-tagged structs that legitimately stay outside
 // internal/model in a strict package: transport internals that are serialized
 // into a cookie, a state parameter, or a local file rather than into an HTTP
-// body (WL-SPEC-73 §3.2a). The value says where each one is serialized; a type that
+// body (WL-RULE-1349). The value says where each one is serialized; a type that
 // has no such answer is a wire shape and belongs in internal/model. Keys are
 // package-scoped, so exempting internal/api's oauthState does not silently
 // exempt a same-named type in internal/cli. An entry no declaration matches
@@ -89,7 +89,7 @@ func wireTagged(st *ast.StructType) bool {
 	return false
 }
 
-// TestNoWireStructsOutsideModel enforces WL-SPEC-73 §3.2a: a value that crosses the
+// TestNoWireStructsOutsideModel enforces WL-RULE-1349: a value that crosses the
 // HTTP boundary has exactly one declaration, in internal/model. It checks the
 // three ways a second one gets in — a named struct, an anonymous struct, and
 // a map literal used as a body.
@@ -146,7 +146,7 @@ func checkFile(fset *token.FileSet, pkg string, m mode, path string, file *ast.F
 // checkStructs reports json-tagged structs declared outside internal/model.
 // Anonymous ones are reported in every scanned package: deleting the type
 // name is the cheapest way to dodge a declaration check, and an undeclared
-// body is exactly what WL-SPEC-73 §3.2a exists to prevent.
+// body is exactly what WL-RULE-1349 exists to prevent.
 func checkStructs(fset *token.FileSet, pkg string, strict bool, path string, file *ast.File, seen map[string]bool) (msgs []string) {
 	named := map[*ast.StructType]string{}
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -260,7 +260,7 @@ func checkBodies(fset *token.FileSet, path string, file *ast.File) (msgs []strin
 // TestModelDeclaresNoUntypedMaps closes the loophole the checks above cannot
 // see: a `map[string]any` nested inside a declared type. Moving a shape into
 // internal/model and leaving it a map satisfies every other rule here while
-// keeping exactly the problem WL-SPEC-73 §3.2a exists to fix — an envelope with a name
+// keeping exactly the problem WL-RULE-1349 exists to fix — an envelope with a name
 // around entries with none. `model.TimelineResponse.Timeline` was that for one
 // release; it is `[]TimelineEntry` now (§8).
 //

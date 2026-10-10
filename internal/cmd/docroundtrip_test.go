@@ -95,7 +95,7 @@ requires: other-corpus:SPEC-99
 // TestDocImportRoundTrip walks a corpus through `lode doc import` and reads it
 // back, holding the result to one property: **every reference the frontmatter
 // declares either exists in the store or was reported**, and the body is
-// stored verbatim less its header (WL-SPEC-77 §7).
+// stored verbatim less its header (WL-REQ-168).
 //
 // The third outcome is the defect this test exists for. WL-357 (a plan's
 // `requires` dropped) and PR #336 (bodies drifting on re-import) were both a

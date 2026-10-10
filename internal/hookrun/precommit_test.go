@@ -67,7 +67,7 @@ func TestPreCommitWithoutLeaseIsSilent(t *testing.T) {
 // TestPreCommitResolvesTaskIDFromGitConfigAfterWorktreeRename covers the case
 // the explicit worklode.task-id field exists for: a worktree renamed to a
 // directory name that carries no task id. It still sits one level below the
-// base, so it clears WL-SPEC-80 §3.4's guard; only the stamped git config can
+// base, so it clears WL-REQ-270's guard; only the stamped git config can
 // then say which task it belongs to.
 func TestPreCommitResolvesTaskIDFromGitConfigAfterWorktreeRename(t *testing.T) {
 	_, c, rec := newRealServer(t)

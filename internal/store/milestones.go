@@ -1,4 +1,4 @@
-// milestones.go implements WL-SPEC-75 §13.2's milestone: one ordered container in
+// milestones.go implements WL-REQ-120's milestone: one ordered container in
 // a project, holding tasks and deliverables. A milestone stores identity,
 // title and ordering only — its progress is a query over its children
 // (milestone_progress.go), never a column.
@@ -18,11 +18,11 @@ import (
 )
 
 // milestoneSeqKind is the milestone's row key in project_entity_seq and the
-// type segment of its id (WL-SPEC-75 §13.4's COW-MILE-2).
+// type segment of its id (WL-REQ-122's COW-MILE-2).
 const milestoneSeqKind = "MILE"
 
 // maxMilestoneTitle bounds a title in runes, matching a deliverable's name.
-// It keeps a stray paste out of the row and out of a list cell; WL-SPEC-75 §13.2 puts
+// It keeps a stray paste out of the row and out of a list cell; WL-REQ-120 puts
 // no length on the field itself.
 const maxMilestoneTitle = 200
 
@@ -160,7 +160,7 @@ func (s *Store) ListMilestones(ctx context.Context, projectID string) ([]model.M
 
 // milestoneTaskStates reads the states of every attached task in a project,
 // keyed by milestone. A tombstoned task is out of the counts for the reason
-// it is out of every listing (WL-SPEC-75 §12).
+// it is out of every listing (WL-REQ-117).
 func (s *Store) milestoneTaskStates(ctx context.Context, projectID string) (map[string][]string, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT milestone_id, state FROM tasks
@@ -344,7 +344,7 @@ func (s *Store) ListMilestoneChildren(ctx context.Context, projectID string) (ma
 // what the delete let go of: the row itself, the tasks it detached, the
 // deliverables it deleted, and the references it dropped.
 //
-// This is a real delete, not WL-SPEC-75 §12's tombstone. That spec covers tasks and
+// This is a real delete, not WL-REQ-117's tombstone. That spec covers tasks and
 // documents, whose rows carry history a hidden row keeps addressable; a
 // milestone carries a title, a position, and progress derived from children
 // that either survive it or are named in the returned record.
@@ -358,7 +358,7 @@ func (s *Store) ListMilestoneChildren(ctx context.Context, projectID string) (ma
 // outputs of the milestone, so they go with it through DeleteDeliverable and
 // its refusals. Tasks are work with a state machine, a lease and blocking
 // edges, so they are only detached: a grouping decision must not destroy work
-// records. The milestone's own outbound references (WL-SPEC-75 §13.4) are dropped either
+// records. The milestone's own outbound references (WL-REQ-122) are dropped either
 // way — no surface can remove an entity_edges row, and one hanging off a
 // deleted milestone can never be read again.
 func DeleteMilestone(tx *sql.Tx, id string, cascade bool) (*model.MilestoneDeletion, error) {
@@ -380,7 +380,7 @@ func DeleteMilestone(tx *sql.Tx, id string, cascade bool) (*model.MilestoneDelet
 		// Counted on this transaction, behind the row lock above, so an
 		// attach racing the delete either loses the lock or is seen here.
 		// Tombstoned tasks are not counted, for the reason they are in no
-		// other listing (WL-SPEC-75 §12): a caller cannot detach what it cannot see.
+		// other listing (WL-REQ-117): a caller cannot detach what it cannot see.
 		var tasks, deliverables int
 		if err := tx.QueryRowContext(ctx,
 			`SELECT (SELECT count(*) FROM tasks

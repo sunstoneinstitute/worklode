@@ -12,7 +12,7 @@ import (
 )
 
 // symlink is os.Symlink, a var so a test can inject a failure to exercise
-// the copy fallback (WL-SPEC-80 §5.6 row 5) without a real symlink-less
+// the copy fallback (WL-REQ-280 row 5) without a real symlink-less
 // filesystem.
 var symlink = os.Symlink
 
@@ -24,9 +24,9 @@ type PublishResult struct {
 }
 
 // PublishDirLink makes target a symlink to the whole links dir — one link
-// serving every harness that reads target (WL-SPEC-80 §5.2, the four
+// serving every harness that reads target (WL-REQ-276, the four
 // ~/.agents/skills harnesses). An existing real directory degrades to
-// per-skill links inside it (WL-SPEC-80 §5.6 row 4: never replace a directory
+// per-skill links inside it (WL-REQ-280 row 4: never replace a directory
 // Worklode did not create); an existing foreign symlink is left untouched.
 func PublishDirLink(dirs Dirs, target string) (PublishResult, error) {
 	res := PublishResult{Path: target}
@@ -39,7 +39,7 @@ func PublishDirLink(dirs Dirs, target string) (PublishResult, error) {
 		if err := symlink(dirs.Links, target); err != nil {
 			// Symlinks unavailable outright: fall back to the same
 			// per-skill mechanism a pre-existing real dir uses. If that
-			// itself has to copy (WL-SPEC-80 §5.6 row 5), "copied" must
+			// itself has to copy (WL-REQ-280 row 5), "copied" must
 			// still surface here — this is the entry point the harnesses
 			// go through, so losing the signal here loses it where it
 			// matters most.
@@ -100,7 +100,7 @@ func PublishPerSkill(dirs Dirs, target string) (PublishResult, error) {
 	var linked, copied, skipped bool
 	for _, e := range entries {
 		if e.Type()&os.ModeSymlink == 0 {
-			continue // dirs.Links holds only name symlinks (WL-SPEC-80 §5.2)
+			continue // dirs.Links holds only name symlinks (WL-REQ-276)
 		}
 		name := e.Name()
 		one, err := PublishOneSkill(dirs, target, name)
@@ -135,7 +135,7 @@ func PublishPerSkill(dirs Dirs, target string) (PublishResult, error) {
 // the per-entry step PublishPerSkill runs for every name symlink in
 // dirs.Links, exposed so `skills install --link` can publish just the one
 // skill it fetched without touching the rest of a per-skill target. A
-// dangling name symlink or anything publishEntry refuses (WL-SPEC-80 §5.6 row
+// dangling name symlink or anything publishEntry refuses (WL-REQ-280 row
 // 4) is reported in Skips rather than treated as an error.
 func PublishOneSkill(dirs Dirs, target, name string) (PublishResult, error) {
 	res := PublishResult{Path: target}
@@ -165,7 +165,7 @@ func PublishOneSkill(dirs Dirs, target, name string) (PublishResult, error) {
 // publishEntry links or copies one skill's version dir into linkPath,
 // honoring what is already there. Already correct: unchanged, silently.
 // A foreign symlink or a real dir/file: skipped, never touched — never
-// delete a path Worklode did not create (WL-SPEC-80 §5.6 row 4). A symlink
+// delete a path Worklode did not create (WL-REQ-280 row 4). A symlink
 // Worklode created itself (pointing inside dirs.Store, just to a stale
 // version): replaced.
 func publishEntry(dirs Dirs, versionDir, linkPath string) (action string, ok bool, err error) {
@@ -258,7 +258,7 @@ func linkVersion(versionDir, linkPath string) (string, error) {
 
 // copyDir recursively copies src into dst, preserving the exec bit the same
 // way extract does (skillhash.Mode) — the copy fallback for a filesystem
-// where symlinks are unavailable (WL-SPEC-80 §5.6 row 5). Symlink entries are
+// where symlinks are unavailable (WL-REQ-280 row 5). Symlink entries are
 // skipped: extract never materializes them, so a version dir never has one.
 func copyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {

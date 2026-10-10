@@ -23,7 +23,7 @@ import (
 
 // specSourceBody is the draft spec actor A creates: real frontmatter, an H1,
 // and two anchored sections whose anchors agree with their numbers (the
-// server parses and lints this, per 025 §5/§6.1).
+// server parses and lints this, per WL-REQ-164/WL-REQ-165).
 const specSourceBody = `---
 status: draft
 ---
@@ -43,7 +43,7 @@ Model body.
 
 // specRevisedBody is specSourceBody with sec-1a inserted and sec-2's body
 // edited; sec-1 is left untouched. This is the revision that must be
-// accepted: exactly one Added anchor and one Changed anchor (025 §6 rule 5).
+// accepted: exactly one Added anchor and one Changed anchor (WL-REQ-167 rule 5).
 const specRevisedBody = `---
 status: accepted
 ---
@@ -66,9 +66,9 @@ Model body, revised.
 `
 
 // planSourceBody is a plan doc: no corpus number, no anchored sections
-// (025 §9). It deliberately declares no `## Tasks` section, so accepting it
+// (WL-REQ-172). It deliberately declares no `## Tasks` section, so accepting it
 // is refused — a plan mints its tasks on accept, and a body that declares
-// none is a plan with nothing to execute (025 §9.2).
+// none is a plan with nothing to execute (WL-REQ-172).
 const planSourceBody = `---
 status: draft
 ---
@@ -81,7 +81,7 @@ Do the thing.
 `
 
 // planAlphaBody is the earlier of the two ordered plans: one task, and no
-// ordering key of its own — plan-beta declares the order (025 §5, §9.3).
+// ordering key of its own — plan-beta declares the order (WL-REQ-164, WL-REQ-172).
 const planAlphaBody = `---
 status: draft
 ---
@@ -101,13 +101,13 @@ Groundwork prose.
 `
 
 // planBetaBody is the plan under test: two task definitions, the second
-// declaring skills and an intra-plan blockedBy on the first (025 §9.1), under
+// declaring skills and an intra-plan blockedBy on the first (WL-REQ-172), under
 // a document-level `blockedBy` holding this plan's whole set until plan-alpha's
-// closes (025 §5, §9.3).
+// closes (WL-REQ-164, WL-REQ-172).
 //
 // The two `blockedBy` keys are different subjects that happen to share a
 // spelling: the frontmatter one names another plan document, the one in a task
-// block names a task number in this file (025 §9.1).
+// block names a task number in this file (WL-REQ-172).
 const planBetaBody = `---
 status: draft
 blockedBy:
@@ -166,7 +166,7 @@ func clientErrStatus(t *testing.T, err error) int {
 // TestDocLifecycle drives spec 025's document lifecycle through the public
 // HTTP API only: a spec's draft -> accept -> revise -> accept-revision path,
 // its owner gate and its §6 anchor rules, and a plan's freely-editable
-// body with acceptance still stubbed out (025 §9.2, lifted in part 3).
+// body with acceptance still stubbed out (WL-REQ-172, lifted in part 3).
 func TestDocLifecycle(t *testing.T) {
 	ctx := context.Background()
 
@@ -208,7 +208,7 @@ func TestDocLifecycle(t *testing.T) {
 	actorB := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: tokB.Token})
 
 	// 2. Actor A creates a spec draft with two anchored sections, assigned to
-	// itself — the only actor that can accept it (025 §7).
+	// itself — the only actor that can accept it (WL-REQ-170).
 	doc, _, err := actorA.CreateDoc(ctx, model.CreateDocInput{
 		Project: "docs", Kind: "spec", Number: 1, Slug: "test-spec",
 		Body: specSourceBody, Owner: "actor-a",
@@ -249,7 +249,7 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("sections after accept = %+v, want both published", detail.Sections)
 	}
 
-	// 5. A revision is structurally a pull request (025 §7.2): actor B may
+	// 5. A revision is structurally a pull request (WL-REQ-170): actor B may
 	// open one against actor A's document even though B cannot accept it, and
 	// A — the owner — may withdraw it without landing anything, freeing the
 	// one-candidate slot for the steps below.
@@ -268,7 +268,7 @@ func TestDocLifecycle(t *testing.T) {
 	// 6. Open a revision, then edit it to drop sec-2's number while keeping
 	// its anchor: this is the form that reaches the diff (renumbering while
 	// keeping the anchor is a lintAnchors defect refused at parse time), and
-	// AcceptDocRevision must reject it citing 025 §6 rule 3.
+	// AcceptDocRevision must reject it citing WL-REQ-167 rule 3.
 	if _, _, err := actorA.ReviseDoc(ctx, doc.ID); err != nil {
 		t.Fatalf("revise doc: %v", err)
 	}
@@ -298,7 +298,7 @@ func TestDocLifecycle(t *testing.T) {
 
 	// 8. Replace the open revision with one that adds sec-1a and edits only
 	// sec-2's body: this must be accepted, landing as version 2 with
-	// last_revised_in moved on exactly sec-2 (025 §6 rule 5).
+	// last_revised_in moved on exactly sec-2 (WL-REQ-167 rule 5).
 	if _, _, err := actorA.UpdateDocRevision(ctx, doc.ID, noHeader(t, specRevisedBody)); err != nil {
 		t.Fatalf("update revision (valid): %v", err)
 	}
@@ -341,7 +341,7 @@ func TestDocLifecycle(t *testing.T) {
 	// 9. The plan half: a plan carries a server-allocated number like every
 	// other kind (029 §4) but no anchors, and its body is freely editable at
 	// any status. Accepting this one is refused because it declares no
-	// `## Tasks` section — plan acceptance mints the plan's tasks (025 §9.2),
+	// `## Tasks` section — plan acceptance mints the plan's tasks (WL-REQ-172),
 	// and a plan that would mint nothing is not acceptable.
 	// TestPlanAcceptanceMintsTasks drives the accepting path.
 	plan, _, err := actorA.CreateDoc(ctx, model.CreateDocInput{
@@ -390,7 +390,7 @@ func hasDocEdge(edges []model.DocEdge, typ string, doc int64) bool {
 
 // assertNoChildEdges fails if the task has a parent or any child_of edge in
 // either direction: plan acceptance mints a flat set with no row above it
-// (025 §9.2).
+// (WL-REQ-172).
 func assertNoChildEdges(ctx context.Context, t *testing.T, c *cli.Client, id string) {
 	t.Helper()
 	d, _, err := c.GetTask(ctx, id)
@@ -449,7 +449,7 @@ func assertNeedsExecution(t *testing.T, project string, want ...int64) {
 	}
 }
 
-// TestPlanAcceptanceMintsTasks drives 025 §9 end to end through the public
+// TestPlanAcceptanceMintsTasks drives WL-REQ-172 end to end through the public
 // surfaces: two plan documents ordered by a frontmatter `blockedBy` edge, the
 // second declaring two tasks with an intra-plan blockedBy. It proves that
 // accepting a plan mints exactly its declared task set and nothing above it,
@@ -493,7 +493,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	// 1. Both plans, in the order a numbered series is actually written:
 	// alpha, then beta declaring `blockedBy: [plan-alpha]`. The later plan
 	// names the earlier one, so an accepted and spent plan is never amended
-	// to state the ordering (025 §5).
+	// to state the ordering (WL-REQ-164).
 	alpha, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
 		Project: "plans", Kind: "plan", Slug: "plan-alpha",
 		Body: planAlphaBody, Owner: "planner",
@@ -511,7 +511,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 
 	// 2. Beta's frontmatter wrote one doc_edges row, beta → alpha, readable
 	// from both ends: blockedBy leaving beta, blocks arriving at alpha
-	// (WL-SPEC-77 §8.1).
+	// (WL-REQ-1288).
 	betaDoc, _, err := planner.GetDoc(ctx, beta.ID)
 	if err != nil {
 		t.Fatalf("get plan-beta: %v", err)
@@ -528,7 +528,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	}
 
 	// 3. Accept alpha: one ready task, minted in the accept transaction
-	// (025 §9.2: minting is itself the acceptance gate, no draft step).
+	// (WL-REQ-172: minting is itself the acceptance gate, no draft step).
 	alphaAccepted, _, err := planner.AcceptDoc(ctx, alpha.ID)
 	if err != nil {
 		t.Fatalf("accept plan-alpha: %v", err)
@@ -625,7 +625,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	// Both plans are accepted with open sets, so both need execution.
 	assertNeedsExecution(t, "plans", alpha.ID, beta.ID)
 
-	// 7. The whole set minted ready and unleased (025 §9.2); beta's tasks
+	// 7. The whole set minted ready and unleased (WL-REQ-172); beta's tasks
 	// would be pickable but for the plan-to-plan edge.
 	assertBlocked(ctx, t, planner, first.ID, true, "plan-alpha's set is still open")
 	assertBlocked(ctx, t, planner, second.ID, true, "plan-alpha's set is still open")
@@ -744,7 +744,7 @@ func TestDocOperationsMetricOnMetrics(t *testing.T) {
 
 // noHeader is body with its header removed. The fixtures carry headers
 // because POST /api/v1/docs reads one; every later body write takes none
-// (WL-SPEC-77 §7).
+// (WL-REQ-168).
 func noHeader(t *testing.T, body string) string {
 	t.Helper()
 	d, err := designdoc.Parse([]byte(body))

@@ -24,12 +24,12 @@ matching `planning_gaps` entry keyed by document id — `{"doc":…,
 "sections":<the spec's section count>, "gaps":[{"anchor":"sec-3",
 "coverage":"plan-draft|deferred|unplanned"}]}`. A `deferred` gap also
 carries `"owner"`: the document a plan explicitly handed the section to
-(WL-SPEC-78 §1.3) — someone was named, nothing is scheduled, so it is the
+(WL-REQ-187) — someone was named, nothing is scheduled, so it is the
 first kind of gap to chase.
 
 **What this reports, and why.** The whole `--needs-planning` result, outcome
 classification included — that selector *is* the backbone's definition of a
-planning gap (WL-SPEC-78 §1.3), and this skill exists to turn gaps into
+planning gap (WL-REQ-187), and this skill exists to turn gaps into
 planning tasks. It is wider than the old file-corpus check, which reported
 only specs with zero referencing plans. Lead the report with the specs whose
 gap set covers every section (`len(gaps) == sections`) with every `coverage`

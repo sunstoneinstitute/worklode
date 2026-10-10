@@ -33,7 +33,7 @@ func findCommand(t *testing.T, path ...string) *cobra.Command {
 	return cur
 }
 
-// TestDeleteCommandsRegistered pins the WL-SPEC-75 §12 CLI surface: delete and
+// TestDeleteCommandsRegistered pins the WL-REQ-117 CLI surface: delete and
 // undelete on both entity types, --justification spelled the same on both
 // deletes and absent from both undeletes, and no -j shorthand — the flag is
 // meant to cost a moment's typing.
@@ -56,7 +56,7 @@ func TestDeleteCommandsRegistered(t *testing.T) {
 }
 
 // TestTaskDeleteHelpPointsAtAbandon pins that `lode task delete`'s help sends
-// the reader to abandon first (WL-SPEC-75 §12): abandon keeps the decision record,
+// the reader to abandon first (WL-REQ-117): abandon keeps the decision record,
 // delete is for a row that should not have existed.
 func TestTaskDeleteHelpPointsAtAbandon(t *testing.T) {
 	help := findCommand(t, "task", "delete").Long
@@ -87,7 +87,7 @@ func TestDeleteCommandsRejectMissingArg(t *testing.T) {
 
 // TestListsHaveDeletedFlag pins `--deleted` on both list commands and says
 // what it is: a switch to the tombstoned rows, not an addition to the live
-// ones (WL-SPEC-75 §12).
+// ones (WL-REQ-117).
 func TestListsHaveDeletedFlag(t *testing.T) {
 	for _, entity := range []string{"task", "doc"} {
 		f := findCommand(t, entity, "list").Flags().Lookup("deleted")
@@ -112,7 +112,7 @@ func TestTaskDeleteListUndeleteRoundTrip(t *testing.T) {
 	noise := createTestTask(t, c, "Seeded by mistake")
 
 	// Abandoned, so the default --status filter would hide it: --deleted has
-	// to ignore that filter to list the tombstone at all (WL-SPEC-75 §12).
+	// to ignore that filter to list the tombstone at all (WL-REQ-117).
 	if _, err := runLode(t, "task", "abandon", noise.ID); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
@@ -225,7 +225,7 @@ func docListIDs(t *testing.T, args ...string) []int64 {
 }
 
 // TestResolveDeletedStatusFilter pins the --deleted/--status interaction. A
-// tombstone is orthogonal to state (WL-SPEC-75 §12), so the default open-state filter
+// tombstone is orthogonal to state (WL-REQ-117), so the default open-state filter
 // would hide most tombstones: --deleted alone drops the state filter, while an
 // explicit --status still narrows within the tombstoned set.
 func TestResolveDeletedStatusFilter(t *testing.T) {

@@ -242,7 +242,7 @@ func TestGetMilestoneAPI(t *testing.T) {
 }
 
 // TestMilestonesPage covers the project-local Milestones destination (spec
-// WL-SPEC-75 §13.2, WL-SPEC-82 §4): an empty project renders the honest "No milestones
+// WL-REQ-120, WL-REQ-335): an empty project renders the honest "No milestones
 // yet" state, a seeded project renders every milestone in position order with
 // its derived progress, and an unknown project 404s the way every other
 // project route does. Milestones are seeded through the real write path, so
@@ -296,7 +296,7 @@ func TestMilestonesPage(t *testing.T) {
 }
 
 // TestMilestoneReferencesOnPage covers the References section and its add
-// form (WL-SPEC-75 §13.4): the empty state, a cross-project reference rendering with
+// form (WL-REQ-122): the empty state, a cross-project reference rendering with
 // the reported state of the deliverable it points at, a good submit writing
 // the edge through the "web" surface and 303ing back, and an unknown id
 // coming back as the page with the message and what was typed.

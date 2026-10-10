@@ -25,7 +25,7 @@ func TestOfferScanOffersAbandonedWorktree(t *testing.T) {
 	}
 }
 
-// The layout is flat (WL-SPEC-80 §3.3): offerScan reads one level below the base
+// The layout is flat (WL-REQ-269): offerScan reads one level below the base
 // and nothing deeper, so a worktree re-homed into a subdirectory is not a
 // worktree root any more and is not offered. This pins the flat scan — the
 // pre-flat code walked to depth 3 and would have found it.
@@ -75,7 +75,7 @@ func TestOfferScanIgnoresLegacyWtDir(t *testing.T) {
 }
 
 // A non-default worktree_dir (here via LODE_WORKTREE_DIR, the env override
-// WL-SPEC-80 §3.3 gives) must be honoured, not just tolerated: the guard has to
+// WL-REQ-269 gives) must be honoured, not just tolerated: the guard has to
 // find a worktree that isn't under the default .worktrees at all.
 func TestLayoutCustomBaseHonored(t *testing.T) {
 	rec := newRecordingServer(t)

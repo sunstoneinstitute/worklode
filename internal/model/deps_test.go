@@ -12,7 +12,7 @@ import (
 // contains a dot, and the guard could never pass.
 const modelPkg = "github.com/sunstoneinstitute/worklode/internal/model"
 
-// TestModelImportsStdlibOnly enforces WL-SPEC-73 §3.2a: internal/model is a leaf
+// TestModelImportsStdlibOnly enforces WL-RULE-1349: internal/model is a leaf
 // every layer can depend on, so it may not reach back into the module or
 // pull in a third-party package.
 func TestModelImportsStdlibOnly(t *testing.T) {

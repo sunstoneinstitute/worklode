@@ -72,7 +72,7 @@ func TestPublishDirLinkCreatesSymlink(t *testing.T) {
 
 func TestPublishDirLinkDegradesToPerSkillInsideRealDir(t *testing.T) {
 	// agents dir exists as a REAL directory with a foreign skill in it:
-	// WL-SPEC-80 §5.6 row 4 — link per-skill inside it, delete nothing.
+	// WL-REQ-280 row 4 — link per-skill inside it, delete nothing.
 	dirs := installedDirs(t)
 	agents := filepath.Join(t.TempDir(), "skills")
 	if err := os.MkdirAll(filepath.Join(agents, "their-skill"), 0o755); err != nil {
@@ -173,7 +173,7 @@ func TestPublishPerSkill(t *testing.T) {
 func TestPublishCopyFallback(t *testing.T) {
 	// Inject symlink failure (see below) and assert the version dir is
 	// copied file-for-file instead, with res naming the copy so a stale
-	// copy is diagnosable (WL-SPEC-80 §5.6 row 5).
+	// copy is diagnosable (WL-REQ-280 row 5).
 	dirs := installedDirs(t)
 	target := t.TempDir()
 

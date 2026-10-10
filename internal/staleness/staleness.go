@@ -1,4 +1,4 @@
-// Package staleness holds the pure WL-SPEC-77 §9 threshold calculation, moved out
+// Package staleness holds the pure WL-REQ-170 threshold calculation, moved out
 // of internal/watcher so internal/store's sweeper can call it directly:
 // watcher pulls in internal/eventbus, which imports internal/store, so
 // internal/store cannot import internal/watcher without an import cycle.

@@ -454,7 +454,7 @@ func (s *Store) AgentSession(ctx context.Context, leaseID int64, agent, sessionI
 //
 // Deliberately package-local rather than an internal/model type: it crosses
 // no HTTP boundary (the cockpit projection's JSON shape is contracted by spec
-// 032 and unchanged by this), so WL-SPEC-73 §3.2a does not reach it. internal/api
+// 032 and unchanged by this), so WL-RULE-1349 does not reach it. internal/api
 // converts it to a ui view type at the render seam.
 type ProjectAgentSession struct {
 	model.AgentSession

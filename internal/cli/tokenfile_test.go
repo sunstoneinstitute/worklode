@@ -120,7 +120,7 @@ func TestFileTokenStoreRejectsWhitespace(t *testing.T) {
 
 // TestNoKeychainBackend pins the line between "this machine has no keychain"
 // and "the keychain is there and said no" — the distinction the whole fallback
-// rests on (WL-SPEC-74 §8).
+// rests on (WL-REQ-61).
 func TestNoKeychainBackend(t *testing.T) {
 	cases := []struct {
 		name string

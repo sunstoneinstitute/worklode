@@ -59,7 +59,7 @@ func TestBlobGCCollects(t *testing.T) {
 }
 
 // TestBlobGCDefaultGraceSparesRecent is the one case that omits grace_hours,
-// so it is the only coverage defaultGCGrace has. WL-SPEC-78 §8.7 says
+// so it is the only coverage defaultGCGrace has. WL-REQ-232 says
 // neither sweep touches anything newer than the grace period: the freshly
 // uploaded blob keeps its row and its object, the freshly written orphan
 // object survives, and only the object aged past 24h is collected.

@@ -1,9 +1,9 @@
 // softdelete.go serves WL-SPEC-75's delete and undelete for tasks and design
 // documents. Delete is a tombstone, not a state: the store hides the row from
-// every list and keeps its events, edges and artifacts valid (WL-SPEC-75 §12).
+// every list and keeps its events, edges and artifacts valid (WL-REQ-117).
 //
-// The one rule this layer owns is WL-SPEC-75 §12's: whether a justification is
-// required depends on LODE_INSTANCE_ENV (WL-SPEC-73 §4.2), and the server is the only
+// The one rule this layer owns is WL-REQ-117's: whether a justification is
+// required depends on LODE_INSTANCE_ENV (WL-REQ-22), and the server is the only
 // party that knows which instance it is. A client may prompt for a
 // justification; it must not decide the rule, so the check lives here and
 // nowhere else.
@@ -22,19 +22,19 @@ import (
 // justificationRequiredMsg is the refusal a prod instance answers a blank
 // delete justification with. It names the instance environment because the
 // request is well-formed and the same server configured the other way would
-// have accepted it (WL-SPEC-75 §12).
+// have accepted it (WL-REQ-117).
 const justificationRequiredMsg = "justification is required on a prod instance (LODE_INSTANCE_ENV=prod)"
 
 // requiresJustification reports whether this instance demands one. Anything
 // that is not a dev instance is a prod instance: NewServer has already
-// normalised the empty value to prod (WL-SPEC-73 §4.2), and a *server built directly in
+// normalised the empty value to prod (WL-REQ-22), and a *server built directly in
 // a test with no config is a prod instance for the same safety reason.
 func (s *server) requiresJustification() bool {
 	return s.cfg.InstanceEnv != InstanceDev
 }
 
 // deleteJustification reads the optional DeleteInput body off a DELETE and
-// applies WL-SPEC-75 §12. An absent body is legal — a bodyless DELETE is an ordinary
+// applies WL-REQ-117. An absent body is legal — a bodyless DELETE is an ordinary
 // request — and leaves the justification empty, which a dev instance accepts
 // and a prod instance refuses with 422. The value is trimmed before both the
 // blank check and storage, so a space is not a reason.
@@ -80,7 +80,7 @@ func (s *server) deleteTask(w http.ResponseWriter, r *http.Request) {
 }
 
 // undeleteTask handles POST /api/v1/tasks/{id}/undelete. No body and no
-// justification on either instance (WL-SPEC-75 §12): deleting hides the record,
+// justification on either instance (WL-REQ-117): deleting hides the record,
 // undeleting restores it, and only the first is worth making someone stop and
 // type.
 func (s *server) undeleteTask(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +100,7 @@ func (s *server) undeleteTask(w http.ResponseWriter, r *http.Request) {
 // writeTask reads a task back after its tombstone changed and answers with it.
 // GetTask does not filter tombstoned rows: fetching by id is the one path that
 // still resolves a deleted row, and rendering its tombstone is what makes the
-// mistake recoverable rather than mysterious (WL-SPEC-75 §12).
+// mistake recoverable rather than mysterious (WL-REQ-117).
 func (s *server) writeTask(w http.ResponseWriter, r *http.Request, id string) {
 	t, err := s.st.GetTask(r.Context(), id)
 	if err != nil {
@@ -110,7 +110,7 @@ func (s *server) writeTask(w http.ResponseWriter, r *http.Request, id string) {
 	writeJSON(w, http.StatusOK, t)
 }
 
-// deleteDoc handles DELETE /api/v1/docs/{id}: the document half of WL-SPEC-75 §12. A
+// deleteDoc handles DELETE /api/v1/docs/{id}: the document half of WL-REQ-117. A
 // document holds no lease, so the tombstone is the whole write.
 func (s *server) deleteDoc(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)

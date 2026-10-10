@@ -43,7 +43,7 @@ func TestCodexTelemetryRoundTripPreservesForeignConfig(t *testing.T) {
 }
 
 // installCodexTelemetry must never enable metrics or traces, and the exact
-// exporter shape WL-SPEC-73 §7.3 requires must be present.
+// exporter shape WL-REQ-36 requires must be present.
 func TestCodexTelemetryInstallWritesExporter(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	action, err := installCodexTelemetry(path)

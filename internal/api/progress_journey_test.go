@@ -22,7 +22,7 @@ import (
 
 // jsonPost drives one page-script write the way progress.js does: a
 // same-origin JSON POST carrying the X-Requested-With header beginJSONPost
-// requires (WL-SPEC-85 §5), plus the caller's session cookie.
+// requires (WL-REQ-1338), plus the caller's session cookie.
 func jsonPost(t *testing.T, h http.Handler, path, session, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))

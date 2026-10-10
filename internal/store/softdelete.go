@@ -9,7 +9,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// Soft delete for tasks and documents (WL-SPEC-75 §12).
+// Soft delete for tasks and documents (WL-REQ-117).
 //
 // Delete tombstones a row rather than removing it: the events log is
 // append-only, and every event, state_log row, edge and artifact naming a task
@@ -18,7 +18,7 @@ import (
 // carries and are never filtered on.
 //
 // Whether a justification is required is not decided here. That rule keys off
-// the instance environment (WL-SPEC-73 §4.2), which only the API layer knows; the store
+// the instance environment (WL-REQ-22), which only the API layer knows; the store
 // records whatever it is given.
 
 // tombstoneFrom builds the model tombstone from the three columns. The columns
@@ -68,12 +68,12 @@ func lockDocTombstone(tx *sql.Tx, id int64) (deleted bool, err error) {
 // a RecordEvent apply callback with the store's clock as now.
 //
 // actorID must name an existing actor. justification is stored verbatim and may
-// be empty — WL-SPEC-75 §12's requirement is the API layer's to enforce. Deleting an
+// be empty — WL-REQ-117's requirement is the API layer's to enforce. Deleting an
 // already-deleted task is ErrInvalidInput, not a silent success: the caller
 // asked to hide a row that is already hidden, and the tombstone it would
 // overwrite names someone else.
 //
-// The delete does not cascade (WL-SPEC-75 §12). Children, covering plans and edges keep
+// The delete does not cascade (WL-REQ-117). Children, covering plans and edges keep
 // naming a row that still exists.
 func DeleteTask(tx *sql.Tx, now time.Time, id, actorID, justification string, eventID int64) error {
 	if err := requireActor(tx, actorID); err != nil {
@@ -94,7 +94,7 @@ func DeleteTask(tx *sql.Tx, now time.Time, id, actorID, justification string, ev
 		return fmt.Errorf("delete task %s: %w", id, err)
 	}
 	// A hidden task cannot be worked, and leaving the lease would leave the
-	// sweeper tending a row nothing can see (WL-SPEC-75 §12).
+	// sweeper tending a row nothing can see (WL-REQ-117).
 	if err := CloseActiveLease(tx, now, id); err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func DeleteTask(tx *sql.Tx, now time.Time, id, actorID, justification string, ev
 // UndeleteTask clears a task's tombstone inside the given transaction and
 // appends a state_log row attributed to eventID. Undeleting a task that is not
 // deleted is ErrInvalidInput. No justification is required on either instance
-// (WL-SPEC-75 §12): deleting hides the record, undeleting restores it, and only the
+// (WL-REQ-117): deleting hides the record, undeleting restores it, and only the
 // first is worth making someone stop and type.
 func UndeleteTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 	deleted, _, err := lockTaskTombstone(tx, id)

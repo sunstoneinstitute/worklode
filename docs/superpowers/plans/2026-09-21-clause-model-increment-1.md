@@ -28,7 +28,7 @@ Deferred to later plans: the migration of the 47 old exports into withdrawn clau
 - Migrations live in `deploy/base/migrations/` as `NNNN_name.up.sql` and `.down.sql`. Highest today is `0080`. Run `./scripts/check-migrations.sh --no-fix` after adding one.
 - Prose in `docs/specs2/` follows the `lode:anti-smartass` plain-language style: no em dashes, no "X, not Y" antithesis.
 - Commit messages: imperative subject, no Co-authored-by or any self-reference.
-- Refs follow the `<KEY>-<TYPE>-<n>` grammar of 025 §14.3; the clause type token is `CL`.
+- Refs follow the `<KEY>-<TYPE>-<n>` grammar of WL-REQ-168; the clause type token is `CL`.
 
 ---
 

@@ -7,7 +7,7 @@
 # and what a real document body loses on the markdown round trip.
 #
 # It needs no Postgres and no running server, but it does need a Chrome-family
-# browser, which CI deliberately does not install (spec 032 §12). With none on
+# browser, which CI deliberately does not install (WL-REQ-334). With none on
 # the machine it prints how to point at one and exits 0.
 #
 # Usage: editor-check.sh [extra go test flags]

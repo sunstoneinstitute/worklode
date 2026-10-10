@@ -56,7 +56,7 @@ func openTermStore(t *testing.T) *Store {
 
 // TestResolveTermProjectFirst: two projects define lease differently and
 // each resolves its own; a project with no definition resolves the
-// instance glossary's; an unknown slug is ErrNotFound (WL-SPEC-77 §4d).
+// instance glossary's; an unknown slug is ErrNotFound (WL-REQ-1368).
 func TestResolveTermProjectFirst(t *testing.T) {
 	s := openTermStore(t)
 	s.metrics = newStoreMetrics(prometheus.NewRegistry())

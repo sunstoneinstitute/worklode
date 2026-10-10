@@ -8,7 +8,7 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-// drift.templ renders the drift board at /drift — the read surface of WL-SPEC-82 §2.5,
+// drift.templ renders the drift board at /drift — the read surface of WL-REQ-1362,
 // the graph-backed expert view Knowledge covers (layout.templ's primaryNav
 // doc comment), which is why the page marks "knowledge" current rather than
 // taking an eighth nav destination.

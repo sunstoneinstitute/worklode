@@ -28,7 +28,7 @@ func scanInstruction(row rowScanner) (model.Instruction, error) {
 // task's lease (migration 0056). Recorded as a "task.instructed" cli event.
 //
 // Errors: ErrNotFound if taskID does not exist or is soft-deleted (same
-// tombstone rule as Claim, WL-SPEC-75 §12), or if actorID does not name an actor.
+// tombstone rule as Claim, WL-REQ-117), or if actorID does not name an actor.
 func (s *Store) EnqueueInstruction(ctx context.Context, taskID, actorID, body string) (*model.Instruction, error) {
 	extID, err := randomExternalID()
 	if err != nil {

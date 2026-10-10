@@ -13,21 +13,21 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// DomainEvent is one emittable event type (WL-SPEC-77 §15): it knows its
+// DomainEvent is one emittable event type (WL-RULE-179): it knows its
 // type curie, its deterministic external id, and its JSON-LD payload.
 type DomainEvent interface {
 	EventType() string
 	// ExternalID is <type>:<subject>:<version> — what makes a retried
-	// request idempotent at the log (WL-SPEC-77 §15).
+	// request idempotent at the log (WL-RULE-179).
 	ExternalID() string
 	// Properties returns the payload minus @context/@type/@id, keyed by
 	// ontology property curie.
 	Properties() map[string]any
 }
 
-// DocumentSubmitted records a document entering review (WL-SPEC-77 §15).
+// DocumentSubmitted records a document entering review (WL-RULE-179).
 type DocumentSubmitted struct {
-	Doc     string // subject IRI, e.g. wlid:doc/spec-worklode-025 (WL-SPEC-77 §5)
+	Doc     string // subject IRI, e.g. wlid:doc/spec-worklode-025 (WL-REQ-166)
 	Actor   string // actor id; rendered wlid:agent/<id>
 	At      time.Time
 	Version int
@@ -48,7 +48,7 @@ func (e DocumentSubmitted) Properties() map[string]any {
 }
 
 // DocumentAccepted records a document's status transitioning to accepted
-// (WL-SPEC-77 §15).
+// (WL-RULE-179).
 type DocumentAccepted struct {
 	Doc      string
 	Actor    string
@@ -75,7 +75,7 @@ func (e DocumentAccepted) Properties() map[string]any {
 
 // Emit validates ev's payload against the generated property set and
 // records it through the store in one transaction with apply — the same
-// seam every other write uses (WL-SPEC-77 §15: an event that could commit without
+// seam every other write uses (WL-RULE-179: an event that could commit without
 // its change is a log that lies).
 func Emit(ctx context.Context, st *store.Store, source string, ev DomainEvent,
 	apply func(tx *sql.Tx, eventID int64) error) (int64, bool, error) {
@@ -92,7 +92,7 @@ func Emit(ctx context.Context, st *store.Store, source string, ev DomainEvent,
 			// Set after the merge, unconditionally: a DomainEvent whose
 			// Properties() included one of these keys (validatePayload
 			// allows them — they're in baseProperties) must never override
-			// the id WL-SPEC-77 §15 mandates.
+			// the id WL-RULE-179 mandates.
 			full["@context"] = "https://worklode.io/ns/ontology#"
 			full["@type"] = ev.EventType()
 			full["@id"] = iri.CURIE(iri.Event(id))
@@ -103,7 +103,7 @@ func Emit(ctx context.Context, st *store.Store, source string, ev DomainEvent,
 // validatePayload checks that keys is a subset of the base properties plus
 // typ's per-type properties, and that every per-type property for typ is
 // present. A missing property fails at emit time (compile-time coverage
-// comes from the struct; this is the runtime half, WL-SPEC-77 §15).
+// comes from the struct; this is the runtime half, WL-RULE-179).
 func validatePayload(typ string, keys []string) error {
 	extra, ok := payloadProperties[typ]
 	if !ok {

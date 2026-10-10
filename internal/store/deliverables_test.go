@@ -47,7 +47,7 @@ func deliverableStore(t *testing.T) *Store {
 	return s
 }
 
-// TestCreateDeliverableAllocatesPerProjectOrdinals checks WL-SPEC-75 §13.4's id
+// TestCreateDeliverableAllocatesPerProjectOrdinals checks WL-REQ-122's id
 // form: a deliverable draws from its project's own DEL counter, so the first
 // is COW-DEL-1 and the numbering is independent of the task counter and of
 // every other project.
@@ -81,7 +81,7 @@ func TestCreateDeliverableAllocatesPerProjectOrdinals(t *testing.T) {
 }
 
 // TestCreateDeliverableStoresFields checks the three descriptive fields spec
-// WL-SPEC-75 §13.3 allows, trimmed, plus the creator and timestamps — and that a
+// WL-RULE-121 allows, trimmed, plus the creator and timestamps — and that a
 // re-read returns the same record.
 func TestCreateDeliverableStoresFields(t *testing.T) {
 	t.Parallel()
@@ -153,7 +153,7 @@ func TestCreateDeliverableRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestCreateDeliverableByLabelMintsSelector covers WL-SPEC-75 §13.3's label form:
+// TestCreateDeliverableByLabelMintsSelector covers WL-RULE-121's label form:
 // the project key and title mint a stable label, which routes only through
 // the label selector and is projected instead of an artifact address.
 func TestCreateDeliverableByLabelMintsSelector(t *testing.T) {
@@ -317,7 +317,7 @@ func TestCreateDeliverableLabelRejectsConcurrentDuplicate(t *testing.T) {
 }
 
 // TestCreateDeliverableMilestone checks that a declared milestone attach
-// (WL-SPEC-75 §13.2) is stored, a cross-project or unknown milestone is
+// (WL-REQ-120) is stored, a cross-project or unknown milestone is
 // ErrInvalidInput, and neither rejected create burns an ordinal.
 func TestCreateDeliverableMilestone(t *testing.T) {
 	t.Parallel()
@@ -399,7 +399,7 @@ func TestListDeliverables(t *testing.T) {
 }
 
 // TestSetDeliverableMilestone mirrors TestUpdateTaskMilestone for the
-// deliverable side of WL-SPEC-75 §13.2: a same-project attach is stored and bumps
+// deliverable side of WL-REQ-120: a same-project attach is stored and bumps
 // updated_at, a cross-project or unknown milestone is refused, and detaching
 // (milestone "") is always legal.
 func TestSetDeliverableMilestone(t *testing.T) {
@@ -450,7 +450,7 @@ func TestSetDeliverableMilestone(t *testing.T) {
 		t.Fatalf("updated_at after attach = %v, want %v", got.UpdatedAt, attachAt)
 	}
 
-	// WL-SPEC-75 §13.4: containment never crosses a project boundary.
+	// WL-REQ-122: containment never crosses a project boundary.
 	if err := set(attachAt, d2.ID, mile.ID); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("cross-project attach: got %v, want ErrInvalidInput", err)
 	}
@@ -461,7 +461,7 @@ func TestSetDeliverableMilestone(t *testing.T) {
 		t.Fatalf("unknown deliverable: got %v, want ErrNotFound", err)
 	}
 
-	// Detach is always legal (WL-SPEC-75 §13.2), and also bumps updated_at.
+	// Detach is always legal (WL-REQ-120), and also bumps updated_at.
 	detachAt := attachAt.Add(time.Minute)
 	if err := set(detachAt, d1.ID, ""); err != nil {
 		t.Fatalf("detach: %v", err)
@@ -488,7 +488,7 @@ func reportDeliverableState(s *Store, deliverableID, state, source, actorID, not
 	return err
 }
 
-// TestReportDeliverableStateWithoutDeclaration pins WL-SPEC-75 §13.3's user report on
+// TestReportDeliverableStateWithoutDeclaration pins WL-RULE-121's user report on
 // a deliverable that declares no address: the evidence lands against
 // artifact_uri = ” and the projection surfaces it, because the entity itself
 // is the subject when the state change has no address.

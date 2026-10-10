@@ -979,7 +979,7 @@ func TestReportProjectSessionUsageUnknownProject(t *testing.T) {
 }
 
 // An unknown agent or an empty external session id are rejected before any
-// project lookup or write, per WL-SPEC-73 §8.
+// project lookup or write, per WL-REQ-38.
 func TestReportProjectSessionUsageRejectsInvalidInput(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -1333,7 +1333,7 @@ func TestReportProjectSessionUsageMovesOverheadBackToATask(t *testing.T) {
 
 // A task named in the classification that this actor never opened a session
 // for cannot be billed, but the tokens were still spent: they land in
-// overhead rather than being dropped (WL-SPEC-73 §8).
+// overhead rather than being dropped (WL-REQ-38).
 func TestReportProjectSessionUsageUnreachableTaskBillsToOverhead(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)

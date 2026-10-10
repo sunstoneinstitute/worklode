@@ -14,10 +14,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// typedID matches WL-SPEC-77 §7's <KEY>-<TYPE>-<n> grammar (generalized by WL-SPEC-75
+// typedID matches WL-REQ-168's <KEY>-<TYPE>-<n> grammar (generalized by WL-SPEC-75
 // §13.4 to plans, milestones and deliverables), with an optional #sec- fragment
 // for the SPEC case. It is checked before taskID: a document reference
-// must never parse as a task id (WL-SPEC-77 §7).
+// must never parse as a task id (WL-REQ-168).
 var typedID = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-([A-Z][A-Z0-9]*)-(\d+(?:-\d+)?)(#sec-[\w.\-]+)?$`)
 
 // taskID matches a full task id ("WL-12"); bareTaskNumber (scope.go) covers
@@ -59,7 +59,7 @@ type showTarget struct {
 //
 // The last arm routes every remaining doc-ref shape — a path, a filename, a
 // number-plus-slug form, a bare slug — to resolveDocRef, which owns that
-// grammar (WL-SPEC-78 §2); classify only recognizes the silhouette. A bare number
+// grammar (WL-REQ-192); classify only recognizes the silhouette. A bare number
 // is checked as a task first, so `lode show 45` stays task 45 — spec 45 is
 // `--spec 45` or `WL-SPEC-45` (the grammar collision WL-129 records).
 func classify(arg string) showTarget {
@@ -102,7 +102,7 @@ var docRefShape = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 var showKinds = []string{"task", "spec", "plan", "milestone", "project", "deliverable"}
 
 // showOrdinalShape validates a kind flag's value against its ordinal shape:
-// every kind takes a bare integer, plans included since WL-SPEC-75 §13.4 put them on
+// every kind takes a bare integer, plans included since WL-REQ-122 put them on
 // their project's sequence. project has no entry here — any non-empty string
 // is a valid slug/id — and is checked separately.
 var showOrdinalShape = map[string]*regexp.Regexp{
@@ -300,7 +300,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 // through its form 3 (and so kind-checks there). When the key is unknown
 // there is no shorthand to build, so the ref falls back to the bare number
 // form (form 2) — legitimate for a flag, where the equivalent positional
-// shorthand (WL-SPEC-6) would instead get WL-SPEC-78 §3.2's tier-3 "unresolved"
+// shorthand (WL-SPEC-6) would instead get WL-REQ-199's tier-3 "unresolved"
 // treatment for an unknown key. Either way expectedKind is passed through to
 // runDocShow, which verifies it against the resolved document's kind — so a
 // keyless --plan on a spec (or vice versa) still gets the KindMismatchError,
@@ -407,7 +407,7 @@ func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline
 		return nil
 	}
 	// The rule's in-force amendments, folded in beneath its text
-	// (WL-SPEC-77 §4).
+	// (WL-REQ-165).
 	blocks, pending, err := designdoc.NewInliner(ruleFetcher(cmd.Context(), c)).RuleAmendments(&rule)
 	if err != nil {
 		return err
@@ -416,7 +416,7 @@ func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline
 	return nil
 }
 
-// runRuleClosure renders a rule's context closure (WL-SPEC-77 §4c).
+// runRuleClosure renders a rule's context closure (WL-REQ-1367).
 func runRuleClosure(cmd *cobra.Command, ref string) error {
 	c, err := newAPIClient()
 	if err != nil {

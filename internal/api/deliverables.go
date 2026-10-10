@@ -1,4 +1,4 @@
-// deliverables.go serves WL-SPEC-75 §13.3's deliverable over the JSON API and
+// deliverables.go serves WL-RULE-121's deliverable over the JSON API and
 // holds the validation and creation path the cockpit's web form shares with
 // it (see webform.go), so a deliverable declared in a browser and one
 // declared by an API client are the same write, recorded the same way, and
@@ -21,7 +21,7 @@ import (
 
 // Field bounds for a declared deliverable. They exist to keep a stray paste
 // out of the database and out of a cockpit list row, not to express domain
-// meaning — WL-SPEC-75 §13.3 puts no length on the three descriptive fields.
+// meaning — WL-RULE-121 puts no length on the three descriptive fields.
 const (
 	maxDeliverableName        = 200
 	maxDeliverableDescription = 4000
@@ -33,7 +33,7 @@ const (
 // cleaned input or a message naming the one thing to fix. Shared by the JSON
 // handler and the web form so the two surfaces cannot drift into accepting
 // different deliverables. milestone is trimmed only — existence and
-// same-project containment (WL-SPEC-75 §13.2) are a store.CreateDeliverable check, not
+// same-project containment (WL-REQ-120) are a store.CreateDeliverable check, not
 // a validator concern.
 func validateDeliverable(projectID, name, description, rawURL, artifact string, label bool, milestone, createdBy string) (store.DeliverableInput, string) {
 	in := store.DeliverableInput{
@@ -107,7 +107,7 @@ func validateArtifacts(artifacts []string) string {
 // from ("cli" for the JSON API, "web" for a cockpit form).
 //
 // It also materializes the review lanes the project's stamped approval flow
-// demands of the new deliverable (WL-SPEC-75 §13.6), in the same transaction that
+// demands of the new deliverable (WL-REQ-124), in the same transaction that
 // records the creation. The hook lives here rather than in a handler so both
 // surfaces get it: a deliverable declared in a browser owes the same reviews
 // as one declared by an API client. A project with no snapshot is untouched.
@@ -201,7 +201,7 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 }
 
 // reportDeliverableState is the write both report surfaces share: one
-// recorded event whose apply files user-reported evidence (WL-SPEC-75 §13.3), with
+// recorded event whose apply files user-reported evidence (WL-RULE-121), with
 // the source naming the surface the person typed into. It counts the attempt
 // on worklode_deliverable_reports_total itself, so neither caller can forget
 // to, and returns the store's error for the caller to map to its own protocol.
@@ -230,7 +230,7 @@ func validReportState(state string) (bool, string) {
 }
 
 // reportDeliverable handles POST /api/v1/deliverables/{id}/report: a person
-// filing the state they see (WL-SPEC-75 §13.3). It writes evidence, never a column on
+// filing the state they see (WL-RULE-121). It writes evidence, never a column on
 // the deliverable, and the evidence is user_reported — so the read projection
 // keeps saying that a person claimed this rather than that anything observed
 // it.

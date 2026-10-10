@@ -67,7 +67,7 @@ func escalateFixture(t *testing.T, h http.Handler, token string, specSlugs ...st
 }
 
 // TestEscalateTaskToPlan is the default target: no --doc, so the escalation
-// lands on the plan the task was minted from (WL-SPEC-77 §10).
+// lands on the plan the task was minted from (WL-REQ-171).
 func TestEscalateTaskToPlan(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)

@@ -1,6 +1,6 @@
 //go:build e2e
 
-// crew_test.go proves the whole Crew journey (spec 029 §6.1, spec 032 §6)
+// crew_test.go proves the whole Crew journey (spec 029 §6.1, WL-REQ-343)
 // end to end, through public surfaces only: the bearer-token API and the
 // read-only web UI. It never calls a store writer directly.
 package e2e

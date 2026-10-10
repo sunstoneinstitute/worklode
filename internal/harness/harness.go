@@ -1,5 +1,5 @@
 // Package harness holds one adapter per coding-agent harness plus a registry
-// (WL-SPEC-80 §5). An adapter is a table of locations and event names; the
+// (WL-REQ-274). An adapter is a table of locations and event names; the
 // behaviour behind them is always `lode-hook <event>`, so no adapter ever
 // introduces a second coordination model.
 package harness
@@ -15,7 +15,7 @@ const (
 )
 
 // Event is Worklode's lifecycle vocabulary. PreCommit is deliberately not an
-// adapter concern: the git hook covers it for every harness (WL-SPEC-80 §5.4).
+// adapter concern: the git hook covers it for every harness (WL-REQ-278).
 type Event string
 
 const (
@@ -49,7 +49,7 @@ type SkillTarget struct {
 
 // HookInstall reports what one adapter's InstallHooks wrote. Unbound names
 // the Worklode events this harness cannot express — degraded coverage,
-// never an install failure (WL-SPEC-80 §5).
+// never an install failure (WL-REQ-274).
 type HookInstall struct {
 	Path    string
 	Bound   []string // harness-native event names actually bound
@@ -78,7 +78,7 @@ type StatusLineAction struct {
 	Action string // ActionInstalled | ActionKept | ActionRemoved | ActionNone
 }
 
-// Harness is one coding agent's integration surface (WL-SPEC-80 §5).
+// Harness is one coding agent's integration surface (WL-REQ-274).
 type Harness interface {
 	ID() string
 	// Detect reports whether this harness is configured for repoDir or for
@@ -94,7 +94,7 @@ type Harness interface {
 }
 
 // StatusLiner is implemented by adapters whose harness has a status-line slot
-// that takes a command (WL-SPEC-80 §6). Only claude-code has one in v1, so it
+// that takes a command (WL-REQ-281). Only claude-code has one in v1, so it
 // is an optional interface rather than part of Harness: an adapter without a
 // status line should not have to implement two no-op methods.
 //

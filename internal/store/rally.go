@@ -69,7 +69,7 @@ func (s *Store) ActiveRally(ctx context.Context, projectID string) (*model.Task,
 }
 
 // DraftRally returns projectID's draft rally, or ErrNotFound when it has
-// none — the rally WL-SPEC-85 §4's Rally button adds to. It is not counted
+// none — the rally WL-REQ-1337's Rally button adds to. It is not counted
 // under worklode_rally_reads_total: that counter is about the active rally,
 // the one that steers ranking.
 func (s *Store) DraftRally(ctx context.Context, projectID string) (*model.Task, error) {
@@ -172,7 +172,7 @@ func rallyUniqueConflict(err error, taskID string) error {
 }
 
 // EnsureDraftRally returns the project's draft rally, creating "Rally
-// <YYYY-MM-DD>" when it has none (WL-SPEC-85 §4). The page never makes a
+// <YYYY-MM-DD>" when it has none (WL-REQ-1337). The page never makes a
 // second one, and neither does this: the read comes first, and where two
 // transactions both read none, migration 0072's partial unique index is what
 // decides between them — the loser gets rallyUniqueConflict's refusal out of
@@ -199,8 +199,8 @@ func EnsureDraftRally(tx *sql.Tx, now time.Time, projectID, actorID string, even
 }
 
 // AddRallyMembers adds each task to the rally as a 'blocks' edge, the only
-// edge a rally carries (WL-SPEC-75 §8), and reports how many edges were new.
-// Adding is set-like (WL-SPEC-85 §4): a task already in the rally, or named twice
+// edge a rally carries (WL-REQ-97), and reports how many edges were new.
+// Adding is set-like (WL-REQ-1337): a task already in the rally, or named twice
 // in one call, is added once.
 //
 // The membership it already holds is read first rather than letting the
@@ -247,19 +247,19 @@ func AddRallyMembers(tx *sql.Tx, now time.Time, rallyID string, taskIDs []string
 	return added, nil
 }
 
-// AcceptDecisionTitle is the title of the decision task WL-SPEC-85 §4 mints for a
+// AcceptDecisionTitle is the title of the decision task WL-REQ-1337 mints for a
 // draft plan a rally wants accepted. The mint and the page name it the same
 // way, so the guard that suppresses a second one recognises the first.
 func AcceptDecisionTitle(planRef string) string { return "Accept " + planRef + "?" }
 
 // MintAcceptDecision mints the decision task that asks whether a draft plan
-// should be accepted (WL-SPEC-85 §4, case 3), with the one yes/no question that
+// should be accepted (WL-REQ-1337, case 3), with the one yes/no question that
 // makes it answerable. The rally holds the prompt; accepting the plan stays
-// the owner's act through WL-SPEC-85 §4, so answering this changes no document.
+// the owner's act through WL-REQ-1337, so answering this changes no document.
 //
-// WL-SPEC-85 §4 puts the prompt in the plan owner's queue, so the task is assigned to
+// WL-REQ-1337 puts the prompt in the plan owner's queue, so the task is assigned to
 // them — but only when they are on the project's crew, which is the whole of
-// what may hold a task (WL-SPEC-75 §13.5). An owner who is not gets an unassigned
+// what may hold a task (WL-REQ-123). An owner who is not gets an unassigned
 // prompt rather than a failed mint: the rally still carries the question, and
 // the answer is to add them to the crew, not to refuse the rally.
 //

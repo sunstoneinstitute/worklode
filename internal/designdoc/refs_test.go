@@ -8,7 +8,7 @@ import (
 
 // refsFixture carries every relation field the enumerator walks, including the
 // inverse spellings, plus the four retired amendment and supersession keys,
-// which the walk ignores (WL-SPEC-77 §7).
+// which the walk ignores (WL-REQ-168).
 const refsFixture = `---
 status: accepted
 covers:
@@ -140,7 +140,7 @@ func TestFrontmatterRefsWalksDefers(t *testing.T) {
 }
 
 // The defers entry rides along with its reference: it is the one relation
-// carrying the named owner (WL-SPEC-78 §4).
+// carrying the named owner (WL-RULE-202).
 func TestFrontmatterRefsCarriesDeferralEntry(t *testing.T) {
 	doc, err := Parse([]byte(defersFixture))
 	if err != nil {
@@ -227,7 +227,7 @@ func TestFrontmatterRefsNil(t *testing.T) {
 }
 
 // ActingRels is the acting-direction set; the inverse spellings are read back
-// off the acting row (WL-SPEC-77 §7) and must stay out of it.
+// off the acting row (WL-REQ-168) and must stay out of it.
 func TestActingRelsExcludesInverseSpellings(t *testing.T) {
 	for _, rel := range ActingRels {
 		if _, inverse := InverseOf[rel]; inverse {
@@ -251,7 +251,7 @@ func TestActingRelsExcludesInverseSpellings(t *testing.T) {
 }
 
 // StoredRels is what store and the importer read: every stored row runs from
-// its declaring document, so it is exactly ActingRels (WL-SPEC-77 §8).
+// its declaring document, so it is exactly ActingRels (WL-REQ-169).
 func TestStoredRelsIsActingRels(t *testing.T) {
 	if !slices.Equal(StoredRels, ActingRels) {
 		t.Errorf("StoredRels = %v, want ActingRels %v", StoredRels, ActingRels)

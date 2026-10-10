@@ -312,7 +312,7 @@ func TestClientFollowUpUnfollow(t *testing.T) {
 // TestClientDuplicateUnduplicate checks Duplicate issues POST
 // /api/v1/tasks/WL-2/edges with body {"to":"WL-1","type":"duplicate_of"} and
 // Unduplicate issues the same body with DELETE. It also pins the "no
-// absorption" rule of WL-SPEC-75 §4 at the surface an agent actually calls: the
+// absorption" rule of WL-REQ-87 at the surface an agent actually calls: the
 // canonical task is untouched by the marking.
 func TestClientDuplicateUnduplicate(t *testing.T) {
 	_, c, _ := newTestServer(t)

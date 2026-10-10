@@ -10,21 +10,21 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// Outcome classifies one handled event for metrics (WL-SPEC-77 §15).
+// Outcome classifies one handled event for metrics (WL-RULE-179).
 type Outcome string
 
 const (
 	OutcomeApplied    Outcome = "applied"
 	OutcomeSuppressed Outcome = "suppressed"
 	// OutcomeError is recorded by Run when a handler returns an error; a
-	// Handler never returns it itself. WL-SPEC-77 §15 fixes the set at these three.
+	// Handler never returns it itself. WL-RULE-179 fixes the set at these three.
 	OutcomeError Outcome = "error"
 )
 
 // Handler processes one event. Returning an error stops the batch: the
 // prefix already handled is acked, the failed event is redelivered on the
 // next poll, and in-order delivery means it blocks everything behind it —
-// deliberate (at-least-once, no DLQ; WL-SPEC-77 §6 keeps retention/partitioning
+// deliberate (at-least-once, no DLQ; WL-REQ-167 keeps retention/partitioning
 // out of scope). The error surfaces in the outcome="error" counter and in
 // the lag gauge.
 type Handler func(ctx context.Context, ev store.Event) (Outcome, error)
@@ -34,7 +34,7 @@ type Options struct {
 	Store     *store.Store
 	Name      string // subscriber name; the row must exist (EnsureEventSubscriber)
 	Handler   Handler
-	Poll      time.Duration // default 1s (WL-SPEC-77 §15: polling, deliberately no LISTEN/NOTIFY)
+	Poll      time.Duration // default 1s (WL-RULE-179: polling, deliberately no LISTEN/NOTIFY)
 	LockRetry time.Duration // default 15s: how often a standby retries the lock
 	BatchSize int           // default 100
 	Metrics   *Metrics      // nil-safe
@@ -127,7 +127,7 @@ func Run(ctx context.Context, o Options) error {
 				log.Error("event loop: acquire subscriber lock", "err", err)
 			case !ok:
 				// The steady state for every replica but one: another
-				// consumer holds the stream (WL-SPEC-77 §15).
+				// consumer holds the stream (WL-RULE-179).
 				log.Debug("event loop: subscriber held elsewhere, standing by")
 			default:
 				lock = l
@@ -247,7 +247,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 }
 
-// outcomeLabel bounds the outcome label to the set WL-SPEC-77 §15 fixes: a
+// outcomeLabel bounds the outcome label to the set WL-RULE-179 fixes: a
 // handler that returns anything but "suppressed" applied its event.
 func outcomeLabel(o Outcome) string {
 	if o == OutcomeSuppressed {

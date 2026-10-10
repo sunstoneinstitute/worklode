@@ -237,7 +237,7 @@ func applySupersede(tx *sql.Tx, now time.Time, actor string, eventID int64, line
 
 // resolveRuleRef resolves one map ref (R7): "WL-RULE-12" by project key and
 // number, which may name another project's rule (S32), or
-// "WL-SPEC-4#sec-2" to the rule that document arranges at that anchor.
+// "WL-REQ-77" to the rule that document arranges at that anchor.
 func resolveRuleRef(tx *sql.Tx, project, ref string) (int64, error) {
 	if c, ok := designdoc.ParseRuleRef(ref); ok {
 		return RuleIDByRef(tx, c.Key, c.Number)
@@ -266,7 +266,7 @@ func resolveRuleRef(tx *sql.Tx, project, ref string) (int64, error) {
 // ruleAtAnchor is the rule a document arranges at anchor, after
 // ensureRules splits a document that predates the rule tables. A plan
 // contains no rules, so a plan anchor names none, and a spec heading's anchor
-// names none either (WL-SPEC-77 §19.1).
+// names none either (WL-REQ-1295).
 // The sibling increment 4a ships store.RuleAtSection for the same lookup;
 // whichever branch lands second deletes one of the two (R7).
 func ruleAtAnchor(tx *sql.Tx, docID int64, anchor string) (int64, bool, error) {

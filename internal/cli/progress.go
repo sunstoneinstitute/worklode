@@ -1,8 +1,8 @@
 // progress.go is the client and table for a project's derived progress
-// (WL-SPEC-85 §2): what each spec says, and how much of it exists. The table
+// (WL-REQ-1335): what each spec says, and how much of it exists. The table
 // prints the same model.ProjectProgress the cockpit's Progress page draws, so
 // an agent reads what a person sees. It shows no completion percentage —
-// WL-SPEC-82 §5.3 forbids one.
+// WL-REQ-339 forbids one.
 package cli
 
 import (
@@ -23,7 +23,7 @@ func (c *Client) ProjectProgress(ctx context.Context, id string) (model.ProjectP
 		http.MethodGet, "/api/v1/projects/"+url.PathEscape(id)+"/progress", nil, "progress")
 }
 
-// progressGroupLabels and progressGroupHelp are WL-SPEC-85 §2's group names and the
+// progressGroupLabels and progressGroupHelp are WL-REQ-1335's group names and the
 // one line saying why the group ranks where it does — the same words the page
 // prints above each group.
 var progressGroupLabels = map[string]string{
@@ -38,7 +38,7 @@ var progressGroupHelp = map[string]string{
 	"built":     "nothing to do",
 }
 
-// ProgressTable prints one spec per line under its WL-SPEC-85 §2 group header: the
+// ProgressTable prints one spec per line under its WL-REQ-1335 group header: the
 // spec's reference and title, the count of its sections in each state, and
 // the act that moves it next. An empty group is omitted rather than printed
 // as a heading with nothing under it.
@@ -69,9 +69,9 @@ func ProgressTable(w io.Writer, p model.ProjectProgress) {
 	}
 }
 
-// progressStates renders a spec's section counts by state, in the WL-SPEC-85 §3 bar
+// progressStates renders a spec's section counts by state, in the WL-REQ-1336 bar
 // order, omitting a state the spec has none of. Sections in "bound" are not
-// owed (WL-SPEC-85 §2) and so are not counted — the same rule the page's strip draws
+// owed (WL-REQ-1335) and so are not counted — the same rule the page's strip draws
 // by.
 func progressStates(sections []model.ProgressSection) string {
 	counts := make(map[string]int, len(progress.BarOrder))

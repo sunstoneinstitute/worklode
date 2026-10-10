@@ -424,7 +424,7 @@ wl:ruleKind a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:domain wl:Rule ;
     rdfs:range skos:Concept ;
     rdfs:comment """The rule's kind, from wlc:RuleKind: wlc:requirement, wlc:catalogue,
-        wlc:invariant, wlc:definition or wlc:principle (WL-SPEC-77 §4). A plan covers
+        wlc:invariant, wlc:definition or wlc:principle (WL-REQ-165). A plan covers
         requirements and catalogues; an invariant governs every task in its project; a
         definition and a principle are read through a rule's context closure (§4c).
         wlc:informative is retired and reads as a principle until the migration (§19.7).""" .
@@ -456,7 +456,7 @@ wl:refines a owl:ObjectProperty ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
     rdfs:comment """Subject narrows the object, a principle or a wider rule. In the subject's
-        context closure (WL-SPEC-77 §4c).""" .
+        context closure (WL-REQ-1367).""" .
 
 wl:refinedBy a owl:ObjectProperty ;
     skos:definition "is refined by" ;
@@ -465,7 +465,7 @@ wl:refinedBy a owl:ObjectProperty ;
     owl:inverseOf wl:refines ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
-    rdfs:comment "Inferred from wl:refines, never stored (WL-SPEC-77 §8.1)." .
+    rdfs:comment "Inferred from wl:refines, never stored (WL-REQ-1288)." .
 
 wl:needs a owl:ObjectProperty ;
     skos:definition "needs" ;
@@ -475,7 +475,7 @@ wl:needs a owl:ObjectProperty ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
     rdfs:comment """Subject cannot be applied without a fact or term the object states, and does
-        not narrow the object. In the subject's context closure (WL-SPEC-77 §4c).""" .
+        not narrow the object. In the subject's context closure (WL-REQ-1367).""" .
 
 wl:neededBy a owl:ObjectProperty ;
     skos:definition "is needed by" ;
@@ -484,7 +484,7 @@ wl:neededBy a owl:ObjectProperty ;
     owl:inverseOf wl:needs ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
-    rdfs:comment "Inferred from wl:needs, never stored (WL-SPEC-77 §8.1)." .
+    rdfs:comment "Inferred from wl:needs, never stored (WL-REQ-1288)." .
 
 wl:constrains a owl:ObjectProperty ;
     skos:definition "constrains" ;
@@ -503,7 +503,7 @@ wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
     rdfs:comment """Two rules state one fact with different values. A finding against the spec
-        until the rule that does not own the fact is fixed (WL-SPEC-77 §4c).""" .
+        until the rule that does not own the fact is fixed (WL-REQ-1367).""" .
 
 wl:references a owl:ObjectProperty ;
     skos:definition "references" ;
@@ -514,7 +514,7 @@ wl:references a owl:ObjectProperty ;
     rdfs:range wl:Rule ;
     rdfs:comment """A textual pointer from the rule to another rule, derived from the rule text on
         every version and replaced with it (S26), or written by hand for context that helps a
-        reader and is not needed to apply the rule. Outside the context closure (WL-SPEC-77 §4c).""" .
+        reader and is not needed to apply the rule. Outside the context closure (WL-REQ-1367).""" .
 
 wl:referencedBy a owl:ObjectProperty ;
     skos:definition "is referenced by" ;
@@ -523,7 +523,7 @@ wl:referencedBy a owl:ObjectProperty ;
     owl:inverseOf wl:references ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
-    rdfs:comment "Inferred from wl:references, never stored (WL-SPEC-77 §8.1)." .
+    rdfs:comment "Inferred from wl:references, never stored (WL-REQ-1288)." .
 
 wl:defers a owl:ObjectProperty ;
     skos:definition "defers" ;
@@ -645,7 +645,7 @@ wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Task ;
     rdfs:comment """This task needs that task done first, stored as a task_edges `dependsOn` row
-        from the dependent task (WL-SPEC-75 §4). Transitive, so reachability is a SPARQL property path (?t wl:dependsOn+ ?x) with no
+        from the dependent task (WL-REQ-87). Transitive, so reachability is a SPARQL property path (?t wl:dependsOn+ ?x) with no
         reasoner, and CI/owlrl proves the closure. Type-homogeneous by ADR-0004.""" .
 
 wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
@@ -859,7 +859,7 @@ wl:layer a owl:AnnotationProperty ;
 
 wl:edgeOrigin a owl:AnnotationProperty ;
     rdfs:range skos:Concept ;
-    rdfs:comment "Marks an edge property wlc:declared or wlc:inferred (WL-SPEC-77 §8.1)." .
+    rdfs:comment "Marks an edge property wlc:declared or wlc:inferred (WL-REQ-1288)." .
 
 wl:storedAs a owl:AnnotationProperty ;
     rdfs:range xsd:string ;
@@ -945,7 +945,7 @@ dct:hasPart wl:edgeOrigin wlc:inferred ;
 #                              ontology.1-2.ttl companion (cf. WL-SPEC-79).
 #   wl:fullyImplements,        never minted (WL-SPEC-77): declared coverage is a
 #   wl:partiallyImplements     second source of truth that goes stale.
-#   wl:Coverage,               retired (WL-SPEC-78 §4.6): a covers edge means
+#   wl:Coverage,               retired (WL-REQ-208): a covers edge means
 #   wl:coverageLevel,          the plan builds the whole rule, so there is no
 #   wl:completedWith,          level to qualify it with.
 #   wlc:CoverageLevel

@@ -10,7 +10,7 @@ type TaskGovernance struct {
 	Current     int    `json:"current"`      // the rule's current version
 	Heading     string `json:"heading"`
 	Status      string `json:"status"`
-	Source      string `json:"source"`           // plan | manual | gate, or invariant when derived from the project (WL-SPEC-77 §4)
+	Source      string `json:"source"`           // plan | manual | gate, or invariant when derived from the project (WL-REQ-165)
 	Pinned      int    `json:"pinned,omitempty"` // the version the link is pinned to, 0 when it follows the newest
 	URL         string `json:"url"`              // canonical rule page, with /<ver> when pinned (S10, S20)
 

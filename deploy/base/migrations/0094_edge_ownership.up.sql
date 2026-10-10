@@ -1,4 +1,4 @@
--- Every edge row is owned by its from end (WL-SPEC-77 §8). Plan ordering is
+-- Every edge row is owned by its from end (WL-REQ-169). Plan ordering is
 -- stored as blockedBy, written by the blocked plan, so declared_by no longer
 -- differs from from_doc and goes. conflictsWith is symmetric and is stored
 -- once per pair.

@@ -47,7 +47,7 @@ func runOpPack(dir, envFile, taskID string, names, declined []string, stdout, st
 	return cmd.Run()
 }
 
-// runSecretsCeremony is the WL-SPEC-74 §10.4 claim-time ceremony: fetch the catalog,
+// runSecretsCeremony is the WL-REQ-71 claim-time ceremony: fetch the catalog,
 // resolve declared ∪ baseline names, take one consent for the non-baseline
 // set, materialize under one op authorization, and record a names-only
 // event. It NEVER fails the claim — every failure degrades to a stderr

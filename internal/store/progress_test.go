@@ -120,7 +120,7 @@ func TestProjectProgress(t *testing.T) {
 	if spec.Ref != "P1-SPEC-66" {
 		t.Errorf("spec Ref = %q, want P1-SPEC-66", spec.Ref)
 	}
-	// Status and owner ride along for WL-SPEC-85 §4's Accept button, which is
+	// Status and owner ride along for WL-REQ-1337's Accept button, which is
 	// offered on a draft document and enabled only for its owner.
 	if spec.Status != "draft" || spec.Owner != "stig" {
 		t.Errorf("spec Status/Owner = %q/%q, want draft/stig", spec.Status, spec.Owner)
@@ -181,7 +181,7 @@ func TestProjectProgress(t *testing.T) {
 }
 
 // TestProjectProgressPositionFromPRAndCI: an open task carrying a PR whose
-// head SHA has a running CI run reports the checks rung of WL-SPEC-85 §3's ladder.
+// head SHA has a running CI run reports the checks rung of WL-REQ-1336's ladder.
 func TestProjectProgressPositionFromPRAndCI(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -222,7 +222,7 @@ func TestProjectProgressPositionFromPRAndCI(t *testing.T) {
 	}
 }
 
-// TestProjectProgressPositionQueued covers WL-SPEC-85 §3:
+// TestProjectProgressPositionQueued covers WL-REQ-1336:
 // a task whose PR has entered the merge queue reads as "queued for merge"
 // ahead of any PR/CI rung, and a task whose PR has not is unaffected.
 func TestProjectProgressPositionQueued(t *testing.T) {
@@ -278,7 +278,7 @@ func TestProjectProgressPositionQueued(t *testing.T) {
 }
 
 // TestProjectProgressPlanningTask: the open design task about a spec rides
-// along on the read, so the page can draw it as a link instead of WL-SPEC-85 §4's
+// along on the read, so the page can draw it as a link instead of WL-REQ-1337's
 // Plan button. A closed one is not carried — that spec owes planning again.
 func TestProjectProgressPlanningTask(t *testing.T) {
 	t.Parallel()
@@ -616,7 +616,7 @@ func TestProjectProgressSkipsWithdrawnPlans(t *testing.T) {
 func TestProjectProgressInformativeSection(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
-	// No plan: an accepted plan's cover keeps a rule a requirement (WL-SPEC-77 §4).
+	// No plan: an accepted plan's cover keeps a rule a requirement (WL-REQ-165).
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 66, Slug: "066-progress",
 		Body: progressSpecBody, CreatedBy: "stig",

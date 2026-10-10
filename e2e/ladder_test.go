@@ -1,6 +1,6 @@
 //go:build e2e
 
-// ladder_test.go drives spec 025 §8's escalation ladder end to end over
+// ladder_test.go drives WL-REQ-171's escalation ladder end to end over
 // public surfaces only: the gap and fix rungs with their funnel events, an
 // escalation and the second worker that joins it rather than minting a rival,
 // an amendment that leaves an unexecuted covering plan stale and the re-plan
@@ -31,7 +31,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// The three funnel event types 025 §15.5 names. Spelled out rather than
+// The three funnel event types WL-RULE-179 names. Spelled out rather than
 // imported for the reason docLifecycleSubscriberName is: they are the labels
 // an operator graphs the ladder by, so this test must fail if one changes.
 const (
@@ -193,7 +193,7 @@ func taskKind(t *testing.T, ctx context.Context, c *cli.Client, id string) strin
 }
 
 // TestEscalationLadder walks one spec, three plans and two workers through
-// spec 025 §8.
+// WL-REQ-171.
 func TestEscalationLadder(t *testing.T) {
 	ctx := context.Background()
 

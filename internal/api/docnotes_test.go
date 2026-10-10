@@ -7,7 +7,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// TestDocNotes walks POST/GET /api/v1/docs/{id}/notes (WL-SPEC-77 §10): a note
+// TestDocNotes walks POST/GET /api/v1/docs/{id}/notes (WL-REQ-171): a note
 // against a real anchor lands and comes back on the note list and on the
 // document's detail, and an anchor the document does not have is a 422 rather
 // than a stored row nobody would ever meet.

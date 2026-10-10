@@ -11,7 +11,7 @@ import (
 )
 
 // ruleEdgeTypes are the wl: properties a rule edge may carry (S12, S26,
-// S22, WL-SPEC-77 §4). supersedes and wasDerivedFrom reuse dct:replaces and
+// S22, WL-REQ-165). supersedes and wasDerivedFrom reuse dct:replaces and
 // prov:wasDerivedFrom (ns/ontology.ttl's reuse list). supersedes runs new ->
 // old and amends runs amending -> amended; their inverses (supersededBy,
 // amendedBy) are read from the far end and never stored.
@@ -24,7 +24,7 @@ var ruleEdgeTypes = map[string]bool{
 const ruleEdgeTypesList = "refines, needs, constrains, conflictsWith, references, amends, supersedes, wasDerivedFrom"
 
 // ruleEdgeInverses maps each inferred inverse to its declared term. A write
-// naming an inverse is refused, naming the declared term (WL-SPEC-77 §8.1).
+// naming an inverse is refused, naming the declared term (WL-REQ-1288).
 var ruleEdgeInverses = map[string]string{
 	"refinedBy": "refines", "neededBy": "needs", "referencedBy": "references",
 	"supersededBy": "supersedes", "amendedBy": "amends",
@@ -105,7 +105,7 @@ func UnlinkRules(tx *sql.Tx, fromID, toID int64, typ string) error {
 }
 
 // ListDocAmendments lists the amends edges onto the rules a document
-// arranges, in section order then by amending rule (WL-SPEC-77 §4). A
+// arranges, in section order then by amending rule (WL-REQ-165). A
 // plan contains no rules, so a plan has none.
 func (s *Store) ListDocAmendments(ctx context.Context, docID int64) ([]model.DocAmendment, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -199,7 +199,7 @@ func deriveReferences(tx *sql.Tx, project string, ruleID int64, text string) err
 		}
 		var id int64
 		// A plan contains no rules, so a ref to a plan anchor names none, and
-		// a spec heading is not a rule (WL-SPEC-77 §19.1).
+		// a spec heading is not a rule (WL-REQ-1295).
 		err = tx.QueryRow(
 			`SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
 			  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan' AND dc.rule_id IS NOT NULL`, docID, r.Anchor).Scan(&id)

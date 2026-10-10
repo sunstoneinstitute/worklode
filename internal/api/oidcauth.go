@@ -33,7 +33,7 @@ var errActorKindConflict = errors.New("actor id is reserved by a non-human actor
 
 // provisionActor enforces the "user" role and upserts the human actor from the
 // verified claims, syncing the admin flag from the "admin" role, the GitHub
-// username from the githubUsername claim (WL-SPEC-74 §4.3, empty when
+// username from the githubUsername claim (WL-REQ-53, empty when
 // Keycloak asserts none), and the email and groups claims in full (WL-SPEC-75
 // §6.2). It returns the provisioned actor id (the preferred_username). Shared
 // by the token-exchange endpoint and the web callback.

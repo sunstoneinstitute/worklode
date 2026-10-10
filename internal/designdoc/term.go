@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-// TermSlug is a definition rule's term slug (WL-SPEC-77 §4d): its heading
+// TermSlug is a definition rule's term slug (WL-REQ-1368): its heading
 // lowercased, each run of characters other than letters and digits turned
 // into one hyphen, with no hyphen at either end. "Edge Agent" is
 // "edge-agent".

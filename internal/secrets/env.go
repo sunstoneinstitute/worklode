@@ -10,7 +10,7 @@ import (
 // a temp directory or a locale. They are checked before the deny rules, so a
 // deny pattern can never grow far enough to break the plumbing by accident.
 // `SSH_AUTH_SOCK` is deliberately here rather than denied — the Linux keystore
-// (WL-SPEC-74 §10.4) is encrypted to a key held in ssh-agent, and git push over ssh
+// (WL-REQ-71) is encrypted to a key held in ssh-agent, and git push over ssh
 // needs it, so stripping it would break `lode` itself in the child. The git
 // identity variables are here because `AUTHOR` contains `AUTH`: they carry a
 // name and an address, and a child that kept the committer pair but lost the
@@ -31,8 +31,8 @@ var keepPrefixes = []string{"LC_", "XDG_"}
 // denyPrefixes are namespaces that exist to carry an identity, and whose
 // non-credential members select which ambient credential is used (`AWS_PROFILE`
 // picks a key pair out of `~/.aws`). A task that needs one of these declares it
-// (WL-SPEC-74 §10.3) and gets the materialized value injected; inheriting the operator's
-// is the least-privilege failure WL-SPEC-74 §10.5 removes.
+// (WL-REQ-70) and gets the materialized value injected; inheriting the operator's
+// is the least-privilege failure WL-REQ-72 removes.
 var denyPrefixes = []string{
 	"AWS_", "AZURE_", "GCP_", "CLOUDSDK_",
 	"ANTHROPIC_", "OPENAI_",
@@ -58,13 +58,13 @@ var denyTokens = []string{
 
 // CredentialShaped reports whether an inherited environment variable name
 // looks like a credential and must not reach a `lode secret exec` child.
-// Case-insensitive: the secret-name grammar is upper-case only (WL-SPEC-74 §10.1), but
+// Case-insensitive: the secret-name grammar is upper-case only (WL-REQ-68), but
 // an inherited name is whatever the operator's shell exported.
 //
-// The rule is deny-by-shape, not allow-by-list (WL-SPEC-74 §10.5): the child keeps
+// The rule is deny-by-shape, not allow-by-list (WL-REQ-72): the child keeps
 // the operator's environment minus anything credential-shaped. It is therefore
 // best-effort — a credential in a variable named for none of these shapes
-// still passes — and defence in depth over the positive rule that WL-SPEC-74 §10.5
+// still passes — and defence in depth over the positive rule that WL-REQ-72
 // already states, never a substitute for it.
 func CredentialShaped(name string) bool {
 	n := strings.ToUpper(name)
@@ -100,7 +100,7 @@ func CredentialShaped(name string) bool {
 //
 // Stripping names is what makes injected authoritative: execve keeps duplicate
 // entries and getenv returns the first, so appending alone would hand the child
-// the operator's ambient value instead of the task's (WL-SPEC-74 §10.5: "not the
+// the operator's ambient value instead of the task's (WL-REQ-72: "not the
 // operator's shell environment"). injected is appended after both passes, so a
 // materialized name that is itself credential-shaped — most of them are — is
 // unaffected by the deny rules.

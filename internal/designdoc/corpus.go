@@ -20,7 +20,7 @@ type SectionMeta struct {
 	Heading  string
 	Depth    int // 2..6
 	Position int // 0-based document order over the anchored sections
-	// Kind is the section's rule kind (WL-SPEC-77 §4); "" when unknown,
+	// Kind is the section's rule kind (WL-REQ-165); "" when unknown,
 	// which reads as a requirement.
 	Kind string
 }
@@ -45,7 +45,7 @@ type CorpusDoc struct {
 	Status, Title   string
 	Source          []byte          // the full file, frontmatter included
 	FrontmatterJSON json.RawMessage // the YAML header re-encoded as JSON
-	Sections        []SectionMeta   // empty for plans (WL-SPEC-77 §11)
+	Sections        []SectionMeta   // empty for plans (WL-REQ-172)
 	Edges           []EdgeMeta
 	// Number is this document's own corpus number — the <n> a <KEY>-<TYPE>-<n>
 	// shorthand or a bare-number reference names it by (WL-SPEC-78 §2-4) — 0 when
@@ -216,8 +216,8 @@ func sectionMetas(doc *Document, name string) ([]SectionMeta, error) {
 }
 
 // planEdges is a plan's edges: its coverage assertions — the retired
-// `implements` spelling read as `covers` (WL-SPEC-78 §4) — then its defers
-// handoffs (WL-SPEC-78 §4), then its requires.
+// `implements` spelling read as `covers` (WL-RULE-202) — then its defers
+// handoffs (WL-RULE-202), then its requires.
 func planEdges(fm *Frontmatter) []EdgeMeta {
 	return edgeMetas(fm.RefsFor("covers", "defers", "requires"))
 }
@@ -243,7 +243,7 @@ func edgeMetas(refs []Ref) []EdgeMeta {
 // loadPlans loads planDir's documents as CorpusDocs, in two passes: the
 // first parses each file and derives its spec ordinal (from `implements`);
 // the second numbers plan ordinals within each spec-ordinal group, ascending
-// by filename. Plans carry no Sections (WL-SPEC-77 §11).
+// by filename. Plans carry no Sections (WL-REQ-172).
 func loadPlans(planDir string) ([]CorpusDoc, error) {
 	files, err := corpusFilenames(planDir) // already sorted ascending
 	if err != nil {
@@ -255,7 +255,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 	}
 	var plans []pending
 	for _, f := range files {
-		doc, cd, err := loadDoc(planDir, f) // doc.Sections deliberately unused: plans carry none (WL-SPEC-77 §11)
+		doc, cd, err := loadDoc(planDir, f) // doc.Sections deliberately unused: plans carry none (WL-REQ-172)
 		if err != nil {
 			return nil, err
 		}
