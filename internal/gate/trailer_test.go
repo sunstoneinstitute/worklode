@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
 
 func TestParseLineForms(t *testing.T) {
@@ -11,14 +13,9 @@ func TestParseLineForms(t *testing.T) {
 		"Spec: WL-RULE-456":         func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 456 && d.Qualifier == "" },
 		"Spec: WL-RULE-456 amended": func(d Declaration) bool { return d.Rule != nil && d.Qualifier == "amended" },
 		"Spec: WL-RULE-456 fix":     func(d Declaration) bool { return d.Rule != nil && d.Qualifier == "fix" },
-		"Spec: WL-SPEC-4 sec-5": func(d Declaration) bool {
-			return d.Section != nil && d.Section.Anchor == "sec-5" && d.Section.Shorthand.Number == 4
-		},
-		"Spec: WL-SPEC-4#sec-5 amended": func(d Declaration) bool {
-			return d.Section != nil && d.Section.Anchor == "sec-5" && d.Qualifier == "amended"
-		},
-		"Spec: none refactor":      func(d Declaration) bool { return d.None == "refactor" && d.Rule == nil },
-		"  Spec:   none   tests  ": func(d Declaration) bool { return d.None == "tests" },
+		"Spec: WL-REQ-456":          func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 456 },
+		"Spec: none refactor":       func(d Declaration) bool { return d.None == "refactor" && d.Rule == nil },
+		"  Spec:   none   tests  ":  func(d Declaration) bool { return d.None == "tests" },
 	}
 	for line, check := range ok {
 		d, matched, err := ParseLine("Spec:", line)
@@ -31,10 +28,12 @@ func TestParseLineForms(t *testing.T) {
 		}
 	}
 	bad := []string{
-		"Spec: none fix",             // 11 §4: a fix with nothing to cite is refused
-		"Spec: none",                 // no reason
-		"Spec: none later",           // not in the closed list
-		"Spec: WL-SPEC-4",            // a section ref needs an anchor
+		"Spec: none fix",        // WL-REQ-7: a fix with nothing to cite is refused
+		"Spec: none",            // no reason
+		"Spec: none later",      // not in the closed list
+		"Spec: WL-SPEC-4",       // a document is not a rule
+		"Spec: WL-SPEC-4 sec-5", // a section value is refused (WL-REQ-7)
+		"Spec: WL-SPEC-4#sec-5 amended",
 		"Spec: WL-RULE-456 sometime", // unknown qualifier
 		"Spec: 456",
 		"Spec:",
@@ -80,5 +79,37 @@ func TestCheck(t *testing.T) {
 	_, err = Check(cfg, Input{Changed: []string{"internal/cmd/gate.go"}, Texts: []string{"Spec: none fix\n"}})
 	if err == nil {
 		t.Fatal("a malformed trailer fails the check")
+	}
+}
+
+// TestCheckTrailerForms runs the three trailer forms through Check: a rule
+// ref passes, none <reason> passes, a section fails naming the rule it
+// resolves to, or `lode show <doc>#sec-N` when it cannot be resolved
+// (WL-REQ-7).
+func TestCheckTrailerForms(t *testing.T) {
+	cfg := Config{Paths: []string{"internal/**"}, Trailer: "Spec:"}
+	changed := []string{"internal/x.go"}
+	v, err := Check(cfg, Input{Changed: changed, Texts: []string{"Spec: WL-REQ-7\n"}})
+	if err != nil || v.Declaration.String() != "WL-RULE-7" {
+		t.Fatalf("rule ref: %+v %v", v.Declaration, err)
+	}
+	v, err = Check(cfg, Input{Changed: changed, Texts: []string{"Spec: none refactor\n"}})
+	if err != nil || v.Declaration.None != "refactor" {
+		t.Fatalf("none reason: %+v %v", v.Declaration, err)
+	}
+	_, err = Check(cfg, Input{Changed: changed, Texts: []string{"Spec: WL-SPEC-72 sec-4\n"}})
+	var se *SectionError
+	if !errors.As(err, &se) || !strings.Contains(err.Error(), "lode show WL-SPEC-72#sec-4") {
+		t.Fatalf("unresolved section must name lode show <doc>#sec-N: %v", err)
+	}
+	resolve := func(s designdoc.SectionRef) string {
+		if s.Shorthand.Number == 72 && s.Anchor == "sec-4" {
+			return "WL-REQ-7"
+		}
+		return ""
+	}
+	_, err = Check(cfg, Input{Changed: changed, Texts: []string{"Spec: WL-SPEC-72#sec-4 amended\n"}, ResolveSection: resolve})
+	if err == nil || !strings.Contains(err.Error(), "Spec: WL-REQ-7") || strings.Contains(err.Error(), "lode show") {
+		t.Fatalf("resolved section must name its rule ref: %v", err)
 	}
 }
