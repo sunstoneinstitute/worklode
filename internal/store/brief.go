@@ -26,7 +26,7 @@ type Brief struct {
 	Branch       string       // <prefix><id>-<slug>
 	OpenBlockers []model.Task // the open tasks holding this one; only ID/Title/State are populated
 	// BlockingPlans are the plan documents ordered before this task's plan
-	// (WL-SPEC-77 §11) whose work is unfinished. A blocking plan still draft has
+	// (WL-REQ-172) whose work is unfinished. A blocking plan still draft has
 	// minted no task, so it lands here with nothing in OpenBlockers.
 	BlockingPlans []model.DocRef
 	Parent        *model.Task // the task's parent, or nil; only ID/Title/State are populated
@@ -41,7 +41,7 @@ type Brief struct {
 	// screenshot the reporter actually saw; any agent can pull the log.
 	Blobs []model.TaskBlob
 	// StalePlan is the slug of the task's plan document when that plan is
-	// stale (WL-SPEC-77 §10), "" otherwise.
+	// stale (WL-REQ-171), "" otherwise.
 	StalePlan string
 }
 
@@ -60,7 +60,7 @@ type BriefOptions struct {
 // bounded, fixed number of queries — one more only when pins are asked for and
 // the task has some — and never returns unbounded lists.
 //
-// A tombstoned task still briefs — this is a fetch by id, WL-SPEC-75 §12 — and Claim
+// A tombstoned task still briefs — this is a fetch by id, WL-REQ-117 — and Claim
 // still refuses it.
 func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*Brief, error) {
 	t, err := s.GetTask(ctx, taskID)
@@ -129,7 +129,7 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 // "plugin:skill" form hits the qualified registry name exactly, a bare pin
 // hits while it names one skill, and a qualified pin naming a plugin the org
 // never synced still falls back to the segment after its first colon — the
-// skill-identifier rule of WL-SPEC-77 §11.
+// skill-identifier rule of WL-REQ-172.
 //
 // Every way a pin can fail to name one skill is a warning, never an error: a
 // brief must not break because a skill was withdrawn, misspelled upstream, or
@@ -180,7 +180,7 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 
 // openBlockers returns the open tasks holding taskID: the from_task of a
 // 'blocks' edge pointing at it, and the open tasks of any plan ordered before
-// its plan (WL-SPEC-77 §11). "Open" uses the same predicate as blockedCondition and
+// its plan (WL-REQ-172). "Open" uses the same predicate as blockedCondition and
 // planBlockedCondition: the blocker is live and has not reached its repo's
 // done_state (taskClosed). Only ID, Title, and State are populated (the brief
 // surfaces no more than that). Ordered by numeric id for a stable payload.

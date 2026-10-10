@@ -20,10 +20,10 @@ import (
 //   - The top level starts at 1, or at 0 when the author numbered the first
 //     top-level section `0.` — the orientation section, numbered 0 so the body
 //     still starts at 1. Only the top level may start at 0.
-//   - A letter-suffixed section (`2.1a`, WL-SPEC-77 §4) is a deliberate post-acceptance
+//   - A letter-suffixed section (`2.1a`, WL-REQ-165) is a deliberate post-acceptance
 //     insert. It keeps its number and consumes no counter slot.
 //   - A heading deeper than depth is legal content and takes no number
-//     (WL-SPEC-77 §6), so it is left exactly as it is.
+//     (WL-REQ-167), so it is left exactly as it is.
 //
 // It mutates d in place; the caller renders the result with d.Bytes(). It
 // changes no other text, so a section's body, its title and the document's
@@ -105,7 +105,7 @@ func firstTopNumber(d *Document) int {
 	return 1
 }
 
-// isInsert reports the letter-suffixed form of WL-SPEC-77 §4: "2.1a".
+// isInsert reports the letter-suffixed form of WL-REQ-165: "2.1a".
 func isInsert(number string) bool {
 	if number == "" {
 		return false

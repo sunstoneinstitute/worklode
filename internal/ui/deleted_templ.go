@@ -9,12 +9,12 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 // deleted.templ renders a project's Deleted destination (GET
-// /projects/{id}/deleted): the tasks and design documents WL-SPEC-75 §12
+// /projects/{id}/deleted): the tasks and design documents WL-REQ-117
 // tombstoned, and the affordance to restore one.
 //
 // A delete never removes a row — it hides it from every list, ranking and
 // pickup path, and carries a justification precisely so that someone can
-// review it later (WL-SPEC-75 §12). Until this page existed that justification was
+// review it later (WL-REQ-117). Until this page existed that justification was
 // readable only through the CLI or the JSON API, so the page's job is to show
 // exactly what the tombstone stores: who deleted the row, when, and why.
 //
@@ -187,7 +187,7 @@ func Deleted(v DeletedView) templ.Component {
 
 // deletedTaskRow renders one tombstoned task. The id still links to its
 // detail page: fetching a deleted row by id is the one read that resolves
-// (WL-SPEC-75 §12), which is what makes the mistake recoverable rather than
+// (WL-REQ-117), which is what makes the mistake recoverable rather than
 // mysterious.
 func deletedTaskRow(t model.Task, action string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -342,7 +342,7 @@ func deletedTaskRow(t model.Task, action string) templ.Component {
 
 // deletedDocRow renders one tombstoned document. A deleted document keeps its
 // slug and corpus number and stays addressable by them, but stops reserving
-// them (WL-SPEC-75 §12), so the row shows both.
+// them (WL-REQ-117), so the row shows both.
 func deletedDocRow(d DeletedDocRow, action string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -496,7 +496,7 @@ func deletedDocRow(d DeletedDocRow, action string) templ.Component {
 
 // tombstoneNote renders the delete record itself: who, when, and the
 // justification. A blank justification is stated as such rather than left
-// out — a dev instance accepts a delete without one (WL-SPEC-75 §12), and an empty
+// out — a dev instance accepts a delete without one (WL-REQ-117), and an empty
 // line would read as a page that failed to load it.
 func tombstoneNote(ts model.Tombstone) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

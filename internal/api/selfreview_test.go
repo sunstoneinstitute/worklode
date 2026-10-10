@@ -70,7 +70,7 @@ func TestSoloOwnerDecidesOwnSpec(t *testing.T) {
 	}
 }
 
-// TestApprovalDetailRendersSelfReviewFacts: WL-SPEC-82 §9 asks for both facts beside
+// TestApprovalDetailRendersSelfReviewFacts: WL-REQ-344 asks for both facts beside
 // a self-reviewed decision — which flow permitted it, and who reviewed.
 func TestApprovalDetailRendersSelfReviewFacts(t *testing.T) {
 	t.Parallel()

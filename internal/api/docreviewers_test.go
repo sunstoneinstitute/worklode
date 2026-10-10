@@ -1,7 +1,7 @@
 package api_test
 
 // docreviewers_test.go covers POST /api/v1/docs/{id}/reviewers: the durable
-// reviewer set WL-SPEC-77 §9 assigns to a document (WL-359), independent of
+// reviewer set WL-REQ-170 assigns to a document (WL-359), independent of
 // any one revision. request-approval, which reads this set, is covered in
 // docapproval_test.go.
 

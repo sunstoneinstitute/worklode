@@ -37,7 +37,7 @@ func newGraphCmd() *cobra.Command {
 
 func init() { rootCmd.AddCommand(newGraphCmd()) }
 
-// newGraphQuarantinesCmd wires `lode graph quarantines` (WL-SPEC-81 §2, §5 rule
+// newGraphQuarantinesCmd wires `lode graph quarantines` (WL-REQ-306, WL-REQ-309 rule
 // 4): `graph projection` had exactly one child, `status`, which is pointless
 // depth under the single-child rule — flattened straight onto `graph`.
 func newGraphQuarantinesCmd() *cobra.Command {
@@ -184,7 +184,7 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 	// implements.yaml is optional — most repos claim nothing. Its absence is
 	// normal and noted like a go-imports skip; a file that exists but fails to
 	// parse, or a claim that resolves to no component or a conflicting pin, is
-	// a publication error naming the offender (WL-SPEC-77 §13) — a claim silently
+	// a publication error naming the offender (WL-REQ-177) — a claim silently
 	// dropped is worse than a failed derive, so those are never downgraded to
 	// a note.
 	implPath := filepath.Join(root, ".worklode", "implements.yaml")

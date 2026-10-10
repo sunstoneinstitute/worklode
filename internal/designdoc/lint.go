@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-// anchorRE is the WL-SPEC-77 §4 anchor grammar: the "sec-" prefix — a bare {#2.1}
+// anchorRE is the WL-REQ-165 anchor grammar: the "sec-" prefix — a bare {#2.1}
 // is legal HTML but a hostile CSS selector and URL fragment — then a section
 // number (2.1a) or a lowercase slug (purpose).
 var anchorRE = regexp.MustCompile(`^sec-[a-z0-9][a-z0-9.-]*$`)

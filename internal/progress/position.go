@@ -20,7 +20,7 @@ type PositionFacts struct {
 	Now      time.Time
 }
 
-// LeaseFact is a live lease on a task (WL-SPEC-75 §6).
+// LeaseFact is a live lease on a task (WL-REQ-94).
 type LeaseFact struct {
 	Actor string
 	Since time.Time
@@ -32,7 +32,7 @@ type PRFact struct {
 	Number int64
 	URL    string
 	// MergeQueue reports whether the PR's repo runs a merge queue on its
-	// base branch, sourced from stored branch rules (WL-SPEC-85 §7).
+	// base branch, sourced from stored branch rules (WL-REQ-1340).
 	// Unknown reads as false — the merge button's fact, not the ladder's:
 	// Position decides the queued rung from Queued, not this field.
 	MergeQueue bool
@@ -52,7 +52,7 @@ var deliveryText = map[string]string{
 	"released":      "released",
 }
 
-// Position renders a task's position on WL-SPEC-85 §3's ladder: the first
+// Position renders a task's position on WL-REQ-1336's ladder: the first
 // rung that applies wins. A landed state (TaskClass) always wins over any
 // PR or CI fact, so a stale PR row on a merged task can't outrank the
 // delivery state that already superseded it.

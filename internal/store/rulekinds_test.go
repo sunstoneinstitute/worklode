@@ -25,7 +25,7 @@ func setRuleKind(t *testing.T, s *Store, n int64, kind string) {
 
 // TestRuleKindSetsRefInfix: a rule is minted a requirement and prints as
 // WL-REQ-<n>; set to another kind it prints as WL-RULE-<n>, and an unknown
-// kind is refused (WL-SPEC-77 §4).
+// kind is refused (WL-REQ-165).
 func TestRuleKindSetsRefInfix(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -59,7 +59,7 @@ func TestRuleKindSetsRefInfix(t *testing.T) {
 // TestCoversStoresOnlyRequirements: a section or whole-document covers entry
 // resolves to the requirements in its scope and skips invariants and
 // informative rules; a section holding none stores no edge; a direct ref to
-// an invariant is refused, naming its kind (WL-SPEC-78 §4.1).
+// an invariant is refused, naming its kind (WL-REQ-203).
 func TestCoversStoresOnlyRequirements(t *testing.T) {
 	s := openDocStore(t)
 	// ruleDocV1: sec-1 is rule 1, sec-1.1 rule 2, sec-2 rule 3.
@@ -91,7 +91,7 @@ func TestCoversStoresOnlyRequirements(t *testing.T) {
 
 // TestCatalogueIsCoveredLikeARequirement: a catalogue prints with the REQ
 // infix and a plan covers it; a definition or principle prints with RULE and
-// is refused as a direct covers target (WL-SPEC-77 §4).
+// is refused as a direct covers target (WL-REQ-165).
 func TestCatalogueIsCoveredLikeARequirement(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -125,7 +125,7 @@ func TestCatalogueIsCoveredLikeARequirement(t *testing.T) {
 }
 
 // TestNeedsPlanningReportsOnlyRequirements: a section whose rule is not a
-// requirement is never a planning gap (WL-SPEC-78 §1.3).
+// requirement is never a planning gap (WL-REQ-187).
 func TestNeedsPlanningReportsOnlyRequirements(t *testing.T) {
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x") // sec-1, sec-2, sec-2.1: rules 1 to 3
@@ -139,7 +139,7 @@ func TestNeedsPlanningReportsOnlyRequirements(t *testing.T) {
 
 // TestAcceptedInvariantGovernsEveryTask: a task's governing rules are its
 // links plus its project's accepted invariants, derived on read and never
-// stored (WL-SPEC-77 §4). A draft invariant governs nothing.
+// stored (WL-REQ-165). A draft invariant governs nothing.
 func TestAcceptedInvariantGovernsEveryTask(t *testing.T) {
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")                                                                               // accepted rules 1 to 3

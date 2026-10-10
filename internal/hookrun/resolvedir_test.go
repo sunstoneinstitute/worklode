@@ -11,7 +11,7 @@ import (
 // an environment signal. `git -C /other/repo merge` chdir()s the hook
 // process into /other/repo, but $PWD is a shell-maintained variable no
 // subprocess updates — it still names the shell's own directory. Preferring
-// $PWD there means the handler probes the wrong repository (WL-SPEC-80 §3.3
+// $PWD there means the handler probes the wrong repository (WL-REQ-269
 // says a hook resolves from its own cwd for exactly this reason).
 func TestResolveDirTrustsProcessCwdOverStalePWD(t *testing.T) {
 	shellDir := t.TempDir()   // where the invoking shell sits ($PWD, stale)

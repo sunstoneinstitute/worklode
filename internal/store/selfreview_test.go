@@ -18,7 +18,7 @@ func stampFlow(t *testing.T, tx *sql.Tx, selfReview ...string) {
 	}
 }
 
-// TestDecideSelfReview (WL-SPEC-75 §13.6): an author's own decision is refused
+// TestDecideSelfReview (WL-REQ-124): an author's own decision is refused
 // unless the project's flow names the entity kind under self_review. An
 // allowed self-decision stamps the author as exception_authorized_by.
 func TestDecideSelfReview(t *testing.T) {

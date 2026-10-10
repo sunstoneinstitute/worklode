@@ -8,7 +8,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
 
-// TestStaleAt covers the WL-SPEC-77 §9 clock's truth table: the default threshold,
+// TestStaleAt covers the WL-REQ-170 clock's truth table: the default threshold,
 // a project override winning over it, the never-stale cases (execution
 // exists, an ADR, a non-accepted status), and the boundary instant.
 func TestStaleAt(t *testing.T) {

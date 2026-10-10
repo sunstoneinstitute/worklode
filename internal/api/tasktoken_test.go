@@ -75,7 +75,7 @@ func TestMintTaskTokenRefusals(t *testing.T) {
 	}
 }
 
-// TestTaskTokenScope is the WL-SPEC-74 §2 narrowing: a task-scoped token reaches
+// TestTaskTokenScope is the WL-REQ-48 narrowing: a task-scoped token reaches
 // its own task's routes and the unbound worker surface, and nothing else.
 func TestTaskTokenScope(t *testing.T) {
 	t.Parallel()

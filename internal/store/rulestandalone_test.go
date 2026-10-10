@@ -14,7 +14,7 @@ import (
 )
 
 // TestAddRuleStandalone: a rule added without a document is a full rule
-// (WL-SPEC-77 §19.2). It reads back by ref with no arrangement, derives
+// (WL-REQ-1296). It reads back by ref with no arrangement, derives
 // references edges from its text, a plan covers it, and the plan's minted
 // tasks are governed by it.
 func TestAddRuleStandalone(t *testing.T) {
@@ -134,7 +134,7 @@ func setRuleOwner(t *testing.T, s *Store, key string, number int64, owner string
 
 // TestAcceptRuleBumpsArrangingSpecs: editing a rule arranged in two accepted
 // specs, then accepting it, bumps both specs' versions; each now shows the
-// new text and its prior version still renders the old (WL-SPEC-77 §19.4).
+// new text and its prior version still renders the old (WL-REQ-1298).
 // A version nobody judged substantive and nothing refers to mints no review.
 func TestAcceptRuleBumpsArrangingSpecs(t *testing.T) {
 	s := openDocStore(t)
@@ -193,7 +193,7 @@ func TestAcceptRuleBumpsArrangingSpecs(t *testing.T) {
 
 // TestAcceptRuleSubstantiveGates: a version its author judges substantive
 // mints one review task and marks the accepted plan covering the rule stale
-// (WL-SPEC-77 §10, §19.4).
+// (WL-REQ-171, WL-REQ-1298).
 func TestAcceptRuleSubstantiveGates(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -227,7 +227,7 @@ func TestAcceptRuleSubstantiveGates(t *testing.T) {
 // TestAcceptRevisionGatesRuleVersions: a spec revision that adds a code span
 // to one rule mints one review task for that rule and marks the plan covering
 // it stale; a rule left unchanged, and one reworded without tripping a
-// check, mint nothing (WL-SPEC-77 §19.4).
+// check, mint nothing (WL-REQ-1298).
 func TestAcceptRevisionGatesRuleVersions(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -308,7 +308,7 @@ func TestAcceptRuleUnderOpenRevision(t *testing.T) {
 
 // TestArrangeRuleShowsAcceptedVersion: a rule with a pending draft is
 // arranged at its accepted version, and the spec marks the draft
-// (WL-SPEC-77 §19.4).
+// (WL-REQ-1298).
 func TestArrangeRuleShowsAcceptedVersion(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -338,7 +338,7 @@ func TestArrangeRuleShowsAcceptedVersion(t *testing.T) {
 
 // TestAcceptRuleOwnedByArrangingSpec: a rule minted from a spec section has
 // no owner of its own, so the owner of the lowest-id spec arranging it
-// accepts it (WL-SPEC-77 §19.2). The owner of a later arranging spec is
+// accepts it (WL-REQ-1296). The owner of a later arranging spec is
 // refused, and an unarranged rule with no owner is refused naming the fix.
 func TestAcceptRuleOwnedByArrangingSpec(t *testing.T) {
 	s := openDocStore(t)

@@ -125,7 +125,7 @@ func TestTaskBlobAttachDetach(t *testing.T) {
 		t.Fatalf("blobs = %+v", got.Blobs)
 	}
 	// The reference addresses the blob by hash and carries its own name, so
-	// the download lands as crash.log rather than as 64 hex digits (WL-SPEC-78 §8.2).
+	// the download lands as crash.log rather than as 64 hex digits (WL-REQ-227).
 	if got.Blobs[0].URL != "/blob/"+blob.Hash+"?filename=crash.log" {
 		t.Fatalf("url = %q", got.Blobs[0].URL)
 	}
@@ -213,7 +213,7 @@ func TestAttachBlobKeepsFilename(t *testing.T) {
 // TestTaskBriefBlobsAreAbsolute checks GET /api/v1/tasks/{id}/brief returns
 // blob URLs absolutized against PublicURL, not the root-relative /blob/...
 // form the store and the plain task-detail/list-blobs endpoints use: an
-// agent fetching a brief is not same-origin with the server (WL-SPEC-78 §8.6).
+// agent fetching a brief is not same-origin with the server (WL-REQ-231).
 func TestTaskBriefBlobsAreAbsolute(t *testing.T) {
 	t.Parallel()
 	fake := blobstore.NewFake()

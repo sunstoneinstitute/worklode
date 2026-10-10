@@ -24,7 +24,7 @@ import (
 // overview surfaces, so counting finished dependents would inflate pickup
 // priority for no benefit.
 //
-// It also filters tombstoned tasks off both ends of every edge (WL-SPEC-75 §12): the
+// It also filters tombstoned tasks off both ends of every edge (WL-REQ-117): the
 // count is a ranking input, and a deleted task neither waits on anything nor
 // lends weight to whatever blocks it.
 func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
@@ -69,19 +69,19 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 // needs_decomposition, not human_only, unleased, not blocked by an open
 // 'blocks' edge from a task not
 // in a closed state, and not held by a plan-to-plan ordering edge
-// (planBlockedCondition, WL-SPEC-77 §11). An empty projectID matches every
+// (planBlockedCondition, WL-REQ-172). An empty projectID matches every
 // project; kind is a comma-separated list of kinds and matches every kind
 // when empty, which is how a loop restricts itself to its own tier
-// (WL-SPEC-77 §10). A task with children is
+// (WL-REQ-171). A task with children is
 // excluded because the worktree is the unit of Worklode work and a
-// container has nothing to check out (WL-SPEC-75 §8). A decision task is
+// container has nothing to check out (WL-REQ-97). A decision task is
 // excluded the same way and for the same reason — it has nothing to check
 // out either — but the predicate is on the kind rather than on an edge:
 // unlike a container, a decision has no child that would let the query
-// detect it any other way (WL-SPEC-75 §8 as amended). A rally is excluded on the
+// detect it any other way (WL-REQ-97 as amended). A rally is excluded on the
 // same predicate and for the same reason: it names other tasks, and the work
 // is its members. A tombstoned task is never handed out, and a tombstoned
-// child does not make its parent a container (WL-SPEC-75 §12).
+// child does not make its parent a container (WL-REQ-117).
 //
 // This is the one seam both ranked paths go through — Frontier and ClaimNext
 // share it via rankedFrontier — so human_only is filtered here and nowhere
@@ -252,7 +252,7 @@ func criticalRank(priority string, strictFocus bool) int {
 // Membership only sorts; it never narrows the ready set (readyCandidates
 // excludes rallies themselves but does not filter on membership), so agents
 // fall through to other ready work once the
-// rally's members are done or all leased — WL-SPEC-75 §8 still holds.
+// rally's members are done or all leased — WL-REQ-97 still holds.
 func rallyRank(inRally bool) int {
 	if inRally {
 		return 0
@@ -317,7 +317,7 @@ func rankTasks(in []rankInput, strictFocus bool) []model.Task {
 type ClaimNextOpts struct {
 	ProjectID string
 	// Kind narrows the ready set to these kinds, comma-separated; empty
-	// matches every kind (WL-SPEC-77 §10).
+	// matches every kind (WL-REQ-171).
 	Kind        string
 	StrictFocus bool
 	DryRun      bool

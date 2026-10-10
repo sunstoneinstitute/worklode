@@ -1,4 +1,4 @@
-// Mirroring remote images into blobs (WL-SPEC-78 §8.8). An issue body arrives
+// Mirroring remote images into blobs (WL-REQ-233). An issue body arrives
 // referencing https://user-images.githubusercontent.com/…; those URLs need
 // GitHub auth for private repos, do not last forever, and §8's renderer
 // blocks remote img src outright, so an imported bug report's screenshots
@@ -31,7 +31,7 @@ import (
 var mirrorHosts = []string{"githubusercontent.com", "github.com"}
 
 // mirrorTokenScopes are the destinations the installation's GitHub App token
-// may be sent to (WL-SPEC-78 §8.8). Narrower than mirrorHosts on both sides,
+// may be sent to (WL-REQ-233). Narrower than mirrorHosts on both sides,
 // deliberately.
 //
 // Narrower than github.com: the host is fetchable because a body can

@@ -41,7 +41,7 @@ func (s *server) getRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // editRule handles PUT /api/v1/rules/{id}: the rule's next draft text
-// (WL-SPEC-77 §19.4). It writes only the rule; the specs arranging it show
+// (WL-REQ-1298). It writes only the rule; the specs arranging it show
 // the draft once it is accepted.
 func (s *server) editRule(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
@@ -95,7 +95,7 @@ func (s *server) patchRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // addRule handles POST /api/v1/rules: a standalone rule at draft version 1,
-// owned by the caller and arranged in no document (WL-SPEC-77 §19.2).
+// owned by the caller and arranged in no document (WL-REQ-1296).
 func (s *server) addRule(w http.ResponseWriter, r *http.Request) {
 	var req model.AddRuleInput
 	if err := readJSON(w, r, &req); err != nil {
@@ -112,7 +112,7 @@ func (s *server) addRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptRule handles POST /api/v1/rules/{id}/accept: the rule's owner
-// accepts its newest draft version (WL-SPEC-77 §19.2, §19.4).
+// accepts its newest draft version (WL-REQ-1296, WL-REQ-1298).
 func (s *server) acceptRule(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
 	if !ok {
@@ -133,7 +133,7 @@ func (s *server) acceptRule(w http.ResponseWriter, r *http.Request) {
 
 // arrangeRule handles POST /api/v1/docs/{id}/rules: place an existing rule
 // in a spec, in place on a draft or in the candidate revision of an accepted
-// one (WL-SPEC-77 §19.3). Answers with the rule.
+// one (WL-REQ-1297). Answers with the rule.
 func (s *server) arrangeRule(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -161,7 +161,7 @@ func (s *server) arrangeRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // unarrangeRule handles DELETE /api/v1/docs/{id}/rules/{rule}: remove a rule
-// from a spec without withdrawing it (WL-SPEC-77 §19.3).
+// from a spec without withdrawing it (WL-REQ-1297).
 func (s *server) unarrangeRule(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -227,7 +227,7 @@ func (s *server) getRuleVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 // getRuleClosure handles GET /api/v1/rules/{id}/closure: the rule and every
-// rule reachable over refines and needs (WL-SPEC-77 §4c).
+// rule reachable over refines and needs (WL-REQ-1367).
 func (s *server) getRuleClosure(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
 	if !ok {
@@ -242,7 +242,7 @@ func (s *server) getRuleClosure(w http.ResponseWriter, r *http.Request) {
 }
 
 // getRuleLint handles GET /api/v1/projects/{id}/rules/lint: the project's
-// corpus against the targets of WL-SPEC-77 §4c.
+// corpus against the targets of WL-REQ-1367.
 func (s *server) getRuleLint(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	if _, err := s.st.GetProject(r.Context(), projectID); err != nil {

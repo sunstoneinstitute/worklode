@@ -1,5 +1,5 @@
 // Package otlp decodes OTLP/JSON log export batches and forwards them
-// upstream (WL-SPEC-80 §8.8).
+// upstream (WL-REQ-1236).
 package otlp
 
 import (
@@ -13,7 +13,7 @@ import (
 )
 
 // Record is one decoded OTLP log record, attributed from its resource and
-// log-record attributes (WL-SPEC-80 §8.6). Task is empty when the batch carries
+// log-record attributes (WL-REQ-1234). Task is empty when the batch carries
 // no worklode.task.id — the caller decides whether to store or only forward
 // such a record.
 type Record struct {
@@ -165,7 +165,7 @@ func findString(kvs []keyValue, key string) string {
 }
 
 // decodeAttrs fills a model.ActivityAttrs from a log record's attributes.
-// This switch is the allowlist (WL-SPEC-80 §8.6): a key it doesn't name
+// This switch is the allowlist (WL-REQ-1234): a key it doesn't name
 // — the body, prompt/response text, tool content, user.*, anything else —
 // is dropped.
 func decodeAttrs(kvs []keyValue) model.ActivityAttrs {

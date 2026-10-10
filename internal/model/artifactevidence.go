@@ -6,7 +6,7 @@ import (
 )
 
 // ArtifactEvidence is one reported fact about a declared artifact address
-// (WL-SPEC-75 §13): an external system asserted this State at OccurredAt, and
+// (WL-REQ-118): an external system asserted this State at OccurredAt, and
 // the event that carried it is the provenance. Nothing here is a human's
 // claim — Provenance is "observed" for an emitter and "user_reported" for a
 // person, and neither is a status the declaring entity stores.

@@ -27,7 +27,7 @@ func normalizeSection(s string) string {
 }
 
 // runDocShow renders a SPEC or ADR document, or one of its sections,
-// cat-style (WL-SPEC-78 §2). It backs every SPEC/ADR path through `lode show`
+// cat-style (WL-REQ-192). It backs every SPEC/ADR path through `lode show`
 // (show.go): the typed-id dispatch (expectedKind "", since resolveDocRef's
 // own <KEY>-<TYPE>-<n> shorthand form already kind-checks), and the
 // --spec/--plan/--kind flags via runDocShowByOrdinal (expectedKind "SPEC" or
@@ -65,7 +65,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 	if err != nil {
 		var unresolved *designdoc.UnresolvedError
 		if errors.As(err, &unresolved) {
-			// WL-SPEC-78 §3.2 tier 3: printed, exit code unaffected.
+			// WL-REQ-199 tier 3: printed, exit code unaffected.
 			return writeUnresolved(cmd, err)
 		}
 		return err
@@ -105,7 +105,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 
 	// Notes are folded in before the section is cut, so `--section` and a
 	// whole-document render show the same note under the same heading
-	// (WL-SPEC-77 §10).
+	// (WL-REQ-171).
 	data := []byte(cli.InlineDocNotes(detail.Body, detail.Notes, detail.Sections))
 
 	if section == "" {
@@ -116,7 +116,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", doc.Slug, err)
 	}
-	// WL-SPEC-78 §2: a section is always its whole subtree. designdoc cuts it from
+	// WL-REQ-192: a section is always its whole subtree. designdoc cuts it from
 	// the spans Parse already found, so nothing here re-scans the source.
 	text, ok := parsed.Subtree(section)
 	if !ok {
@@ -136,7 +136,7 @@ func ruleFetcher(ctx context.Context, c *cli.Client) func(string) (*model.Rule, 
 	}
 }
 
-// resolveDocRefTiers resolves ref through WL-SPEC-78 §3.2's tiers 1 and 2: the pure
+// resolveDocRefTiers resolves ref through WL-REQ-199's tiers 1 and 2: the pure
 // grammar against docs with this checkout's own project key, then — when the
 // key names another project, or this checkout declares no project_key at all —
 // against the docs of the project the backbone says owns that key. It returns
@@ -174,13 +174,13 @@ func resolveDocRefTiers(ctx context.Context, c *cli.Client, docs []model.Doc, pr
 	return model.Doc{}, "", err
 }
 
-// resolveForeignDocRef is WL-SPEC-78 §3.2's tier 2: resolve a shorthand whose key
+// resolveForeignDocRef is WL-REQ-199's tier 2: resolve a shorthand whose key
 // is not the current checkout's against the backbone's own knowledge of the
 // org. The project whose key it is supplies the candidate docs, and the ref
 // then resolves through the same pure grammar as a local one — kind check
 // included. A key no project carries returns *designdoc.UnresolvedError
 // (tier 3); a known key whose document is missing is a defect and errors
-// (the WL-SPEC-78 §3.2 table's "the key is known and the document is not").
+// (the WL-REQ-199 table's "the key is known and the document is not").
 func resolveForeignDocRef(ctx context.Context, c *cli.Client, key, ref string) (model.Doc, string, error) {
 	projects, _, err := c.ListProjects(ctx)
 	if err != nil {
@@ -219,7 +219,7 @@ type docShowResult struct {
 // writeUnresolved prints a tier-3 UnresolvedError: the bare message on
 // stdout normally, or, under --json, {"unresolved": "<message>"} alone (no
 // path/section/content — there is no document to report them for). Either
-// way this returns nil: WL-SPEC-78 §3.2 tier 3 is printed, exit code unaffected.
+// way this returns nil: WL-REQ-199 tier 3 is printed, exit code unaffected.
 func writeUnresolved(cmd *cobra.Command, err error) error {
 	if !jsonOut(cmd) {
 		fmt.Fprintln(cmd.OutOrStdout(), err.Error())

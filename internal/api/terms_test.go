@@ -1,6 +1,6 @@
 package api_test
 
-// terms_test.go covers definition terms (WL-SPEC-77 §4d): the term page at
+// terms_test.go covers definition terms (WL-REQ-1368): the term page at
 // /projects/{proj}/term/{slug}, GET /api/v1/projects/{id}/terms, and a
 // definition's concept IRI through PATCH /api/v1/rules/{id}.
 

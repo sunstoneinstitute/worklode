@@ -24,7 +24,7 @@ func TestProjectGraphTriples(t *testing.T) {
 		DocEdges: []model.GraphDocEdge{
 			{From: 20, To: 10, Type: "covers"},
 			{From: 30, To: 10, Type: "replaces"}, // retired document-level types:
-			{From: 30, To: 10, Type: "amends"},   // not emitted (WL-SPEC-77 §8)
+			{From: 30, To: 10, Type: "amends"},   // not emitted (WL-REQ-169)
 			{From: 20, To: 99, Type: "requires"}, // 99 is not in Docs: skipped
 		},
 		Links: []model.GraphLink{

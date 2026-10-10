@@ -18,7 +18,7 @@ func TestNormalizePayload(t *testing.T) {
 			`{"cwd":"/w","session_id":"s1","transcript_path":"/t.jsonl"}`,
 			Payload{Cwd: "/w", SessionID: "s1"}},
 		// The default (empty harness) is claude-code, for every binding
-		// already installed (WL-SPEC-80 §5.4).
+		// already installed (WL-REQ-278).
 		{"default harness is claude-code", "",
 			`{"cwd":"/w","session_id":"s1"}`,
 			Payload{Cwd: "/w", SessionID: "s1"}},
@@ -29,7 +29,7 @@ func TestNormalizePayload(t *testing.T) {
 			`{"workingDirectory":"/w","sessionId":"s3"}`,
 			Payload{Cwd: "/w", SessionID: "s3"}},
 		// A field Worklode needs but the payload omits => zero value => the
-		// guard NOPs. Never an error (WL-SPEC-80 §5.4).
+		// guard NOPs. Never an error (WL-REQ-278).
 		{"missing fields degrade to zero value", "amp",
 			`{"unrelated":true}`,
 			Payload{}},

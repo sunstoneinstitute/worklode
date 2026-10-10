@@ -95,7 +95,7 @@ type AgentSessionInput struct {
 
 // ProjectSessionUsageInput is the request body for
 // POST /api/v1/projects/{id}/session-usage: one session's COMPLETE usage
-// across the project (WL-SPEC-73 §8.2). ByTask keys are task ids; the "" key
+// across the project (WL-REQ-40). ByTask keys are task ids; the "" key
 // carries the turns with no task to bill to.
 //
 // The whole classification is posted together because it is replaced

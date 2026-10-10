@@ -36,7 +36,7 @@ func TestSetBranchTemplateValid(t *testing.T) {
 }
 
 // TestSetBranchTemplateRejects also covers the "rejected template leaves the
-// previous configuration in place" invariant (WL-SPEC-80 §3.1): it configures a
+// previous configuration in place" invariant (WL-REQ-267): it configures a
 // known-good, non-default template up front, then after every rejection
 // checks that BranchTemplate() (and TaskIDFromRef, at least once) still
 // reflect that good template rather than the rejected one or the default.
@@ -123,7 +123,7 @@ func TestBranchRoundTrip(t *testing.T) {
 	}
 }
 
-// TestBranchForSanitizesProjectID covers WL-SPEC-80 §3.1's render-time
+// TestBranchForSanitizesProjectID covers WL-REQ-267's render-time
 // sanitization: projects.id is free text (no ref-safety guarantee), so
 // SetBranchTemplate's sample-render validation cannot catch a real project id
 // that would render an illegal branch. BranchFor must run .projectId (like

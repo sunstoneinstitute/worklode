@@ -287,7 +287,7 @@ func TestLinkOnAcceptedSpecWritesCandidate(t *testing.T) {
 }
 
 // TestLinkRefusesInverse: an inverse spelling is refused naming the declared
-// type (WL-SPEC-77 §8.1), as is a type no table declares and a document past
+// type (WL-REQ-1288), as is a type no table declares and a document past
 // changing.
 func TestLinkRefusesInverse(t *testing.T) {
 	t.Parallel()

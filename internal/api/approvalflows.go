@@ -15,7 +15,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// flowActorID owns every approval row a flow rule mints (WL-SPEC-75 §13.6). The
+// flowActorID owns every approval row a flow rule mints (WL-REQ-124). The
 // materializer stamps it as created_by, so the id is store's to define and
 // this side only asserts the actor exists at boot.
 const flowActorID = store.FlowActorID
@@ -23,7 +23,7 @@ const flowActorID = store.FlowActorID
 //go:embed approvalflows/*.json
 var defaultFlowFS embed.FS
 
-// LoadApprovalFlows returns the effective flow set (WL-SPEC-75 §13.6): the embedded
+// LoadApprovalFlows returns the effective flow set (WL-REQ-124): the embedded
 // defaults, then every *.json in dir (LODE_APPROVAL_FLOWS_DIR; an empty dir
 // string means defaults only). A dir flow whose name matches a default
 // replaces it.

@@ -4,8 +4,8 @@
 // both `lode show --inline` and the cockpit's document page (WL-716), which
 // is why it lives here rather than in internal/cmd.
 //
-// A section's rule folds in the rules that amend it (WL-SPEC-77 §4),
-// attributed to the amending rule (**[amending WL-RULE-12 (WL-SPEC-76#sec-2)]:**<br>)
+// A section's rule folds in the rules that amend it (WL-REQ-165),
+// attributed to the amending rule (**[amending WL-RULE-12 (WL-REQ-134)]:**<br>)
 // so borrowed text is never mistakable for the document's own, and
 // transitively, depth-capped so a mutually-amending defect cannot hang. An
 // accepted or superseded amending rule is in force, a draft one is pending
@@ -62,7 +62,7 @@ func amendersOf(r *model.Rule) []string {
 }
 
 // ruleCite names an amending rule and where it is arranged:
-// "WL-RULE-12 (WL-SPEC-76#sec-2)".
+// "WL-RULE-12 (WL-REQ-134)".
 func ruleCite(r *model.Rule) string {
 	if len(r.ArrangedIn) == 0 {
 		return r.Ref
@@ -122,7 +122,7 @@ func effectiveStatus(status string) bool {
 var headingLine = regexp.MustCompile(`(?m)^#+[ \t]+(.*?)(?:[ \t]*\{#[^}]*\})?[ \t]*$`)
 
 // flattenHeadings turns an inlined subtree's headings into bold lines, so
-// the borrowed text cannot reshape the outline it lands in (WL-SPEC-78 §2).
+// the borrowed text cannot reshape the outline it lands in (WL-REQ-192).
 func flattenHeadings(text string) string {
 	return headingLine.ReplaceAllString(text, "**$1**")
 }
@@ -190,7 +190,7 @@ func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, erro
 }
 
 // PendingMarker is the line a rendered spec shows under a rule whose newer
-// draft version it does not show yet (WL-SPEC-77 §19.4).
+// draft version it does not show yet (WL-REQ-1298).
 func PendingMarker(rule string, version int) string {
 	return fmt.Sprintf("> **pending** — draft version %d of %s awaits `lode rule accept %s` (WL-SPEC-77 §19.4).", version, rule, rule)
 }

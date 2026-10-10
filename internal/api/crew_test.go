@@ -31,7 +31,7 @@ func crewEvents(t *testing.T, st *store.Store, want int) []store.Event {
 	return storeEventsOfType(t, st, "crew.member_added", want)
 }
 
-// crewPayload is the shape WL-SPEC-75 §13.8's subscribers read off both
+// crewPayload is the shape WL-REQ-126's subscribers read off both
 // crew.member_added and crew.member_removed.
 type crewPayload struct {
 	Project string   `json:"project"`
@@ -44,7 +44,7 @@ type crewPayload struct {
 // TestAddCrewMemberAPI covers POST /api/v1/projects/{id}/participants: the
 // 201 body is the member as the roster shows them (every role they hold, not
 // just the one just added), the role defaults to "member", and the event the
-// write is recorded under is WL-SPEC-75 §13.8's crew.member_added.
+// write is recorded under is WL-REQ-126's crew.member_added.
 func TestAddCrewMemberAPI(t *testing.T) {
 	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
@@ -98,7 +98,7 @@ func TestAddCrewMemberAPI(t *testing.T) {
 	}
 
 	// Every add is one crew.member_added event from the "cli" surface,
-	// carrying the payload WL-SPEC-75 §13.8's subscribers read.
+	// carrying the payload WL-REQ-126's subscribers read.
 	events := crewEvents(t, st, 3)
 	if len(events) != 3 {
 		t.Fatalf("crew.member_added events = %d, want 3", len(events))
@@ -327,7 +327,7 @@ func seedCrewTask(t *testing.T, h http.Handler, token, project, actor, title str
 }
 
 // TestRemoveCrewMemberAPI covers DELETE
-// /api/v1/projects/{id}/participants/{actor} in the order WL-SPEC-75 §13.5's
+// /api/v1/projects/{id}/participants/{actor} in the order WL-REQ-123's
 // rules fire: open work refuses with the items named, the lead is never
 // removable, and a clean removal drops every role the member held.
 func TestRemoveCrewMemberAPI(t *testing.T) {
@@ -481,7 +481,7 @@ func TestRemoveCrewMemberForm(t *testing.T) {
 	}
 }
 
-// TestRemoveCrewMemberFormBlocked is the responsibility review (WL-SPEC-82 §8)
+// TestRemoveCrewMemberFormBlocked is the responsibility review (WL-REQ-343)
 // in its minimal honest form: a removal refused because the member still
 // owns open work comes back as the roster with that work listed and linked,
 // so the person can go and reassign or close it.

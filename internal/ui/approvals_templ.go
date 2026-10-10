@@ -11,8 +11,8 @@ import templruntime "github.com/a-h/templ/runtime"
 import "strconv"
 
 // approvals.templ renders the Reviews destination (GET /reviews): the
-// awaiting-approvals queue (WL-SPEC-82 §9), one row per approval still in
-// state 'awaiting', oldest first, each with the decide form (WL-SPEC-82 §9). A row
+// awaiting-approvals queue (WL-REQ-344), one row per approval still in
+// state 'awaiting', oldest first, each with the decide form (WL-REQ-344). A row
 // links to whatever it governs — a pull request jumps out to GitHub, which
 // stays the review surface for one; every other kind links to its cockpit
 // page — and names the kind, so the queue does not ask a reviewer to infer it
@@ -21,7 +21,7 @@ import "strconv"
 // refuses that decide, so the page does not offer it. An empty queue states
 // that honestly rather than showing a fabricated record.
 //
-// It also renders the approval detail page (GET /approvals/{id}, WL-SPEC-82 §9):
+// It also renders the approval detail page (GET /approvals/{id}, WL-REQ-344):
 // see ApprovalDetail's own doc comment below.
 func Approvals(v ApprovalsView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -112,7 +112,7 @@ func Approvals(v ApprovalsView) templ.Component {
 // approvalRow renders one queue row. rel="noreferrer" on the entity link
 // matches the task page's own jump-out convention for an external source
 // link. Every line-two part is conditional: only a PR-kind row has a task,
-// and only a row answering a named lane (WL-SPEC-82 §9) has one to show.
+// and only a row answering a named lane (WL-REQ-344) has one to show.
 func approvalRow(row ApprovalRow) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -472,7 +472,7 @@ func approvalRow(row ApprovalRow) templ.Component {
 	})
 }
 
-// impactActs renders the two acts an open impact review offers (WL-SPEC-82 §9):
+// impactActs renders the two acts an open impact review offers (WL-REQ-344):
 // the dependent owner writes down what the upstream change means for their
 // entity, and a prior approver then says whether their own approval still
 // holds. The buttons post the ordinary decide values — the question they
@@ -546,7 +546,7 @@ func impactActs(id int64) templ.Component {
 	})
 }
 
-// ApprovalDetail renders GET /approvals/{id} (WL-SPEC-82 §9), the tracer for the
+// ApprovalDetail renders GET /approvals/{id} (WL-REQ-344), the tracer for the
 // review-graph presentation surface: one approval, the entity it governs,
 // its full decision history, and the review-graph references its own
 // designation recorded. Read-mostly: the only acts it offers are an open

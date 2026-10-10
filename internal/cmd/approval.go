@@ -14,7 +14,7 @@ import (
 // is outstanding.
 //
 // There is no `lode approval approve` — nor reject, nor request-changes — and
-// that is WL-SPEC-75 §13.6, not an unfinished command family: approving is a web
+// that is WL-REQ-124, not an unfinished command family: approving is a web
 // UI act because the OIDC session's group claims are fresh and a 30-day CLI
 // token's are not. `lode approval list` prints the ids; the decision itself
 // happens on the cockpit's /reviews page.
@@ -31,13 +31,13 @@ func newApprovalCmd() *cobra.Command {
 	return cmd
 }
 
-// newApprovalAddCmd files one ad-hoc approval requirement (WL-SPEC-75 §13.6). It is
-// `add`, L3's create verb, and not `require`: WL-SPEC-81 §1 L3 admits a new verb
+// newApprovalAddCmd files one ad-hoc approval requirement (WL-REQ-124). It is
+// `add`, L3's create verb, and not `require`: WL-REQ-305 L3 admits a new verb
 // only for an act none of the seven expresses, and filing a requirement is
 // creating an approval row.
 //
 // It is a different act from `approval request`, which materializes a
-// document's own durable reviewer set (WL-SPEC-77 §9) and takes no policy of its
+// document's own durable reviewer set (WL-REQ-170) and takes no policy of its
 // own: this one names the target, the lane and who owes the decision.
 func newApprovalAddCmd() *cobra.Command {
 	var role, actor, lane, revision string
@@ -111,7 +111,7 @@ func approvalTargetArgs(cmd *cobra.Command, args []string, toComplete string) ([
 func init() { rootCmd.AddCommand(newApprovalCmd()) }
 
 // newApprovalRequestCmd opens one awaiting lane per reviewer in the
-// document's durable reviewer set (WL-SPEC-77 §9) on its current version. The set
+// document's durable reviewer set (WL-REQ-170) on its current version. The set
 // itself is assigned separately, with `lode doc set reviewers` (WL-359,
 // WL-487) — this command only materializes the lanes.
 func newApprovalRequestCmd() *cobra.Command {

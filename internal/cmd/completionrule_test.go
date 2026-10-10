@@ -8,7 +8,7 @@ import (
 )
 
 // entityPlaceholders is the closed vocabulary a usage string uses to name one
-// of the four entity kinds WL-SPEC-81 §3 C1 gives a completion helper: task, doc,
+// of the four entity kinds WL-REQ-307 C1 gives a completion helper: task, doc,
 // project, actor. `<id>` is whichever of the four the command's own entity
 // group makes it (`lode task show <id>` a task, `lode project focus <id>` a
 // project); the rule below only asks that *something* completes it.
@@ -41,7 +41,7 @@ var entityArgsExempt = map[string]string{
 	"lode rule set tags":  "no rule-listing endpoint exists yet to complete refs from",
 }
 
-// TestEntityArgsComplete is WL-SPEC-81 §3 C1's coverage: a positional argument
+// TestEntityArgsComplete is WL-REQ-307 C1's coverage: a positional argument
 // naming an entity has a ValidArgsFunction. Sixty commands were wired by hand
 // (WL-506–WL-508) and nothing else would notice the sixty-first arriving
 // without one, or an existing one being dropped in a refactor.
@@ -54,7 +54,7 @@ var entityArgsExempt = map[string]string{
 // built tree is the same source of truth TestCommandReference already uses.
 //
 // Scope is positional arguments only. A flag's values complete through
-// RegisterFlagCompletionFunc (WL-SPEC-81 §3 C4), which leaves nothing on the command
+// RegisterFlagCompletionFunc (WL-REQ-307 C4), which leaves nothing on the command
 // this walk can see, so the scan stops at the first flag in a usage string —
 // the `<id>` in `lode secret purge [--task <id>]` is not this rule's.
 func TestEntityArgsComplete(t *testing.T) {

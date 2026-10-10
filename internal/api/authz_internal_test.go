@@ -255,7 +255,7 @@ func TestUnusedGuardsAreReported(t *testing.T) {
 	}
 }
 
-// TestRequireSession checks the authentication-method gate WL-SPEC-75 §13.6
+// TestRequireSession checks the authentication-method gate WL-REQ-124
 // puts in front of approval decisions: only a subject authenticated by a
 // live session cookie reaches the wrapped handler. A bearer token and the
 // open-deployment bypass are refused exactly like an unauthenticated caller
@@ -310,7 +310,7 @@ func TestSubjectFromActorGroups(t *testing.T) {
 }
 
 // TestHasReviewSurface: with today's table, WL-SPEC-84's routes do not exist,
-// so the Progress page's Review button stays disabled (WL-SPEC-85 §4).
+// so the Progress page's Review button stays disabled (WL-REQ-1337).
 func TestHasReviewSurface(t *testing.T) {
 	t.Parallel()
 	if hasReviewSurfaceIn(routeGuards) {

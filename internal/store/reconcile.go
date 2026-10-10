@@ -1,4 +1,4 @@
-// Reconciliation queries (WL-SPEC-80 §10): the applied_at
+// Reconciliation queries (WL-REQ-294): the applied_at
 // completion marker, the replay candidate set, and the ingestion-health and
 // poll-candidate reads added by later tasks in the same plan.
 
@@ -26,7 +26,7 @@ func MarkEventApplied(tx *sql.Tx, eventID int64, at time.Time) error {
 // replaySources are the event sources engine 1 can re-apply: a github
 // delivery recorded before its repo was mapped (or whose apply failed), and
 // an artifact-evidence delivery (catalog, ci, pipeline) that matched no
-// declaration when it arrived (WL-SPEC-75 §13.3, §13.8, WL-256). All leave applied_at
+// declaration when it arrived (WL-RULE-121, WL-REQ-126, WL-256). All leave applied_at
 // NULL exactly when there is still an apply to run, so the candidate set
 // stays finite. Flux is deliberately absent: its handler never sets
 // applied_at at all, so every flux row would be a permanent candidate with
@@ -92,7 +92,7 @@ type PollCandidate struct {
 // they have recorded activity in — a PR or a task commit; a task with
 // neither has nothing to poll. repo/task/since bound the set (WL-SPEC-80);
 // since compares tasks.updated_at against the server clock. A tombstoned task
-// is never polled (WL-SPEC-75 §12) — its delivery state has nowhere to go.
+// is never polled (WL-REQ-117) — its delivery state has nowhere to go.
 //
 // WL-SPEC-80 open question 1: this set may be too large for an unscoped
 // org-wide run; --since/--repo are the intended controls.
@@ -140,7 +140,7 @@ func (s *Store) PollCandidates(ctx context.Context, repo, task string, since *ti
 }
 
 // RepoIngestion is one mapped repo's ingestion health: what project health
-// reports (WL-SPEC-80 §10.2).
+// reports (WL-REQ-296).
 type RepoIngestion struct {
 	Repo        string
 	ProjectID   string
@@ -235,7 +235,7 @@ func (s *Store) UnlandedTaskCommits(ctx context.Context, taskID, repo string) ([
 // repo. The poll engine asks GitHub about a commit only to learn whether it
 // landed, so a sha already in main_commits has nothing left to learn and the
 // request is pure waste — and a recurring one, because the scheduled run is
-// org-wide and rate limits are the binding constraint (WL-SPEC-80 §10.3).
+// org-wide and rate limits are the binding constraint (WL-REQ-297).
 func (s *Store) KnownMainSHAs(ctx context.Context, repo string, shas []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	if len(shas) == 0 {

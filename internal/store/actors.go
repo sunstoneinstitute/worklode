@@ -21,14 +21,14 @@ import (
 // Actor is deliberately not model.Actor: GitHubUsername, Email, and
 // Groups are auth bookkeeping fields this package needs internally (matching
 // a Keycloak login) that never cross the wire, so they stay outside the four
-// fields model.Actor declares (WL-SPEC-73 §3.2a, "store scan plumbing").
+// fields model.Actor declares (WL-RULE-1349, "store scan plumbing").
 type Actor struct {
 	ID          string
 	Kind        string
 	DisplayName string
 	Admin       bool
 	// GitHubUsername is the GitHub login Keycloak asserts for this actor via
-	// the realm's githubUsername user attribute (WL-SPEC-74 §4.3), re-synced on
+	// the realm's githubUsername user attribute (WL-REQ-53), re-synced on
 	// every login. Empty when the Keycloak account carries no such attribute.
 	GitHubUsername string
 	// Email is the Keycloak email claim, re-synced on every login (WL-SPEC-74).
@@ -180,7 +180,7 @@ func scanActorGroups(raw []byte) ([]string, error) {
 }
 
 // ActorDisplayNames resolves a set of actor ids to their display names in
-// one round trip — the approval detail page's decided-by column (WL-SPEC-82 §9),
+// one round trip — the approval detail page's decided-by column (WL-REQ-344),
 // which may name a different actor per history row. An id absent from the
 // result is honest empty (a deleted actor, or a nil id the caller filtered
 // out), never a fabricated name; ids may repeat and duplicates cost nothing
@@ -238,7 +238,7 @@ func (s *Store) CreateToken(ctx context.Context, actorID, description string, ex
 	return plaintext, nil
 }
 
-// CreateTaskToken mints a bearer token bound to one task (WL-SPEC-74 §2,
+// CreateTaskToken mints a bearer token bound to one task (WL-REQ-48,
 // WL-306): the same wl_ shape as CreateToken, with tokens.task_id set and a
 // required expiry — a task-scoped token that never expires would outlive the
 // lease whose lifecycle it exists to follow. The lease-ending paths revoke
@@ -277,7 +277,7 @@ func (s *Store) EnsureActor(ctx context.Context, id, kind, displayName string) e
 }
 
 // revokeTaskTokens revokes every live token bound to taskID, inside the
-// caller's transaction — the lease-ending half of WL-SPEC-74 §2's "expires with
+// caller's transaction — the lease-ending half of WL-REQ-48's "expires with
 // its lease".
 func revokeTaskTokens(tx *sql.Tx, now time.Time, taskID string) error {
 	if _, err := tx.Exec(
@@ -345,7 +345,7 @@ func (s *Store) RevokeToken(ctx context.Context, plaintextOrHash string) error {
 
 // Authenticate looks up the actor for a plaintext bearer token. It returns
 // ErrNotFound if the token is unknown, revoked, or expired. taskID is the
-// task the token is scoped to (WL-SPEC-74 §2, WL-306), "" for an ordinary
+// task the token is scoped to (WL-REQ-48, WL-306), "" for an ordinary
 // actor-scoped token.
 func (s *Store) Authenticate(ctx context.Context, plaintext string) (a *Actor, taskID string, err error) {
 	hash := tokenHashOf(plaintext)

@@ -455,7 +455,7 @@ func seedLandedTask(t *testing.T, st *store.Store) (taskID string) {
 // Releases are a repo-level fact, so the apply phase must run on what was
 // gathered rather than on whether any task-level repair was detected: this
 // candidate yields no PR and no newly-landed commit, and a release published
-// during the outage still has to move it to released (WL-SPEC-80 §10.3).
+// during the outage still has to move it to released (WL-REQ-297).
 func TestPollAppliesReleaseWithoutTaskLevelRepair(t *testing.T) {
 	st := store.OpenTestStore(t)
 	taskID := seedLandedTask(t, st)
@@ -676,7 +676,7 @@ func TestPollRejectsReusedAndEmptyRunID(t *testing.T) {
 // first seen through the reconcile poll must carry its author immediately,
 // not only after a later webhook fills it in. While author is unset,
 // store.IsSelfApproval cannot prove anything either way, so the approver who
-// authored the PR could self-approve it during that window (WL-SPEC-75 §13's
+// authored the PR could self-approve it during that window (WL-REQ-118's
 // default refusal). The second half — actually deciding through
 // store.DecideApproval — is what catches a fix that sets Author but leaves
 // it unused.
@@ -752,7 +752,7 @@ func TestPollSetsPRAuthorEnablingSelfApprovalRefusal(t *testing.T) {
 
 // TestPollStopsRecheckingSettledSHAs is WL-203. Every branch-membership
 // question costs one GitHub request against the repo's installation token, and
-// the scheduled run is org-wide (WL-SPEC-80 §10.3), so a question whose answer is
+// the scheduled run is org-wide (WL-REQ-297), so a question whose answer is
 // already recorded must not be asked again. Two of them accumulate per merged
 // PR: the merge sha, which the previous run appended to main_commits, and the
 // PR's head sha, which a squash merge never lands at all — the fake's

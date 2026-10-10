@@ -150,7 +150,7 @@ func (a *AppAuth) EnqueuePR(ctx context.Context, repo, nodeID string) error {
 }
 
 // MergeMethod is the merge method MergePR should use on repo: the first of
-// squash, merge, rebase that the repository allows (WL-SPEC-85 §4). A
+// squash, merge, rebase that the repository allows (WL-REQ-1337). A
 // repository that reports none of them gets "", which leaves the choice to
 // GitHub.
 func (a *AppAuth) MergeMethod(ctx context.Context, repo string) (string, error) {

@@ -59,7 +59,7 @@ Do the thing.
 `
 
 // docPlanMintBody is a well-formed plan in the mintable ## Tasks format
-// (WL-SPEC-77 §11.1): two definitions, no blockers, for the accept-response tests.
+// (WL-REQ-173): two definitions, no blockers, for the accept-response tests.
 const docPlanMintBody = `---
 status: draft
 ---
@@ -108,7 +108,7 @@ func createDocViaAPI(t *testing.T, h http.Handler, token string, in model.Create
 
 // seedDoc writes a document straight through the store, for the one state the
 // API deliberately refuses to create: an accepted plan (POST /accept is
-// stubbed for plans until minting exists, WL-SPEC-77 §11.2).
+// stubbed for plans until minting exists, WL-REQ-174).
 func seedDoc(t *testing.T, st *store.Store, in store.DocInput) *model.Doc {
 	t.Helper()
 	var out *model.Doc
@@ -179,7 +179,7 @@ func TestCreateDoc(t *testing.T) {
 	}
 }
 
-// TestCreateDocAutoAssignsNumber: WL-SPEC-77 §7 — a spec/ADR created with no
+// TestCreateDocAutoAssignsNumber: WL-REQ-168 — a spec/ADR created with no
 // Number gets the next free one for its (project, kind) rather than a 422.
 func TestCreateDocAutoAssignsNumber(t *testing.T) {
 	t.Parallel()
@@ -362,7 +362,7 @@ func TestReplaceDocEdges(t *testing.T) {
 }
 
 // TestDocDetailEdgesIncludeDefersOwner: GET /api/v1/docs/{id} (what
-// `lode doc show --json` shows) carries a defers entry's owner (WL-SPEC-78 §4,
+// `lode doc show --json` shows) carries a defers entry's owner (WL-RULE-202,
 // WL-291).
 func TestDocDetailEdgesIncludeDefersOwner(t *testing.T) {
 	t.Parallel()
@@ -462,7 +462,7 @@ func TestCreateDocRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestCreateDocDuplicateSlugConflicts: the identity rules of WL-SPEC-77 §3 reach the
+// TestCreateDocDuplicateSlugConflicts: the identity rules of WL-REQ-164 reach the
 // caller as a 409 naming the collision, not as a raw database error.
 func TestCreateDocDuplicateSlugConflicts(t *testing.T) {
 	t.Parallel()
@@ -673,7 +673,7 @@ func TestGetDocDetail(t *testing.T) {
 		t.Errorf("revision = %+v, want null with none open", got.Revision)
 	}
 
-	// A plan carries no sections (WL-SPEC-77 §11) and its covers edge points out.
+	// A plan carries no sections (WL-REQ-172) and its covers edge points out.
 	rr = doReq(t, h, "GET", docPath(plan.ID, ""), token, nil)
 	decodeInto(t, rr, &got)
 	if len(got.Sections) != 0 {
@@ -744,7 +744,7 @@ func TestUpdateDocBody(t *testing.T) {
 		t.Errorf("error = %q, want it to point at revise", msg)
 	}
 
-	// A plan stays freely mutable at any status (WL-SPEC-77 §11). Seeded accepted:
+	// A plan stays freely mutable at any status (WL-REQ-172). Seeded accepted:
 	// accepting a plan over HTTP is the stub below.
 	plan := seedDoc(t, st, store.DocInput{
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
@@ -762,7 +762,7 @@ func TestUpdateDocBody(t *testing.T) {
 	}
 }
 
-// TestAcceptDoc: acceptance is the owner's deliberate act (WL-SPEC-77 §9), so
+// TestAcceptDoc: acceptance is the owner's deliberate act (WL-REQ-170), so
 // another authenticated actor is refused with 403 — an authorization refusal
 // about this document, not about the endpoint.
 func TestAcceptDoc(t *testing.T) {
@@ -798,7 +798,7 @@ func TestAcceptDoc(t *testing.T) {
 		}
 	}
 
-	// Accepting a plan mints its tasks in the same transaction (WL-SPEC-77 §11.2),
+	// Accepting a plan mints its tasks in the same transaction (WL-REQ-174),
 	// which is not built yet, so it is refused rather than half-done.
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
@@ -813,7 +813,7 @@ func TestAcceptDoc(t *testing.T) {
 }
 
 // TestReAcceptPlanMintsAddedDeclaration: the whole re-accept path through the
-// endpoint (WL-SPEC-77 §11.2). A plan edited after acceptance carries a new version,
+// endpoint (WL-REQ-174). A plan edited after acceptance carries a new version,
 // so its accept event is a new event and the mint runs, returning only the
 // declaration that had no row; re-accepting the same version again mints
 // nothing and still answers 200 with the document.
@@ -890,7 +890,7 @@ Do the third thing.
 	// The event says what actually happened: the second acceptance left
 	// "accepted", not "draft" — an append-only log may not record a transition
 	// the document never made. Read from the table rather than through
-	// /api/v1/events, whose commit-horizon predicate (WL-SPEC-77 §15) may not have
+	// /api/v1/events, whose commit-horizon predicate (WL-RULE-179) may not have
 	// caught up with an event committed a moment ago.
 	rows, err := st.DBForTests().Query(
 		`SELECT payload->>'wl:fromStatus' FROM events WHERE type = 'wl:DocumentAccepted' ORDER BY id`)
@@ -915,7 +915,7 @@ Do the third thing.
 }
 
 // TestAcceptPlanReturnsMintedTasks: accepting a plan returns the doc and the
-// tasks it minted in one response (WL-SPEC-77 §11.2); accepting a spec or ADR
+// tasks it minted in one response (WL-REQ-174); accepting a spec or ADR
 // carries no "tasks" key at all, so the response stays byte-identical to
 // before this field existed.
 func TestAcceptPlanReturnsMintedTasks(t *testing.T) {
@@ -956,7 +956,7 @@ func TestAcceptPlanReturnsMintedTasks(t *testing.T) {
 	}
 }
 
-// TestDocRevisionLifecycle walks WL-SPEC-77 §9 over HTTP: open a candidate, edit
+// TestDocRevisionLifecycle walks WL-REQ-170 over HTTP: open a candidate, edit
 // it, be refused for a violation, fix it, land it.
 func TestDocRevisionLifecycle(t *testing.T) {
 	t.Parallel()
@@ -1041,7 +1041,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 
 // TestDocRevisionDiscard walks DELETE /api/v1/docs/{id}/revision: a third
 // party is refused, the proposer withdraws their own candidate, and the slot
-// the withdrawal frees takes a fresh one straight away (WL-SPEC-77 §9).
+// the withdrawal frees takes a fresh one straight away (WL-REQ-170).
 //
 // The token identity is alice, who is the spec's owner; bob proposes.
 func TestDocRevisionDiscard(t *testing.T) {
@@ -1144,7 +1144,7 @@ func TestDocRevisionRefusals(t *testing.T) {
 	}
 }
 
-// --- list selectors (WL-SPEC-78 §1.2) --------------------------------------------
+// --- list selectors (WL-REQ-186) --------------------------------------------
 
 // docPlanCoveringSec1Body is a mintable plan whose covers edge names sec-1 of
 // docSpecBody's spec, so accepting it discharges exactly that section.
@@ -1242,7 +1242,7 @@ func TestListDocsNeedsExecution(t *testing.T) {
 
 // TestListDocsSelectorConflicts: each derived selector implies a kind and a
 // status, so a contradicting filter is refused rather than answered with an
-// empty list, which would read as "nothing to plan" (WL-SPEC-78 §1.2).
+// empty list, which would read as "nothing to plan" (WL-REQ-186).
 func TestListDocsSelectorConflicts(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -1299,7 +1299,7 @@ func TestListDocsSelectorRedundantFiltersAllowed(t *testing.T) {
 }
 
 // TestListDocsBareSuperseded: the selector answers the withdrawn rules no
-// rule supersedes (WL-SPEC-77 §6), with the section arranging each, and
+// rule supersedes (WL-REQ-167), with the section arranging each, and
 // leaves the document and planning-gap shapes empty.
 func TestListDocsBareSuperseded(t *testing.T) {
 	t.Parallel()
@@ -1341,7 +1341,7 @@ func eventPayload(t *testing.T, ev map[string]any) map[string]any {
 	return p
 }
 
-// checkPayloadProps fails for every property whose value is not what WL-SPEC-77 §15
+// checkPayloadProps fails for every property whose value is not what WL-RULE-179
 // mandates, naming all of them rather than stopping at the first.
 func checkPayloadProps(t *testing.T, payload map[string]any, want map[string]string) {
 	t.Helper()
@@ -1366,7 +1366,7 @@ func eventsOfType(t *testing.T, h http.Handler, token, typ string) []any {
 }
 
 // TestAcceptDocEmitsTypedEvent: acceptance is one of the two events the
-// doc-lifecycle watcher consumes, so it is recorded in WL-SPEC-77 §15's typed
+// doc-lifecycle watcher consumes, so it is recorded in WL-RULE-179's typed
 // JSON-LD form — wl:DocumentAccepted, with the deterministic external id that
 // makes a retry idempotent at the log — and not as the dotted doc.accepted the
 // other document verbs still write.
@@ -1421,7 +1421,7 @@ func TestAcceptDocEmitsTypedEvent(t *testing.T) {
 	}
 }
 
-// TestSubmitDoc walks POST /api/v1/docs/{id}/submit, WL-SPEC-77 §15's "submission is
+// TestSubmitDoc walks POST /api/v1/docs/{id}/submit, WL-RULE-179's "submission is
 // an event, not a status": the log gains a wl:DocumentSubmitted row and the
 // document itself does not move at all.
 func TestSubmitDoc(t *testing.T) {
@@ -1488,7 +1488,7 @@ func TestSubmitDoc(t *testing.T) {
 	}
 }
 
-// TestCreateDocRecordsAuthoringTask covers WL-SPEC-77 §13: the document a task wrote
+// TestCreateDocRecordsAuthoringTask covers WL-REQ-177: the document a task wrote
 // points back at that task, so "which task produced this spec?" is answerable.
 // Both halves are checked, because both are the design: a create carrying the
 // caller's worktree task records it, and a create carrying none is a document
@@ -1670,7 +1670,7 @@ func TestDocMutationResponsesCarryTheProjectKey(t *testing.T) {
 }
 
 // TestResolveDocRefFullGrammar is WL-358: the resolve endpoint behind every
-// `lode doc <verb> <ref>` must accept the same WL-SPEC-78 §2 grammar `lode show`
+// `lode doc <verb> <ref>` must accept the same WL-REQ-192 grammar `lode show`
 // resolves — the <KEY>-<TYPE>-<n> shorthand included — not just id and exact
 // slug, or no single ref form works across the doc surfaces.
 func TestResolveDocRefFullGrammar(t *testing.T) {
@@ -1683,7 +1683,7 @@ func TestResolveDocRefFullGrammar(t *testing.T) {
 	})
 
 	for _, ref := range []string{
-		"WL-SPEC-25",          // WL-SPEC-77 §7 shorthand
+		"WL-SPEC-25",          // WL-REQ-168 shorthand
 		"docs/specs/025-x.md", // corpus path
 		"25",                  // bare corpus number, unique here
 	} {
@@ -1795,9 +1795,9 @@ requires: 025-documents-in-the-backbone.md#sec-99
 	}
 }
 
-// TestDocSections covers GET /api/v1/docs/sections (WL-SPEC-77 §16): the cross-corpus
+// TestDocSections covers GET /api/v1/docs/sections (WL-REQ-180): the cross-corpus
 // section listing, its ?project= and ?number= narrowing, and the Ref the
-// boundary stamps so a row is citable as WL-SPEC-25#sec-2.
+// boundary stamps so a row is citable as WL-REQ-163.
 func TestDocSections(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -1856,7 +1856,7 @@ func TestDocSections(t *testing.T) {
 	}
 }
 
-// TestDocReferrers covers GET /api/v1/docs/{id}/referrers (WL-SPEC-77 §10): the
+// TestDocReferrers covers GET /api/v1/docs/{id}/referrers (WL-REQ-171): the
 // open work pointing at one section, and the refusal to answer for a whole
 // document — a referrer is a section-level fact.
 func TestDocReferrers(t *testing.T) {
@@ -1903,7 +1903,7 @@ func TestDocReferrers(t *testing.T) {
 }
 
 // noHeader is body with its header removed: fixtures carry headers because
-// POST /api/v1/docs reads one, and a body write takes none (WL-SPEC-77 §7).
+// POST /api/v1/docs reads one, and a body write takes none (WL-REQ-168).
 func noHeader(t *testing.T, body string) string {
 	t.Helper()
 	d, err := designdoc.Parse([]byte(body))

@@ -1,5 +1,5 @@
 // progresswrite_test.go exercises beginJSONPost, the Progress page's write
-// gate (WL-SPEC-85 §5), rule by rule. It is a white-box test because the
+// gate (WL-REQ-1338), rule by rule. It is a white-box test because the
 // gate is a helper, not a route: the routes that call it arrive with WL-734,
 // and a probe route cannot be registered from the black-box harness —
 // routeGuards refuses to boot on a pattern it does not name.
@@ -279,10 +279,10 @@ func TestBeginJSONPostCountsRefusals(t *testing.T) {
 	}
 }
 
-// --- the accept route (WL-SPEC-85 §4) --------------------------------------
+// --- the accept route (WL-REQ-1337) --------------------------------------
 
 // probeAcceptPlan is a draft plan with one declaration, so accepting it mints
-// exactly one task (WL-SPEC-77 §11.2) and the reply's count is checkable.
+// exactly one task (WL-REQ-174) and the reply's count is checkable.
 const probeAcceptPlan = `---
 status: draft
 ---
@@ -355,7 +355,7 @@ func acceptPost(t *testing.T, s *server, actor string, doc int64) *httptest.Resp
 }
 
 // TestProgressAcceptMintsTasks: the owner accepts their draft plan and gets
-// back what was accepted and how many tasks it minted (§3.2, WL-SPEC-77 §11.2).
+// back what was accepted and how many tasks it minted (§3.2, WL-REQ-174).
 func TestProgressAcceptMintsTasks(t *testing.T) {
 	t.Parallel()
 	s, plan := newAcceptServer(t)
@@ -377,7 +377,7 @@ func TestProgressAcceptMintsTasks(t *testing.T) {
 	}
 }
 
-// TestProgressAcceptRefusesNonOwner: the owner gate is the store's (WL-SPEC-77 §9),
+// TestProgressAcceptRefusesNonOwner: the owner gate is the store's (WL-REQ-170),
 // so it holds here whatever the page rendered for this viewer.
 func TestProgressAcceptRefusesNonOwner(t *testing.T) {
 	t.Parallel()
@@ -404,7 +404,7 @@ func TestProgressAcceptRefusesNonOwner(t *testing.T) {
 }
 
 // TestProgressAcceptTwiceIsAConflict: §4.2 rule 7. A plan is re-acceptable
-// while accepted through the CLI (WL-SPEC-77 §11.2), but this button is offered on a
+// while accepted through the CLI (WL-REQ-174), but this button is offered on a
 // draft document, so a second click on a stale page is refused rather than
 // answered as a success that minted nothing.
 func TestProgressAcceptTwiceIsAConflict(t *testing.T) {
@@ -592,7 +592,7 @@ func TestProgressPlanRefusesNonSpec(t *testing.T) {
 	}
 }
 
-// --- the rally act (WL-SPEC-85 §4) -----------------------------------------
+// --- the rally act (WL-REQ-1337) -----------------------------------------
 
 // probeRallySpec is the rally probe's spec: one section an accepted plan
 // covers, one a draft plan covers, and one nothing covers at all.
@@ -770,7 +770,7 @@ func TestProgressRallyAddAssemblesFourMembers(t *testing.T) {
 
 // TestProgressRallyAddAssignsNonCrewOwnerNothing: the accept prompt is
 // assigned to the plan's owner only when the owner can hold a task. An owner
-// who is not on the crew (WL-SPEC-75 §13.5) gets an unassigned prompt rather than a
+// who is not on the crew (WL-REQ-123) gets an unassigned prompt rather than a
 // refused rally.
 func TestProgressRallyAddAssignsNonCrewOwnerNothing(t *testing.T) {
 	t.Parallel()

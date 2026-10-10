@@ -90,7 +90,7 @@ func Truncate(s string, n int) string {
 //
 // The timeout is fixed and the caller's input count is not: the indexer hands
 // over a whole subject at once, and a long spec chunks into dozens of pieces
-// (WL-SPEC-79 §14) — the corpus holds one of 88. On the in-cluster CPU backend an
+// (WL-REQ-254) — the corpus holds one of 88. On the in-cluster CPU backend an
 // input costs on the order of a second, so an unsplit request for a large doc
 // cannot finish inside any timeout worth setting, and the retry that follows
 // it is more load on a server that is already behind. Eight inputs keeps one
@@ -145,7 +145,7 @@ func (p *OpenAI) Dim() int {
 // are included because text embedded under a different instruction lands
 // somewhere else in the same model's space; they are digested rather than
 // spelled out to keep the ID bounded, and left off entirely when both are
-// empty so a symmetric instance keeps the ID it already recorded (WL-SPEC-79 §14).
+// empty so a symmetric instance keeps the ID it already recorded (WL-REQ-254).
 func (p *OpenAI) ID() string {
 	endpoint := p.URL
 	if u, err := url.Parse(p.URL); err == nil {

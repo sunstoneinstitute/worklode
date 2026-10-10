@@ -17,7 +17,7 @@ const lintDoc = "---\nstatus: draft\n---\n# T\n\n## 1. Closure {#sec-1}\n\na set
 // TestRuleLint: rule 1 defines "Closure". A uses the term without the
 // definition in its closure and points above; B needs the definition (one
 // context edge) and conflicts with C; C cites a section by number, and
-// "enclosure" is not the term (WL-SPEC-77 §4c).
+// "enclosure" is not the term (WL-REQ-1367).
 func TestRuleLint(t *testing.T) {
 	s := openDocStore(t)
 	s.metrics = newStoreMetrics(prometheus.NewRegistry())

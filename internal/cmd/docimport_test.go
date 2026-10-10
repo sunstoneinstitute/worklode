@@ -64,7 +64,7 @@ func TestWalkImportCorpus(t *testing.T) {
 }
 
 // TestWalkImportCorpusRejectsUnnumberedSpec: a spec or ADR is identified by its
-// corpus number (WL-SPEC-77 §7), so a spec-directory file with none is a defect in
+// corpus number (WL-REQ-168), so a spec-directory file with none is a defect in
 // the corpus, not a document to guess a number for.
 func TestWalkImportCorpusRejectsUnnumberedSpec(t *testing.T) {
 	dir := writeCorpus(t, map[string]string{"specs/no-number.md": "# A spec\n"})
@@ -241,7 +241,7 @@ func TestDocImport(t *testing.T) {
 		}{
 			"001-forward-spec":         {"spec", 1},
 			"003-record-a-decision":    {"spec", 3},
-			"2026-01-01-mintable-plan": {"plan", 1}, // WL-SPEC-75 §13.4: allocated, not 0
+			"2026-01-01-mintable-plan": {"plan", 1}, // WL-REQ-122: allocated, not 0
 		} {
 			d := importedDoc(t, c, slug)
 			if d.Kind != want.kind || d.Number != want.number {
@@ -369,7 +369,7 @@ func TestDocImportDryRun(t *testing.T) {
 
 // TestDocImportForwardBlockingPlanChain: a plan series whose phases each name
 // the next in `blockedBy` imports whole. It is the one relation the server
-// resolves at create time (WL-SPEC-77 §3), so pass 1 has to create the chain back to
+// resolves at create time (WL-REQ-164), so pass 1 has to create the chain back to
 // front (WL-339) — in walk order every phase would name a plan that does not
 // exist yet and the whole import would fail on the first one.
 func TestDocImportForwardBlockingPlanChain(t *testing.T) {
@@ -412,7 +412,7 @@ func TestDocImportForwardBlockingPlanChain(t *testing.T) {
 }
 
 // TestDocImportRefusesBlocks: `blocks:` is an inverse spelling the server
-// never stores (WL-SPEC-77 §8.1), so the import fails before writing and
+// never stores (WL-REQ-1288), so the import fails before writing and
 // names blockedBy.
 func TestDocImportRefusesBlocks(t *testing.T) {
 	dir := t.TempDir()

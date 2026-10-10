@@ -137,7 +137,7 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 }
 
 // Manual mode has no listener to redirect to, so it carries no redirect_uri and
-// the loopback check does not apply to it (WL-SPEC-74 §7.2). Everything else about
+// the loopback check does not apply to it (WL-REQ-58). Everything else about
 // the request is unchanged — a state is still required.
 func TestCLILoginManualMode(t *testing.T) {
 	t.Parallel()
@@ -258,7 +258,7 @@ func TestFinishLoginEmptyModeIsLoopback(t *testing.T) {
 
 // TestCLILoginRequiresOIDC asserts the server-mediated CLI login 404s when
 // OIDC is unconfigured, even if the dormant GitHub App OAuth client (s.gh,
-// WL-SPEC-74 §9.2) is set — it never gates login.
+// WL-REQ-64) is set — it never gates login.
 func TestCLILoginRequiresOIDC(t *testing.T) {
 	t.Parallel()
 	s := &server{cfg: Config{SessionSecret: "sek"}, gh: &githubauth.Client{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}

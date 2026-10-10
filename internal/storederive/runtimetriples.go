@@ -40,7 +40,7 @@ func artifactCoordinate(a store.Artifact) (name, artifactIRI string) {
 	return name, iri.Artifact(a.Kind, name, a.Version)
 }
 
-// ArtifactTriples projects one artifacts row (WL-SPEC-79 §12). The commit edge is
+// ArtifactTriples projects one artifacts row (WL-REQ-251). The commit edge is
 // guarded: target_commitish is frequently a branch name, and minting a
 // commit IRI from one would create a plausible, permanently wrong node —
 // emit prov:wasDerivedFrom only when source_sha resolves via known. An
@@ -131,8 +131,8 @@ func CommitTriples(host, repo, sha string) []graphproj.Triple {
 
 // ReleaseCutFromTriples projects one release_frontiers row joined to its
 // main_commits sha: the release's git_tag artifact wl:cutFrom the frontier
-// commit (WL-SPEC-79 §12 — release_frontiers projects as an edge, not a node;
-// the property was spelled wl:covers until WL-SPEC-78 §4.6 took that name for the
+// commit (WL-REQ-251 — release_frontiers projects as an edge, not a node;
+// the property was spelled wl:covers until WL-REQ-208 took that name for the
 // Plan→Section undertaking). repo is "owner/name" (GitHub full_name); a
 // malformed repo projects nothing.
 func ReleaseCutFromTriples(repo, tag, sha string) []graphproj.Triple {
@@ -150,7 +150,7 @@ func ReleaseCutFromTriples(repo, tag, sha string) []graphproj.Triple {
 // targetKindConcept maps a deployments.target_kind DB value to its concept
 // id. The DB stores 'pypi' for the target kind, but the concept is
 // wlc:pypi_target — the artifact kind and target kind are different concepts
-// that share a name in the relational schema (WL-SPEC-79 §5).
+// that share a name in the relational schema (WL-REQ-240).
 func targetKindConcept(dbKind string) string {
 	if dbKind == "pypi" {
 		return "pypi_target"

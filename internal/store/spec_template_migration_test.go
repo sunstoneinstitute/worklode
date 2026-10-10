@@ -20,7 +20,7 @@ const (
 	tmplSpecTwo = "## 1. Alpha {#sec-1}\n\nAlpha text.\n\n## 2. Beta {#sec-2}\n\nBeta text.\n"
 )
 
-// TestSpecTemplateMigration applies the WL-SPEC-77 §19.7 migration to the
+// TestSpecTemplateMigration applies the WL-REQ-1301 migration to the
 // fixture corpus: the heading-only rule becomes a spec heading, its covers
 // edge and governedBy link move to the requirement under it, rule text
 // leaves docs.body while the preamble and ## Sources stay, and the rendered

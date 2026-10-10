@@ -29,7 +29,7 @@ func WithMetrics(reg prometheus.Registerer) Option {
 }
 
 // WithDocStalenessDays overrides the instance default doc-staleness
-// threshold (WL-SPEC-77 §9) sweepStaleDocs applies to a document whose project
+// threshold (WL-REQ-170) sweepStaleDocs applies to a document whose project
 // sets no override. Open sets 30 by default; the caller (serverapp.Run)
 // passes this only when LODE_DOC_STALENESS_DAYS is set.
 func WithDocStalenessDays(days int) Option {
@@ -136,7 +136,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_search_requests_total",
 			Help: "Corpus searches by mode (hybrid|dense|lexical|invalid) and outcome (ok|error|empty).",
 		}, []string{"mode", "outcome"}),
-		// WL-SPEC-79 §17 asks for worklode_search_arm_duration_seconds{arm}. §15
+		// WL-REQ-261 asks for worklode_search_arm_duration_seconds{arm}. WL-REQ-259
 		// mandates one statement for both arms, so no arm has a duration of
 		// its own to report; this times the statement and labels it by mode,
 		// which is the arm in the two single-arm modes and honestly not one
@@ -204,7 +204,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.ruleSupersedes, m.ruleClosureSize, m.ruleLints, m.ruleOps, m.termResolves, m.queries, m.querySeconds)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
-	// WL-SPEC-79 §17 is about the first of those becoming the second.
+	// WL-REQ-261 is about the first of those becoming the second.
 	m.searchArmEmpties.WithLabelValues("dense")
 	m.searchArmEmpties.WithLabelValues("lexical")
 	// Pre-initialise both sweeper series so alert expressions see 0, not
@@ -241,7 +241,7 @@ func (m *storeMetrics) release(outcome string) {
 
 // escalation records one EscalateTask call by what it did: minted a design
 // task, joined an open one, or failed. Three fixed labels, no document or task
-// id — WL-SPEC-77 §15 wants the ladder's funnel, not its subjects.
+// id — WL-RULE-179 wants the ladder's funnel, not its subjects.
 func (m *storeMetrics) escalation(outcome string) {
 	if m == nil {
 		return
@@ -251,7 +251,7 @@ func (m *storeMetrics) escalation(outcome string) {
 
 // gap records one RecordGap call by outcome: recorded (new event), replayed
 // (matched an existing external id, nothing written), or error (invalid
-// input) — WL-SPEC-77 §15's non-escalating rung.
+// input) — WL-RULE-179's non-escalating rung.
 func (m *storeMetrics) gap(outcome string) {
 	if m == nil {
 		return
@@ -312,7 +312,7 @@ func (m *storeMetrics) expire(n int) {
 
 // sweeperRun records one lease-sweeper tick by result. The label key is
 // "result", not "outcome": this is plain operational success/failure, not a
-// domain sentinel (WL-SPEC-73 §6).
+// domain sentinel (WL-REQ-32).
 func (m *storeMetrics) sweeperRun(err error) {
 	if m == nil {
 		return
@@ -320,7 +320,7 @@ func (m *storeMetrics) sweeperRun(err error) {
 	m.sweeperRuns.WithLabelValues(outcome(err)).Inc()
 }
 
-// docGroomRun records one WL-SPEC-77 §9 stale-doc sweep tick by outcome. Like
+// docGroomRun records one WL-REQ-170 stale-doc sweep tick by outcome. Like
 // sweeperRun, this is plain operational success/failure.
 func (m *storeMetrics) docGroomRun(err error) {
 	if m == nil {
@@ -379,7 +379,7 @@ func (m *storeMetrics) projectWorkRead(err error) {
 // docOp records one document operation by op and outcome. op is the caller's
 // fixed verb — create|update|patch|stale|accept|submit|revise|discard|withdraw|
 // edges|resolve|delete|undelete|list-versions|get-version|arrange|unarrange, the enumeration the Help string above
-// is the contract for (WL-SPEC-73 §6) — never a doc id or project, which are
+// is the contract for (WL-REQ-32) — never a doc id or project, which are
 // unbounded. Adding a verb means adding it there too.
 func (m *storeMetrics) docOp(op string, err error) {
 	if m == nil {
@@ -390,9 +390,9 @@ func (m *storeMetrics) docOp(op string, err error) {
 
 // docOpOutcome maps one document operation's error to its metric label.
 // accept and patch are the two ops with a third outcome: refused-reviewers
-// picks out AcceptDoc's mechanical multi-approval gate (WL-SPEC-77 §9,
+// picks out AcceptDoc's mechanical multi-approval gate (WL-REQ-170,
 // ErrMissingApprovals); PatchRule picks out PatchDoc's own refusals
-// (WL-SPEC-77 §10) — refused-mechanical for a rule that fired, no-reviewers for a
+// (WL-REQ-171) — refused-mechanical for a rule that fired, no-reviewers for a
 // substantive patch with no one to re-approve it. Both come from a single op
 // each, so no other op's errors can land on these labels.
 func docOpOutcome(op string, err error) string {
@@ -438,7 +438,7 @@ func (m *storeMetrics) instruction(op, outcome string) {
 	m.instructions.WithLabelValues(op, outcome).Inc()
 }
 
-// decision records one decision-row operation (WL-SPEC-77 §12) by op and
+// decision records one decision-row operation (WL-REQ-176) by op and
 // outcome. Every caller passes an op literal, so the label stays bounded.
 func (m *storeMetrics) decision(op, outcome string) {
 	if m == nil {

@@ -447,7 +447,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		return a.reopenApproval(tx, repo, gh.Number, p.RequestedReviewer.Login)
 	case action == "synchronize":
 		// A push to the PR branch designates the new head as the governed
-		// revision (WL-SPEC-75 §13). An open row rebinds; a decided PR gets a
+		// revision (WL-REQ-118). An open row rebinds; a decided PR gets a
 		// visibly unreviewed candidate row. Correlation never fails the
 		// delivery — but that guard already ran above (pr.TaskID != nil);
 		// once past it, a DesignateRevision error is a genuine store
@@ -473,7 +473,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		return nil
 	case action == "closed" && gh.Merged:
 		// The lease is deliberately left alone: it says a worktree is
-		// occupied, which a merge does not change (WL-SPEC-75 §6).
+		// occupied, which a merge does not change (WL-REQ-94).
 		// Record the PR's shas as task commits; the resolver advances the
 		// task once (and if) they appear on main via a push event.
 		shas := []string{gh.Head.SHA}
@@ -593,11 +593,11 @@ func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
 }
 
 // prLane is the lane a PR-review approval lives in. The GitHub ingest is not
-// a flow rule, so it writes and reads the no-lane row; WL-SPEC-75 §13's named lanes
+// a flow rule, so it writes and reads the no-lane row; WL-REQ-118's named lanes
 // belong to flows that mint their own.
 const prLane = ""
 
-// openApproval materializes WL-SPEC-75 §13's "a missing approval is a visible
+// openApproval materializes WL-REQ-118's "a missing approval is a visible
 // awaiting row" for a task-correlated PR, bound to the head sha it governs.
 // required_actor is best effort: the first requested reviewer that maps to an
 // actor, NULL when none does. A redelivery conflicts on (kind, id, revision)
@@ -626,7 +626,7 @@ func (a *applier) openApproval(tx *sql.Tx, now time.Time, repo string, number in
 	return nil
 }
 
-// reopenApproval handles WL-SPEC-75 §13's re-request edge: asking for review again
+// reopenApproval handles WL-REQ-118's re-request edge: asking for review again
 // puts a changes_requested row back in the awaiting queue, and fills in the
 // reviewer the open delivery could not resolve. Any other state is a no-op.
 func (a *applier) reopenApproval(tx *sql.Tx, repo string, number int64, reviewerLogin string) error {
@@ -661,9 +661,9 @@ func (a *applier) reopenApproval(tx *sql.Tx, repo string, number int64, reviewer
 // resolveApprovalForReview closes the open approval a review decides. Only
 // approved and changes_requested decide anything: a commented review leaves
 // the row awaiting in the table, so a late real review can still resolve it
-// (WL-SPEC-75 §13). Once the PR itself closes, WL-663's approvalPROpen hides that
+// (WL-REQ-118). Once the PR itself closes, WL-663's approvalPROpen hides that
 // still-awaiting row from every display reader — tasks carry no review
-// requirement by default (WL-SPEC-75 §13), so a closed PR with no review was never
+// requirement by default (WL-REQ-118), so a closed PR with no review was never
 // a bypassed gate, just nothing left to act on. resolving_actor is NULL when
 // the reviewer maps to no actor. A PR with no open row, or none correlated
 // to a task, is a no-op — a correlation must never fail the delivery.

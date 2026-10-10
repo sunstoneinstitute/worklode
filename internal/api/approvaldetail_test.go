@@ -24,7 +24,7 @@ func getOK(t *testing.T, h http.Handler, path string) string {
 }
 
 // TestApprovalDetailShowsRevisionHistory: the candidate's own detail page
-// renders the full decision history (ListApprovalsForEntity, WL-SPEC-82 §9), not
+// renders the full decision history (ListApprovalsForEntity, WL-REQ-344), not
 // just its own row — a stale approval beside an open candidate has to read
 // as exactly that.
 func TestApprovalDetailShowsRevisionHistory(t *testing.T) {
@@ -53,7 +53,7 @@ func TestApprovalDetailUnknownID404s(t *testing.T) {
 }
 
 // TestApprovalDetailRendersGovernedReferences: the review-graph list (WL-SPEC-75
-// §13.6, WL-SPEC-82 §9) renders every reference this approval's own designation
+// §13.6, WL-REQ-344) renders every reference this approval's own designation
 // recorded, each as "kind id @ revision".
 func TestApprovalDetailRendersGovernedReferences(t *testing.T) {
 	t.Parallel()
@@ -85,7 +85,7 @@ func TestApprovalDetailGovernedReferencesEmptyIsHonest(t *testing.T) {
 }
 
 // TestApprovalDetailCompareLinkOnlyWithDecidedPredecessor: the GitHub
-// diff-from-previous jump-out link (WL-SPEC-82 §9) appears for a candidate that
+// diff-from-previous jump-out link (WL-REQ-344) appears for a candidate that
 // follows a decided review, and not for a first-ever review with no
 // predecessor to diff against.
 func TestApprovalDetailCompareLinkOnlyWithDecidedPredecessor(t *testing.T) {

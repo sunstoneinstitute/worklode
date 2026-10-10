@@ -59,7 +59,7 @@ func TestLayoutDir(t *testing.T) {
 		t.Errorf("Dir = %q, want %q", got, want)
 	}
 	// The layout is flat: a "/" from a namespaced template is flattened to
-	// "-" rather than nesting a directory (WL-SPEC-80 §3.3).
+	// "-" rather than nesting a directory (WL-REQ-269).
 	if got, want := l.Dir("/repo", "team/WL-7-x"), "/repo/.worktrees/team-WL-7-x"; got != want {
 		t.Errorf("Dir = %q, want %q", got, want)
 	}
@@ -123,7 +123,7 @@ func TestLayoutParseDir(t *testing.T) {
 	}{
 		{"default", def, "/repo/.worktrees/WL-7-fix-the-thing", "WL-7", true},
 		{"bare id", def, "/repo/.worktrees/WL-7", "WL-7", true},
-		// The layout is flat (WL-SPEC-80 §3.3): only a directory immediately
+		// The layout is flat (WL-REQ-269): only a directory immediately
 		// below the base is a worktree root. Anything deeper is a path INSIDE
 		// one, which the hook guards reach only via worktree.Root — never as a
 		// worktree root itself.

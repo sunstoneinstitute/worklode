@@ -30,12 +30,12 @@ docker compose up -d
 ```
 
 `LODE_DOC_DEPTH_LIMIT` (or `--doc-depth-limit`) sets how deep an anchored
-document section may go and still be addressable (WL-SPEC-78 §3.4). It defaults
+document section may go and still be addressable (WL-RULE-201). It defaults
 to 3, and a value below 1 fails the boot. Raising it is always safe; lowering
 it is refused for any document whose already-accepted anchors it would orphan.
 
 `LODE_GLOSSARY_PROJECT` (or `--glossary-project`) names the project whose
-glossary spec (slug `glossary`) is the instance glossary (WL-SPEC-77 §4d). A
+glossary spec (slug `glossary`) is the instance glossary (WL-REQ-1368). A
 term a project does not define resolves there. Unset, the instance has no
 glossary.
 
@@ -186,7 +186,7 @@ lode inbox promote acme/widgets 41 --priority medium --draft --parent <backlog-i
 - `--draft` on `lode inbox promote` lands the task in `draft` (not claimable
   until `lode task publish`); `--parent <id>` files it under an existing task in
   the same step. Any ordinary task can be a parent — the `child_of` edge is
-  what makes it a container (WL-SPEC-75 §5).
+  what makes it a container (WL-REQ-88).
 - `lode inbox link <repo> <number> <task-id>` marks an issue as already
   covered by an existing task, without creating a new one.
 
@@ -328,7 +328,7 @@ tracking has no other stage. A cluster missing from the map falls back to
 
 `POST /hooks/catalog` receives what a data catalog reports about an artifact
 and files it as evidence against whatever open deliverable, task or document
-declared that artifact address (WL-SPEC-75 §13.3). Authentication is the same
+declared that artifact address (WL-RULE-121). Authentication is the same
 `generic-hmac` scheme as the Flux hook: `X-Signature: sha256=<hex>` over the
 exact request bytes, keyed by `LODE_CATALOG_WEBHOOK_SECRET`. An unset secret
 answers 503. `X-Catalog-Delivery` is the idempotency key when the emitter has
@@ -361,7 +361,7 @@ bytes, keyed by `LODE_CMS_WEBHOOK_SECRET`, `X-CMS-Delivery` as the
 idempotency key. The payload additionally requires `published_by` and
 `approved_by` — who hit publish and who approved, both non-blank after
 trimming. A delivery missing either is a 400 before any event is recorded
-(WL-SPEC-75 §13.6): the publish fact without the person would rebuild the
+(WL-REQ-124): the publish fact without the person would rebuild the
 invisible-sign-off problem the whole spec exists to remove. Both fields are
 merged into the filed evidence's `detail` alongside anything the CMS itself
 sent there.
@@ -393,7 +393,7 @@ Only plan bodies are measured; specs and ADRs are unaffected.
 ## Task secrets
 
 Tasks can declare the credentials their executor needs, by symbolic name,
-without ever storing a value in worklode (WL-SPEC-74 §10).
+without ever storing a value in worklode (WL-REQ-67).
 
 - **Declaring:** `lode task add --secrets KUBECONFIG_HZDEV,OPENALEX_API_KEY …`
   or `lode task edit <id> --secrets …` (`--secrets none` clears). Names come
@@ -416,7 +416,7 @@ without ever storing a value in worklode (WL-SPEC-74 §10).
 - **Server side:** the catalog is a `LODE_SECRETS_CATALOG_PATH` file, projected
   from the `worklode-secrets-catalog` 1Password item into a per-environment
   `worklode-secrets-catalog` Secret by an ExternalSecret. It's deliberately
-  not in this repo (WL-SPEC-74 §10.2); entries are added in 1Password, not
+  not in this repo (WL-REQ-69); entries are added in 1Password, not
   by PR — `deploy/secrets-catalog.example.toml` shows the shape.
 - **Guarantees:** worklode stores names only — values never touch disk, logs,
   or the event log; the `secrets_materialized` event records names, not
@@ -458,7 +458,7 @@ reached over HTTPS (or `localhost`); the `lode login` CLI flow is unaffected.
 ## Knowledge graph projection
 
 When `LODE_GRAPHSERVER_URL` is set, `lode-server` mirrors every project's
-tasks into the data-platform knowledge graph (WL-SPEC-79 §12). A background
+tasks into the data-platform knowledge graph (WL-REQ-251). A background
 projector follows the `state_log` outbox and, for each dirtied project,
 replaces its named graph (`https://worklode.io/ns/graph/project/<id>`)
 wholesale on graph-server's `main` branch — checkpointed in the
@@ -483,7 +483,7 @@ say — is a watermark rewind: `UPDATE graph_projection SET last_txid = 0`. The
 next run treats every project as dirty again.
 
 The watermark counts *transactions*, not `state_log` rows, and the scan stops
-at the commit horizon (`pg_snapshot_xmin`) for the reason WL-SPEC-75 §9.3 gives for
+at the commit horizon (`pg_snapshot_xmin`) for the reason WL-REQ-106 gives for
 the event log: `state_log` ids are assigned at INSERT time, so a slower
 transaction can commit a lower id after a faster one committed a higher one,
 and a row-id watermark would skip it. The cost is the same as the event log's
@@ -498,7 +498,7 @@ zero is the signal — `worklode_graph_projection_runs_total{result="error"}`
 climbing without it means the batch itself is broken, not one project. Which
 project, since when, and the last error is what `lode graph quarantines`
 prints (`GET /api/v1/graph/projection/failures`), since the metric is
-deliberately unlabelled — WL-SPEC-73 §6 keeps the project set, which is not closed,
+deliberately unlabelled — WL-REQ-32 keeps the project set, which is not closed,
 out of a label. The projector re-attempts a quarantined project immediately,
 then on a 1m→30m doubling backoff, and immediately again whenever the project
 has new task activity. The row is
@@ -598,7 +598,7 @@ them); `lode task skills <id>` shows what is pinned, and pinned skills are
 always inlined in `lode task brief`.
 
 Recommendations and `lode search` share one retrieval path over the corpus
-index (WL-SPEC-79 §14). Its dense arm needs `LODE_EMBEDDING_URL`, `LODE_EMBEDDING_MODEL`
+index (WL-REQ-254). Its dense arm needs `LODE_EMBEDDING_URL`, `LODE_EMBEDDING_MODEL`
 and `LODE_EMBEDDING_CONTEXT_TOKENS` (the model's context window, which sizes
 the chunks) on the server, and, if the endpoint requires auth,
 `LODE_EMBEDDING_API_KEY`; the default deployment points the URL at a CPU
@@ -835,7 +835,7 @@ NNNN_name.down.sql
 
 where `NNNN` is the next sequence number.
 
-### Graph-server acceptance (WL-SPEC-79 §13)
+### Graph-server acceptance (WL-REQ-252)
 
 `e2e/graphserver_test.go` proves the knowledge-graph hand-off end-to-end
 against a live data-platform graph-server: Keycloak client-credentials

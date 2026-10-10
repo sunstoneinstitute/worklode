@@ -241,7 +241,7 @@ func TestClaimRequiresReady(t *testing.T) {
 	}
 }
 
-// TestClaimRejectsDecision pins WL-SPEC-75 §8 as amended (WL-638): a decision is
+// TestClaimRejectsDecision pins WL-REQ-97 as amended (WL-638): a decision is
 // never leased, even by a direct claim by id (the human_only escape hatch
 // does not apply here). `lode task assign` is the intended path instead.
 func TestClaimRejectsDecision(t *testing.T) {

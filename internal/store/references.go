@@ -1,4 +1,4 @@
-// references.go implements WL-SPEC-75 §13.4's entity_edges: typed references
+// references.go implements WL-REQ-122's entity_edges: typed references
 // between entities of different kinds, the only edges allowed to cross a
 // project boundary. Containment (a deliverable's milestone, a task's
 // project) always stays same-project and lives on the owning row instead;
@@ -21,7 +21,7 @@ type referenceShape struct {
 	ToKind   string
 }
 
-// referenceShapes is the rel vocabulary (WL-SPEC-75 §13.4), one row per rel naming its
+// referenceShapes is the rel vocabulary (WL-REQ-122), one row per rel naming its
 // end kinds. A rel outside this table, or ends of the wrong kind, is
 // ErrInvalidInput.
 var referenceShapes = map[string]referenceShape{
@@ -155,7 +155,7 @@ func (s *Store) ReferencesFor(ctx context.Context, kind, id string) ([]model.Ent
 }
 
 // MilestoneDeliverableRefs returns the deliverables a milestone depends_on
-// (WL-SPEC-75 §13.4), joined through deliverableFrom so each one carries its own
+// (WL-REQ-122), joined through deliverableFrom so each one carries its own
 // reported state — the read the project Progress page needs to show a
 // dependency on an unpublished deliverable as blocked, not as a bare id.
 func (s *Store) MilestoneDeliverableRefs(ctx context.Context, milestoneID string) ([]model.Deliverable, error) {

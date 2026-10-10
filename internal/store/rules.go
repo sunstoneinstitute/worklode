@@ -28,7 +28,7 @@ type ruleRow struct {
 
 // syncRules makes a document's rules agree with its parsed source.
 // Every anchored section is a design rule or, when isSpecHeading holds and no
-// prior rule matches it, a spec heading row (WL-SPEC-77 §19.1); changed text rewrites the rule's draft version or, once
+// prior rule matches it, a spec heading row (WL-REQ-1295); changed text rewrites the rule's draft version or, once
 // that version is accepted, becomes its next version; anything else is a new
 // rule numbered from the project's RULE counter. The arrangement
 // (doc_rules) is rewritten in section order. Plans never reach here:
@@ -174,7 +174,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 	// A rule this write left unchanged shows its newest accepted version,
 	// which may have moved past the text the write was based on: a
 	// candidate revision opened before `lode rule accept` holds the older
-	// text (WL-SPEC-77 §19.4).
+	// text (WL-REQ-1298).
 	if _, err := tx.Exec(
 		`UPDATE doc_rules dr
 		    SET rule_version = CASE WHEN r.status = 'draft' THEN r.version - 1 ELSE r.version END
@@ -280,7 +280,7 @@ func arrangedRules(tx *sql.Tx, docID int64) ([]ruleRow, error) {
 }
 
 // ruleSeqKind is the rule's row key in project_entity_seq — the counter
-// behind its number, shared by every kind (WL-SPEC-77 §4).
+// behind its number, shared by every kind (WL-REQ-165).
 const ruleSeqKind = "RULE"
 
 // insertRule mints a rule at version 1 with the project's next RULE number.
@@ -352,11 +352,11 @@ func publishDocSections(tx *sql.Tx, docID int64) ([]int64, map[int64]int, error)
 // arrangement holds (S11). Called both when a document is accepted and when
 // ensureRules backfills the arrangement of a document that was already
 // accepted before the rule tables existed. A plan contains no rules
-// (WL-SPEC-77 §4); the d.kind <> 'plan' guard keeps accepting a plan from
+// (WL-REQ-165); the d.kind <> 'plan' guard keeps accepting a plan from
 // ever flipping a rule.
 //
 // Every other spec arranging a rule this accepts moves to the accepted
-// version, an accepted one through a version bump (WL-SPEC-77 §19.4). It
+// version, an accepted one through a version bump (WL-REQ-1298). It
 // returns the rules it accepted and the specs it bumped, with their new
 // versions.
 func acceptDocRules(tx *sql.Tx, docID int64) ([]int64, map[int64]int, error) {
@@ -632,7 +632,7 @@ func (s *Store) GetRuleVersion(ctx context.Context, projectKey string, number in
 }
 
 // EditRule writes a rule's heading and body as its next draft version
-// (WL-SPEC-77 §19.4): it rewrites the newest version in place while that is a
+// (WL-REQ-1298): it rewrites the newest version in place while that is a
 // draft, else adds the next version as a draft. It writes only rule_versions,
 // whichever specs arrange the rule, none or several; each spec keeps showing
 // the version its arrangement holds until the draft is accepted. A withdrawn
@@ -736,7 +736,7 @@ func deref[T any](p *T) T {
 }
 
 // SetRuleMeta sets a rule's owner, tags, kind and concept IRI (S15,
-// WL-SPEC-77 §4, §4d). A nil field is left alone. Only a definition carries
+// WL-REQ-165, WL-REQ-1368). A nil field is left alone. Only a definition carries
 // a concept IRI: a rule that stops being one loses it, and naming one on
 // any other kind is refused. Dates never live on a rule; they reach it
 // through its tasks.
@@ -828,7 +828,7 @@ var ruleStatuses = map[string]bool{"draft": true, "accepted": true, "superseded"
 
 // SetRuleStatus is the one writer of a rule's status outside document
 // acceptance (increment 3 R7). Withdrawing a rule marks every accepted plan
-// covering it stale (S23, WL-SPEC-77 §9): the plan undertook text that no
+// covering it stale (S23, WL-REQ-170): the plan undertook text that no
 // longer holds. Increment 4's split and merge lineage is the caller that
 // withdraws. The rule row lock is NO KEY UPDATE so it does not wait on a
 // concurrent Govern's FK KEY SHARE (see resolveSupersede).

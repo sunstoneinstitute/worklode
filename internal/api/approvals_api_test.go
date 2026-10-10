@@ -22,7 +22,7 @@ func requireApproval(t *testing.T, h http.Handler, token string, in model.Requir
 	return &a
 }
 
-// TestAdHocRequirementOnATask is WL-SPEC-75 §13.6's "ad-hoc requirements can be added
+// TestAdHocRequirementOnATask is WL-REQ-124's "ad-hoc requirements can be added
 // to any governed target": a task owes a review nothing in the project's flow
 // demanded, on a revision the caller named, in the no-lane row.
 func TestAdHocRequirementOnATask(t *testing.T) {

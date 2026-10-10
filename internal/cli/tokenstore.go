@@ -2,7 +2,7 @@
 // Linux Secret Service, Windows Credential Manager) instead of cleartext on
 // disk. Tokens are keyed by server URL so one machine can hold tokens for
 // several worklode servers. On a machine with no keychain at all the token
-// falls back to a 0600 file (tokenfile.go) — see WL-SPEC-74 §8.
+// falls back to a 0600 file (tokenfile.go) — see WL-REQ-61.
 package cli
 
 import (
@@ -142,7 +142,7 @@ func (f *FallbackTokenStore) Get(server string) (string, error) {
 }
 
 // Set writes to the keychain when there is one. A keychain that exists and
-// fails is returned as an error rather than retried on disk (WL-SPEC-74 §8).
+// fails is returned as an error rather than retried on disk (WL-REQ-61).
 func (f *FallbackTokenStore) Set(server, token string) error {
 	if f.keychainUsable() {
 		return f.keychain.Set(server, token)

@@ -22,7 +22,7 @@ SELECT e.type, r.id, ` + ruleRefSQL("p", "r") + `, r.kind, v.heading, v.body
  WHERE e.from_rule = $1 AND e.type IN ('refines', 'needs')
  ORDER BY e.type, p.key, r.number`
 
-// RuleClosure reads a rule's context closure (WL-SPEC-77 §4c): the rule plus
+// RuleClosure reads a rule's context closure (WL-REQ-1367): the rule plus
 // every rule reachable over refines and needs, breadth-first, each rule once,
 // with the edge it was first reached by. references edges are outside it.
 // An unknown rule is ErrNotFound.

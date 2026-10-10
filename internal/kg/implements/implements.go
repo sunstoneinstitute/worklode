@@ -1,8 +1,8 @@
-// Package implements reads .worklode/implements.yaml (WL-SPEC-77 §13): the
+// Package implements reads .worklode/implements.yaml (WL-REQ-177): the
 // machine-readable claim that this repository's code satisfies specific
 // design-document sections, pinned to the document version validated
 // against. The manifest deliberately has no component field — the claiming
-// component is derived from the by: paths (resolve.go, WL-SPEC-77 §13),
+// component is derived from the by: paths (resolve.go, WL-REQ-177),
 // never declared.
 package implements
 
@@ -70,7 +70,7 @@ func Load(p string) (*File, error) {
 // examples expands to the full instance IRI; both forms are accepted.
 //
 // Unknown keys are rejected, not ignored. The field this most matters for is
-// component: — WL-SPEC-77 §13 says the claiming component is derived from the by:
+// component: — WL-REQ-177 says the claiming component is derived from the by:
 // paths and never declared, and a silently-ignored component: key is exactly
 // the declaration the spec forbids, spelled so that nothing complains.
 func Parse(data []byte) (*File, error) {
@@ -121,7 +121,7 @@ func Parse(data []byte) (*File, error) {
 	return &f, nil
 }
 
-// expand resolves the wlid: prefix (WL-SPEC-77 §14) to the full instance namespace.
+// expand resolves the wlid: prefix (WL-REQ-178) to the full instance namespace.
 func expand(v string) string {
 	if rest, ok := strings.CutPrefix(strings.TrimSpace(v), "wlid:"); ok {
 		return iri.IDNS + rest
@@ -149,7 +149,7 @@ func sectionDoc(ref string) (docKey, anchor string, err error) {
 	return slug, anchor, nil
 }
 
-// pinnedDoc validates a versioned doc IRI — id/doc/<doc-key>/v<n> (WL-SPEC-77 §5) —
+// pinnedDoc validates a versioned doc IRI — id/doc/<doc-key>/v<n> (WL-REQ-166) —
 // and returns its doc slug and version number.
 func pinnedDoc(ref string) (docKey string, version int, err error) {
 	rest, ok := strings.CutPrefix(ref, docPrefix)

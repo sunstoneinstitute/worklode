@@ -1,4 +1,4 @@
-// The Progress page's one outward write (WL-SPEC-85 §4): queue a task's
+// The Progress page's one outward write (WL-REQ-1337): queue a task's
 // pull request for merge, or merge it. Everything else this page writes goes
 // to the backbone alone; this route also calls GitHub, so §4.2 rule 9
 // applies — the request is in the event log before the call leaves.

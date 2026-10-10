@@ -1,5 +1,5 @@
 // The document-reference redirect (WL-301): GET /docs/ref/{ref...} resolves
-// any WL-SPEC-78 §2 reference — a corpus path, a filename, a number form, a slug,
+// any WL-REQ-192 reference — a corpus path, a filename, a number form, a slug,
 // or the <KEY>-<TYPE>-<n> shorthand — against the backbone's documents and
 // redirects to the document's page. The #sec fragment never reaches the
 // server; the browser re-applies it to the redirect target, which is what
@@ -39,7 +39,7 @@ func (s *server) docRefRedirect(w http.ResponseWriter, r *http.Request) {
 // resolveDocRefWeb resolves ref against every live document, using the same
 // pure grammar `lode show` resolves with (designdoc.ResolveRef). The
 // org-wide resolution has no current project, so the shorthand's key is
-// answered the way `lode show`'s tier 2 answers it (WL-SPEC-78 §3): the project
+// answered the way `lode show`'s tier 2 answers it (WL-REQ-198): the project
 // whose key it is supplies the candidates. A number form that is ambiguous
 // across projects reports the candidates rather than picking one.
 //
@@ -126,7 +126,7 @@ func scopeDocsToProject(docs []model.Doc, project string) []model.Doc {
 // row, and because <KEY>-<n> and <KEY>-<TYPE>-<n> are not distinguishable by
 // shape alone — model.SplitTaskID reads "WL-SPEC-59" as key "WL-SPEC".
 // Whatever the task lookup misses falls through to the same resolver
-// /docs/ref/{ref...} uses, which already answers every WL-SPEC-78 §2 reference form.
+// /docs/ref/{ref...} uses, which already answers every WL-REQ-192 reference form.
 func (s *server) refShortcut(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(r.PathValue("ref"))
 	if ref == "" {

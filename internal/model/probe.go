@@ -1,7 +1,7 @@
 package model
 
 // ProbeTargetsResponse is the body of GET /api/v1/probe-targets: every
-// artifact address (WL-SPEC-75 §13) a still-open entity declared with the
+// artifact address (WL-REQ-118) a still-open entity declared with the
 // "address" selector. Label declarations never appear here — their
 // addresses are minted at build time and reach worklode by push, not poll.
 type ProbeTargetsResponse struct {

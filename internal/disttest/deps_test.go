@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// WL-SPEC-73 §3.2: lode-hook and lode-statusline are short-lived hot paths. They parse
+// WL-REQ-16: lode-hook and lode-statusline are short-lived hot paths. They parse
 // their own arguments with the stdlib, so their transitive graphs must stay
 // clear of the command tree, the document renderer, and everything the server
 // and watcher pull in. Nothing else in the build fails when one of these
@@ -64,7 +64,7 @@ func TestHotPathDependencyBoundaries(t *testing.T) {
 	}
 }
 
-// WL-SPEC-73 §3.2's third boundary (WL-324): internal/cmd is the `lode` CLI surface
+// WL-REQ-16's third boundary (WL-324): internal/cmd is the `lode` CLI surface
 // and no longer imports internal/api, internal/store, internal/watch,
 // internal/hookrun, or internal/statusline — the split's whole point is that
 // editing a server or watcher package does not rebuild the CLI, and k8s.io

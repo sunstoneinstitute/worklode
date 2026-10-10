@@ -1,7 +1,7 @@
 // Package storederive holds the WL-SPEC-82 derivers that read the backbone
 // store. They live apart from internal/derive (the local/pure derivers the
 // CLI runs) so cmd/lode's transitive graph stays clear of internal/store —
-// WL-SPEC-73 §3.2's boundary, guarded by internal/disttest (WL-324).
+// WL-REQ-16's boundary, guarded by internal/disttest (WL-324).
 package storederive
 
 import (

@@ -123,7 +123,7 @@ func (f *docWatchFixture) accepted(t *testing.T, version int) store.Event {
 	})
 }
 
-// patched records the doc.patched event patchDoc writes (WL-SPEC-77 §10): a dotted
+// patched records the doc.patched event patchDoc writes (WL-REQ-171): a dotted
 // backbone type, so it goes through RecordEvent rather than eventbus.Emit,
 // and it names its document by numeric id with no wl:subject.
 func (f *docWatchFixture) patched(t *testing.T, version int, classification string, anchors ...string) store.Event {
@@ -160,7 +160,7 @@ func (f *docWatchFixture) handle(t *testing.T, ev store.Event) eventbus.Outcome 
 	return outcome
 }
 
-// tasksAbout is the doc's review/design task set — the query WL-SPEC-77 §1 says the
+// tasksAbout is the doc's review/design task set — the query WL-RULE-162 says the
 // set is, rather than a stored list.
 func (f *docWatchFixture) tasksAbout(t *testing.T) []model.Task {
 	t.Helper()
@@ -268,7 +268,7 @@ func TestDocWatchRedeliveryMintsOnce(t *testing.T) {
 	}
 }
 
-// TestDocWatchMaterializesApprovalOnSubmit is WL-SPEC-77 §9 / WL-SPEC-75 §13.6 at its
+// TestDocWatchMaterializesApprovalOnSubmit is WL-REQ-170 / WL-REQ-124 at its
 // source: submitting a document opens one unlaned awaiting approvals row
 // bound to the submitted version, and the /reviews queue lists it. The row
 // lands exactly once whether the same event is redelivered or a second,
@@ -327,7 +327,7 @@ func TestDocWatchMaterializesApprovalOnSubmit(t *testing.T) {
 	f.wantActions(t, "approval-on-submit", "suppressed", 2)
 }
 
-// TestDocWatchSuppressionCycle walks WL-SPEC-77 §15's whole cycle for the
+// TestDocWatchSuppressionCycle walks WL-RULE-179's whole cycle for the
 // plan-on-accept rule: mint, suppress-with-a-note while the design task is
 // open, and mint again once it closes — because sections accepted since the
 // last plan do need planning.
@@ -374,7 +374,7 @@ func TestDocWatchSuppressionCycle(t *testing.T) {
 }
 
 // TestDocWatchIgnoresVendorEvents: the log's dotted population is not RDF
-// (WL-SPEC-77 §15) and no rule speaks about it, so it is acked untouched.
+// (WL-RULE-179) and no rule speaks about it, so it is acked untouched.
 func TestDocWatchIgnoresVendorEvents(t *testing.T) {
 	t.Parallel()
 	f := newDocWatchFixture(t)
@@ -428,7 +428,7 @@ func slicesContainsSubstring(entries []store.StateLogEntry, want string) bool {
 	return false
 }
 
-// TestDocWatchMintsReviewOnPatch is WL-SPEC-77 §9's re-review: a substantive
+// TestDocWatchMintsReviewOnPatch is WL-REQ-170's re-review: a substantive
 // in-place amendment left approved text modified since, so the rule mints one
 // review task naming the sections it touched — once, however often the event
 // is redelivered.
@@ -525,7 +525,7 @@ func (f *docWatchFixture) seedPlan(t *testing.T) *model.Doc {
 	return plan
 }
 
-// stale records the doc.stale event store.MarkPlansStale writes (WL-SPEC-77 §10):
+// stale records the doc.stale event store.MarkPlansStale writes (WL-REQ-171):
 // a dotted backbone type naming its document by numeric id, with the cause
 // that tells the rule which sentence its body gets.
 func (f *docWatchFixture) stale(t *testing.T, plan *model.Doc, version int) store.Event {
@@ -554,7 +554,7 @@ func (f *docWatchFixture) stale(t *testing.T, plan *model.Doc, version int) stor
 
 // TestDocWatchMintsReplanOnStale: the doc.stale event the patch path records
 // reaches the §8.7 groom rule, which mints one "Re-plan" design task for the
-// plan (WL-SPEC-77 §10). A second stale event while that task is open is
+// plan (WL-REQ-171). A second stale event while that task is open is
 // suppressed onto it.
 func TestDocWatchMintsReplanOnStale(t *testing.T) {
 	t.Parallel()

@@ -51,7 +51,7 @@ func Ungovern(tx *sql.Tx, taskID string, ruleID int64) error {
 // GovernedBy lists a task's governing rules with the version each link was
 // made against and the rule's current version (S10): its task_governed_by
 // links, then its project's accepted invariants it has no link to, with
-// source "invariant" (WL-SPEC-77 §4). The invariants are derived here on
+// source "invariant" (WL-REQ-165). The invariants are derived here on
 // every read and never stored. A withdrawn governing rule also carries
 // ResolvesTo, the live rules it resolves to through supersedes edges back
 // from it (R8).
@@ -175,7 +175,7 @@ func HasPlanGovernance(tx *sql.Tx, taskID string) (bool, error) {
 
 // RulesAtSection resolves a section ref (WL-SPEC-4 plus sec-5) to the rule
 // arranged at that anchor or, when the anchor is a spec heading, to the rules
-// grouped under it (WL-SPEC-77 §19.1), splitting the document first when it
+// grouped under it (WL-REQ-1295), splitting the document first when it
 // predates the rule tables. ErrNotFound when the project, the document or the
 // anchor is unknown, or a heading groups no rule.
 func RulesAtSection(tx *sql.Tx, ref designdoc.SectionRef) ([]int64, error) {

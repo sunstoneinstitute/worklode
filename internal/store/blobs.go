@@ -185,7 +185,7 @@ func (s *Store) ListTaskBlobs(ctx context.Context, taskID string) ([]model.TaskB
 
 // UnreferencedBlobs returns blobs no task_blobs row references and that are
 // older than grace. The grace period exists because the upload path writes
-// the object before the row (WL-SPEC-78 §8 section 5), so a blob seconds old may
+// the object before the row (WL-REQ-225 section 5), so a blob seconds old may
 // legitimately have no reference yet.
 //
 // When WL-SPEC-78 adds section_blobs, this predicate grows a second NOT EXISTS

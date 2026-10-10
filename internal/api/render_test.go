@@ -11,7 +11,7 @@ import (
 )
 
 // The cockpit's automation-boundary card shows overhead's share of a
-// project's spend, so the mapping has to carry it across (WL-SPEC-73 §8.3).
+// project's spend, so the mapping has to carry it across (WL-REQ-41).
 func TestCockpitCostTotalsIncludesOverhead(t *testing.T) {
 	t.Parallel()
 	report := model.CostReport{Totals: []model.CostTotals{{

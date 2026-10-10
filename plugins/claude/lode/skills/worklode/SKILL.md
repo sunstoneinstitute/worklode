@@ -185,7 +185,7 @@ mints no rules. Acceptance mints tasks governed by those rules. Governance
 follows the newest rule text unless pinned; reorganising a document does not
 complete or rewrite those tasks. Coverage remains a query over plans and work.
 
-Design work starts from rules (WL-SPEC-77 §19.6). Find them with `lode search`
+Design work starts from rules (WL-REQ-1300). Find them with `lode search`
 or `lode rule list --doc <spec-ref>`, read one with `lode show <rule-ref>`,
 change them with `lode rule add`, `edit`, `link` and `supersede`, and touch a
 spec only to change its arrangement (`lode rule arrange`, `unarrange`).

@@ -106,7 +106,7 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 		spec.Sections[1].Position != 1 {
 		t.Errorf("spec sections = %+v", spec.Sections)
 	}
-	// The fixture's retired `amends:` key projects no edge (WL-SPEC-77 §7).
+	// The fixture's retired `amends:` key projects no edge (WL-REQ-168).
 	if len(spec.Edges) != 0 {
 		t.Errorf("spec edges = %+v, want none", spec.Edges)
 	}
@@ -119,7 +119,7 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 		t.Errorf("plan carries sections: %+v (025 §4: plans take none)", plan.Sections)
 	}
 	// The fixture uses the retired `implements:` spelling; the projected edge
-	// is still the canonical wl:covers (WL-SPEC-78 §4.6).
+	// is still the canonical wl:covers (WL-REQ-208).
 	if len(plan.Edges) != 1 || !reflect.DeepEqual(plan.Edges[0], designdoc.EdgeMeta{
 		Rel: "covers", Target: "docs/specs/034-design-doc-sync.md",
 	}) {
@@ -131,7 +131,7 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 	}
 
 	// A plan's defers entry projects to a covers-sibling edge: covers first,
-	// then defers (WL-SPEC-78 §4), with its owner.
+	// then defers (WL-RULE-202), with its owner.
 	deferring := byFile["2026-08-10-sync-2-store.md"]
 	wantDeferring := []designdoc.EdgeMeta{
 		{Rel: "covers", Target: "docs/specs/034-design-doc-sync.md"},

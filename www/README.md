@@ -56,7 +56,7 @@ the layer model in `WL-SPEC-79` and `WL-SPEC-82` (drift and overview); the docum
 in `WL-SPEC-77` (documents in the backbone). When the architecture changes
 materially, update this copy too — nothing derives it automatically.
 
-The Escalation section (`#ladder`) describes WL-SPEC-77 §10, which is fully specified
+The Escalation section (`#ladder`) describes WL-REQ-171, which is fully specified
 and partly implemented: `lode task escalate` and its `task.gap_found` event
 ship (§8.1), the fixer subagent and the rest of the ladder do not. Its copy
 is deliberately future-tense ("will record", "will amend") to say so; as each

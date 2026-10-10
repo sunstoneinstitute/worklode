@@ -139,7 +139,7 @@ func (Amp) Detect(repoDir string) (bool, error) {
 }
 
 // SkillTargets: ~/.agents/skills only. Amp's own `.amp/skills` is unverified,
-// so v1 relies on the shared directory (WL-SPEC-80 §5.2).
+// so v1 relies on the shared directory (WL-REQ-276).
 func (Amp) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -149,7 +149,7 @@ func (Amp) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 }
 
 // Events is ampBindings read the other way round, so the event table cannot
-// drift from what install actually writes (WL-SPEC-80 §5).
+// drift from what install actually writes (WL-REQ-274).
 func (Amp) Events() map[Event][]string { return eventsFor(ampBindings) }
 
 // ampPluginSource renders the plugin file. It takes no arguments and depends

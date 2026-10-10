@@ -272,7 +272,7 @@ func checkFlagValue(cmd *cobra.Command, flag *pflag.Flag, name, value string) st
 	if len(allowed) == 0 {
 		return ""
 	}
-	// A repeatable --kind takes a comma-separated list (WL-SPEC-77 §10), so each
+	// A repeatable --kind takes a comma-separated list (WL-REQ-171), so each
 	// element is checked. A single-valued flag is not split: a comma there is
 	// a doc bug, not a list.
 	written := []string{value}
@@ -412,7 +412,7 @@ func TestFindInvocations(t *testing.T) {
 }
 
 // TestKindEnumMatchesNS pins enumValues' parse of the task --kind usage string
-// to ns.TaskKinds, the generated source of truth (WL-SPEC-77 §14). Without this the
+// to ns.TaskKinds, the generated source of truth (WL-REQ-178). Without this the
 // value check would quietly follow a usage string that had itself drifted.
 func TestKindEnumMatchesNS(t *testing.T) {
 	cmd, _ := resolve(rootCmd, []string{"task", "add"})

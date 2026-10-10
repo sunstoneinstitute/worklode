@@ -34,12 +34,12 @@ type TaskInput struct {
 	Draft     bool
 	Skills    []string
 	// PlanDoc is the plan document this task was minted from (0 = none).
-	// Written only by AcceptDoc's plan branch (WL-SPEC-77 §11) — no other caller
+	// Written only by AcceptDoc's plan branch (WL-REQ-172) — no other caller
 	// sets it.
 	PlanDoc int64
 	// PlanTaskKey is the title of the ## Tasks declaration this task was
 	// minted from — the declaration's identity, which a re-accept matches
-	// against to mint only what has no row yet (WL-SPEC-77 §11). Required exactly
+	// against to mint only what has no row yet (WL-REQ-172). Required exactly
 	// when PlanDoc is set (a CHECK constraint holds the pair together), and
 	// written only by AcceptDoc's plan branch.
 	//
@@ -49,10 +49,10 @@ type TaskInput struct {
 	PlanTaskKey string
 	// AboutDoc is the document this task is about (0 = none) — the review or
 	// design task's reference to the document that triggered its minting
-	// (WL-SPEC-77 §15). Distinct from PlanDoc.
+	// (WL-RULE-179). Distinct from PlanDoc.
 	AboutDoc int64
 	// AboutAnchor narrows AboutDoc to one section ("sec-3"), "" for the whole
-	// document. Written by the escalation path (WL-SPEC-77 §10), which dedups on the
+	// document. Written by the escalation path (WL-REQ-171), which dedups on the
 	// (AboutDoc, AboutAnchor) pair.
 	AboutAnchor string
 }
@@ -68,7 +68,7 @@ type TaskFilter struct {
 	Assignee string
 	// HasChildren narrows to containers — tasks with at least one child_of
 	// child. Container-ness is inferred from the edges, so this is the only
-	// selector for it; no kind declares one (WL-SPEC-75 §5).
+	// selector for it; no kind declares one (WL-REQ-88).
 	HasChildren bool
 	// Repo narrows to the tasks of the project that owns this "owner/name"
 	// repo. A repo maps to at most one project (project_repos.repo is
@@ -80,12 +80,12 @@ type TaskFilter struct {
 	// updated_at it has already seen. The zero value does not filter.
 	UpdatedSince time.Time
 	// PlanDoc narrows to the tasks minted from this plan document (0 = none)
-	// — the query that is the plan's task set (WL-SPEC-77 §11).
+	// — the query that is the plan's task set (WL-REQ-172).
 	PlanDoc int64
 	// AboutDoc narrows to the tasks that reference this document (0 = none)
-	// — the review/design task set a document's lifecycle minted (WL-SPEC-77 §15).
+	// — the review/design task set a document's lifecycle minted (WL-RULE-179).
 	AboutDoc int64
-	// Deleted switches the list from live tasks to tombstoned ones (WL-SPEC-75 §12).
+	// Deleted switches the list from live tasks to tombstoned ones (WL-REQ-117).
 	// It is a switch, not an addition: a list mixing the two invites acting on
 	// a row that is not there. The zero value lists live tasks, which is what
 	// every caller that predates the tombstone meant.
@@ -153,7 +153,7 @@ var validTaskKinds = ns.Set(ns.TaskKinds)
 
 // containerForbiddenStates are the delivery states a task with children can
 // never occupy. They are earned by observed deploy facts about a specific
-// commit (WL-SPEC-75 §10.1) and a container has no commit of its own. Checked on
+// commit (WL-REQ-113) and a container has no commit of its own. Checked on
 // both ends of a transition so `lode task set state merged` on a parent
 // reports the roll-up rule instead of a from-state mismatch.
 var containerForbiddenStates = map[string]bool{
@@ -355,7 +355,7 @@ func ValidConcern(s string) bool {
 }
 
 // lintUsabilityAlt refuses a body embedding an image with no alt text at all
-// (`![](…)`) on a task whose concern is usability -- WL-SPEC-78 §8 Q021.1. A
+// (`![](…)`) on a task whose concern is usability -- WL-REQ-225 Q021.1. A
 // basename-derived alt (`![shot.png](…)`, `lode task attach`'s default when
 // `--alt` is not given) is a worse default than real alt text but a
 // non-empty one, and stays an acceptable fallback; only true `![]()` trips
@@ -473,7 +473,7 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 // here as well as at the API gate, so no store caller can write a kind the
 // CHECK constraint would refuse with a raw error. milestone, when non-nil,
 // follows concern's clearing rule ("" or "none" clears it to NULL); any
-// other value must name a milestone in the task's own project (WL-SPEC-75 §13.2) — a
+// other value must name a milestone in the task's own project (WL-REQ-120) — a
 // cross-project attach and an unknown milestone are both ErrInvalidInput,
 // checked inside this transaction against the task's current project.
 func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind, milestone *string) error {
@@ -655,7 +655,7 @@ func scanTask(row rowScanner) (*model.Task, error) {
 		t.Secrets = []string{}
 	}
 	// Branch is derived, not stored: the server owns LODE_BRANCH_TEMPLATE and
-	// is the authority on branch names (WL-SPEC-80 §3.1). Filling it here means every
+	// is the authority on branch names (WL-REQ-267). Filling it here means every
 	// path that reads a task serves the same name.
 	t.Branch = BranchFor(&t)
 	return &t, nil
@@ -823,9 +823,9 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 // precedes WL-10 — but done in the database. Shared so a second listing (the
 // tree's children) cannot order its rows differently from ListTasks. Pinned
 // to model.CompareTaskIDs by TestListTasksOrderMatchesModelCompareTaskIDs and
-// TestChildrenOfOrderMatchesModelCompareTaskIDs (WL-SPEC-81 §3 S3).
+// TestChildrenOfOrderMatchesModelCompareTaskIDs (WL-REQ-307 S3).
 //
-// WL-SPEC-81 §3 S4: this is the default order and tiebreak, never a ranking. `task
+// WL-REQ-307 S4: this is the default order and tiebreak, never a ranking. `task
 // frontier`, `task board` and `task critical-path` order by the 005 ranking
 // instead; `task list` (this function) orders by priority first, id second.
 func taskListOrder(alias string) string {
@@ -844,7 +844,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	q := `SELECT ` + taskColumns + ` FROM tasks`
 	var conds []string
 	var args sqlArgs
-	// WL-SPEC-75 §12: a tombstoned task is out of every list by default.
+	// WL-REQ-117: a tombstoned task is out of every list by default.
 	if f.Deleted {
 		conds = append(conds, `deleted_at IS NOT NULL`)
 	} else {
@@ -877,7 +877,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	}
 	if f.HasChildren {
 		// Only live children make a container, exactly as hasChildren reads
-		// it (WL-SPEC-75 §12) — otherwise a task whose only children are tombstoned
+		// it (WL-REQ-117) — otherwise a task whose only children are tombstoned
 		// would list as a container the claim path treats as an ordinary task.
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges c
 		                              JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
@@ -1154,7 +1154,7 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 // backbone blocks edges plus KG requires edges, and the deriver needs the
 // whole edge set at once rather than one task's edges via ListEdges).
 //
-// Both ends are filtered to live tasks (WL-SPEC-75 §12). Soft delete leaves the
+// Both ends are filtered to live tasks (WL-REQ-117). Soft delete leaves the
 // task_edges rows in place, so without the joins a deleted task would enter
 // the critical path and inflate a live task's depth — and the same surface
 // reads BlockingFanOut, which does filter, so the two must agree.
@@ -1230,12 +1230,12 @@ func (s *Store) ListEdgesForTasks(ctx context.Context, ids []string) (map[string
 // deliveryRanks places the delivery states on one "how far delivered" axis, so
 // "at or past a repo's done_state" is a single integer comparison.
 //
-// The two terminals share a rank deliberately. WL-SPEC-75 §3's branches never meet: a
+// The two terminals share a rank deliberately. WL-REQ-83's branches never meet: a
 // prod repo walks merged → deployed_dev → deployed_prod, a release repo walks
 // merged → deployed_dev → released, and `deployed_prod → released` is not a
 // legal transition. Ordering one terminal above the other would wedge a task
 // that reached the *other* branch's terminal — after `lode project repo edit
-// --done-state` (WL-SPEC-75 §10), or when a multi-repo task's prod deploy lands before
+// --done-state` (WL-RULE-112), or when a multi-repo task's prod deploy lands before
 // its release — permanently open with no state left to advance to. Calling
 // them peers under-blocks in that corner instead, which is where the old
 // fixed tuple already sat.
@@ -1273,7 +1273,7 @@ func deliveryRank(expr string) string {
 }
 
 // taskClosed renders the "no longer blocks its dependents" predicate for the
-// tasks row aliased as alias. Per WL-SPEC-75 §4 the closed set is per repo,
+// tasks row aliased as alias. Per WL-REQ-87 the closed set is per repo,
 // not one fixed tuple of states: a task is closed when it is abandoned, or
 // when its state is at or past the done_state of every repo its work *landed*
 // in. The same merged task is closed where done_state = 'merged' and still
@@ -1290,7 +1290,7 @@ func deliveryRank(expr string) string {
 // A repo the task landed in that no project maps takes DefaultDoneState,
 // matching RepoDoneState: an unconfigured repo must not block forever.
 //
-// A task with children is the one state-fixed case (WL-SPEC-75 §5.2): it has no commit of
+// A task with children is the one state-fixed case (WL-REQ-90): it has no commit of
 // its own, cannot advance past merged, and so is closed at merged in every
 // repo. It is checked explicitly rather than left to "a container has no
 // commits", since AddEdge can give children to a task that already landed some.
@@ -1299,7 +1299,7 @@ func deliveryRank(expr string) string {
 // tombstoned child does not count.
 //
 // Deleted is deliberately *not* folded in here. The tombstone is orthogonal to
-// state (WL-SPEC-75 §12), and this predicate is what ClosedTaskIDs answers `Closed`
+// state (WL-REQ-117), and this predicate is what ClosedTaskIDs answers `Closed`
 // with on the wire: a tombstoned draft is a hidden draft, not a closed one.
 // Each caller that means "live and open" adds `deleted_at IS NULL` itself —
 // blockedCondition, planUnfinished, the open-blocker queries, OpenTaskForDoc —
@@ -1324,7 +1324,7 @@ func taskClosed(alias string) string {
 // blockedCondition matches 'blocks' edges whose blocker (from_task) is still
 // open, i.e. the edge currently blocks its to_task. The blocker must also be
 // live: a deleted blocker stops blocking without its edge being retracted
-// (WL-SPEC-75 §12), which is why the filter sits here and not in taskClosed.
+// (WL-REQ-117), which is why the filter sits here and not in taskClosed.
 var blockedCondition = `e.type = 'blocks'
 	 AND EXISTS (SELECT 1 FROM tasks b
 	             WHERE b.id = e.from_task
@@ -1332,11 +1332,11 @@ var blockedCondition = `e.type = 'blocks'
 	               AND NOT ` + taskClosed("b") + `)`
 
 // planUnfinished renders "the plan document aliased as alias still has work
-// outstanding" (WL-SPEC-77 §11): any open task in its set, or a set not yet minted
+// outstanding" (WL-REQ-172): any open task in its set, or a set not yet minted
 // because the document is still draft (read literally, the empty set would count as
 // finished, but an unminted set is unfinished).
 //
-// An accepted plan carrying a declaration that has no row yet (WL-SPEC-77 §11)
+// An accepted plan carrying a declaration that has no row yet (WL-REQ-172)
 // counts as finished once its minted tasks close. That is the same limit
 // NeedsExecution documents: the declaration is in the body, and this predicate
 // reads rows. Re-accepting the plan mints it and the gate closes again.
@@ -1360,7 +1360,7 @@ func planUnfinished(alias string) string {
 }
 
 // planBlockedCondition holds a task while its plan is ordered after another
-// plan whose work is unfinished (WL-SPEC-77 §11): a document-level blockedBy edge
+// plan whose work is unfinished (WL-REQ-172): a document-level blockedBy edge
 // between the two plan documents, evaluated over the blocking plan through
 // planUnfinished.
 //
@@ -1404,12 +1404,12 @@ func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 }
 
 // ClosedTaskIDs reports, for the given task ids, which are closed by the
-// per-repo predicate in taskClosed (WL-SPEC-75 §4; see also WL-SPEC-78 §1.2, which
+// per-repo predicate in taskClosed (WL-REQ-87; see also WL-REQ-186, which
 // requires closure be the server's answer since a client cannot evaluate a
 // predicate over other repos' done_state and landed-commit facts). An empty
 // ids returns an empty map without touching the database. A tombstoned id is
 // answered on its state like any other: the tombstone is orthogonal to state
-// (WL-SPEC-75 §12), so a deleted draft answers Closed false and a deleted merged task
+// (WL-REQ-117), so a deleted draft answers Closed false and a deleted merged task
 // answers what its repos say. What stops a deleted task blocking or holding a
 // plan open is the live filter at those queries, not this verdict.
 func (s *Store) ClosedTaskIDs(ctx context.Context, ids []string) (map[string]bool, error) {
@@ -1470,11 +1470,11 @@ func blockedByEdgeOrPlan(ctx context.Context, q queryer, taskID string) (bool, e
 }
 
 // OpenTaskForDoc returns the id of an open task of the given kind that
-// references doc, or "" — the suppression guard of WL-SPEC-77 §15,
-// computed rather than stored (WL-SPEC-77 §1). Open means live and taskClosed's
+// references doc, or "" — the suppression guard of WL-RULE-179,
+// computed rather than stored (WL-RULE-162). Open means live and taskClosed's
 // complement, the same notion the ready set and the blocks predicate share, so
 // this guard cannot disagree with either about what "still open" means. A
-// tombstoned task suppresses nothing (WL-SPEC-75 §12): the lifecycle should mint the
+// tombstoned task suppresses nothing (WL-REQ-117): the lifecycle should mint the
 // replacement the operator deleted the old one to make room for.
 func (s *Store) OpenTaskForDoc(ctx context.Context, docID int64, kind string) (string, error) {
 	return openTaskForDoc(ctx, s.db, docID, kind)

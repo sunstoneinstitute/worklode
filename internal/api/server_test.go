@@ -403,7 +403,7 @@ func TestMetricsEndpointDomainFamilies(t *testing.T) {
 
 // TestNewServerRejectsMalformedPublicURL and TestNewServerRejectsBadTokenEncKey
 // re-home from the deleted githubweb_test.go: they cover config validation
-// that survives the GitHub App OAuth client (dormant, WL-SPEC-74 §9.2), not the
+// that survives the GitHub App OAuth client (dormant, WL-REQ-64), not the
 // login flow that was removed.
 func TestNewServerRejectsMalformedPublicURL(t *testing.T) {
 	t.Parallel()

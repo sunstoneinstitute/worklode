@@ -37,14 +37,14 @@ func docClass(kind string) string {
 }
 
 // DocTriples projects one backbone document row into its canonical node's
-// triples — the v1 of WL-SPEC-77 §3's "the graph receives them by projection"
+// triples — the v1 of WL-REQ-164's "the graph receives them by projection"
 // (WL-289): type, title, status (a wlc:DesignDocStatus concept, per
 // wl:status's range), the current version as a plain dcat:version literal,
 // timestamps, and — the edge this projection exists to make reachable —
-// prov:wasGeneratedBy naming the authoring task (WL-SPEC-77 §13).
+// prov:wasGeneratedBy naming the authoring task (WL-REQ-177).
 //
 // dcat:version stays a plain literal on the canonical node alongside the
-// pointer edges below: DCAT permits both, WL-SPEC-79 §12 documents the literal
+// pointer edges below: DCAT permits both, WL-REQ-251 documents the literal
 // as-built, and dropping it buys nothing.
 //
 // versions is nil for a draft (Global Constraints — a draft has no accepted
@@ -52,10 +52,10 @@ func docClass(kind string) string {
 // byte-identical to before this pointer machinery existed. Non-nil, each
 // entry gets a dcat:hasVersion edge to its snapshot node
 // (iri.DocVersion(DocKey(d), v.Version)), plus one dcat:hasCurrentVersion naming
-// d.Version's snapshot (WL-SPEC-77 §5). Sections are separate subjects and have
+// d.Version's snapshot (WL-REQ-166). Sections are separate subjects and have
 // their own projection, SectionTriples. Subject-complete for iri.Doc(DocKey(d)),
 // like TaskTriples.
-// DocKey is d's document key (WL-SPEC-79 §10.2), the one identity every
+// DocKey is d's document key (WL-REQ-247), the one identity every
 // document, section, version and declared-graph IRI is built on.
 func DocKey(d model.Doc) string { return iri.DocKey(d.Kind, d.Project, d.Number) }
 
@@ -82,7 +82,7 @@ func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
 }
 
 // DocVersionTriples projects one immutable document version into the
-// snapshot graph of WL-SPEC-77 §5: the version's own node — iri.DocVersion(DocKey(d),
+// snapshot graph of WL-REQ-166: the version's own node — iri.DocVersion(DocKey(d),
 // v.Version) — plus one wl:Section node per entry in sections, the parsed
 // content of that version's body. Section IRIs are version-free
 // (iri.Section(DocKey(d), anchor): the anchor is the identity, and the graph a
@@ -91,8 +91,8 @@ func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
 // what makes this projection distinct from SectionTriples, which targets the
 // canonical graph.
 //
-// prov:wasAttributedTo from WL-SPEC-77 §5's example is deliberately not emitted
-// here: doc_versions stores no per-version author (WL-SPEC-77 §3's scope), and the
+// prov:wasAttributedTo from WL-REQ-166's example is deliberately not emitted
+// here: doc_versions stores no per-version author (WL-REQ-164's scope), and the
 // document-level prov:wasGeneratedBy on the canonical node (DocTriples)
 // already carries authorship.
 func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSection) []Triple {
@@ -128,17 +128,17 @@ func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSect
 }
 
 // SectionTriples projects one document's sections as wl:Section nodes in that
-// document's own declared graph (WL-SPEC-77 §4). Each section is its own subject —
+// document's own declared graph (WL-REQ-165). Each section is its own subject —
 // iri.Section(key, anchor) — so this is deliberately not part of DocTriples,
 // which stays subject-complete for the document node.
 //
 // Only published sections are projected. An unpublished section belongs to a
-// draft that has not been accepted, and WL-SPEC-77 §4 freezes an anchor at first
+// draft that has not been accepted, and WL-REQ-165 freezes an anchor at first
 // publication: minting an IRI from an anchor that may still change would put a
 // mutable identity in a graph whose whole value is that section IRIs are
 // durable.
 //
-// Status is derived, never stored: WL-SPEC-77 §6 keeps section-level supersession a
+// Status is derived, never stored: WL-REQ-167 keeps section-level supersession a
 // query rather than a column, and the graph is where that derivation becomes
 // visible. A section is superseded when an inbound replaces edge names its
 // anchor, or when its document is superseded as a whole; otherwise it carries
@@ -146,7 +146,7 @@ func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSect
 // Store.ListDocEdges, where FromAnchor is the anchor *in this document* the
 // edge lands on and ToAnchor is the anchor it left from.
 //
-// WL-SPEC-77 §6 rule 2's other branch — a dct:description saying why a section went
+// WL-REQ-167 rule 2's other branch — a dct:description saying why a section went
 // away with no successor to point at — has no author-facing home yet, so
 // nothing here emits one (WL-150).
 func SectionTriples(d model.Doc, sections []model.DocSection, in []model.DocEdge) []Triple {

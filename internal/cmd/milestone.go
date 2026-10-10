@@ -56,7 +56,7 @@ func newMilestoneListCmd() *cobra.Command {
 }
 
 // deliverableIDOrErr rejects a task id passed where a deliverable id was
-// wanted: the two live behind different attach commands (WL-SPEC-75 §13.2), and a task
+// wanted: the two live behind different attach commands (WL-REQ-120), and a task
 // id here is a common mistake worth naming rather than surfacing as a store
 // 404.
 func deliverableIDOrErr(id string) error {
@@ -125,7 +125,7 @@ func newMilestoneDetachCmd() *cobra.Command {
 }
 
 // newMilestoneDeleteCmd is `lode milestone delete`. Unlike `lode task delete`
-// and `lode doc delete` this is a real delete rather than WL-SPEC-75 §12's tombstone:
+// and `lode doc delete` this is a real delete rather than WL-REQ-117's tombstone:
 // a milestone holds a title, a position, and progress derived from children
 // that survive it, so there is nothing a hidden row would preserve.
 func newMilestoneDeleteCmd() *cobra.Command {
