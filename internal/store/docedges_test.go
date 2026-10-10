@@ -1212,12 +1212,12 @@ func TestDocEdgesRejectBlocksCycleBetweenPlans(t *testing.T) {
 		Body: blockedByPlanBody("plan-b"),
 	})
 
-	// Two hops back to plan-a: the whole cycle is named, in order.
+	// Two hops back to plan-a: the whole cycle is named by ref, in order.
 	err := linkDocEdge(t, s, a.ID, model.DocEdgeInput{Type: "blockedBy", To: "plan-c"})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("plan-a blockedBy plan-c = %v, want ErrInvalidInput", err)
 	}
-	if want := "plan-a blockedBy plan-c blockedBy plan-b blockedBy plan-a"; !strings.Contains(err.Error(), want) {
+	if want := "P1-PLAN-1 blockedBy P1-PLAN-3 blockedBy P1-PLAN-2 blockedBy P1-PLAN-1"; !strings.Contains(err.Error(), want) {
 		t.Fatalf("plan-a blockedBy plan-c = %v, want it to name the cycle %q", err, want)
 	}
 	// The refused write left plan-a's edges alone.
@@ -1230,7 +1230,7 @@ func TestDocEdgesRejectBlocksCycleBetweenPlans(t *testing.T) {
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("plan-a blockedBy plan-b = %v, want ErrInvalidInput", err)
 	}
-	if want := "plan-a blockedBy plan-b blockedBy plan-a"; !strings.Contains(err.Error(), want) {
+	if want := "P1-PLAN-1 blockedBy P1-PLAN-2 blockedBy P1-PLAN-1"; !strings.Contains(err.Error(), want) {
 		t.Fatalf("plan-a blockedBy plan-b = %v, want it to name the cycle %q", err, want)
 	}
 }

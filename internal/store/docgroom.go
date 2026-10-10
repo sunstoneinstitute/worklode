@@ -40,10 +40,10 @@ func StaleExternalID(planSlug string, version int) string {
 // section the amendment moved, and nobody has claimed work from them, so
 // WL-REQ-171 let the amendment through and this is what it owes them.
 //
-// cause, specSlug and anchors say what happened, in the payload's
+// cause, specRef and anchors say what happened, in the payload's
 // {"cause":...,"spec":...,"anchors":[...]}: cause is "amended" for WL-REQ-171
-// (specSlug and anchors name the spec and the sections that moved) and
-// "rule_withdrawn" for increment 3's S23 (specSlug carries the withdrawn
+// (specRef and anchors name the spec and the sections that moved) and
+// "rule_withdrawn" for increment 3's S23 (specRef carries the withdrawn
 // rule's ref, WL-RULE-<n>, and anchors is empty). eventID is the write this
 // is a consequence of.
 //
@@ -54,7 +54,7 @@ func StaleExternalID(planSlug string, version int) string {
 // The count returned is the plans actually flipped: a plan already stale by
 // any cause collides on the event key and is skipped, so it is not counted
 // twice on the metric.
-func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, cause, specSlug string, anchors []string, eventID int64) (int, error) {
+func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, cause, specRef string, anchors []string, eventID int64) (int, error) {
 	if len(anchors) == 0 {
 		anchors = []string{}
 	}
@@ -73,7 +73,7 @@ func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, cause, specSlug 
 		payload, err := EventPayload(map[string]any{
 			"doc":                id,
 			"cause":              cause,
-			"spec":               specSlug,
+			"spec":               specRef,
 			"anchors":            anchors,
 			"prov:wasInformedBy": iri.CURIE(iri.Event(eventID)),
 		})

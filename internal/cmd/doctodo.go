@@ -258,7 +258,7 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 		g.Go(func() error {
 			detail, _, err := c.GetDoc(ctx, d.ID)
 			if err != nil {
-				return fmt.Errorf("read document %s: %w", d.Slug, err)
+				return fmt.Errorf("read document %s: %w", cli.DocRef(d), err)
 			}
 			p := pathBySlug[d.Slug]
 			out[i] = designdoc.CorpusDoc{

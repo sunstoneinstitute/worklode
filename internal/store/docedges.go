@@ -823,9 +823,8 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 }
 
 // ResolveDocRef resolves a document reference to its row (WL-REQ-168): a
-// positive integer is the id itself, anything else is matched against slugs,
-// exact match only — corpus-number and SPEC/ADR shorthand resolution stay
-// unbuilt. The rule lives here, beside the data, so resolving a ref costs one
+// positive integer is the id itself, then a <KEY>-<TYPE>-<n> ref, then an
+// exact slug. The rule lives here, beside the data, so resolving a ref costs one
 // indexed lookup instead of a listing of the whole corpus, and so every
 // client answers a given ref the same way.
 //

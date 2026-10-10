@@ -764,16 +764,16 @@ func TestBriefRenderRendersBlockingPlans(t *testing.T) {
 		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
 		BlockingPlans: []model.DocRef{
-			{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"},
-			{ID: 8, Slug: "plan-b", Title: "Plan B", Status: "stale"},
+			{ID: 7, Slug: "plan-a", Ref: "WL-PLAN-7", Title: "Plan A", Status: "draft"},
+			{ID: 8, Slug: "plan-b", Ref: "WL-PLAN-8", Title: "Plan B", Status: "stale"},
 		},
 		Skills: model.SkillRecommendation{Provider: "none"},
 	})
 	out := buf.String()
-	if !strings.Contains(out, "blocked by plans:\n  - plan-a: Plan A (draft)") {
+	if !strings.Contains(out, "blocked by plans:\n  - WL-PLAN-7: Plan A (draft)") {
 		t.Fatalf("output = %q, want the blocking plan rendered", out)
 	}
-	if !strings.Contains(out, "  - plan-b: Plan B (stale)") {
+	if !strings.Contains(out, "  - WL-PLAN-8: Plan B (stale)") {
 		t.Fatalf("output = %q, want a stale blocking plan flagged as stale", out)
 	}
 }

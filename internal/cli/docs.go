@@ -51,7 +51,7 @@ func (c *Client) ListCorpusSections(ctx context.Context, project, number string)
 }
 
 // ResolveDoc calls GET /api/v1/docs/resolve?ref=, returning the document a
-// reference names — an id or an exact slug (WL-REQ-168). The server owns the
+// reference names — an id, a ref or an exact slug (WL-REQ-168). The server owns the
 // grammar and its ambiguity rule, so a ref costs one indexed lookup rather
 // than a listing of the whole corpus, and a grammar extension needs no client
 // upgrade. A *ClientError with Status 404 means no document holds that ref;
@@ -407,11 +407,9 @@ func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc
 }
 
 // DocLintTable prints `lode doc lint`'s corpus-wide dangling-reference
-// report: one row per finding — the source document by slug (a finding
-// carries no project key to build the WL-REQ-168 shorthand from, unlike a
-// document listing), the section it was declared from, the edge type, and
-// what's wrong: the verbatim unresolved reference, or the anchor missing
-// from its resolved target.
+// report: one row per finding — the source document by ref, the section it
+// was declared from, the edge type, and what's wrong: the verbatim
+// unresolved reference, or the anchor missing from its resolved target.
 func DocLintTable(w io.Writer, findings []model.DocLintFinding) {
 	tbl := newTable(
 		column{header: "DOC"},
@@ -766,7 +764,7 @@ func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSect
 }
 
 // docEdgeTarget renders one edge's far end: a covers edge's rule, the
-// document's slug and optional anchor — the id only when a read did not resolve the slug — or the external
+// document's ref (its slug when unnumbered, the id when neither resolved) and optional anchor, or the external
 // reference an unresolved edge carries. A far end that has gone stale carries
 // docStaleSuffix, so a `requires` line says its target is owed a re-plan
 // (WL-REQ-170) without the reader following the reference to find out.

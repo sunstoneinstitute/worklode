@@ -454,19 +454,19 @@ func TestEscalationLadder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim %s from the stale plan: %v", modelling.ID, err)
 	}
-	if claim.StalePlan != "plan-two" {
-		t.Fatalf("claim of %s reports stale_plan %q, want plan-two", modelling.ID, claim.StalePlan)
+	if claim.StalePlan != "LAD-PLAN-2" {
+		t.Fatalf("claim of %s reports stale_plan %q, want LAD-PLAN-2", modelling.ID, claim.StalePlan)
 	}
 	brief, _, err := carol.Brief(ctx, modelling.ID)
 	if err != nil {
 		t.Fatalf("brief for %s: %v", modelling.ID, err)
 	}
-	if brief.StalePlan != "plan-two" {
-		t.Fatalf("brief for %s reports stale_plan %q, want plan-two", modelling.ID, brief.StalePlan)
+	if brief.StalePlan != "LAD-PLAN-2" {
+		t.Fatalf("brief for %s reports stale_plan %q, want LAD-PLAN-2", modelling.ID, brief.StalePlan)
 	}
 	var warning bytes.Buffer
 	cli.StalePlanWarning(&warning, claim.StalePlan)
-	if !strings.Contains(warning.String(), "plan-two") {
+	if !strings.Contains(warning.String(), "LAD-PLAN-2") {
 		t.Fatalf("claim-time warning = %q, want it to name the stale plan", warning.String())
 	}
 

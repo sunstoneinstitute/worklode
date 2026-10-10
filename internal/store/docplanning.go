@@ -358,21 +358,22 @@ func blocksPath(tx *sql.Tx, start, target int64) ([]int64, error) {
 }
 
 // blocksChainText renders a chain of document ids as "a blockedBy b blockedBy a", by
-// slug, so a refused write names the cycle rather than just reporting one. A
-// document whose slug cannot be read falls back to its id — the caller is
+// ref (slug when it has no number), so a refused write names the cycle rather
+// than just reporting one. A document that cannot be read falls back to its id — the caller is
 // already on an error path and a lookup failure must not mask what refused the
 // write.
 func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 	parts := make([]string, 0, len(chain))
 	for _, id := range chain {
-		var slug string
-		if err := tx.QueryRow(`SELECT slug FROM docs WHERE id = $1`, id).Scan(&slug); err != nil {
+		var name string
+		if err := tx.QueryRow(`SELECT coalesce(`+docRefSQL("p", "d")+`, d.slug)
+			FROM docs d JOIN projects p ON p.id = d.project_id WHERE d.id = $1`, id).Scan(&name); err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
-				return "", fmt.Errorf("read slug of doc %d: %w", id, err)
+				return "", fmt.Errorf("read ref of doc %d: %w", id, err)
 			}
-			slug = fmt.Sprintf("doc %d", id)
+			name = fmt.Sprintf("doc %d", id)
 		}
-		parts = append(parts, slug)
+		parts = append(parts, name)
 	}
 	return strings.Join(parts, " blockedBy "), nil
 }

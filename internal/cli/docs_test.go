@@ -100,7 +100,7 @@ func TestDocDetailRenderFlagsStaleness(t *testing.T) {
 	var buf strings.Builder
 	DocDetailRender(&buf, model.DocDetail{
 		Doc: model.Doc{
-			ID: 7, Title: "A spec", Project: "p1", Kind: "spec", Number: 25,
+			ID: 7, Title: "A spec", Project: "p1", ProjectKey: "WL", Kind: "spec", Number: 25,
 			Slug: "025-a", Status: "stale", Version: 3,
 			UpdatedAt: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC),
 		},
@@ -109,11 +109,11 @@ func TestDocDetailRenderFlagsStaleness(t *testing.T) {
 			{Anchor: "sec-2", Number: "2", Heading: "Model"},
 		},
 		Edges: []model.DocEdge{
-			{Type: "requires", ToDoc: 9, ToSlug: "004-backbone", ToAnchor: "sec-6", ToStatus: "stale"},
-			{Type: "requires", ToDoc: 10, ToSlug: "006-graph", ToStatus: "accepted"},
+			{Type: "requires", ToDoc: 9, ToSlug: "004-backbone", ToKey: "WL", ToKind: "spec", ToNumber: 4, ToAnchor: "sec-6", ToStatus: "stale"},
+			{Type: "requires", ToDoc: 10, ToSlug: "006-graph", ToKey: "WL", ToKind: "spec", ToNumber: 6, ToStatus: "accepted"},
 		},
 		EdgesIn: []model.DocEdge{
-			{Type: "isCoveredBy", FromAnchor: "sec-2", ToDoc: 11, ToSlug: "210-plan", ToStatus: "stale"},
+			{Type: "isCoveredBy", FromAnchor: "sec-2", ToDoc: 11, ToSlug: "210-plan", ToKey: "WL", ToKind: "plan", ToNumber: 210, ToStatus: "stale"},
 			{Type: "isCoveredBy", FromAnchor: "sec-1", ToDoc: 12, ToSlug: "211-plan", ToStatus: "accepted"},
 		},
 	})
@@ -121,9 +121,9 @@ func TestDocDetailRenderFlagsStaleness(t *testing.T) {
 	for _, want := range []string{
 		"STALE since " + LocalTime(time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)) +
 			" — re-planning owed (WL-REQ-170)",
-		"SPEC-25 requires 004-backbone#sec-6 (stale)",
+		"WL-SPEC-25 requires WL-SPEC-4#sec-6 (stale)",
 		"COVERED BY",
-		"covered by 210-plan (stale)",
+		"covered by WL-PLAN-210 (stale)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output = %q, want it to contain %q", out, want)
