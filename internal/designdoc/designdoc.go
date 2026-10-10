@@ -253,6 +253,20 @@ func (s *Section) anchorSource() string {
 	return "{#" + s.Anchor + "}"
 }
 
+// Editable is src in the editable form (WL-SPEC-77 §19.5): each heading
+// anchored at a key of rules carries that rule ref, "{#sec-3 rule=WL-REQ-12}".
+// Every other byte is kept, and src that does not parse is returned unchanged.
+func Editable(src string, rules map[string]string) string {
+	d, err := Parse([]byte(src))
+	if err != nil {
+		return src
+	}
+	for _, sec := range d.Sections {
+		sec.Rule = rules[sec.Anchor]
+	}
+	return string(d.Bytes())
+}
+
 // StripRuleRefs is src with the rule ref removed from every heading's anchor
 // attribute: the stored form of a body written in the editable form
 // (WL-SPEC-77 §19.5). Every other byte is kept, and src that does not parse

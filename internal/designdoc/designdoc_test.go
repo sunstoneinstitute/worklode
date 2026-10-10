@@ -397,9 +397,7 @@ func TestRuleAttribute(t *testing.T) {
 	if got := StripRuleRefs(src); got != want {
 		t.Fatalf("StripRuleRefs:\n%s", got)
 	}
-	doc, _ = Parse([]byte(want))
-	doc.Sections[1].Rule = "WL-REQ-4"
-	if got, w := string(doc.Bytes()), "# T\n\n## 3 Leases {#sec-3}\n\nText.\n\n## 4. Other {#sec-4 rule=WL-REQ-4}\n"; got != w {
-		t.Fatalf("set rule:\n%s", got)
+	if got, w := Editable(want, map[string]string{"sec-4": "WL-REQ-4"}), "# T\n\n## 3 Leases {#sec-3}\n\nText.\n\n## 4. Other {#sec-4 rule=WL-REQ-4}\n"; got != w {
+		t.Fatalf("Editable:\n%s", got)
 	}
 }
