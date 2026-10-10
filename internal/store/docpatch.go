@@ -354,7 +354,8 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 			return 0, fmt.Errorf("stamp last_revised_in on doc %d: %w", in.ID, err)
 		}
 	}
-	if err := publishDocSections(tx, in.ID); err != nil {
+	// A patch's own §10 gate covers its rule versions; they are not gated again.
+	if _, _, err := publishDocSections(tx, in.ID); err != nil {
 		return 0, err
 	}
 	return version, logDocChange(tx, in.ID, eventID, map[string]string{

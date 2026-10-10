@@ -310,10 +310,10 @@ func reviseRule(tx *sql.Tx, id int64, heading, body string) (int64, int, error) 
 
 // publishDocSections marks a document's sections published and its arranged
 // rules accepted. Accepting a document accepts every draft rule it
-// arranges and writes nothing else (S11).
-func publishDocSections(tx *sql.Tx, docID int64) error {
+// arranges and writes nothing else (S11). It returns acceptDocRules' result.
+func publishDocSections(tx *sql.Tx, docID int64) ([]int64, map[int64]int, error) {
 	if _, err := tx.Exec(`UPDATE doc_sections SET published = true WHERE doc_id = $1`, docID); err != nil {
-		return fmt.Errorf("publish sections of doc %d: %w", docID, err)
+		return nil, nil, fmt.Errorf("publish sections of doc %d: %w", docID, err)
 	}
 	return acceptDocRules(tx, docID)
 }
@@ -326,8 +326,10 @@ func publishDocSections(tx *sql.Tx, docID int64) error {
 // ever flipping a rule.
 //
 // Every other spec arranging a rule this accepts moves to the accepted
-// version, an accepted one through a version bump (WL-SPEC-77 §19.4).
-func acceptDocRules(tx *sql.Tx, docID int64) error {
+// version, an accepted one through a version bump (WL-SPEC-77 §19.4). It
+// returns the rules it accepted and the specs it bumped, with their new
+// versions.
+func acceptDocRules(tx *sql.Tx, docID int64) ([]int64, map[int64]int, error) {
 	rows, err := tx.Query(
 		`UPDATE rules SET status = 'accepted', updated_at = now()
 		  WHERE status = 'draft'
@@ -336,14 +338,14 @@ func acceptDocRules(tx *sql.Tx, docID int64) error {
 		       WHERE dc.doc_id = $1 AND d.kind <> 'plan')
 		 RETURNING id`, docID)
 	if err != nil {
-		return fmt.Errorf("accept rules of doc %d: %w", docID, err)
+		return nil, nil, fmt.Errorf("accept rules of doc %d: %w", docID, err)
 	}
 	ids, err := scanColumn[int64](rows, fmt.Sprintf("accept rules of doc %d", docID))
 	if err != nil || len(ids) == 0 {
-		return err
+		return nil, nil, err
 	}
-	_, err = moveSpecsToAcceptedRules(tx, ids, docID)
-	return err
+	bumped, err := moveSpecsToAcceptedRules(tx, ids, docID)
+	return ids, bumped, err
 }
 
 // GetRule reads one rule by its project key and number, with the current
