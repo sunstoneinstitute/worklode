@@ -221,6 +221,11 @@ func (s *Section) HeadingAndBody() string {
 	return s.headingSource() + s.Body
 }
 
+// Heading is the section's heading line, terminator included.
+func (s *Section) Heading() string {
+	return s.headingSource()
+}
+
 func (s *Section) writeSource(b *strings.Builder) {
 	b.WriteString(s.headingSource())
 	b.WriteString(s.Body)

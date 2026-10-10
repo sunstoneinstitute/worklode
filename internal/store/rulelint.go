@@ -18,7 +18,7 @@ var positionalRefRE = regexp.MustCompile(`§|(?i)\bsection\s+\d+|\babove\b|\bbel
 // lintRule is one rule as the lint reads it.
 type lintRule struct {
 	id, number    int64
-	project       string
+	project, key  string
 	ref, kind     string
 	heading, body string
 	live          bool
@@ -67,7 +67,7 @@ func (s *Store) ruleLint(ctx context.Context, projectID string) (*model.RuleLint
 	// ponytail: reads every rule and edge in the instance, since closures
 	// cross projects; scope to the reachable set if the corpus outgrows memory.
 	rows, err = s.db.QueryContext(ctx,
-		`SELECT r.id, r.number, r.project_id, `+ruleRefSQL("p", "r")+`, r.kind, v.heading, v.body,
+		`SELECT r.id, r.number, r.project_id, p.key, `+ruleRefSQL("p", "r")+`, r.kind, v.heading, v.body,
 		        r.status IN ('draft', 'accepted')
 		   FROM rules r
 		   JOIN projects p ON p.id = r.project_id
@@ -77,7 +77,7 @@ func (s *Store) ruleLint(ctx context.Context, projectID string) (*model.RuleLint
 	}
 	all, err := collectRows(rows, "read rules for lint", func(r rowScanner) (*lintRule, error) {
 		var lr lintRule
-		err := r.Scan(&lr.id, &lr.number, &lr.project, &lr.ref, &lr.kind, &lr.heading, &lr.body, &lr.live)
+		err := r.Scan(&lr.id, &lr.number, &lr.project, &lr.key, &lr.ref, &lr.kind, &lr.heading, &lr.body, &lr.live)
 		lr.words = len(strings.Fields(lr.body))
 		return &lr, err
 	})
@@ -85,8 +85,10 @@ func (s *Store) ruleLint(ctx context.Context, projectID string) (*model.RuleLint
 		return nil, err
 	}
 	byID := make(map[int64]*lintRule, len(all))
+	exists := make(map[designdoc.RuleRef]bool, len(all))
 	for _, r := range all {
 		byID[r.id] = r
+		exists[designdoc.RuleRef{Key: r.key, Number: r.number}] = true
 	}
 
 	type edge struct {
@@ -169,10 +171,46 @@ func (s *Store) ruleLint(ctx context.Context, projectID string) (*model.RuleLint
 		if len(seen) > 0 {
 			add(r, "positional-reference", strings.Join(seen, ", "))
 		}
+		for _, ref := range designdoc.FindRuleRefs(r.heading + "\n" + r.body) {
+			if !exists[ref] {
+				add(r, "unresolved-ref", designdoc.FormatRuleRef(ref.Key, ref.Number, "")+" names no rule")
+			}
+		}
+	}
+	if err := s.convertedHeadings(ctx, projectID, out); err != nil {
+		return nil, err
 	}
 	out.Rules = len(subjects)
 	out.ClosureRules, out.ClosureWords = spread(sizes), spread(words)
 	return out, nil
+}
+
+// convertedHeadings appends one converted-heading finding per rule the
+// WL-SPEC-77 §19.7 migration turned into a spec heading in projectID, so an
+// owner can check where its covers edges and governedBy links went.
+func (s *Store) convertedHeadings(ctx context.Context, projectID string, out *model.RuleLint) error {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT c.rule_ref, p.key || '-SPEC-' || d.number || '#' || c.anchor, c.heading,
+		        c.covering_plans, c.governed_tasks, c.grouped_rules
+		   FROM rule_heading_conversions c
+		   JOIN docs d ON d.id = c.doc_id
+		   JOIN projects p ON p.id = d.project_id
+		  WHERE c.project_id = $1
+		  ORDER BY c.rule_ref, d.number`, projectID)
+	if err != nil {
+		return fmt.Errorf("read converted headings: %w", err)
+	}
+	found, err := collectRows(rows, "read converted headings", func(r rowScanner) (model.RuleLintFinding, error) {
+		var at, heading string
+		var plans, tasks, grouped int
+		f := model.RuleLintFinding{Check: "converted-heading"}
+		err := r.Scan(&f.Rule, &at, &heading, &plans, &tasks, &grouped)
+		f.Detail = fmt.Sprintf("now spec heading %s %q; covers from %d plan(s) and governedBy of %d task(s) moved to %d rule(s)",
+			at, heading, plans, tasks, grouped)
+		return f, err
+	})
+	out.Findings = append(out.Findings, found...)
+	return err
 }
 
 // spread is the nearest-rank median and 90th percentile of v; zero for none.
