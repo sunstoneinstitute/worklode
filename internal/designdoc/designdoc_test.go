@@ -374,3 +374,32 @@ func TestFindRefs(t *testing.T) {
 		t.Errorf("section refs: %+v", ss)
 	}
 }
+
+// TestRuleAttribute covers the editable form's heading attribute (WL-SPEC-77
+// §19.5): parsed into Section.Rule, emitted only when set, and removed by
+// StripRuleRefs without touching the rest of the heading line.
+func TestRuleAttribute(t *testing.T) {
+	src := "# T\n\n## 3 Leases {#sec-3 rule=WL-RULE-12}\n\nText.\n\n## 4. Other {#sec-4}\n"
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := doc.Sections[0]; got.Anchor != "sec-3" || got.Rule != "WL-RULE-12" || got.Title != "Leases" {
+		t.Fatalf("section 0 = anchor %q rule %q title %q", got.Anchor, got.Rule, got.Title)
+	}
+	if doc.Sections[1].Rule != "" {
+		t.Fatalf("section 1 rule = %q, want none", doc.Sections[1].Rule)
+	}
+	if got := string(doc.Bytes()); got != src {
+		t.Fatalf("round trip:\n%s", got)
+	}
+	want := "# T\n\n## 3 Leases {#sec-3}\n\nText.\n\n## 4. Other {#sec-4}\n"
+	if got := StripRuleRefs(src); got != want {
+		t.Fatalf("StripRuleRefs:\n%s", got)
+	}
+	doc, _ = Parse([]byte(want))
+	doc.Sections[1].Rule = "WL-REQ-4"
+	if got, w := string(doc.Bytes()), "# T\n\n## 3 Leases {#sec-3}\n\nText.\n\n## 4. Other {#sec-4 rule=WL-REQ-4}\n"; got != w {
+		t.Fatalf("set rule:\n%s", got)
+	}
+}
