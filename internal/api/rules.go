@@ -40,10 +40,9 @@ func (s *server) getRule(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
-// editRule handles PUT /api/v1/rules/{id}: a rule-first write of the
-// heading and body (S14, S35). The store regenerates the arranging
-// document's body and writes it through the document path, so the event is
-// recorded against that document.
+// editRule handles PUT /api/v1/rules/{id}: the rule's next draft text
+// (WL-SPEC-77 §19.4). It writes only the rule; the specs arranging it show
+// the draft once it is accepted.
 func (s *server) editRule(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
 	if !ok {
@@ -54,25 +53,7 @@ func (s *server) editRule(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	current, err := s.st.GetRule(r.Context(), ref.Key, ref.Number)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	if len(current.ArrangedIn) != 1 {
-		writeErr(w, http.StatusUnprocessableEntity, fmt.Sprintf("rule %s is arranged in %d documents; edit the document instead", current.Ref, len(current.ArrangedIn)))
-		return
-	}
-	now := s.st.Now()
-	err = s.recordDocEvent(w, r, "rule_edit", "doc.rule_edited", current.ArrangedIn[0].Doc, req,
-		func(tx *sql.Tx, eventID int64) error {
-			_, err := store.EditRule(tx, now, ref.Key, ref.Number, req, actorIDFrom(r), eventID)
-			return err
-		})
-	if err != nil {
-		return
-	}
-	c, err := s.st.GetRule(r.Context(), ref.Key, ref.Number)
+	c, err := s.st.EditRule(r.Context(), ref.Key, ref.Number, req, actorIDFrom(r))
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -131,13 +112,18 @@ func (s *server) addRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptRule handles POST /api/v1/rules/{id}/accept: the rule's owner
-// accepts its newest draft version (WL-SPEC-77 §19.2).
+// accepts its newest draft version (WL-SPEC-77 §19.2, §19.4).
 func (s *server) acceptRule(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
 	if !ok {
 		return
 	}
-	c, err := s.st.AcceptRule(r.Context(), ref.Key, ref.Number, actorIDFrom(r))
+	var req model.AcceptRuleInput
+	if err := readOptionalJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	c, err := s.st.AcceptRule(r.Context(), ref.Key, ref.Number, req.Substantive, actorIDFrom(r))
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -334,7 +320,8 @@ var ruleRouteDocs = map[string]routeDoc{
 		responses: map[int]any{http.StatusCreated: model.Rule{}},
 	},
 	"POST /api/v1/rules/{id}/accept": {
-		summary:   "Accept a rule's newest draft version; owner only",
+		summary:   "Accept a rule's newest draft version; owner only. Specs arranging it move to it, and a substantive version mints a review",
+		request:   model.AcceptRuleInput{},
 		responses: map[int]any{http.StatusOK: model.Rule{}},
 	},
 	"POST /api/v1/docs/{id}/rules": {
@@ -351,7 +338,7 @@ var ruleRouteDocs = map[string]routeDoc{
 		responses: map[int]any{http.StatusOK: model.Rule{}},
 	},
 	"PUT /api/v1/rules/{id}": {
-		summary:   "Edit a rule's heading and body",
+		summary:   "Write a rule's heading and body as its next draft version",
 		request:   model.EditRuleInput{},
 		responses: map[int]any{http.StatusOK: model.Rule{}},
 	},

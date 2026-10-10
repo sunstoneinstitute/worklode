@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -279,18 +278,14 @@ func TestRuleVersionsAndGovernedTasks(t *testing.T) {
 	}
 }
 
-// TestEditRuleDraftRewritesInPlace: editing a rule of a draft document
-// regenerates the document body with only that section changed and rewrites
-// the rule's draft version in place (S14, S35).
+// TestEditRuleDraftRewritesInPlace: editing a draft rule rewrites its draft
+// version in place, and the draft document arranging it renders the new text
+// with only that section changed (WL-SPEC-77 §19.4).
 func TestEditRuleDraftRewritesInPlace(t *testing.T) {
 	s := openDocStore(t)
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
-	docID, err := editRule(t, s, "P1", 2, model.EditRuleInput{Heading: "Subsection", Body: "\nB changed.\n\n"}, "stig")
-	if err != nil {
+	if err := editRule(t, s, "P1", 2, model.EditRuleInput{Heading: "Subsection", Body: "\nB changed.\n\n"}, "stig"); err != nil {
 		t.Fatal(err)
-	}
-	if docID != d.ID {
-		t.Errorf("docID = %d, want %d", docID, d.ID)
 	}
 	got, err := s.GetDoc(context.Background(), d.ID)
 	if err != nil {
@@ -304,7 +299,7 @@ func TestEditRuleDraftRewritesInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Version != 1 || c.Heading != "Subsection" || c.Body != "\nB changed.\n\n" || c.Status != "draft" {
+	if c.Version != 1 || c.Heading != "Subsection" || c.Body != "\nB changed.\n" || c.Status != "draft" {
 		t.Errorf("rule after edit = %+v", c)
 	}
 	assertArrangement(t, arrangementOf(t, s, d.ID), []arranged{
@@ -314,50 +309,51 @@ func TestEditRuleDraftRewritesInPlace(t *testing.T) {
 	})
 }
 
-// TestEditRuleAcceptedGoesThroughRevision: editing a rule of an accepted
-// document opens (or updates) the candidate revision with the regenerated
-// body; the rule itself does not move until the revision lands (R2, S13,
-// S35).
-func TestEditRuleAcceptedGoesThroughRevision(t *testing.T) {
+// TestEditRuleAcceptedAddsDraftVersion: editing an accepted rule adds its
+// next version as a draft and opens no revision; the accepted spec keeps
+// showing the accepted text and marks the pending draft, and a second edit
+// rewrites that draft in place (WL-SPEC-77 §19.4).
+func TestEditRuleAcceptedAddsDraftVersion(t *testing.T) {
 	s := openDocStore(t)
+	ctx := context.Background()
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, d.ID, "stig"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: "\nC changed.\n\n"}, "stig"); err != nil {
-		t.Fatal(err)
+	for _, body := range []string{"\nC changed.\n", "\nC again.\n"} {
+		if err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: body}, "stig"); err != nil {
+			t.Fatal(err)
+		}
 	}
-	rev, err := s.GetDocRevision(context.Background(), d.ID)
+	c, err := s.GetRule(ctx, "P1", 3)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(rev.Body, "C changed.") || strings.Contains(rev.Body, "\nC.\n") {
-		t.Errorf("revision body:\n%s", rev.Body)
+	if c.Version != 2 || c.Body != "\nC again.\n" || c.Status != "draft" {
+		t.Errorf("rule after two edits = %+v", c)
 	}
-	c, err := s.GetRule(context.Background(), "P1", 3)
+	if _, err := s.GetDocRevision(ctx, d.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a rule edit opened a revision: %v", err)
+	}
+	got, err := s.GetDoc(ctx, d.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Version != 1 || c.Body != "\nC.\n" || c.Status != "accepted" {
-		t.Errorf("rule must not move before the revision lands: %+v", c)
+	if !strings.Contains(got.Body, "\nC.\n") || strings.Contains(got.Body, "C again.") {
+		t.Errorf("accepted spec must show the accepted text:\n%s", got.Body)
 	}
-	// A second edit updates the same open revision rather than failing on
-	// ErrRevisionExists.
-	if _, err := editRule(t, s, "P1", 1, model.EditRuleInput{Heading: "One", Body: "\nA changed.\n\n"}, "stig"); err != nil {
+	secs, err := s.ListDocSections(ctx, d.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	rev, _ = s.GetDocRevision(context.Background(), d.ID)
-	if !strings.Contains(rev.Body, "A changed.") || !strings.Contains(rev.Body, "C changed.") {
-		t.Errorf("second edit lost the first: %s", rev.Body)
-	}
-	if _, err := acceptRevision(t, s, d.ID, "stig"); err != nil {
-		t.Fatal(err)
-	}
-	c, _ = s.GetRule(context.Background(), "P1", 3)
-	// sec-2 is the document's last section, so its body ends in a single
-	// newline the way Parse produced it, whatever the caller sent.
-	if c.Version != 2 || c.Body != "\nC changed.\n" || c.Status != "accepted" {
-		t.Errorf("after landing: %+v", c)
+	for _, sec := range secs {
+		want := 0
+		if sec.Anchor == "sec-2" {
+			want = 2
+		}
+		if sec.Pending != want {
+			t.Errorf("%s pending = %d, want %d", sec.Anchor, sec.Pending, want)
+		}
 	}
 }
 
@@ -377,7 +373,7 @@ func TestEditRuleNormalisesBodyWhitespace(t *testing.T) {
 
 	// A middle section: a blank line must still separate it from the next
 	// heading.
-	if _, err := editRule(t, s, "P1", 2, model.EditRuleInput{Heading: "Sub", Body: "B tight."}, "stig"); err != nil {
+	if err := editRule(t, s, "P1", 2, model.EditRuleInput{Heading: "Sub", Body: "B tight."}, "stig"); err != nil {
 		t.Fatal(err)
 	}
 	assertArrangement(t, arrangementOf(t, s, d.ID), want)
@@ -386,13 +382,13 @@ func TestEditRuleNormalisesBodyWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Body != "\nB tight.\n\n" {
-		t.Errorf("middle rule body = %q, want %q", c.Body, "\nB tight.\n\n")
+	if c.Body != "\nB tight.\n" {
+		t.Errorf("middle rule body = %q, want %q", c.Body, "\nB tight.\n")
 	}
 
 	// The last section: no heading follows, so no trailing blank line is
 	// added and the document still ends in one newline.
-	if _, err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: "C tight."}, "stig"); err != nil {
+	if err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: "C tight."}, "stig"); err != nil {
 		t.Fatal(err)
 	}
 	assertArrangement(t, arrangementOf(t, s, d.ID), want)
@@ -434,35 +430,33 @@ func assertSameAnchors(t *testing.T, s *Store, docID int64, want ...string) {
 	}
 }
 
-// TestEditRuleRefusals: an unknown rule is ErrNotFound; a rule arranged
-// in no document is ErrInvalidInput (R3).
+// TestEditRuleRefusals: an unknown rule is ErrNotFound and a withdrawn one
+// ErrBadTransition; a rule arranged in no document is edited like any other.
 func TestEditRuleRefusals(t *testing.T) {
 	s := openDocStore(t)
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
-	if _, err := editRule(t, s, "P1", 99, model.EditRuleInput{Heading: "x", Body: "y"}, "stig"); !errors.Is(err, ErrNotFound) {
+	if err := editRule(t, s, "P1", 99, model.EditRuleInput{Heading: "x", Body: "y"}, "stig"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown rule: %v", err)
 	}
 	if _, err := s.db.ExecContext(context.Background(), `DELETE FROM doc_rules WHERE doc_id = $1`, d.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := editRule(t, s, "P1", 1, model.EditRuleInput{Heading: "x", Body: "y"}, "stig"); !errors.Is(err, ErrInvalidInput) {
-		t.Errorf("unarranged rule: %v, want ErrInvalidInput", err)
+	if err := editRule(t, s, "P1", 1, model.EditRuleInput{Heading: "x", Body: "y"}, "stig"); err != nil {
+		t.Errorf("unarranged rule: %v", err)
+	}
+	if _, err := s.db.ExecContext(context.Background(), `UPDATE rules SET status = 'withdrawn' WHERE id = $1`, ruleID(t, s, "P1", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := editRule(t, s, "P1", 1, model.EditRuleInput{Heading: "x", Body: "z"}, "stig"); !errors.Is(err, ErrBadTransition) {
+		t.Errorf("withdrawn rule: %v, want ErrBadTransition", err)
 	}
 }
 
-// editRule runs EditRule through RecordDocEvent against the arranging
-// document, the way the API handler does.
-func editRule(t *testing.T, s *Store, key string, number int64, in model.EditRuleInput, actor string) (int64, error) {
+// editRule runs Store.EditRule as the API handler does.
+func editRule(t *testing.T, s *Store, key string, number int64, in model.EditRuleInput, actor string) error {
 	t.Helper()
-	var docID int64
-	_, _, err := s.RecordDocEvent(t.Context(), "rule_edit", "cli",
-		fmt.Sprintf("rule-edit-%d", docEventSeq.Add(1)), "doc.rule_edited", nil,
-		func(tx *sql.Tx, eventID int64) error {
-			var err error
-			docID, err = EditRule(tx, s.Now(), key, number, in, actor, eventID)
-			return err
-		})
-	return docID, err
+	_, err := s.EditRule(t.Context(), key, number, in, actor)
+	return err
 }
 
 // TestSetRuleMeta sets owner and tags (round-tripping a tag needing

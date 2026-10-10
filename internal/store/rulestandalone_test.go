@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -99,23 +101,190 @@ func TestAcceptRule(t *testing.T) {
 	if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "H", Body: "B."}, "stig"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AcceptRule(ctx, "P1", 1, "ada"); !errors.Is(err, ErrForbidden) {
+	if _, err := s.AcceptRule(ctx, "P1", 1, false, "ada"); !errors.Is(err, ErrForbidden) {
 		t.Errorf("non-owner accept: %v, want ErrForbidden", err)
 	}
-	r, err := s.AcceptRule(ctx, "P1", 1, "stig")
+	r, err := s.AcceptRule(ctx, "P1", 1, false, "stig")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r.Status != "accepted" || r.Version != 1 {
 		t.Errorf("accepted rule = %s v%d", r.Status, r.Version)
 	}
-	if _, err := s.AcceptRule(ctx, "P1", 1, "stig"); !errors.Is(err, ErrBadTransition) {
+	if _, err := s.AcceptRule(ctx, "P1", 1, false, "stig"); !errors.Is(err, ErrBadTransition) {
 		t.Errorf("second accept: %v, want ErrBadTransition", err)
 	}
-	if _, err := s.AcceptRule(ctx, "P1", 99, "stig"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.AcceptRule(ctx, "P1", 99, false, "stig"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing rule: %v, want ErrNotFound", err)
 	}
 	if got := testutil.ToFloat64(s.metrics.ruleOps.WithLabelValues("accept", "ok")); got != 1 {
 		t.Errorf("accept ok = %v, want 1", got)
+	}
+}
+
+// setRuleOwner makes owner the owner of rule key-number.
+func setRuleOwner(t *testing.T, s *Store, key string, number int64, owner string) {
+	t.Helper()
+	if err := s.Tx(context.Background(), func(tx *sql.Tx) error {
+		return SetRuleMeta(tx, ruleID(t, s, key, number), model.RuleMetaInput{Owner: &owner})
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAcceptRuleBumpsArrangingSpecs: editing a rule arranged in two accepted
+// specs, then accepting it, bumps both specs' versions; each now shows the
+// new text and its prior version still renders the old (WL-SPEC-77 §19.4).
+// A version nobody judged substantive and nothing refers to mints no review.
+func TestAcceptRuleBumpsArrangingSpecs(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+	b := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "b", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n# B\n\n## 1. Own {#sec-1}\n\nX.\n"})
+	if _, err := arrangeRule(t, s, b.ID, model.ArrangeRuleInput{Rule: "P1-REQ-3"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{a.ID, b.ID} {
+		if _, _, err := acceptDoc(t, s, id, "stig"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setRuleOwner(t, s, "P1", 3, "stig")
+	before := map[int64]int{}
+	for _, id := range []int64{a.ID, b.ID} {
+		d, err := s.GetDoc(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[id] = d.Version
+	}
+
+	if err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: "C changed."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AcceptRule(ctx, "P1", 3, false, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{a.ID, b.ID} {
+		d, err := s.GetDoc(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Version != before[id]+1 || !strings.Contains(d.Body, "C changed.") {
+			t.Errorf("doc %d: version %d (was %d), body:\n%s", id, d.Version, before[id], d.Body)
+		}
+		prior, err := s.GetDocVersion(ctx, id, before[id])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(prior.Body, "\nC.\n") || strings.Contains(prior.Body, "C changed.") {
+			t.Errorf("doc %d v%d must render the old text:\n%s", id, before[id], prior.Body)
+		}
+	}
+	var reviews int
+	if err := s.db.QueryRow(`SELECT count(*) FROM tasks WHERE kind = 'review'`).Scan(&reviews); err != nil {
+		t.Fatal(err)
+	}
+	if reviews != 0 {
+		t.Errorf("a non-substantive version minted %d review tasks", reviews)
+	}
+}
+
+// TestAcceptRuleSubstantiveGates: a version its author judges substantive
+// mints one review task and marks the accepted plan covering the rule stale
+// (WL-SPEC-77 §10, §19.4).
+func TestAcceptRuleSubstantiveGates(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, spec.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	setRuleOwner(t, s, "P1", 1, "stig")
+	if err := editRule(t, s, "P1", 1, model.EditRuleInput{Heading: "One", Body: "A narrowed."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AcceptRule(ctx, "P1", 1, true, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	var reviews int
+	if err := s.db.QueryRow(`SELECT count(*) FROM tasks WHERE kind = 'review' AND title LIKE 'Review P1-REQ-1 v2%'`).Scan(&reviews); err != nil {
+		t.Fatal(err)
+	}
+	if reviews != 1 {
+		t.Errorf("review tasks = %d, want 1", reviews)
+	}
+	if d, err := s.GetDoc(ctx, plan.ID); err != nil || d.Status != "stale" {
+		t.Errorf("covering plan = %v %v, want stale", d.Status, err)
+	}
+}
+
+// TestAcceptRuleUnderOpenRevision: a candidate revision opened before a rule
+// version was accepted still holds the older text; landing it keeps the
+// accepted version rather than writing the older text back as a new one.
+func TestAcceptRuleUnderOpenRevision(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reviseDoc(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	setRuleOwner(t, s, "P1", 3, "stig")
+	if err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: "C changed."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AcceptRule(ctx, "P1", 3, false, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := acceptRevision(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.GetRule(ctx, "P1", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Version != 2 || r.Status != "accepted" {
+		t.Errorf("rule after landing = v%d %s, want accepted v2", r.Version, r.Status)
+	}
+	if body := docBody(t, s, a.ID); !strings.Contains(body, "C changed.") {
+		t.Errorf("landed spec lost the accepted text:\n%s", body)
+	}
+}
+
+// TestArrangeRuleShowsAcceptedVersion: a rule with a pending draft is
+// arranged at its accepted version, and the spec marks the draft
+// (WL-SPEC-77 §19.4).
+func TestArrangeRuleShowsAcceptedVersion(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: "C draft."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	b := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "b", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n# B\n\n## 1. Own {#sec-1}\n\nX.\n"})
+	if _, err := arrangeRule(t, s, b.ID, model.ArrangeRuleInput{Rule: "P1-REQ-3"}); err != nil {
+		t.Fatal(err)
+	}
+	if body := docBody(t, s, b.ID); !strings.Contains(body, "\nC.\n") || strings.Contains(body, "C draft.") {
+		t.Errorf("arranged spec must show the accepted version:\n%s", body)
+	}
+	secs, err := s.ListDocSections(ctx, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(secs) != 2 || secs[1].Pending != 2 || secs[1].Rule != "P1-REQ-3" {
+		t.Errorf("sections = %+v, want sec-2 pending v2 of P1-REQ-3", secs)
 	}
 }
