@@ -12,7 +12,7 @@ import (
 )
 
 // coversRules resolves one covers entry to the requirements it names, when
-// the plan is written (WL-SPEC-77 §4, WL-SPEC-78 §4.1): a rule ref (any
+// the plan is written (WL-REQ-165, WL-REQ-203): a rule ref (any
 // infix) to that rule, a <doc>#sec-N entry to the requirements at that
 // anchor and under it, and a whole-document entry to every requirement the
 // document contains, in arrangement order. A section or document entry skips
@@ -87,7 +87,7 @@ func coversRules(tx *sql.Tx, project, ref string) (rules []int64, named bool, er
 
 // planRules is the rules a plan's covers edges point at, in edge order: the
 // rules that govern the tasks it mints and, at close, its ungoverned tasks
-// (WL-SPEC-75 §4). It reads the edges as stored and does not follow
+// (WL-REQ-87). It reads the edges as stored and does not follow
 // supersession; a governed task resolves a withdrawn rule to its successors
 // when it is read.
 func planRules(tx *sql.Tx, planID int64) ([]int64, error) {

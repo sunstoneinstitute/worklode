@@ -1,5 +1,5 @@
 // Delivery-lifecycle fact tables
-// (WL-SPEC-75 §10). Handlers record
+// (WL-RULE-112). Handlers record
 // facts inside a RecordEvent transaction, then call ResolveDelivery
 // (delivery_resolve.go), which advances the task to the furthest milestone
 // the facts support.
@@ -438,7 +438,7 @@ func ReleaseFrontier(tx *sql.Tx, repo string) (*int64, error) {
 
 // ReleaseFrontierRow is one repo's release-frontier row resolved to the
 // commit sha it covers, for the deploy deriver's wl:cutFrom projection
-// (spelled wl:covers until WL-SPEC-78 §4.6 took that name for Plan→Section).
+// (spelled wl:covers until WL-REQ-208 took that name for Plan→Section).
 type ReleaseFrontierRow struct {
 	Repo string
 	Tag  string

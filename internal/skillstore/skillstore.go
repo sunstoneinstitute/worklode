@@ -10,7 +10,7 @@
 // convenience for humans and the path every coding-agent harness walks to
 // discover skills. It holds one name symlink per skill and nothing else: a
 // hash dir living there too would surface every version as a duplicate
-// skill (WL-SPEC-80 §5.2). It holds one version at a time, so nothing that
+// skill (WL-REQ-276). It holds one version at a time, so nothing that
 // needs a specific version may depend on it.
 //
 // A pre-split layout (Store nested under Links, as <links>/.store/<hash>)
@@ -43,7 +43,7 @@ var (
 
 // Root returns the local skill dir: $LODE_SKILLS_DIR or ~/.worklode/skills.
 // Cleaned so a trailing slash can't make DefaultDirs derive the store as a
-// child of the links dir instead of its sibling (WL-SPEC-80 §5.2, acceptance
+// child of the links dir instead of its sibling (WL-REQ-276, acceptance
 // 9: no store hash dir may be reachable by a harness walking the links dir).
 func Root() (string, error) {
 	if v := os.Getenv("LODE_SKILLS_DIR"); v != "" {

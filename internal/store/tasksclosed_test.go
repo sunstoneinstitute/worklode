@@ -72,7 +72,7 @@ func TestClosedTaskIDsReadyNotClosed(t *testing.T) {
 // TestClosedTaskIDsPerRepoDoneState mirrors TestBlockedTaskIDsPerRepoDoneState
 // against ClosedTaskIDs directly: a task is closed at or past its landed
 // repo's done_state, and the same state is still open where the repo gates
-// higher (WL-SPEC-75 §4).
+// higher (WL-REQ-87).
 func TestClosedTaskIDsPerRepoDoneState(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

@@ -67,7 +67,7 @@ func TestAllBlockEdges(t *testing.T) {
 }
 
 // TestAllBlockEdgesExcludesDeletedEndpoints: soft delete leaves task_edges
-// alone (WL-SPEC-75 §12), so the filter has to be in the read. Otherwise a deleted
+// alone (WL-REQ-117), so the filter has to be in the read. Otherwise a deleted
 // task enters the overview's critical path, and AllBlockEdges disagrees with
 // BlockingFanOut on the same screen.
 func TestAllBlockEdgesExcludesDeletedEndpoints(t *testing.T) {

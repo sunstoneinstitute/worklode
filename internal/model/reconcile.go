@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// ReplayResult is one reconcile replay run's report (WL-SPEC-80 §10.3). It is
+// ReplayResult is one reconcile replay run's report (WL-REQ-297). It is
 // the "replay" section of the POST /api/v1/reconcile response body, so ADR
 // 036 puts it here rather than in internal/hooks.
 // Truncated and ErrorsOmitted report the two caps the run works under: the
@@ -22,7 +22,7 @@ type ReplayResult struct {
 
 // WhoAmI is the response of GET /api/v1/whoami (WL-SPEC-80): the calling
 // actor's identity, as internal/api resolves it from the request's Subject
-// and internal/cli decodes it back — one declaration per WL-SPEC-73 §3.2a, not a
+// and internal/cli decodes it back — one declaration per WL-RULE-1349, not a
 // same-shaped struct in each package.
 type WhoAmI struct {
 	ID    string `json:"id"`
@@ -97,7 +97,7 @@ type ReconcileResponse struct {
 
 // PollResult is one reconcile poll run's report (WL-SPEC-80 engine 2). Like
 // ReplayResult it is a section of the POST /api/v1/reconcile response body,
-// so WL-SPEC-73 §3.2a puts it here rather than in internal/reconcile. Repaired is what
+// so WL-RULE-1349 puts it here rather than in internal/reconcile. Repaired is what
 // the run observed, not what it changed — see `lode task reconcile --help`.
 type PollResult struct {
 	RunID      string       `json:"run_id"`

@@ -7,7 +7,7 @@ import (
 
 // Triples renders the claim set as <component> wl:implements <section>
 // edges, each annotated with its pinned document version — the payload of
-// the WL-SPEC-77 §13 observed/repo-implements named graph, and what the
+// the WL-REQ-177 observed/repo-implements named graph, and what the
 // stale-claim query compares against wl:lastRevisedIn.
 //
 // Each claim yields three lines: the asserted edge, a reifier node linked to

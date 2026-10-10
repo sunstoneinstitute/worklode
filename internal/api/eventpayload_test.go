@@ -1,7 +1,7 @@
 package api_test
 
 // eventpayload_test.go pins WL-281: every task-scoped event payload names the
-// task it describes under the JSON key "task" (WL-SPEC-77 §15), so GET
+// task it describes under the JSON key "task" (WL-RULE-179), so GET
 // /api/v1/events can attribute an event without a second lookup. One test per
 // event type, each reading the payload back out of the store (storeEventsOfType,
 // events_test.go) and decoding it as JSON, rather than trusting the wire

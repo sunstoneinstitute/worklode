@@ -494,7 +494,7 @@ func dirExists(path string) bool {
 }
 
 // TestNextFlattensTemplateWorktree drives the full template → branch →
-// Layout.Dir → ParseDir chain end to end (WL-SPEC-80 §3.3, §5.2), which is
+// Layout.Dir → ParseDir chain end to end (WL-REQ-269, WL-REQ-276), which is
 // otherwise only proved by composing separate unit tests: a server configured
 // with a "/"-containing LODE_BRANCH_TEMPLATE keeps the "/" in the BRANCH but
 // gets a flat directory one level below the base, which the path guard then

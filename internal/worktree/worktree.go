@@ -15,11 +15,11 @@ import (
 )
 
 // DefaultBase is the worktree base directory used when worktree_dir /
-// LODE_WORKTREE_DIR is unset (WL-SPEC-80 §3.3).
+// LODE_WORKTREE_DIR is unset (WL-REQ-269).
 const DefaultBase = ".worktrees"
 
 // idRe matches a task id anywhere in the worktree's directory name. The base
-// directory is the guard; this only extracts (WL-SPEC-80 §3.4).
+// directory is the guard; this only extracts (WL-REQ-270).
 var idRe = regexp.MustCompile(`[A-Z][A-Z0-9]*-[0-9]+`)
 
 // Layout is the resolved worktree directory layout for a checkout. Construct
@@ -63,7 +63,7 @@ func (l Layout) Base() string { return l.base }
 // is flat, so a "/" from a namespaced template ("team/{{ .id }}-{{ .slug }}")
 // is flattened to "-": every worktree is one directory below the base, and
 // under the default template the directory name is the branch name verbatim
-// (WL-SPEC-80 §3.3).
+// (WL-REQ-269).
 func DirName(branch string) string { return strings.ReplaceAll(branch, "/", "-") }
 
 // Dir returns the worktree directory for a branch: <root>/<base>/<dirname>.
@@ -97,7 +97,7 @@ func (l Layout) ParseDir(path string) (taskID string, ok bool) {
 // segmentBelowBase is the guard half of ParseDir: the single directory name
 // one level below the base directory, or ok=false. It is a pure string
 // operation — no config, no subprocess — which is what lets it run on every
-// hook event (WL-SPEC-80 §3.4).
+// hook event (WL-REQ-270).
 func (l Layout) segmentBelowBase(path string) (string, bool) {
 	if len(l.parts) == 0 {
 		return "", false
@@ -403,7 +403,7 @@ func StampedTaskID(dir string) (taskID string, ok bool) {
 // The guard is unchanged and still runs first: dir must be exactly one
 // directory below the base, on strings alone. Only once it has cleared that
 // does TaskID spend a git subprocess, so the reject-fast path every hook
-// event takes stays free of one (WL-SPEC-80 §3.4).
+// event takes stays free of one (WL-REQ-270).
 func (l Layout) TaskID(dir string) (taskID string, ok bool) {
 	seg, ok := l.segmentBelowBase(dir)
 	if !ok {

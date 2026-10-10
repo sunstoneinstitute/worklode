@@ -1,6 +1,6 @@
 // Package graphserver is a client for the data-platform graph-server
 // (data-platform crates/graph-server) — the knowledge-graph system of
-// record that WL-SPEC-79 §13 requires the data-platform to host.
+// record that WL-REQ-252 requires the data-platform to host.
 //
 // graph-server's surface, unlike a plain SPARQL endpoint, is:
 //   - branch-scoped Graph Store Protocol writes:

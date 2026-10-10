@@ -1,4 +1,4 @@
-// act.js drives the two-step action buttons (WL-SPEC-85 §4) outside the
+// act.js drives the two-step action buttons (WL-REQ-1337) outside the
 // Progress page: the document page's Accept and Publish and the task page's
 // Publish. The markup and write gate are progress.js's; what differs is that
 // data-route is an absolute path, a disabled button's reason is shown as its

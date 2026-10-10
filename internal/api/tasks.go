@@ -41,14 +41,14 @@ func validSecretNames(names []string) bool {
 // invalidSecretNameMsg is shared by every handler that gates on
 // validSecretNames, so the message cannot drift from the grammar. It names
 // both halves of the contract: a caller told only the pattern after
-// submitting PATH would read the rejection as a bug (WL-SPEC-74 §10.1).
+// submitting PATH would read the rejection as a bug (WL-REQ-68).
 const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$ " +
 	"and must not be loader-sensitive (LD_*, DYLD_*, PATH, IFS, ENV, BASH_ENV, PYTHONPATH, ...)"
 
 // validKinds mirrors the tasks.kind CHECK constraint (migration 0025) and
 // wlc:TaskKind in ns/concept.ttl. The list is generated from the Turtle by
 // scripts/nsgen.py, so adding a kind is one commit over ns/concept.ttl, the
-// regenerated internal/ns/gen.go, and the migration (WL-SPEC-77 §14).
+// regenerated internal/ns/gen.go, and the migration (WL-REQ-178).
 var validKinds = ns.Set(ns.TaskKinds)
 
 // invalidKindMsg is shared by every handler that gates on validKinds, so the
@@ -151,7 +151,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 			created = t
 			// The id is minted from the project counter here, after the
 			// payload was marshalled, so the event names the task it created
-			// from inside the same transaction (WL-SPEC-77 §15).
+			// from inside the same transaction (WL-RULE-179).
 			if err := store.AttributeEventToTask(tx, eventID, t.ID); err != nil {
 				return err
 			}
@@ -186,7 +186,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				blobref.Extract(req.Body), actorID); err != nil {
 				return err
 			}
-			// Every kind may carry rows (WL-SPEC-77 §12), and a decision-kind
+			// Every kind may carry rows (WL-REQ-176), and a decision-kind
 			// task with none is legal while its questions are still being
 			// drafted. Same transaction as the insert: a task never exists
 			// with half its questions posed.
@@ -300,11 +300,11 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 
 // getTaskCost handles
 // GET /api/v1/tasks/{id}/cost?from=&to=&children=: a task's accounted usage
-// and cost (WL-SPEC-77 §15). children=true widens the scope to the
+// and cost (WL-RULE-179). children=true widens the scope to the
 // task's child_of descendants, so a container task's own report is not
 // always zero. No dedicated metric: this is an ordinary read with no derived
 // outcome, so the generic http_requests_total / http_request_duration_seconds
-// middleware (WL-SPEC-73 §6) is sufficient and WL-SPEC-73 §6's add-a-metric rule is
+// middleware (WL-REQ-32) is sufficient and WL-REQ-32's add-a-metric rule is
 // deliberately not triggered.
 func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -343,9 +343,9 @@ func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 // containers; updated_since is an RFC3339 instant that narrows to the tasks
 // touched at or after it (the incremental fetch a polling mirror makes);
 // plan_doc narrows to the tasks minted from that plan document — the query
-// that is the plan's task set (WL-SPEC-77 §11.2, §1); about_doc narrows to the tasks
-// that reference that document (WL-SPEC-77 §15); deleted=true switches the list
-// from live tasks to tombstoned ones (WL-SPEC-75 §12); detail=true adds "blocked" and
+// that is the plan's task set (WL-REQ-174, WL-RULE-162); about_doc narrows to the tasks
+// that reference that document (WL-RULE-179); deleted=true switches the list
+// from live tasks to tombstoned ones (WL-REQ-117); detail=true adds "blocked" and
 // "edges" to each row (see model.TaskListDetail) at the cost of two extra
 // bulk queries; tree=true answers with the hierarchy instead of a flat list
 // (see listTaskTree), and root names the single container it covers.
@@ -570,7 +570,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		req.Milestone = &empty
 	}
 	// planDoc is resolved outside the transaction the same way `--plan` on
-	// `task list` resolves one (id or slug, WL-SPEC-77 §11.2): store.ResolveDocRef
+	// `task list` resolves one (id or slug, WL-REQ-174): store.ResolveDocRef
 	// alone, no KEY-TYPE-n grammar — plans carry no corpus number for that
 	// grammar to address. SetTaskPlan re-checks kind and project once the id
 	// is known, since a ref can resolve to a document that is not a plan.
@@ -780,7 +780,7 @@ func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 
 // publishTasksFromPage handles POST /projects/{id}/tasks/publish: the task
 // page's and a plan page's Publish button, performing `lode task publish`
-// (draft -> ready) through the page-script write gate (WL-SPEC-85 §5). The body
+// (draft -> ready) through the page-script write gate (WL-REQ-1338). The body
 // names one task, or a plan whose draft tasks are all published.
 //
 // The refusals mirror progressAccept's. A task or plan of another project is

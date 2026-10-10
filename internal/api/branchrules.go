@@ -1,10 +1,10 @@
-// The branch-rules refresh loop (WL-SPEC-85 §7). The Progress page needs to
+// The branch-rules refresh loop (WL-REQ-1340). The Progress page needs to
 // know whether a PR's base branch runs a merge queue — it decides both the
 // position line's wording and whether the merge button queues or merges — and
 // it must never ask GitHub while rendering. So worklode reads the fact through
 // the App on its own schedule and stores it. The same read records whether
 // the branch requires pull requests, which `lode doctor` reads through
-// GET /api/v1/repos/branch-rules (WL-SPEC-72 §3).
+// GET /api/v1/repos/branch-rules (WL-REQ-6).
 
 package api
 

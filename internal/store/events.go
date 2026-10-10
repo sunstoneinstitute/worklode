@@ -11,7 +11,7 @@ import (
 )
 
 // eventHorizon is the commit-horizon predicate every cursor read of events
-// carries (WL-SPEC-77 §15): a row is only readable once no transaction older
+// carries (WL-RULE-179): a row is only readable once no transaction older
 // than its writer can still commit, so an id can never appear behind a
 // position a subscriber has already passed. One const, not one literal per
 // query — the whole ordered-log guarantee is this line.
@@ -187,7 +187,7 @@ func (s *Store) RecordEventThenApply(
 }
 
 // RecordEventWithID is RecordEvent for payloads that must embed their own
-// event id (WL-SPEC-77 §15: the JSON-LD `@id` is `wlid:event/<id>`). It
+// event id (WL-RULE-179: the JSON-LD `@id` is `wlid:event/<id>`). It
 // reserves the id from the events.id sequence first, then calls payloadFor
 // to build the payload before inserting — the reverse of RecordEvent, which
 // lets the INSERT assign the id. (source, externalID) still governs
@@ -225,7 +225,7 @@ func (s *Store) RecordEventWithID(
 		// With DO NOTHING, RETURNING yields no row on conflict, so
 		// sql.ErrNoRows means the event was already recorded. The
 		// reserved sequence value is burned in that case — fine,
-		// offsets are positions, not counts (WL-SPEC-77 §15).
+		// offsets are positions, not counts (WL-RULE-179).
 		scanErr := tx.QueryRowContext(ctx,
 			`INSERT INTO events (id, source, external_id, type, payload, received_at)
 			 OVERRIDING SYSTEM VALUE
@@ -263,7 +263,7 @@ func (s *Store) RecordEventWithID(
 // SetEventPayload rewrites the payload of an event from inside the same
 // transaction its apply runs in. RecordEvent inserts the payload before apply,
 // so a mutation whose event has to state what it did — doc.patched names the
-// sections it changed and how the caller classified them (WL-SPEC-77 §15) — cannot
+// sections it changed and how the caller classified them (WL-RULE-179) — cannot
 // know it in time. The rewrite commits with the mutation or not at all, so the
 // log never carries a payload for a write that rolled back.
 func SetEventPayload(tx *sql.Tx, eventID int64, payload []byte) error {
@@ -276,7 +276,7 @@ func SetEventPayload(tx *sql.Tx, eventID int64, payload []byte) error {
 // EventPayload marshals v as an event payload. Every payload is a JSON
 // object naming what the event is about; an event about one task names it
 // under the "task" key, so GET /api/v1/events attributes the event on its
-// own without a second read of state_log (WL-SPEC-77 §15).
+// own without a second read of state_log (WL-RULE-179).
 func EventPayload(v any) ([]byte, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -289,14 +289,14 @@ func EventPayload(v any) ([]byte, error) {
 // recorded, for the events whose task id does not exist until apply runs:
 // task.created and issue.promoted mint the id from the project counter
 // inside the transaction, after RecordEvent has already marshalled the
-// payload (WL-SPEC-77 §15).
+// payload (WL-RULE-179).
 //
 // It must be called from inside that same transaction — the apply callback —
 // so the event row becomes visible to any reader already carrying its task
 // id. No committed row is ever rewritten: the INSERT and this UPDATE are one
 // transaction, and events are read below the commit horizon, so the
 // intermediate payload is unobservable. That is what keeps the log
-// append-only in the sense that matters (WL-SPEC-77 §15's objection is to patching a
+// append-only in the sense that matters (WL-RULE-179's objection is to patching a
 // row that has already committed).
 func AttributeEventToTask(tx *sql.Tx, eventID int64, taskID string) error {
 	what := fmt.Sprintf("attribute event %d to task %s", eventID, taskID)
@@ -364,7 +364,7 @@ func (s *Store) GetEvent(ctx context.Context, id int64) (Event, error) {
 	return e, nil
 }
 
-// EventSubscriber mirrors one event_subscribers row (WL-SPEC-77 §15).
+// EventSubscriber mirrors one event_subscribers row (WL-RULE-179).
 type EventSubscriber struct {
 	Name      string
 	LastRead  int64
@@ -374,7 +374,7 @@ type EventSubscriber struct {
 
 // EnsureEventSubscriber creates the subscriber row if absent. Offset 0
 // means a new subscriber replays the whole log — the right default for a
-// rule set that should have been running all along (WL-SPEC-77 §15).
+// rule set that should have been running all along (WL-RULE-179).
 func (s *Store) EnsureEventSubscriber(ctx context.Context, name string) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO event_subscribers (name, updated_at) VALUES ($1, $2)
@@ -521,7 +521,7 @@ type EventFilter struct {
 // pins the relationship at compile time.
 const MaxEventListLimit = 200
 
-// ListEvents returns matching events in id order (newest last, WL-SPEC-77 §18),
+// ListEvents returns matching events in id order (newest last, WL-REQ-182),
 // horizon-bounded like every subscriber read so the tail never shows an id
 // that later reads would order before.
 func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) {
@@ -556,7 +556,7 @@ func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) 
 	return collectRows(rows, "list events", scanEvent)
 }
 
-// EventSubscriberStatus is the lode event subscribers row (WL-SPEC-77 §18): the
+// EventSubscriberStatus is the lode event subscribers row (WL-REQ-182): the
 // durable offsets plus two derived, point-in-time facts — how far the
 // subscriber trails the commit horizon, and which Postgres backend (if any)
 // currently holds its advisory lock.
@@ -603,7 +603,7 @@ func (s *Store) EventSubscriberStatuses(ctx context.Context) ([]EventSubscriberS
 }
 
 // SeekEventSubscriber moves both offsets to the given position — the only
-// path that moves an offset backwards (admin replay/skip, WL-SPEC-77 §18). Setting
+// path that moves an offset backwards (admin replay/skip, WL-REQ-182). Setting
 // last_read_offset and last_acked_offset to the same value keeps the
 // event_subscribers_acked_le_read CHECK satisfied by construction. Safe
 // precisely because handlers are idempotent.
@@ -619,7 +619,7 @@ func (s *Store) SeekEventSubscriber(ctx context.Context, name string, to int64) 
 }
 
 // SubscriberLock pins one pool connection holding the pg_try_advisory_lock
-// for a subscriber (WL-SPEC-77 §15: one active consumer). The connection is
+// for a subscriber (WL-RULE-179: one active consumer). The connection is
 // held for the consumer's lifetime; a crashed process drops it and
 // Postgres releases the lock — failover with no lease table.
 type SubscriberLock struct {
@@ -737,7 +737,7 @@ func (s *Store) EventLogHorizonID(ctx context.Context) (int64, error) {
 }
 
 // SubscriberLag is how far one subscriber trails the log: the highest event
-// id below the commit horizon minus what it has acked (WL-SPEC-77 §15).
+// id below the commit horizon minus what it has acked (WL-RULE-179).
 type SubscriberLag struct {
 	Name string
 	Lag  int64
@@ -746,7 +746,7 @@ type SubscriberLag struct {
 // EventSubscriberLags returns the lag of every subscriber, by name. The
 // horizon tail is shared by all of them, which is what makes the gauge read
 // two pathologies at once: a stuck subscriber lags alone, a long transaction
-// holding the horizon back (WL-SPEC-77 §15) lags every subscriber together.
+// holding the horizon back (WL-RULE-179) lags every subscriber together.
 func (s *Store) EventSubscriberLags(ctx context.Context) ([]SubscriberLag, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT s.name, GREATEST(h.max_id - s.last_acked_offset, 0)

@@ -13,10 +13,10 @@ import (
 )
 
 // Participant is one Crew member of a project, aggregated over their
-// role-labelled rows (WL-SPEC-75 §13.5). One actor may hold several role
+// role-labelled rows (WL-REQ-123). One actor may hold several role
 // labels, each its own project_participants row; ListParticipants folds
 // those into one Participant per actor. IsDeputy is folded into Roles as the
-// literal "acting-lead" entry (WL-SPEC-75 §13.5) rather than kept only as a
+// literal "acting-lead" entry (WL-REQ-123) rather than kept only as a
 // flag, so every reader of Roles sees it with no further code.
 type Participant struct {
 	ProjectID   string
@@ -187,7 +187,7 @@ func (s *Store) ProjectsForActor(ctx context.Context, actorID string) ([]ActorPr
 }
 
 // OwnedWork is one open item a Crew member owns, blocking their removal
-// (WL-SPEC-75 §13.5). Kind is "task" today; approvals (WL-SPEC-75 §13.6, plan C)
+// (WL-REQ-123). Kind is "task" today; approvals (WL-REQ-124, plan C)
 // and decisions join this query when their tables exist.
 type OwnedWork struct {
 	Kind  string // "task"
@@ -250,8 +250,8 @@ func openWorkOwnedBy(ctx context.Context, q rowQueryer, projectID, actorID strin
 }
 
 // OpenWorkOwnedBy returns every open item actorID owns in projectID — the
-// removal guard's fact query (WL-SPEC-75 §13.5) and the basis for a member's
-// responsibility listing (WL-SPEC-82 §8). An actor who owns nothing open returns
+// removal guard's fact query (WL-REQ-123) and the basis for a member's
+// responsibility listing (WL-REQ-343). An actor who owns nothing open returns
 // an empty slice, not an error.
 func (s *Store) OpenWorkOwnedBy(ctx context.Context, projectID, actorID string) ([]OwnedWork, error) {
 	return openWorkOwnedBy(ctx, s.db, projectID, actorID)
@@ -266,7 +266,7 @@ const maxParticipantRole = 100
 // mirrored by migration 0046's CHECK constraint and the cockpit form's
 // dropdown — TestParticipantRolesMatchMigration holds the first pair
 // together. member is the generic default; the rest are the story-project
-// roles the corpus names (WL-SPEC-75 §13.5, the cockpit design brief). Widening
+// roles the corpus names (WL-REQ-123, the cockpit design brief). Widening
 // means a new migration plus this map plus the form's option list.
 var validParticipantRoles = map[string]bool{
 	"member": true, "editor": true, "science-lead": true, "reporter": true,
@@ -282,8 +282,8 @@ func ParticipantRoles() []string {
 }
 
 // AddParticipant adds one role-labelled Crew row inside the given ingest
-// transaction (WL-SPEC-75 §13.5). Callers reach it through RecordEvent with
-// event type "crew.member_added" (WL-SPEC-75 §13.8) — never directly, so the
+// transaction (WL-REQ-123). Callers reach it through RecordEvent with
+// event type "crew.member_added" (WL-REQ-126) — never directly, so the
 // membership fact and the event that records it commit together.
 //
 // The project and the actor must exist (ErrNotFound); role is trimmed and
@@ -384,19 +384,19 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 // RemoveParticipant removes actorID from projectID's Crew — every role row
 // the member holds, in one act — inside the given ingest transaction.
 // Callers reach it through RecordEvent with event type
-// "crew.member_removed" (WL-SPEC-75 §13.8), never directly, so the membership
+// "crew.member_removed" (WL-REQ-126), never directly, so the membership
 // fact and the event that records it commit together.
 //
 // Removal is member-level on purpose: dropping a single role label is out of
 // scope (remove, then re-add with the labels that still apply), because a
-// per-role removal has no distinct meaning in WL-SPEC-75 §13.5 and would need
+// per-role removal has no distinct meaning in WL-REQ-123 and would need
 // its own event type to stay honest.
 //
 // The rules fire in this order, and the order is part of the contract: an
 // actor who holds no row is ErrNotFound; the project lead cannot be removed
 // while lead handoff is unimplemented (ErrInvalidInput); a member who still
 // owns open work is refused with every item named, so the caller's message
-// carries the responsibility list (WL-SPEC-75 §13.5, WL-SPEC-82 §8). removedBy is
+// carries the responsibility list (WL-REQ-123, WL-REQ-343). removedBy is
 // recorded in the change log only — it is not a stored column, so an empty
 // one on an open instance is simply an empty attribution, not a fabricated
 // actor. now is unused: a removal deletes rows rather than stamping one, and
@@ -448,7 +448,7 @@ func RemoveParticipant(tx *sql.Tx, now time.Time, projectID, actorID, removedBy 
 		return fmt.Errorf("project lead cannot be removed; lead handoff is not implemented: %w", ErrInvalidInput)
 	}
 
-	// The same query the responsibility listing reads (WL-SPEC-82 §8), run on
+	// The same query the responsibility listing reads (WL-REQ-343), run on
 	// this transaction so the guard and the listing can never disagree.
 	open, err := openWorkOwnedBy(ctx, tx, projectID, actorID)
 	if err != nil {

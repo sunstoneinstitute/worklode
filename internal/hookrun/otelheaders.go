@@ -9,7 +9,7 @@ import (
 
 // handleOTelHeaders answers `lode-hook otel-headers`: Claude Code's
 // otelHeadersHelper, run before every OTel export to supply the bearer token
-// for the log exporter (WL-SPEC-80 §5.5). It always exits 0 and writes exactly
+// for the log exporter (WL-REQ-279). It always exits 0 and writes exactly
 // one JSON object to stdout -- {} when no token is found, so a missing
 // credential never stops the agent, just leaves that export unauthenticated.
 // The token never lands in a settings file; this is how Claude Code gets it

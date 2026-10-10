@@ -162,7 +162,7 @@ func parseSince(s string, now time.Time) (*time.Time, error) {
 // reconcile handles POST /api/v1/reconcile: engine 1 (replay stored events)
 // then engine 2 (poll GitHub — skipped when no App is configured).
 // Synchronous by design: a scoped run is fast and the unscoped run is the
-// scheduled case where waiting is acceptable (WL-SPEC-80 §10.3).
+// scheduled case where waiting is acceptable (WL-REQ-297).
 func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
 	var req model.ReconcileInput
 	if err := readJSON(w, r, &req); err != nil {

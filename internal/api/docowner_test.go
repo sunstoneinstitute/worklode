@@ -9,7 +9,7 @@ import (
 )
 
 // TestListDocsByOwner: GET /api/v1/docs?owner= narrows to that owner's
-// documents (WL-SPEC-77 §9, WL-382 task 4), served by the docs_owner partial
+// documents (WL-REQ-170, WL-382 task 4), served by the docs_owner partial
 // index (migration 0058). It composes with the project and kind filters
 // rather than replacing them, and an owner with no documents returns an
 // empty list, not a 404.
@@ -56,12 +56,12 @@ func TestListDocsByOwner(t *testing.T) {
 	}
 }
 
-// TestTransferDocOwner walks POST /api/v1/docs/{id}/owner (WL-SPEC-77 §9): the
+// TestTransferDocOwner walks POST /api/v1/docs/{id}/owner (WL-REQ-170): the
 // owner or an admin may hand a document to another actor, a third party is
 // refused, transferring to the actor that already owns it is a no-op that
 // still answers 200, an unknown actor is a 422, and the transfer lands as a
 // doc.owner_changed event shaped like every other document verb's — doc,
-// actor, request — rather than the previous_owner/owner keys WL-SPEC-77 §15
+// actor, request — rather than the previous_owner/owner keys WL-RULE-179
 // originally proposed before this endpoint existed.
 func TestTransferDocOwner(t *testing.T) {
 	t.Parallel()

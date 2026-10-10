@@ -177,7 +177,7 @@ func TestRefShortcutBareNumberAcrossProjects(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("/029 status = %d, want 404 (ambiguous across projects)", rr.Code)
 	}
-	// Candidates are named by citable id (WL-SPEC-77 §7): the project key is
+	// Candidates are named by citable id (WL-REQ-168): the project key is
 	// exactly what a bare number does not carry, so it is what the reader
 	// needs back.
 	for _, want := range []string{"WL-SPEC-29", "OTHER-SPEC-29"} {

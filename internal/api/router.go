@@ -31,7 +31,7 @@ import (
 type routeGuard struct {
 	perm   Permission
 	public string
-	// taskScope is what a task-scoped token (WL-SPEC-74 §2, WL-306) may do with
+	// taskScope is what a task-scoped token (WL-REQ-48, WL-306) may do with
 	// this route: nothing (the zero value — default deny), call it when the
 	// path's {id} is the bound task (taskScopeBound), or call it freely
 	// (taskScopeAny, for the worker surface that carries no task id).
@@ -78,7 +78,7 @@ func open(why string) routeGuard { return routeGuard{perm: permPublic, public: w
 var routeGuards = map[string]routeGuard{
 	// --- web UI (WL-SPEC-82) ---------------------------------------------------
 	"GET /{$}": guarded(permWebRead),
-	// The Morning Brief's one write (WL-SPEC-82 §11): advancing the actor's review
+	// The Morning Brief's one write (WL-REQ-346): advancing the actor's review
 	// boundary. requireSession, applied at registration like the decide
 	// route below, because a forged cutoff needs a live session's identity
 	// to attribute the advance to.
@@ -101,7 +101,7 @@ var routeGuards = map[string]routeGuard{
 	// reader could already see.
 	"GET /projects/{id}/progress/spec/{doc}": guarded(permWebRead),
 	"GET /projects/{id}/progress/summary":    guarded(permWebRead),
-	// The Progress page's writes (WL-SPEC-85 §8). permDocWrite for accepting a
+	// The Progress page's writes (WL-REQ-1341). permDocWrite for accepting a
 	// document, matching POST /api/v1/docs/{id}/accept — the owner gate that
 	// decides who may actually accept it stays inside the store (§4.2 rule 5).
 	"POST /projects/{id}/progress/accept": guarded(permDocWrite),
@@ -110,7 +110,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /projects/{id}/progress/plan": guarded(permTaskWrite),
 	// permTaskWrite for the rally acts (§3.5): assembling one mints and links
 	// tasks, and confirming or discarding it moves a task's state. The rally
-	// is a task like any other (WL-SPEC-75 §8).
+	// is a task like any other (WL-REQ-97).
 	"POST /projects/{id}/progress/rally/add":     guarded(permTaskWrite),
 	"POST /projects/{id}/progress/rally/confirm": guarded(permTaskWrite),
 	"POST /projects/{id}/progress/rally/discard": guarded(permTaskWrite),
@@ -127,16 +127,16 @@ var routeGuards = map[string]routeGuard{
 	"GET /projects/{id}/deliverables":                 guarded(permWebRead),
 	"GET /projects/{id}/deliverables/new":             guarded(permWebWrite),
 	"POST /projects/{id}/deliverables":                guarded(permWebWrite),
-	// The Report control on a deliverable row (WL-SPEC-75 §13.3). No project segment:
+	// The Report control on a deliverable row (WL-RULE-121). No project segment:
 	// deliverable ids are globally unique, and the handler reads the project
 	// off the deliverable for the redirect.
 	"POST /deliverables/{id}/report": guarded(permWebWrite),
 	"GET /projects/{id}/tasks/new":   guarded(permWebWrite),
 	"POST /projects/{id}/tasks":      guarded(permWebWrite),
-	// The cockpit's tombstone review (WL-SPEC-75 §12) and its two Restore buttons.
+	// The cockpit's tombstone review (WL-REQ-117) and its two Restore buttons.
 	// Reading the page is an ordinary web read; restoring carries the
 	// permission the JSON API's undelete carries — permTaskWrite for a task,
-	// permDocWrite for a document (WL-SPEC-75 §12) — rather than permWebWrite, which
+	// permDocWrite for a document (WL-REQ-117) — rather than permWebWrite, which
 	// is why they are two routes and not one.
 	"GET /projects/{id}/deleted":                guarded(permWebRead),
 	"POST /projects/{id}/deleted/tasks/restore": guarded(permTaskWrite),
@@ -152,7 +152,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /deliveries":                           guarded(permWebRead),
 	"GET /knowledge":                            guarded(permWebRead),
 	"GET /tasks/{id}":                           guarded(permWebRead),
-	// The task page's Activity follow (WL-SPEC-80 §8.9): permWebRead like the
+	// The task page's Activity follow (WL-REQ-1237): permWebRead like the
 	// page it belongs to — a frame is the same row the page already renders.
 	"GET /tasks/{id}/activity/events": guarded(permWebRead),
 	"GET /docs":                       guarded(permWebRead),
@@ -182,12 +182,12 @@ var routeGuards = map[string]routeGuard{
 	// route above, so it only answers what nothing else claims.
 	"GET /{ref}": guarded(permWebRead),
 	"GET /drift": guarded(permWebRead),
-	// The cockpit's one decision act (WL-SPEC-75 §13.6). permApprovalDecide rather
+	// The cockpit's one decision act (WL-REQ-124). permApprovalDecide rather
 	// than permWebWrite: deciding an approval is a different capability from
 	// filing a task through a form, and the route is additionally gated by
 	// requireSession — see authz.go.
 	"POST /approvals/{id}/decide": guarded(permApprovalDecide),
-	// The impact note (WL-SPEC-75 §13.6): authoring what an upstream change means for
+	// The impact note (WL-REQ-124): authoring what an upstream change means for
 	// your own entity, which is not the decision that follows it.
 	"POST /approvals/{id}/note": guarded(permApprovalNote),
 
@@ -218,7 +218,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/tasks/{id}/blockers": guardedBound(permTaskRead),
 	"GET /api/v1/tasks/{id}/cost":     guardedBound(permTaskRead),
 	"GET /api/v1/tasks/{id}/timeline": guardedBound(permTaskRead),
-	// A task's blob references (WL-SPEC-78 §8.3). Listing is a task read; both
+	// A task's blob references (WL-REQ-228). Listing is a task read; both
 	// halves of the reference graph are task writes.
 	"GET /api/v1/tasks/{id}/blobs":           guardedBound(permTaskRead),
 	"POST /api/v1/tasks/{id}/blobs":          guardedBound(permTaskWrite),
@@ -234,20 +234,20 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/tasks/{id}/decompose":      guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/state":          guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/abandon":        guardedBound(permTaskWrite),
-	// The escalation ladder (WL-SPEC-77 §10). A task write like release and block,
+	// The escalation ladder (WL-REQ-171). A task write like release and block,
 	// which is what it is made of: the executor gives the task back and files
 	// the design work that has to land first.
 	"POST /api/v1/tasks/{id}/escalate": guardedBound(permTaskWrite),
-	// The ladder's non-escalating rungs (WL-SPEC-77 §15): a gap logged without
+	// The ladder's non-escalating rungs (WL-RULE-179): a gap logged without
 	// stopping, and the fixer's start/finish. Task writes like escalate, but
 	// event-only — no lease, no edge, no task state.
 	"POST /api/v1/tasks/{id}/gap":    guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/fix":    guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/reopen": guarded(permTaskWrite),
-	// Delete and undelete are task writes like the rest (WL-SPEC-75 §12). Deliberately
+	// Delete and undelete are task writes like the rest (WL-REQ-117). Deliberately
 	// not admin-only: a per-role delete permission would be the first of an
-	// RBAC model this repo does not have (WL-SPEC-74 §4.3). What stops a careless
-	// delete on a prod instance is the justification WL-SPEC-75 §12 demands, not a
+	// RBAC model this repo does not have (WL-REQ-53). What stops a careless
+	// delete on a prod instance is the justification WL-REQ-117 demands, not a
 	// narrower role.
 	"DELETE /api/v1/tasks/{id}":                 guarded(permTaskWrite),
 	"POST /api/v1/tasks/{id}/undelete":          guarded(permTaskWrite),
@@ -266,13 +266,13 @@ var routeGuards = map[string]routeGuard{
 	// different task the same actor also holds (0016 multi-lease).
 	"POST /api/v1/tasks/{id}/instructions": guarded(permTaskWrite),
 
-	// Reading the decision rows of a task (WL-SPEC-77 §12): the same permission
+	// Reading the decision rows of a task (WL-REQ-176): the same permission
 	// and the same task-token grant as GET /api/v1/tasks/{id}, which already
 	// carries these rows in its detail.
 	"GET /api/v1/tasks/{id}/decisions":       guardedBound(permTaskRead),
 	"GET /api/v1/tasks/{id}/decisions/{key}": guardedBound(permTaskRead),
 
-	// Posing and rewording a decision row (WL-SPEC-77 §12). Not guardedBound: a
+	// Posing and rewording a decision row (WL-REQ-176). Not guardedBound: a
 	// PATCH may re-parent the row to another task, which a task-scoped
 	// token has no business reaching.
 	"POST /api/v1/tasks/{id}/decisions":        guarded(permTaskWrite),
@@ -287,10 +287,10 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/tasks/{id}/unassign": guarded(permTaskAssign),
 	"GET /api/v1/board":                guarded(permTaskRead),
 
-	// --- documents (WL-SPEC-77 §3, §6, §9) --------------------------------------
+	// --- documents (WL-REQ-164, WL-REQ-167, WL-REQ-170) --------------------------------------
 	// Reading and writing the corpus is its own capability (see permDocRead in
 	// authz.go). The accept routes are permDocWrite like the rest: whether a
-	// given actor may accept a given document is the owner gate of WL-SPEC-77 §9,
+	// given actor may accept a given document is the owner gate of WL-REQ-170,
 	// a per-document fact the store checks, not a role. Owner transfer
 	// (§7.3) is the same shape: guarded rather than guardedAny, matching
 	// accept and revision/accept, since it is another deliberate act on the
@@ -337,7 +337,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/owner":               guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/notes":               guardedAny(permDocWrite),
 	"GET /api/v1/docs/{id}/notes":                guardedAny(permDocRead),
-	// Setting the reviewer set (WL-SPEC-77 §9, WL-359) is the same shape as owner
+	// Setting the reviewer set (WL-REQ-170, WL-359) is the same shape as owner
 	// transfer: guarded rather than guardedAny, since it too is a deliberate
 	// act on the document's identity, gated in the store on the same
 	// owner-or-admin authority TransferDocOwner checks.
@@ -349,13 +349,13 @@ var routeGuards = map[string]routeGuard{
 	"PUT /api/v1/docs/{id}/revision":          guardedAny(permDocWrite),
 	"DELETE /api/v1/docs/{id}/revision":       guardedAny(permDocWrite),
 	"POST /api/v1/docs/{id}/revision/accept":  guarded(permDocWrite),
-	// The document half of WL-SPEC-75 §12; see the task entries above.
+	// The document half of WL-REQ-117; see the task entries above.
 	"DELETE /api/v1/docs/{id}":        guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/undelete": guarded(permDocWrite),
 
-	// --- approvals (WL-SPEC-75 §13.6) --------------------------------------------
+	// --- approvals (WL-REQ-124) --------------------------------------------
 	// Reading the queue and filing an ad-hoc requirement (§7.2). Deciding is
-	// not on the JSON API at all: WL-SPEC-75 §13.6 makes it a web-session act, and
+	// not on the JSON API at all: WL-REQ-124 makes it a web-session act, and
 	// its route is "POST /approvals/{id}/decide" above.
 	"GET /api/v1/approvals":  guarded(permApprovalRead),
 	"POST /api/v1/approvals": guarded(permApprovalRequire),
@@ -375,7 +375,7 @@ var routeGuards = map[string]routeGuard{
 	// --- runtime -------------------------------------------------------------
 	"POST /api/v1/runtime-events": guarded(permRuntimeWrite),
 
-	// --- prober (WL-SPEC-75 §13.3) -----------------------------------------------------
+	// --- prober (WL-RULE-121) -----------------------------------------------------
 	"GET /api/v1/probe-targets":     guarded(permArtifactProbe),
 	"POST /api/v1/artifact-reports": guarded(permArtifactProbe),
 
@@ -425,7 +425,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/projects/{id}/milestones":   guarded(permMilestoneWrite),
 	"GET /api/v1/milestones/{id}":             guarded(permMilestoneRead),
 	"DELETE /api/v1/milestones/{id}":          guarded(permMilestoneWrite),
-	// entity_edges (WL-SPEC-75 §13.4): typed references between entities of
+	// entity_edges (WL-REQ-122): typed references between entities of
 	// different kinds. Any crew member may declare a dependency, matching
 	// deliverable creation.
 	"POST /api/v1/references":                           guarded(permReferenceWrite),
@@ -433,7 +433,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/projects/{id}/participants":            guarded(permProjectRead),
 	"POST /api/v1/projects/{id}/participants":           guarded(permCrewWrite),
 	"DELETE /api/v1/projects/{id}/participants/{actor}": guarded(permCrewWrite),
-	// Reporting overhead usage (WL-SPEC-73 §8.2) is not a claim on any one task,
+	// Reporting overhead usage (WL-REQ-40) is not a claim on any one task,
 	// so every authenticated role may report it — see permProjectReport.
 	"POST /api/v1/projects/{id}/session-usage": guarded(permProjectReport),
 	"POST /api/v1/projects":                    guarded(permProjectAdmin),
@@ -469,7 +469,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/inbox/link":    guarded(permInboxTriage),
 	"POST /api/v1/inbox/import":  guarded(permInboxAdmin),
 
-	// --- events (WL-SPEC-77 §15/§18) --------------------------------------------
+	// --- events (WL-RULE-179/WL-REQ-182) --------------------------------------------
 	"GET /api/v1/events": guarded(permEventRead),
 	// A route of its own rather than ?follow=1 on the line above: the table
 	// keys on the exact pattern, which is how "the stream is admin, the
@@ -502,7 +502,7 @@ var routeGuards = map[string]routeGuard{
 
 // hasReviewSurface reports whether WL-SPEC-84's routes are registered. The
 // Progress page renders Review disabled until they are, and enables it the
-// day they land with no change here (WL-SPEC-85 §4).
+// day they land with no change here (WL-REQ-1337).
 func (s *server) hasReviewSurface() bool {
 	return hasReviewSurfaceIn(routeGuards)
 }

@@ -9,7 +9,7 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 // cockpit.templ renders the project cockpit / overview page (GET
-// /projects/{id}, WL-SPEC-82 §4) in the prototype's Operations mode
+// /projects/{id}, WL-REQ-335) in the prototype's Operations mode
 // (docs/mockups/cockpit/index.html, mode B): the Operations canvas
 // (Sunstone-Way stepper, pinned focus, active work) beside the
 // right decision rail (next decision, highest-signal exception, automation

@@ -29,7 +29,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// maxBlobBytes caps a blob upload at 100 MiB (WL-SPEC-78 §8.5). Large enough for
+// maxBlobBytes caps a blob upload at 100 MiB (WL-REQ-230). Large enough for
 // the screen recordings the spec exists to carry; readJSON's 1 MiB
 // maxAPIBody does not apply, since this route takes a raw body.
 const maxBlobBytes = 100 << 20
@@ -92,7 +92,7 @@ const maxFilenameBytes = 200
 // blobURL renders the root-relative reference a client follows to fetch one
 // blob reference. The name rides along as a query parameter because
 // `task_blobs.filename` is per-reference while `/blob/{hash}` is per-blob
-// (WL-SPEC-78 §8.2): one blob two tasks attached under different names has no
+// (WL-REQ-227): one blob two tasks attached under different names has no
 // single name the route could serve it under, so the reference carries its
 // own. A reference with no name (every embedded image) keeps the bare URL.
 //
@@ -143,7 +143,7 @@ func sanitizeFilename(s string) string {
 	return s
 }
 
-// contentDisposition renders the header WL-SPEC-78 §8.2 promises: the
+// contentDisposition renders the header WL-REQ-227 promises: the
 // inline/attachment token, plus the reference's own name when it has one.
 // Formatting goes through mime.FormatMediaType rather than string
 // concatenation — it owns the quoting rules and the RFC 2231/8187 encoding of
@@ -317,7 +317,7 @@ func (s *server) uploadBlob(w http.ResponseWriter, r *http.Request) {
 // other, which is what keeps it out of the schema: whatever body embeds the
 // <video poster="/blob/…"> pins it through the same reference graph as the
 // video itself, and a poster nobody ever embedded is collected by the same GC
-// sweep (WL-SPEC-78 §8.7).
+// sweep (WL-REQ-232).
 func (s *server) storePoster(ctx context.Context, path string) string {
 	img, err := ffmpeg.Poster(ctx, path)
 	if err != nil {
@@ -420,7 +420,7 @@ func (s *server) serveBlob(w http.ResponseWriter, r *http.Request) {
 }
 
 // listTaskBlobs handles GET /api/v1/tasks/{id}/blobs: a task's full
-// reference graph row, embedded and attached alike (WL-SPEC-78 §8.3). The task is
+// reference graph row, embedded and attached alike (WL-REQ-228). The task is
 // checked to exist first, so an unknown id is a 404 rather than an empty list
 // that reads as "this task has no blobs".
 func (s *server) listTaskBlobs(w http.ResponseWriter, r *http.Request) {
@@ -444,7 +444,7 @@ func (s *server) listTaskBlobs(w http.ResponseWriter, r *http.Request) {
 
 // attachTaskBlob handles POST /api/v1/tasks/{id}/blobs: declares an explicit
 // reference to an already-uploaded blob, distinct from the embedded
-// references ReconcileEmbedded derives from the body (WL-SPEC-78 §8.3). Both the
+// references ReconcileEmbedded derives from the body (WL-REQ-228). Both the
 // task and the blob are checked to exist before the write, so a bad id or
 // hash comes back as a clean 404 rather than an FK violation surfacing as a
 // 500.

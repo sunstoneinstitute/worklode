@@ -677,7 +677,7 @@ func TestImportClosedUnmergedPRStoresNoMergedAt(t *testing.T) {
 // first seen through backfill import must carry its author immediately, not
 // only after a later webhook fills it in. While author is unset,
 // store.IsSelfApproval cannot prove anything either way, so the approver who
-// authored the PR could self-approve it during that window (WL-SPEC-75 §13.6's
+// authored the PR could self-approve it during that window (WL-REQ-124's
 // default refusal). The second half — actually deciding through
 // store.DecideApproval — is what catches a fix that sets Author but leaves
 // it unused, or a passing GetPR check that hides a still-broken decide path.

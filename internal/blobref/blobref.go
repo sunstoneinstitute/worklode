@@ -141,7 +141,7 @@ func LocalImages(body string) []string {
 }
 
 // RemoteImages returns the body's http(s) image destinations, deduplicated
-// in document order. These are what import mirrors into blobs (WL-SPEC-78 §8.8).
+// in document order. These are what import mirrors into blobs (WL-REQ-233).
 //
 // Markdown images only -- deliberately not the raw-HTML `<img src="https://…">`
 // that Extract also scans. ReplaceDestination moves *ast.Image destinations
@@ -194,7 +194,7 @@ func EmptyAltImages(body string) []string {
 }
 
 // imageTypes and videoTypes render in place in the web UI and
-// terminal-adjacent surfaces. Everything else is a download (WL-SPEC-78 §8.5).
+// terminal-adjacent surfaces. Everything else is a download (WL-REQ-230).
 // Nothing is rejected on type: a core dump is a legitimate attachment, and an
 // allowlist buys nothing once non-embeddable types can only be served as
 // attachments.
@@ -235,7 +235,7 @@ func Embeddable(mediaType string) bool {
 
 // Video reports whether an embeddable media type is one of the video ones —
 // the blobs that embed as <video> rather than <img>, and the only ones a
-// poster frame is extracted for (WL-SPEC-78 §8.5).
+// poster frame is extracted for (WL-REQ-230).
 func Video(mediaType string) bool {
 	return videoTypes[bareType(mediaType)]
 }
@@ -244,7 +244,7 @@ func Video(mediaType string) bool {
 // destination mapping names, splicing the source by byte offset: only the
 // destination token itself is replaced, so an image title, a link label, the
 // same path spelled in prose or inside a code fence, and a plain link to the
-// same file all survive verbatim. Spec WL-SPEC-78 §8.5 keeps a linked local file
+// same file all survive verbatim. WL-REQ-230 keeps a linked local file
 // linked -- `lode task attach` is the tool for those -- so only *ast.Image
 // destinations move.
 //

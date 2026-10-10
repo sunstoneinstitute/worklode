@@ -121,7 +121,7 @@ func TestRenumberLeavesUnnumberedHeadings(t *testing.T) {
 	}
 }
 
-// TestRenumberKeepsInsertSuffix: a letter-suffixed insert (WL-SPEC-77 §4) is what a
+// TestRenumberKeepsInsertSuffix: a letter-suffixed insert (WL-REQ-165) is what a
 // section added after acceptance looks like. It keeps its number and takes no
 // slot, so the section after it is unaffected by its presence.
 func TestRenumberKeepsInsertSuffix(t *testing.T) {
@@ -144,7 +144,7 @@ func TestRenumberKeepsInsertSuffix(t *testing.T) {
 }
 
 // TestRenumberDeeperThanLimitUntouched: a heading below the addressability
-// limit is legal content with no number (WL-SPEC-77 §6), so it is left alone rather
+// limit is legal content with no number (WL-REQ-167), so it is left alone rather
 // than given one.
 func TestRenumberDeeperThanLimitUntouched(t *testing.T) {
 	got := renumbered(t, `# Title

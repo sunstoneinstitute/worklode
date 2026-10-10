@@ -14,7 +14,7 @@
 // --deleted` and `lode doc list --deleted` list, narrowed to one project.
 //
 // Restore is two routes, not one: undeleting a task is permTaskWrite and
-// undeleting a document is permDocWrite (WL-SPEC-75 §12), routeGuards names one
+// undeleting a document is permDocWrite (WL-REQ-117), routeGuards names one
 // permission per route, and collapsing the two into a single endpoint would
 // mean one of the halves ran under the other's authority.
 package api

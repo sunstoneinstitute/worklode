@@ -233,7 +233,7 @@ func TestRankSecondaryConcernsCrossProjectBlocker(t *testing.T) {
 }
 
 // TestRankSecondaryConcernsBlockingPlan asserts an unfinished plan ordered
-// before a task's own plan (WL-SPEC-77 §11.3) becomes a plan root, distinct from the
+// before a task's own plan (WL-REQ-175) becomes a plan root, distinct from the
 // task-root case, when it has minted no task to chase further.
 func TestRankSecondaryConcernsBlockingPlan(t *testing.T) {
 	t.Parallel()

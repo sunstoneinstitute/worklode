@@ -9,7 +9,7 @@ import (
 )
 
 // TodoItem is one unit of work remaining before a spec is fully implemented
-// (WL-SPEC-78 §1.2). Every item is typed by the act that discharges it, because
+// (WL-REQ-186). Every item is typed by the act that discharges it, because
 // that act decides who can perform it.
 //
 // Anchor and Anchors are disjoint, and which is filled says what shape the
@@ -29,7 +29,7 @@ type TodoItem struct {
 	Detail  string   // one line naming why
 }
 
-// The item types of WL-SPEC-78 §1.7's table.
+// The item types of WL-REQ-191's table.
 const (
 	TodoUnplanned  = "unplanned"  // no plan covers the section
 	TodoPlanDraft  = "plan-draft" // a draft plan covers it: a human must accept
@@ -45,9 +45,9 @@ type Diagnostics struct {
 	Notes      []string // degradations, e.g. no closure lookup
 }
 
-// ExecutionTask is one task a plan's acceptance minted (WL-SPEC-77 §11), as this
+// ExecutionTask is one task a plan's acceptance minted (WL-REQ-172), as this
 // walk needs to read it. Closed is the server's per-repo answer, never a
-// state string (WL-SPEC-78 §1.2), so this package never derives it; State is kept
+// state string (WL-REQ-186), so this package never derives it; State is kept
 // only to tell a minted-but-unpublished `draft` task from a claimable one,
 // which is a different act to ask for, not a different closure.
 type ExecutionTask struct {
@@ -58,7 +58,7 @@ type ExecutionTask struct {
 
 // TodoOptions configures one walk. Tasks is the injected plan → minted-tasks
 // lookup, keyed by the plan's canonical repo-relative path: a plan's tasks
-// are the rows carrying its `plan_doc` (WL-SPEC-77 §11), which only the backbone
+// are the rows carrying its `plan_doc` (WL-REQ-172), which only the backbone
 // holds. A nil Tasks is the offline case — the planning half still answers
 // and every plan's execution state reads as unknown.
 // ProjectKey is the current repo's project key ("WL"), for resolving a
@@ -72,7 +72,7 @@ type TodoOptions struct {
 }
 
 // Todo walks specPath's current sections, the plans covering them, and those
-// plans' execution tasks, and returns one ordered work list (WL-SPEC-78 §1.2).
+// plans' execution tasks, and returns one ordered work list (WL-REQ-186).
 //
 // specPath is any §4 path reference — bare filename, repo-relative with or
 // without a leading "/", or an absolute CorpusDoc.Path; a "#sec-N" fragment
@@ -104,7 +104,7 @@ func Todo(docs []CorpusDoc, specPath string, opts TodoOptions) ([]TodoItem, Diag
 
 // rankedItem is one item with its sort key: topological rank over plan
 // requires first, then the order documents were walked in, then the spec's
-// own section document order, then plan path (WL-SPEC-78 §1.2).
+// own section document order, then plan path (WL-REQ-186).
 type rankedItem struct {
 	item     TodoItem
 	rank     int
@@ -115,7 +115,7 @@ type rankedItem struct {
 // Positions ahead of any section, ordering a document's document-level items
 // among themselves: the acceptance decision leads, then the collapsed
 // planning gaps — nothing blocks writing a plan — then the plan items in the
-// document's own section order (WL-SPEC-78 §1.2).
+// document's own section order (WL-REQ-186).
 const (
 	posAcceptance = -2
 	posUnplanned  = -1
@@ -290,8 +290,8 @@ func (w *todoWalk) requiresPath(from, to string) []string {
 func (w *todoWalk) emitDoc(docPath string) {
 	d := w.byPath[docPath]
 	if d.Status == "draft" {
-		// WL-SPEC-78 §1.2: the acceptance item leads the list, it does not replace
-		// it. §2.1's "a draft spec is not yet owed planning" is the right
+		// WL-REQ-186: the acceptance item leads the list, it does not replace
+		// it. WL-REQ-193's "a draft spec is not yet owed planning" is the right
 		// rule for the corpus-wide --needs-planning sweep, and the wrong one
 		// here — naming one document is itself the statement that this spec
 		// is worth asking about, so the caller gets its sections whatever
@@ -312,7 +312,7 @@ func (w *todoWalk) emitDoc(docPath string) {
 	}
 	var unplanned []string
 	for _, sec := range d.Sections {
-		// Only a covered kind is owed a plan (WL-SPEC-78 §1.7).
+		// Only a covered kind is owed a plan (WL-REQ-191).
 		if sec.Kind != "" && !RuleKindCovered(sec.Kind) {
 			continue
 		}
@@ -326,7 +326,7 @@ func (w *todoWalk) emitDoc(docPath string) {
 // emitGap records a document's whole planning gap of one type as a single
 // item naming its anchors. Writing a plan is one act and one plan covers many
 // sections, exactly as executing a plan is one act however many sections it
-// covers (WL-SPEC-78 §1.2) — emitting one item per section buried the executable
+// covers (WL-REQ-186) — emitting one item per section buried the executable
 // tail of this corpus's own answers under fifty-odd section names.
 func (w *todoWalk) emitGap(docPath, title, typ string, anchors []string, position int) {
 	if len(anchors) == 0 {
@@ -395,7 +395,7 @@ func (w *todoWalk) emitAcceptedPlan(docPath string, sec SectionMeta, plan Coveri
 		w.decidedPlan[plan.Path] = true
 		return
 	}
-	// Offline, `blocked` is not emitted at all (WL-SPEC-78 §1.2): it is a statement
+	// Offline, `blocked` is not emitted at all (WL-REQ-186): it is a statement
 	// about another plan's task state, which is precisely what is
 	// unavailable. Letting it through would make an item's type depend on
 	// the caller's connectivity, so the same corpus would describe the same
@@ -411,7 +411,7 @@ func (w *todoWalk) emitAcceptedPlan(docPath string, sec SectionMeta, plan Coveri
 }
 
 // executionDetail says why an accepted plan still owes work, in the terms
-// WL-SPEC-77 §11 leaves it: the tasks its acceptance minted. Minting none is the
+// WL-REQ-172 leaves it: the tasks its acceptance minted. Minting none is the
 // one case that reads as a defect. Every other line names the open ones and
 // marks those still `draft`, because a draft task is minted work nobody can
 // claim yet — publishing it is a different act from executing it, and a
@@ -466,7 +466,7 @@ func plural(n int, noun string) string {
 }
 
 // emitPlan records one plan-level item, attributed to the first section of
-// this spec the plan covers. Every item in WL-SPEC-78 §1.2 is typed by the act that
+// this spec the plan covers. Every item in WL-REQ-186 is typed by the act that
 // discharges it, and accepting or executing a plan is one act — so a plan
 // covering six sections owes one item, not six identical rows.
 func (w *todoWalk) emitPlan(docPath string, sec SectionMeta, plan CoveringPlan, typ, detail string) {
@@ -489,7 +489,7 @@ func (w *todoWalk) add(it rankedItem) {
 	w.items = append(w.items, it)
 }
 
-// tasksOf is the set of tasks the plan's acceptance minted (WL-SPEC-77 §11), read
+// tasksOf is the set of tasks the plan's acceptance minted (WL-REQ-172), read
 // from the injected lookup. Offline there is no set to read, which is never
 // evidence that the plan minted none.
 func (w *todoWalk) tasksOf(planPath string) []ExecutionTask {
@@ -544,7 +544,7 @@ func (w *todoWalk) blockers(planPath string) []string {
 // notePlanCycles records any requires cycle planPath sits on. A plan cycle
 // makes each member block the other forever, and silent mutual blocking is
 // indistinguishable from real ordering — the same reasoning that puts a
-// spec-level cycle in the footer (WL-SPEC-78 §1.2).
+// spec-level cycle in the footer (WL-REQ-186).
 func (w *todoWalk) notePlanCycles(planPath string) {
 	for _, req := range w.requires(planPath) {
 		if d, ok := w.byPath[req]; !ok || d.Kind != "plan" {
@@ -576,7 +576,7 @@ func (w *todoWalk) planDischarged(planPath string) bool {
 // planRank is the plan's depth in the requires graph over plans: 0 for one
 // that requires nothing, otherwise one more than the deepest plan it
 // requires. The on-stack guard exists because requires cycles are legal —
-// WL-SPEC-78 §1.2 says the graph may contain them and reports one rather than
+// WL-REQ-186 says the graph may contain them and reports one rather than
 // failing. A reader who meets one is better served by an order than by a
 // hang.
 func (w *todoWalk) planRank(planPath string) int {
@@ -610,7 +610,7 @@ func (w *todoWalk) rankOf(planPath string, onStack map[string]bool) int {
 	return rank
 }
 
-// ordered sorts the collected items into the execution queue WL-SPEC-78 §1.2
+// ordered sorts the collected items into the execution queue WL-REQ-186
 // specifies: topologically over plan requires, ties broken by document walk
 // order, then the spec's own section order, then plan path.
 func (w *todoWalk) ordered() []TodoItem {

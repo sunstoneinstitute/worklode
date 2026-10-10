@@ -236,7 +236,7 @@ jobs:
   # ignores, such as deploy/base/**. Under the `code` scope a pull request
   # confined to one of those would be a guarded change the gate never saw.
   # A docs-only pull request has run=false, so docs/** is not gateable
-  # (WL-SPEC-72 §4). The job is a Go build plus one git diff, so running it on every pull
+  # (WL-REQ-7). The job is a Go build plus one git diff, so running it on every pull
   # request costs little. It prints a notice and exits 0 on a repo with no
   # [gate] table in .worklode/config.toml, which this repo does not have yet.
   spec-gate:

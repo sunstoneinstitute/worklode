@@ -53,7 +53,7 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 //
 // Delivery never touches the lease: a lease records that a worktree is
 // occupied, and landing, deploying or releasing the code says nothing about
-// that (WL-SPEC-75 §6). Leases end on release, abandon, reopen, or the expiry
+// that (WL-REQ-94). Leases end on release, abandon, reopen, or the expiry
 // sweep. Mutual exclusion is unaffected — Claim requires state "ready", so a
 // delivered task cannot be claimed out from under its holder anyway.
 //
@@ -74,13 +74,13 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 // here write a state_log row attributed to the incoming event and record no
 // event of their own, so the caller is the only place that can name the
 // tasks a delivery event moved — which it merges onto that event's payload
-// for the Progress page to fan out (WL-SPEC-85 §6).
+// for the Progress page to fan out (WL-REQ-1339).
 func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int64) (bool, error) {
 	var moved bool
-	// A task with children has no commit of its own (WL-SPEC-75 §5.2), and an
+	// A task with children has no commit of its own (WL-REQ-90), and an
 	// unknown task id is a correlation miss that must not fail the delivery
 	// (InsertTaskCommit's contract); both return nil here rather than an
-	// error. A tombstoned task joins them (WL-SPEC-75 §12): its commits still land,
+	// error. A tombstoned task joins them (WL-REQ-117): its commits still land,
 	// but nothing advances a row nothing can see.
 	//
 	// FOR UPDATE because this read is the from-state of up to two transitions

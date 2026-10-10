@@ -62,51 +62,51 @@ type Task struct {
 	Assignee  string    `json:"assignee"`
 	// Branch is the server-authoritative task branch. It is derived from
 	// LODE_BRANCH_TEMPLATE, which only the server knows, so a client matching
-	// local refs to tasks reads it rather than rendering one (WL-SPEC-80 §3.1).
+	// local refs to tasks reads it rather than rendering one (WL-REQ-267).
 	Branch string `json:"branch"`
 	// Secrets is the task's declared org-catalog secret names (WL-SPEC-74).
 	// Names only; nil and empty are equivalent, always [] on the wire.
 	Secrets []string `json:"secrets"`
-	// PlanDoc is the plan document this task was minted from (WL-SPEC-77 §11); 0
+	// PlanDoc is the plan document this task was minted from (WL-REQ-172); 0
 	// (omitted on the wire) when no plan authored it.
 	PlanDoc int64 `json:"plan_doc,omitempty"`
-	// AboutDoc is the document this task is about (WL-SPEC-77 §15): set on review
+	// AboutDoc is the document this task is about (WL-RULE-179): set on review
 	// tasks minted at submission and design tasks minted at acceptance. 0
 	// (omitted on the wire) when the task carries no such reference. Distinct
 	// from PlanDoc, which names the plan whose acceptance minted the task
-	// (WL-SPEC-77 §11), not what the task is about.
+	// (WL-REQ-172), not what the task is about.
 	AboutDoc int64 `json:"about_doc,omitempty"`
 	// AboutAnchor narrows AboutDoc to one section ("sec-3"), "" when the task
-	// is about the whole document (WL-SPEC-77 §10). Only meaningful alongside
+	// is about the whole document (WL-REQ-171). Only meaningful alongside
 	// AboutDoc; it is what lets two escalations against different sections of
 	// one spec stay two tasks.
 	AboutAnchor string `json:"about_anchor,omitempty"`
-	// Milestone is the milestone this task is attached to (WL-SPEC-75 §13), ""
+	// Milestone is the milestone this task is attached to (WL-REQ-118), ""
 	// when it is attached to none. Always in the task's own project — the
 	// store refuses a cross-project attach.
 	Milestone string `json:"milestone,omitempty"`
 	// Closed reports whether the task has no work left for anyone to own, by
-	// the per-repo predicate of WL-SPEC-75 §4: server-derived and read-only. A
+	// the per-repo predicate of WL-REQ-87: server-derived and read-only. A
 	// client cannot compute this itself (the predicate reads other repos'
 	// done_state and landed-commit facts), and it is ignored on any inbound
 	// body.
 	Closed bool `json:"closed"`
-	// Tombstone carries the delete record (WL-SPEC-75 §12) and is nil on a live task.
+	// Tombstone carries the delete record (WL-REQ-117) and is nil on a live task.
 	// Every list and pickup path already hides deleted tasks, so a non-nil
 	// value only ever reaches a caller that asked for this task by id.
 	Tombstone *Tombstone `json:"tombstone,omitempty"`
 }
 
 // Tombstone is the delete record a soft-deleted task or document carries
-// (WL-SPEC-75 §12): who deleted it, when, and why. Justification is "" only for a
-// delete made on a dev instance, which does not require one (WL-SPEC-75 §12).
+// (WL-REQ-117): who deleted it, when, and why. Justification is "" only for a
+// delete made on a dev instance, which does not require one (WL-REQ-117).
 type Tombstone struct {
 	DeletedAt     time.Time `json:"deleted_at"`
 	DeletedBy     string    `json:"deleted_by"`
 	Justification string    `json:"justification,omitempty"`
 }
 
-// DeleteInput is the request body for the delete endpoints (WL-SPEC-75 §12). The
+// DeleteInput is the request body for the delete endpoints (WL-REQ-117). The
 // justification is required on a prod instance and optional on a dev one; the
 // server owns that rule, because it is the only party that knows which
 // instance it is.
@@ -120,7 +120,7 @@ type SetTaskStateInput struct {
 	State string `json:"state"`
 }
 
-// SettableTaskStates are the states that endpoint accepts (WL-SPEC-81 §2) — the
+// SettableTaskStates are the states that endpoint accepts (WL-REQ-306) — the
 // four an ingestion path normally supplies. Every other transition has its
 // own endpoint, because it carries behaviour beyond the state write (claim
 // takes a lease, reopen clears commit attribution, abandon is its own event).
@@ -151,7 +151,7 @@ type CreateTaskInput struct {
 	// 017). Names only; validated against internal/secrets.ValidName.
 	Secrets []string `json:"secrets,omitempty"`
 	// Decisions poses questions on the new task in the same transaction as
-	// the insert (WL-SPEC-77 §12). Legal on any kind, and a decision-kind task
+	// the insert (WL-REQ-176). Legal on any kind, and a decision-kind task
 	// with none is legal too — the list is often written after the task.
 	Decisions []Decision `json:"decisions,omitempty"`
 }
@@ -177,13 +177,13 @@ type EditTaskInput struct {
 	// way.
 	Kind *string `json:"kind"`
 	// Artifacts, when non-nil, declares each listed catalog address as
-	// verified-by for this task (WL-SPEC-75 §13), which is what routes a
+	// verified-by for this task (WL-REQ-118), which is what routes a
 	// /hooks/catalog delivery to it. Declarations are additive and
 	// idempotent — an entity may hold several addresses, and there is no
 	// undeclare surface yet.
 	Artifacts *[]string `json:"artifacts"`
 	// Milestone, when non-nil, attaches or detaches the task from a milestone
-	// (WL-SPEC-75 §13): "" or "none" detaches, any other value must name a
+	// (WL-REQ-118): "" or "none" detaches, any other value must name a
 	// milestone in the task's own project.
 	Milestone *string `json:"milestone,omitempty"`
 	// Plan, when non-nil, links the task to the plan document it executed
@@ -278,11 +278,11 @@ type TaskListParams struct {
 	// the wire.
 	PlanDoc *int64 `query:"plan_doc,omitempty"`
 	// AboutDoc narrows to the tasks that reference this document id — the
-	// review and planning tasks the doc-lifecycle watcher mints (WL-SPEC-77 §15).
+	// review and planning tasks the doc-lifecycle watcher mints (WL-RULE-179).
 	// nil (the parameter absent) does not filter; a non-positive value is
 	// refused, the same stance PlanDoc takes.
 	AboutDoc *int64 `query:"about_doc,omitempty"`
-	// Deleted switches the list from live tasks to tombstoned ones (WL-SPEC-75 §12)
+	// Deleted switches the list from live tasks to tombstoned ones (WL-REQ-117)
 	// instead of joining the two.
 	Deleted bool `query:"deleted,omitempty"`
 	// Detail adds "blocked" and "edges" to each row (see TaskListDetail) at

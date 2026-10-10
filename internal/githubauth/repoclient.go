@@ -52,7 +52,7 @@ type PRFacts struct {
 	} `json:"head"`
 	// User.Login is the PR's author (store.PullRequest.Author). Leaving it
 	// unread would let a PR the poller first observes sit with a NULL
-	// author — and therefore an unrefusable self-approval (WL-SPEC-75 §13) —
+	// author — and therefore an unrefusable self-approval (WL-REQ-118) —
 	// until some later webhook delivery fills it in (WL-244).
 	User struct {
 		Login string `json:"login"`

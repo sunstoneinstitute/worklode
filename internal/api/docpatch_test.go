@@ -1,6 +1,6 @@
 package api_test
 
-// docpatch_test.go covers POST /api/v1/docs/{id}/patch: WL-SPEC-77 §10's in-place
+// docpatch_test.go covers POST /api/v1/docs/{id}/patch: WL-REQ-171's in-place
 // amendment of an accepted spec. The rule split itself is the store's and is
 // tested there; this is about the route, the response and what the
 // doc.patched event says.

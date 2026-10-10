@@ -25,7 +25,7 @@ type payload struct {
 }
 
 // Forwarder relays stored OTLP log batches to the cluster otel-gateway
-// (WL-SPEC-80 §8.8). A nil *Forwarder means forwarding is off: Enqueue returns
+// (WL-REQ-1236). A nil *Forwarder means forwarding is off: Enqueue returns
 // false without blocking, Run returns at once.
 //
 // ponytail: no disk spool — a full queue or a dead process drops in-flight
@@ -37,7 +37,7 @@ type Forwarder struct {
 
 	// Client posts each payload; overridable so tests can point it at
 	// httptest, or a caller can tune transport settings. Defaults to a
-	// 10s-timeout client (WL-SPEC-80 §8.8).
+	// 10s-timeout client (WL-REQ-1236).
 	Client *http.Client
 
 	metrics *Metrics

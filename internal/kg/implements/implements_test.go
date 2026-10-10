@@ -63,7 +63,7 @@ func TestParseRejects(t *testing.T) {
 		{"not a section IRI", "implements: [{section: 'wlid:doc/x', pinned: 'wlid:doc/x/v1', by: [a.go]}]"},
 		{"bad anchor", "implements: [{section: 'wlid:section/x/NOT-AN-ANCHOR', pinned: 'wlid:doc/x/v1', by: [a.go]}]"},
 		{"pinned version out of range", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x/v99999999999999999999', by: [a.go]}]"},
-		// WL-SPEC-77 §13: the claiming component is derived, never declared, so a
+		// WL-REQ-177: the claiming component is derived, never declared, so a
 		// component: key must fail rather than be quietly ignored.
 		{"declares a component", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x/v1', by: [a.go], component: 'wlid:component/x'}]"},
 		{"unknown top-level key", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x/v1', by: [a.go]}]\ncovers: [y]"},

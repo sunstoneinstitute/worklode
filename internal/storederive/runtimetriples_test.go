@@ -65,7 +65,7 @@ func TestBranchNameProjectsNoCommitEdge(t *testing.T) {
 	if strings.Contains(got, "wasDerivedFrom") {
 		t.Fatalf("branch-name source_sha minted a commit edge:\n%s", got)
 	}
-	// The git_tag coordinate is host-qualified (WL-SPEC-79 §10 example).
+	// The git_tag coordinate is host-qualified (WL-REQ-246 example).
 	if !strings.Contains(got, "<https://worklode.io/ns/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v1>") {
 		t.Fatalf("git_tag artifact IRI not host-qualified:\n%s", got)
 	}
@@ -110,8 +110,8 @@ func TestDeploymentTriples(t *testing.T) {
 	}
 }
 
-// deployments.artifact_id is null whenever nothing resolved it (WL-SPEC-79 §12,
-// §15 question 11): the prov:used edge is specified but must simply be
+// deployments.artifact_id is null whenever nothing resolved it (WL-REQ-251,
+// WL-REQ-259 question 11): the prov:used edge is specified but must simply be
 // absent, not invented.
 func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 	d := store.Deployment{
@@ -124,7 +124,7 @@ func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 	}
 }
 
-// The DB stores target_kind 'pypi'; the concept is wlc:pypi_target (WL-SPEC-79 §5).
+// The DB stores target_kind 'pypi'; the concept is wlc:pypi_target (WL-REQ-240).
 func TestPyPITargetKindConcept(t *testing.T) {
 	d := store.Deployment{
 		Environment: "prod", TargetKind: "pypi", TargetName: "sunstone-py",
@@ -160,7 +160,7 @@ func TestEnvironmentAndCommitTriples(t *testing.T) {
 }
 
 // AC8, first half: a release_frontiers row projects as wl:cutFrom (spelled
-// wl:covers until WL-SPEC-78 §4.6 took that name) from the git_tag artifact to the
+// wl:covers until WL-REQ-208 took that name) from the git_tag artifact to the
 // frontier commit.
 func TestReleaseCutFromTriples(t *testing.T) {
 	got := string(graphproj.Document(ReleaseCutFromTriples("sunstoneinstitute/worklode", "v0.4", "a16c2a7")))

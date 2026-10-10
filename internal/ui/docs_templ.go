@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import "strconv"
 
-// docs.templ renders the backbone's document corpus (WL-SPEC-77 §3): the index
+// docs.templ renders the backbone's document corpus (WL-REQ-164): the index
 // at /docs and one document at /docs/{id}. Both are read-only. Authoring is
 // not a page: a document's body is a markdown artifact with frontmatter,
 // submitted whole through the API or `lode doc`, and a textarea in a browser
@@ -24,7 +24,7 @@ import "strconv"
 //
 // The document page is a review surface (WL-716), so what it defaults to
 // showing is the consolidated body — every effective amendment folded into
-// the section it acts on (WL-SPEC-78 §2.4) — alongside the review state the backbone
+// the section it acts on (WL-RULE-196) — alongside the review state the backbone
 // already holds: the reviewer roster, the open approvals with their decide
 // form, and the anchored notes. The stored source is one link away and says
 // which of the two is on screen. What is deliberately absent is comment
@@ -1284,7 +1284,7 @@ func docEditor(body string) templ.Component {
 }
 
 // DocVersion renders one version of a document, current or superseded
-// (WL-SPEC-77 §3), reusing Doc's header/chip markup. The body is read-only, as
+// (WL-REQ-164), reusing Doc's header/chip markup. The body is read-only, as
 // every document body is; a superseded version additionally gets a banner
 // pointing back to the current one.
 func DocVersion(v DocVersionView) templ.Component {
@@ -1524,7 +1524,7 @@ func DocVersion(v DocVersionView) templ.Component {
 	})
 }
 
-// docReview renders the review state WL-SPEC-77 §9 and WL-SPEC-82 §9 hold, plus the
+// docReview renders the review state WL-REQ-170 and WL-REQ-344 hold, plus the
 // document's actions (Accept, Publish): the reviewer roster with who still
 // owes a verdict, and every approval awaiting a decision, each with the same
 // decide form the Reviews queue posts. An empty roster and queue collapse to
@@ -1643,7 +1643,7 @@ func docReview(v DocView) templ.Component {
 	})
 }
 
-// docNotes renders the document's anchored notes (WL-SPEC-77 §10). A note settles
+// docNotes renders the document's anchored notes (WL-REQ-171). A note settles
 // nothing and blocks nothing, so it is listed where it applies — the anchor
 // links at the section in the body above — and never presented as a verdict.
 // No notes collapses the card to its header.

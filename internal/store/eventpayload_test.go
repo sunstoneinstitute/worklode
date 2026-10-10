@@ -10,7 +10,7 @@ import (
 
 // Every event the store records about a task names it under "task", so
 // GET /api/v1/events attributes the event without a second read of
-// state_log (WL-SPEC-77 §15). One test per event type, because each emit site
+// state_log (WL-RULE-179). One test per event type, because each emit site
 // builds its own payload and a shared assertion would let a new one ship
 // unattributed.
 

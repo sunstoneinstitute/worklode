@@ -395,7 +395,7 @@ func TestDecideDecision(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	// Answering an unassigned task assigns it to the decider, and an
-	// assignee must be on the project's crew (WL-SPEC-75 §13.5).
+	// assignee must be on the project's crew (WL-REQ-123).
 	if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token,
 		map[string]any{"actor": "alice"}); rr.Code != http.StatusCreated {
 		t.Fatalf("add alice to the crew status = %d, body %s", rr.Code, rr.Body.String())

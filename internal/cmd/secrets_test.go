@@ -233,7 +233,7 @@ func TestSecretsExecInjectsExactlyMaterializedNames(t *testing.T) {
 	}
 }
 
-// TestSecretsExecScrubsAmbientCredentials is WL-SPEC-74 §10.5's acceptance criterion, run
+// TestSecretsExecScrubsAmbientCredentials is WL-REQ-72's acceptance criterion, run
 // end to end: with the operator's shell exporting
 // ANTHROPIC_API_KEY, `lode secret exec -- env` in a claimed worktree hands the
 // child the materialized names and the shell plumbing, and not that key.

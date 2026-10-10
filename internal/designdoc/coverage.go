@@ -11,7 +11,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// PlanningOutcome is where one spec section sits (WL-SPEC-78 §1.3).
+// PlanningOutcome is where one spec section sits (WL-REQ-187).
 type PlanningOutcome string
 
 const (
@@ -98,7 +98,7 @@ type claim struct {
 }
 
 // deferral is one plan's explicit handoff of a section to a named owner
-// (WL-SPEC-78 §4), resolved once at index build time the same way claim is:
+// (WL-RULE-202), resolved once at index build time the same way claim is:
 // Section need not re-parse frontmatter per query.
 type deferral struct {
 	plan   string // repo-relative
@@ -106,7 +106,7 @@ type deferral struct {
 	owner  string // repo-relative reference to the document the section is handed to
 }
 
-// discharges reports whether status is in WL-SPEC-78 §1.3's discharging set:
+// discharges reports whether status is in WL-REQ-187's discharging set:
 // accepted, superseded or spent. A superseded or spent plan is done
 // (accepted, then executed) and discharges what it covered exactly as an
 // accepted plan does.
@@ -116,12 +116,12 @@ func discharges(status string) bool {
 
 // sectionKey identifies a spec section by its repo-relative spec path (§4
 // reference, fragment split off) and bare anchor, both fully resolved
-// (WL-SPEC-78 §4) — never the raw string a document happened to write.
+// (WL-RULE-202) — never the raw string a document happened to write.
 type sectionKey struct {
 	spec, anchor string
 }
 
-// PlanIndex is the plan corpus indexed for WL-SPEC-78 §1.2 coverage queries: every
+// PlanIndex is the plan corpus indexed for WL-REQ-186 coverage queries: every
 // plan's coverage claim against every section it names, keyed for lookup by
 // section.
 type PlanIndex struct {
@@ -217,9 +217,9 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 			}
 			if e.TargetAnchor == "" || e.Target == "NO-SPEC" {
 				// A whole-document covers names no section a coverage query
-				// can use, and NO-SPEC has no sections to cover (WL-SPEC-78 §1.2,
-				// §4.3). A defers entry with no fragment is rejected at write
-				// time (WL-SPEC-78 §4); this skip mirrors covers defensively.
+				// can use, and NO-SPEC has no sections to cover (WL-REQ-186,
+				// WL-REQ-205). A defers entry with no fragment is rejected at write
+				// time (WL-RULE-202); this skip mirrors covers defensively.
 				continue
 			}
 			target := resolveNumberedAlias(ix.normalizeRef(e.Target, home), knownSpecs)
@@ -415,7 +415,7 @@ func (ix *PlanIndex) resolveShorthand(ref string) (string, bool) {
 
 // numberPrefixPattern is the leading "<digits>-" a numbered corpus filename
 // carries (WL-404) — "045-per-project-workflows.md" — even once a spec's
-// backbone slug has dropped the number WL-SPEC-77 §14 minted its ordinal from.
+// backbone slug has dropped the number WL-REQ-178 minted its ordinal from.
 var numberPrefixPattern = regexp.MustCompile(`^\d+-`)
 
 // resolveNumberedAlias recognises ref as a numbered-filename alias of a spec
@@ -447,8 +447,8 @@ func resolveNumberedAlias(ref string, known map[string]bool) string {
 	return ref
 }
 
-// Section returns the WL-SPEC-78 §1.3 outcome for one spec section,
-// addressed by a §4 spec reference — a bare filename, a repo-relative path,
+// Section returns the WL-REQ-187 outcome for one spec section,
+// addressed by a WL-RULE-202 spec reference — a bare filename, a repo-relative path,
 // or an absolute CorpusDoc.Path, from either form the corpus was loaded in —
 // and its bare anchor, e.g. "docs/specs/026-design-doc-queries.md", "sec-2.1".
 // It also returns every plan covering the section, at any status, since a
@@ -494,7 +494,7 @@ func (ix *PlanIndex) Section(specPath, anchor string) (PlanningOutcome, []Coveri
 }
 
 // deferredOwner returns the comma-joined, sorted, deduplicated set of owners
-// an accepted-or-superseded plan's `defers` names for key (WL-SPEC-78 §4) — the
+// an accepted-or-superseded plan's `defers` names for key (WL-RULE-202) — the
 // same "not draft" eligibility rule Section applies to a covers claim
 // (discharges), not a separate rule invented for defers. "" when no such
 // plan defers this section.

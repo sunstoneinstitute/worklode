@@ -116,10 +116,10 @@ const unmatchedQuery = sparqlPrefixes + `SELECT DISTINCT ?repo ?path WHERE {
   GRAPH ?g { ?repo wl:unmatchedPath ?path . }
 } ORDER BY ?repo ?path`
 
-// The WL-SPEC-77 §13 standing queries, over wl:implements claims and the sections
+// The WL-REQ-177 standing queries, over wl:implements claims and the sections
 // they name.
 //
-// A claim's data shape is RDF 1.2 (WL-SPEC-79 §4, wl:pinnedVersion): the asserted
+// A claim's data shape is RDF 1.2 (WL-REQ-239, wl:pinnedVersion): the asserted
 // edge, an IRI reifier bound to that edge's triple term by rdf:reifies, and
 // wl:pinnedVersion on the reifier. `<< ?c wl:implements ?s >> wl:pinnedVersion
 // ?pv` is the SPARQL 1.2 annotation pattern for exactly those three triples,
@@ -153,7 +153,7 @@ const coverageQuery = sparqlPrefixes + `SELECT ?doc (COUNT(DISTINCT ?s) AS ?tota
 
 // staleClaimQuery is §11.5 row 3: a claim pinned at a version older than the
 // one that last revised the section it names. Both versions are compared as
-// xsd:integer, never as the strings or the IRIs carrying them — WL-SPEC-77 §5: v10
+// xsd:integer, never as the strings or the IRIs carrying them — WL-REQ-166: v10
 // does not sort after v3 either way round.
 const staleClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
   GRAPH ?cg { << ?c wl:implements ?s >> wl:pinnedVersion ?pv . }
@@ -177,9 +177,9 @@ const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
 // deliveredCoverageQuery is §11.5 row 5: for each wl:implements claim, the
 // environments the claiming component's deliverable is actually deployed to.
 // It is the join that turns "component A claims section S" into "section S is
-// live in prod", which is what WL-SPEC-79 §8 calls the vertical.
+// live in prod", which is what WL-REQ-243 calls the vertical.
 //
-// Two arms, because a deliverable is witnessed two ways (WL-SPEC-79 §8's witness
+// Two arms, because a deliverable is witnessed two ways (WL-REQ-243's witness
 // table) and there is no reasoner (WL-SPEC-79), so wl:Effect's subclass edge to
 // wl:Deliverable does not fire and each arm names its own type:
 //
@@ -191,7 +191,7 @@ const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
 //   - A wl:Effect ships nothing, so its dct:relation names the Deployment
 //     directly and reaching wlc:deployed is the whole witness.
 //
-// v1 checks deployment status alone. WL-SPEC-79 §8's open question 10 adds the
+// v1 checks deployment status alone. WL-REQ-243's open question 10 adds the
 // default-branch-commit witness for the Effect arm — that a deployed
 // Kustomization reconciles a commit on the delivering component's branch,
 // rather than any revision at all — and until it is settled an Effect counts
@@ -199,7 +199,7 @@ const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
 //
 // Deployment, Artifact and Environment nodes are projected today
 // (internal/storederive/deploy.go); Deliverable and Effect nodes are not
-// (WL-SPEC-79 §8, WL-PLAN-118). So against a production graph this answers empty,
+// (WL-REQ-243, WL-PLAN-118). So against a production graph this answers empty,
 // whatever it holds, until that projection lands — the query is right and its
 // left-hand input is missing.
 const deliveredCoverageQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s ?env WHERE {

@@ -1,4 +1,4 @@
--- Stored bodies carry no YAML header (WL-SPEC-77 §7): title and issued are
+-- Stored bodies carry no YAML header (WL-REQ-168): title and issued are
 -- docs columns and edges are doc_edges rows, so the header only restated
 -- them. doc_versions is left verbatim: history keeps the text as written.
 BEGIN;

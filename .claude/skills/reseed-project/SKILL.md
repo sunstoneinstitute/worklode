@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Reseed a worklode project
 
-Seed **genuine pending work only**. Spec 025 §1: rows are things someone made;
+Seed **genuine pending work only**. WL-RULE-162: rows are things someone made;
 groupings are queries. Never seed plan-root tasks, per-spec umbrella tasks,
 sprint containers, or anything whose state duplicates a coverage query.
 
@@ -29,7 +29,7 @@ lode doc list --needs-execution --json   # accepted plans whose task set still h
 `--needs-planning` returns `planning_gaps` alongside `docs`: per spec, its
 section count and the uncovered anchors classified `plan-draft`,
 `deferred` or `unplanned`, a `deferred` one with an `owner`, the document a
-plan handed the section to (WL-SPEC-78 §1.3). `--needs-execution` is the backbone's own answer to
+plan handed the section to (WL-REQ-187). `--needs-execution` is the backbone's own answer to
 "which plans are unfinished" — a plan's tasks exist because accepting it minted
 them, so plan checkboxes are never the evidence.
 
@@ -84,7 +84,7 @@ COMMIT;
 ## 3. Seed
 
 1. **Import the documents**, if the project has none — a git corpus of specs
-   and plans goes in with one command (025 §22):
+   and plans goes in with one command (WL-REQ-167):
 
    ```bash
    lode doc import --docs <corpus-root> --project <P> --dry-run   # inspect first
@@ -100,7 +100,7 @@ COMMIT;
    mints nothing.
 2. **Mint the unexecuted plans' tasks.** For each plan the §1 audit found
    unexecuted, put it through the accept gate rather than hand-writing its
-   tasks — acceptance mints the task set in one transaction (025 §9.2):
+   tasks — acceptance mints the task set in one transaction (WL-REQ-172):
 
    ```bash
    lode doc add --kind plan --slug <slug> --file <path|->   # if not already imported; lands draft

@@ -1,5 +1,5 @@
 // replan.go: `lode work next --replan` (S28) — hand a stale plan document
-// out as claimed re-planning work. The doc-lifecycle subscriber's WL-SPEC-77 §9 rule
+// out as claimed re-planning work. The doc-lifecycle subscriber's WL-REQ-170 rule
 // already mints one "Re-plan: <title>" design task when a plan goes stale
 // (docgroom.go); ReplanNext reuses that task in the ordinary case, and
 // mintReplanTask below is the fallback for when no such task is open yet.

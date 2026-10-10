@@ -113,7 +113,7 @@ func newRuleAcceptCmd() *cobra.Command {
 
 // newRuleArrangeCmd is `lode rule arrange <spec> <rule>`: place an existing
 // rule in a spec, in place on a draft or in the candidate revision of an
-// accepted spec (WL-SPEC-77 §19.3).
+// accepted spec (WL-REQ-1297).
 func newRuleArrangeCmd() *cobra.Command {
 	var in model.ArrangeRuleInput
 	cmd := &cobra.Command{
@@ -204,7 +204,7 @@ func newRuleShowCmd() *cobra.Command {
 }
 
 // newRuleLintCmd is `lode rule lint`: the project's rules against the corpus
-// targets (WL-SPEC-77 §4c). It exits non-zero on any finding but a rule with
+// targets (WL-REQ-1367). It exits non-zero on any finding but a rule with
 // one context edge or a converted heading, which are reports, not verdicts.
 func newRuleLintCmd() *cobra.Command {
 	var scope scopeFlags
@@ -326,7 +326,7 @@ func newRuleEditCmd() *cobra.Command {
 			}
 			cli.RuleRender(cmd.OutOrStdout(), rule)
 			// A spec arranging an older version keeps showing it
-			// (WL-SPEC-77 §19.4); say what moves it.
+			// (WL-REQ-1298); say what moves it.
 			for _, a := range rule.ArrangedIn {
 				if rule.Status == "draft" && a.RuleVersion < rule.Version {
 					fmt.Fprintf(cmd.OutOrStdout(), "\nSpecs arranging %s show this draft once you run lode rule accept %s.\n", rule.Ref, rule.Ref)
@@ -447,7 +447,7 @@ func newRuleUnlinkCmd() *cobra.Command {
 // takes its own positional shape (owner one actor, tags any number), so the
 // field is a subcommand rather than a leading argument the way `project set`
 // groups its fields (WL-489). The kind is `lode rule set <ref> --kind <kind>`
-// (WL-SPEC-77 §4) and a definition's concept IRI `--concept <iri>` (§4d): a
+// (WL-REQ-165) and a definition's concept IRI `--concept <iri>` (WL-REQ-1368): a
 // ref never collides with a subcommand name.
 func newRuleSetCmd() *cobra.Command {
 	var kind, concept string
@@ -657,7 +657,7 @@ func parseSupersedeMap(content string) ([]model.SupersedeEntry, error) {
 }
 
 // newRuleTermsCmd is `lode rule terms`: a project's definition rules with
-// the slugs their term pages live under (WL-SPEC-77 §4d).
+// the slugs their term pages live under (WL-REQ-1368).
 func newRuleTermsCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{

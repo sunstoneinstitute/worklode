@@ -135,7 +135,7 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 	}
 	// Gate on what was gathered, not on res.Repaired: Repaired only fills
 	// from task-level facts (PRs, commits), but a repo's releases are a
-	// repo-level fact (WL-SPEC-80 §10.3). A candidate correlated solely through an
+	// repo-level fact (WL-REQ-297). A candidate correlated solely through an
 	// already-landed task_commits row produces no repair, yet a release
 	// published during the outage still has to move it to released.
 	// Every candidate belongs to exactly one repo, so the ones whose repo

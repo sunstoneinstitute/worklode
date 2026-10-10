@@ -9,21 +9,21 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
 )
 
-// Subject kinds, matching index_chunks.subject_kind's CHECK (WL-SPEC-79 §14).
+// Subject kinds, matching index_chunks.subject_kind's CHECK (WL-REQ-254).
 const (
 	SubjectDoc   = "doc"
 	SubjectTask  = "task"
 	SubjectSkill = "skill"
 )
 
-// IndexDim is the embedding width every provider must produce (WL-SPEC-79 §14).
+// IndexDim is the embedding width every provider must produce (WL-REQ-254).
 // The index_chunks.embedding typmod enforces it in Postgres; nothing here
 // re-checks it, so a wrong-shaped vector is refused by the column that
 // stores it rather than by a Go guard that could drift from it.
 const IndexDim = 768
 
 // ChunkSubject names one indexed subject: exactly one id field is set, and
-// Kind says which. ContentHash is the subject's live hash (WL-SPEC-79 §14), stored
+// Kind says which. ContentHash is the subject's live hash (WL-REQ-254), stored
 // identically on every one of its chunk rows; StaleSubjects computes it and
 // callers pass back what it returned, so the freshness comparison has one
 // definition and it lives in SQL.
@@ -83,11 +83,11 @@ func isZeroVector(v []float32) bool {
 
 // ReplaceSubjectChunks swaps one subject's whole chunk set in a single
 // transaction. vectors is either nil — an instance with no embedding
-// provider, which still indexes the text for the lexical arm (WL-SPEC-79 §17) —
+// provider, which still indexes the text for the lexical arm (WL-REQ-261) —
 // or one vector per chunk, positionally.
 //
 // Vector width is not checked here: the vector(768) typmod refuses a
-// wrong-shaped one at INSERT (WL-SPEC-79 §14). A zero-norm vector is checked, because
+// wrong-shaped one at INSERT (WL-REQ-254). A zero-norm vector is checked, because
 // no column constraint catches it: pgvector's <=> returns NaN against it and
 // NaN sorts above every real score, so one degenerate chunk would rank first
 // for every query forever.
@@ -123,7 +123,7 @@ func (s *Store) ReplaceSubjectChunks(ctx context.Context, subj ChunkSubject, chu
 		// re-embed is thousands of chunks in one transaction, and every round
 		// trip is paid with that transaction open. WITH ORDINALITY is not used
 		// — chunk_index comes from the Chunk itself, since a doc's sub-chunks
-		// number per anchor, not per subject (WL-SPEC-79 §14).
+		// number per anchor, not per subject (WL-REQ-254).
 		var (
 			idxs    = make([]int32, len(chunks))
 			anchors = make([]string, len(chunks))
@@ -131,7 +131,7 @@ func (s *Store) ReplaceSubjectChunks(ctx context.Context, subj ChunkSubject, chu
 			texts   = make([]string, len(chunks))
 			// Empty string means "no vector"; NULLIF below turns it into a
 			// NULL embedding, which is what a no-provider instance writes
-			// (WL-SPEC-79 §17). A text[] of literals keeps this one bind parameter
+			// (WL-REQ-261). A text[] of literals keeps this one bind parameter
 			// rather than a per-chunk round trip.
 			vecs = make([]string, len(chunks))
 		)
@@ -165,13 +165,13 @@ func (s *Store) ReplaceSubjectChunks(ctx context.Context, subj ChunkSubject, chu
 }
 
 // liveHashSQL is the live content-hash expression per subject kind — the one
-// definition of "has this subject changed since it was indexed" (WL-SPEC-79 §16).
+// definition of "has this subject changed since it was indexed" (WL-REQ-260).
 // Skills reuse skill_versions.content_hash, which 016 already maintains over
 // the whole skill dir; docs and tasks have no such column, so the hash is
 // taken over exactly the text and metadata the chunker feeds the index,
 // including the header fields (a task's kind and state are embedded and
 // lexically indexed, so changing one must re-index). A spec's text is
-// rendered from its arranged rule versions (WL-SPEC-77 §19.5), so their text
+// rendered from its arranged rule versions (WL-REQ-1299), so their text
 // is part of its hash: a rule edit or accept changes no docs column.
 var liveHashSQL = map[string]string{
 	SubjectDoc: `md5(d.title || E'\n' || d.body || coalesce((
@@ -186,9 +186,9 @@ var liveHashSQL = map[string]string{
 // LATERAL aggregates a subject's chunk rows into its hash — every chunk of a
 // subject carries the same one, so max() is that hash — and whether any of
 // them lacks a vector. IS DISTINCT FROM makes a subject with no chunk rows at
-// all stale, which is what makes a never-indexed subject converge (WL-SPEC-79 §16); the
+// all stale, which is what makes a never-indexed subject converge (WL-REQ-260); the
 // $2 disjunct is what makes a provider change converge, since invalidation
-// nulls vectors without touching the text or its hash (WL-SPEC-79 §16).
+// nulls vectors without touching the text or its hash (WL-REQ-260).
 var staleSubjectsSQL = map[string]string{
 	SubjectDoc: `
 		SELECT d.id::text, d.project_id, ` + liveHashSQL[SubjectDoc] + `
@@ -215,7 +215,7 @@ var staleSubjectsSQL = map[string]string{
 		 ORDER BY t.id
 		 LIMIT $1`,
 	// Skills are org-wide, so they carry no project. Soft-deleted ones are
-	// excluded (WL-SPEC-79 §14); their chunk rows are deleted by the caller rather than
+	// excluded (WL-REQ-254); their chunk rows are deleted by the caller rather than
 	// filtered, so the index carries no tombstones.
 	SubjectSkill: `
 		SELECT s.id::text, '', ` + liveHashSQL[SubjectSkill] + `
@@ -237,7 +237,7 @@ var staleSubjectsSQL = map[string]string{
 // those whose indexed text no longer matches the live row, never-indexed ones
 // included, plus — when needVectors is set, meaning an embedding provider is
 // configured — those whose chunk rows carry no vector. That second set is
-// what a provider change leaves behind (WL-SPEC-79 §16) and what a failed embed call
+// what a provider change leaves behind (WL-REQ-260) and what a failed embed call
 // leaves behind mid-pass; with no provider it is every row, so a lexical-only
 // instance passes false and converges. The returned ContentHash is the live
 // hash the caller writes back through ReplaceSubjectChunks.
@@ -280,7 +280,7 @@ func (s *Store) StaleSubjects(ctx context.Context, kind string, limit int, needV
 }
 
 // ClearAllChunkVectors nulls every stored vector, returning how many rows it
-// touched. This is the provider-change invalidation primitive (WL-SPEC-79 §16): the
+// touched. This is the provider-change invalidation primitive (WL-REQ-260): the
 // chunk text and its tsv are provider-independent, so the lexical arm keeps
 // serving while the next convergence pass rebuilds the vectors.
 func (s *Store) ClearAllChunkVectors(ctx context.Context) (int64, error) {
@@ -296,7 +296,7 @@ func (s *Store) ClearAllChunkVectors(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
-// IndexCounts is the index's size, for WL-SPEC-79 §17's gauges.
+// IndexCounts is the index's size, for WL-REQ-261's gauges.
 type IndexCounts struct {
 	ByKind        map[string]int64 // chunk rows per subject_kind
 	WithoutVector int64            // chunk rows whose embedding is NULL

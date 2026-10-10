@@ -11,7 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 // forms.templ renders the cockpit's two creation forms: a new task and a
 // declared deliverable. Both are plain server-rendered <form method="post">
 // pages — no client state, no HTMX behavior — so they work with the keyboard
-// and without JavaScript, as WL-SPEC-82 §4 requires of a primary workflow.
+// and without JavaScript, as WL-REQ-335 requires of a primary workflow.
 //
 // A rejected submit re-renders the same form with the validation message and
 // every entered value preserved, so nothing typed is lost to a missing field.
@@ -440,7 +440,7 @@ func NewTask(v NewTaskView) templ.Component {
 
 // NewDeliverable renders the deliverable form (GET
 // /projects/{id}/deliverables/new). It offers no state control on purpose:
-// WL-SPEC-75 §13.3 makes deliverable state reported, never declared by the
+// WL-RULE-121 makes deliverable state reported, never declared by the
 // person who wrote the row, and the note under the URL field says so.
 func NewDeliverable(v NewDeliverableView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

@@ -28,7 +28,7 @@ func dash(s string) string {
 }
 
 // DocNumber renders a document's number, or "-" for a plan, which carries
-// none (WL-SPEC-77 §7).
+// none (WL-REQ-168).
 func DocNumber(n int) string {
 	if n == 0 {
 		return "-"
@@ -36,19 +36,19 @@ func DocNumber(n int) string {
 	return strconv.Itoa(n)
 }
 
-// DocRef is a document's formatted id: <KEY>-<KIND>-<N>, the WL-SPEC-77 §7
-// shorthand as widened by WL-SPEC-75 §13.4 — "WL-SPEC-29", "WL-ADR-43", "WL-PLAN-7".
+// DocRef is a document's formatted id: <KEY>-<KIND>-<N>, the WL-REQ-168
+// shorthand as widened by WL-REQ-122 — "WL-SPEC-29", "WL-ADR-43", "WL-PLAN-7".
 // It is what a person cites, which the integer id and the bare corpus number
 // are not, so it replaces both wherever a document lists.
 //
 // Every kind takes the same form, plans included. They were the exception
-// while WL-SPEC-77 §7 gave them no number; WL-SPEC-75 §13.4 puts them on their project's
+// while WL-REQ-168 gave them no number; WL-REQ-122 puts them on their project's
 // sequence, so nothing here special-cases a kind.
 //
 // An unknown project key degrades to the unqualified "SPEC-29" rather than
 // guessing one or printing a leading dash: the number is still true, and only
 // the corpus it is scoped to went missing. A document with no number at all
-// predates WL-SPEC-75 §13.4's backfill and renders as its kind, which is what the whole
+// predates WL-REQ-122's backfill and renders as its kind, which is what the whole
 // column said for plans before.
 func DocRef(d model.Doc) string {
 	return d.FormatRef()
@@ -66,7 +66,7 @@ func LocalTime(t time.Time) string {
 }
 
 // Age renders how long ago t was, in whole days: "31d", "0d" for today, "-"
-// for the zero value. A staleness clock counts in days (WL-SPEC-77 §9), so a
+// for the zero value. A staleness clock counts in days (WL-REQ-170), so a
 // coarser unit than LocalTime's timestamp is what the column is for. A future
 // t reads "0d" rather than a negative age.
 func Age(t time.Time) string {

@@ -16,8 +16,8 @@ command to run (that's `commands.md`) or how documents version (that's
 | Deliverable | `<PROJECT_KEY>-DEL-<n>` | A thing the project ships (a service, a package) — never claimed or worked; state is derived from reported facts, not a status a human sets. |
 | Actor | free text id | A human, agent, or service account. Carries `admin`, and since WL-SPEC-74 the Keycloak identity claims (`groups`, `email`) recorded at login. |
 | Lease | numeric id | One worktree's claim on one task. At most one active lease per task and per worktree. Ending a lease (release/done/block/abandon/reopen) never itself changes task state. |
-| Approval | `(entity_kind, entity_id, subject_revision)` | WL-SPEC-75 §13.6's one-table model of "does this need a sign-off". Currently populated only from GitHub PR review requests (`awaiting → approved/rejected/changes_requested`); no general CLI verb for it yet. |
-| Project participant | `(project_id, actor_id, role)` | WL-SPEC-75 §13.5 "Project Crew" — role-labelled, visible before any task is claimed. At most one `is_lead` and at most one `is_deputy` row per project. `lode project crew`. |
+| Approval | `(entity_kind, entity_id, subject_revision)` | WL-REQ-124's one-table model of "does this need a sign-off". Currently populated only from GitHub PR review requests (`awaiting → approved/rejected/changes_requested`); no general CLI verb for it yet. |
+| Project participant | `(project_id, actor_id, role)` | WL-REQ-123 "Project Crew" — role-labelled, visible before any task is claimed. At most one `is_lead` and at most one `is_deputy` row per project. `lode project crew`. |
 | Issue / PullRequest | `(repo, number)` | GitHub facts ingested by the App webhook, optionally correlated to a task. |
 | Artifact / Deployment | numeric id | A built thing (`docker_image`, `pypi`, `git_tag`, `binary`) and where it landed (Flux Kustomization, PyPI, manual). |
 | RuntimeEvent | numeric id | Pod-watcher facts: `crashloop`, `oom`, `flux_failure`, `flux_recovery`. |
@@ -94,8 +94,8 @@ Commands and editing constraints: `specs-and-docs.md`.
 
 | Column | Meaning |
 |---|---|
-| `tasks.plan_doc` | The plan whose acceptance minted this task (WL-SPEC-77 §11.2). Nullable — a task no plan authored carries none. |
-| `tasks.about_doc` | The document a review or design task is *about* — set on review tasks minted at submission and design tasks minted at acceptance (WL-SPEC-75 §9.6). |
+| `tasks.plan_doc` | The plan whose acceptance minted this task (WL-REQ-174). Nullable — a task no plan authored carries none. |
+| `tasks.about_doc` | The document a review or design task is *about* — set on review tasks minted at submission and design tasks minted at acceptance (WL-REQ-109). |
 
 Nothing yet records the reverse — which task *authored* a new document
 (`prov:wasGeneratedBy`, WL-SPEC-77) is asserted in `ns/concept.ttl` but has no

@@ -11,13 +11,13 @@ import (
 )
 
 // newDocReviewersCmd is `lode doc reviewers`: the read-only view of a
-// document's durable reviewer set (WL-SPEC-77 §9, WL-359) — the actors `lode
+// document's durable reviewer set (WL-REQ-170, WL-359) — the actors `lode
 // approval request` opens an awaiting lane for on the document's current
 // version. The set is not versioned: it survives an accept/revise cycle,
-// which is what lets a review task minted for a WL-SPEC-77 §10 in-place amendment name
+// which is what lets a review task minted for a WL-REQ-171 in-place amendment name
 // "the original approvers" without the caller re-assigning them.
 //
-// A view never writes (WL-SPEC-81 §1 rule L6): the paired write is `lode doc set
+// A view never writes (WL-REQ-305 rule L6): the paired write is `lode doc set
 // reviewers <reviewer…> <ref>` (WL-487), matching `lode task set skills`.
 func newDocReviewersCmd() *cobra.Command {
 	return &cobra.Command{
@@ -73,10 +73,10 @@ func reviewerList(reviewers []string) string {
 }
 
 // docSetFields are the fields `lode doc set` writes — the switch below and
-// the unknown-field error read this list, and so does completion (WL-SPEC-81 §1 L4).
+// the unknown-field error read this list, and so does completion (WL-REQ-305 L4).
 var docSetFields = []string{"reviewers"}
 
-// newDocSetCmd is `lode doc set <field> <value…> <ref>` (WL-SPEC-81 §2, WL-487):
+// newDocSetCmd is `lode doc set <field> <value…> <ref>` (WL-REQ-306, WL-487):
 // write one named field on a document. The field and the values are
 // arguments, not part of the verb, matching `lode task set` — this is the
 // doc half of the same rename `lode task set skills` made for tasks, and the

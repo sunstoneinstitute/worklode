@@ -1,7 +1,7 @@
-// WL-SPEC-75 §13.6: one approvals table for every entity that needs a
+// WL-REQ-124: one approvals table for every entity that needs a
 // human decision. Functions here are tx-scoped so the GitHub review ingest
 // and the web decide handler both call them inside a RecordEvent
-// transaction (WL-SPEC-78 §8.4).
+// transaction (WL-REQ-229).
 
 package store
 
@@ -20,7 +20,7 @@ import (
 
 // Approval is one row of the approvals table. It is model.Approval: the row
 // crosses the HTTP boundary on GET /api/v1/approvals, so it is declared once,
-// in internal/model (WL-SPEC-73 §3.2a), and scanned into directly here.
+// in internal/model (WL-RULE-1349), and scanned into directly here.
 type Approval = model.Approval
 
 // PREntityID renders the approvals entity_id for a pull request: the webhook
@@ -69,7 +69,7 @@ func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 	return n > 0, nil
 }
 
-// RequestDocApproval materializes WL-SPEC-77 §9's durable reviewer set (WL-359:
+// RequestDocApproval materializes WL-REQ-170's durable reviewer set (WL-359:
 // doc_reviewers, assigned separately via SetDocReviewers) for one document
 // revision: one 'awaiting' row per assigned reviewer, all on the same
 // subject_revision (the docs.version the reviewers see), which is exactly the
@@ -77,7 +77,7 @@ func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 // same version is a no-op, and a reviewer assigned later gets only the new
 // lane the next time this runs.
 //
-// WL-SPEC-75 §13.6's role-scoped lanes (a flow requiring "someone in this group")
+// WL-REQ-124's role-scoped lanes (a flow requiring "someone in this group")
 // call InsertAwaitingApproval directly with a required_role: that assignment
 // is project policy, not a document's own reviewer set, and the two lane
 // kinds coexist on one revision under 0064's key without conflict.
@@ -198,12 +198,12 @@ func (s *Store) docReviewersCtx(ctx context.Context, docID int64) ([]string, err
 	return collectRows(rows, fmt.Sprintf("load reviewers for doc %d", docID), scanString)
 }
 
-// SetDocReviewers replaces doc's durable reviewer set wholesale (WL-SPEC-77 §9):
+// SetDocReviewers replaces doc's durable reviewer set wholesale (WL-REQ-170):
 // "who reviews stays a social choice", decided once per change the way a
 // PR's reviewer list is, not accumulated a name at a time — so this is a
 // replace, with no separate add/remove verb. The set is not versioned: it
 // survives an accept/revise cycle, which is what lets a review task minted
-// for a WL-SPEC-77 §10 in-place amendment name "the original approvers" (WL-SPEC-77 §9) without
+// for a WL-REQ-171 in-place amendment name "the original approvers" (WL-REQ-170) without
 // the caller having to re-assign them.
 //
 // The current owner or an admin may set it — the same authority
@@ -252,7 +252,7 @@ func SetDocReviewers(tx *sql.Tx, now time.Time, docID int64, actorID string, rev
 }
 
 // DocReviewersAwaiting returns the reviewer ids doc's current version still
-// owes an approval from — WL-SPEC-77 §9's "who still owes a review on this
+// owes an approval from — WL-REQ-170's "who still owes a review on this
 // document" as a query, oldest lane first. A document's reviewer set is
 // several open lanes on purpose, unlike the PR ingest's single no-lane row,
 // so this reads every open one rather than the newest.
@@ -281,7 +281,7 @@ const openDocApprovals = `SELECT count(*) FROM approvals
 
 // OpenApprovalBound reports whether such a row exists — the guard fact the
 // doc-lifecycle watcher's approval-on-submit rule consults before
-// materializing another one (WL-SPEC-77 §9).
+// materializing another one (WL-REQ-170).
 func (s *Store) OpenApprovalBound(ctx context.Context, entityKind, entityID, revision string) (bool, error) {
 	var n int
 	if err := s.db.QueryRowContext(ctx, openDocApprovals,
@@ -295,17 +295,17 @@ func (s *Store) OpenApprovalBound(ctx context.Context, entityKind, entityID, rev
 // checkDocReviewerGate is AcceptDoc's mechanical approval gate, in two parts,
 // both scoped to the version being accepted.
 //
-// The named half (WL-SPEC-77 §9) is the stored reviewer set: every reviewer
+// The named half (WL-REQ-170) is the stored reviewer set: every reviewer
 // WL-359's doc_reviewers names for id must hold an 'approved' approvals row
 // at version, or the accept is refused naming who is still owed a decision. A
 // reviewer with no row at all, an 'awaiting' row, or a 'changes_requested'
 // row all read the same here — not yet approved. An empty reviewer set skips
 // this half.
 //
-// The unnamed half (WL-SPEC-75 §13.6) then refuses while any open row remains on that
+// The unnamed half (WL-REQ-124) then refuses while any open row remains on that
 // version. It is what catches the unlaned row a submission materializes,
 // which names no reviewer and so is invisible to the half above; it also
-// catches a role-scoped lane (WL-SPEC-75 §13.6) nobody was named for. The two cannot
+// catches a role-scoped lane (WL-REQ-124) nobody was named for. The two cannot
 // double-report: the named half returns first, and once it passes, every row
 // it covers is approved and no longer counted here.
 //
@@ -448,7 +448,7 @@ func scanApproval(row rowScanner) (*Approval, error) {
 
 // OpenApprovalForLane returns the open row — state 'awaiting' or
 // 'changes_requested', both counting as open — for one lane of one entity;
-// ErrNotFound otherwise. It replaces OpenApprovalForEntity: with WL-SPEC-75 §13.6's
+// ErrNotFound otherwise. It replaces OpenApprovalForEntity: with WL-REQ-124's
 // lanes, "the" open row of an entity is no longer a single thing. The PR
 // ingest reads lane "". ORDER BY id DESC is a deterministic tiebreak, not a
 // selector: the key keeps at most one open row per lane in practice.
@@ -503,7 +503,7 @@ func ResolveApproval(tx *sql.Tx, id int64, state string,
 
 // DecideInput is one decision on an approval, as the web act submits it.
 // Groups is the decider's stored groups claim, carried from the session
-// subject: WL-SPEC-75 §13.6 gates the act on a session precisely so it is no older
+// subject: WL-REQ-124 gates the act on a session precisely so it is no older
 // than the login that refreshed it.
 type DecideInput struct {
 	ApprovalID int64
@@ -521,7 +521,7 @@ type DecideInput struct {
 // decider did not author the thing under review (ErrSelfApproval). Then it
 // resolves the row.
 //
-// Self-approval is refused by default (WL-SPEC-75 §13.6), except on a plan
+// Self-approval is refused by default (WL-REQ-124), except on a plan
 // and where the project's flow allows self-review of the entity's kind
 // (SelfReviewAllowed). An allowed self-decision stamps the author as
 // exception_authorized_by, so the row records that it was self-reviewed. An
@@ -559,7 +559,7 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 		return nil, ErrNotQualified
 	}
 	if a.ReviewKind == "impact" {
-		// WL-SPEC-75 §13.6 puts the impact question to a qualified prior approver:
+		// WL-REQ-124 puts the impact question to a qualified prior approver:
 		// the person whose own approval is at stake. Self-approval does not
 		// apply — the decider is deciding their own past decision by design.
 		history, err := ListApprovalsForEntity(tx, a.EntityKind, a.EntityID)
@@ -615,7 +615,7 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 	return a, nil
 }
 
-// reopenDependentReview is ImpactReopen's side effect (WL-SPEC-75 §13.6): the prior
+// reopenDependentReview is ImpactReopen's side effect (WL-REQ-124): the prior
 // approver says their decision no longer holds, so the dependent goes back
 // into review at the revision that approval bound.
 //
@@ -646,7 +646,7 @@ func reopenDependentReview(tx *sql.Tx, now time.Time, impact *Approval) error {
 	return nil
 }
 
-// clearPatchedOnFullApproval is WL-SPEC-77 §9's other half: the §10 patched marks
+// clearPatchedOnFullApproval is WL-REQ-170's other half: the WL-REQ-171 patched marks
 // come off a document once its reviewers have settled the version that
 // carries them. It runs on a document row only, after the decision is
 // recorded, and clears nothing until every lane on that revision reads
@@ -774,7 +774,7 @@ func authorAndActorForEntity(tx *sql.Tx, kind, entityID, actorID string) (string
 
 // isPlanDoc reports whether an approval governs a plan document. A plan's
 // author may approve it: plans are often written by an agent under the
-// author's own credentials (WL-SPEC-75 §9).
+// author's own credentials (WL-REQ-104).
 func isPlanDoc(tx *sql.Tx, kind, entityID string) (bool, error) {
 	if kind != "doc" {
 		return false, nil
@@ -836,7 +836,7 @@ func SelfReviewAllowed(tx *sql.Tx, kind, entityID string) (bool, error) {
 	return slices.Contains(snap.Flow.SelfReview, kind), nil
 }
 
-// ReopenApproval flips changes_requested back to awaiting (WL-SPEC-75 §13.6's
+// ReopenApproval flips changes_requested back to awaiting (WL-REQ-124's
 // re-request edge), clearing resolving_actor and resolved_at. No-op on any
 // other state, including approved.
 func ReopenApproval(tx *sql.Tx, id int64) error {
@@ -901,7 +901,7 @@ func (s *Store) GetApproval(ctx context.Context, id int64) (*Approval, error) {
 // Every join is a LEFT JOIN, and that is the point: a doc has no task between
 // it and its project, and an entity_kind added later has no join here at all.
 // An inner join would silently drop those rows from the queue — the one thing
-// WL-SPEC-75 §13.6's "a missing approval is a visible row" cannot afford. A row whose
+// WL-REQ-124's "a missing approval is a visible row" cannot afford. A row whose
 // kind nothing correlates still lists, with empty columns. (approvalPROpen
 // below adds a narrower, deliberate exclusion on top of these joins — a
 // pr-kind row whose PR has closed — which is a display decision, not a
@@ -1054,7 +1054,7 @@ func (s *Store) ApprovalsAwaiting(ctx context.Context,
 }
 
 // InboxReview is one open pr-kind approval as the cross-project inbox
-// consumes it (WL-SPEC-82 §12).
+// consumes it (WL-REQ-347).
 type InboxReview struct {
 	ApprovalID    int64
 	Project       string
@@ -1084,7 +1084,7 @@ func scanInboxReview(row rowScanner) (*InboxReview, error) {
 // ListInboxReviews returns every open ('awaiting' | 'changes_requested')
 // pr-kind approval whose PR is still open (approvalPROpen — WL-663) across
 // all projects, oldest first, id tiebreak — the membership scoping happens
-// in the pure assembly (WL-SPEC-82 §12's score-wide-filter-late rule applied
+// in the pure assembly (WL-REQ-347's score-wide-filter-late rule applied
 // uniformly). Join shape is approvalEntityJoins/approvalProjectID, the same
 // as ListAwaitingApprovals,
 // plus the PR's author column.
@@ -1104,9 +1104,9 @@ func (s *Store) ListInboxReviews(ctx context.Context) ([]InboxReview, error) {
 	return collectRows(rows, "list inbox reviews", byValue(scanInboxReview))
 }
 
-// HasInboxItems answers WL-SPEC-82 §2.3's indicator: does at least one inbox item
+// HasInboxItems answers WL-REQ-333's indicator: does at least one inbox item
 // exist for the actor. One statement of EXISTS branches, each commented
-// with the WL-SPEC-82 §12 bucket it answers, so this reader and ListInboxReviews plus
+// with the WL-REQ-347 bucket it answers, so this reader and ListInboxReviews plus
 // the pure assembly (internal/api's assembleInbox, over ListInboxReviews and
 // ListProjectWorkFacts) cannot silently diverge. Postgres evaluates an
 // EXISTS(... UNION ALL ...) lazily and stops at the first row produced, so
@@ -1179,14 +1179,14 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 
 // RevisionRef renders a revision-bound entity reference, "<id>@<revision>".
 // The one spelling for governed-edge endpoints (InsertGovernedRefs et al.)
-// and the CI gate's queries (WL-SPEC-75 §13.6).
+// and the CI gate's queries (WL-REQ-124).
 func RevisionRef(entityID, revision string) string {
 	return entityID + "@" + revision
 }
 
 // ImpactRevision renders an impact row's subject_revision:
 // "<dependentRevision>+<upstreamID>@<upstreamRevision>" — the pair the
-// impact decision reviews, unique per upstream move (WL-SPEC-75 §13.6).
+// impact decision reviews, unique per upstream move (WL-REQ-124).
 func ImpactRevision(dependentRevision, upstreamID, upstreamRevision string) string {
 	return dependentRevision + "+" + RevisionRef(upstreamID, upstreamRevision)
 }
@@ -1208,7 +1208,7 @@ func ListApprovalsForEntity(tx *sql.Tx, entityKind, entityID string) ([]Approval
 }
 
 // ListApprovalsForEntityCtx is ListApprovalsForEntity for the detail page
-// (GET /approvals/{id}, WL-SPEC-82 §9), which reads outside the caller's own
+// (GET /approvals/{id}, WL-REQ-344), which reads outside the caller's own
 // transaction — the same shape docReviewersCtx gives docReviewers.
 func (s *Store) ListApprovalsForEntityCtx(ctx context.Context, entityKind, entityID string) ([]Approval, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -1265,12 +1265,12 @@ func (s *Store) EntityTitleURL(ctx context.Context, approvalID int64) (title, ur
 
 // designationScope narrows DesignateRevision's queries to the no-lane,
 // 'review'-kind row: the single decision a PR-style entity carries. A
-// document's several reviewer lanes (WL-SPEC-77 §9) are RequestDocApproval's
+// document's several reviewer lanes (WL-REQ-170) are RequestDocApproval's
 // concern, not DesignateRevision's — nothing here reruns that fan-out.
 const designationScope = `lane = '' AND review_kind = 'review'`
 
 // DesignateRevision applies OnNewRevision (approval_rules.go) inside the
-// caller's event transaction (WL-SPEC-75 §13.6): rebinds the open review row's
+// caller's event transaction (WL-REQ-124): rebinds the open review row's
 // subject_revision, or inserts a candidate row copying required_role/
 // required_actor from the newest decided review row. A designation that moved
 // something (rebind or candidate) then fans the change out to the entities
@@ -1351,7 +1351,7 @@ func approvedReviewFor(tx *sql.Tx, entityKind, entityID string) (*Approval, erro
 	return a, nil
 }
 
-// impactFanOut opens WL-SPEC-75 §13.6's explicit impact review: for every entity
+// impactFanOut opens WL-REQ-124's explicit impact review: for every entity
 // governed by (entityKind, entityID) that already approved something, one
 // 'awaiting' impact row asking its prior approver whether that decision still
 // holds at the upstream's new revision. The requirement is copied from the
@@ -1403,7 +1403,7 @@ func impactFanOut(tx *sql.Tx, now time.Time,
 }
 
 // SetImpactNote records the dependent owner's note on an open impact review
-// (WL-SPEC-75 §13.6): what the upstream change means for this entity, written before
+// (WL-REQ-124): what the upstream change means for this entity, written before
 // a prior approver decides. ErrApprovalResolved once the row is decided,
 // ErrInvalidInput on an ordinary review row or an empty note.
 func SetImpactNote(tx *sql.Tx, id int64, note string) error {
@@ -1440,7 +1440,7 @@ type GovernedRef struct {
 
 // InsertGovernedRefs writes rel='references_revision' entity_edges rows from
 // RevisionRef(fromID, fromRevision) to each RevisionRef(ref.ID, ref.Revision)
-// (WL-SPEC-75 §13.6). Idempotent on the table's primary key (from_kind, from_id,
+// (WL-REQ-124). Idempotent on the table's primary key (from_kind, from_id,
 // to_kind, to_id, rel) — a re-designation that references the same set is a
 // no-op, not a conflict.
 func InsertGovernedRefs(tx *sql.Tx, now time.Time, createdBy *string,
@@ -1488,7 +1488,7 @@ func GovernedRefsFor(tx *sql.Tx, kind, id, revision string) ([]GovernedRef, erro
 
 // DependentsOf returns the distinct entities holding a references_revision
 // edge pointing at (kind, id) at any revision of it — the impact fan-out set
-// (WL-SPEC-75 §13.6). A referrer that recorded the reference at more than one of its
+// (WL-REQ-124). A referrer that recorded the reference at more than one of its
 // own revisions is returned once, at its newest.
 func DependentsOf(tx *sql.Tx, kind, id string) ([]GovernedRef, error) {
 	rows, err := tx.Query(

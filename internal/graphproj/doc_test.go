@@ -77,7 +77,7 @@ func TestDocTriples(t *testing.T) {
 	}
 }
 
-// TestDocVersionTriples covers WL-SPEC-77 §5's immutable version-snapshot
+// TestDocVersionTriples covers WL-REQ-166's immutable version-snapshot
 // projection: the snapshot node's type/title/version/timestamps, the
 // previousVersion/wasRevisionOf edges to the prior version, the optional
 // dct:issued, and one wl:Section node per parsed section pointing dct:isPartOf
@@ -125,9 +125,9 @@ func TestDocVersionTriples(t *testing.T) {
 	}
 }
 
-// TestSectionTriples covers WL-SPEC-77 §4's section projection: a wl:Section node
+// TestSectionTriples covers WL-REQ-165's section projection: a wl:Section node
 // per published section, and the derived supersession the document store keeps
-// as a query rather than a column (WL-SPEC-77 §6).
+// as a query rather than a column (WL-REQ-167).
 func TestSectionTriples(t *testing.T) {
 	d := model.Doc{Slug: "025-backbone", Kind: "spec", Project: "alpha", Number: 25, Status: "accepted"}
 	sections := []model.DocSection{
@@ -193,7 +193,7 @@ func TestSectionTriples(t *testing.T) {
 		}
 	}
 
-	// A plan carries no sections at all (WL-SPEC-77 §11), so it projects none.
+	// A plan carries no sections at all (WL-REQ-172), so it projects none.
 	if got := SectionTriples(model.Doc{Slug: "a-plan", Kind: "plan"}, nil, nil); got != nil {
 		t.Errorf("plan projected %d section triples, want none", len(got))
 	}

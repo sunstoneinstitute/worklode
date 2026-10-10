@@ -116,7 +116,7 @@ func setupDocServer(t *testing.T, projectKey string, files map[string]string) st
 			number, _ = strconv.Atoi(m[1])
 		}
 		// A `kind: adr` fixture stands for a former ADR: a spec 100 past its
-		// old number, reachable by <KEY>-ADR-<n> (WL-SPEC-77 §7a).
+		// old number, reachable by <KEY>-ADR-<n> (WL-REQ-1357).
 		formerADR := 0
 		if parsed.Frontmatter != nil && parsed.Frontmatter.Kind == "adr" {
 			formerADR, number = number, number+100
@@ -136,7 +136,7 @@ func setupDocServer(t *testing.T, projectKey string, files map[string]string) st
 		copy(listed, docs)
 		writeTestJSON(t, w, model.DocListResponse{Docs: listed})
 	})
-	// Tier 2 (WL-SPEC-78 §3.2, WL-276) resolves a foreign key through the project
+	// Tier 2 (WL-REQ-199, WL-276) resolves a foreign key through the project
 	// list; this stub knows only its own project, so any foreign key stays
 	// tier-3 unresolved, which is what the single-project tests assert.
 	mux.HandleFunc("GET /api/v1/projects", func(w http.ResponseWriter, r *http.Request) {
@@ -271,7 +271,7 @@ func TestShowDispatchesSpecToDocShow(t *testing.T) {
 // setupCrossProjectDocServer stands up a backbone stub knowing two projects
 // — "proj" (key WL) with fixture spec 14, and "cms" (key CMS) with fixture
 // spec 4 — filtering GET /api/v1/docs by ?project= and serving GET
-// /api/v1/projects, which is what WL-SPEC-78 §3.2's tier 2 resolves through. The
+// /api/v1/projects, which is what WL-REQ-199's tier 2 resolves through. The
 // repo config binds the checkout to "proj"/WL.
 func setupCrossProjectDocServer(t *testing.T) {
 	t.Helper()
@@ -325,7 +325,7 @@ func setupCrossProjectDocServer(t *testing.T) {
 	t.Setenv("LODE_TOKEN", "test-token")
 }
 
-// TestShowResolvesForeignShorthand covers WL-SPEC-78 §3.2 tier 2 going live
+// TestShowResolvesForeignShorthand covers WL-REQ-199 tier 2 going live
 // (WL-276): a shorthand whose key belongs to another registered project
 // resolves against that project's backbone docs; a known key with a missing
 // document is a defect; only an unknown key still prints tier 3's
@@ -628,7 +628,7 @@ func TestDocShowForeignKeyUnresolvedJSON(t *testing.T) {
 }
 
 // TestShowMilestoneDispatch covers the classify-and-dispatch path for a full
-// milestone id (WL-SPEC-75 §13.4, WL-536): `lode show WL-MILE-2` fetches through
+// milestone id (WL-REQ-122, WL-536): `lode show WL-MILE-2` fetches through
 // Client.GetMilestone and renders it via cli.MilestoneRender, the same as
 // every other show arm.
 func TestShowMilestoneDispatch(t *testing.T) {
@@ -660,7 +660,7 @@ func TestShowMilestoneDispatch(t *testing.T) {
 }
 
 // TestShowDeliverableDispatch covers the classify-and-dispatch path for a
-// full deliverable id (WL-SPEC-75 §13.3, WL-715): `lode show WL-DEL-3` fetches through
+// full deliverable id (WL-RULE-121, WL-715): `lode show WL-DEL-3` fetches through
 // Client.GetDeliverable and renders it via cli.DeliverableRender, the same as
 // every other show arm.
 func TestShowDeliverableDispatch(t *testing.T) {
@@ -1184,7 +1184,7 @@ func TestShowMilestoneFlagNoProjectKey(t *testing.T) {
 }
 
 // TestShowPlanFlagTakesABareOrdinal: a plan's number is one per-project
-// sequence like every other kind's (WL-SPEC-75 §13.4), so the two-part "4-1" form the
+// sequence like every other kind's (WL-REQ-122), so the two-part "4-1" form the
 // flag used to accept is refused with the same message every kind gives.
 func TestShowPlanFlagTakesABareOrdinal(t *testing.T) {
 	out, err := runLode(t, "show", "--plan", "4-1")
@@ -1223,7 +1223,7 @@ func TestShowPlanFlagKeylessStillChecksKind(t *testing.T) {
 
 // TestShowRuleClosure covers `lode show WL-REQ-1 --closure` reading GET
 // /api/v1/rules/{ref}/closure and printing each member with the edge that
-// reached it, and --closure on a non-rule being refused (WL-SPEC-77 §4c).
+// reached it, and --closure on a non-rule being refused (WL-REQ-1367).
 func TestShowRuleClosure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/rules/WL-REQ-1/closure" {

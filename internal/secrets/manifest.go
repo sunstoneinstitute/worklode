@@ -49,7 +49,7 @@ func manifestPath(taskID string) (string, error) {
 
 // MaterializedTasks lists every task id with a local manifest, sorted. The
 // keystore cannot enumerate its own items, so this directory is the machine's
-// only inventory of materialized secrets, and a machine-wide sweep (WL-SPEC-74 §10.5)
+// only inventory of materialized secrets, and a machine-wide sweep (WL-REQ-72)
 // has nothing else to walk.
 //
 // A missing directory means nothing was ever materialized, not an error.

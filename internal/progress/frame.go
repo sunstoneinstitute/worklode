@@ -1,5 +1,5 @@
 // frame.go answers, for one backbone event, which task or document the
-// Progress page has to refresh (WL-SPEC-85 §6). Pure, like the rest of
+// Progress page has to refresh (WL-REQ-1339). Pure, like the rest of
 // this package: the event type and its recorded payload, nothing else.
 package progress
 
@@ -49,7 +49,7 @@ var touchKinds = map[string]string{
 	// internal/api/admin.go: issue.promoted, issue.linked, issue.dismissed.
 	"issue": "task",
 	// internal/api/docs.go via recordDocEvent, plus the two typed events
-	// internal/eventbus emits (WL-SPEC-77 §15), which carry no dot.
+	// internal/eventbus emits (WL-RULE-179), which carry no dot.
 	"doc":                  "doc",
 	"wl:DocumentSubmitted": "doc",
 	"wl:DocumentAccepted":  "doc",
@@ -89,9 +89,9 @@ func Resolve(eventType string, payload []byte) Touch {
 	_ = json.Unmarshal(fields["tasks"], &t.Tasks)
 	// "doc" is the row id in a document mutation's payload and the document's
 	// IRI in the events minted about one (api/progress.go, api/docwatch.go);
-	// the typed WL-SPEC-77 §15 events name their document in "wl:subject" and
+	// the typed WL-RULE-179 events name their document in "wl:subject" and
 	// nowhere else. Whichever form is there, the document is named — the row
-	// id directly, the IRI for the reader to resolve (WL-SPEC-85 §6).
+	// id directly, the IRI for the reader to resolve (WL-REQ-1339).
 	if json.Unmarshal(fields["doc"], &t.Doc) != nil {
 		_ = json.Unmarshal(fields["doc"], &t.DocIRI)
 	}

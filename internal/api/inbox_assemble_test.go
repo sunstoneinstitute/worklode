@@ -48,7 +48,7 @@ func inboxReviewFor(id int64, project, author string, required *string, age time
 
 func actorRef(s string) *string { return &s }
 
-// TestAssembleInbox pins WL-SPEC-82 §12: which item lands in which
+// TestAssembleInbox pins WL-REQ-347: which item lands in which
 // bucket, the fixed bucket order and headings, and the order within a
 // bucket. Each case names the buckets it expects, in order, with each
 // bucket's item hrefs in order.

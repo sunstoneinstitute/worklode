@@ -1,4 +1,4 @@
--- Spec headings (WL-SPEC-77 §19.1): an arrangement entry is either a rule or a
+-- Spec headings (WL-REQ-1295): an arrangement entry is either a rule or a
 -- heading the spec owns, which carries heading text and no rule.
 BEGIN;
 

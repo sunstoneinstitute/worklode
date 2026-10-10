@@ -1,10 +1,10 @@
--- Retire the adr document kind (WL-966, decision WL-1005, WL-SPEC-77 §2).
+-- Retire the adr document kind (WL-966, decision WL-1005, WL-REQ-163).
 --
 -- Every live ADR becomes a spec with the next free spec number in its
 -- project. The row keeps its id, so its sections, rules, versions, notes,
 -- reviewers, edges and tasks follow it unchanged. former_adr keeps the old
 -- number, so a <KEY>-ADR-<n> reference still resolves to the successor
--- (WL-SPEC-77 §7a), and the body's first line names the former ref so search
+-- (WL-REQ-1357), and the body's first line names the former ref so search
 -- finds it.
 --
 -- Tombstoned ADRs are hard-deleted so the kind CHECK can drop 'adr'. Their

@@ -139,7 +139,7 @@ func TestRunLoginNoInteractiveLogin(t *testing.T) {
 }
 
 // manualStub serves the discovery document and a token endpoint that redeems
-// wantCode, the pair a manual-mode login needs (WL-SPEC-74 §7.2).
+// wantCode, the pair a manual-mode login needs (WL-REQ-58).
 func manualStub(t *testing.T, wantCode string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()

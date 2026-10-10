@@ -199,7 +199,7 @@ func TestValidateAnswer(t *testing.T) {
 }
 
 // answerFor is the smallest legal answer for each response type, so a test
-// about the record-answer mutation does not restate WL-SPEC-77 §12's answer rules.
+// about the record-answer mutation does not restate WL-REQ-176's answer rules.
 func answerFor(responseType string) model.DecisionAnswer {
 	switch responseType {
 	case "single_select", "pick_or_freetext":
@@ -286,7 +286,7 @@ func TestRecordDecisionClosesTheTask(t *testing.T) {
 	}
 }
 
-// TestRecordDecisionEveryResponseType: each of WL-SPEC-77 §12's six types records its
+// TestRecordDecisionEveryResponseType: each of WL-REQ-176's six types records its
 // own answer shape and closes its one-row decision task.
 func TestRecordDecisionEveryResponseType(t *testing.T) {
 	t.Parallel()

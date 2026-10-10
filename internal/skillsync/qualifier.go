@@ -7,7 +7,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 )
 
-// A skill's registry identity is <plugin>:<name> (WL-SPEC-81 §7.4). The name half comes
+// A skill's registry identity is <plugin>:<name> (WL-REQ-321). The name half comes
 // from SKILL.md; this file derives the plugin half, which is what keeps two
 // plugins shipping the same skill name from colliding in the registry.
 

@@ -272,7 +272,7 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 		"## 1. Scope {#sec-1}\n\nOriginal scope.\n\n" +
 		"#### Details\n\nStable details.\n\n" +
 		"## 2. Model {#sec-2}\n\nStable model.\n"
-	// A revision body carries no header (WL-SPEC-77 §7).
+	// A revision body carries no header (WL-REQ-168).
 	bodyV2 := strings.Replace(strings.TrimPrefix(bodyV1, "---\nstatus: accepted\nissued: 2026-08-01\n---\n"),
 		"## 1. Scope {#sec-1}", "## 1. Renamed scope {#sec-1}", 1)
 	bodyV3 := strings.Replace(bodyV2, "Stable details.", "Revised details.", 1)
@@ -404,7 +404,7 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 	}
 }
 
-// TestRunOnceProjectsSections covers WL-SPEC-77 §4: once a document is accepted,
+// TestRunOnceProjectsSections covers WL-REQ-165: once a document is accepted,
 // its sections are frozen and project as wl:Section nodes in the same declared
 // graph. A draft's sections stay out, because their anchors can still change.
 func TestRunOnceProjectsSections(t *testing.T) {
@@ -465,7 +465,7 @@ func TestRunOnceProjectsSections(t *testing.T) {
 	}
 }
 
-// TestDeletedDocumentGraphIsRemoved covers WL-SPEC-75 §12's "the graph shows live rows
+// TestDeletedDocumentGraphIsRemoved covers WL-REQ-117's "the graph shows live rows
 // only" for the one entity that does not get it for free. A task leaves the
 // graph by not being written into the project graph the next pass replaces; a
 // document owns a graph of its own, so the projector has to remove it.

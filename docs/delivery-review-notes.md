@@ -12,19 +12,19 @@ that rule applied to a place where it currently isn't.
 
 ### C1 — Reintroduce `proposed` on documents, drop `in_review`
 
-`draft → proposed → accepted → superseded`. WL-SPEC-77 §9 removed `proposed` on the
+`draft → proposed → accepted → superseded`. WL-REQ-170 removed `proposed` on the
 grounds that an open review task already proves "under review". That argument
 holds for review *progress* and not for authorial readiness: only the author
 can state that the text is finished enough to read, and no other row proves
-it. `in_review` (WL-SPEC-77 §9, spec'd, unimplemented) is the redundant one —
+it. `in_review` (WL-REQ-170, spec'd, unimplemented) is the redundant one —
 review progress is provable from the review task's own state.
 
 Anchors freeze at `proposed`, not at `accepted`, so crit comments cannot be
-renumbered out from under a reviewer. WL-SPEC-77 §6 rule 4 currently exempts drafts
+renumbered out from under a reviewer. WL-REQ-167 rule 4 currently exempts drafts
 from the renumbering constraints, which allows exactly that.
 
 Cost: `ns/concept.ttl` + `nsgen`, the CHECK in `0027_docs.up.sql`, the accept
-guard at `internal/store/docs.go:377`, and an amendment to WL-SPEC-77 §9.
+guard at `internal/store/docs.go:377`, and an amendment to WL-REQ-170.
 The enum has one source, so nothing else hand-mirrors it.
 
 ### C2 — Rename the task state `in_review` to `submitted`
@@ -79,7 +79,7 @@ already key delivery on it. A branch is a movable label, and the default
 predictable, so a deliverable naming one would be pre-claimable by a third
 party.
 
-WL-SPEC-75 §13 already settles the "address not known in advance" case: a
+WL-REQ-118 already settles the "address not known in advance" case: a
 deliverable is verified **by address** when known ahead of time, or **by
 label** when minted at build time, with worklode defining the label key and
 value at creation. A worklode-minted label is not guessable, which is
@@ -114,7 +114,7 @@ correlation, where one body means one task.
 ### C9 — Required environments are declared intent, never observed state
 
 A deliverable may declare that prod is required before it counts as
-delivered. That is intent, which WL-SPEC-75 §13 keeps distinct from reported state.
+delivered. That is intent, which WL-REQ-118 keeps distinct from reported state.
 A single checkbox that means both "prod is required" and "prod was reached"
 collapses the two. Required is declared and editable; reached is read-only and
 comes from `env_deploys`.
@@ -126,7 +126,7 @@ independently, so "prod required, dev skipped" works without changing it.
 
 `internal/api/webform.go`: `SameSite=Lax` cookie, a same-origin header check
 as the second lock, POST-redirect-GET, and `requireSession` on the
-approval-decide route because WL-SPEC-75 §13 makes deciding a session act. A review
+approval-decide route because WL-REQ-118 makes deciding a session act. A review
 link is a plain GET that renders; claiming is a POST through the API.
 
 ### C11 — The review surface is designed, not decomposed
@@ -155,7 +155,7 @@ post.
 
 ### C14 — One spec owns the evidence scheme, sources integrate against it (was Q3)
 
-WL-SPEC-76 puts frontier-driven delivery resolution out of scope and WL-SPEC-75 §13
+WL-SPEC-76 puts frontier-driven delivery resolution out of scope and WL-REQ-118
 stops at "is this deliverable live", so nothing claims the seam today. One
 spec owns the overall evidence scheme, and each source gets its own
 integration spec against it. Sources in view: GitHub/GHCR, the data catalog,

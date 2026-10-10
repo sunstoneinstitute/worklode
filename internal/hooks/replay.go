@@ -1,7 +1,7 @@
 // Engine 1 of lode task reconcile (WL-SPEC-80): re-apply stored events whose apply
 // never ran — GitHub *.ignored deliveries recorded before their repo was
 // mapped, and artifact-evidence deliveries (catalog, ci, pipeline, ...) that
-// matched no declaration when they arrived (WL-SPEC-75 §13, §13, WL-256). Offline: the payload is intact in
+// matched no declaration when they arrived (WL-REQ-118, WL-256). Offline: the payload is intact in
 // events.payload, so no GitHub call is needed. Re-running is harmless because
 // the applies are order-safe, not merely idempotent: a replayed event may be
 // older than facts that already landed, so the fact upserts are guarded to be
@@ -26,7 +26,7 @@ import (
 // defaultReplayBatch caps how many candidate events one run reads. Every
 // candidate is materialised with its whole delivery payload (up to
 // maxGitHubBody each), and the unscoped org-wide run is the scheduled case
-// (WL-SPEC-80 §10.3), so an unbounded read is a backlog-sized allocation. A run
+// (WL-REQ-297), so an unbounded read is a backlog-sized allocation. A run
 // that fills its batch says so in ReplayResult.Truncated; re-running drains
 // the rest, because an applied event leaves the candidate set.
 const defaultReplayBatch = 500
