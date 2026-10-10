@@ -19,7 +19,8 @@ const StatusLineCommand = "lode-statusline"
 // bound to four events because Stop alone leaves a live session looking dead:
 // StopFailure replaces Stop when a turn dies on an API error, SubagentStop
 // covers a long subagent fan-out, and Notification covers a session blocked on
-// a human.
+// a human. SubagentStart carries the instruction to cite rules by ref into
+// each subagent (WL-REQ-1791).
 //
 // WorktreeCreate and WorktreeRemove are deliberately absent: they are
 // delegation hooks, so binding one makes Worklode *the* worktree creator in
@@ -30,6 +31,7 @@ const StatusLineCommand = "lode-statusline"
 // scripts.
 var claudeBindings = []hookBinding{
 	{Event: "SessionStart", Command: "lode-hook session-start"},
+	{Event: "SubagentStart", Command: "lode-hook subagent-start"},
 	{Event: "SessionEnd", Command: "lode-hook session-end"},
 	{Event: "Stop", Command: "lode-hook heartbeat"},
 	{Event: "StopFailure", Command: "lode-hook heartbeat"},
