@@ -274,3 +274,32 @@ func TestRuleLintAPI(t *testing.T) {
 		t.Errorf("unknown project: %d", rr.Code)
 	}
 }
+
+// TestArrangeAndUnarrangeRule: POST /api/v1/docs/{id}/rules arranges a rule
+// from another spec, DELETE .../rules/{rule} removes it, and the rule reads
+// back arranged in one spec again (WL-SPEC-77 §19.3).
+func TestArrangeAndUnarrangeRule(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "a", Body: ruleDocV1})
+	b := createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "b",
+		Body: "---\nstatus: draft\n---\n# B\n\n## 1. Own {#sec-1}\n\nX.\n"})
+	rr := doReq(t, h, http.MethodPost, docPath(b.ID, "/rules"), token, model.ArrangeRuleInput{Rule: "WL-REQ-3", After: "WL-REQ-4"})
+	var c model.Rule
+	decodeInto(t, rr, &c)
+	if rr.Code != http.StatusOK || len(c.ArrangedIn) != 2 {
+		t.Fatalf("arrange: status %d, rule %+v", rr.Code, c)
+	}
+	if rr := doReq(t, h, http.MethodPost, docPath(b.ID, "/rules"), token, model.ArrangeRuleInput{Rule: "WL-REQ-3"}); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("arrange twice: status %d, want 422", rr.Code)
+	}
+	rr = doReq(t, h, http.MethodDelete, docPath(b.ID, "/rules/WL-REQ-3"), token, nil)
+	decodeInto(t, rr, &c)
+	if rr.Code != http.StatusOK || len(c.ArrangedIn) != 1 {
+		t.Errorf("unarrange: status %d, rule %+v", rr.Code, c)
+	}
+	if rr := doReq(t, h, http.MethodDelete, docPath(b.ID, "/rules/WL-REQ-3"), token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unarrange twice: status %d, want 404", rr.Code)
+	}
+}

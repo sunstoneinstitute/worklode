@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -58,6 +59,13 @@ func openRevision(tx *sql.Tx, now time.Time, id int64, body, actorID string) err
 		 SELECT from_doc, from_anchor, type, to_doc, to_anchor, to_external, to_rule, owner_doc, owner_external
 		   FROM doc_edges WHERE from_doc = $1`, id); err != nil {
 		return fmt.Errorf("copy edges of doc %d into its revision: %w", id, err)
+	}
+	// And from the live arrangement (WL-SPEC-77 §19.3).
+	if _, err := tx.Exec(
+		`INSERT INTO doc_revision_rules (doc_id, position, rule_id, rule_version, heading, depth, anchor)
+		 SELECT doc_id, position, rule_id, rule_version, heading, depth, anchor
+		   FROM doc_rules WHERE doc_id = $1`, id); err != nil {
+		return fmt.Errorf("copy arrangement of doc %d into its revision: %w", id, err)
 	}
 	return nil
 }
@@ -200,7 +208,14 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
+	// An anchor whose rule the candidate unarranged leaves on purpose
+	// (WL-SPEC-77 §19.3); the freeze still holds every other anchor.
+	dropped, err := unarrangedAnchors(tx, id)
+	if err != nil {
+		return nil, err
+	}
 	diff := designdoc.CompareSections(accepted.doc, candidate.doc, docDepthLimit)
+	diff.Removed = slices.DeleteFunc(diff.Removed, func(a string) bool { return dropped[a] })
 	if err := checkAnchorFreeze(fmt.Sprintf("revision of doc %d cannot be accepted", id),
 		&diff, prior); err != nil {
 		return nil, err
@@ -218,6 +233,9 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	); err != nil {
 		return nil, fmt.Errorf("land revision of doc %d: %w", id, err)
 	}
+	if err := landRevisionRules(tx, id); err != nil {
+		return nil, err
+	}
 	after, err := rebuildSectionsFrom(tx, id, d.kind, candidate.doc, version, prior, eventID)
 	if err != nil {
 		return nil, err
@@ -230,7 +248,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	// checks that it did. A failure here is a bug in the gate, not bad input,
 	// so it carries no sentinel.
 	for anchor, p := range prior {
-		if _, still := after[anchor]; p.published && !still {
+		if _, still := after[anchor]; p.published && !still && !dropped[anchor] {
 			return nil, fmt.Errorf(
 				"internal: doc %d lost published anchor #%s in the section rebuild", id, anchor)
 		}
@@ -273,6 +291,45 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	return getDocTx(tx, id)
+}
+
+// landRevisionRules makes the candidate's arrangement document id's prior
+// arrangement, so the section rebuild matches the candidate body against the
+// rules the candidate arranged, a rule arranged from another spec included.
+// Called after the version snapshot, which keeps the accepted arrangement.
+func landRevisionRules(tx *sql.Tx, id int64) error {
+	if _, err := tx.Exec(`DELETE FROM doc_rules WHERE doc_id = $1`, id); err != nil {
+		return fmt.Errorf("clear arrangement of doc %d: %w", id, err)
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO doc_rules (doc_id, position, rule_id, rule_version, heading, depth, anchor)
+		 SELECT doc_id, position, rule_id, rule_version, heading, depth, anchor
+		   FROM doc_revision_rules WHERE doc_id = $1`, id); err != nil {
+		return fmt.Errorf("land revision arrangement of doc %d: %w", id, err)
+	}
+	return nil
+}
+
+// unarrangedAnchors is the set of anchors document id arranges a rule at that
+// its candidate revision no longer arranges.
+func unarrangedAnchors(tx *sql.Tx, id int64) (map[string]bool, error) {
+	rows, err := tx.Query(
+		`SELECT anchor FROM doc_rules
+		  WHERE doc_id = $1 AND rule_id IS NOT NULL
+		    AND rule_id NOT IN (SELECT rule_id FROM doc_revision_rules WHERE doc_id = $1 AND rule_id IS NOT NULL)`, id)
+	if err != nil {
+		return nil, fmt.Errorf("read unarranged rules of doc %d: %w", id, err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var a string
+		if err := rows.Scan(&a); err != nil {
+			return nil, fmt.Errorf("scan unarranged rule of doc %d: %w", id, err)
+		}
+		out[a] = true
+	}
+	return out, rows.Err()
 }
 
 // landRevisionEdges replaces document id's live edges with its candidate's.

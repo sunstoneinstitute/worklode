@@ -261,6 +261,13 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 // ifVersion is the caller's compare-and-swap; see checkDocVersion. Zero skips
 // the check, which is what every caller did before the option existed.
 func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion int, eventID int64) (*model.Doc, error) {
+	return updateDocBodyPinned(tx, now, id, body, ifVersion, eventID, nil)
+}
+
+// updateDocBodyPinned is UpdateDocBody with pin, when set, run after the version
+// snapshot and before the arrangement is rebuilt, so a row it adds to
+// doc_rules is matched by syncRules without entering the prior version.
+func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVersion int, eventID int64, pin func(*sql.Tx) error) (*model.Doc, error) {
 	var kind, status string
 	var version int
 	err := tx.QueryRow(
@@ -305,6 +312,11 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`, id, body, ts,
 	); err != nil {
 		return nil, fmt.Errorf("update doc %d body: %w", id, err)
+	}
+	if pin != nil {
+		if err := pin(tx); err != nil {
+			return nil, err
+		}
 	}
 	if err := rebuildSections(tx, id, kind, parsed.doc, version, eventID); err != nil {
 		return nil, err
