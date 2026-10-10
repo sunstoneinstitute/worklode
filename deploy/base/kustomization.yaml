@@ -222,5 +222,5 @@ configMapGenerator:
       - migrations/0104_doc-revision-rules.down.sql
       - migrations/0105_rule-concept-iri.up.sql
       - migrations/0105_rule-concept-iri.down.sql
-      - migrations/NEW-spec-template-text.up.sql
-      - migrations/NEW-spec-template-text.down.sql
+      - migrations/0106_spec-template-text.up.sql
+      - migrations/0106_spec-template-text.down.sql
