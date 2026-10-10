@@ -1,5 +1,5 @@
 -- A covers entry naming a section also covers every rule arranged under it
--- (WL-SPEC-77 §4, WL-SPEC-78 §4.1). 0091 resolved a section entry to the rule
+-- (WL-REQ-165, WL-REQ-203). 0091 resolved a section entry to the rule
 -- at its anchor only, so each covers edge now extends to its rule's subtree:
 -- the later rules of the arranging document up to the next heading at the
 -- same depth or shallower. A rule the plan already covers keeps its edge, and

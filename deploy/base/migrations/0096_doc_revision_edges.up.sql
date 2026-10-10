@@ -1,4 +1,4 @@
--- An open candidate revision carries its own edge set (WL-SPEC-77 §3), so a
+-- An open candidate revision carries its own edge set (WL-REQ-164), so a
 -- relation can change in a revision without the body's header. The checks
 -- and foreign keys mirror doc_edges, so landing a candidate cannot fail on
 -- them. completed_with is doc_coverage_completed_with in position order:

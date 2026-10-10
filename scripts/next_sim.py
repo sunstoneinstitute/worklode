@@ -24,7 +24,7 @@ only way to see whether the loop actually converges on one spec at a time.
 
 Two limits, both about what the task list can say:
 
-  - A task names the plan whose acceptance minted it (`plan_doc`, 025 §9.2)
+  - A task names the plan whose acceptance minted it (`plan_doc`, WL-REQ-172)
     and the plan's `covers` edges name its spec, so grouping is exact for
     minted tasks. Tasks filed by hand carry no plan and become singleton
     groups here; the header prints how many.

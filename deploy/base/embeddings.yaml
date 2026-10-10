@@ -1,6 +1,6 @@
 ---
 # EmbeddingGemma-300M served on CPU by text-embeddings-inference, with the
-# weights baked into the image (040 §2.3).
+# weights baked into the image (WL-REQ-859).
 # It exposes the OpenAI-compatible /v1/embeddings that internal/embed.OpenAI
 # already speaks, so the default deployment needs no new provider code: it is
 # LODE_EMBEDDING_URL in configmap.yaml pointed at the Service below.
@@ -101,7 +101,7 @@ spec:
                 - ALL
           resources:
             requests:
-              # 040 §2.3's "~200 MB resident" is the model quantised; the
+              # WL-REQ-859's "~200 MB resident" is the model quantised; the
               # safetensors text-embeddings-inference actually loads are fp32,
               # 1.21 GB on disk and about that resident. Still one small pod,
               # not a node pool — but requesting 200 Mi would get it OOM-killed

@@ -12,7 +12,7 @@
 # Run it before merging a page that is new or has changed shape. It needs no
 # Postgres and no running server — internal/ui renders standalone — but it does
 # need a Chrome-family browser, which CI deliberately does not install (spec
-# 032 §12). With none on the machine it prints how to point at one and exits 0.
+# WL-REQ-334). With none on the machine it prints how to point at one and exits 0.
 #
 # Usage: narrow-check.sh [extra go test flags]
 #   LODE_NARROW_BROWSER=/path/to/chrome   use this browser instead of searching

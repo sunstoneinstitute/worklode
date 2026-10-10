@@ -18,13 +18,13 @@ Every source is the worklode backbone, read through the `lode` CLI:
   lode doc list --kind plan       plan inventory and status
   lode doc list --needs-planning  the backbone's own verdict on which spec
                                   sections no accepted plan discharges
-                                  (WL-SPEC-78 sec-1.3), each classified
+                                  (WL-REQ-187), each classified
                                   plan-draft, deferred or unplanned
   lode doc show <id>              a spec's section count and a plan's `covers`
                                   edges -- one round trip per document, so it
                                   is issued only where a list cannot answer
   lode task list                  the live task rows, each naming the plan it
-                                  was minted from (plan_doc, 025 sec-9.2)
+                                  was minted from (plan_doc, WL-REQ-172)
   lode task timeline               per-task state_log transitions -- real
                                   completion times, so throughput and lead
                                   time are measured, not guessed
@@ -57,7 +57,7 @@ INFLIGHT = {"in_progress", "in_review"}
 ABANDONED = {"abandoned"}
 
 # Kinds are read from the data, not hardcoded -- the task kind `spec` is
-# mid-rename to `design` (025 sec-10), and both spellings are live. Only the
+# mid-rename to `design` (WL-REQ-176), and both spellings are live. Only the
 # upkeep set is fixed, because that is the question being asked.
 UPKEEP = {"bug", "chore"}
 
@@ -619,7 +619,7 @@ def render(report, out):
     cav = report["caveats"]
     linked, total = cav["tasks_minted_by_a_plan"]
     w("NOTES\n")
-    w(f"  {linked}/{total} tasks were minted by a plan (plan_doc, 025 sec-9.2), so\n"
+    w(f"  {linked}/{total} tasks were minted by a plan (plan_doc, WL-REQ-172), so\n"
       "  \"accepted plans, no tasks\" is an upper bound.\n")
     if cav["completion_time_fallbacks"]:
         w(f"  {cav['completion_time_fallbacks']} done tasks had no state_log transition;\n"
