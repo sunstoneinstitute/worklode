@@ -104,7 +104,7 @@ func TestDocCoversPlainEntries(t *testing.T) {
 	})
 	var n int
 	if err := s.db.QueryRow(
-		`SELECT count(DISTINCT dr.anchor) FROM doc_edges e JOIN doc_rules dr ON dr.rule_id = e.to_rule
+		`SELECT count(DISTINCT dr.anchor) FROM doc_edges e JOIN doc_entries dr ON dr.rule_id = e.to_rule
 		  WHERE e.from_doc = $1 AND e.type = 'covers' AND dr.doc_id = $2 AND dr.anchor IN ('sec-1', 'sec-2')`,
 		plan.ID, spec.ID).Scan(&n); err != nil {
 		t.Fatalf("read covers edges: %v", err)

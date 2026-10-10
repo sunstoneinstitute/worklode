@@ -227,7 +227,7 @@ func ruleGate(tx *sql.Tx, id int64, version int, judged bool) (string, error) {
 		                  JOIN docs p ON p.id = t.plan_doc AND p.status = 'accepted' AND p.deleted_at IS NULL
 		                  JOIN covered_rules c ON c.plan_id = p.id AND c.rule_id = $1
 		                 WHERE t.deleted_at IS NULL AND t.state IN (`+claimedOpenStates+`))
-		     OR EXISTS (SELECT 1 FROM doc_rules dr
+		     OR EXISTS (SELECT 1 FROM doc_entries dr
 		                  JOIN doc_edges e ON e.to_doc = dr.doc_id AND e.to_anchor = dr.anchor AND e.type IN ('requires', 'covers')
 		                  JOIN docs d ON d.id = e.from_doc AND d.kind <> 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL
 		                 WHERE dr.rule_id = $1)`, id).Scan(&referred); err != nil {
