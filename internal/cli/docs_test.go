@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
@@ -67,6 +68,18 @@ func TestInlineDocNotesMarksPatchedSections(t *testing.T) {
 	}
 	if !strings.Contains(sec2, "tightened the wording") {
 		t.Errorf("note not folded into its section:\n%s", sec2)
+	}
+}
+
+// TestInlineDocNotesMarksPendingDrafts: a section whose rule has a newer
+// draft version carries the pending marker naming it (WL-SPEC-77 §19.4).
+func TestInlineDocNotesMarksPendingDrafts(t *testing.T) {
+	out := InlineDocNotes(inlineSpecBody, nil,
+		[]model.DocSection{{Anchor: "sec-1"}, {Anchor: "sec-2", Rule: "WL-REQ-7", Pending: 3}})
+	sec1, sec2, _ := strings.Cut(out, "## 2. Model")
+	want := designdoc.PendingMarker("WL-REQ-7", 3)
+	if strings.Contains(sec1, want) || !strings.Contains(sec2, want) {
+		t.Errorf("pending marker belongs under sec-2 only:\n%s", out)
 	}
 }
 

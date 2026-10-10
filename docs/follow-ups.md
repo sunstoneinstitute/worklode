@@ -945,14 +945,13 @@ Recorded by WL-566 (the document reviewer gate, WL-SPEC-75):
 Recorded by the clause increment 1b review (12-spec-refactoring-design-tree.md
 S14, S20):
 
-- `[P1]` **No compare-and-swap on a rule edit.** `store.EditRule` calls
-  `UpdateDocBody(..., ifVersion: 0, ...)` and `PUT /api/v1/rules/{id}` has no
-  `--if-version` counterpart, while `lode doc edit` grew exactly that guard.
-  Two agents editing the same rule: the second overwrites the first with no
-  warning. The `FOR UPDATE` lock on the arranging document prevents the two
-  writes interleaving, not the later one discarding the earlier. The fix is an
-  `if_version` field on `model.EditRuleInput`, threaded to `UpdateDocBody`,
-  and an `--if-version` flag on `lode rule edit`.
+- `[P1]` **No compare-and-swap on a rule edit.** `PUT /api/v1/rules/{id}`
+  has no `--if-version` counterpart, while `lode doc edit` grew exactly that
+  guard. Two agents editing the same draft rule: the second overwrites the
+  first with no warning. The rule row lock prevents the two writes
+  interleaving, not the later one discarding the earlier. The fix is an
+  `if_version` field on `model.EditRuleInput` checked against the rule's
+  version, and an `--if-version` flag on `lode rule edit`.
 
 - `[P4]` **`/WL-RULE-2` does not resolve.** `refShortcut` in
   `internal/api/docref.go` resolves a bare task id or document ref at the site

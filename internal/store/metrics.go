@@ -185,7 +185,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		ruleOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_rule_ops_total",
-			Help: "Standalone rule writes (WL-SPEC-77 §19.2) by op (add|accept) and outcome (ok|invalid|not_found|forbidden|conflict|error).",
+			Help: "Standalone rule writes (WL-SPEC-77 §19.2) by op (add|edit|accept) and outcome (ok|invalid|not_found|forbidden|conflict|error).",
 		}, []string{"op", "outcome"}),
 		// Query counters rather than a histogram: the question these answer
 		// is which store function the database time is going to, and
@@ -347,7 +347,7 @@ func (m *storeMetrics) emitStaleDocs(n int) {
 	m.docsStaleEmitted.Add(float64(n))
 }
 
-// ruleOp records one AddRule or AcceptRule call by op and outcome.
+// ruleOp records one AddRule, EditRule or AcceptRule call by op and outcome.
 func (m *storeMetrics) ruleOp(op string, err error) {
 	if m == nil {
 		return

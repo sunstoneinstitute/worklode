@@ -949,9 +949,33 @@ func (s *server) docPageBody(r *http.Request, d *model.DocDetail) (string, bool)
 	if err != nil {
 		s.log.Warn("rendering doc page from its stored source: consolidation failed",
 			"doc", d.Doc.ID, "err", err)
-		return d.Doc.Body, false
+		return withPendingMarkers(d.Doc.Body, d.Sections), false
 	}
-	return out, true
+	return withPendingMarkers(out, d.Sections), true
+}
+
+// withPendingMarkers appends designdoc.PendingMarker to each section whose
+// rule has a newer draft version than the page shows (WL-SPEC-77 §19.4).
+func withPendingMarkers(body string, sections []model.DocSection) string {
+	marks := map[string]string{}
+	for _, sec := range sections {
+		if sec.Pending > 0 {
+			marks[sec.Anchor] = designdoc.PendingMarker(sec.Rule, sec.Pending)
+		}
+	}
+	if len(marks) == 0 {
+		return body
+	}
+	doc, err := designdoc.Parse([]byte(body))
+	if err != nil {
+		return body
+	}
+	for _, sec := range doc.Sections {
+		if m := marks[sec.Anchor]; m != "" {
+			sec.Body = strings.TrimRight(sec.Body, "\n") + "\n\n" + m + "\n\n"
+		}
+	}
+	return string(doc.Bytes())
 }
 
 // docPageApprovals is this document's still-awaiting approval rows, filtered

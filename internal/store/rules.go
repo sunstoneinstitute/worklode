@@ -132,7 +132,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		case m == nil:
 			id, version, err = insertRule(tx, project, sec.Title, sec.Body)
 			minted = true
-		case m.heading != sec.Title || m.body != sec.Body:
+		case m.heading != sec.Title || !sameRuleBody(m.body, sec.Body):
 			id, version, err = reviseRule(tx, m.id, sec.Title, sec.Body)
 		default:
 			id, version = m.id, m.version
@@ -140,7 +140,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		if err != nil {
 			return false, err
 		}
-		if m == nil || m.heading != sec.Title || m.body != sec.Body {
+		if m == nil || m.heading != sec.Title || !sameRuleBody(m.body, sec.Body) {
 			changed = append(changed, changedRule{id, sec.Title + "\n" + sec.Body})
 		}
 		if _, err := tx.Exec(
@@ -150,6 +150,19 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 			return false, fmt.Errorf("arrange rule %d in doc %d: %w", id, docID, err)
 		}
 		position++
+	}
+	// A rule this write left unchanged shows its newest accepted version,
+	// which may have moved past the text the write was based on: a
+	// candidate revision opened before `lode rule accept` holds the older
+	// text (WL-SPEC-77 §19.4).
+	if _, err := tx.Exec(
+		`UPDATE doc_rules dr
+		    SET rule_version = CASE WHEN r.status = 'draft' THEN r.version - 1 ELSE r.version END
+		   FROM rules r
+		  WHERE dr.doc_id = $1 AND r.id = dr.rule_id
+		    AND dr.rule_version < CASE WHEN r.status = 'draft' THEN r.version - 1 ELSE r.version END`,
+		docID); err != nil {
+		return false, fmt.Errorf("move doc %d to accepted rule versions: %w", docID, err)
 	}
 	for _, c := range changed {
 		if err := deriveReferences(tx, project, c.id, c.text); err != nil {
@@ -272,16 +285,26 @@ func publishDocSections(tx *sql.Tx, docID int64) error {
 // accepted before the rule tables existed. A plan contains no rules
 // (WL-SPEC-77 §4); the d.kind <> 'plan' guard keeps accepting a plan from
 // ever flipping a rule.
+//
+// Every other spec arranging a rule this accepts moves to the accepted
+// version, an accepted one through a version bump (WL-SPEC-77 §19.4).
 func acceptDocRules(tx *sql.Tx, docID int64) error {
-	if _, err := tx.Exec(
+	rows, err := tx.Query(
 		`UPDATE rules SET status = 'accepted', updated_at = now()
 		  WHERE status = 'draft'
 		    AND id IN (
 		      SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
-		       WHERE dc.doc_id = $1 AND d.kind <> 'plan')`, docID); err != nil {
+		       WHERE dc.doc_id = $1 AND d.kind <> 'plan')
+		 RETURNING id`, docID)
+	if err != nil {
 		return fmt.Errorf("accept rules of doc %d: %w", docID, err)
 	}
-	return nil
+	ids, err := scanColumn[int64](rows, fmt.Sprintf("accept rules of doc %d", docID))
+	if err != nil || len(ids) == 0 {
+		return err
+	}
+	_, err = moveSpecsToAcceptedRules(tx, ids, docID)
+	return err
 }
 
 // GetRule reads one rule by its project key and number, with the current
@@ -537,87 +560,58 @@ func (s *Store) GetRuleVersion(ctx context.Context, projectKey string, number in
 	return c, nil
 }
 
-// EditRule writes a rule's new heading and body by regenerating the
-// arranging document's body around it. A draft document is written through
-// UpdateDocBody, so syncRules rewrites the rule's draft version in place. An accepted
-// document is written through its candidate revision, opened here when none
-// is open; the rule's next version appears when the revision lands. A
-// plan contains no rules, so the rule writes through the spec or ADR that
-// arranges it, never through a covering plan. A rule arranged in
-// no spec or ADR, or in more than one, is refused: editing is document-first
-// in this stage. Returns the arranging document's id.
-func EditRule(tx *sql.Tx, now time.Time, projectKey string, number int64, in model.EditRuleInput, actorID string, eventID int64) (int64, error) {
-	if strings.TrimSpace(in.Heading) == "" {
-		return 0, fmt.Errorf("rule heading is required: %w", ErrInvalidInput)
+// EditRule writes a rule's heading and body as its next draft version
+// (WL-SPEC-77 §19.4): it rewrites the newest version in place while that is a
+// draft, else adds the next version as a draft. It writes only rule_versions,
+// whichever specs arrange the rule, none or several; each spec keeps showing
+// the version its arrangement holds until the draft is accepted. A withdrawn
+// or superseded rule is ErrBadTransition. One rule.edited event records it.
+func (s *Store) EditRule(ctx context.Context, projectKey string, number int64, in model.EditRuleInput, actor string) (r *model.Rule, err error) {
+	defer func() { s.metrics.ruleOp("edit", err) }()
+	in.Heading = strings.TrimSpace(in.Heading)
+	if in.Heading == "" {
+		return nil, fmt.Errorf("rule heading is required: %w", ErrInvalidInput)
 	}
-	ruleID, err := RuleIDByRef(tx, projectKey, number)
+	ref := designdoc.FormatRuleRef(projectKey, number, "")
+	extID, err := randomExternalID()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	rows, err := tx.Query(
-		`SELECT dc.doc_id, dc.anchor FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
-		  WHERE dc.rule_id = $1 AND d.kind <> 'plan' AND d.deleted_at IS NULL
-		  ORDER BY dc.doc_id`, ruleID)
+	payload, err := EventPayload(map[string]any{"actor": actor, "rule": ref, "heading": in.Heading})
 	if err != nil {
-		return 0, fmt.Errorf("read arrangements of rule %d: %w", ruleID, err)
+		return nil, err
 	}
-	var docIDs []int64
-	var anchors []string
-	for rows.Next() {
-		var id int64
-		var anchor string
-		if err := rows.Scan(&id, &anchor); err != nil {
-			rows.Close()
-			return 0, fmt.Errorf("scan arrangement of rule %d: %w", ruleID, err)
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "rule.edited", payload, func(tx *sql.Tx, _ int64) error {
+		id, err := RuleIDByRef(tx, projectKey, number)
+		if err != nil {
+			return err
 		}
-		docIDs, anchors = append(docIDs, id), append(anchors, anchor)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("read arrangements of rule %d: %w", ruleID, err)
-	}
-	switch len(docIDs) {
-	case 0:
-		return 0, fmt.Errorf("rule %s is arranged in no spec or ADR; edit the document instead: %w", ruleRefOf(tx, ruleID), ErrInvalidInput)
-	case 1:
-	default:
-		return 0, fmt.Errorf("rule %s is arranged in %d specs or ADRs; editing a rule shared between them is not supported: %w", ruleRefOf(tx, ruleID), len(docIDs), ErrInvalidInput)
-	}
-	docID, anchor := docIDs[0], anchors[0]
-
-	var kind, status, body string
-	if err := tx.QueryRow(`SELECT kind, status, body FROM docs WHERE id = $1 FOR UPDATE`, docID).Scan(&kind, &status, &body); err != nil {
-		return 0, fmt.Errorf("load doc %d: %w", docID, err)
-	}
-	editable := body
-	revising := kind != "plan" && status != "draft"
-	if revising {
-		var candidate sql.NullString
-		if err := tx.QueryRow(`SELECT body FROM doc_revisions WHERE doc_id = $1`, docID).Scan(&candidate); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return 0, fmt.Errorf("load revision of doc %d: %w", docID, err)
+		var status, project string
+		if err := tx.QueryRow(`SELECT status, project_id FROM rules WHERE id = $1 FOR NO KEY UPDATE`, id).Scan(&status, &project); err != nil {
+			return fmt.Errorf("read rule %s: %w", ref, err)
 		}
-		if candidate.Valid {
-			editable = candidate.String
-		} else if err := ReviseDoc(tx, now, docID, actorID, eventID); err != nil {
-			return 0, err
+		if status != "draft" && status != "accepted" {
+			return fmt.Errorf("rule %s is %s; only a live rule is edited: %w", ref, status, ErrBadTransition)
 		}
-	}
-	parsed, err := designdoc.Parse([]byte(editable))
+		body := sectionBody(in.Body, true)
+		var heading, current string
+		if err := tx.QueryRow(
+			`SELECT v.heading, v.body FROM rule_versions v JOIN rules r ON r.id = v.rule_id AND r.version = v.version
+			  WHERE r.id = $1`, id).Scan(&heading, &current); err != nil {
+			return fmt.Errorf("read rule %s text: %w", ref, err)
+		}
+		if heading == in.Heading && sameRuleBody(current, body) {
+			return nil
+		}
+		if _, _, err := reviseRule(tx, id, in.Heading, body); err != nil {
+			return err
+		}
+		return deriveReferences(tx, project, id, in.Heading+"\n"+body)
+	})
 	if err != nil {
-		return 0, fmt.Errorf("parse doc %d: %w", docID, err)
+		return nil, err
 	}
-	sec := parsed.SectionByAnchor(anchor)
-	if sec == nil {
-		return 0, fmt.Errorf("rule %s: its section %s is not in the editable body of doc %d: %w", ruleRefOf(tx, ruleID), anchor, docID, ErrInvalidInput)
-	}
-	sec.Title = in.Heading
-	sec.Body = sectionBody(in.Body, sec.Index == len(parsed.Sections)-1)
-	next := string(parsed.Bytes())
-	if revising {
-		return docID, UpdateRevision(tx, now, docID, next, eventID)
-	}
-	_, err = UpdateDocBody(tx, now, docID, next, 0, eventID)
-	return docID, err
+	return s.GetRule(ctx, projectKey, number)
 }
 
 // sectionBody normalises a submitted rule body to the shape designdoc.Parse

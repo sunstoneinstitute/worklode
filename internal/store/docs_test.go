@@ -1256,9 +1256,9 @@ func TestDocListSections(t *testing.T) {
 		t.Fatalf("ListDocSections: %v", err)
 	}
 	want := []model.DocSection{
-		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1, Kind: "requirement"},
-		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 1, Kind: "requirement"},
-		{Anchor: "sec-2.1", Number: "2.1", Heading: "Detail", Depth: 3, Position: 2, LastRevisedIn: 1, Kind: "requirement"},
+		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1, Kind: "requirement", Rule: "P1-REQ-1"},
+		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 1, Kind: "requirement", Rule: "P1-REQ-2"},
+		{Anchor: "sec-2.1", Number: "2.1", Heading: "Detail", Depth: 3, Position: 2, LastRevisedIn: 1, Kind: "requirement", Rule: "P1-REQ-3"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("sections = %+v, want %+v", got, want)

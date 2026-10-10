@@ -75,12 +75,19 @@ type RuleTask struct {
 }
 
 // EditRuleInput is the body of PUT /api/v1/rules/{id}: the rule's new
-// heading and body. Both replace what is stored (S35: a draft version is
-// rewritten in place, an accepted version becomes the next version when the
-// arranging document's revision lands).
+// heading and body. Both replace what is stored: a draft version is
+// rewritten in place, an accepted one gets the next version as a draft
+// (WL-SPEC-77 §19.4).
 type EditRuleInput struct {
 	Heading string `json:"heading"`
 	Body    string `json:"body"`
+}
+
+// AcceptRuleInput is the optional body of POST /api/v1/rules/{id}/accept.
+// Substantive is the author's judgment that the version is substantive
+// (WL-SPEC-77 §10), which applies the gates when no mechanical check does.
+type AcceptRuleInput struct {
+	Substantive bool `json:"substantive,omitempty"`
 }
 
 // RuleMetaInput is the body of PATCH /api/v1/rules/{id} (S15). A nil

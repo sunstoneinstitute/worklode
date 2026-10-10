@@ -689,7 +689,8 @@ const docPatchedMarker = "> **patched** — approved text, amended in place sinc
 
 // InlineDocNotes returns body with each note folded in under the section it is
 // anchored to, as a blockquoted one-liner (WL-SPEC-77 §10), and a patched marker
-// above them on every section sections says carries one (WL-SPEC-77 §9). Notes and
+// above them on every section sections says carries one (WL-SPEC-77 §9), and
+// a pending marker on every section whose rule has a newer draft (§19.4). Notes and
 // marks anchored outside body — the common case when body is one section's
 // subtree — are left out rather than collected somewhere else: a note belongs
 // where it was left.
@@ -705,12 +706,16 @@ func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSect
 		byAnchor[n.Anchor] = append(byAnchor[n.Anchor], n)
 	}
 	patched := make(map[string]bool)
+	pending := make(map[string]string)
 	for _, sec := range sections {
 		if sec.Patched {
 			patched[sec.Anchor] = true
 		}
+		if sec.Pending > 0 {
+			pending[sec.Anchor] = designdoc.PendingMarker(sec.Rule, sec.Pending)
+		}
 	}
-	if len(byAnchor) == 0 && len(patched) == 0 {
+	if len(byAnchor) == 0 && len(patched) == 0 && len(pending) == 0 {
 		return body
 	}
 	doc, err := designdoc.Parse([]byte(body))
@@ -720,13 +725,16 @@ func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSect
 	var folded bool
 	for _, sec := range doc.Sections {
 		secNotes := byAnchor[sec.Anchor]
-		if len(secNotes) == 0 && !patched[sec.Anchor] {
+		if len(secNotes) == 0 && !patched[sec.Anchor] && pending[sec.Anchor] == "" {
 			continue
 		}
 		var b strings.Builder
 		b.WriteString(strings.TrimRight(sec.Body, "\n"))
 		if patched[sec.Anchor] {
 			b.WriteString("\n\n" + docPatchedMarker)
+		}
+		if m := pending[sec.Anchor]; m != "" {
+			b.WriteString("\n\n" + m)
 		}
 		for _, n := range secNotes {
 			b.WriteString("\n\n> " + DocNoteLine(n))

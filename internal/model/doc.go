@@ -106,6 +106,12 @@ type DocSection struct {
 	// (WL-SPEC-77 §4), "heading" for a spec heading (§19.1), "" when nothing
 	// is arranged there.
 	Kind string `json:"kind,omitempty"`
+	// Rule is the ref of the rule arranged at the anchor ("WL-REQ-12"), ""
+	// for a spec heading or nothing arranged.
+	Rule string `json:"rule,omitempty"`
+	// Pending is the rule's newer draft version the section does not show
+	// yet, 0 when there is none (WL-SPEC-77 §19.4).
+	Pending int `json:"pending,omitempty"`
 }
 
 // DocSectionRow is one section of one document as the cross-corpus listing

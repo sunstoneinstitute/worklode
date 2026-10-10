@@ -117,8 +117,8 @@ func (c *Client) AddRule(ctx context.Context, in model.AddRuleInput) (model.Rule
 }
 
 // AcceptRule calls POST /api/v1/rules/{ref}/accept.
-func (c *Client) AcceptRule(ctx context.Context, ref string) (model.Rule, []byte, error) {
-	return doJSON[model.Rule](ctx, c, http.MethodPost, "/api/v1/rules/"+url.PathEscape(ref)+"/accept", nil, "rule")
+func (c *Client) AcceptRule(ctx context.Context, ref string, in model.AcceptRuleInput) (model.Rule, []byte, error) {
+	return doJSON[model.Rule](ctx, c, http.MethodPost, "/api/v1/rules/"+url.PathEscape(ref)+"/accept", in, "rule")
 }
 
 // ArrangeRule calls POST /api/v1/docs/{id}/rules: place a rule in a spec

@@ -95,9 +95,11 @@ an invariant.
 The store assigns rule refs when new anchored sections are written. Existing
 rules match by anchor and heading, then heading alone, then anchor alone.
 Check the arrangement after moving or renaming sections; copying text into a
-new spec does not establish shared identity. For an accepted spec, a direct
-rule edit goes into its candidate revision and lands only on revision accept.
-A draft rule version is mutable; accepted text is preserved in version history.
+new spec does not establish shared identity. `lode rule edit` writes only the
+rule: it rewrites a draft version or adds the next draft. Specs arranging the
+rule keep showing its accepted version, with a pending marker, until the owner
+runs `lode rule accept`, which bumps every accepted spec arranging it. A draft
+rule version is mutable; accepted text is preserved in version history.
 
 Use `spec` for new durable design, including rationale previously written as
 an ADR. Existing ADR references remain valid. Preserve accepted section
