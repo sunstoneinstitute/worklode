@@ -185,12 +185,13 @@ Flags: --server
 
 ## `lode rule` — Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another, arrange it in a spec, list terms
 
-- `lode rule accept` — Accept a rule's newest draft version (owner only)
+- `lode rule accept` — Accept a rule's newest draft version (owner only); the specs arranging it move to it
+  Flags: --substantive
 - `lode rule add` — Add a rule arranged in no document, as a draft owned by you
   Flags: --file, --heading, --kind, --project, --repo, --tag
 - `lode rule arrange` — Place an existing rule in a spec; an accepted spec gets it in its candidate revision
   Flags: --after, --anchor, --under
-- `lode rule edit` — Replace a rule's body (and heading) from a file; the document is regenerated around it
+- `lode rule edit` — Write a rule's next draft version (body and heading) from a file
   Flags: --file, --heading
 - `lode rule link` — Relate a rule to another: --refines, --needs, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>
   Flags: --amends, --conflicts-with, --constrains, --derived-from, --needs, --references, --refines

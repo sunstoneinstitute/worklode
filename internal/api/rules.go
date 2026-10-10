@@ -112,13 +112,18 @@ func (s *server) addRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptRule handles POST /api/v1/rules/{id}/accept: the rule's owner
-// accepts its newest draft version (WL-SPEC-77 §19.2).
+// accepts its newest draft version (WL-SPEC-77 §19.2, §19.4).
 func (s *server) acceptRule(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
 	if !ok {
 		return
 	}
-	c, err := s.st.AcceptRule(r.Context(), ref.Key, ref.Number, actorIDFrom(r))
+	var req model.AcceptRuleInput
+	if err := readOptionalJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	c, err := s.st.AcceptRule(r.Context(), ref.Key, ref.Number, req.Substantive, actorIDFrom(r))
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -315,7 +320,8 @@ var ruleRouteDocs = map[string]routeDoc{
 		responses: map[int]any{http.StatusCreated: model.Rule{}},
 	},
 	"POST /api/v1/rules/{id}/accept": {
-		summary:   "Accept a rule's newest draft version; owner only",
+		summary:   "Accept a rule's newest draft version; owner only. Specs arranging it move to it, and a substantive version mints a review",
+		request:   model.AcceptRuleInput{},
 		responses: map[int]any{http.StatusOK: model.Rule{}},
 	},
 	"POST /api/v1/docs/{id}/rules": {

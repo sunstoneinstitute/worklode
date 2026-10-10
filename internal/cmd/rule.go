@@ -83,9 +83,10 @@ func newRuleAddCmd() *cobra.Command {
 // newRuleAcceptCmd is `lode rule accept <ref>`: the owner accepts the rule's
 // newest draft version.
 func newRuleAcceptCmd() *cobra.Command {
-	return &cobra.Command{
+	var in model.AcceptRuleInput
+	cmd := &cobra.Command{
 		Use:               "accept <ref>",
-		Short:             "Accept a rule's newest draft version (owner only)",
+		Short:             "Accept a rule's newest draft version (owner only); the specs arranging it move to it",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: ruleRefAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -93,7 +94,7 @@ func newRuleAcceptCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rule, raw, err := c.AcceptRule(cmd.Context(), args[0])
+			rule, raw, err := c.AcceptRule(cmd.Context(), args[0], in)
 			if err != nil {
 				return err
 			}
@@ -105,6 +106,9 @@ func newRuleAcceptCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&in.Substantive, "substantive", false,
+		"judge the version substantive (WL-SPEC-77 §10): mint a review and mark covering plans stale")
+	return cmd
 }
 
 // newRuleArrangeCmd is `lode rule arrange <spec> <rule>`: place an existing

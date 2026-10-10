@@ -64,6 +64,69 @@ func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
 	return version, nil
 }
 
+// moveSpecsToAcceptedRules moves every live spec arranging one of ruleIDs
+// at an older version than the rule's accepted one to that version
+// (WL-SPEC-77 §19.4). An accepted spec is bumped first, so its prior version
+// keeps the rule versions it showed, and the sections whose rule moved are
+// stamped revised in the new version; a draft spec follows without a bump.
+// except is the spec whose own accept lands the rules, 0 for none. It
+// returns the accepted specs it bumped, with their new versions.
+func moveSpecsToAcceptedRules(tx *sql.Tx, ruleIDs []int64, except int64) (map[int64]int, error) {
+	rows, err := tx.Query(
+		`SELECT DISTINCT dr.doc_id, d.status FROM doc_rules dr
+		   JOIN rules r ON r.id = dr.rule_id
+		   JOIN docs d ON d.id = dr.doc_id
+		  WHERE dr.rule_id = ANY($1) AND r.status = 'accepted' AND dr.rule_version < r.version
+		    AND dr.doc_id <> $2 AND d.kind <> 'plan' AND d.deleted_at IS NULL
+		    AND d.status IN ('draft', 'accepted')
+		  ORDER BY dr.doc_id`, ruleIDs, except)
+	if err != nil {
+		return nil, fmt.Errorf("specs arranging rules %v: %w", ruleIDs, err)
+	}
+	type spec struct {
+		id       int64
+		accepted bool
+	}
+	var specs []spec
+	for rows.Next() {
+		var sp spec
+		var status string
+		if err := rows.Scan(&sp.id, &status); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan spec arranging rules %v: %w", ruleIDs, err)
+		}
+		sp.accepted = status == "accepted"
+		specs = append(specs, sp)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("specs arranging rules %v: %w", ruleIDs, err)
+	}
+	bumped := map[int64]int{}
+	for _, sp := range specs {
+		version := 0
+		if sp.accepted {
+			if version, err = bumpDocVersion(tx, sp.id); err != nil {
+				return nil, err
+			}
+			bumped[sp.id] = version
+		}
+		if _, err := tx.Exec(
+			`WITH moved AS (
+			     UPDATE doc_rules dr SET rule_version = r.version
+			       FROM rules r
+			      WHERE dr.doc_id = $1 AND r.id = dr.rule_id AND dr.rule_id = ANY($2)
+			        AND r.status = 'accepted' AND dr.rule_version < r.version
+			  RETURNING dr.anchor)
+			 UPDATE doc_sections SET last_revised_in = $3
+			  WHERE $3 > 0 AND doc_id = $1 AND anchor IN (SELECT anchor FROM moved)`,
+			sp.id, ruleIDs, version); err != nil {
+			return nil, fmt.Errorf("move doc %d to accepted rule versions: %w", sp.id, err)
+		}
+	}
+	return bumped, nil
+}
+
 // bumpRuleVersion snapshots rule ruleID's outgoing edges at its current
 // version into rule_edge_versions, moves the rule to the next version as a
 // draft, and inserts that version's text. It returns the new version.

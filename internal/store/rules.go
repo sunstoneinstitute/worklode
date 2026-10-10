@@ -151,6 +151,19 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		}
 		position++
 	}
+	// A rule this write left unchanged shows its newest accepted version,
+	// which may have moved past the text the write was based on: a
+	// candidate revision opened before `lode rule accept` holds the older
+	// text (WL-SPEC-77 §19.4).
+	if _, err := tx.Exec(
+		`UPDATE doc_rules dr
+		    SET rule_version = CASE WHEN r.status = 'draft' THEN r.version - 1 ELSE r.version END
+		   FROM rules r
+		  WHERE dr.doc_id = $1 AND r.id = dr.rule_id
+		    AND dr.rule_version < CASE WHEN r.status = 'draft' THEN r.version - 1 ELSE r.version END`,
+		docID); err != nil {
+		return false, fmt.Errorf("move doc %d to accepted rule versions: %w", docID, err)
+	}
 	for _, c := range changed {
 		if err := deriveReferences(tx, project, c.id, c.text); err != nil {
 			return false, err
@@ -272,16 +285,26 @@ func publishDocSections(tx *sql.Tx, docID int64) error {
 // accepted before the rule tables existed. A plan contains no rules
 // (WL-SPEC-77 §4); the d.kind <> 'plan' guard keeps accepting a plan from
 // ever flipping a rule.
+//
+// Every other spec arranging a rule this accepts moves to the accepted
+// version, an accepted one through a version bump (WL-SPEC-77 §19.4).
 func acceptDocRules(tx *sql.Tx, docID int64) error {
-	if _, err := tx.Exec(
+	rows, err := tx.Query(
 		`UPDATE rules SET status = 'accepted', updated_at = now()
 		  WHERE status = 'draft'
 		    AND id IN (
 		      SELECT dc.rule_id FROM doc_rules dc JOIN docs d ON d.id = dc.doc_id
-		       WHERE dc.doc_id = $1 AND d.kind <> 'plan')`, docID); err != nil {
+		       WHERE dc.doc_id = $1 AND d.kind <> 'plan')
+		 RETURNING id`, docID)
+	if err != nil {
 		return fmt.Errorf("accept rules of doc %d: %w", docID, err)
 	}
-	return nil
+	ids, err := scanColumn[int64](rows, fmt.Sprintf("accept rules of doc %d", docID))
+	if err != nil || len(ids) == 0 {
+		return err
+	}
+	_, err = moveSpecsToAcceptedRules(tx, ids, docID)
+	return err
 }
 
 // GetRule reads one rule by its project key and number, with the current
