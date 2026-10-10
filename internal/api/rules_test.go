@@ -96,7 +96,7 @@ func TestRuleEditAndVersionsAPI(t *testing.T) {
 		decodeInto(t, rr, &d)
 		return d.Body
 	}
-	if b := docBody(); !strings.Contains(b, "### 1.1 Subsection {#sec-1.1}\n\nB changed.\n") {
+	if b := docBody(); !strings.Contains(b, "### 1.1 Subsection (WL-REQ-2) {#sec-1.1}\n\nB changed.\n") {
 		t.Errorf("doc body does not render the edit:\n%s", b)
 	}
 

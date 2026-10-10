@@ -168,7 +168,7 @@ Stating a status needs the admin-only doc.import permission.`,
 					if err != nil {
 						return fmt.Errorf("read the stored body of %s: %w", d.path, err)
 					}
-					if stored.Body == d.stored {
+					if sameImportedBody(d.kind, stored.Body, d.stored) {
 						continue
 					}
 					// Editable in place: a plan at any status, a draft spec or
@@ -479,6 +479,22 @@ func printImportCorpus(w io.Writer, docs []importDoc) {
 		}
 	}
 	fmt.Fprintf(w, "\n%d document(s): %d spec(s), %d plan(s)\n", len(docs), specs, plans)
+}
+
+// sameImportedBody reports whether a stored document's rendered body is the
+// file's body. A spec renders its numbers and anchors from its arrangement
+// and prints rule refs on rule headings (WL-REQ-165, WL-REQ-1299), so both
+// sides are compared in that form without the refs.
+func sameImportedBody(kind, rendered, file string) bool {
+	if kind == "plan" {
+		return rendered == file
+	}
+	d, err := designdoc.Parse([]byte(file))
+	if err != nil {
+		return false
+	}
+	d.DeriveAnchors()
+	return designdoc.StripRuleRefs(rendered) == string(d.Bytes())
 }
 
 // printDriftedDocs names every file whose body drifted from a document the

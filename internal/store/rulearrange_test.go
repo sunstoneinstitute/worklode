@@ -182,8 +182,8 @@ func TestArrangeRuleAcrossSpecs(t *testing.T) {
 func TestUnarrangeRuleRefusesArrangedChildren(t *testing.T) {
 	s := openDocStore(t)
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
-	if err := unarrangeRule(t, s, d.ID, "P1-REQ-1"); !errors.Is(err, ErrInvalidInput) {
-		t.Errorf("unarrange with children: %v, want ErrInvalidInput", err)
+	if err := unarrangeRule(t, s, d.ID, "P1-REQ-1"); !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "P1-REQ-2") {
+		t.Errorf("unarrange with children: %v, want ErrInvalidInput naming P1-REQ-2", err)
 	}
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "p", CreatedBy: "stig",
 		Body: "---\nstatus: draft\n---\n# Plan\n"})
