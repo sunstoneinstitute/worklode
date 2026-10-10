@@ -71,8 +71,9 @@ func TestGetRule(t *testing.T) {
 }
 
 // TestRuleEditAndVersionsAPI edits a rule through the API on a draft
-// document, again after acceptance (landing through the revision path), then
-// reads its version history back (S14, S35).
+// document, again after acceptance (a draft version the spec does not show
+// until its owner accepts it), then reads its version history back
+// (WL-SPEC-77 §19.4).
 func TestRuleEditAndVersionsAPI(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -85,14 +86,18 @@ func TestRuleEditAndVersionsAPI(t *testing.T) {
 	}
 	var c model.Rule
 	decodeInto(t, rr, &c)
-	if c.Heading != "Subsection" || c.Version != 1 || c.Body != "\nB changed.\n\n" {
+	if c.Heading != "Subsection" || c.Version != 1 || c.Body != "\nB changed.\n" {
 		t.Errorf("edited rule = %+v", c)
 	}
-	rr = doReq(t, h, http.MethodGet, fmt.Sprintf("/api/v1/docs/%d", doc.ID), token, nil)
-	var d model.DocDetail
-	decodeInto(t, rr, &d)
-	if !strings.Contains(d.Body, "### 1.1 Subsection {#sec-1.1}\n\nB changed.\n") {
-		t.Errorf("doc body not regenerated:\n%s", d.Body)
+	docBody := func() string {
+		t.Helper()
+		rr := doReq(t, h, http.MethodGet, fmt.Sprintf("/api/v1/docs/%d", doc.ID), token, nil)
+		var d model.DocDetail
+		decodeInto(t, rr, &d)
+		return d.Body
+	}
+	if b := docBody(); !strings.Contains(b, "### 1.1 Subsection {#sec-1.1}\n\nB changed.\n") {
+		t.Errorf("doc body does not render the edit:\n%s", b)
 	}
 
 	acceptDocViaAPI(t, h, token, doc.ID)
@@ -101,12 +106,21 @@ func TestRuleEditAndVersionsAPI(t *testing.T) {
 		t.Fatalf("PUT on accepted = %d %s", rr.Code, rr.Body)
 	}
 	decodeInto(t, rr, &c)
-	if c.Body != "\nB changed.\n\n" || c.Status != "accepted" {
-		t.Errorf("accepted rule moved before the revision landed: %+v", c)
+	if c.Body != "\nB again.\n" || c.Status != "draft" || c.Version != 2 {
+		t.Errorf("edit of an accepted rule = %+v, want draft v2", c)
 	}
-	rr = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/v1/docs/%d/revision/accept", doc.ID), token, nil)
-	if rr.Code/100 != 2 {
-		t.Fatalf("accept revision = %d %s", rr.Code, rr.Body)
+	if b := docBody(); !strings.Contains(b, "B changed.") || strings.Contains(b, "B again.") {
+		t.Errorf("accepted spec must show the accepted version:\n%s", b)
+	}
+	owner := "alice"
+	if rr := doReq(t, h, http.MethodPatch, "/api/v1/rules/WL-REQ-2", token, model.RuleMetaInput{Owner: &owner}); rr.Code != http.StatusOK {
+		t.Fatalf("set owner = %d %s", rr.Code, rr.Body)
+	}
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-2/accept", token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("accept rule = %d %s", rr.Code, rr.Body)
+	}
+	if b := docBody(); !strings.Contains(b, "B again.") {
+		t.Errorf("spec must show the accepted draft:\n%s", b)
 	}
 
 	rr = doReq(t, h, http.MethodGet, "/api/v1/rules/WL-REQ-2/versions", token, nil)
@@ -117,12 +131,12 @@ func TestRuleEditAndVersionsAPI(t *testing.T) {
 	}
 	rr = doReq(t, h, http.MethodGet, "/api/v1/rules/WL-REQ-2/versions/1", token, nil)
 	decodeInto(t, rr, &c)
-	if rr.Code != http.StatusOK || c.Version != 1 || c.Body != "\nB changed.\n\n" {
+	if rr.Code != http.StatusOK || c.Version != 1 || c.Body != "\nB changed.\n" {
 		t.Errorf("v1 = %d %+v", rr.Code, c)
 	}
 	rr = doReq(t, h, http.MethodGet, "/api/v1/rules/WL-REQ-2/versions/2", token, nil)
 	decodeInto(t, rr, &c)
-	if rr.Code != http.StatusOK || c.Version != 2 || c.Body != "\nB again.\n\n" {
+	if rr.Code != http.StatusOK || c.Version != 2 || c.Body != "\nB again.\n" {
 		t.Errorf("v2 = %d %+v", rr.Code, c)
 	}
 

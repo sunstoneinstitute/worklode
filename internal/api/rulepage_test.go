@@ -6,7 +6,6 @@ package api_test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -68,8 +67,12 @@ func TestRulePageOlderVersionLinksBack(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("edit rule = %d %s", rr.Code, rr.Body)
 	}
-	if rr := doReq(t, h, http.MethodPost, fmt.Sprintf("/api/v1/docs/%d/revision/accept", doc.ID), token, nil); rr.Code != http.StatusOK {
-		t.Fatalf("accept revision = %d %s", rr.Code, rr.Body)
+	owner := "alice"
+	if rr := doReq(t, h, http.MethodPatch, "/api/v1/rules/WL-REQ-2", token, model.RuleMetaInput{Owner: &owner}); rr.Code != http.StatusOK {
+		t.Fatalf("set owner = %d %s", rr.Code, rr.Body)
+	}
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/rules/WL-REQ-2/accept", token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("accept rule = %d %s", rr.Code, rr.Body)
 	}
 
 	rr = doReq(t, h, http.MethodGet, "/projects/"+projID+"/rule/2/1", "", nil)

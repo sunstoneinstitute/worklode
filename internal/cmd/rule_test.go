@@ -29,14 +29,13 @@ func TestRuleEditRequiresFile(t *testing.T) {
 	}
 }
 
-// TestRuleEditOnAcceptedSaysWhereItLanded: the write went to the arranging
-// document's candidate revision, so the rule read back still carries the
-// old text. The render alone reads as a no-op; the command has to name the
-// document and the command that lands it.
-func TestRuleEditOnAcceptedSaysWhereItLanded(t *testing.T) {
+// TestRuleEditOnAcceptedNamesTheAccept: the edit added a draft version the
+// arranging spec does not show yet (WL-SPEC-77 §19.4), so the command names
+// the accept that moves it.
+func TestRuleEditOnAcceptedNamesTheAccept(t *testing.T) {
 	accepted := model.Rule{
-		Ref: "WL-RULE-1", Heading: "Sub", Body: "\nOld text.\n\n",
-		Status: "accepted", Version: 1,
+		Ref: "WL-RULE-1", Heading: "Sub", Body: "\nNew text.\n",
+		Status: "draft", Version: 2,
 		ArrangedIn: []model.RuleArrangement{{DocRef: "WL-SPEC-12", Anchor: "sec-1.1", Depth: 3, RuleVersion: 1}},
 	}
 	mux := http.NewServeMux()
@@ -62,16 +61,15 @@ func TestRuleEditOnAcceptedSaysWhereItLanded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode rule edit: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "candidate revision of WL-SPEC-12") ||
-		!strings.Contains(out, "lode doc revise WL-SPEC-12 --accept") {
-		t.Fatalf("output = %q; want it to name the document and how the change lands", out)
+	if !strings.Contains(out, "lode rule accept WL-RULE-1") {
+		t.Fatalf("output = %q; want it to name the accept that moves the specs", out)
 	}
 
 	out, err = runLode(t, "rule", "edit", "WL-RULE-1", "--file", file, "--json")
 	if err != nil {
 		t.Fatalf("lode rule edit --json: %v\noutput: %s", err, out)
 	}
-	if strings.Contains(out, "candidate revision") {
+	if strings.Contains(out, "lode rule accept") {
 		t.Fatalf("--json output carries the notice: %q", out)
 	}
 	if !json.Valid([]byte(out)) {
@@ -79,8 +77,8 @@ func TestRuleEditOnAcceptedSaysWhereItLanded(t *testing.T) {
 	}
 }
 
-// TestRuleEditDraftSaysNothingExtra: on a draft document the write lands at
-// once, so the notice above must not appear.
+// TestRuleEditDraftSaysNothingExtra: a draft spec arranging the draft
+// version shows the write at once, so the notice above must not appear.
 func TestRuleEditDraftSaysNothingExtra(t *testing.T) {
 	mux := http.NewServeMux()
 	reply := model.Rule{
@@ -108,8 +106,8 @@ func TestRuleEditDraftSaysNothingExtra(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode rule edit: %v\noutput: %s", err, out)
 	}
-	if strings.Contains(out, "candidate revision") {
-		t.Fatalf("draft edit printed the revision notice: %q", out)
+	if strings.Contains(out, "lode rule accept") {
+		t.Fatalf("draft edit printed the accept notice: %q", out)
 	}
 }
 

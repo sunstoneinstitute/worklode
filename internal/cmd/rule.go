@@ -289,7 +289,7 @@ func newRuleEditCmd() *cobra.Command {
 	var file, heading string
 	cmd := &cobra.Command{
 		Use:   "edit <ref>",
-		Short: "Replace a rule's body (and heading) from a file; the document is regenerated around it",
+		Short: "Write a rule's next draft version (body and heading) from a file",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body, err := readBodyFile(cmd, file)
@@ -321,13 +321,13 @@ func newRuleEditCmd() *cobra.Command {
 				return nil
 			}
 			cli.RuleRender(cmd.OutOrStdout(), rule)
-			// An edit of an accepted document goes to its candidate
-			// revision, so the rule read back is still the old text and
-			// the render above looks like nothing happened (S13, S35). Say
-			// where the change is waiting.
-			if rule.Status == "accepted" && strings.TrimSpace(rule.Body) != strings.TrimSpace(body) && len(rule.ArrangedIn) == 1 {
-				ref := rule.ArrangedIn[0].DocRef
-				fmt.Fprintf(cmd.OutOrStdout(), "\nSaved to the candidate revision of %s; it lands when you run lode doc revise %s --accept.\n", ref, ref)
+			// A spec arranging an older version keeps showing it
+			// (WL-SPEC-77 §19.4); say what moves it.
+			for _, a := range rule.ArrangedIn {
+				if rule.Status == "draft" && a.RuleVersion < rule.Version {
+					fmt.Fprintf(cmd.OutOrStdout(), "\nSpecs arranging %s show this draft once you run lode rule accept %s.\n", rule.Ref, rule.Ref)
+					break
+				}
 			}
 			return nil
 		},
