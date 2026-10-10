@@ -300,7 +300,8 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 // dropOmittedRevisionRules unarranges from document id's candidate every rule
 // the candidate text leaves out: neither a heading at its anchor nor a rule=
 // heading naming it (WL-SPEC-77 §19.5). The candidate body keeps its rule=
-// attributes until it lands, where syncRules reads them.
+// attributes until it lands, where syncRules reads them. A rule= heading
+// naming a withdrawn rule the candidate does not arrange yet is refused.
 func dropOmittedRevisionRules(tx *sql.Tx, id int64, doc *designdoc.Document) error {
 	var anchors []string
 	var named []int64
@@ -313,6 +314,17 @@ func dropOmittedRevisionRules(tx *sql.Tx, id int64, doc *designdoc.Document) err
 			rid, err := ruleByRefString(tx, sec.Rule)
 			if err != nil {
 				return err
+			}
+			var arranged bool
+			if err := tx.QueryRow(
+				`SELECT EXISTS (SELECT 1 FROM doc_revision_rules WHERE doc_id = $1 AND rule_id = $2)`,
+				id, rid).Scan(&arranged); err != nil {
+				return fmt.Errorf("read revision arrangement of doc %d: %w", id, err)
+			}
+			if !arranged {
+				if err := refuseWithdrawnRule(tx, rid, sec.Rule); err != nil {
+					return err
+				}
 			}
 			named = append(named, rid)
 		}

@@ -76,6 +76,11 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		if err != nil {
 			return false, err
 		}
+		if !slices.ContainsFunc(prior, func(r ruleRow) bool { return r.id == c.id }) || c.heading != sec.Title || !sameRuleBody(c.body, sec.Body) {
+			if err := refuseWithdrawnRule(tx, c.id, sec.Rule); err != nil {
+				return false, err
+			}
+		}
 		if claimed[c.id] {
 			return false, fmt.Errorf("%s names %s, which an earlier heading already arranges: %w", sec.Anchor, sec.Rule, ErrInvalidInput)
 		}
@@ -212,6 +217,31 @@ func namedRule(tx *sql.Tx, prior []ruleRow, ref string) (*ruleRow, error) {
 		return nil, fmt.Errorf("read rule %s: %w", ref, err)
 	}
 	return c, nil
+}
+
+// refuseWithdrawnRule refuses a rule= heading that would arrange or edit a
+// withdrawn rule, which would undo its supersession. The error names the
+// rule's successors so the author can point at one instead. A spec that
+// already arranges it may keep it there unchanged.
+func refuseWithdrawnRule(tx *sql.Tx, id int64, ref string) error {
+	var status string
+	if err := tx.QueryRow(`SELECT status FROM rules WHERE id = $1`, id).Scan(&status); err != nil {
+		return fmt.Errorf("read rule %s: %w", ref, err)
+	}
+	if status != "withdrawn" && status != "superseded" {
+		return nil
+	}
+	var succ string
+	if err := tx.QueryRow(
+		`SELECT coalesce(string_agg(`+ruleRefSQL("p", "r")+`, ', ' ORDER BY r.id), '')
+		   FROM rule_edges e JOIN rules r ON r.id = e.from_rule JOIN projects p ON p.id = r.project_id
+		  WHERE e.to_rule = $1 AND e.type = 'supersedes'`, id).Scan(&succ); err != nil {
+		return fmt.Errorf("successors of rule %s: %w", ref, err)
+	}
+	if succ == "" {
+		return fmt.Errorf("%s is %s and has no successor: %w", ref, status, ErrInvalidInput)
+	}
+	return fmt.Errorf("%s is %s; name a successor instead: %s: %w", ref, status, succ, ErrInvalidInput)
 }
 
 // isSpecHeading reports whether section i is a spec heading (WL-SPEC-77
