@@ -77,20 +77,79 @@ lode show <rule-ref>                         # requirement and where it is arran
 lode rule edit <rule-ref> --file <body-file> # body under its heading, optional --heading
 ```
 
-Every rule has a kind, and the kind sets its ref's infix:
+Every rule has exactly one kind, and each kind states one obligation
+(WL-SPEC-77 §4). The kind sets its ref's infix:
 
-| Kind | Ref | Use for |
-|---|---|---|
-| `requirement` | `WL-REQ-<n>` | behavior a plan builds once; a planning gap until an accepted plan covers it |
-| `invariant` | `WL-RULE-<n>` | a constraint that binds every task in its project and is never finished |
-| `informative` | `WL-RULE-<n>` | rationale or context, nothing to build or obey |
+| Kind | Ref | Obligation | A reviewer checks it | Planning |
+|---|---|---|---|---|
+| `requirement` | `WL-REQ-<n>` | a plan builds it once; afterwards its tests hold the behavior | directly against the change | a gap until an accepted plan covers it |
+| `catalogue` | `WL-REQ-<n>` | a set of entries with one shape, each answering the same question (command tree, metric table, error table, state list); a plan builds its entries | by membership: the change adds, removes or alters an entry | a gap until an accepted plan covers it |
+| `invariant` | `WL-RULE-<n>` | a property that holds in every state, with the checks that enforce it; binds every task in its project | against the state, not the change | never covered, never a gap |
+| `definition` | `WL-RULE-<n>` | one term, one meaning, in one scope | whether the term is used as defined | never covered, never a gap |
+| `principle` | `WL-RULE-<n>` | a design stance other rules `refine`; not checkable on its own | through its refiners only | never covered, never a gap |
 
 New rules are requirements. Set another kind with
-`lode rule set <rule-ref> --kind invariant` (or `informative`). The number
-alone names the rule: `WL-REQ-12`, `WL-RULE-12` and the old `WL-CL-12` all
-resolve, and output prints the current kind's infix. A rule that both builds
-something and binds later work is two rules: split it into a requirement and
-an invariant.
+`lode rule set <rule-ref> --kind <kind>`.
+A rule an accepted plan covers stays a requirement or catalogue. Rationale is
+not a kind: it ends the body of the rule it explains. Background nothing
+refines is template text of the spec, not a rule. The number alone names the
+rule: `WL-REQ-12`, `WL-RULE-12` and `WL-CL-12` all resolve, and output prints
+the current kind's infix. A rule that both builds something and binds later
+work is two rules: split it into a requirement and an invariant.
+
+### Edges and the context closure
+
+Link rules with `lode rule link <a> --<edge> <b>` (`lode rule unlink` removes
+it):
+
+| Edge | Meaning | In closure |
+|---|---|---|
+| `--refines` | A narrows B, a principle or wider rule | yes |
+| `--needs` | A cannot be applied without a fact or term B states; A does not narrow B | yes |
+| `--references` | B helps a reader and A does not need it | no |
+
+Text that names a rule ref also yields a derived `references` edge. The other
+edges are `--amends`, `--constrains`, `--conflicts-with` and `--derived-from`.
+
+A rule's **context closure** is the rule plus everything reachable over
+`refines` and `needs`. Read it with `lode show <rule-ref> --closure`. A spec
+arranges rules, never closures: arrange the context rules too if the spec
+should show them.
+
+### Checklist for a new rule
+
+A rule is sized so a reader with it and its closure can decide whether a change
+complies. Apply the five sizing tests (WL-SPEC-77 §4c) before submitting:
+
+1. **It decides something.** It is one of the five kinds. Overviews,
+   motivation, non-goals, plan indexes and open questions are template text.
+2. **It is self-contained over its closure.** No reference by position ("§N",
+   "above"); needed context is a `refines` or `needs` edge. Every term it uses
+   is a `definition` in its closure or defined in the rule. A fact lives in one
+   rule, its owner, and rules that need it `needs` the owner.
+3. **It is not too big.** One subject and one check. Storage, API and CLI of one
+   feature are three rules, each needing the model rule.
+4. **It is not too small.** If it cannot be applied without restating its
+   parent and is the parent's only refiner, merge it into the parent.
+5. **Arrangement does not pull context.** A rendered spec shows the rules it
+   arranges and nothing else.
+
+Two rules stating one fact with different values get a `conflictsWith` edge
+until the non-owner is fixed.
+
+### Definitions and the glossary
+
+A `definition` rule holds one term. `lode rule terms [--project <id>]` lists a
+project's definitions with their term slugs, and
+`lode rule set <ref> --concept <iri>` attaches the `ns/concept.ttl` IRI it
+defines (definitions only). Term pages are `/projects/<proj>/term/<slug>`.
+Every project has a `glossary` spec of definitions, one term each. The instance
+glossary is the `glossary` spec (`WL-SPEC-87`) of the project named by the
+server setting `glossary_project` (`--glossary-project`,
+`LODE_GLOSSARY_PROJECT`). A term resolves to the project's definition first,
+then the instance's; a project definition that narrows an instance term
+`refines` it. `lode rule lint [--project <id>]` reports closure sizes,
+undefined terms, conflicts and positional references.
 
 The store assigns rule refs when new anchored sections are written. Existing
 rules match by anchor and heading, then heading alone, then anchor alone.
@@ -119,7 +178,7 @@ requirement, no levels — or
 it, never omitted, since an absent `covers` reads as a forgotten one. See
 `lode:splitting-specs-into-plans` for the cases that used to be expressed
 with a coverage level: splitting a rule the plan only partly builds,
-invariants, and informative rules.
+invariants, definitions and principles.
 
 Keys are ontology property local names (WL-SPEC-77, WL-SPEC-78, WL-SPEC-79), not a second
 vocabulary — a key with no term behind it means the ontology is missing one,
@@ -130,7 +189,7 @@ dependency → amendment → supersession:
 |---|---|---|
 | `status` | spec | `draft`, `accepted`, or `superseded` (`proposed` is retired — a document under review stays `draft`) |
 | `issued` | spec | `YYYY-MM-DD` of first publication |
-| `covers` | plan | scalar or list of requirement refs (`WL-REQ-<n>`), spec-section references, or whole-document references this plan undertakes to build in full; a section or document entry skips invariants and informative rules, a direct ref to one is refused; `coverage:`/`fullCoverageWith:` are refused |
+| `covers` | plan | scalar or list of requirement refs (`WL-REQ-<n>`), spec-section references, or whole-document references this plan undertakes to build in full; a section or document entry skips invariants, definitions and principles, a direct ref to one is refused; `coverage:`/`fullCoverageWith:` are refused |
 | `implements` | plan | retired spelling of `covers`; still parses, reported as retired. A document carrying both is an error |
 | `defers` | plan | list of `{spec, to}`: a section this plan hands off, and the document expected to cover it (WL-SPEC-78 §4.2) |
 | `requires` | any | list of references; plain dependency, no ordering semantics |

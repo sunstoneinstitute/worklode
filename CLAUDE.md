@@ -21,6 +21,10 @@ doc`. `docs/specs.md` is the map of the fifteen specs; `lode show WL-SPEC-75`
 starts you on the execution backbone. `lode search <query>` ranks documents,
 tasks and skills together when you know what you are looking for but not where
 it is (WL-SPEC-79 §17).
+A spec arranges rules of five kinds (requirement, catalogue, invariant,
+definition, principle) linked by `refines`, `needs` and `references`; a rule is
+sized to be applied with its context closure alone (`lode show <rule> --closure`,
+WL-SPEC-77 §4c).
 
 **To read what a spec says, use `lode show <ref> --inline`.** That folds every
 in-force amendment and supersession into the text, attributed to the section it

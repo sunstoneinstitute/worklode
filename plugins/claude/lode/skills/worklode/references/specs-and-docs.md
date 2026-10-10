@@ -12,13 +12,18 @@ document. Each placement records the rule and version, position, depth and
 section anchor. A rule ref names the rule; a ref such as `WL-SPEC-77#sec-11`
 names a place in that spec's arrangement.
 
-A rule's kind is one of three, and sets the infix its ref prints with:
+A rule's kind is one of five, and sets the infix its ref prints with:
 
-- **requirement** (`WL-REQ-12`) — a plan builds it once. It is a planning
-  gap until an accepted plan covers it. New rules are requirements.
-- **invariant** (`WL-RULE-12`) — binds every task in its project and is
-  never finished. Never covered, never a gap.
-- **informative** (`WL-RULE-12`) — rationale or context. Never covered,
+- **requirement** (`WL-REQ-12`): a plan builds it once. A planning gap until
+  an accepted plan covers it. New rules are requirements.
+- **catalogue** (`WL-REQ-12`): a set of entries with one shape, such as a
+  command tree or error table. A plan builds its entries. Same planning
+  status as a requirement.
+- **invariant** (`WL-RULE-12`): holds in every state and binds every task in
+  its project. Never covered, never a gap.
+- **definition** (`WL-RULE-12`): one term, one meaning, in one scope. Never
+  covered, never a gap.
+- **principle** (`WL-RULE-12`): a stance other rules `refine`. Never covered,
   never a gap.
 
 The number alone identifies a rule: `WL-REQ-12`, `WL-RULE-12` and the old
@@ -73,7 +78,7 @@ A `covers` entry is a plain reference: a requirement ref (`WL-REQ-<n>`), a
 document/section reference such as `WL-SPEC-77#sec-11`, or a whole-document
 reference. A requirement ref resolves to that rule; a section reference
 reaches the requirements at that anchor and under it; a whole-document
-reference reaches all its requirements. Invariants and informative rules in
+reference reaches all its requirements. Invariants, definitions and principles in
 scope are skipped, and a direct ref to one is refused. Unresolved refs
 reach none. Each entry is resolved
 when the plan is written and stored as a `covers` edge from the plan to the
@@ -84,7 +89,7 @@ on write.
 
 A rule the plan must obey but builds nothing in is an invariant, and governs
 every task in its project without a `covers` entry once accepted; a rule with nothing to build
-(rationale, context) is informative and also carries no `covers` entry. A
+(a definition or principle) carries no `covers` entry either. A
 plan that builds only part of a rule is a sign the rule should split
 (`lode rule link WL-REQ-B --derived-from WL-REQ-A`) so each plan covers
 whole rules.
@@ -110,8 +115,12 @@ inspect and update affected open tasks explicitly.
 
 ## Rule relationships and refactoring
 
-Use `lode rule link <ref>` with one of `--refines`, `--constrains`,
-`--conflicts-with`, `--references` or `--derived-from <other-ref>`.
+Use `lode rule link <ref>` with one of `--refines`, `--needs`, `--references`,
+`--constrains`, `--conflicts-with`, `--amends` or `--derived-from <other-ref>`.
+`refines` and `needs` put the target in the rule's context closure, which
+`lode show <ref> --closure` reads; `references` does not. `lode rule terms`
+lists a project's definitions and `lode rule lint` reports undefined terms,
+oversized closures, conflicts and positional references.
 `lode rule unlink` removes a manually written link. References in rule text
 also produce derived `references` edges; edit the text to change those.
 
