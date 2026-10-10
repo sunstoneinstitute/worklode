@@ -258,3 +258,33 @@ func TestAcceptRuleUnderOpenRevision(t *testing.T) {
 		t.Errorf("landed spec lost the accepted text:\n%s", body)
 	}
 }
+
+// TestArrangeRuleShowsAcceptedVersion: a rule with a pending draft is
+// arranged at its accepted version, and the spec marks the draft
+// (WL-SPEC-77 §19.4).
+func TestArrangeRuleShowsAcceptedVersion(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: "C draft."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	b := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "b", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n# B\n\n## 1. Own {#sec-1}\n\nX.\n"})
+	if _, err := arrangeRule(t, s, b.ID, model.ArrangeRuleInput{Rule: "P1-REQ-3"}); err != nil {
+		t.Fatal(err)
+	}
+	if body := docBody(t, s, b.ID); !strings.Contains(body, "\nC.\n") || strings.Contains(body, "C draft.") {
+		t.Errorf("arranged spec must show the accepted version:\n%s", body)
+	}
+	secs, err := s.ListDocSections(ctx, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(secs) != 2 || secs[1].Pending != 2 || secs[1].Rule != "P1-REQ-3" {
+		t.Errorf("sections = %+v, want sec-2 pending v2 of P1-REQ-3", secs)
+	}
+}
