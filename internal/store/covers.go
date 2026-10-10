@@ -144,7 +144,8 @@ func ensureRules(tx *sql.Tx, docID int64) error {
 		return err
 	}
 	if status == "accepted" {
-		return acceptDocRules(tx, docID)
+		_, _, err := acceptDocRules(tx, docID)
+		return err
 	}
 	return nil
 }

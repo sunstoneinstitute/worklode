@@ -277,7 +277,11 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err := ClearPatchedSections(tx, id, version); err != nil {
 		return nil, err
 	}
-	if err := publishDocSections(tx, id); err != nil {
+	ruleIDs, bumped, err := publishDocSections(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := gateDocRuleVersions(tx, now, id, ruleIDs, bumped, d.owner, actorID, eventID); err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(`DELETE FROM doc_revisions WHERE doc_id = $1`, id); err != nil {

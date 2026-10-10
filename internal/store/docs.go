@@ -227,7 +227,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, err
 	}
 	if acceptedAtCreate {
-		if err := publishDocSections(tx, id); err != nil {
+		if _, _, err := publishDocSections(tx, id); err != nil {
 			return nil, err
 		}
 	}
@@ -447,7 +447,11 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
 		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
 	}
-	if err := publishDocSections(tx, id); err != nil {
+	ruleIDs, bumped, err := publishDocSections(tx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := gateDocRuleVersions(tx, now, id, ruleIDs, bumped, d.owner, actorID, eventID); err != nil {
 		return nil, nil, err
 	}
 	if err := supersedeRetiredDocs(tx, ts, id, eventID); err != nil {
