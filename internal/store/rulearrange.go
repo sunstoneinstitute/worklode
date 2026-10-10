@@ -91,7 +91,8 @@ func ruleByRefString(tx *sql.Tx, ref string) (int64, error) {
 }
 
 // ArrangeRule places an existing rule in a spec (WL-SPEC-77 §19.3): its
-// newest version's heading and body are written into the spec's editable
+// newest accepted version's heading and body (a first draft's, when none is
+// accepted, §19.4) are written into the spec's editable
 // text at the chosen position and anchor, and the spec's arrangement holds
 // the rule there. A draft spec is written in place; an accepted one through
 // its candidate revision, and the arrangement lands with it. Returns the
@@ -104,8 +105,9 @@ func ArrangeRule(tx *sql.Tx, now time.Time, docID int64, in model.ArrangeRuleInp
 	var version int
 	var heading, body string
 	if err := tx.QueryRow(
-		`SELECT r.version, v.heading, v.body FROM rules r
-		   JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+		`SELECT v.version, v.heading, v.body FROM rules r
+		   JOIN rule_versions v ON v.rule_id = r.id
+		    AND v.version = CASE WHEN r.status = 'draft' AND r.version > 1 THEN r.version - 1 ELSE r.version END
 		  WHERE r.id = $1`, ruleID).Scan(&version, &heading, &body); err != nil {
 		return "", fmt.Errorf("read rule %d: %w", ruleID, err)
 	}

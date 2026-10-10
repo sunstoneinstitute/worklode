@@ -170,13 +170,14 @@ func TestCoverageFollowsSupersession(t *testing.T) {
 	}
 }
 
-// TestEditRuleWritesThroughTheSpec: a rule a plan covers is edited through
-// the spec arranging it; the plan contains no rules.
-func TestEditRuleWritesThroughTheSpec(t *testing.T) {
+// TestEditRuleShowsInTheDraftSpec: a rule a plan covers is edited as a rule,
+// and the draft spec arranging it renders the edit; the plan contains no
+// rules.
+func TestEditRuleShowsInTheDraftSpec(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
-	if _, err := editRule(t, s, "P1", 1, model.EditRuleInput{Heading: "One", Body: "\nChanged.\n\n"}, "stig"); err != nil {
+	if err := editRule(t, s, "P1", 1, model.EditRuleInput{Heading: "One", Body: "\nChanged.\n\n"}, "stig"); err != nil {
 		t.Fatalf("edit of a rule a plan covers: %v", err)
 	}
 	d, err := s.GetDoc(t.Context(), spec.ID)

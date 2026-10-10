@@ -60,12 +60,12 @@ can match once. An unmatched section creates a rule. Replacing text at the
 same anchor can therefore revise the existing rule; it does not declare that
 rule withdrawn. Check identities after a structural edit.
 
-A rule edit regenerates the arranging spec's body through its document write
-path. On a draft it rewrites the draft rule version. On an accepted spec it
-opens or updates a candidate revision; the change lands with
-`lode doc revise <spec-ref> --accept`. Direct editing requires exactly one
-arranging spec; covering plans do not count toward that limit. Sharing
-one rule across several specs is not yet supported by this edit path.
+A rule edit writes only the rule (WL-SPEC-77 §19.4): it rewrites the draft
+version, or adds the next version as a draft when the newest is accepted. It
+works for a rule arranged in no spec or in several. A spec shows each rule at
+its newest accepted version and marks a pending draft. `lode rule accept
+<rule-ref>` (owner only; `--substantive` for a judged change) accepts the
+draft and bumps every accepted spec arranging it.
 
 ## Rules govern plans and their tasks
 
