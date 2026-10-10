@@ -1223,3 +1223,36 @@ func TestDocResolve(t *testing.T) {
 		t.Errorf("after the edit minted rules: %+v, want nothing left to resolve", got)
 	}
 }
+
+// TestDocShowEditable: --editable names each rule in its heading, plain show
+// does not, and feeding the editable form back to doc edit changes nothing
+// (WL-SPEC-77 §19.5).
+func TestDocShowEditable(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec", "--number", "1",
+		"--slug", "ed", "--file", writeDocFile(t, "# Ed\n\n## 1. One {#sec-1}\n\nA.\n"), "--json")
+	if err != nil {
+		t.Fatalf("doc add: %v\noutput: %s", err, out)
+	}
+	d := docJSON(t, out)
+	id := strconv.FormatInt(d.ID, 10)
+
+	editable, err := runLode(t, "doc", "show", id, "--editable")
+	if err != nil {
+		t.Fatalf("doc show --editable: %v\noutput: %s", err, editable)
+	}
+	if !strings.Contains(editable, "## 1. One {#sec-1 rule=PROJ-REQ-") {
+		t.Fatalf("--editable lacks the rule ref:\n%s", editable)
+	}
+	if out, _ = runLode(t, "doc", "show", id); strings.Contains(out, "rule=") {
+		t.Errorf("plain show carries rule=:\n%s", out)
+	}
+	out, err = runLode(t, "doc", "edit", id, "--file", writeDocFile(t, editable), "--json")
+	if err != nil {
+		t.Fatalf("doc edit: %v\noutput: %s", err, out)
+	}
+	if got := docJSON(t, out); got.Version != d.Version || strings.Contains(got.Body, "rule=") {
+		t.Errorf("round trip: version %d (was %d), body\n%s", got.Version, d.Version, got.Body)
+	}
+}
