@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -180,5 +181,122 @@ func TestUnarrangeRuleRefusesArrangedChildren(t *testing.T) {
 		Body: "---\nstatus: draft\n---\n# Plan\n"})
 	if _, err := arrangeRule(t, s, plan.ID, model.ArrangeRuleInput{Rule: "P1-REQ-1"}); !errors.Is(err, ErrInvalidInput) {
 		t.Errorf("arrange in a plan: %v, want ErrInvalidInput", err)
+	}
+}
+
+// editableBody is spec id's text in the editable form `lode doc show
+// --editable` prints (WL-SPEC-77 §19.5).
+func editableBody(t *testing.T, s *Store, id int64) string {
+	t.Helper()
+	secs, err := s.ListDocSections(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := map[string]string{}
+	for _, sec := range secs {
+		if sec.Rule != "" {
+			refs[sec.Anchor] = sec.Rule
+		}
+	}
+	return designdoc.Editable(docBody(t, s, id), refs)
+}
+
+func rawDocBody(t *testing.T, s *Store, id int64) string {
+	t.Helper()
+	var body string
+	if err := s.db.QueryRow(`SELECT body FROM docs WHERE id = $1`, id).Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+// TestEditableFormWritesRules: the editable form fed back unchanged changes
+// no rule; a rule= heading copied from another spec arranges the shared rule
+// and text changed under it is a rule edit; an unmarked new heading mints a
+// rule; a rule left out is unarranged, not withdrawn. On an accepted spec the
+// same write goes through the candidate revision (WL-SPEC-77 §19.5).
+func TestEditableFormWritesRules(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+	b := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "b", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n# B\n\n## 1. Own {#sec-1}\n\nX.\n"})
+	wantA := []arranged{
+		{0, 2, 1, 1, "sec-1", "draft"},
+		{1, 3, 2, 1, "sec-1.1", "draft"},
+		{2, 2, 3, 1, "sec-2", "draft"},
+	}
+
+	edA := editableBody(t, s, a.ID)
+	if !strings.Contains(edA, "## 2. Two {#sec-2 rule=P1-REQ-3}\n") {
+		t.Fatalf("editable form lacks rule refs:\n%s", edA)
+	}
+	if strings.Contains(docBody(t, s, a.ID), "rule=") {
+		t.Fatal("normal show carries rule=")
+	}
+	if d, err := updateDocBody(t, s, a.ID, edA); err != nil {
+		t.Fatal(err)
+	} else if d.Version != a.Version {
+		t.Errorf("round trip moved the version to %d", d.Version)
+	}
+	assertArrangement(t, arrangementOf(t, s, a.ID), wantA)
+	if n := ruleCount(t, s); n != 4 {
+		t.Fatalf("round trip minted a rule: %d rules", n)
+	}
+	if strings.Contains(rawDocBody(t, s, a.ID), "rule=") {
+		t.Fatalf("stored body carries rule=:\n%s", rawDocBody(t, s, a.ID))
+	}
+
+	// B takes A's sec-2 heading, edits its text, drops its own rule and
+	// adds an unmarked new one.
+	edB := editableBody(t, s, b.ID)
+	edB = strings.Replace(edB, "## 1. Own {#sec-1 rule=P1-REQ-4}\n\nX.\n",
+		"## 1. Two {#sec-1 rule=P1-REQ-3}\n\nC edited.\n\n## 2. New {#sec-2}\n\nN.\n", 1)
+	if _, err := updateDocBody(t, s, b.ID, edB); err != nil {
+		t.Fatal(err)
+	}
+	assertArrangement(t, arrangementOf(t, s, b.ID), []arranged{
+		{0, 2, 3, 1, "sec-1", "draft"},
+		{1, 2, 5, 1, "sec-2", "draft"},
+	})
+	if r, err := s.GetRule(ctx, "P1", 3); err != nil || strings.TrimSpace(r.Body) != "C edited." || r.Version != 1 {
+		t.Fatalf("shared rule = %+v, %v", r, err)
+	}
+	if r, err := s.GetRule(ctx, "P1", 4); err != nil || len(r.ArrangedIn) != 0 || r.Status != "draft" {
+		t.Fatalf("dropped rule = %+v, %v; want a standalone draft", r, err)
+	}
+	if body := docBody(t, s, a.ID); !strings.Contains(body, "## 2. Two {#sec-2}\n\nC edited.\n") {
+		t.Errorf("spec A does not show the shared rule's edit:\n%s", body)
+	}
+	if _, err := updateDocBody(t, s, b.ID, "# B\n\n## 1. X {#sec-1 rule=P1-REQ-1}\n\nA.\n\n## 2. Y {#sec-2 rule=P1-REQ-1}\n\nA.\n"); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("one rule at two headings: %v, want ErrInvalidInput", err)
+	}
+
+	// Accepted A: the write lands through the candidate revision. Its sec-1
+	// text changes and its sec-2 is left out.
+	if _, _, err := acceptDoc(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reviseDoc(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	edA = editableBody(t, s, a.ID)
+	edA = strings.Replace(edA, "\nA.\n", "\nA revised.\n", 1)
+	edA = edA[:strings.Index(edA, "## 2. Two")]
+	if err := updateRevision(t, s, a.ID, edA); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := acceptRevision(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	assertArrangement(t, arrangementOf(t, s, a.ID), []arranged{
+		{0, 2, 1, 2, "sec-1", "accepted"},
+		{1, 3, 2, 1, "sec-1.1", "accepted"},
+	})
+	if r, err := s.GetRule(ctx, "P1", 3); err != nil || len(r.ArrangedIn) != 1 || r.Status == "superseded" {
+		t.Fatalf("rule left out of A = %+v, %v; want it still arranged in B", r, err)
+	}
+	if strings.Contains(rawDocBody(t, s, a.ID), "rule=") {
+		t.Fatalf("landed body carries rule=:\n%s", rawDocBody(t, s, a.ID))
 	}
 }

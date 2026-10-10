@@ -98,7 +98,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 			"doc %d is %s: only an accepted document is amended in place (WL-SPEC-77 §10): %w",
 			in.ID, d.status, ErrInvalidInput)
 	}
-	if in.Body == d.body {
+	if storedBody(d.kind, in.Body) == d.body {
 		return nil, nil, fmt.Errorf("doc %d: nothing changed: %w", in.ID, ErrInvalidInput)
 	}
 
@@ -339,7 +339,7 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 	}
 	if _, err := tx.Exec(
 		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`,
-		in.ID, in.Body, now.UTC().Truncate(time.Second),
+		in.ID, storedBody(d.kind, in.Body), now.UTC().Truncate(time.Second),
 	); err != nil {
 		return 0, fmt.Errorf("patch doc %d: %w", in.ID, err)
 	}

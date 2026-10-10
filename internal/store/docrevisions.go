@@ -86,7 +86,8 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 		return fmt.Errorf("doc %d is %s: only an accepted document has a revision to edit: %w",
 			id, d.status, ErrInvalidInput)
 	}
-	if _, err := parseDocBody(d.kind, body); err != nil {
+	parsed, err := parseDocBody(d.kind, body)
+	if err != nil {
 		return err
 	}
 	res, err := tx.Exec(`UPDATE doc_revisions SET body = $2 WHERE doc_id = $1`, id, body)
@@ -95,6 +96,9 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 	}
 	if err := requireOneAffected(res, fmt.Sprintf("update revision of doc %d", id),
 		fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)); err != nil {
+		return err
+	}
+	if err := dropOmittedRevisionRules(tx, id, parsed.doc); err != nil {
 		return err
 	}
 	return logDocChange(tx, id, eventID,
@@ -229,7 +233,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	if _, err := tx.Exec(
-		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`, id, candidateBody, ts,
+		`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`, id, storedBody(d.kind, candidateBody), ts,
 	); err != nil {
 		return nil, fmt.Errorf("land revision of doc %d: %w", id, err)
 	}
@@ -291,6 +295,36 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	return getDocTx(tx, id)
+}
+
+// dropOmittedRevisionRules unarranges from document id's candidate every rule
+// the candidate text leaves out: neither a heading at its anchor nor a rule=
+// heading naming it (WL-SPEC-77 §19.5). The candidate body keeps its rule=
+// attributes until it lands, where syncRules reads them.
+func dropOmittedRevisionRules(tx *sql.Tx, id int64, doc *designdoc.Document) error {
+	var anchors []string
+	var named []int64
+	for _, sec := range doc.Sections {
+		if sec.Anchor == "" {
+			continue
+		}
+		anchors = append(anchors, sec.Anchor)
+		if sec.Rule != "" {
+			rid, err := ruleByRefString(tx, sec.Rule)
+			if err != nil {
+				return err
+			}
+			named = append(named, rid)
+		}
+	}
+	if _, err := tx.Exec(
+		`DELETE FROM doc_revision_rules
+		  WHERE doc_id = $1 AND rule_id IS NOT NULL
+		    AND anchor <> ALL($2::text[]) AND rule_id <> ALL($3::bigint[])`,
+		id, anchors, named); err != nil {
+		return fmt.Errorf("unarrange omitted rules from the revision of doc %d: %w", id, err)
+	}
+	return nil
 }
 
 // landRevisionRules makes the candidate's arrangement document id's prior
@@ -403,6 +437,7 @@ func (s *Store) GetDocRevision(ctx context.Context, id int64) (*model.DocRevisio
 	if err != nil {
 		return nil, fmt.Errorf("get revision of doc %d: %w", id, err)
 	}
+	r.Body = designdoc.StripRuleRefs(r.Body)
 	r.CreatedBy = createdBy.String
 	r.CreatedAt = r.CreatedAt.UTC()
 	if r.Edges, err = s.revisionEdges(ctx, id); err != nil {

@@ -594,6 +594,19 @@ func docStaleCoverage(edgesIn []model.DocEdge) map[string][]string {
 // list gains a COVERED BY column naming each stale plan that covers a section
 // (WL-SPEC-77 §9). Both are rendering rules: nothing about reading the document
 // changes, the reader is told what the text is worth.
+// DocEditableRender writes d's body in the editable form (WL-SPEC-77 §19.5):
+// each heading arranging a rule names it, "{#sec-3 rule=WL-REQ-12}", so the
+// text can be fed back to lode doc edit or lode doc revise --file.
+func DocEditableRender(w io.Writer, d model.DocDetail) {
+	refs := map[string]string{}
+	for _, sec := range d.Sections {
+		if sec.Rule != "" {
+			refs[sec.Anchor] = sec.Rule
+		}
+	}
+	fmt.Fprint(w, designdoc.Editable(d.Body, refs))
+}
+
 func DocDetailRender(w io.Writer, d model.DocDetail) {
 	fmt.Fprintf(w, "%d  %s\n", d.ID, d.Title)
 	if banner := docStatusBanner(d.Doc); banner != "" {
