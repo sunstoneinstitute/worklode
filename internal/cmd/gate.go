@@ -14,7 +14,6 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/gate"
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
-	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // newGateCmd is the design authority gate (WL-REQ-8): the
@@ -39,9 +38,12 @@ commit message when a guarded path changed. The trailer names a rule
 (Spec: WL-REQ-<n>, optionally followed by amended or a reason word) or
 says Spec: none <reason>. A section value (WL-SPEC-<n> sec-N) is refused,
 naming the rule it resolves to when a server is configured, else the
-lode show <doc>#sec-N command that reads it. Exit status 1 with the reason
-when the trailer is missing or malformed. Without a [gate] table it does
-nothing. The server resolves the rule a well-formed trailer names.`,
+lode show <doc>#sec-N command that reads it. The pull request body and the
+lines the diff adds must cite rules by ref, never by spec section; paths the
+[gate] exempt list names are skipped. Exit status 1 with the reason when the
+trailer is missing or malformed or a section citation is found. Without a
+[gate] table it does nothing. The server resolves the rule a well-formed
+trailer names.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dir, err := os.Getwd()
@@ -96,13 +98,27 @@ func runGateCheck(dir, base, head, bodyFile string) (string, error) {
 			in.Changed = append(in.Changed, p)
 		}
 	}
+	var cites []gate.Citation
 	if bodyFile != "" {
 		body, err := os.ReadFile(bodyFile)
 		if err != nil {
 			return "", fmt.Errorf("gate: %w", err)
 		}
 		in.Texts = append(in.Texts, string(body))
+		for _, c := range gate.Citations(string(body)) {
+			c.Where = "pull request body"
+			cites = append(cites, c)
+		}
 	}
+	added, err := gitexec.Text(root, "diff", "--no-renames", "--no-color", "--no-ext-diff", base+"..."+head)
+	if err != nil {
+		return "", fmt.Errorf("gate: %w", err)
+	}
+	inDiff, err := cfg.AddedCitations(added)
+	if err != nil {
+		return "", fmt.Errorf("gate: %w", err)
+	}
+	cites = append(cites, inDiff...)
 	// One NUL after each message keeps a multi-paragraph body whole; newest
 	// first so the final commit's trailer wins when several carry one.
 	log, err := gitexec.Text(root, "log", "--format=%B%x00", base+".."+head)
@@ -116,6 +132,11 @@ func runGateCheck(dir, base, head, bodyFile string) (string, error) {
 	}
 	in.ResolveSection = resolveSectionRule
 	v, err := gate.Check(cfg, in)
+	if len(cites) > 0 {
+		// WL-REQ-1791: reported alongside a trailer refusal, not instead of it.
+		err = errors.Join(err, fmt.Errorf("cite rules by ref, never by spec section (WL-REQ-1791):\n%s",
+			strings.TrimRight(gate.Describe(cites, resolveSectionRule), "\n")))
+	}
 	if err != nil {
 		return "", fmt.Errorf("gate: %w", err)
 	}
@@ -125,10 +146,10 @@ func runGateCheck(dir, base, head, bodyFile string) (string, error) {
 	return fmt.Sprintf("gate: %s covers %s\n", cfg.Trailer+" "+v.Declaration.String(), strings.Join(v.Guarded, ", ")), nil
 }
 
-// resolveSectionRule names the rule a refused section value resolves to at
-// the document's current version, or "" when no server is configured (as in
-// CI, which makes no Worklode API call per WL-REQ-8), the call fails within
-// the hook timeout of WL-REQ-1722, or the anchor arranges no single rule.
+// resolveSectionRule names the rule a section resolves to at the
+// document's current version, or "" when no server is configured (as in CI,
+// which makes no Worklode API call per WL-REQ-8), the call fails within the
+// hook timeout of WL-REQ-1722, or the anchor arranges no single rule.
 func resolveSectionRule(sec designdoc.SectionRef) string {
 	c, err := newAPIClient()
 	if err != nil {
@@ -136,19 +157,7 @@ func resolveSectionRule(sec designdoc.SectionRef) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	doc := fmt.Sprintf("%s-%s-%d", sec.Shorthand.Key, sec.Shorthand.Type, sec.Shorthand.Number)
-	rules, _, err := c.ListRules(ctx, model.RuleListParams{Doc: doc})
-	if err != nil {
-		return ""
-	}
-	for _, r := range rules {
-		for _, a := range r.ArrangedIn {
-			if a.DocRef == doc && a.Anchor == sec.Anchor {
-				return r.Ref
-			}
-		}
-	}
-	return ""
+	return c.SectionRule(ctx, sec)
 }
 
 func init() {

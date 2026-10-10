@@ -109,3 +109,49 @@ func TestGateCheckRefusesSectionNamingItsRule(t *testing.T) {
 		t.Fatalf("section refusal must name the rule ref: %v", err)
 	}
 }
+
+// addCommit commits files on top of dir's HEAD and returns the new head.
+func addCommit(t *testing.T, dir string, files map[string]string) string {
+	t.Helper()
+	for name, body := range files {
+		os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
+		os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
+	}
+	if err := gitexec.Run(dir, "add", "-A"); err != nil {
+		t.Fatal(err)
+	}
+	if err := gitexec.Run(dir, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "-m", "more\n\nSpec: WL-RULE-7"); err != nil {
+		t.Fatal(err)
+	}
+	head, _ := gitexec.Line(dir, "rev-parse", "HEAD")
+	return head
+}
+
+// The citation test of WL-REQ-1791 runs over the lines the diff adds: a
+// string literal passes, a comment citing a section fails naming it.
+func TestGateCheckCitationsInAddedLines(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", "")
+	dir, base, _ := gateRepo(t, gateTable, "change a command\n\nSpec: WL-RULE-7\n")
+	head := addCommit(t, dir, map[string]string{"internal/cmd/y.go": "package cmd\n\nvar anchor = \"#sec-\"\n"})
+	if _, err := runGateCheck(dir, base, head, ""); err != nil {
+		t.Fatalf("a Go string literal is not prose: %v", err)
+	}
+	head = addCommit(t, dir, map[string]string{"notes.md": "see WL-SPEC-77 §4\n"})
+	_, err := runGateCheck(dir, base, head, "")
+	if err == nil || !strings.Contains(err.Error(), "notes.md:1") || !strings.Contains(err.Error(), "lode show WL-SPEC-77#sec-4") {
+		t.Fatalf("an added prose line citing a section must fail naming it: %v", err)
+	}
+}
+
+func TestGateCheckCitationsInBody(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", "")
+	dir, base, head := gateRepo(t, gateTable, "change a command")
+	body := filepath.Join(dir, "body.md")
+	os.WriteFile(body, []byte("Implements WL-SPEC-77 §4.\n\nSpec: WL-REQ-165\n"), 0o644)
+	_, err := runGateCheck(dir, base, head, body)
+	if err == nil || !strings.Contains(err.Error(), "WL-SPEC-77 §4") {
+		t.Fatalf("a body citing a section must fail: %v", err)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -211,4 +212,24 @@ func RuleVersionsTable(w io.Writer, vs []model.RuleVersion) {
 		tbl.add(strconv.Itoa(v.Version), v.Heading, LocalTime(v.CreatedAt))
 	}
 	tbl.flush(w)
+}
+
+// SectionRule names the rule a document arranges at a section anchor in its
+// current version, or "" when the call fails or no rule sits there. The
+// citation checks of WL-REQ-1791 and the Spec trailer refusal of WL-REQ-7
+// name it in place of the section; the caller bounds ctx.
+func (c *Client) SectionRule(ctx context.Context, sec designdoc.SectionRef) string {
+	doc := fmt.Sprintf("%s-%s-%d", sec.Shorthand.Key, sec.Shorthand.Type, sec.Shorthand.Number)
+	rules, _, err := c.ListRules(ctx, model.RuleListParams{Doc: doc})
+	if err != nil {
+		return ""
+	}
+	for _, r := range rules {
+		for _, a := range r.ArrangedIn {
+			if a.DocRef == doc && a.Anchor == sec.Anchor {
+				return r.Ref
+			}
+		}
+	}
+	return ""
 }

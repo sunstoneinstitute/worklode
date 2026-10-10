@@ -2,10 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -93,5 +97,25 @@ func TestRulesTable(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("table lacks %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestSectionRule(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("doc") != "WL-SPEC-77" {
+			http.Error(w, "unexpected doc", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`[{"ref":"WL-REQ-164","arranged_in":[{"doc_ref":"WL-SPEC-77","anchor":"sec-3"}]},
+			{"ref":"WL-REQ-165","arranged_in":[{"doc_ref":"WL-SPEC-77","anchor":"sec-4"}]}]`))
+	}))
+	defer srv.Close()
+	c := NewClient(Config{ServerURL: srv.URL, Token: "wl_token"})
+	sh, _ := designdoc.ParseShorthand("WL-SPEC-77")
+	if got := c.SectionRule(context.Background(), designdoc.SectionRef{Shorthand: sh, Anchor: "sec-4"}); got != "WL-REQ-165" {
+		t.Errorf("SectionRule = %q, want WL-REQ-165", got)
+	}
+	if got := c.SectionRule(context.Background(), designdoc.SectionRef{Shorthand: sh, Anchor: "sec-9"}); got != "" {
+		t.Errorf("SectionRule(unarranged) = %q, want empty", got)
 	}
 }
