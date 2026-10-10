@@ -20,6 +20,9 @@ type Rule struct {
 	Version int    `json:"version"`
 	Heading string `json:"heading"`
 	Body    string `json:"body"`
+	// ConceptIRI is the ns/concept.ttl concept a definition defines, empty
+	// when it names none (WL-SPEC-77 §4d).
+	ConceptIRI string `json:"concept_iri"`
 	// ArrangedIn lists the documents whose current arrangement holds this
 	// rule, and at which version, position and depth.
 	ArrangedIn []RuleArrangement `json:"arranged_in"`
@@ -87,6 +90,8 @@ type RuleMetaInput struct {
 	Owner *string   `json:"owner,omitempty"`
 	Tags  *[]string `json:"tags,omitempty"`
 	Kind  *string   `json:"kind,omitempty"` // requirement | catalogue | invariant | definition | principle
+	// Concept is a definition's concept IRI from ns/concept.ttl; "" clears it.
+	Concept *string `json:"concept,omitempty"`
 }
 
 // SupersedeEntry is one line of a refactor map (S24, R7): an old rule and

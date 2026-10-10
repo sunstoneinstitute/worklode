@@ -183,7 +183,7 @@ Flags: --server
 - `lode project show` — Show a project's repos, focus, and token cost
   Flags: --days, --project
 
-## `lode rule` — Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another, arrange it in a spec
+## `lode rule` — Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another, arrange it in a spec, list terms
 
 - `lode rule accept` — Accept a rule's newest draft version (owner only)
 - `lode rule add` — Add a rule arranged in no document, as a draft owned by you
@@ -198,14 +198,16 @@ Flags: --server
   Flags: --project, --repo
 - `lode rule list` — List rules, or one document's rules in arrangement order
   Flags: --doc, --project, --repo, --status
-- `lode rule set` — Set a rule's kind, owner or tags
-  Flags: --kind
+- `lode rule set` — Set a rule's kind, concept IRI, owner or tags
+  Flags: --concept, --kind
 - `lode rule set owner` — Set a rule's owner; "" clears it
 - `lode rule set tags` — Replace a rule's tags; naming none clears them
 - `lode rule show` — Show a rule: its status, version, placements and text
   Flags: --closure, --inline, --version
 - `lode rule supersede` — Apply a refactor map: withdraw old rules and link each to its successors (S24)
   Flags: --dry-run, --map, --project, --repo
+- `lode rule terms` — List a project's definition rules with their term slugs
+  Flags: --project, --repo
 - `lode rule unarrange` — Remove a rule from a spec without withdrawing it; an accepted spec loses it in its candidate revision
 - `lode rule unlink` — Remove a relation written with rule link
   Flags: --amends, --conflicts-with, --constrains, --derived-from, --needs, --references, --refines

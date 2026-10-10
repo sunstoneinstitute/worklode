@@ -1,0 +1,49 @@
+package ui
+
+// term.templ renders a definition rule as a term (WL-SPEC-77 §4d): the
+// meaning, where it resolved from, its concept IRI, and the rules that
+// need it. Read-only, like the rule page.
+templ Term(v TermView) {
+	@Page(v.Page) {
+		@globalShell() {
+			<section class="card pad">
+				<h1>{ v.Term.Rule.Heading }</h1>
+				<p>
+					<a class="mono" href={ templ.SafeURL(v.RuleURL) }>{ v.Term.Rule.Ref }</a>
+					<span class={ "chip " + docStatusChip(v.Term.Rule.Status) }>{ v.Term.Rule.Status }</span>
+					<span class="chip plain">term { v.Term.Slug }</span>
+					if v.Term.Instance {
+						<span class="chip plain">instance glossary</span>
+					}
+				</p>
+				if v.Term.Rule.ConceptIRI != "" {
+					<p class="muted small">Concept: <span class="mono">{ v.Term.Rule.ConceptIRI }</span></p>
+				}
+			</section>
+			<section class="card">
+				<div class="hd"><h3>Definition</h3></div>
+				<div class="bd prose">
+					// BodyHTML is emitted unescaped for the reason Rule's Body
+					// section gives: internal/mdrender has already reduced it.
+					@templ.Raw(string(v.BodyHTML))
+				</div>
+			</section>
+			<section class="card">
+				<div class="hd"><h3>Needed by</h3></div>
+				<div class="bd">
+					if len(v.Term.NeededBy) == 0 {
+						<p class="muted">No rule needs this term.</p>
+					} else {
+						<ul>
+							for _, e := range v.Term.NeededBy {
+								<li>
+									<a href={ templ.SafeURL("/rules/" + e.From) }>{ e.From }</a>{ " " }{ e.FromHeading }
+								</li>
+							}
+						</ul>
+					}
+				</div>
+			</section>
+		}
+	}
+}

@@ -969,3 +969,14 @@ func ruleView(md *mdrender.Cache, keys mdrender.ProjectKeys, c *model.Rule, vers
 	}
 	return v
 }
+
+// termView maps a resolved term to its page. The rule link uses the rule's
+// own project, which is the glossary project for an instance term.
+func termView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Term, projectID string) ui.TermView {
+	return ui.TermView{
+		Page:     ui.PageProps{Title: "worklode: " + t.Rule.Heading, ActiveGlobal: "knowledge"},
+		Term:     *t,
+		BodyHTML: md.Body(keys, t.Rule.Body),
+		RuleURL:  fmt.Sprintf("/projects/%s/rule/%d", t.Rule.Project, t.Rule.Number),
+	}
+}

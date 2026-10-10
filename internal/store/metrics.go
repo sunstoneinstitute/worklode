@@ -65,6 +65,7 @@ type storeMetrics struct {
 	ruleClosureSize       prometheus.Histogram
 	ruleLints             *prometheus.CounterVec
 	ruleOps               *prometheus.CounterVec
+	termResolves          *prometheus.CounterVec
 	queries               *prometheus.CounterVec
 	querySeconds          *prometheus.CounterVec
 }
@@ -165,6 +166,10 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_task_fixes_total",
 			Help: "fix.started/fix.finished calls by phase (started|finished) and outcome (recorded|replayed|error) — WL-SPEC-75 §9.6's funnel.",
 		}, []string{"phase", "outcome"}),
+		termResolves: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_term_resolutions_total",
+			Help: "Term resolutions (WL-SPEC-77 §4d) by outcome (project|instance|not_found|error).",
+		}, []string{"outcome"}),
 		ruleSupersedes: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_rule_supersede_total",
 			Help: "Refactor maps (lode rule supersede, S24) by outcome (applied|dry_run|invalid|not_found|error).",
@@ -196,7 +201,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help: "Seconds spent in database queries, by the same pkg and func labels as worklode_store_queries_total. rate() of this ranks store functions by the database time they consume.",
 		}, []string{"pkg", "func"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.ruleSupersedes, m.ruleClosureSize, m.ruleOps, m.queries, m.querySeconds)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.ruleSupersedes, m.ruleClosureSize, m.ruleLints, m.ruleOps, m.termResolves, m.queries, m.querySeconds)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// WL-SPEC-79 §17 is about the first of those becoming the second.
@@ -286,6 +291,16 @@ func (m *storeMetrics) ruleLint(outcome string) {
 		return
 	}
 	m.ruleLints.WithLabelValues(outcome).Inc()
+}
+
+// termResolve records one ResolveTerm call by outcome: project (the
+// project's own definition), instance (the instance glossary's), not_found
+// or error.
+func (m *storeMetrics) termResolve(outcome string) {
+	if m == nil {
+		return
+	}
+	m.termResolves.WithLabelValues(outcome).Inc()
 }
 
 func (m *storeMetrics) expire(n int) {

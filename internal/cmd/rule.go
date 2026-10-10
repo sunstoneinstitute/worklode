@@ -17,9 +17,9 @@ import (
 func newRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rule",
-		Short: "Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another, arrange it in a spec",
+		Short: "Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another, arrange it in a spec, list terms",
 	}
-	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleArrangeCmd(), newRuleUnarrangeCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleLintCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd())
+	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleArrangeCmd(), newRuleUnarrangeCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleLintCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd(), newRuleTermsCmd())
 	return cmd
 }
 
@@ -443,23 +443,31 @@ func newRuleUnlinkCmd() *cobra.Command {
 // takes its own positional shape (owner one actor, tags any number), so the
 // field is a subcommand rather than a leading argument the way `project set`
 // groups its fields (WL-489). The kind is `lode rule set <ref> --kind <kind>`
-// (WL-SPEC-77 §4): a ref never collides with a subcommand name.
+// (WL-SPEC-77 §4) and a definition's concept IRI `--concept <iri>` (§4d): a
+// ref never collides with a subcommand name.
 func newRuleSetCmd() *cobra.Command {
-	var kind string
+	var kind, concept string
 	cmd := &cobra.Command{
-		Use:               "set <ref> --kind <kind>",
-		Short:             "Set a rule's kind, owner or tags",
+		Use:               "set <ref> [--kind <kind>] [--concept <iri>]",
+		Short:             "Set a rule's kind, concept IRI, owner or tags",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: ruleRefAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !cmd.Flags().Changed("kind") {
-				return errors.New("name a field: --kind <kind>, or the owner or tags subcommand")
+			var in model.RuleMetaInput
+			if cmd.Flags().Changed("kind") {
+				in.Kind = &kind
+			}
+			if cmd.Flags().Changed("concept") {
+				in.Concept = &concept
+			}
+			if in.Kind == nil && in.Concept == nil {
+				return errors.New("name a field: --kind <kind>, --concept <iri>, or the owner or tags subcommand")
 			}
 			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			rule, raw, err := c.SetRuleMeta(cmd.Context(), args[0], model.RuleMetaInput{Kind: &kind})
+			rule, raw, err := c.SetRuleMeta(cmd.Context(), args[0], in)
 			if err != nil {
 				return err
 			}
@@ -472,6 +480,7 @@ func newRuleSetCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&kind, "kind", "", "the rule's kind: "+strings.Join(ns.Schemes["RuleKind"], ", "))
+	cmd.Flags().StringVar(&concept, "concept", "", `a definition's concept IRI from ns/concept.ttl, e.g. `+ns.ConceptNS+`requirement; "" clears it`)
 	completeFlagValues(cmd, "kind", ns.Schemes["RuleKind"])
 	cmd.AddCommand(newRuleSetOwnerCmd(), newRuleSetTagsCmd())
 	return cmd
@@ -641,4 +650,40 @@ func parseSupersedeMap(content string) ([]model.SupersedeEntry, error) {
 		entries = append(entries, model.SupersedeEntry{Old: old, New: news})
 	}
 	return entries, nil
+}
+
+// newRuleTermsCmd is `lode rule terms`: a project's definition rules with
+// the slugs their term pages live under (WL-SPEC-77 §4d).
+func newRuleTermsCmd() *cobra.Command {
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "terms",
+		Short: "List a project's definition rules with their term slugs",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			if sc.Project == "" {
+				return errNoProject
+			}
+			terms, raw, err := c.ListTerms(cmd.Context(), sc.Project)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TermsTable(cmd.OutOrStdout(), terms)
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "project id")
+	return cmd
 }

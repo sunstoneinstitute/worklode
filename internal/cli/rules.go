@@ -54,6 +54,9 @@ var ruleEdgeInverse = map[string]string{"amends": "amendedBy", "supersedes": "su
 func RuleRender(w io.Writer, c model.Rule) {
 	fmt.Fprintf(w, "%s  %s\n", c.Ref, c.Heading)
 	fmt.Fprintf(w, "  kind:     %s\n", c.Kind)
+	if c.ConceptIRI != "" {
+		fmt.Fprintf(w, "  concept:  %s\n", c.ConceptIRI)
+	}
 	fmt.Fprintf(w, "  status:   %s\n", c.Status)
 	fmt.Fprintf(w, "  version:  %d\n", c.Version)
 	if c.Owner != "" {

@@ -34,6 +34,11 @@ document section may go and still be addressable (WL-SPEC-78 §3.4). It defaults
 to 3, and a value below 1 fails the boot. Raising it is always safe; lowering
 it is refused for any document whose already-accepted anchors it would orphan.
 
+`LODE_GLOSSARY_PROJECT` (or `--glossary-project`) names the project whose
+glossary spec (slug `glossary`) is the instance glossary (WL-SPEC-77 §4d). A
+term a project does not define resolves there. Unset, the instance has no
+glossary.
+
 Install the end-user binaries: the `lode` CLI plus `lode-hook` and
 `lode-statusline`, which agent harnesses invoke on every lifecycle event.
 

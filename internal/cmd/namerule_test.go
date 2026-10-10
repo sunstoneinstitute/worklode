@@ -70,6 +70,7 @@ var l3DomainActions = map[string]bool{
 // allowed" is unanswerable until this set is known. The set is closed in the
 // spec's own words — adding a member is part of adding the command.
 var nounViews = map[string]bool{
+	"lode rule terms":         true,
 	"lode rule versions":      true,
 	"lode doc referrers":      true,
 	"lode doc progress":       true,

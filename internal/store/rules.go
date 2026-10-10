@@ -155,6 +155,9 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document) (minted bool, e
 		if err := deriveReferences(tx, project, c.id, c.text); err != nil {
 			return false, err
 		}
+		if err := checkTermSlug(tx, c.id); err != nil {
+			return false, err
+		}
 	}
 	return minted, nil
 }
@@ -289,13 +292,13 @@ func (s *Store) GetRule(ctx context.Context, projectKey string, number int64) (*
 	var tagsRaw string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT c.id, c.project_id, p.key, c.number, c.kind, c.status, c.version,
-		        cv.heading, cv.body, c.owner, c.tags, c.created_at, c.updated_at
+		        cv.heading, cv.body, coalesce(c.concept_iri, ''), c.owner, c.tags, c.created_at, c.updated_at
 		   FROM rules c
 		   JOIN projects p ON p.id = c.project_id
 		   JOIN rule_versions cv ON cv.rule_id = c.id AND cv.version = c.version
 		  WHERE p.key = $1 AND c.number = $2`, projectKey, number,
 	).Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Kind, &c.Status, &c.Version,
-		&c.Heading, &c.Body, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt)
+		&c.Heading, &c.Body, &c.ConceptIRI, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -385,7 +388,7 @@ func (s *Store) ListRules(ctx context.Context, f RuleFilter) ([]model.Rule, erro
 		return nil, fmt.Errorf("rule status %q: must be draft, accepted, superseded or withdrawn: %w", f.Status, ErrInvalidInput)
 	}
 	q := `SELECT c.id, c.project_id, p.key, c.number, c.kind, c.status, c.version,
-	             cv.heading, c.owner, c.tags, c.created_at, c.updated_at
+	             cv.heading, coalesce(c.concept_iri, ''), c.owner, c.tags, c.created_at, c.updated_at
 	        FROM rules c
 	        JOIN projects p ON p.id = c.project_id
 	        JOIN rule_versions cv ON cv.rule_id = c.id AND cv.version = c.version`
@@ -409,7 +412,7 @@ func (s *Store) ListRules(ctx context.Context, f RuleFilter) ([]model.Rule, erro
 		var owner sql.NullString
 		var tagsRaw string
 		if err := rows.Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Kind, &c.Status, &c.Version,
-			&c.Heading, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			&c.Heading, &c.ConceptIRI, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan rule: %w", err)
 		}
 		tags, err := scanTextArray(tagsRaw)
@@ -667,12 +670,17 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-// SetRuleMeta sets a rule's owner, tags and kind (S15, WL-SPEC-77 §4). A
-// nil field is left alone. Dates never live on a rule; they reach it
+// SetRuleMeta sets a rule's owner, tags, kind and concept IRI (S15,
+// WL-SPEC-77 §4, §4d). A nil field is left alone. Only a definition carries
+// a concept IRI: a rule that stops being one loses it, and naming one on
+// any other kind is refused. Dates never live on a rule; they reach it
 // through its tasks.
 func SetRuleMeta(tx *sql.Tx, ruleID int64, in model.RuleMetaInput) error {
-	if in.Owner == nil && in.Tags == nil && in.Kind == nil {
+	if in.Owner == nil && in.Tags == nil && in.Kind == nil && in.Concept == nil {
 		return fmt.Errorf("nothing to set: %w", ErrInvalidInput)
+	}
+	if c := deref(in.Concept); c != "" && !ns.IsConceptIRI(c) {
+		return fmt.Errorf("concept %q is not a scheme or concept of ns/concept.ttl (%s<name>): %w", c, ns.ConceptNS, ErrInvalidInput)
 	}
 	if in.Kind != nil && !slices.Contains(ns.Schemes["RuleKind"], *in.Kind) {
 		return fmt.Errorf("rule kind %q: must be one of %s: %w",
@@ -688,18 +696,32 @@ func SetRuleMeta(tx *sql.Tx, ruleID int64, in model.RuleMetaInput) error {
 				ruleRefOf(tx, ruleID), ErrRuleCovered)
 		}
 	}
-	res, err := tx.Exec(
+	var kind string
+	err := tx.QueryRow(
 		`UPDATE rules
 		    SET owner = CASE WHEN $2::boolean THEN nullif($3, '') ELSE owner END,
 		        tags  = CASE WHEN $4::boolean THEN $5::text[] ELSE tags END,
 		        kind  = CASE WHEN $6::boolean THEN $7 ELSE kind END,
+		        concept_iri = CASE WHEN (CASE WHEN $6::boolean THEN $7 ELSE kind END) <> 'definition' THEN NULL
+		                           WHEN $8::boolean THEN nullif($9, '') ELSE concept_iri END,
 		        updated_at = now()
-		  WHERE id = $1`,
-		ruleID, in.Owner != nil, deref(in.Owner), in.Tags != nil, deref(in.Tags), in.Kind != nil, deref(in.Kind))
+		  WHERE id = $1
+		  RETURNING kind`,
+		ruleID, in.Owner != nil, deref(in.Owner), in.Tags != nil, deref(in.Tags), in.Kind != nil, deref(in.Kind),
+		in.Concept != nil, deref(in.Concept)).Scan(&kind)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("rule %d: %w", ruleID, ErrNotFound)
+	}
 	if err != nil {
 		return fmt.Errorf("set meta of rule %d: %w", ruleID, err)
 	}
-	return requireOneAffected(res, fmt.Sprintf("rule %d", ruleID), ErrNotFound)
+	if deref(in.Concept) != "" && kind != designdoc.RuleKindDefinition {
+		return fmt.Errorf("%s is a %s; only a definition carries a concept IRI: %w", ruleRefOf(tx, ruleID), kind, ErrInvalidInput)
+	}
+	if in.Kind != nil {
+		return checkTermSlug(tx, ruleID)
+	}
+	return nil
 }
 
 // ruleRefSQL is designdoc.FormatRuleRef as a SQL expression over a projects
