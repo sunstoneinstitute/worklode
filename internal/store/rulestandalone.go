@@ -129,22 +129,60 @@ func (s *Store) AcceptRule(ctx context.Context, projectKey string, number int64,
 		if err != nil {
 			return err
 		}
-		if version == 1 {
-			return nil
-		}
-		gate, err := ruleGate(tx, id, version, substantive)
-		if err != nil || gate == "" {
-			return err
-		}
-		return reviewRuleVersion(tx, now, ruleVersionReview{
+		return gateRuleVersion(tx, now, ruleVersionReview{
 			id: id, project: project, ref: ruleRefOf(tx, id), version: version, owner: owner.String,
-			gate: gate, actor: actor, bumped: bumped,
-		}, eventID)
+			actor: actor, bumped: bumped,
+		}, substantive, eventID)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return s.GetRule(ctx, projectKey, number)
+}
+
+// gateRuleVersion applies WL-SPEC-77 §10's gates to an accepted rule version
+// (§19.4), whether it landed through AcceptRule or through the accept of a
+// spec arranging it: a substantive version gets reviewRuleVersion. A first
+// version amends nothing and passes no gate.
+func gateRuleVersion(tx *sql.Tx, now time.Time, in ruleVersionReview, judged bool, eventID int64) error {
+	if in.version == 1 {
+		return nil
+	}
+	gate, err := ruleGate(tx, in.id, in.version, judged)
+	if err != nil || gate == "" {
+		return err
+	}
+	in.gate = gate
+	return reviewRuleVersion(tx, now, in, eventID)
+}
+
+// gateDocRuleVersions runs gateRuleVersion over the rule versions accepting
+// spec docID landed (acceptDocRules' ids and bumped). A rule with no owner
+// is reviewed by owner, the accepting spec's.
+func gateDocRuleVersions(tx *sql.Tx, now time.Time, docID int64, ids []int64, bumped map[int64]int, owner, actor string, eventID int64) error {
+	for _, id := range ids {
+		in := ruleVersionReview{id: id, ref: ruleRefOf(tx, id), actor: actor, spec: docID, bumped: map[int64]int{}}
+		if err := tx.QueryRow(`SELECT project_id, version, coalesce(owner, $2) FROM rules WHERE id = $1`, id, owner).
+			Scan(&in.project, &in.version, &in.owner); err != nil {
+			return fmt.Errorf("read rule %s: %w", in.ref, err)
+		}
+		rows, err := tx.Query(`SELECT DISTINCT doc_id FROM doc_rules WHERE rule_id = $1 AND doc_id = ANY($2)`,
+			id, slices.Collect(maps.Keys(bumped)))
+		if err != nil {
+			return fmt.Errorf("specs arranging rule %s: %w", in.ref, err)
+		}
+		specs, err := scanColumn[int64](rows, "specs arranging rule "+in.ref)
+		if err != nil {
+			return err
+		}
+		for _, sp := range specs {
+			in.bumped[sp] = bumped[sp]
+		}
+		if err := gateRuleVersion(tx, now, in, false, eventID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ruleGate is WL-SPEC-77 §10's substantive test applied to version of rule
@@ -205,8 +243,10 @@ func ruleGate(tx *sql.Tx, id int64, version int, judged bool) (string, error) {
 }
 
 // ruleVersionReview is what reviewRuleVersion needs about the accepted
-// version: bumped maps each accepted spec moved to it to its new version.
+// version: bumped maps each accepted spec moved to it to its new version,
+// spec is the spec whose own accept landed it (0 for AcceptRule).
 type ruleVersionReview struct {
+	spec    int64
 	id      int64
 	project string
 	ref     string
@@ -218,11 +258,15 @@ type ruleVersionReview struct {
 }
 
 // reviewRuleVersion performs WL-SPEC-77 §10's consequences of a substantive
-// rule version (§19.4): one review task for the rule owner and the bumped
-// specs' reviewers, an awaiting approval for each reviewer on the spec's new
-// version, and every accepted plan covering the rule marked stale.
+// rule version (§19.4): one review task for the rule owner and the reviewers
+// of the accepting and bumped specs, an awaiting approval for each reviewer on
+// a bumped spec's new version, and every accepted plan covering the rule
+// marked stale.
 func reviewRuleVersion(tx *sql.Tx, now time.Time, in ruleVersionReview, eventID int64) error {
 	specs := slices.Sorted(maps.Keys(in.bumped))
+	if in.spec != 0 {
+		specs = append([]int64{in.spec}, specs...)
+	}
 	reviewers := []string{in.owner}
 	for _, spec := range specs {
 		rs, err := docReviewers(tx, spec)
@@ -232,8 +276,12 @@ func reviewRuleVersion(tx *sql.Tx, now time.Time, in ruleVersionReview, eventID 
 		if len(rs) == 0 {
 			continue
 		}
-		if err := RequestDocApproval(tx, now, spec, in.bumped[spec]); err != nil {
-			return err
+		// The accepting spec's reviewers gate its own accept; only a bumped
+		// spec owes a new approval.
+		if spec != in.spec {
+			if err := RequestDocApproval(tx, now, spec, in.bumped[spec]); err != nil {
+				return err
+			}
 		}
 		for _, r := range rs {
 			if !slices.Contains(reviewers, r) {
@@ -266,7 +314,10 @@ func reviewRuleVersion(tx *sql.Tx, now time.Time, in ruleVersionReview, eventID 
 	if err != nil {
 		return err
 	}
-	return MergeEventPayload(tx, eventID, map[string]any{
-		"gate": in.gate, "review_task": task.ID, "stale_plans": stale,
-	})
+	fields := map[string]any{"gate": in.gate, "review_task": task.ID, "stale_plans": stale}
+	if in.spec != 0 {
+		// A spec accept can land several rule versions under one event.
+		fields = map[string]any{in.ref: fields}
+	}
+	return MergeEventPayload(tx, eventID, fields)
 }

@@ -224,6 +224,53 @@ func TestAcceptRuleSubstantiveGates(t *testing.T) {
 	}
 }
 
+// TestAcceptRevisionGatesRuleVersions: a spec revision that adds a code span
+// to one rule mints one review task for that rule and marks the plan covering
+// it stale; a rule left unchanged, and one reworded without tripping a
+// check, mint nothing (WL-SPEC-77 §19.4).
+func TestAcceptRevisionGatesRuleVersions(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, spec.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reviseDoc(t, s, spec.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	v2 := strings.Replace(ruleDocV1, "\nA.\n", "\nA calls `Frob()`.\n", 1)
+	v2 = strings.Replace(v2, "\nC.\n", "\nC reworded.\n", 1)
+	if err := updateRevision(t, s, spec.ID, v2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := acceptRevision(t, s, spec.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	rows, err := s.db.Query(`SELECT title FROM tasks WHERE kind = 'review' ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err != nil {
+			t.Fatal(err)
+		}
+		titles = append(titles, title)
+	}
+	rows.Close()
+	if len(titles) != 1 || !strings.HasPrefix(titles[0], "Review P1-REQ-1 v2") {
+		t.Errorf("review tasks = %q, want one for P1-REQ-1 v2", titles)
+	}
+	if d, err := s.GetDoc(ctx, plan.ID); err != nil || d.Status != "stale" {
+		t.Errorf("covering plan = %v %v, want stale", d.Status, err)
+	}
+}
+
 // TestAcceptRuleUnderOpenRevision: a candidate revision opened before a rule
 // version was accepted still holds the older text; landing it keeps the
 // accepted version rather than writing the older text back as a new one.
