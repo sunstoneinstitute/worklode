@@ -28,6 +28,9 @@ type Store struct {
 	// sweepStaleDocs applies (WL-SPEC-77 §9) when a document's project sets no
 	// override (projects.doc_staleness_days). WithDocStalenessDays changes it.
 	docStalenessDays int
+	// glossaryProject is the project whose glossary spec is the instance
+	// glossary (WL-SPEC-77 §4d); empty means none. WithGlossaryProject sets it.
+	glossaryProject string
 }
 
 // Open opens a Postgres-backed store for the given postgres:// DSN. Callers

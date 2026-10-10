@@ -220,3 +220,5 @@ configMapGenerator:
       - migrations/0103_spec-headings.down.sql
       - migrations/0104_doc-revision-rules.up.sql
       - migrations/0104_doc-revision-rules.down.sql
+      - migrations/0105_rule-concept-iri.up.sql
+      - migrations/0105_rule-concept-iri.down.sql
