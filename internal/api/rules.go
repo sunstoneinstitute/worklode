@@ -145,6 +145,68 @@ func (s *server) acceptRule(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
+// arrangeRule handles POST /api/v1/docs/{id}/rules: place an existing rule
+// in a spec, in place on a draft or in the candidate revision of an accepted
+// one (WL-SPEC-77 §19.3). Answers with the rule.
+func (s *server) arrangeRule(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.ArrangeRuleInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	ref, ok := designdoc.ParseRuleRef(req.Rule)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "rule must look like WL-REQ-12")
+		return
+	}
+	now := s.st.Now()
+	if err := s.recordDocEvent(w, r, "arrange", "doc.rule_arranged", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.ArrangeRule(tx, now, id, req, actorIDFrom(r), eventID)
+			return err
+		}); err != nil {
+		return
+	}
+	s.writeRule(w, r, ref)
+}
+
+// unarrangeRule handles DELETE /api/v1/docs/{id}/rules/{rule}: remove a rule
+// from a spec without withdrawing it (WL-SPEC-77 §19.3).
+func (s *server) unarrangeRule(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	rule := r.PathValue("rule")
+	ref, ok := designdoc.ParseRuleRef(rule)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "rule must look like WL-REQ-12")
+		return
+	}
+	now := s.st.Now()
+	if err := s.recordDocEvent(w, r, "unarrange", "doc.rule_unarranged", id, map[string]string{"rule": rule},
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UnarrangeRule(tx, now, id, rule, actorIDFrom(r), eventID)
+		}); err != nil {
+		return
+	}
+	s.writeRule(w, r, ref)
+}
+
+// writeRule answers with a rule read back after a write.
+func (s *server) writeRule(w http.ResponseWriter, r *http.Request, ref designdoc.RuleRef) {
+	c, err := s.st.GetRule(r.Context(), ref.Key, ref.Number)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
 // listRuleVersions handles GET /api/v1/rules/{id}/versions.
 func (s *server) listRuleVersions(w http.ResponseWriter, r *http.Request) {
 	ref, ok := ruleRef(w, r)
@@ -273,6 +335,15 @@ var ruleRouteDocs = map[string]routeDoc{
 	},
 	"POST /api/v1/rules/{id}/accept": {
 		summary:   "Accept a rule's newest draft version; owner only",
+		responses: map[int]any{http.StatusOK: model.Rule{}},
+	},
+	"POST /api/v1/docs/{id}/rules": {
+		summary:   "Arrange an existing rule in a spec; an accepted spec gets it in its candidate revision",
+		request:   model.ArrangeRuleInput{},
+		responses: map[int]any{http.StatusOK: model.Rule{}},
+	},
+	"DELETE /api/v1/docs/{id}/rules/{rule}": {
+		summary:   "Remove a rule from a spec without withdrawing it; an accepted spec loses it in its candidate revision",
 		responses: map[int]any{http.StatusOK: model.Rule{}},
 	},
 	"GET /api/v1/rules/{id}": {

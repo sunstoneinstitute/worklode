@@ -118,6 +118,17 @@ func (c *Client) AcceptRule(ctx context.Context, ref string) (model.Rule, []byte
 	return doJSON[model.Rule](ctx, c, http.MethodPost, "/api/v1/rules/"+url.PathEscape(ref)+"/accept", nil, "rule")
 }
 
+// ArrangeRule calls POST /api/v1/docs/{id}/rules: place a rule in a spec
+// (WL-SPEC-77 §19.3).
+func (c *Client) ArrangeRule(ctx context.Context, docID int64, in model.ArrangeRuleInput) (model.Rule, []byte, error) {
+	return doJSON[model.Rule](ctx, c, http.MethodPost, docPath(docID, "/rules"), in, "rule")
+}
+
+// UnarrangeRule calls DELETE /api/v1/docs/{id}/rules/{ref}.
+func (c *Client) UnarrangeRule(ctx context.Context, docID int64, ref string) (model.Rule, []byte, error) {
+	return doJSON[model.Rule](ctx, c, http.MethodDelete, docPath(docID, "/rules/"+url.PathEscape(ref)), nil, "rule")
+}
+
 // SetRuleMeta calls PATCH /api/v1/rules/{ref}: owner and/or tags.
 func (c *Client) SetRuleMeta(ctx context.Context, ref string, in model.RuleMetaInput) (model.Rule, []byte, error) {
 	return doJSON[model.Rule](ctx, c, http.MethodPatch, "/api/v1/rules/"+url.PathEscape(ref), in, "rule")

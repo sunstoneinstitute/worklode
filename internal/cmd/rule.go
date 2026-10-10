@@ -17,9 +17,9 @@ import (
 func newRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rule",
-		Short: "Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another",
+		Short: "Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another, arrange it in a spec",
 	}
-	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleLintCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd())
+	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleArrangeCmd(), newRuleUnarrangeCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleLintCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd())
 	return cmd
 }
 
@@ -94,6 +94,74 @@ func newRuleAcceptCmd() *cobra.Command {
 				return err
 			}
 			rule, raw, err := c.AcceptRule(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.RuleRender(cmd.OutOrStdout(), rule)
+			return nil
+		},
+	}
+}
+
+// newRuleArrangeCmd is `lode rule arrange <spec> <rule>`: place an existing
+// rule in a spec, in place on a draft or in the candidate revision of an
+// accepted spec (WL-SPEC-77 §19.3).
+func newRuleArrangeCmd() *cobra.Command {
+	var in model.ArrangeRuleInput
+	cmd := &cobra.Command{
+		Use:   "arrange <spec> <rule>",
+		Short: "Place an existing rule in a spec; an accepted spec gets it in its candidate revision",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
+			if err != nil {
+				return err
+			}
+			in.Rule = args[1]
+			rule, raw, err := c.ArrangeRule(cmd.Context(), id, in)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.RuleRender(cmd.OutOrStdout(), rule)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&in.After, "after", "", "place it after this rule or section anchor, at the same depth")
+	cmd.Flags().StringVar(&in.Under, "under", "", "place it as the last child of this rule or section anchor")
+	cmd.Flags().StringVar(&in.Anchor, "anchor", "", "its anchor (sec-N); defaults to the next free number at that position")
+	cmd.MarkFlagsMutuallyExclusive("after", "under")
+	return cmd
+}
+
+// newRuleUnarrangeCmd is `lode rule unarrange <spec> <rule>`: remove a rule
+// from a spec without withdrawing it.
+func newRuleUnarrangeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unarrange <spec> <rule>",
+		Short: "Remove a rule from a spec without withdrawing it; an accepted spec loses it in its candidate revision",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
+			if err != nil {
+				return err
+			}
+			rule, raw, err := c.UnarrangeRule(cmd.Context(), id, args[1])
 			if err != nil {
 				return err
 			}
