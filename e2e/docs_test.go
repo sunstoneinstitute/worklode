@@ -265,27 +265,15 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("discard with nothing open: status = %d, want 404 (err %v)", status, err)
 	}
 
-	// 6. Open a revision, then edit it to drop sec-2's number while keeping
-	// its anchor: this is the form that reaches the diff (renumbering while
-	// keeping the anchor is a lintAnchors defect refused at parse time), and
-	// AcceptDocRevision must reject it citing WL-REQ-167 rule 3.
+	// 6. Open a revision and drop sec-2's number while keeping its anchor.
+	// Numbers are derived (WL-REQ-165), so the candidate is valid; step 8
+	// replaces it before anything is accepted.
 	if _, _, err := actorA.ReviseDoc(ctx, doc.ID); err != nil {
 		t.Fatalf("revise doc: %v", err)
 	}
 	droppedNumberBody := strings.Replace(specSourceBody, "## 2. Model {#sec-2}", "## Model {#sec-2}", 1)
 	if _, _, err := actorA.UpdateDocRevision(ctx, doc.ID, noHeader(t, droppedNumberBody)); err != nil {
 		t.Fatalf("update revision (dropped number): %v", err)
-	}
-	if _, _, err := actorA.AcceptDocRevision(ctx, doc.ID); err == nil {
-		t.Fatal("accept revision with dropped number: want an error, got nil")
-	} else {
-		if status := clientErrStatus(t, err); status != http.StatusUnprocessableEntity {
-			t.Fatalf("accept revision with dropped number: status = %d, want 422 (err %v)", status, err)
-		}
-		if !strings.Contains(err.Error(), `sec-2: renumbered from "2" to ""`) ||
-			!strings.Contains(err.Error(), "025 §6 rule 3") {
-			t.Fatalf("accept revision with dropped number: err = %v, want the rule 3 violation naming sec-2", err)
-		}
 	}
 
 	// 7. Actor B is neither the owner nor this candidate's author, so B
@@ -296,9 +284,10 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("third-party discard: status = %d, want 403 (err %v)", status, err)
 	}
 
-	// 8. Replace the open revision with one that adds sec-1a and edits only
-	// sec-2's body: this must be accepted, landing as version 2 with
-	// last_revised_in moved on exactly sec-2 (WL-REQ-167 rule 5).
+	// 8. Replace the open revision with one that inserts "1a. Extra" and edits
+	// only Model's body: it lands as version 2, Extra numbered sec-2 and Model
+	// sec-3 (WL-REQ-165), with last_revised_in moved on exactly the edited and
+	// the new section (WL-REQ-167 rule 3).
 	if _, _, err := actorA.UpdateDocRevision(ctx, doc.ID, noHeader(t, specRevisedBody)); err != nil {
 		t.Fatalf("update revision (valid): %v", err)
 	}
@@ -317,25 +306,25 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("doc version after revision accept = %d, want 2", detail.Version)
 	}
 	if len(detail.Sections) != 3 {
-		t.Fatalf("sections after revision accept = %+v, want exactly 3 (sec-1, sec-1a, sec-2)", detail.Sections)
+		t.Fatalf("sections after revision accept = %+v, want exactly 3", detail.Sections)
 	}
 	sec1 = findDocSection(detail.Sections, "sec-1")
-	sec1a := findDocSection(detail.Sections, "sec-1a")
-	sec2 = findDocSection(detail.Sections, "sec-2")
-	if sec1 == nil || sec1a == nil || sec2 == nil {
-		t.Fatalf("sections after revision accept = %+v, want sec-1, sec-1a and sec-2", detail.Sections)
+	extra := findDocSection(detail.Sections, "sec-2")
+	model3 := findDocSection(detail.Sections, "sec-3")
+	if sec1 == nil || extra == nil || model3 == nil || extra.Heading != "Extra" || model3.Heading != "Model" {
+		t.Fatalf("sections after revision accept = %+v, want Scope, Extra and Model at sec-1..3", detail.Sections)
 	}
 	if sec1.LastRevisedIn != 1 {
 		t.Fatalf("sec-1 last_revised_in = %d, want 1 (untouched by the revision)", sec1.LastRevisedIn)
 	}
-	if sec2.LastRevisedIn != 2 {
-		t.Fatalf("sec-2 last_revised_in = %d, want 2 (its body was edited)", sec2.LastRevisedIn)
+	if model3.LastRevisedIn != 2 {
+		t.Fatalf("Model last_revised_in = %d, want 2 (its body was edited)", model3.LastRevisedIn)
 	}
-	if sec1a.LastRevisedIn != 2 {
-		t.Fatalf("sec-1a last_revised_in = %d, want 2 (introduced in this revision)", sec1a.LastRevisedIn)
+	if extra.LastRevisedIn != 2 {
+		t.Fatalf("Extra last_revised_in = %d, want 2 (introduced in this revision)", extra.LastRevisedIn)
 	}
-	if !sec1a.Published {
-		t.Fatalf("sec-1a published = false, want true (accept publishes every current anchor)")
+	if !extra.Published {
+		t.Fatalf("Extra published = false, want true (accept publishes every current anchor)")
 	}
 
 	// 9. The plan half: a plan carries a server-allocated number like every
