@@ -300,3 +300,39 @@ func TestEditableFormWritesRules(t *testing.T) {
 		t.Fatalf("landed body carries rule=:\n%s", rawDocBody(t, s, a.ID))
 	}
 }
+
+// TestEditableFormRefusesWithdrawnRule: a rule= heading naming a withdrawn
+// rule is refused with its successors named, on a draft edit and on a
+// candidate revision; naming the successor is accepted. A spec that already
+// arranges the withdrawn rule round-trips it unchanged (WL-SPEC-77 §19.5).
+func TestEditableFormRefusesWithdrawnRule(t *testing.T) {
+	s := openDocStore(t)
+	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+	b := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "b", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n# B\n\n## 1. Own {#sec-1}\n\nX.\n"})
+	mustSupersede(t, s, entry("P1-REQ-3", "P1-REQ-2"))
+
+	_, err := updateDocBody(t, s, b.ID, "# B\n\n## 1. Two {#sec-1 rule=P1-REQ-3}\n\nC.\n")
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "P1-REQ-2") {
+		t.Fatalf("withdrawn rule arranged: %v, want ErrInvalidInput naming P1-REQ-2", err)
+	}
+	if _, err := updateDocBody(t, s, b.ID, "# B\n\n## 1. Sub {#sec-1 rule=P1-REQ-2}\n\nB.\n"); err != nil {
+		t.Fatalf("successor refused: %v", err)
+	}
+	if _, err := updateDocBody(t, s, a.ID, editableBody(t, s, a.ID)); err != nil {
+		t.Fatalf("round trip of a spec arranging the withdrawn rule: %v", err)
+	}
+	if _, err := updateDocBody(t, s, a.ID, strings.Replace(editableBody(t, s, a.ID), "\nC.\n", "\nC edited.\n", 1)); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("withdrawn rule's text edited: %v, want ErrInvalidInput", err)
+	}
+
+	if _, _, err := acceptDoc(t, s, b.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reviseDoc(t, s, b.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := updateRevision(t, s, b.ID, "# B\n\n## 1. Two {#sec-1 rule=P1-REQ-3}\n\nC.\n"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("withdrawn rule in a revision: %v, want ErrInvalidInput", err)
+	}
+}
