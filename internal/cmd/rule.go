@@ -205,12 +205,12 @@ func newRuleShowCmd() *cobra.Command {
 
 // newRuleLintCmd is `lode rule lint`: the project's rules against the corpus
 // targets (WL-SPEC-77 §4c). It exits non-zero on any finding but a rule with
-// one context edge, which is a report, not a verdict.
+// one context edge or a converted heading, which are reports, not verdicts.
 func newRuleLintCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
 		Use:   "lint",
-		Short: "Report rules per spec, closure sizes, undefined terms, conflicts and positional references",
+		Short: "Report rules per spec, closure sizes, undefined terms, conflicts, positional and unresolved references, and converted headings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
@@ -232,7 +232,7 @@ func newRuleLintCmd() *cobra.Command {
 			}
 			n := 0
 			for _, f := range l.Findings {
-				if f.Check != "one-context-edge" {
+				if f.Check != "one-context-edge" && f.Check != "converted-heading" {
 					n++
 				}
 			}
