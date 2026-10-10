@@ -24,12 +24,17 @@ import (
 //
 // The trailing dot after the number is optional because the house style is
 // "1." at the top level and "1.1" below it; it is not captured either way.
+// The anchor may carry the editable form's rule ref, "{#sec-3 rule=WL-RULE-12}"
+// (WL-SPEC-77 §19.5).
 var heading = regexp.MustCompile(
 	`^(?P<hashes>#{2,6})[ \t]+` +
 		`(?:(?P<num>\d+(?:\.\d+)*[a-z]?)\.?[ \t]+)?` +
 		`(?P<text>.*?)` +
-		`(?:[ \t]*\{#(?P<anchor>[\w.\-]+)\})?` +
+		`(?:[ \t]*\{#(?P<anchor>[\w.\-]+)(?:[ \t]+rule=(?P<rule>[\w\-]+))?\})?` +
 		`[ \t]*$`)
+
+// anchorAttr is the anchor attribute at the end of a heading line.
+var anchorAttr = regexp.MustCompile(`\{#[^{}]*\}([ \t]*\r?\n?)$`)
 
 // Document is a parsed design document: a wl:DesignDoc.
 type Document struct {
@@ -55,6 +60,9 @@ type Section struct {
 	// Anchor is the Quarto anchor without its "#" ("sec-4.1a"), or empty
 	// when the heading carries none.
 	Anchor string
+	// Rule is the rule ref the editable form names in the anchor attribute
+	// ("WL-RULE-12"), or empty (WL-SPEC-77 §19.5). Ignored without an Anchor.
+	Rule string
 	// Body is the source between this heading and the next heading of any
 	// level, so a section's Body excludes its subsections' text.
 	Body string
@@ -76,6 +84,7 @@ type Section struct {
 	// fields directly and there is no dirty flag to forget to set.
 	origLevel                         int
 	origNumber, origTitle, origAnchor string
+	origRule                          string
 }
 
 // Parse reads a design document from src.
@@ -100,6 +109,7 @@ func Parse(src []byte) (*Document, error) {
 			Number:     h.num,
 			Title:      h.text,
 			Anchor:     h.anchor,
+			Rule:       h.rule,
 			Index:      len(d.Sections),
 			raw:        raw,
 			term:       terminatorOf(raw),
@@ -107,6 +117,7 @@ func Parse(src []byte) (*Document, error) {
 			origNumber: h.num,
 			origTitle:  h.text,
 			origAnchor: h.anchor,
+			origRule:   h.rule,
 		}
 		d.Sections = append(d.Sections, sec)
 	}
@@ -225,9 +236,50 @@ func (s *Section) writeSource(b *strings.Builder) {
 func (s *Section) headingSource() string {
 	if s.Level == s.origLevel && s.Number == s.origNumber &&
 		s.Title == s.origTitle && s.Anchor == s.origAnchor {
-		return s.raw
+		if s.Rule == s.origRule || s.Anchor == "" {
+			return s.raw
+		}
+		return anchorAttr.ReplaceAllString(s.raw, s.anchorSource()+"$1")
 	}
 	return s.renderHeading()
+}
+
+// anchorSource is the heading's anchor attribute, "{#sec-3}" or, with a rule
+// ref, "{#sec-3 rule=WL-RULE-12}".
+func (s *Section) anchorSource() string {
+	if s.Rule != "" {
+		return "{#" + s.Anchor + " rule=" + s.Rule + "}"
+	}
+	return "{#" + s.Anchor + "}"
+}
+
+// Editable is src in the editable form (WL-SPEC-77 §19.5): each heading
+// anchored at a key of rules carries that rule ref, "{#sec-3 rule=WL-REQ-12}".
+// Every other byte is kept, and src that does not parse is returned unchanged.
+func Editable(src string, rules map[string]string) string {
+	d, err := Parse([]byte(src))
+	if err != nil {
+		return src
+	}
+	for _, sec := range d.Sections {
+		sec.Rule = rules[sec.Anchor]
+	}
+	return string(d.Bytes())
+}
+
+// StripRuleRefs is src with the rule ref removed from every heading's anchor
+// attribute: the stored form of a body written in the editable form
+// (WL-SPEC-77 §19.5). Every other byte is kept, and src that does not parse
+// is returned unchanged.
+func StripRuleRefs(src string) string {
+	d, err := Parse([]byte(src))
+	if err != nil {
+		return src
+	}
+	for _, sec := range d.Sections {
+		sec.Rule = ""
+	}
+	return string(d.Bytes())
 }
 
 // renderHeading writes the heading in house style: "1." at the top level and
@@ -246,9 +298,8 @@ func (s *Section) renderHeading() string {
 	}
 	b.WriteString(s.Title)
 	if s.Anchor != "" {
-		b.WriteString(" {#")
-		b.WriteString(s.Anchor)
-		b.WriteByte('}')
+		b.WriteByte(' ')
+		b.WriteString(s.anchorSource())
 	}
 	b.WriteString(s.term)
 	return b.String()
@@ -269,6 +320,7 @@ func terminatorOf(raw string) string {
 type hit struct {
 	start, end                int // span of the heading line, terminator included
 	hashes, num, text, anchor string
+	rule                      string
 }
 
 // scanHeadings finds every ATX heading outside fenced code, in order.
@@ -299,6 +351,7 @@ func scanHeadings(body string) []hit {
 			num:    m[2],
 			text:   m[3],
 			anchor: m[4],
+			rule:   m[5],
 		})
 	}
 	return hits

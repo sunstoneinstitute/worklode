@@ -516,6 +516,7 @@ type docLintFileReport struct {
 // questions about the same row.
 func newDocShowCmd() *cobra.Command {
 	var version int
+	var editable bool
 	cmd := &cobra.Command{
 		Use:               "show <ref>",
 		ValidArgsFunction: docRefAt(0),
@@ -550,6 +551,10 @@ func newDocShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if editable {
+				cli.DocEditableRender(cmd.OutOrStdout(), d)
+				return nil
+			}
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
 				return nil
@@ -559,6 +564,8 @@ func newDocShowCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&version, "version", 0, "get a specific past version instead of the current one (WL-SPEC-77 §5)")
+	cmd.Flags().BoolVar(&editable, "editable", false, "print only the body, each rule's heading naming it ({#sec-3 rule=WL-REQ-12}), to edit and feed back to doc edit or doc revise --file (WL-SPEC-77 §19.5)")
+	cmd.MarkFlagsMutuallyExclusive("version", "editable")
 	return cmd
 }
 
