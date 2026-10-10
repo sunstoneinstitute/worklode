@@ -100,9 +100,7 @@ func TestAcceptPlanGovernsMintedTasks(t *testing.T) {
 func TestAcceptPlanSplitsCoveredDocOnFirstUse(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
-	if _, err := s.db.ExecContext(context.Background(), `DELETE FROM doc_rules WHERE doc_id = $1`, spec.ID); err != nil {
-		t.Fatal(err)
-	}
+	forgetArrangement(t, s, spec.ID)
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "plan", Body: governedPlanBody, CreatedBy: "stig"})
 	_, minted, err := acceptDoc(t, s, plan.ID, "stig")
 	if err != nil {
@@ -127,9 +125,7 @@ func TestEnsureRulesBackfillsAcceptedRules(t *testing.T) {
 	if _, _, err := acceptDoc(t, s, spec.ID, "stig"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.ExecContext(context.Background(), `DELETE FROM doc_rules WHERE doc_id = $1`, spec.ID); err != nil {
-		t.Fatal(err)
-	}
+	forgetArrangement(t, s, spec.ID)
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "plan", Body: governedPlanBody, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, plan.ID, "stig"); err != nil {
 		t.Fatal(err)
@@ -512,4 +508,21 @@ func TestHasPlanGovernance(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(true, "a plan link")
+}
+
+// forgetArrangement puts docID back in the state of a spec written before
+// the rule tables: its full text in docs.body and no arrangement.
+func forgetArrangement(t *testing.T, s *Store, docID int64) {
+	t.Helper()
+	d, err := s.GetDoc(context.Background(), docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(context.Background(),
+		`UPDATE docs SET body = $2 WHERE id = $1`, docID, d.Body); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(context.Background(), `DELETE FROM doc_rules WHERE doc_id = $1`, docID); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -268,11 +268,11 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 // snapshot and before the arrangement is rebuilt, so a row it adds to
 // doc_rules is matched by syncRules without entering the prior version.
 func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVersion int, eventID int64, pin func(*sql.Tx) error) (*model.Doc, error) {
-	var kind, status, stored string
+	var kind, status string
 	var version int
 	err := tx.QueryRow(
-		`SELECT kind, status, version, body FROM docs WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&kind, &status, &version, &stored)
+		`SELECT kind, status, version FROM docs WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&kind, &status, &version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
@@ -292,9 +292,15 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 		return nil, err
 	}
 	// A spec's editable form fed back unchanged writes nothing (WL-SPEC-77
-	// §19.5).
-	if kind != "plan" && pin == nil && storedBody(kind, body) == stored {
-		return getDocTx(tx, id)
+	// §19.5). docs.body is a template, so compare against the rendered text.
+	if kind != "plan" && pin == nil {
+		cur, err := getDocTx(tx, id)
+		if err != nil {
+			return nil, err
+		}
+		if storedBody(kind, body) == cur.Body {
+			return cur, nil
+		}
 	}
 	if kind == "plan" {
 		if err := checkPlanTasksMinted(tx, id, parsed.doc); err != nil {
@@ -829,6 +835,9 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 	if err != nil {
 		return nil, err
 	}
+	if err := storeSpecTemplate(tx, docID); err != nil {
+		return nil, err
+	}
 	if minted {
 		if _, err := resolveExternalCovers(tx, docID, eventID); err != nil {
 			return nil, err
@@ -1015,7 +1024,11 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 	if err != nil {
 		return nil, fmt.Errorf("list docs: %w", err)
 	}
-	return collectRows(rows, "list docs", byValue(scanDoc))
+	docs, err := collectRows(rows, "list docs", byValue(scanDoc))
+	if err != nil {
+		return nil, err
+	}
+	return docs, renderDocList(ctx, s.db, docs)
 }
 
 // scanDocVersionSummary scans one row of ListDocVersions' union: version,

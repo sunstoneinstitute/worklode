@@ -134,6 +134,10 @@ func TestRetireADRMigration(t *testing.T) {
 		t.Errorf("insert kind adr: err = %v, want docs_kind_check violation", err)
 	}
 
+	// ListDocs renders through today's arrangement columns.
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate to head: %v", err)
+	}
 	docs, err := s.ListDocs(t.Context(), DocFilter{Project: "pa"})
 	if err != nil {
 		t.Fatalf("ListDocs: %v", err)
