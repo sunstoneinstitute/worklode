@@ -103,7 +103,7 @@ func TestArrangeRuleAcrossSpecs(t *testing.T) {
 	if anchor, err = arrangeRule(t, s, b.ID, model.ArrangeRuleInput{Rule: "P1-REQ-2", Under: "sec-1"}); err != nil || anchor != "sec-1.1" {
 		t.Fatalf("under: anchor %s, err %v", anchor, err)
 	}
-	if body := docBody(t, s, b.ID); !strings.Contains(body, "## 1. Own {#sec-1}\n\nX.\n### 1.1 Sub {#sec-1.1}\n\nB.\n\n## 2. Two") {
+	if body := docBody(t, s, b.ID); !strings.Contains(body, "## 1. Own {#sec-1}\n\nX.\n\n### 1.1 Sub {#sec-1.1}\n\nB.\n\n## 2. Two") {
 		t.Errorf("under: body\n%s", body)
 	}
 

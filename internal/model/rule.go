@@ -193,8 +193,10 @@ type RuleLintSpread struct {
 }
 
 // RuleLintFinding is one line of the report, naming its rule. Check is
-// one-context-edge (a report, not a verdict), undefined-term, conflict or
-// positional-reference.
+// one-context-edge or converted-heading (reports, not verdicts),
+// undefined-term, conflict, positional-reference or unresolved-ref (a rule
+// ref in the rule's text that names no rule). A converted-heading finding
+// names a rule the WL-SPEC-77 §19.7 migration deleted.
 type RuleLintFinding struct {
 	Rule   string `json:"rule"`
 	Check  string `json:"check"`

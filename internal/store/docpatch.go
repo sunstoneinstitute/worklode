@@ -106,7 +106,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse the accepted body of doc %d: %w", in.ID, err)
 	}
-	next, err := parseDocBody(d.kind, in.Body)
+	next, err := parseSpecWrite(d.kind, in.Body)
 	if err != nil {
 		return nil, nil, err
 	}

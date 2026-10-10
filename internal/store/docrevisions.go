@@ -86,7 +86,7 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 		return fmt.Errorf("doc %d is %s: only an accepted document has a revision to edit: %w",
 			id, d.status, ErrInvalidInput)
 	}
-	parsed, err := parseDocBody(d.kind, body)
+	parsed, err := parseSpecWrite(d.kind, body)
 	if err != nil {
 		return err
 	}
