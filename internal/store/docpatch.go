@@ -98,7 +98,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 			"doc %d is %s: only an accepted document is amended in place (WL-SPEC-77 §10): %w",
 			in.ID, d.status, ErrInvalidInput)
 	}
-	if storedBody(d.kind, in.Body) == d.body {
+	if storedBody(d.kind, in.Body) == storedBody(d.kind, d.body) {
 		return nil, nil, fmt.Errorf("doc %d: nothing changed: %w", in.ID, ErrInvalidInput)
 	}
 
@@ -343,7 +343,11 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 	); err != nil {
 		return 0, fmt.Errorf("patch doc %d: %w", in.ID, err)
 	}
-	if _, err := rebuildSectionsFrom(tx, in.ID, d.kind, next.doc, version, prior, eventID); err != nil {
+	after, err := rebuildSectionsFrom(tx, in.ID, d.kind, next.doc, version, prior, "doc_entries", eventID)
+	if err != nil {
+		return 0, err
+	}
+	if err := checkRulesLeft(tx, in.ID, prior, after, nil); err != nil {
 		return 0, err
 	}
 	if len(changed) > 0 {

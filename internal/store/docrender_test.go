@@ -12,12 +12,12 @@ import (
 // are template text and stay; a body that already agrees is returned as is.
 func TestRenderBody(t *testing.T) {
 	body := "Intro.\n\n## 1. Head {#sec-1}\n\n### 1.1 Old {#sec-1.1}\n\nOld text.\n\n## Sources\n\nA list.\n"
-	texts := map[string]arrangedText{
-		"sec-1":   {heading: "Renamed head"},
-		"sec-1.1": {heading: "New", body: "\nNew text.\n", rule: true},
+	texts := []arrangedText{
+		{heading: "Renamed head", depth: 2},
+		{heading: "New", body: "\nNew text.\n", rule: true, ref: "P1-REQ-4", depth: 3},
 	}
 	got := renderBody(body, texts)
-	want := "Intro.\n\n## 1. Renamed head {#sec-1}\n\n### 1.1 New {#sec-1.1}\n\nNew text.\n\n## Sources\n\nA list.\n"
+	want := "Intro.\n\n## 1. Renamed head {#sec-1}\n\n### 1.1 New (P1-REQ-4) {#sec-1.1}\n\nNew text.\n\n## Sources\n\nA list.\n"
 	if got != want {
 		t.Errorf("rendered:\n%q\nwant:\n%q", got, want)
 	}
@@ -42,7 +42,7 @@ func TestGetDocRendersArrangedRuleText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Intro.", "## 2. Second {#sec-2}", "C from the rule."} {
+	for _, want := range []string{"Intro.", "## 2. Second (P1-REQ-3) {#sec-2}", "C from the rule."} {
 		if !strings.Contains(got.Body, want) {
 			t.Errorf("rendered body lacks %q:\n%s", want, got.Body)
 		}
@@ -56,17 +56,19 @@ func TestGetDocRendersArrangedRuleText(t *testing.T) {
 	}
 }
 
-// TestRenderBodyInsertsMissingEntries: an entry whose anchor the stored
-// body has no heading for still renders, before the next entry that has one
-// or at the end.
-func TestRenderBodyInsertsMissingEntries(t *testing.T) {
-	body := "Intro.\n\n## 2. Two {#sec-2}\n"
-	texts := map[string]arrangedText{
-		"sec-1": {heading: "One", body: "\nA.\n", rule: true, position: 0, depth: 2},
-		"sec-2": {heading: "Two", body: "\nB.\n", rule: true, position: 1, depth: 2},
-		"sec-3": {heading: "Three", body: "\nC.\n", rule: true, position: 2, depth: 2},
+// TestRenderBodyNumbersByPosition: the k-th placeholder shows the k-th
+// entry, numbered and anchored from its place whatever the stored anchor
+// says (WL-REQ-165), and an entry with no placeholder renders at the end.
+func TestRenderBodyNumbersByPosition(t *testing.T) {
+	body := "Intro.\n\n## 3. One {#sec-3}\n\n## 3a Two {#sec-3a}\n"
+	texts := []arrangedText{
+		{heading: "One", body: "\nA.\n", rule: true, ref: "P1-REQ-1", depth: 2},
+		{heading: "Two", body: "\nB.\n", rule: true, ref: "P1-REQ-2", depth: 2},
+		{heading: "Three", body: "\nC.\n", rule: true, ref: "P1-RULE-3", depth: 2},
+		{heading: "Open questions", depth: 2, slug: "sec-open-questions"},
 	}
-	want := "Intro.\n\n## 1. One {#sec-1}\n\nA.\n\n## 2. Two {#sec-2}\n\nB.\n\n## 3. Three {#sec-3}\n\nC.\n"
+	want := "Intro.\n\n## 1. One (P1-REQ-1) {#sec-1}\n\nA.\n\n## 2. Two (P1-REQ-2) {#sec-2}\n\nB.\n\n" +
+		"## 3. Three (P1-RULE-3) {#sec-3}\n\nC.\n\n## Open questions {#sec-open-questions}\n"
 	if got := renderBody(body, texts); got != want {
 		t.Errorf("rendered:\n%q\nwant:\n%q", got, want)
 	}
@@ -88,7 +90,7 @@ func TestSpecWriteStoresTemplate(t *testing.T) {
 	if stored != want {
 		t.Errorf("stored body:\n%q\nwant:\n%q", stored, want)
 	}
-	if d.Body != body {
+	if plain(d.Body) != body {
 		t.Errorf("rendered body:\n%q\nwant:\n%q", d.Body, body)
 	}
 	edited := strings.Replace(body, "C.", "C, edited.", 1)
@@ -96,11 +98,11 @@ func TestSpecWriteStoresTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Body != edited {
+	if plain(got.Body) != edited {
 		t.Errorf("rendered after edit:\n%q", got.Body)
 	}
 	list, err := s.ListDocs(ctx, DocFilter{Project: "p1"})
-	if err != nil || len(list) != 1 || list[0].Body != edited {
+	if err != nil || len(list) != 1 || plain(list[0].Body) != edited {
 		t.Errorf("ListDocs body:\n%+v, err %v", list, err)
 	}
 }

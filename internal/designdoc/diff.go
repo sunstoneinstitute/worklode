@@ -175,3 +175,41 @@ func anchoredSections(d *Document) map[string]*Section {
 	}
 	return out
 }
+
+// ChangedEntries matches accepted's and candidate's anchored sections by
+// entry identity, accKeys and candKeys giving each one's key in order, and
+// returns the ordinals among candidate's anchored sections whose content
+// (effectiveContent) changed. Numbers and anchors are derived (WL-REQ-165),
+// so an entry that moved is matched where an anchor would not be. An entry
+// new in candidate is not reported.
+func ChangedEntries(accepted, candidate *Document, accKeys, candKeys []string) []int {
+	acc := map[string]*Section{}
+	for i, s := range anchoredInOrder(accepted) {
+		if i < len(accKeys) {
+			if _, dup := acc[accKeys[i]]; !dup {
+				acc[accKeys[i]] = s
+			}
+		}
+	}
+	var out []int
+	for i, s := range anchoredInOrder(candidate) {
+		if i >= len(candKeys) {
+			break
+		}
+		if a, ok := acc[candKeys[i]]; ok && effectiveContent(a) != effectiveContent(s) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// anchoredInOrder is d's anchored sections in document order.
+func anchoredInOrder(d *Document) []*Section {
+	var out []*Section
+	for _, s := range d.Sections {
+		if s.Anchor != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}

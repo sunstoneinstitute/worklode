@@ -190,7 +190,7 @@ Flags: --server
 - `lode rule add` — Add a rule arranged in no document, as a draft owned by you
   Flags: --file, --heading, --kind, --project, --repo, --tag
 - `lode rule arrange` — Place an existing rule in a spec; an accepted spec gets it in its candidate revision
-  Flags: --after, --anchor, --under
+  Flags: --after, --under
 - `lode rule edit` — Write a rule's next draft version (body and heading) from a file
   Flags: --file, --heading
 - `lode rule link` — Relate a rule to another: --refines, --needs, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>

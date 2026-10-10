@@ -80,7 +80,7 @@ lode show <rule-ref> --closure               # a rule and the context it needs
 lode rule add --heading <text> --file <body> [--kind <kind>] [--tag <t>]  # new draft rule, arranged in no spec
 lode rule edit <rule-ref> --file <body>      # rewrites the draft, or adds the next draft; --heading
 lode rule accept <rule-ref>                  # owner only; every accepted spec arranging it moves to it
-lode rule arrange <spec> <rule-ref>          # place it; --after or --under <ref|sec-N>, --anchor sec-N
+lode rule arrange <spec> <rule-ref>          # place it; --after or --under <ref|sec-N>
 lode rule unarrange <spec> <rule-ref>        # take it out of the spec; the rule stays
 ```
 
@@ -252,19 +252,19 @@ ancestor. `lode doc lint <file>` checks numbering, anchors, and depth
 before you post, and `--update-section-anchors` on `lode doc add` or `lode
 doc edit` fixes what it reports: it renumbers the headings and rewrites their anchors from the
 structure, so inserting a section does not mean editing every number below
-it by hand. It is refused on an accepted document, for the reason below.
+it by hand. It is refused on an accepted document.
 
-**An anchor is frozen once its document is `accepted`.** A revision that
-renumbers a published anchor, or drops one without a replacing supersession,
-is refused at `lode doc revise --accept` — the backbone's own append-only
-rule (WL-REQ-170), not a linter you can skip. To insert a section between
-`2.1` and `2.2` on an accepted document, use a **letter suffix**:
-`### 2.1a New section {#sec-2.1a}`, which takes no counter slot and tells a
-reader it was added after acceptance. Adding a genuinely *missing* anchor to
-an already-correctly-numbered section is fine. A **superseded section keeps
-its heading and anchor** — never delete it — with a note saying what
-replaced it; a bare superseded section is a broken promise to whoever
-linked it.
+**Numbers and anchors are derived (WL-REQ-165).** The server numbers a
+spec's entries in reading order when it renders it, so inserting, moving or
+unarranging a section renumbers the ones after it, on a draft or an accepted
+spec alike. Whatever numbers a write carries, the stored arrangement keeps
+only position and depth. An unnumbered section takes a slug anchor
+(`## Open questions {#sec-open-questions}`) and keeps it. A rendered rule
+heading prints its rule ref: `## 4. Sections and anchors (WL-REQ-165)
+{#sec-4}`. The ref is the identity, so cite the rule, never `#sec-4`
+(WL-REQ-1791); `<spec>#sec-N` is a locator resolved when it is written. A
+rule leaves an accepted spec only through `lode rule unarrange` or `lode rule
+supersede`; unarranging from an accepted spec mints a review task.
 
 ## Amendment and supersession
 

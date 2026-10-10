@@ -4,9 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,11 +14,14 @@ import (
 
 // editableSpec is the text a rule arrangement writes and the table holding
 // its arrangement: a draft spec's own body and doc_rules, or an accepted
-// spec's candidate revision and doc_revision_rules (WL-REQ-1297).
+// spec's candidate revision and doc_revision_rules (WL-REQ-1297). anchors is
+// where an entry's anchor in that text is read: the derived one
+// (doc_entries) or the candidate's own.
 type editableSpec struct {
 	id       int64
 	text     string
 	table    string
+	anchors  string
 	revising bool
 }
 
@@ -36,7 +37,7 @@ func openEditableSpec(tx *sql.Tx, now time.Time, docID int64, actorID string, ev
 		return editableSpec{}, fmt.Errorf("doc %d is a %s: only a spec arranges rules (WL-SPEC-77 §4): %w", docID, d.kind, ErrInvalidInput)
 	}
 	if d.status == "draft" {
-		return editableSpec{id: docID, text: d.body, table: "doc_rules"}, nil
+		return editableSpec{id: docID, text: d.body, table: "doc_rules", anchors: "doc_entries"}, nil
 	}
 	var candidate string
 	err = tx.QueryRow(`SELECT body FROM doc_revisions WHERE doc_id = $1 FOR UPDATE`, docID).Scan(&candidate)
@@ -48,21 +49,54 @@ func openEditableSpec(tx *sql.Tx, now time.Time, docID int64, actorID string, ev
 	} else if err != nil {
 		return editableSpec{}, fmt.Errorf("load revision of doc %d: %w", docID, err)
 	}
-	return editableSpec{id: docID, text: candidate, table: "doc_revision_rules", revising: true}, nil
+	return editableSpec{id: docID, text: candidate, table: "doc_revision_rules", anchors: "doc_revision_rules", revising: true}, nil
 }
 
-// anchorOf is the anchor the spec's editable arrangement holds ruleID at, or
-// "" when it does not arrange the rule.
-func (e editableSpec) anchorOf(tx *sql.Tx, ruleID int64) (string, error) {
-	var anchor string
-	err := tx.QueryRow(`SELECT anchor FROM `+e.table+` WHERE doc_id = $1 AND rule_id = $2`, e.id, ruleID).Scan(&anchor)
+// ruleSection is the section of d that holds rule ruleID (ref): the heading
+// naming it, else the one at the anchor the arrangement holds it at. ok
+// reports whether the spec arranges the rule at all.
+func (e editableSpec) ruleSection(tx *sql.Tx, d *designdoc.Document, ruleID int64, ref string) (sec *designdoc.Section, ok bool, err error) {
+	var anchor sql.NullString
+	err = tx.QueryRow(`SELECT anchor FROM `+e.anchors+` WHERE doc_id = $1 AND rule_id = $2`, e.id, ruleID).Scan(&anchor)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return nil, false, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("read arrangement of rule %d in doc %d: %w", ruleID, e.id, err)
+		return nil, false, fmt.Errorf("read arrangement of rule %d in doc %d: %w", ruleID, e.id, err)
 	}
-	return anchor, nil
+	for _, s := range d.Sections {
+		if s.Anchor != "" && namedRef(s) == ref {
+			return s, true, nil
+		}
+	}
+	return d.SectionByAnchor(anchor.String), true, nil
+}
+
+// renumber rewrites d's anchors to the ones each section's place derives
+// (WL-REQ-165). A candidate's arrangement follows its text's anchors.
+func (e editableSpec) renumber(tx *sql.Tx, d *designdoc.Document) error {
+	var olds, news []string
+	for _, s := range d.Sections {
+		if s.Anchor != "" {
+			olds = append(olds, s.Anchor)
+		}
+	}
+	d.DeriveAnchors()
+	if !e.revising {
+		return nil
+	}
+	for _, s := range d.Sections {
+		if s.Anchor != "" {
+			news = append(news, s.Anchor)
+		}
+	}
+	if _, err := tx.Exec(
+		`UPDATE doc_revision_rules r SET anchor = m.new
+		   FROM unnest($2::text[], $3::text[]) AS m(old, new)
+		  WHERE r.doc_id = $1 AND r.anchor = m.old`, e.id, olds, news); err != nil {
+		return fmt.Errorf("renumber the revision of doc %d: %w", e.id, err)
+	}
+	return nil
 }
 
 // write stores the spec's new editable text: in place on a draft, so
@@ -92,16 +126,18 @@ func ruleByRefString(tx *sql.Tx, ref string) (int64, error) {
 
 // ArrangeRule places an existing rule in a spec (WL-REQ-1297): its
 // newest accepted version's heading and body (a first draft's, when none is
-// accepted, §19.4) are written into the spec's editable
-// text at the chosen position and anchor, and the spec's arrangement holds
-// the rule there. A draft spec is written in place; an accepted one through
-// its candidate revision, and the arrangement lands with it. Returns the
-// anchor used.
+// accepted, §19.4) are written into the spec's editable text at the chosen
+// position, its heading naming the rule, and the spec's arrangement holds
+// the rule there. Its number and anchor, and those of every entry after it,
+// are derived from the new arrangement (WL-REQ-165). A draft spec is
+// written in place; an accepted one through its candidate revision, and the
+// arrangement lands with it. Returns the anchor the rule landed at.
 func ArrangeRule(tx *sql.Tx, now time.Time, docID int64, in model.ArrangeRuleInput, actorID string, eventID int64) (string, error) {
 	ruleID, err := ruleByRefString(tx, in.Rule)
 	if err != nil {
 		return "", err
 	}
+	ref := ruleRefOf(tx, ruleID)
 	var version int
 	var heading, body string
 	if err := tx.QueryRow(
@@ -115,24 +151,18 @@ func ArrangeRule(tx *sql.Tx, now time.Time, docID int64, in model.ArrangeRuleInp
 	if err != nil {
 		return "", err
 	}
-	if a, err := e.anchorOf(tx, ruleID); err != nil {
-		return "", err
-	} else if a != "" {
-		return "", fmt.Errorf("doc %d already arranges %s at %s: %w", docID, in.Rule, a, ErrInvalidInput)
-	}
 	parsed, err := designdoc.Parse([]byte(e.text))
 	if err != nil {
 		return "", fmt.Errorf("parse doc %d: %w", docID, err)
 	}
-	idx, level, anchor, err := placeRule(tx, e, parsed, in)
+	if _, arranged, err := e.ruleSection(tx, parsed, ruleID, ref); err != nil {
+		return "", err
+	} else if arranged {
+		return "", fmt.Errorf("doc %d already arranges %s: %w", docID, ref, ErrInvalidInput)
+	}
+	idx, level, err := placeRule(tx, e, parsed, in)
 	if err != nil {
 		return "", err
-	}
-	number := strings.TrimPrefix(anchor, "sec-")
-	if !sectionNumber.MatchString(number) {
-		number = ""
-	} else if strings.Count(number, ".") != level-2 {
-		return "", fmt.Errorf("anchor %s does not fit depth %d at that position: %w", anchor, level-1, ErrInvalidInput)
 	}
 
 	// The text before the new heading must end its line, and so must the
@@ -145,69 +175,91 @@ func ArrangeRule(tx *sql.Tx, now time.Time, docID int64, in model.ArrangeRuleInp
 	if idx < len(parsed.Sections) {
 		body = endLine(body)
 	}
-	parsed.Sections = slices.Insert(parsed.Sections, idx, designdoc.NewSection(level, number, heading, anchor, body))
-
-	pin := func(tx *sql.Tx) error {
-		_, err := tx.Exec(
-			`INSERT INTO `+e.table+` (doc_id, position, rule_id, rule_version, depth, anchor)
-			 SELECT $1, coalesce(max(position) + 1, 0), $2, $3, $4, $5 FROM `+e.table+` WHERE doc_id = $1`,
-			docID, ruleID, version, level, anchor)
-		if err != nil {
-			return fmt.Errorf("arrange rule %d in doc %d: %w", ruleID, docID, err)
-		}
-		return nil
+	// Any numbered anchor will do until renumber derives the real one.
+	sec := designdoc.NewSection(level, "", heading, "sec-0", body)
+	sec.Ref = ref
+	parsed.Sections = slices.Insert(parsed.Sections, idx, sec)
+	if err := e.renumber(tx, parsed); err != nil {
+		return "", err
 	}
-	return anchor, e.write(tx, now, string(parsed.Bytes()), eventID, pin)
+
+	var pin func(*sql.Tx) error
+	if e.revising {
+		pin = func(tx *sql.Tx) error {
+			_, err := tx.Exec(
+				`INSERT INTO doc_revision_rules (doc_id, position, rule_id, rule_version, depth, anchor)
+				 SELECT $1, coalesce(max(position) + 1, 0), $2, $3, $4, $5 FROM doc_revision_rules WHERE doc_id = $1`,
+				docID, ruleID, version, level, sec.Anchor)
+			if err != nil {
+				return fmt.Errorf("arrange rule %d in doc %d: %w", ruleID, docID, err)
+			}
+			return nil
+		}
+	}
+	return sec.Anchor, e.write(tx, now, string(parsed.Bytes()), eventID, pin)
 }
 
 // UnarrangeRule removes a rule from a spec without withdrawing it
 // (WL-REQ-1297): its section leaves the spec's editable text and its
-// arrangement row goes. A rule left in no spec is a standalone rule. A rule
-// with anchored sections under it is refused, since they would fall under
-// whatever precedes it.
+// arrangement row goes, and the entries after it are renumbered. A rule
+// left in no spec is a standalone rule. An entry with deeper entries under
+// it is refused, naming them, since they would fall under whatever
+// precedes it. On an accepted spec it lands with the candidate revision,
+// which mints a review (reviewUnarranged).
 func UnarrangeRule(tx *sql.Tx, now time.Time, docID int64, rule, actorID string, eventID int64) error {
 	ruleID, err := ruleByRefString(tx, rule)
 	if err != nil {
 		return err
 	}
+	ref := ruleRefOf(tx, ruleID)
 	e, err := openEditableSpec(tx, now, docID, actorID, eventID)
 	if err != nil {
 		return err
-	}
-	anchor, err := e.anchorOf(tx, ruleID)
-	if err != nil {
-		return err
-	}
-	if anchor == "" {
-		return fmt.Errorf("doc %d does not arrange %s: %w", docID, rule, ErrNotFound)
 	}
 	parsed, err := designdoc.Parse([]byte(e.text))
 	if err != nil {
 		return fmt.Errorf("parse doc %d: %w", docID, err)
 	}
-	sec := parsed.SectionByAnchor(anchor)
-	if sec == nil {
-		return fmt.Errorf("%s: its section %s is not in the text of doc %d: %w", rule, anchor, docID, ErrInvalidInput)
+	sec, arranged, err := e.ruleSection(tx, parsed, ruleID, ref)
+	if err != nil {
+		return err
 	}
-	end := sec.Index + 1
-	for end < len(parsed.Sections) && parsed.Sections[end].Level > sec.Level {
-		if parsed.Sections[end].Anchor != "" {
-			return fmt.Errorf("%s has %s under it in doc %d; unarrange or move that first: %w",
-				rule, parsed.Sections[end].Anchor, docID, ErrInvalidInput)
+	if !arranged {
+		return fmt.Errorf("doc %d does not arrange %s: %w", docID, ref, ErrNotFound)
+	}
+	if sec == nil {
+		return fmt.Errorf("%s: its section is not in the text of doc %d: %w", ref, docID, ErrInvalidInput)
+	}
+	end := subtreeEnd(parsed, sec)
+	var deeper []string
+	for _, s := range parsed.Sections[sec.Index+1 : end] {
+		if s.Anchor == "" {
+			continue
 		}
-		end++
+		if r := namedRef(s); r != "" {
+			deeper = append(deeper, r)
+		} else {
+			deeper = append(deeper, s.Anchor)
+		}
+	}
+	if len(deeper) > 0 {
+		return fmt.Errorf("%s has %s under it in doc %d; unarrange or move those first: %w",
+			ref, strings.Join(deeper, ", "), docID, ErrInvalidInput)
 	}
 	parsed.Sections = slices.Delete(parsed.Sections, sec.Index, end)
+	for i, s := range parsed.Sections {
+		s.Index = i
+	}
 	if e.revising {
 		if _, err := tx.Exec(`DELETE FROM doc_revision_rules WHERE doc_id = $1 AND rule_id = $2`, docID, ruleID); err != nil {
 			return fmt.Errorf("unarrange rule %d from the revision of doc %d: %w", ruleID, docID, err)
 		}
 	}
+	if err := e.renumber(tx, parsed); err != nil {
+		return err
+	}
 	return e.write(tx, now, string(parsed.Bytes()), eventID, nil)
 }
-
-// sectionNumber is a section number the heading parser reads: "2", "2.1a".
-var sectionNumber = regexp.MustCompile(`^\d+(\.\d+)*[a-z]?$`)
 
 // endLine adds a newline to text that does not end in one.
 func endLine(text string) string {
@@ -218,77 +270,46 @@ func endLine(text string) string {
 }
 
 // placeRule decides where an arranged rule goes in d: the index to insert its
-// section at, its heading level and its anchor. After puts it after the
-// named section's subtree at the same depth, Under as the named section's
-// last child, and neither at the end at the top level. The default anchor is
-// the next free number there (WL-REQ-165): the next integer at the end of
-// a sibling list, a letter suffix between two siblings.
-func placeRule(tx *sql.Tx, e editableSpec, d *designdoc.Document, in model.ArrangeRuleInput) (idx, level int, anchor string, err error) {
+// section at and its heading level. After puts it after the named section's
+// subtree at the same depth, Under as the named section's last child, and
+// neither at the end at the top level.
+func placeRule(tx *sql.Tx, e editableSpec, d *designdoc.Document, in model.ArrangeRuleInput) (idx, level int, err error) {
 	if in.After != "" && in.Under != "" {
-		return 0, 0, "", fmt.Errorf("name --after or --under, not both: %w", ErrInvalidInput)
+		return 0, 0, fmt.Errorf("name --after or --under, not both: %w", ErrInvalidInput)
 	}
-	var target *designdoc.Section
-	if ref := in.After + in.Under; ref != "" {
-		if target, err = sectionOf(tx, e, d, ref); err != nil {
-			return 0, 0, "", err
-		}
+	ref := in.After + in.Under
+	if ref == "" {
+		return len(d.Sections), 2, nil
 	}
-	var siblings []*designdoc.Section
-	switch {
-	case target == nil:
-		idx, level = len(d.Sections), 2
-		for _, s := range d.Sections {
-			if s.Parent == nil {
-				siblings = append(siblings, s)
-			}
-		}
-	case in.Under != "":
-		idx, level, siblings = subtreeEnd(d, target), target.Level+1, target.Children
-	default:
-		idx, level = subtreeEnd(d, target), target.Level
-		if target.Parent != nil {
-			siblings = target.Parent.Children
-		} else {
-			for _, s := range d.Sections {
-				if s.Parent == nil {
-					siblings = append(siblings, s)
-				}
-			}
-		}
+	target, err := sectionOf(tx, e, d, ref)
+	if err != nil {
+		return 0, 0, err
 	}
-	if in.Anchor != "" {
-		anchor = in.Anchor
-	} else if anchor, err = defaultAnchor(target, in.Under != "", siblings); err != nil {
-		return 0, 0, "", err
+	if in.Under != "" {
+		return subtreeEnd(d, target), target.Level + 1, nil
 	}
-	if !strings.HasPrefix(anchor, "sec-") || strings.ContainsAny(anchor, " {}#") {
-		return 0, 0, "", fmt.Errorf("anchor %q must look like sec-2.1a: %w", anchor, ErrInvalidInput)
-	}
-	if d.SectionByAnchor(anchor) != nil {
-		return 0, 0, "", fmt.Errorf("anchor %s is taken in doc %d; pass --anchor: %w", anchor, e.id, ErrInvalidInput)
-	}
-	return idx, level, anchor, nil
+	return subtreeEnd(d, target), target.Level, nil
 }
 
 // sectionOf finds the section a position names: a rule ref the spec
-// arranges, or a section anchor.
+// arranges, or a section anchor of its current text.
 func sectionOf(tx *sql.Tx, e editableSpec, d *designdoc.Document, ref string) (*designdoc.Section, error) {
-	anchor := ref
-	if !strings.HasPrefix(ref, "sec-") {
-		ruleID, err := ruleByRefString(tx, ref)
-		if err != nil {
-			return nil, err
+	if strings.HasPrefix(ref, "sec-") {
+		if sec := d.SectionByAnchor(ref); sec != nil {
+			return sec, nil
 		}
-		if anchor, err = e.anchorOf(tx, ruleID); err != nil {
-			return nil, err
-		}
-		if anchor == "" {
-			return nil, fmt.Errorf("doc %d does not arrange %s: %w", e.id, ref, ErrInvalidInput)
-		}
+		return nil, fmt.Errorf("doc %d has no section %s: %w", e.id, ref, ErrInvalidInput)
 	}
-	sec := d.SectionByAnchor(anchor)
-	if sec == nil {
-		return nil, fmt.Errorf("doc %d has no section %s: %w", e.id, anchor, ErrInvalidInput)
+	ruleID, err := ruleByRefString(tx, ref)
+	if err != nil {
+		return nil, err
+	}
+	sec, arranged, err := e.ruleSection(tx, d, ruleID, ruleRefOf(tx, ruleID))
+	if err != nil {
+		return nil, err
+	}
+	if !arranged || sec == nil {
+		return nil, fmt.Errorf("doc %d does not arrange %s: %w", e.id, ref, ErrInvalidInput)
 	}
 	return sec, nil
 }
@@ -300,63 +321,4 @@ func subtreeEnd(d *designdoc.Document, sec *designdoc.Section) int {
 		end++
 	}
 	return end
-}
-
-// defaultAnchor numbers a new section placed after target (under=false),
-// as target's last child (under=true), or last at the top level (target
-// nil). siblings are the sections at the new section's depth.
-// ponytail: one letter suffix only, since the heading parser reads one; a
-// second insert between the same two siblings needs --anchor.
-func defaultAnchor(target *designdoc.Section, under bool, siblings []*designdoc.Section) (string, error) {
-	var anchored []*designdoc.Section
-	for _, s := range siblings {
-		if s.Anchor != "" {
-			anchored = append(anchored, s)
-		}
-	}
-	numberOf := func(s *designdoc.Section) (string, error) {
-		if s.Number == "" {
-			return "", fmt.Errorf("section %s has no number to count from; pass --anchor: %w", s.Anchor, ErrInvalidInput)
-		}
-		return s.Number, nil
-	}
-	if target == nil || under {
-		if len(anchored) == 0 {
-			if target == nil {
-				return "sec-1", nil
-			}
-			n, err := numberOf(target)
-			return "sec-" + n + ".1", err
-		}
-		n, err := numberOf(anchored[len(anchored)-1])
-		if err != nil {
-			return "", err
-		}
-		return "sec-" + nextNumber(n), nil
-	}
-	n, err := numberOf(target)
-	if err != nil {
-		return "", err
-	}
-	if anchored[len(anchored)-1] == target {
-		return "sec-" + nextNumber(n), nil
-	}
-	if last := n[len(n)-1]; last >= 'a' && last < 'z' {
-		return "sec-" + n[:len(n)-1] + string(last+1), nil
-	} else if last == 'z' {
-		return "", fmt.Errorf("no letter left after %s; pass --anchor: %w", n, ErrInvalidInput)
-	}
-	return "sec-" + n + "a", nil
-}
-
-// nextNumber increments a section number's last component and drops its
-// letter suffix: 2.1a becomes 2.2.
-func nextNumber(n string) string {
-	head, last := "", n
-	if i := strings.LastIndex(n, "."); i >= 0 {
-		head, last = n[:i+1], n[i+1:]
-	}
-	last = strings.TrimRight(last, "abcdefghijklmnopqrstuvwxyz")
-	v, _ := strconv.Atoi(last)
-	return head + strconv.Itoa(v+1)
 }

@@ -24,7 +24,7 @@ func arrangementOf(t *testing.T, s *Store, docID int64) []arranged {
 	t.Helper()
 	rows, err := s.db.QueryContext(context.Background(),
 		`SELECT dc.position, dc.depth, c.number, dc.rule_version, dc.anchor, c.status
-		   FROM doc_rules dc JOIN rules c ON c.id = dc.rule_id
+		   FROM doc_entries dc JOIN rules c ON c.id = dc.rule_id
 		  WHERE dc.doc_id = $1 ORDER BY dc.position`, docID)
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +85,7 @@ func TestSyncRulesMintsVersionsAndKeepsIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := arrangementOf(t, s, d.ID)
-	if len(got) != 4 || got[3].Number != 4 || got[3].Anchor != "sec-2a" || got[3].RuleVersion != 1 {
+	if len(got) != 4 || got[3].Number != 4 || got[3].Anchor != "sec-3" || got[3].RuleVersion != 1 {
 		t.Errorf("anchor change with the same heading should keep rule 4 at v1: %+v", got)
 	}
 
@@ -292,7 +292,7 @@ func TestEditRuleDraftRewritesInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := noHeader(t, strings.Replace(ruleDocV1, "### 1.1 Sub {#sec-1.1}\n\nB.\n", "### 1.1 Subsection {#sec-1.1}\n\nB changed.\n", 1))
-	if got.Body != want {
+	if plain(got.Body) != want {
 		t.Errorf("body after rule edit:\n%s\nwant:\n%s", got.Body, want)
 	}
 	c, err := s.GetRule(context.Background(), "P1", 2)
@@ -404,7 +404,7 @@ func TestEditRuleNormalisesBodyWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(got.Body, "## 2. Two {#sec-2}\n\nC tight.\n") {
+	if !strings.HasSuffix(plain(got.Body), "## 2. Two {#sec-2}\n\nC tight.\n") {
 		t.Errorf("document body after editing the last rule:\n%q", got.Body)
 	}
 }

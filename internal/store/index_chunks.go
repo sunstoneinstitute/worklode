@@ -172,10 +172,13 @@ func (s *Store) ReplaceSubjectChunks(ctx context.Context, subj ChunkSubject, chu
 // including the header fields (a task's kind and state are embedded and
 // lexically indexed, so changing one must re-index). A spec's text is
 // rendered from its arranged rule versions (WL-REQ-1299), so their text
-// is part of its hash: a rule edit or accept changes no docs column.
+// is part of its hash: a rule edit or accept changes no docs column. So is
+// each entry's place, which its rendered number, anchor and ref derive from
+// (WL-REQ-165).
 var liveHashSQL = map[string]string{
 	SubjectDoc: `md5(d.title || E'\n' || d.body || coalesce((
-	    SELECT string_agg(coalesce(x.heading, v.heading) || E'\n' || coalesce(v.body, ''), E'\n' ORDER BY x.position)
+	    SELECT string_agg(x.depth || coalesce(x.slug, '') || coalesce(x.rule_id::text, '') || E'\n' ||
+	                      coalesce(x.heading, v.heading) || E'\n' || coalesce(v.body, ''), E'\n' ORDER BY x.position)
 	      FROM doc_rules x LEFT JOIN rule_versions v ON v.rule_id = x.rule_id AND v.version = x.rule_version
 	     WHERE x.doc_id = d.id), ''))`,
 	SubjectTask:  `md5(t.kind || E'\n' || t.state || E'\n' || t.title || E'\n' || coalesce(t.body, ''))`,

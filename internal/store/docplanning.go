@@ -433,7 +433,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		                 FILTER (WHERE NOT coalesce(c.discharging AND NOT c.draft, false)), '[]')::text
 		   FROM docs d
 		   JOIN doc_sections sec ON sec.doc_id = d.id
-		   LEFT JOIN doc_rules dr ON dr.doc_id = sec.doc_id AND dr.anchor = sec.anchor
+		   LEFT JOIN doc_rules dr ON dr.doc_id = sec.doc_id AND dr.position = sec.position
 		   LEFT JOIN rules r ON r.id = dr.rule_id
 		   LEFT JOIN cov c ON c.doc_id = sec.doc_id AND c.anchor = sec.anchor
 		   LEFT JOIN def ON def.doc_id = sec.doc_id AND def.anchor = sec.anchor

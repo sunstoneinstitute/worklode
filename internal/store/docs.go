@@ -301,7 +301,7 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 		if err != nil {
 			return nil, err
 		}
-		if storedBody(kind, body) == cur.Body {
+		if storedBody(kind, body) == storedBody(kind, cur.Body) {
 			return cur, nil
 		}
 	}
@@ -826,7 +826,9 @@ func parseWrittenDocSource(kind, body string) (parsedDoc, error) {
 	return p, nil
 }
 
-// priorSection is the accept-time state rebuildSections carries forward.
+// priorSection is the accept-time state rebuildSections carries forward,
+// keyed by the entry it belongs to (entryKey): numbers and anchors are
+// derived (WL-REQ-165), so an anchor does not follow an entry that moves.
 type priorSection struct {
 	lastRevisedIn int
 	published     bool
@@ -834,7 +836,13 @@ type priorSection struct {
 	// document was last approved as a whole. Carried forward like the other
 	// two, so a later patch of another section does not clear it.
 	patched bool
+	// key is the entry's identity, entryKey.
+	key string
 }
+
+// entryKeySQL is an entry's identity in the doc_rules row aliased a: its rule,
+// or a spec heading's text.
+const entryKeySQL = `coalesce('rule:' || a.rule_id, 'heading:' || a.heading)`
 
 // rebuildSections replaces a document's section rows from its parsed source,
 // reading the prior state itself. Callers that already hold that map — the
@@ -848,42 +856,50 @@ func rebuildSections(tx *sql.Tx, docID int64, kind string, doc *designdoc.Docume
 	if err != nil {
 		return err
 	}
-	_, err = rebuildSectionsFrom(tx, docID, kind, doc, version, prior, eventID)
+	_, err = rebuildSectionsFrom(tx, docID, kind, doc, version, prior, "doc_entries", eventID)
 	return err
 }
 
 // rebuildSectionsFrom replaces a document's section rows from its parsed
-// source, preserving last_revised_in and published for every anchor in prior
+// source, preserving last_revised_in and published for every entry in prior
 // that survives: those are accept-time facts about the section, not facts
-// about the current text. A new anchor starts unpublished at the document's
-// current version. Plans have no sections (WL-REQ-172), so nothing is written for
-// one. The returned map is the state the rebuilt rows carry, so a caller
-// needing to compare before against after does not have to read them back.
+// about the current text. A new entry starts unpublished at the document's
+// current version. Plans have no sections (WL-REQ-172), so nothing is
+// written for one. Each row carries the anchor and number its place derives
+// (WL-REQ-165) at its entry's position, and doc's sections are rewritten to
+// them. The returned map, keyed by entry, is the state the rebuilt rows
+// carry, so a caller needing to compare before against after does not have
+// to read them back. priorTable is where syncRules reads the arrangement the
+// text is matched against.
 //
 // When the rewrite mints a rule, plans' to_external covers entries naming
 // this document are re-resolved in the same transaction (WL-903).
 func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Document, version int,
-	prior map[string]priorSection, eventID int64) (map[string]priorSection, error) {
+	prior map[string]priorSection, priorTable string, eventID int64) (map[string]priorSection, error) {
 
 	after := map[string]priorSection{}
 	if kind == "plan" {
 		return after, nil
 	}
-	minted, err := syncRules(tx, docID, doc)
+	minted, derive, err := syncRules(tx, docID, doc, priorTable)
 	if err != nil {
 		return nil, err
 	}
 	if err := storeSpecTemplate(tx, docID); err != nil {
 		return nil, err
 	}
-	if minted {
-		if _, err := resolveExternalCovers(tx, docID, eventID); err != nil {
-			return nil, err
-		}
-	}
 	if _, err := tx.Exec(`DELETE FROM doc_sections WHERE doc_id = $1`, docID); err != nil {
 		return nil, fmt.Errorf("clear sections of doc %d: %w", docID, err)
 	}
+	keys, err := entryKeys(tx, docID)
+	if err != nil {
+		return nil, err
+	}
+	byKey := map[string]priorSection{}
+	for _, p := range prior {
+		byKey[p.key] = p
+	}
+	doc.DeriveAnchors()
 
 	// One INSERT over parallel arrays rather than one per section: a 60-section
 	// spec is a round trip per heading otherwise, and every accept pays it.
@@ -901,10 +917,15 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 		if sec.Anchor == "" {
 			continue
 		}
+		var key string
+		if n := len(positions); n < len(keys) {
+			key = keys[n]
+		}
 		p := priorSection{lastRevisedIn: version}
-		if q, ok := prior[sec.Anchor]; ok {
+		if q, ok := byKey[key]; ok && key != "" {
 			p = q
 		}
+		p.key = key
 		anchors = append(anchors, sec.Anchor)
 		numbers = append(numbers, nullTextPtr(sec.Number))
 		headings = append(headings, sec.Title)
@@ -913,29 +934,51 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 		revisions = append(revisions, int32(p.lastRevisedIn))
 		published = append(published, p.published)
 		patched = append(patched, p.patched)
-		after[sec.Anchor] = p
+		after[key] = p
 	}
-	if len(anchors) == 0 {
-		return after, nil
-	}
-	if _, err := tx.Exec(
-		`INSERT INTO doc_sections (doc_id, anchor, number, heading, depth, position, last_revised_in, published, patched)
+	if len(anchors) > 0 {
+		if _, err := tx.Exec(
+			`INSERT INTO doc_sections (doc_id, anchor, number, heading, depth, position, last_revised_in, published, patched)
 		 SELECT $1::bigint, s.anchor, s.number, s.heading, s.depth, s.position,
 		        s.last_revised_in, s.published, s.patched
 		   FROM unnest($2::text[], $3::text[], $4::text[], $5::int[], $6::int[], $7::int[], $8::boolean[], $9::boolean[])
 		        AS s(anchor, number, heading, depth, position, last_revised_in, published, patched)`,
-		docID, anchors, numbers, headings, depths, positions, revisions, published, patched,
-	); err != nil {
-		return nil, fmt.Errorf("insert sections of doc %d: %w", docID, err)
+			docID, anchors, numbers, headings, depths, positions, revisions, published, patched,
+		); err != nil {
+			return nil, fmt.Errorf("insert sections of doc %d: %w", docID, err)
+		}
+	}
+	// References and covers resolve against the anchors just written
+	// (doc_entries).
+	if err := derive(); err != nil {
+		return nil, err
+	}
+	if minted {
+		if _, err := resolveExternalCovers(tx, docID, eventID); err != nil {
+			return nil, err
+		}
 	}
 	return after, nil
 }
 
+// entryKeys is each entry of document docID's arrangement, in position
+// order, as its identity (entryKeySQL).
+func entryKeys(tx *sql.Tx, docID int64) ([]string, error) {
+	rows, err := tx.Query(`SELECT `+entryKeySQL+` FROM doc_rules a WHERE a.doc_id = $1 ORDER BY a.position`, docID)
+	if err != nil {
+		return nil, fmt.Errorf("read entries of doc %d: %w", docID, err)
+	}
+	return scanColumn[string](rows, fmt.Sprintf("entries of doc %d", docID))
+}
+
 // priorSections reads the accept-time state of a document's current sections,
-// keyed by anchor.
+// keyed by anchor, each naming its entry.
 func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 	rows, err := tx.Query(
-		`SELECT anchor, last_revised_in, published, patched FROM doc_sections WHERE doc_id = $1`, docID)
+		`SELECT s.anchor, s.last_revised_in, s.published, s.patched, coalesce(`+entryKeySQL+`, 'anchor:' || s.anchor)
+		   FROM doc_sections s
+		   LEFT JOIN doc_rules a ON a.doc_id = s.doc_id AND a.position = s.position
+		  WHERE s.doc_id = $1`, docID)
 	if err != nil {
 		return nil, fmt.Errorf("read sections of doc %d: %w", docID, err)
 	}
@@ -944,7 +987,7 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 	for rows.Next() {
 		var anchor string
 		var p priorSection
-		if err := rows.Scan(&anchor, &p.lastRevisedIn, &p.published, &p.patched); err != nil {
+		if err := rows.Scan(&anchor, &p.lastRevisedIn, &p.published, &p.patched, &p.key); err != nil {
 			return nil, fmt.Errorf("scan section of doc %d: %w", docID, err)
 		}
 		out[anchor] = p
@@ -1193,7 +1236,7 @@ func (s *Store) BareSupersededRules(ctx context.Context, project, kind string) (
 		       FROM rules r
 		       JOIN projects p ON p.id = r.project_id
 		       JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
-		       LEFT JOIN doc_rules dr ON dr.rule_id = r.id
+		       LEFT JOIN doc_entries dr ON dr.rule_id = r.id
 		       LEFT JOIN docs d ON d.id = dr.doc_id AND d.deleted_at IS NULL
 		       LEFT JOIN projects dp ON dp.id = d.project_id
 		      WHERE r.status = 'withdrawn'
@@ -1239,7 +1282,7 @@ func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSe
 		        coalesce(`+ruleRefSQL("p", "r")+`, ''),
 		        CASE WHEN r.status = 'draft' AND r.version > dr.rule_version THEN r.version ELSE 0 END
 		   FROM doc_sections s
-		   LEFT JOIN doc_rules dr ON dr.doc_id = s.doc_id AND dr.anchor = s.anchor
+		   LEFT JOIN doc_rules dr ON dr.doc_id = s.doc_id AND dr.position = s.position
 		   LEFT JOIN rules r ON r.id = dr.rule_id
 		   LEFT JOIN projects p ON p.id = r.project_id
 		   LEFT JOIN rule_versions v ON v.rule_id = dr.rule_id AND v.version = dr.rule_version
@@ -1426,7 +1469,7 @@ func docSectionReferrers(ctx context.Context, q rowQueryer, docID int64, anchor 
 		    AND d.kind <> 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL
 		  UNION ALL
 		 SELECT 'rule', `+ruleRefSQL("p", "r")+`, e.type, v.heading
-		   FROM doc_rules dr
+		   FROM doc_entries dr
 		   JOIN rule_edges e ON e.to_rule = dr.rule_id AND e.type IN ('amends','supersedes')
 		   JOIN rules r ON r.id = e.from_rule
 		   JOIN projects p ON p.id = r.project_id

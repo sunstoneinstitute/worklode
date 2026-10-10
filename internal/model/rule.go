@@ -218,11 +218,10 @@ type AddRuleInput struct {
 // ArrangeRuleInput is the body of POST /api/v1/docs/{id}/rules: place an
 // existing rule in a spec (WL-REQ-1297). After and Under each name a
 // rule ref or a section anchor of the spec, at most one of them; with
-// neither the rule goes last. Anchor defaults to the next free number at
-// that position.
+// neither the rule goes last. Its number and anchor are derived from where
+// it lands (WL-REQ-165).
 type ArrangeRuleInput struct {
-	Rule   string `json:"rule"`
-	After  string `json:"after,omitempty"`
-	Under  string `json:"under,omitempty"`
-	Anchor string `json:"anchor,omitempty"`
+	Rule  string `json:"rule"`
+	After string `json:"after,omitempty"`
+	Under string `json:"under,omitempty"`
 }

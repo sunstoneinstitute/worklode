@@ -206,7 +206,7 @@ func (s *Store) progressSections(ctx context.Context, projectID string, specs ma
 SELECT sec.doc_id, sec.anchor, sec.heading, sec.depth,
        coalesce((SELECT bool_and(dr.heading IS NOT NULL OR r.kind NOT IN ('requirement', 'catalogue'))
                    FROM doc_rules dr LEFT JOIN rules r ON r.id = dr.rule_id
-                  WHERE dr.doc_id = sec.doc_id AND dr.anchor = sec.anchor), false)
+                  WHERE dr.doc_id = sec.doc_id AND dr.position = sec.position), false)
   FROM doc_sections sec
   JOIN docs d ON d.id = sec.doc_id
  WHERE d.project_id = $1 AND d.kind = 'spec' AND d.deleted_at IS NULL

@@ -617,7 +617,7 @@ func TestListDocsOmitsBodies(t *testing.T) {
 	rr = doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
 	var detail model.DocDetail
 	decodeInto(t, rr, &detail)
-	if detail.Body != noHeader(t, docSpecBody) {
+	if plain(detail.Body) != noHeader(t, docSpecBody) {
 		t.Errorf("detail body = %q, want the whole source", detail.Body)
 	}
 
@@ -725,7 +725,7 @@ func TestUpdateDocBody(t *testing.T) {
 	}
 	var got model.Doc
 	decodeInto(t, rr, &got)
-	if got.Title != spec.Title || got.Body != noHeader(t, edited) {
+	if got.Title != spec.Title || plain(got.Body) != noHeader(t, edited) {
 		t.Errorf("doc = %+v, want the new body and the title unchanged", got)
 	}
 	rr = doReq(t, h, "PUT", docPath(spec.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited})
@@ -987,22 +987,6 @@ func TestDocRevisionLifecycle(t *testing.T) {
 		t.Fatalf("detail revision = %+v, want the open candidate", detail.Revision)
 	}
 
-	// A candidate that drops a published anchor is refused at the gate, and
-	// the 422 lists the violation.
-	dropped := strings.Replace(docSpecBody, "## 1. Scope {#sec-1}\n\nScope body.\n\n", "", 1)
-	if rr := doReq(t, h, "PUT", docPath(spec.ID, "/revision"), token,
-		model.UpdateDocBodyInput{Body: noHeader(t, dropped)}); rr.Code != http.StatusOK {
-		t.Fatalf("update revision status = %d, body %s", rr.Code, rr.Body.String())
-	}
-	rr = doReq(t, h, "POST", docPath(spec.ID, "/revision/accept"), token, nil)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("violating accept status = %d, want 422, body %s", rr.Code, rr.Body.String())
-	}
-	msg, _ := decodeMap(t, rr)["error"].(string)
-	if !strings.Contains(msg, "sec-1") || !strings.Contains(msg, "section removed") {
-		t.Errorf("error = %q, want it to list the removed anchor", msg)
-	}
-
 	// Appending a section is legal; landing it bumps the version and moves
 	// last_revised_in on exactly the changed anchor.
 	added := docSpecBody + "\n## 3. Added {#sec-3}\n\nAdded body.\n"
@@ -1016,7 +1000,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 	}
 	var landed model.Doc
 	decodeInto(t, rr, &landed)
-	if landed.Version != 2 || landed.Body != noHeader(t, added) {
+	if landed.Version != 2 || plain(landed.Body) != noHeader(t, added) {
 		t.Errorf("doc = version %d, want 2 with the candidate body", landed.Version)
 	}
 
@@ -1082,7 +1066,7 @@ func TestDocRevisionDiscard(t *testing.T) {
 	}
 	var after model.Doc
 	decodeInto(t, rr, &after)
-	if after.Version != 1 || after.Body != noHeader(t, docSpecBody) {
+	if after.Version != 1 || plain(after.Body) != noHeader(t, docSpecBody) {
 		t.Errorf("doc = version %d, want the accepted version untouched by a discard", after.Version)
 	}
 
@@ -1904,6 +1888,10 @@ func TestDocReferrers(t *testing.T) {
 
 // noHeader is body with its header removed: fixtures carry headers because
 // POST /api/v1/docs reads one, and a body write takes none (WL-REQ-168).
+// plain is a rendered body without the rule refs its headings print
+// (WL-REQ-1299).
+func plain(body string) string { return designdoc.StripRuleRefs(body) }
+
 func noHeader(t *testing.T, body string) string {
 	t.Helper()
 	d, err := designdoc.Parse([]byte(body))

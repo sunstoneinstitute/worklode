@@ -136,7 +136,7 @@ func TestPatchDocRuleSplit(t *testing.T) {
 				if getErr != nil {
 					t.Fatal(getErr)
 				}
-				if after.Version != 1 || after.Body != noHeader(t, patchSpecBody) {
+				if after.Version != 1 || plain(after.Body) != noHeader(t, patchSpecBody) {
 					t.Errorf("refused patch still moved the document: version %d", after.Version)
 				}
 				return
@@ -481,5 +481,22 @@ func TestPatchDocIfVersion(t *testing.T) {
 		Note: "reworded the model", IfVersion: after.Version,
 	}); err != nil {
 		t.Fatalf("PatchDoc after re-reading the version: %v", err)
+	}
+}
+
+// TestPatchDocRefusesRuleLeaving: an in-place patch that drops a rule's
+// section is refused naming the rule; a rule leaves an accepted spec only
+// through unarrange or supersede (WL-REQ-167).
+func TestPatchDocRefusesRuleLeaving(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 90, Slug: "090-a",
+		Body: patchSpecBody, CreatedBy: "stig", Status: "accepted",
+	})
+	dropped := strings.Replace(patchSpecBody, "## 3. Rules {#sec-3}\n\nRules body.\n", "", 1)
+	_, _, err := patchDoc(t, s, DocPatchInput{ID: spec.ID, Body: dropped, Note: "drop", ActorID: "stig"})
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "P1-REQ-3") {
+		t.Fatalf("err = %v, want ErrInvalidInput naming P1-REQ-3", err)
 	}
 }

@@ -49,9 +49,9 @@ const (
 	   FROM doc_edge_versions e WHERE e.doc_id = $1 AND e.version = $2
 	  ORDER BY e.type, coalesce(e.to_rule, 0), coalesce(e.to_doc, 0), coalesce(e.to_external, '')`
 	liveRulesSQL = `SELECT json_build_object('position', position, 'rule_id', rule_id, 'rule_version', rule_version,
-	        'depth', depth, 'anchor', anchor)::text FROM doc_rules WHERE doc_id = $1 ORDER BY position`
+	        'depth', depth, 'slug', slug)::text FROM doc_rules WHERE doc_id = $1 ORDER BY position`
 	snapRulesSQL = `SELECT json_build_object('position', position, 'rule_id', rule_id, 'rule_version', rule_version,
-	        'depth', depth, 'anchor', anchor)::text FROM doc_rule_versions WHERE doc_id = $1 AND version = $2 ORDER BY position`
+	        'depth', depth, 'slug', slug)::text FROM doc_rule_versions WHERE doc_id = $1 AND version = $2 ORDER BY position`
 )
 
 func equalRows(t *testing.T, what string, got, want []string) {

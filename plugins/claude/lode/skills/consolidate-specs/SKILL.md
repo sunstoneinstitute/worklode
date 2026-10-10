@@ -204,8 +204,8 @@ Before retiring anything, the coordinator checks, and the owner approves the res
   stop, not discard it.
 - `lode doc revise --file` refuses a body with frontmatter. Set title and issue date with `lode doc edit`, and
   dependencies with `lode doc link --requires`.
-- Anchors of accepted docs are frozen. Add sections with a letter suffix (`{#sec-4a}`). A merged section keeps
-  its heading as a one-line stub ("Merged into §7.").
+- Section numbers and anchors are derived from the arrangement (WL-REQ-165), so adding or unarranging a
+  section renumbers the ones after it. Cite rules by ref, not by section.
 - Move a rule's content with `lode rule supersede --map`, which carries task links over. **Supersede after
   `--accept`, not before:** accepting a revision re-activates rules superseded earlier.
 - A doc whose rules are all superseded still shows `accepted`. Retire it with `lode doc withdraw

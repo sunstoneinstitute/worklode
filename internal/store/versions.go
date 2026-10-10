@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -48,8 +49,8 @@ func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
 		return 0, fmt.Errorf("snapshot edges of doc %d: %w", docID, err)
 	}
 	if _, err := tx.Exec(
-		`INSERT INTO doc_rule_versions (doc_id, version, position, rule_id, rule_version, heading, depth, anchor)
-		 SELECT r.doc_id, d.version, r.position, r.rule_id, r.rule_version, r.heading, r.depth, r.anchor
+		`INSERT INTO doc_rule_versions (doc_id, version, position, rule_id, rule_version, heading, depth, slug)
+		 SELECT r.doc_id, d.version, r.position, r.rule_id, r.rule_version, r.heading, r.depth, r.slug
 		   FROM doc_rules r JOIN docs d ON d.id = r.doc_id
 		  WHERE r.doc_id = $1`, docID,
 	); err != nil {
@@ -117,9 +118,9 @@ func moveSpecsToAcceptedRules(tx *sql.Tx, ruleIDs []int64, except int64) (map[in
 			       FROM rules r
 			      WHERE dr.doc_id = $1 AND r.id = dr.rule_id AND dr.rule_id = ANY($2)
 			        AND r.status = 'accepted' AND dr.rule_version < r.version
-			  RETURNING dr.anchor)
+			  RETURNING dr.position)
 			 UPDATE doc_sections SET last_revised_in = $3
-			  WHERE $3 > 0 AND doc_id = $1 AND anchor IN (SELECT anchor FROM moved)`,
+			  WHERE $3 > 0 AND doc_id = $1 AND position IN (SELECT position FROM moved)`,
 			sp.id, ruleIDs, version); err != nil {
 			return nil, fmt.Errorf("move doc %d to accepted rule versions: %w", sp.id, err)
 		}
@@ -177,7 +178,7 @@ func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...
 		   LEFT JOIN rules r ON r.id = e.to_rule
 		   LEFT JOIN projects rp ON rp.id = r.project_id
 		   LEFT JOIN LATERAL (
-		            SELECT dr.doc_id, dr.anchor FROM doc_rules dr
+		            SELECT dr.doc_id, dr.anchor FROM doc_entries dr
 		             WHERE dr.rule_id = e.to_rule
 		             ORDER BY dr.doc_id, dr.position LIMIT 1
 		        ) ra ON true
@@ -207,7 +208,7 @@ func (s *Store) docVersionRules(ctx context.Context, id int64, version int, snap
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT x.position, coalesce(`+ruleRefSQL("p", "r")+`, ''), coalesce(x.rule_version, 0),
-		        coalesce(x.heading, ''), x.depth, x.anchor
+		        coalesce(x.heading, ''), x.depth, coalesce(x.slug, '')
 		   FROM `+table+` x
 		   LEFT JOIN rules r ON r.id = x.rule_id
 		   LEFT JOIN projects p ON p.id = r.project_id
@@ -216,11 +217,23 @@ func (s *Store) docVersionRules(ctx context.Context, id int64, version int, snap
 	if err != nil {
 		return nil, fmt.Errorf("read rules of doc %d v%d: %w", id, version, err)
 	}
-	return collectRows(rows, fmt.Sprintf("read rules of doc %d v%d", id, version), func(r rowScanner) (model.DocVersionRule, error) {
+	var entries []designdoc.Entry
+	out, err := collectRows(rows, fmt.Sprintf("read rules of doc %d v%d", id, version), func(r rowScanner) (model.DocVersionRule, error) {
 		var v model.DocVersionRule
-		err := r.Scan(&v.Position, &v.Rule, &v.RuleVersion, &v.Heading, &v.Depth, &v.Anchor)
+		var e designdoc.Entry
+		err := r.Scan(&v.Position, &v.Rule, &v.RuleVersion, &v.Heading, &v.Depth, &e.Slug)
+		e.Depth = v.Depth
+		entries = append(entries, e)
 		return v, err
 	})
+	if err != nil {
+		return nil, err
+	}
+	// The anchor is derived from the version's own arrangement (WL-REQ-165).
+	for i, d := range designdoc.DeriveNumbers(entries) {
+		out[i].Anchor = d.Anchor
+	}
+	return out, nil
 }
 
 // ruleEdgeSnapshotSQL reads a rule's outgoing edges as snapshotted at a

@@ -224,3 +224,5 @@ configMapGenerator:
       - migrations/0105_rule-concept-iri.down.sql
       - migrations/0106_spec-template-text.up.sql
       - migrations/0106_spec-template-text.down.sql
+      - migrations/0107_derived-section-numbers.up.sql
+      - migrations/0107_derived-section-numbers.down.sql

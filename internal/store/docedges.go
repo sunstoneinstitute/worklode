@@ -994,7 +994,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		   LEFT JOIN rules r ON r.id = e.to_rule
 		   LEFT JOIN projects rp ON rp.id = r.project_id
 		   LEFT JOIN LATERAL (
-		            SELECT dr.doc_id, dr.anchor FROM doc_rules dr
+		            SELECT dr.doc_id, dr.anchor FROM doc_entries dr
 		             WHERE dr.rule_id = e.to_rule
 		             ORDER BY dr.doc_id, dr.position LIMIT 1
 		        ) ra ON true

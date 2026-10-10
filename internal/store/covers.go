@@ -53,7 +53,7 @@ func coversRules(tx *sql.Tx, project, ref string) (rules []int64, named bool, er
 	rows, err := tx.Query(
 		`SELECT s.rule_id, r.kind
 		   FROM docs d
-		   LEFT JOIN doc_rules a ON a.doc_id = d.id AND a.anchor = $2
+		   LEFT JOIN doc_entries a ON a.doc_id = d.id AND a.anchor = $2
 		   JOIN doc_rules s ON s.doc_id = d.id
 		   JOIN rules r ON r.id = s.rule_id
 		  WHERE d.id = $1 AND d.kind <> 'plan'
@@ -140,7 +140,11 @@ func ensureRules(tx *sql.Tx, docID int64) error {
 	if err != nil {
 		return fmt.Errorf("parse doc %d: %w", docID, err)
 	}
-	if _, err := syncRules(tx, docID, parsed); err != nil {
+	_, derive, err := syncRules(tx, docID, parsed, "doc_entries")
+	if err != nil {
+		return err
+	}
+	if err := derive(); err != nil {
 		return err
 	}
 	if status == "accepted" {

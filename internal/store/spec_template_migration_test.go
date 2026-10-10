@@ -106,13 +106,13 @@ func TestSpecTemplateMigration(t *testing.T) {
 		"### 1.1 Leases {#sec-1.1}\n### 1.2 Background {#sec-1.2}\n## Sources\n\nA list.\n"
 	wantTwo := "## 1. Alpha {#sec-1}\n## 2. Beta {#sec-2}\n"
 	for _, tc := range []struct {
-		id         int64
-		before     string
-		want       string
-		ruleAnchor []string
+		id     int64
+		before string
+		want   string
+		rules  []bool
 	}{
-		{one, tmplSpecOne, wantOne, []string{"sec-1.1", "sec-1.2"}},
-		{two, tmplSpecTwo, wantTwo, []string{"sec-1", "sec-2"}},
+		{one, tmplSpecOne, wantOne, []bool{false, true, true}},
+		{two, tmplSpecTwo, wantTwo, []bool{true, true}},
 	} {
 		var body string
 		if err := db.QueryRow(`SELECT body FROM docs WHERE id = $1`, tc.id).Scan(&body); err != nil {
@@ -121,23 +121,23 @@ func TestSpecTemplateMigration(t *testing.T) {
 		if body != tc.want {
 			t.Errorf("doc %d stored body:\n%q\nwant:\n%q", tc.id, body, tc.want)
 		}
-		rules := map[string]bool{}
-		for _, a := range tc.ruleAnchor {
-			rules[a] = true
-		}
-		if got := specTemplate(tc.before, rules); got != tc.want {
+		if got := specTemplate(tc.before, tc.rules); got != tc.want {
 			t.Errorf("specTemplate disagrees with the migration on doc %d:\n%q", tc.id, got)
 		}
 	}
 
+	// The store reads the current schema.
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatal(err)
+	}
 	got, err := s.GetDoc(t.Context(), one)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Body != tmplSpecOne {
+	if plain(got.Body) != tmplSpecOne {
 		t.Errorf("rendered PM-SPEC-1:\n%q\nwant the text it had:\n%q", got.Body, tmplSpecOne)
 	}
-	if got, err = s.GetDoc(t.Context(), two); err != nil || got.Body != tmplSpecTwo {
+	if got, err = s.GetDoc(t.Context(), two); err != nil || plain(got.Body) != tmplSpecTwo {
 		t.Errorf("rendered PM-SPEC-2:\n%q, err %v", got.Body, err)
 	}
 

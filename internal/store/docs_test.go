@@ -137,6 +137,10 @@ func unlinkDocEdge(t *testing.T, s *Store, id int64, in model.DocEdgeInput) erro
 
 // noHeader is body with its header removed, the form a body is stored and
 // written in (WL-REQ-168).
+// plain is a rendered body without the rule refs its headings print
+// (WL-REQ-1299), to compare with the text that was written.
+func plain(body string) string { return designdoc.StripRuleRefs(body) }
+
 func noHeader(t *testing.T, body string) string {
 	t.Helper()
 	d, err := designdoc.Parse([]byte(body))
@@ -236,7 +240,7 @@ func docEdges(t *testing.T, s *Store, docID int64) []model.DocEdge {
 // arranging it, as ra.doc_id and ra.anchor, so the helpers below read a
 // covers edge in the section terms its entry was written in.
 const ruleArrangementJoin = `
-		   LEFT JOIN LATERAL (SELECT dr.doc_id, dr.anchor FROM doc_rules dr
+		   LEFT JOIN LATERAL (SELECT dr.doc_id, dr.anchor FROM doc_entries dr
 		                       WHERE dr.rule_id = e.to_rule
 		                       ORDER BY dr.doc_id, dr.position LIMIT 1) ra ON true`
 
@@ -476,7 +480,7 @@ func TestDocUpdateBodyDraftSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDocBody: %v", err)
 	}
-	if updated.Body != noHeader(t, edited) {
+	if plain(updated.Body) != noHeader(t, edited) {
 		t.Error("body not swapped")
 	}
 	if updated.Title != doc.Title {
@@ -595,7 +599,7 @@ func TestDocUpdateBodyAcceptedPlanAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDocBody on an accepted plan: %v", err)
 	}
-	if updated.Body != noHeader(t, edited) {
+	if plain(updated.Body) != noHeader(t, edited) {
 		t.Error("body not swapped")
 	}
 	if edges := docEdges(t, s, doc.ID); len(edges) == 0 {
@@ -628,7 +632,7 @@ func TestDocGetAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDoc: %v", err)
 	}
-	if got.Slug != "025-x" || got.Body != noHeader(t, specBody) {
+	if got.Slug != "025-x" || plain(got.Body) != noHeader(t, specBody) {
 		t.Errorf("GetDoc = %+v, want the spec", got)
 	}
 	if _, err := s.GetDoc(t.Context(), 9999); !errors.Is(err, ErrNotFound) {

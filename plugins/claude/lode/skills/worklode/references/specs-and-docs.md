@@ -60,7 +60,7 @@ lode rule versions <rule-ref>
 lode show <rule-ref> --version <n>
 lode rule add --heading <text> --file <body> [--kind <kind>] [--tag <t>]  # new draft rule in no spec
 lode rule edit <rule-ref> --file <body-file> # text under the heading; optional --heading
-lode rule arrange <spec> <rule-ref>          # --after or --under <ref|sec-N>, --anchor sec-N
+lode rule arrange <spec> <rule-ref>          # --after or --under <ref|sec-N>
 lode rule unarrange <spec> <rule-ref>        # out of the spec, not withdrawn
 ```
 
@@ -216,11 +216,12 @@ error; `lode show <ref>` is what actually verifies one.
 
 ## Section anchors and document amendments
 
-Once a spec is accepted, its `{#sec-N}` anchors never move and never get
-renumbered — inserting between `2.1` and `2.2` uses a letter suffix
-(`2.1a`), never a renumber. A superseded *section* keeps its heading and
-anchor and gets a note saying what replaced it; deleting it breaks whoever
-linked it.
+Section numbers and `{#sec-N}` anchors are derived from the spec's
+arrangement in reading order (WL-REQ-165), so they change when the
+arrangement does. A rule heading prints its ref, `## 4. Title (WL-REQ-165)
+{#sec-4}`, and the ref is what to cite. `<spec>#sec-N` resolves against the
+spec's current version when written. A rule leaves a spec only through
+`lode rule unarrange` or `lode rule supersede`.
 
 A bare `lode show <ref>` reads the current stored body, including landed
 revisions. `--version` reads a historical snapshot. Use `--inline` when acting

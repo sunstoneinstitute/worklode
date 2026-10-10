@@ -128,7 +128,7 @@ func TestDocImportRoundTrip(t *testing.T) {
 			}
 			fm := doc.Frontmatter
 			doc.Frontmatter = nil
-			if want := strings.TrimLeft(string(doc.Bytes()), "\n"); d.Body != want {
+			if want := strings.TrimLeft(string(doc.Bytes()), "\n"); !sameImportedBody(d.Kind, d.Body, want) {
 				t.Errorf("body did not round-trip:\n--- on disk, header removed ---\n%s\n--- in the store ---\n%s", want, d.Body)
 			}
 			doc.Frontmatter = fm
