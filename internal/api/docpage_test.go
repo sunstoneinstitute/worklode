@@ -20,7 +20,7 @@ func TestDocsPage(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
-	// The plan is the point: since WL-SPEC-75 §13.4 it carries a number, so the index
+	// The plan is the point: since WL-REQ-122 it carries a number, so the index
 	// links it by shorthand like every other kind rather than by database id.
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
@@ -116,8 +116,8 @@ func TestDocPageDegradesWithoutVersions(t *testing.T) {
 	bodyContains(t, body, "Documents in the backbone")
 }
 
-// TestDocVersionPage covers GET /docs/{id}/versions/{n} (WL-SPEC-77 §3): a plan
-// stays freely mutable (WL-SPEC-77 §11), so editing its body once leaves version 1
+// TestDocVersionPage covers GET /docs/{id}/versions/{n} (WL-REQ-164): a plan
+// stays freely mutable (WL-REQ-172), so editing its body once leaves version 1
 // superseded and version 2 current, and only the superseded one shows the
 // "back to current" banner.
 func TestDocVersionPage(t *testing.T) {
@@ -216,7 +216,7 @@ func TestDocVersionPageRejectsInt32Overflow(t *testing.T) {
 	}
 }
 
-// TestDocPageShowsNotes is WL-716's second gap: the anchored notes WL-SPEC-77 §10
+// TestDocPageShowsNotes is WL-716's second gap: the anchored notes WL-REQ-171
 // stores are rendered instead of invisible. ?body=source is the escape hatch
 // back to the stored text. Rule amendment folding is
 // TestDocPageFoldsRuleAmendments.
@@ -253,7 +253,7 @@ func TestDocPageShowsNotes(t *testing.T) {
 
 // TestDocPageFoldsRuleAmendments: a rule amends edge onto a section's rule
 // folds the amending rule's text beneath that section, attributed to the
-// amending rule (WL-SPEC-77 §4).
+// amending rule (WL-REQ-165).
 func TestDocPageFoldsRuleAmendments(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -283,7 +283,7 @@ func TestDocPageFoldsRuleAmendments(t *testing.T) {
 }
 
 // TestDocPageShowsReviewState is WL-716's third gap: the reviewer roster
-// (WL-SPEC-77 §9) and the open approval rows (WL-SPEC-75 §13.6) are rendered on the document
+// (WL-REQ-170) and the open approval rows (WL-REQ-124) are rendered on the document
 // itself, each with the decide form the Reviews queue uses — carrying this
 // page as its return, so deciding here does not throw the reviewer to /reviews.
 func TestDocPageShowsReviewState(t *testing.T) {

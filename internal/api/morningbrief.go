@@ -51,7 +51,7 @@ func (s *server) briefEventsSince(ctx context.Context, after int64) (events []st
 	return events, len(more) > 0, nil
 }
 
-// morningBriefTier is WL-SPEC-82 §11's ordering, from the spec's own numbered list.
+// morningBriefTier is WL-REQ-346's ordering, from the spec's own numbered list.
 // Tier 1 (decisions and exceptions needing the actor) is never assigned to
 // an event: it is derived from open state in assembleMorningBrief, which is
 // what makes it persist across cursor advances.
@@ -260,7 +260,7 @@ func morningBriefItemText(ev store.Event) (text, href string) {
 }
 
 // reviewedThroughNow advances the actor's Morning Brief boundary to the
-// cutoff the page displayed (WL-SPEC-82 §11's explicit "Reviewed through now" —
+// cutoff the page displayed (WL-REQ-346's explicit "Reviewed through now" —
 // the one way the boundary ever moves). Forward-only via the store's
 // GREATEST upsert; clamped to the event-log horizon so a forged form value
 // cannot mark unseen events reviewed.

@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// Decision is one question posed on a task (WL-SPEC-77 §12). A task carries one
+// Decision is one question posed on a task (WL-REQ-176). A task carries one
 // or more; Key is stable within the task and (Task, Key) is the address
 // people use, e.g. "WL-643/x-distribution".
 type Decision struct {

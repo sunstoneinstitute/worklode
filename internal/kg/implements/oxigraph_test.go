@@ -13,7 +13,7 @@ import (
 
 // TestPinAnnotationRoundTrip proves the RDF 1.2 annotation encoding survives
 // a real store: the document PUTs as written, and the pin reads back through
-// the annotation syntax the stale-claim query of WL-SPEC-77 §13 uses, keyed on
+// the annotation syntax the stale-claim query of WL-REQ-177 uses, keyed on
 // the edge rather than on the reifier's own IRI.
 func TestPinAnnotationRoundTrip(t *testing.T) {
 	base := graphtest.Endpoint(t)

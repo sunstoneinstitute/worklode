@@ -80,7 +80,7 @@ func (Copilot) Detect(repoDir string) (bool, error) {
 }
 
 // SkillTargets: ~/.agents/skills, the cross-harness personal skills directory
-// Copilot reads (WL-SPEC-80 §5.2).
+// Copilot reads (WL-REQ-276).
 func (Copilot) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -90,7 +90,7 @@ func (Copilot) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 }
 
 // Events is copilotBindings read the other way round, so the event table
-// cannot drift from what install actually writes (WL-SPEC-80 §5).
+// cannot drift from what install actually writes (WL-REQ-274).
 func (Copilot) Events() map[Event][]string { return eventsFor(copilotBindings) }
 
 // InstallHooks writes the whole file. "version": 1 is required — Copilot

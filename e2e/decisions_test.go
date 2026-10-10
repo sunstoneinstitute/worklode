@@ -1,6 +1,6 @@
 //go:build e2e
 
-// decisions_test.go proves 025 §10.1's decision task end to end over public
+// decisions_test.go proves WL-REQ-176's decision task end to end over public
 // HTTP surfaces only: a decision-kind task poses its questions at creation,
 // reads them back unanswered and in authored order, stays out of the pickup
 // loop and refuses a claim, and closes itself when its last row is answered.
@@ -102,7 +102,7 @@ func TestDecisionTaskJourney(t *testing.T) {
 		}
 	}
 
-	// 3. A decision is never handed out as work and never leased (004 §6.3 as
+	// 3. A decision is never handed out as work and never leased (WL-REQ-432 as
 	// amended): the ranked pickup loop does not see it, and a claim by id is
 	// refused. The store holds nothing else, so "no-ready-task" is the whole
 	// ready set answering.

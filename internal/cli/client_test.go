@@ -638,7 +638,7 @@ func TestRefLinksFrom(t *testing.T) {
 }
 
 // WorktreeDirFrom, not LoadConfig/loadConfigFrom, is the sole reader of
-// worktree_dir (WL-SPEC-80 §3.3 scopes it to the repo-local config only) — see
+// worktree_dir (WL-REQ-269 scopes it to the repo-local config only) — see
 // Config.WorktreeDir's doc. These two tests exercise it directly.
 
 func TestWorktreeDirFromRepoConfig(t *testing.T) {
@@ -672,7 +672,7 @@ func TestWorktreeDirEnvOverride(t *testing.T) {
 // sees: loadConfigFrom (LoadConfig's implementation) must leave
 // Config.WorktreeDir empty even when BOTH a user-level and a repo-level
 // config set worktree_dir — WorktreeDirFrom, not this merged Config, is the
-// sole reader (WL-SPEC-80 §3.3; see Config.WorktreeDir's doc). Today this is
+// sole reader (WL-REQ-269; see Config.WorktreeDir's doc). Today this is
 // correct only by inspection (cfg.WorktreeDir = "" in loadConfigFrom, and
 // merge() never touching it); this test would fail if either of those broke.
 func TestLoadConfigFromNeverPopulatesWorktreeDir(t *testing.T) {
@@ -689,7 +689,7 @@ func TestLoadConfigFromNeverPopulatesWorktreeDir(t *testing.T) {
 	}
 }
 
-// The file corpus is retired: documents live in the backbone (WL-SPEC-77 §16), and
+// The file corpus is retired: documents live in the backbone (WL-REQ-180), and
 // nothing reads spec_corpus / plan_corpus any more. They are still accepted
 // and ignored, so a checkout that has not dropped them from its config.toml
 // yet does not fail every command on parseConfig's unknown-key error.

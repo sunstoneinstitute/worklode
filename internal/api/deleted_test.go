@@ -23,7 +23,7 @@ import (
 
 // deleteBoth tombstones the fixture's task and document with a justification,
 // which is what a prod instance demands and a dev instance stores all the
-// same (WL-SPEC-75 §12).
+// same (WL-REQ-117).
 func deleteBoth(t *testing.T, f *deleteFixture, justification string) {
 	t.Helper()
 	body := model.DeleteInput{Justification: justification}
@@ -114,7 +114,7 @@ func TestDeletedPageRestoresTask(t *testing.T) {
 }
 
 // TestDeletedPageRestoresDoc is the document half. The two are separate
-// routes because they carry separate permissions (WL-SPEC-75 §12).
+// routes because they carry separate permissions (WL-REQ-117).
 func TestDeletedPageRestoresDoc(t *testing.T) {
 	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)

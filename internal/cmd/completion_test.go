@@ -83,7 +83,7 @@ func tasksResponse(ids ...string) model.TaskListResponse {
 	return resp
 }
 
-// TestTaskIDCompletionSanitizesTitle is WL-SPEC-81 §3 C3: a task title is free text
+// TestTaskIDCompletionSanitizesTitle is WL-REQ-307 C3: a task title is free text
 // and will eventually contain a tab or newline. Either would corrupt the
 // "id\tdescription" line a shell splits on, so both are replaced before
 // joining, and a long title is truncated to keep one candidate on one line.
@@ -124,7 +124,7 @@ func TestTaskIDCompletionSanitizesTitle(t *testing.T) {
 
 // TestTaskIDCompletionOffersScopedIDsInOrder covers the happy path: the
 // candidates are the project's tasks matching what has been typed, ordered by
-// model.CompareTaskIDs (WL-SPEC-81 §3), so WL-9 precedes WL-10.
+// model.CompareTaskIDs (WL-REQ-307), so WL-9 precedes WL-10.
 func TestTaskIDCompletionOffersScopedIDsInOrder(t *testing.T) {
 	setupCompletion(t, "proj", func(w http.ResponseWriter, r *http.Request) {
 		writeTestJSON(t, w, tasksResponse("WL-10", "WL-9", "WL-91", "XX-1"))
@@ -143,7 +143,7 @@ func TestTaskIDCompletionOffersScopedIDsInOrder(t *testing.T) {
 	}
 }
 
-// TestTaskIDCompletionIsSilentOnFailure is WL-SPEC-81 §3 C2: pressing TAB while
+// TestTaskIDCompletionIsSilentOnFailure is WL-REQ-307 C2: pressing TAB while
 // logged out, offline, unscoped or against a slow server offers nothing and
 // prints nothing — never ShellCompDirectiveError, never CompErrorln.
 func TestTaskIDCompletionIsSilentOnFailure(t *testing.T) {
@@ -192,7 +192,7 @@ func TestTaskIDCompletionIsSilentOnFailure(t *testing.T) {
 	}
 }
 
-// TestTaskIDCompletionFiresAtTheRightPosition is WL-SPEC-81 §3 C1 for the commands
+// TestTaskIDCompletionFiresAtTheRightPosition is WL-REQ-307 C1 for the commands
 // whose task id is not the first argument. Wiring a completion function that
 // only ever fires at position 0 would leave `lode task set state merged WL-…`
 // silently uncompletable while still looking wired, so the position is a
@@ -245,8 +245,8 @@ func docsResponse(docs ...model.Doc) model.DocListResponse {
 	return model.DocListResponse{Docs: docs}
 }
 
-// TestDocRefCompletionOffersSlugAndShorthand is WL-SPEC-81 §3 C1 for documents: a
-// document is named either way (WL-SPEC-78 §3.2), so both are candidates, ordered by
+// TestDocRefCompletionOffersSlugAndShorthand is WL-REQ-307 C1 for documents: a
+// document is named either way (WL-REQ-199), so both are candidates, ordered by
 // the shorthand's numeric suffix rather than lexically — WL-SPEC-9 before
 // WL-SPEC-10, the same discipline task ids get.
 func TestDocRefCompletionOffersSlugAndShorthand(t *testing.T) {
@@ -406,7 +406,7 @@ func TestShowCompletionUnionsTasksAndDocs(t *testing.T) {
 }
 
 // TestDocAndProjectCompletionFireAtTheRightPosition is the position half of
-// WL-SPEC-81 §3 C1 for the other kinds: which argument holds the ref is a property
+// WL-REQ-307 C1 for the other kinds: which argument holds the ref is a property
 // of the command, and a helper wired at the wrong one looks wired while
 // completing nothing useful.
 func TestDocAndProjectCompletionFireAtTheRightPosition(t *testing.T) {
@@ -484,7 +484,7 @@ func completionCandidates(t *testing.T, args ...string) []string {
 	return values
 }
 
-// TestTaskKindFlagCompletesTheLiveKindsOnly is WL-SPEC-81 §3 C4 for the flag
+// TestTaskKindFlagCompletesTheLiveKindsOnly is WL-REQ-307 C4 for the flag
 // docs/agent-surfaces.md names as the one agents most often get wrong. The
 // candidates are ns.TaskKinds itself (or, on a claim surface, the derived
 // claimableTaskKinds), never a literal beside it, and the
@@ -498,7 +498,7 @@ func TestTaskKindFlagCompletesTheLiveKindsOnly(t *testing.T) {
 
 	// The two claim surfaces complete claimableTaskKinds instead: a ranked
 	// pick never hands out a decision or a rally, so offering either would
-	// complete a value that matches nothing (WL-SPEC-77 §10).
+	// complete a value that matches nothing (WL-REQ-171).
 	cases := map[string][]string{
 		"task add":      ns.TaskKinds,
 		"task list":     ns.TaskKinds,
@@ -524,7 +524,7 @@ func TestTaskKindFlagCompletesTheLiveKindsOnly(t *testing.T) {
 	}
 }
 
-// TestFlagValueCompletion is the rest of WL-SPEC-81 §3 C4: --status and --priority
+// TestFlagValueCompletion is the rest of WL-REQ-307 C4: --status and --priority
 // from their static sets, --kind from the set belonging to the entity the
 // command acts on (a document kind is not a task kind), and --project from
 // the live projects through the same helper the positional argument uses.
@@ -562,7 +562,7 @@ func TestFlagValueCompletion(t *testing.T) {
 	}
 }
 
-// TestSetFieldCompletion is WL-SPEC-81 §1 L4's payoff: `set` writes the field named
+// TestSetFieldCompletion is WL-REQ-305 L4's payoff: `set` writes the field named
 // in an argument, so the field names complete, and each field then decides
 // what belongs after it. `project set` is not here — its fields are
 // subcommands, which cobra already completes.

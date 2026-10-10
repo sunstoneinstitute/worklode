@@ -46,7 +46,7 @@ func RulesTable(w io.Writer, rules []model.Rule) {
 }
 
 // ruleEdgeInverse names the inverse a reader sees on the far end of a stored
-// edge that has one (WL-SPEC-77 §4). The inverse is never stored.
+// edge that has one (WL-REQ-165). The inverse is never stored.
 var ruleEdgeInverse = map[string]string{"amends": "amendedBy", "supersedes": "supersededBy"}
 
 // RuleRender is the human view of one rule: its ref and heading, status
@@ -111,7 +111,7 @@ func (c *Client) EditRule(ctx context.Context, ref string, in model.EditRuleInpu
 	return doJSON[model.Rule](ctx, c, http.MethodPut, "/api/v1/rules/"+url.PathEscape(ref), in, "rule")
 }
 
-// AddRule calls POST /api/v1/rules: a standalone rule (WL-SPEC-77 §19.2).
+// AddRule calls POST /api/v1/rules: a standalone rule (WL-REQ-1296).
 func (c *Client) AddRule(ctx context.Context, in model.AddRuleInput) (model.Rule, []byte, error) {
 	return doJSON[model.Rule](ctx, c, http.MethodPost, "/api/v1/rules", in, "rule")
 }
@@ -122,7 +122,7 @@ func (c *Client) AcceptRule(ctx context.Context, ref string, in model.AcceptRule
 }
 
 // ArrangeRule calls POST /api/v1/docs/{id}/rules: place a rule in a spec
-// (WL-SPEC-77 §19.3).
+// (WL-REQ-1297).
 func (c *Client) ArrangeRule(ctx context.Context, docID int64, in model.ArrangeRuleInput) (model.Rule, []byte, error) {
 	return doJSON[model.Rule](ctx, c, http.MethodPost, docPath(docID, "/rules"), in, "rule")
 }

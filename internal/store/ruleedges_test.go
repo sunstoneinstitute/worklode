@@ -74,7 +74,7 @@ func TestLinkRules(t *testing.T) {
 
 // TestConflictsWithOncePerPair: conflictsWith is symmetric and stored once
 // per pair, so linking the reverse is ErrEdgeExists and unlinking either
-// direction removes the one row (WL-SPEC-77 §8.1).
+// direction removes the one row (WL-REQ-1288).
 func TestConflictsWithOncePerPair(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
@@ -134,7 +134,7 @@ func TestLinkRulesLineage(t *testing.T) {
 
 // TestLinkRulesAmends: amends is a manual edge from the amending rule to the
 // amended one, listed on both details and removed by UnlinkRules
-// (WL-SPEC-77 §4). amendedBy is an inverse and is never stored.
+// (WL-REQ-165). amendedBy is an inverse and is never stored.
 func TestLinkRulesAmends(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
@@ -166,7 +166,7 @@ func TestLinkRulesAmends(t *testing.T) {
 
 // TestLinkRulesNeeds: needs is a manual edge from the dependent rule to the
 // needed one. Every inferred inverse is refused, naming the declared term
-// (WL-SPEC-77 §8.1).
+// (WL-REQ-1288).
 func TestLinkRulesNeeds(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})

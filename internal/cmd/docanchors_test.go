@@ -58,7 +58,7 @@ func TestDocUpdateSectionAnchors(t *testing.T) {
 	}
 
 	// Once accepted, the anchors are published and the flag is refused
-	// rather than moving them (WL-SPEC-77 §6).
+	// rather than moving them (WL-REQ-167).
 	if out, err = runLode(t, "doc", "accept", id, "--json"); err != nil {
 		t.Fatalf("doc accept: %v\noutput: %s", err, out)
 	}

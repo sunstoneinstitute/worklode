@@ -1,6 +1,6 @@
-// Package watcher implements the doc-lifecycle rules of WL-SPEC-75 §9.6:
+// Package watcher implements the doc-lifecycle rules of WL-REQ-109:
 // given one domain event, Evaluate returns the actions it implies. It has
-// no store handle and no HTTP (WL-SPEC-75 §9.6) — the executor that fetches the
+// no store handle and no HTTP (WL-REQ-109) — the executor that fetches the
 // guard facts (open review/design tasks) and performs the mint lives in
 // internal/api. Keeping the rules a pure function makes them table-testable
 // without Postgres, and keeps the loop that drives them testable without
@@ -16,14 +16,14 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 )
 
-// TypeDocPatched is events.type of an in-place amendment (WL-SPEC-77 §10). Unlike
+// TypeDocPatched is events.type of an in-place amendment (WL-REQ-171). Unlike
 // the two wl: curies above it, it is a dotted backbone type with no ns/
 // mirror, so it is declared here — beside the rule that consumes it and the
 // handler in internal/api that writes it, which imports this name rather
 // than repeating the literal.
 const TypeDocPatched = "doc.patched"
 
-// Rule labels Evaluate emits — also the "rule" metric label (WL-SPEC-75 §9.7).
+// Rule labels Evaluate emits — also the "rule" metric label (WL-REQ-111).
 const (
 	ruleReviewOnSubmit   = "review-on-submit"
 	rulePlanOnAccept     = "plan-on-accept"
@@ -31,9 +31,9 @@ const (
 	ruleApprovalOnSubmit = "approval-on-submit"
 )
 
-// Input is everything the rules of WL-SPEC-75 §9.6 may consult. The
+// Input is everything the rules of WL-REQ-109 may consult. The
 // executor fills it; Evaluate never touches the store, so the rules are a
-// pure function (WL-SPEC-75 §9.6).
+// pure function (WL-REQ-109).
 type Input struct {
 	EventID   int64
 	EventType string // events.type: a wl: curie or a vendor dotted type
@@ -57,8 +57,8 @@ type Input struct {
 	Classification string
 	ChangedAnchors []string
 	// StaleCause is a doc.stale event's payload cause: "amended" when a
-	// covered spec section moved under the plan (WL-SPEC-77 §10), empty for the idle
-	// sweeper (WL-SPEC-77 §9). One rule mints for both; only the body's first
+	// covered spec section moved under the plan (WL-REQ-171), empty for the idle
+	// sweeper (WL-REQ-170). One rule mints for both; only the body's first
 	// sentence differs.
 	StaleCause string
 }
@@ -69,7 +69,7 @@ type Action struct {
 	Suppressed bool   // guard hit: perform no mint
 	NoteTask   string // when suppressed on accept: note the absorbed event here
 	// MintApproval discriminates the one consequence that is not a task
-	// mint: materialize the document's awaiting approvals row (WL-SPEC-82 §9).
+	// mint: materialize the document's awaiting approvals row (WL-REQ-344).
 	// The mint parameters below stay empty on such an action.
 	MintApproval bool
 	// Mint parameters (Suppressed == false && !MintApproval):
@@ -78,7 +78,7 @@ type Action struct {
 	Body     string
 }
 
-// Evaluate applies the hardcoded rules of WL-SPEC-75 §9.6. Rules must never
+// Evaluate applies the hardcoded rules of WL-REQ-109. Rules must never
 // emit an event this subscriber consumes (no cascades — a rule, reviewed
 // here, not a mechanism).
 func Evaluate(in Input) []Action {
@@ -100,13 +100,13 @@ func Evaluate(in Input) []Action {
 }
 
 // evaluateSubmitted fires two rules on one submission: the review task
-// somebody works (WL-SPEC-75 §9.6), and the approvals row that records the decision the
-// document is owed (WL-SPEC-82 §9). They have separate guards, so one being
+// somebody works (WL-REQ-109), and the approvals row that records the decision the
+// document is owed (WL-REQ-344). They have separate guards, so one being
 // suppressed says nothing about the other.
 //
 // Neither suppression carries a NoteTask: the event log's own (source,
 // external_id) dedup usually absorbs a same-version resubmit before either
-// guard runs, so there is rarely a second event to note anywhere (WL-SPEC-75 §9.6).
+// guard runs, so there is rarely a second event to note anywhere (WL-REQ-109).
 func evaluateSubmitted(in Input) []Action {
 	review := Action{Rule: ruleReviewOnSubmit, Suppressed: true}
 	if in.OpenReviewTask == "" {
@@ -126,7 +126,7 @@ func evaluateSubmitted(in Input) []Action {
 
 func evaluateAccepted(in Input) []Action {
 	if in.DocKind != "spec" {
-		// WL-SPEC-77 §11.2: an accepted plan mints its own task set in the
+		// WL-REQ-174: an accepted plan mints its own task set in the
 		// accepting transaction — nothing above it. The rule is
 		// explicitly scoped "where the document is a spec", so ADR
 		// acceptance mints nothing either.
@@ -175,9 +175,9 @@ separate, deliberate act — %s — which this task does not perform.`,
 		in.DocRef, in.DocIRI, in.Version, iri.CURIE(iri.Event(in.EventID)), "`lode doc accept`")
 }
 
-// PlanningTitle is the title of the planning task WL-SPEC-75 §9.6 mints when a
+// PlanningTitle is the title of the planning task WL-REQ-109 mints when a
 // spec is accepted. It is exported because the Progress page mints the same
-// task from a button (WL-SPEC-85 §4): one open planning task per spec, whichever
+// task from a button (WL-REQ-1337): one open planning task per spec, whichever
 // act asked for it, so the title has to come from one place.
 func PlanningTitle(docTitle string) string {
 	return "Plan: decompose " + docTitle + " into plans"

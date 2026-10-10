@@ -28,7 +28,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		// commitChecks counts the branch-membership questions a run resolved,
 		// by how: "checked" spent a GitHub request, "skipped_landed" read the
 		// answer out of main_commits, "skipped_settled" is a merged PR's head
-		// sha whose merge sha already landed (WL-SPEC-80 §10.3 — the org-wide run
+		// sha whose merge sha already landed (WL-REQ-297 — the org-wide run
 		// is rate-limit bound, so the skip ratio is the thing to watch).
 		commitChecks: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_reconcile_poll_commit_checks_total",

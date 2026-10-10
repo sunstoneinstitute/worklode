@@ -30,7 +30,7 @@ func TestRuleEditRequiresFile(t *testing.T) {
 }
 
 // TestRuleEditOnAcceptedNamesTheAccept: the edit added a draft version the
-// arranging spec does not show yet (WL-SPEC-77 §19.4), so the command names
+// arranging spec does not show yet (WL-REQ-1298), so the command names
 // the accept that moves it.
 func TestRuleEditOnAcceptedNamesTheAccept(t *testing.T) {
 	accepted := model.Rule{
@@ -358,7 +358,7 @@ func TestRuleAddAndAcceptCommands(t *testing.T) {
 // TestRuleLint covers `lode rule lint` end to end: a positional reference is
 // named with its rule in both human and --json output, and the command exits
 // non-zero while such a finding exists; a clean project exits zero
-// (WL-SPEC-77 §4c).
+// (WL-REQ-1367).
 func TestRuleLint(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

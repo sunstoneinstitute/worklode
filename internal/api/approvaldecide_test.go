@@ -16,7 +16,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// These tests cover POST /approvals/{id}/decide (WL-SPEC-75 §13.6): who may
+// These tests cover POST /approvals/{id}/decide (WL-REQ-124): who may
 // decide, what a decision does, and what each refusal answers. The first is
 // the property the route exists for — approving is a web-session act, so
 // nothing else reaches the handler.
@@ -169,7 +169,7 @@ func TestDecideApprovalBySessionResolves(t *testing.T) {
 	}
 }
 
-// TestDecideApprovalRefusesSelfApproval checks WL-SPEC-75 §13.6's default refusal:
+// TestDecideApprovalRefusesSelfApproval checks WL-REQ-124's default refusal:
 // the PR's own author cannot decide their change, matched on the actor's
 // github_username against pull_requests.author. The second half is
 // what keeps this from passing for the wrong reason — the same row is
@@ -204,7 +204,7 @@ func TestDecideApprovalRefusesSelfApproval(t *testing.T) {
 }
 
 // seedUndesignatedApproval seeds one awaiting row that names no
-// subject_revision — the shape WL-SPEC-75 §13.6's flows materialize before anything
+// subject_revision — the shape WL-REQ-124's flows materialize before anything
 // designates a revision — and returns its approvals id, read back through the
 // queue the decide form posts from.
 func seedUndesignatedApproval(t *testing.T, st *store.Store, entityID string) int64 {
@@ -228,7 +228,7 @@ func seedUndesignatedApproval(t *testing.T, st *store.Store, entityID string) in
 }
 
 // TestDecideApprovalRefusesUndesignatedRevision: a decision binds the
-// revision the decider saw (WL-SPEC-75 §13.6), so a row naming none is answered as
+// revision the decider saw (WL-REQ-124), so a row naming none is answered as
 // unprocessable rather than resolved — and counted under its own outcome.
 func TestDecideApprovalRefusesUndesignatedRevision(t *testing.T) {
 	t.Parallel()
@@ -366,7 +366,7 @@ func TestApprovalDecisionMetric(t *testing.T) {
 	if rr := decideForm(t, h, session, gated.ID, "approve", nil); rr.Code != http.StatusForbidden {
 		t.Fatalf("unqualified decide = %d, want 403", rr.Code)
 	}
-	// changes_requested is still an open state (WL-SPEC-75 §13.6's re-request edge),
+	// changes_requested is still an open state (WL-REQ-124's re-request edge),
 	// so the row is decidable again; the approval after it closes the row.
 	if rr := decideForm(t, h, session, open.ID, "request_changes", nil); rr.Code != http.StatusSeeOther {
 		t.Fatalf("request_changes = %d, want 303", rr.Code)
@@ -400,7 +400,7 @@ func TestApprovalDecisionMetric(t *testing.T) {
 
 // TestReviewsPageRendersDecideForm checks the queue row carries the control
 // the route serves: a plain POST form of native submit buttons, pointed at
-// this row's id, keyboard-operable with no JavaScript (WL-SPEC-82 §4).
+// this row's id, keyboard-operable with no JavaScript (WL-REQ-335).
 func TestReviewsPageRendersDecideForm(t *testing.T) {
 	t.Parallel()
 	st, h, _ := newTestServer(t)

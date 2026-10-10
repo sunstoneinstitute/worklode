@@ -158,7 +158,7 @@ func TestBlockedTaskIDsAbandonedBlocker(t *testing.T) {
 }
 
 // TestBlockedTaskIDsPerRepoDoneState pins the per-repo closed predicate
-// (WL-SPEC-75 §4): a blocker stops blocking at or past *its repo mapping's*
+// (WL-REQ-87): a blocker stops blocking at or past *its repo mapping's*
 // done_state, not at one fixed tuple of states. The same merged blocker is
 // closed in a repo that gates on merged and still open in one that gates on
 // released.
@@ -177,7 +177,7 @@ func TestBlockedTaskIDsPerRepoDoneState(t *testing.T) {
 		{"released", "merged", true},
 		{"released", "deployed_dev", true},
 		{"released", "released", false},
-		// The two terminals are peers, not ordered (deliveryRanks): WL-SPEC-75 §3's
+		// The two terminals are peers, not ordered (deliveryRanks): WL-REQ-83's
 		// branches never meet, and there is no legal transition between them,
 		// so treating either as short of the other would leave a task that
 		// reached the wrong one blocking forever with nowhere to advance.
@@ -245,7 +245,7 @@ func TestBlockedTaskIDsMultiRepoBlocker(t *testing.T) {
 	}
 }
 
-// TestBlockedTaskIDsContainerBlocker pins the one state-fixed case (WL-SPEC-75 §5.2):
+// TestBlockedTaskIDsContainerBlocker pins the one state-fixed case (WL-REQ-90):
 // a task with children has no commit of its own, cannot advance past merged,
 // and is therefore closed at merged in every repo — including one whose
 // mapping gates on released.
@@ -265,7 +265,7 @@ func TestBlockedTaskIDsContainerBlocker(t *testing.T) {
 	}
 	landCommit(t, s, child.ID, "acme/app", "sha-child")
 
-	// The child closing rolls the parent up to merged (WL-SPEC-75 §5.3).
+	// The child closing rolls the parent up to merged (WL-REQ-90).
 	walkTo(t, s, child.ID, "released")
 	if isBlocked(t, s, blocked.ID) {
 		t.Fatalf("IsBlocked: a container at merged must not block, whatever its repo gates on")
@@ -318,7 +318,7 @@ func TestBlockedTaskIDsUnlandedCommitBlocker(t *testing.T) {
 	}
 }
 
-// TestBlockedTaskIDsContainerWithOwnCommits pins WL-SPEC-75 §5.2's state-fixed case
+// TestBlockedTaskIDsContainerWithOwnCommits pins WL-REQ-90's state-fixed case
 // against the case the "a container has no commits" reading misses: AddEdge
 // happily gives children to a task that already landed some. Such a parent is
 // barred from every state past merged (containerForbiddenStates), so gating it
@@ -347,7 +347,7 @@ func TestBlockedTaskIDsContainerWithOwnCommits(t *testing.T) {
 
 // TestBlockedTaskIDsDoneStateFlipAfterDelivery pins that raising a repo's
 // done_state after a task delivered cannot strand that task's dependents.
-// Discovery runs only at repo-add time (WL-SPEC-75 §10), so `lode project repo edit
+// Discovery runs only at repo-add time (WL-RULE-112), so `lode project repo edit
 // --done-state` on a repo that started cutting releases is the expected path,
 // and a task already at deployed_prod has no legal transition left.
 func TestBlockedTaskIDsDoneStateFlipAfterDelivery(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 // TestApprovalsQueueMixesKinds renders one queue holding a PR row, a doc row
 // and a deliverable lane with no designated revision. The doc row is the
 // regression: it has no task, and the row used to emit <a href="/tasks/">
-// unconditionally. The deliverable row pins WL-SPEC-82 §9's two additions: the
+// unconditionally. The deliverable row pins WL-REQ-344's two additions: the
 // lane is visible, and a row nobody can decide yet offers no decide form.
 func TestApprovalsQueueMixesKinds(t *testing.T) {
 	var b strings.Builder

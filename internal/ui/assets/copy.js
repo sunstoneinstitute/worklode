@@ -1,6 +1,6 @@
 // copy.js wires every [data-copy="<selector>"] button to copy the text of the
 // element it points at, briefly swapping its label for data-copied. Used by the
-// CLI-code page (WL-SPEC-74 §7.2).
+// CLI-code page (WL-REQ-58).
 //
 // navigator.clipboard is unavailable outside a secure context, which is exactly
 // where this page often runs — a worklode reached over plain http on a LAN or

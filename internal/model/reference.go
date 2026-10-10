@@ -3,7 +3,7 @@ package model
 import "time"
 
 // EntityEdge is one typed reference between entities of different kinds
-// (WL-SPEC-75 §13), the only edges that may cross a project boundary.
+// (WL-REQ-118), the only edges that may cross a project boundary.
 type EntityEdge struct {
 	FromKind  string    `json:"from_kind"`
 	From      string    `json:"from"`

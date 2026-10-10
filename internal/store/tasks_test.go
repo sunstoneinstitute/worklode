@@ -264,7 +264,7 @@ func pushBranchCommit(t *testing.T, s *Store, taskID, repo, sha string) {
 }
 
 // TestCreateTaskAboutDoc verifies AboutDoc round-trips through CreateTask and
-// GetTask, and that a task created without one reads back 0 (WL-SPEC-77 §15).
+// GetTask, and that a task created without one reads back 0 (WL-RULE-179).
 func TestCreateTaskAboutDoc(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -424,7 +424,7 @@ func TestCreateTaskInvalidConcernRejected(t *testing.T) {
 	}
 }
 
-// TestCreateTaskUsabilityRejectsEmptyAlt pins WL-SPEC-78 §8 Q021.1: a usability
+// TestCreateTaskUsabilityRejectsEmptyAlt pins WL-REQ-225 Q021.1: a usability
 // task whose body embeds an image with no alt text at all is refused, but
 // the same body is fine on a task with a different (or no) concern, and a
 // basename-derived alt on a usability task still goes through.
@@ -560,7 +560,7 @@ func TestUpdateTaskFieldsConcernAndNeedsDecomposition(t *testing.T) {
 	}
 }
 
-// TestUpdateTaskMilestone pins WL-SPEC-75 §13.2's containment rule as it applies
+// TestUpdateTaskMilestone pins WL-REQ-120's containment rule as it applies
 // to UpdateTaskFields: a milestone attach must name a milestone in the
 // task's own project, an unknown milestone is ErrInvalidInput just like a
 // cross-project one, and detaching (milestone "") is always legal.
@@ -612,7 +612,7 @@ func TestUpdateTaskMilestone(t *testing.T) {
 		t.Fatalf("milestone not stored: %+v", got)
 	}
 
-	// WL-SPEC-75 §13.4: containment never crosses a project boundary.
+	// WL-REQ-122: containment never crosses a project boundary.
 	if err := set(t2.ID, mile.ID); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("cross-project attach: got %v, want ErrInvalidInput", err)
 	}
@@ -620,7 +620,7 @@ func TestUpdateTaskMilestone(t *testing.T) {
 		t.Fatalf("unknown milestone: got %v, want ErrInvalidInput", err)
 	}
 
-	// Detach is always legal (WL-SPEC-75 §13.2).
+	// Detach is always legal (WL-REQ-120).
 	if err := set(t1.ID, ""); err != nil {
 		t.Fatalf("detach: %v", err)
 	}
@@ -634,7 +634,7 @@ func TestUpdateTaskMilestone(t *testing.T) {
 }
 
 // TestSetTaskPlan is the store round trip and both refusals for `lode task
-// edit --plan` (WL-SPEC-85 §7): plan_task_key ends up as the task's title
+// edit --plan` (WL-REQ-1340): plan_task_key ends up as the task's title
 // — the same value a task minted straight from the plan's `## Tasks`
 // declaration would carry (migration 0043 backfill) — since a link made
 // after the fact has no declaration to key on. Same plan again is a no-op;
@@ -1011,7 +1011,7 @@ func TestTaskSecretsRejectsBadName(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 	// The store re-checks independently of the API, so the loader-sensitive
-	// deny-list (WL-SPEC-74 §10.5) has to hold here too, not only at the HTTP edge.
+	// deny-list (WL-REQ-72) has to hold here too, not only at the HTTP edge.
 	for _, name := range []string{"op://Employee/x", "LD_PRELOAD", "DYLD_LIBRARY_PATH", "PATH", "PYTHONPATH"} {
 		_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.create", nil,
 			func(tx *sql.Tx, eventID int64) error {

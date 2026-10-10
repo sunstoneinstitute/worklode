@@ -17,7 +17,7 @@ func renderMilestones(t *testing.T, v MilestonesView) string {
 	return b.String()
 }
 
-// TestMilestonesProgressIsPlainCounts pins the progress line WL-SPEC-75 §13.2's
+// TestMilestonesProgressIsPlainCounts pins the progress line WL-REQ-120's
 // derived counts render as: the numbers themselves, never a percentage or a
 // bar the backbone has no basis for.
 func TestMilestonesProgressIsPlainCounts(t *testing.T) {
@@ -81,7 +81,7 @@ func TestMilestonesEmptyStatesAreHonest(t *testing.T) {
 	}
 }
 
-// TestMilestonesTaskTableScrollsInALabelledRegion pins WL-SPEC-82 §4: the one
+// TestMilestonesTaskTableScrollsInALabelledRegion pins WL-REQ-335: the one
 // table on this page scrolls inside its own labelled container rather than
 // widening the page. The deliverable rows are not a table — they reuse the
 // Deliverables page's row component, which reflows.

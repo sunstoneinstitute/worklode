@@ -85,7 +85,7 @@ func RecordLocalMerge(tx *sql.Tx, now time.Time, repo, sha string, taskIDs []str
 		out = append(out, LocalMergeOutcome{TaskID: taskID, Result: result})
 	}
 	// The transitions above record no event of their own, so this event is
-	// the only place the moved set exists (WL-SPEC-85 §6).
+	// the only place the moved set exists (WL-REQ-1339).
 	if len(movedIDs) > 0 {
 		if err := MergeEventPayload(tx, eventID, map[string]any{"tasks": movedIDs}); err != nil {
 			return nil, err

@@ -10,7 +10,7 @@
 // and turn a store sentinel into a status code (see mapStoreErr).
 //
 // Two verbs are the exception to the RecordDocEvent shape above: submit and
-// accept emit WL-SPEC-77 §15's typed JSON-LD events (wl:DocumentSubmitted,
+// accept emit WL-RULE-179's typed JSON-LD events (wl:DocumentSubmitted,
 // wl:DocumentAccepted) through eventbus.Emit, because those are the two the
 // doc-lifecycle subscriber consumes (§15.4). Every other verb still writes a
 // dotted doc.* event; retyping the rest is a separate decision, not made here.
@@ -42,7 +42,7 @@ import (
 var validDocKinds = map[string]bool{"spec": true, "plan": true}
 
 // validDocStatuses mirrors the docs.status CHECK constraint, derived from
-// wlc:DesignDocStatus in ns/concept.ttl (WL-SPEC-77 §14). Only the corpus importer
+// wlc:DesignDocStatus in ns/concept.ttl (WL-REQ-178). Only the corpus importer
 // may state a status (see createDoc); the store re-checks.
 var validDocStatuses = ns.Set(ns.DesignDocStatuses)
 
@@ -130,10 +130,10 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	// The payload goes in with document id 0 — the row does not exist until
 	// CreateDoc runs, and it is the event's own consequence — and the real id
 	// is merged back inside the same transaction, exactly as a minted task id
-	// is (WL-SPEC-77 §15, store.AttributeEventToTask). Without it the log's one
+	// is (WL-RULE-179, store.AttributeEventToTask). Without it the log's one
 	// record of a document's creation names no document, and every reader of
 	// it, the Progress stream included, has nothing to resolve
-	// (WL-SPEC-85 §6).
+	// (WL-REQ-1339).
 	var created *model.Doc
 	err = s.recordDocEvent(w, r, "create", "doc.created", 0, req,
 		func(tx *sql.Tx, eventID int64) error {
@@ -145,7 +145,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 				Body:      req.Body,
 				Owner:     req.Owner,
 				CreatedBy: actorID,
-				// The authoring task (WL-SPEC-77 §13). Left empty by every caller
+				// The authoring task (WL-REQ-177). Left empty by every caller
 				// bound to no task, which is a document with no authoring
 				// task — a normal state, not a refusal. See migration 0044.
 				GeneratedByTask: req.GeneratedByTask,
@@ -167,8 +167,8 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 
 // listDocs handles GET /api/v1/docs?project=&kind=&status=&owner=&deleted=
 // plus the three derived selectors: ?needs_planning= and ?needs_execution=
-// (WL-SPEC-78 §1.2), and ?bare_superseded= (WL-SPEC-78 §1.6, WL-SPEC-77 §6 rule 2). deleted=true
-// switches the list from live documents to tombstoned ones (WL-SPEC-75 §12).
+// (WL-REQ-186), and ?bare_superseded= (WL-REQ-190, WL-REQ-167 rule 2). deleted=true
+// switches the list from live documents to tombstoned ones (WL-REQ-117).
 // projectKeyByID reads the project id -> key map that a document's formatted
 // id needs (model.Doc.ProjectKey): the shorthand is built from the key, and a
 // document carries only its project id.
@@ -267,7 +267,7 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveDocRef handles GET /api/v1/docs/resolve?ref=<ref>: the one document
-// a reference names (WL-SPEC-77 §7). Every `lode doc <verb>` takes a ref, and
+// a reference names (WL-REQ-168). Every `lode doc <verb>` takes a ref, and
 // resolving it here rather than by listing the corpus client-side keeps the
 // ambiguity and tombstone-fallback rules beside the data — the same reason
 // GET /api/v1/projects/resolve normalizes a remote URL server-side, and what
@@ -275,7 +275,7 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 //
 // Two tiers (WL-358). The store's id/exact-slug lookup runs first — it alone
 // reaches tombstoned documents, which `lode doc undelete <slug>` needs. A
-// miss then goes through the full WL-SPEC-78 §2 grammar `lode show` and the /docs/ref/
+// miss then goes through the full WL-REQ-192 grammar `lode show` and the /docs/ref/
 // redirect already resolve (designdoc.ResolveRef via resolveDocRefWeb), so
 // the <KEY>-<TYPE>-<n> shorthand, a corpus path, and the number forms name a
 // document on every doc surface, not just some.
@@ -318,7 +318,7 @@ func (s *server) resolveDocRef(w http.ResponseWriter, r *http.Request) {
 }
 
 // lintDocs handles GET /api/v1/docs/lint?project=: the corpus-wide read-only
-// report of dangling frontmatter references (WL-SPEC-77 §16) — store.LintDocs does
+// report of dangling frontmatter references (WL-REQ-180) — store.LintDocs does
 // the work; this just reads the query filter and shapes the response the
 // same way every other doc list route does (?project= narrows, "" answers
 // over every project).
@@ -367,7 +367,7 @@ func (s *server) resolveExternalCovers(w http.ResponseWriter, r *http.Request) {
 }
 
 // listCorpusSections handles GET /api/v1/docs/sections?project=&number=: the
-// cross-corpus section listing (WL-SPEC-77 §16). ?project= narrows to one project
+// cross-corpus section listing (WL-REQ-180). ?project= narrows to one project
 // the way every other doc list route does; ?number= narrows to one section
 // number or anchor across the corpus. Both empty answers over everything.
 func (s *server) listCorpusSections(w http.ResponseWriter, r *http.Request) {
@@ -409,7 +409,7 @@ func withoutDocBodies(docs []model.Doc) []model.Doc {
 // docFilterFrom reads the four plain list filters off the query string. An
 // unknown value filters to nothing rather than erroring — the same way the
 // task list treats a state nobody uses. The cockpit's /docs page calls it
-// directly; the JSON API goes through docSelectorFrom, which adds WL-SPEC-78 §1.2's
+// directly; the JSON API goes through docSelectorFrom, which adds WL-REQ-186's
 // derived selectors on top.
 //
 // status=all is not a status: it means "every status, terminal documents
@@ -431,7 +431,7 @@ func docFilterFrom(r *http.Request) store.DocFilter {
 }
 
 // addDocNote handles POST /api/v1/docs/{id}/notes: one anchored, non-blocking
-// note against a section the document has (WL-SPEC-77 §10). It gates on doc.write
+// note against a section the document has (WL-REQ-171). It gates on doc.write
 // rather than doc.read because it writes a row, not because a note carries any
 // authority over the document — it blocks nothing and settles nothing.
 func (s *server) addDocNote(w http.ResponseWriter, r *http.Request) {
@@ -476,7 +476,7 @@ func (s *server) listDocNotes(w http.ResponseWriter, r *http.Request) {
 
 // docListSelector is GET /api/v1/docs' query string once validated: the four
 // plain filters, plus at most one of the derived selectors — the three of
-// WL-SPEC-78 §1.2 and WL-SPEC-77 §9's unresolved.
+// WL-REQ-186 and WL-REQ-170's unresolved.
 type docListSelector struct {
 	filter         store.DocFilter
 	needsPlanning  bool
@@ -509,7 +509,7 @@ type docDerivedSelector struct {
 // the same way the task list treats a state nobody uses. The three derived
 // selectors do not: each implies a status, and needs_planning/needs_execution
 // each imply a single kind while bare_superseded implies one of two (WL-SPEC-78
-// §1.3, §1.6; WL-SPEC-77 §6 rule 2) — so a contradicting kind or status is an error
+// §1.3, §1.6; WL-REQ-167 rule 2) — so a contradicting kind or status is an error
 // rather than an empty result, which would read as "nothing to plan".
 // Requesting more than one derived selector at once is an error for the same
 // reason: needs_planning and needs_execution select disjoint kinds, and
@@ -544,7 +544,7 @@ func docSelectorFrom(p model.DocListParams) (docListSelector, error) {
 		olderThanDays:  p.OlderThanDays,
 	}
 	// A day count, not a duration: the CLI's "30d" is parsed there, so what
-	// crosses the wire is already the number WL-SPEC-77 §9's clock counts in.
+	// crosses the wire is already the number WL-REQ-170's clock counts in.
 	// OlderThanDays is a plain int (not a pointer), so an explicit 0 reads
 	// the same as absent; that only changes behavior for older_than_days=0
 	// combined with unresolved=false, which no longer errors.
@@ -694,7 +694,7 @@ func (s *server) getDocVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 // listDocReferrers handles GET /api/v1/docs/{id}/referrers?anchor=sec-N:
-// WL-SPEC-77 §10's open work pointing at one section, which a fixer can read
+// WL-REQ-171's open work pointing at one section, which a fixer can read
 // before editing accepted text. The anchor is required — a referrer is a
 // section-level fact, and a document-wide answer would silently mix in
 // sections nobody asked about.
@@ -763,7 +763,7 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, doc)
 }
 
-// patchDoc handles POST /api/v1/docs/{id}/patch: WL-SPEC-77 §10's in-place
+// patchDoc handles POST /api/v1/docs/{id}/patch: WL-REQ-171's in-place
 // amendment of an accepted spec or ADR, the one write that changes accepted
 // text without a revision cycle. The §8.3 gates are the store's — the CLI
 // re-checks none of them, so the rule that refuses an edit is stated in one
@@ -801,7 +801,7 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 			}
 			doc, patch = d, p
 			// The plans this amendment left behind are marked in the same
-			// transaction (WL-SPEC-77 §10): the amendment and the staleness it
+			// transaction (WL-REQ-171): the amendment and the staleness it
 			// causes commit together or not at all. The re-planning task is
 			// minted by the doc-lifecycle subscriber off the doc.stale
 			// events this records, not here.
@@ -852,7 +852,7 @@ func (s *server) replaceDocEdges(w http.ResponseWriter, r *http.Request) {
 }
 
 // linkDocEdge handles POST /api/v1/docs/{id}/edges and unlinkDocEdge DELETE:
-// add or remove one edge (WL-SPEC-77 §3). The store routes the write: a
+// add or remove one edge (WL-REQ-164). The store routes the write: a
 // plan's next version, a draft's live set, or an accepted document's
 // candidate revision.
 func (s *server) linkDocEdge(w http.ResponseWriter, r *http.Request) {
@@ -887,7 +887,7 @@ func (s *server) changeDocEdge(w http.ResponseWriter, r *http.Request, eventType
 }
 
 // setDocColumns handles PATCH /api/v1/docs/{id}: sets the title and issued
-// date a body no longer states (WL-SPEC-77 §7).
+// date a body no longer states (WL-REQ-168).
 func (s *server) setDocColumns(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -923,7 +923,7 @@ func (s *server) writeDocDetail(w http.ResponseWriter, r *http.Request, id int64
 
 // emitDocAccepted is the shared body of the two routes that accept a
 // document: POST /api/v1/docs/{id}/accept and the Progress page's Accept
-// button (WL-SPEC-85 §4). It emits WL-SPEC-77 §15's typed wl:DocumentAccepted
+// button (WL-REQ-1337). It emits WL-RULE-179's typed wl:DocumentAccepted
 // and applies store.AcceptDoc inside it, so the owner gate, the state gate
 // and plan minting stay the store's for both callers and the page cannot
 // grant what `lode doc accept` would refuse.
@@ -936,7 +936,7 @@ func (s *server) emitDocAccepted(ctx context.Context, doc *model.Doc, actorID st
 
 	now := s.st.Now()
 	// From is the status the document is actually leaving, not a constant: a
-	// plan re-accepted while accepted leaves "accepted" (WL-SPEC-77 §11.2), and an
+	// plan re-accepted while accepted leaves "accepted" (WL-REQ-174), and an
 	// event saying otherwise would put a transition that did not happen in the
 	// append-only log.
 	ev := eventbus.DocumentAccepted{
@@ -960,12 +960,12 @@ func (s *server) emitDocAccepted(ctx context.Context, doc *model.Doc, actorID st
 }
 
 // acceptDoc handles POST /api/v1/docs/{id}/accept: the manual commit of
-// WL-SPEC-77 §9, gated on the document's owner. On a plan this also mints its
-// execution tasks (WL-SPEC-77 §11.2) in the same transaction; the response carries
+// WL-REQ-170, gated on the document's owner. On a plan this also mints its
+// execution tasks (WL-REQ-174) in the same transaction; the response carries
 // the doc and, for a plan, the minted set (model.AcceptDocResponse) — empty
 // and omitted for a spec or ADR, so their response stays byte-identical.
 //
-// The event is WL-SPEC-77 §15's typed wl:DocumentAccepted, whose external id is
+// The event is WL-RULE-179's typed wl:DocumentAccepted, whose external id is
 // derived from the document's IRI and version, so a retried request records
 // one event rather than two.
 func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
@@ -1001,7 +1001,7 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		if settled {
 			// An accepted plan re-accepted at a version already accepted:
 			// every declaration in this body has a row, so the accept has
-			// nothing left to do (WL-SPEC-77 §11.2). Answering with the document and
+			// nothing left to do (WL-REQ-174). Answering with the document and
 			// an empty minted set says exactly that. A plan edited since
 			// carries a new version, so this is not the path it takes. The op
 			// is already counted as a success above; counting it again here
@@ -1026,7 +1026,7 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 }
 
 // submitDoc handles POST /api/v1/docs/{id}/submit: the document enters review.
-// Submission is an event, not a status (WL-SPEC-77 §15) — no document column moves
+// Submission is an event, not a status (WL-RULE-179) — no document column moves
 // — so this emits wl:DocumentSubmitted with no apply at all and answers with
 // the document unchanged.
 //
@@ -1056,7 +1056,7 @@ func (s *server) submitDoc(w http.ResponseWriter, r *http.Request) {
 }
 
 // reviseDoc handles POST /api/v1/docs/{id}/revise: opens the one candidate
-// revision an accepted spec or ADR may carry (WL-SPEC-77 §9), and answers with it.
+// revision an accepted spec or ADR may carry (WL-REQ-170), and answers with it.
 func (s *server) reviseDoc(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -1075,7 +1075,7 @@ func (s *server) reviseDoc(w http.ResponseWriter, r *http.Request) {
 }
 
 // transferDocOwner handles POST /api/v1/docs/{id}/owner: hands the document
-// to another actor (WL-SPEC-77 §9). The current owner or an admin may transfer;
+// to another actor (WL-REQ-170). The current owner or an admin may transfer;
 // transferring to the actor that already owns it is a no-op that still
 // answers 200, since Task 5's bulk form is a client-side loop over many
 // documents and relies on re-running being safe.
@@ -1107,7 +1107,7 @@ func (s *server) transferDocOwner(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.withProjectKey(r.Context(), *doc))
 }
 
-// withdrawDoc handles POST /api/v1/docs/{id}/withdraw: WL-SPEC-77 §9's close verb.
+// withdrawDoc handles POST /api/v1/docs/{id}/withdraw: WL-REQ-170's close verb.
 // An accepted or stale document that will not be executed and that nothing
 // replaces leaves the corpus here, with the justification on the event.
 //
@@ -1175,7 +1175,7 @@ func (s *server) updateDocRevision(w http.ResponseWriter, r *http.Request) {
 }
 
 // discardDocRevision handles DELETE /api/v1/docs/{id}/revision: withdraws the
-// open candidate without landing it (WL-SPEC-77 §9's close-without-merging), which
+// open candidate without landing it (WL-REQ-170's close-without-merging), which
 // frees the document's one candidate slot. Either the owner or the
 // revision's author may; anyone else gets 403.
 //
@@ -1206,7 +1206,7 @@ func (s *server) discardDocRevision(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptDocRevision handles POST /api/v1/docs/{id}/revision/accept: runs the
-// WL-SPEC-77 §6 anchor gate and, when clean, lands the candidate as the next version.
+// WL-REQ-167 anchor gate and, when clean, lands the candidate as the next version.
 func (s *server) acceptDocRevision(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -1247,11 +1247,11 @@ func (s *server) recordDocEvent(
 	}
 	// The payload records who asked for what against which document. The
 	// actor matters most here: events carries no actor column, and acceptance
-	// is an owner-gated deliberate act (WL-SPEC-77 §9), so this is the only place
+	// is an owner-gated deliberate act (WL-REQ-170), so this is the only place
 	// the log says who performed it. A wrapper rather than the request alone,
 	// because the five bodyless verbs would otherwise record a bare null and
 	// lose the subject. It is an event row and not an HTTP body, so no
-	// internal/model declaration is owed (WL-SPEC-73 §3.2a).
+	// internal/model declaration is owed (WL-RULE-1349).
 	payload, err := json.Marshal(map[string]any{
 		"doc":     id,
 		"actor":   actorIDFrom(r),

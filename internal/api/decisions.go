@@ -1,4 +1,4 @@
-// decisions.go serves WL-SPEC-77 §12's posed question over the JSON API: reading
+// decisions.go serves WL-REQ-176's posed question over the JSON API: reading
 // the rows a task poses, adding one, editing an unanswered one, and recording
 // the answer that closes it.
 package api

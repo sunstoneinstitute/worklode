@@ -15,7 +15,7 @@ import (
 )
 
 // patchSpecBody is an accepted-shaped spec with three plain-prose sections:
-// the WL-SPEC-77 §10 rule split is about what an edit does to them, so none of them
+// the WL-REQ-171 rule split is about what an edit does to them, so none of them
 // carries a code span, a wl: term or an acceptance-criteria heading that
 // would fire a mechanical rule on its own.
 const patchSpecBody = `# In-place amendment
@@ -62,7 +62,7 @@ func patchDoc(t *testing.T, s *Store, in DocPatchInput) (*model.Doc, *model.DocP
 	return doc, res, err
 }
 
-// patchedAnchors reads the anchors a document carries the WL-SPEC-77 §10 patched mark
+// patchedAnchors reads the anchors a document carries the WL-REQ-171 patched mark
 // on, in document order.
 func patchedAnchors(t *testing.T, s *Store, docID int64) []string {
 	t.Helper()
@@ -83,7 +83,7 @@ func patchedAnchors(t *testing.T, s *Store, docID int64) []string {
 	return out
 }
 
-// TestPatchDocRuleSplit is WL-SPEC-77 §10's split: a mechanical rule refuses
+// TestPatchDocRuleSplit is WL-REQ-171's split: a mechanical rule refuses
 // the edit outright and sends it to `lode doc revise`; anything left is the
 // caller's own judgment, non-substantive with a note or substantive with the
 // reviewers reopened.
@@ -144,7 +144,7 @@ func TestPatchDocRuleSplit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("PatchDoc: %v", err)
 			}
-			// WL-SPEC-77 §9: the document stays accepted either way — a patch is not a
+			// WL-REQ-170: the document stays accepted either way — a patch is not a
 			// status change.
 			if doc.Status != "accepted" {
 				t.Errorf("status = %s, want accepted", doc.Status)
@@ -165,7 +165,7 @@ func TestPatchDocRuleSplit(t *testing.T) {
 				t.Errorf("patched anchors = %v, want %v", got, tc.wantPatched)
 			}
 
-			// WL-SPEC-77 §6 rule 5: last_revised_in moves on exactly the changed
+			// WL-REQ-167 rule 5: last_revised_in moves on exactly the changed
 			// sections.
 			for _, sec := range docSections(t, s, spec.ID) {
 				want := 1
@@ -180,7 +180,7 @@ func TestPatchDocRuleSplit(t *testing.T) {
 			lanes := awaitingDocLanes(t, s, spec.ID)
 			if tc.substantive {
 				// The reviewers who approved the document owe a decision on
-				// the version the patch made (WL-SPEC-77 §9).
+				// the version the patch made (WL-REQ-170).
 				if !reflect.DeepEqual(lanes, []string{"ada@2"}) {
 					t.Errorf("awaiting lanes = %v, want [ada@2]", lanes)
 				}
@@ -198,7 +198,7 @@ func TestPatchDocRuleSplit(t *testing.T) {
 				}
 				return
 			}
-			// WL-SPEC-77 §10: the fixer's own record of what changed and why, anchored
+			// WL-REQ-171: the fixer's own record of what changed and why, anchored
 			// at the first section the patch touched and naming them all.
 			if len(notes) != 1 || notes[0].Anchor != res.ChangedAnchors[0] ||
 				!strings.Contains(notes[0].Body, tc.note) ||
@@ -229,7 +229,7 @@ func awaitingDocLanes(t *testing.T, s *Store, docID int64) []string {
 	return out
 }
 
-// TestPatchDocReferrerExclusion covers the two halves of the WL-SPEC-77 §10 referrer
+// TestPatchDocReferrerExclusion covers the two halves of the WL-REQ-171 referrer
 // question a patch asks that a plain reader does not: the plan the patching
 // task was minted from does not block its own amendment, and an accepted
 // covering plan nobody has claimed work from is reported rather than
@@ -287,7 +287,7 @@ func TestPatchDocReferrerExclusion(t *testing.T) {
 }
 
 // TestPatchDocKeepsEarlierPatchedMarks: every accepted-document write rebuilds
-// the section rows, so the WL-SPEC-77 §10 mark a previous patch left has to survive one
+// the section rows, so the WL-REQ-171 mark a previous patch left has to survive one
 // that touches a different section.
 func TestPatchDocKeepsEarlierPatchedMarks(t *testing.T) {
 	t.Parallel()
@@ -320,7 +320,7 @@ func TestPatchDocKeepsEarlierPatchedMarks(t *testing.T) {
 	}
 }
 
-// TestPatchDocMetricOutcomes: the WL-SPEC-77 §10 refusals are worth telling apart on
+// TestPatchDocMetricOutcomes: the WL-REQ-171 refusals are worth telling apart on
 // worklode_doc_operations_total{op="patch"} — a mechanical gate refusing an
 // edit is not the same event as a bug, and neither is a document with nobody
 // left to re-approve it.
@@ -368,7 +368,7 @@ func decideDocLane(t *testing.T, s *Store, docID int64, lane string) {
 	}
 }
 
-// TestClearPatchedOnReapproval is the second half of WL-SPEC-77 §9: the §10 marks
+// TestClearPatchedOnReapproval is the second half of WL-REQ-170: the WL-REQ-171 marks
 // come off only when every lane the patch reopened has approved. One of two
 // reviewers is not the gate — that is the case a "clear on approve" that
 // forgot to look at its neighbours would pass.
@@ -439,7 +439,7 @@ func TestClearPatchedOnRevisionLanding(t *testing.T) {
 }
 
 // TestPatchDocIfVersion: the compare-and-swap guards the amendment path too,
-// and it runs before the WL-SPEC-77 §10 gates — a caller working from a version that has
+// and it runs before the WL-REQ-171 gates — a caller working from a version that has
 // moved is told so, not told which rule its stale text broke.
 func TestPatchDocIfVersion(t *testing.T) {
 	t.Parallel()

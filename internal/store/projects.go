@@ -18,7 +18,7 @@ import (
 // Project is deliberately not model.Project: the curated cockpit columns
 // below (migration 0013) are internal bookkeeping this package and the
 // cockpit projection need that never cross the /api/v1/projects wire shape,
-// so they stay outside the five fields model.Project declares (WL-SPEC-73 §3.2a,
+// so they stay outside the five fields model.Project declares (WL-RULE-1349,
 // "store scan plumbing"). api.toProjectJSON is the one conversion point from
 // this type to model.Project.
 type Project struct {
@@ -38,13 +38,13 @@ type Project struct {
 	DecisionAccountable string
 	DecisionReadiness   string
 
-	// The approval flow governing this project (WL-SPEC-75 §13.6), denormalized out
+	// The approval flow governing this project (WL-REQ-124), denormalized out
 	// of the approval_flow snapshot (migration 0063) so a listing can name
 	// the flow without unmarshalling it. Empty until a flow is applied.
 	ApprovalFlowName string
 	ApprovalFlowRev  string
 
-	// Labels and Horizon (migration 0074, WL-SPEC-75 §13.1): free-form classification
+	// Labels and Horizon (migration 0074, WL-REQ-119): free-form classification
 	// stamped at promotion and the bounded/standing horizon attribute. Both
 	// are NOT NULL with schema defaults ({} and "standing"), so unlike the
 	// fields above they never need a nullable scan type.
@@ -249,10 +249,10 @@ var validHorizons = map[string]bool{"bounded": true, "standing": true}
 // ValidHorizon reports whether horizon is an accepted projects.horizon value.
 func ValidHorizon(horizon string) bool { return validHorizons[horizon] }
 
-// SetProjectMetadata stamps a project's labels and horizon (WL-SPEC-75 §13.1,
+// SetProjectMetadata stamps a project's labels and horizon (WL-REQ-119,
 // migration 0074): free-form classification tags and whether the project is
 // bounded or standing. Tx-scoped so promotion can write it inside the same
-// event transaction as whatever act derived the values (WL-SPEC-78 §8.4). A nil
+// event transaction as whatever act derived the values (WL-REQ-229). A nil
 // labels map is written as an empty JSON object, not null. Returns
 // ErrInvalidInput for an unknown horizon before the UPDATE runs.
 func SetProjectMetadata(tx *sql.Tx, projectID string, labels map[string]string, horizon string) error {
@@ -417,7 +417,7 @@ func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, erro
 const DefaultDoneState = "merged"
 
 // validDoneStates are the terminal states a repo mapping may declare as
-// "fully delivered" (WL-SPEC-75 §3.3).
+// "fully delivered" (WL-REQ-85).
 var validDoneStates = map[string]bool{"merged": true, "deployed_prod": true, "released": true}
 
 // ValidDoneState reports whether state is an accepted repo done_state.
@@ -457,7 +457,7 @@ func (s *Store) ListRepos(ctx context.Context, projectID string) ([]model.RepoMa
 }
 
 // MappedRepos returns every repo mapped to any project, ordered by repo. The
-// branch-rules refresh loop (WL-SPEC-85 §7) walks it; it asks nothing about
+// branch-rules refresh loop (WL-REQ-1340) walks it; it asks nothing about
 // which project a repo belongs to, so this is the whole query rather than
 // ListRepos per project.
 func (s *Store) MappedRepos(ctx context.Context) ([]string, error) {

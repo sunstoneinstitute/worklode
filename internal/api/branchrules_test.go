@@ -145,7 +145,7 @@ func TestBranchRulesWithoutAppWritesNothing(t *testing.T) {
 
 // GET /api/v1/repos/branch-rules serves what the refresh stored, keyed by
 // the remote URL the CLI has, and 404s a repo with nothing observed so
-// `lode doctor` can say "unknown" (WL-SPEC-72 §3).
+// `lode doctor` can say "unknown" (WL-REQ-6).
 func TestGetBranchRules(t *testing.T) {
 	f := &fakeRulesApp{}
 	s := branchRulesServer(t, f.start(t))

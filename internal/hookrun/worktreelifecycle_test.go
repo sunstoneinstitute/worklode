@@ -110,7 +110,7 @@ func TestWorktreeRemovePurgesSecretsRegardlessOfBackbone(t *testing.T) {
 // TestWorktreeExitKeepsSecrets is the converse of the two above, and the
 // reason purgeSecrets is bound to removal rather than to a session leaving.
 // A session that exits a worktree still holds that task's lease and can come
-// back (WL-SPEC-80 §8.4: one session working several tasks in sequence); WL-SPEC-74
+// back (WL-REQ-291: one session working several tasks in sequence); WL-SPEC-74
 // §3 purges on exit only for a lease that is gone. Purging here would cost a
 // fresh consent and a fresh Touch ID on return — unobtainable in the
 // non-interactive session that is the common case.

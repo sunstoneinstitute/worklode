@@ -16,11 +16,11 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
-// maxOTLPBody caps an OTLP log batch at 4 MiB (WL-SPEC-80 §8.6).
+// maxOTLPBody caps an OTLP log batch at 4 MiB (WL-REQ-1234).
 const maxOTLPBody = 4 << 20
 
 // ingestOTLPLogs handles POST /otlp/v1/logs: an OTLP/JSON
-// ExportLogsServiceRequest from a coding agent's log exporter (WL-SPEC-80 §8.6).
+// ExportLogsServiceRequest from a coding agent's log exporter (WL-REQ-1234).
 // Attributed records are stored as task activity, the raw body is queued for
 // the otel-gateway (§3), and the answer is an empty
 // ExportLogsServiceResponse.
@@ -77,7 +77,7 @@ func (s *server) ingestOTLPLogs(w http.ResponseWriter, r *http.Request) {
 			unattributed++
 			continue
 		}
-		// A task-scoped token speaks for its own task only (WL-SPEC-74 §2). The
+		// A task-scoped token speaks for its own task only (WL-REQ-48). The
 		// whole batch is refused, since a mixed batch means the exporter is
 		// stamping records it has no claim on.
 		if sub.TaskID != "" && rec.Task != sub.TaskID {
@@ -127,7 +127,7 @@ func otlpLimitKey(sub Subject) string {
 }
 
 // activityAgent maps an OTLP resource service.name onto WL-SPEC-80's agent
-// vocabulary (WL-SPEC-80 §8.6). An absent name is the route's own default,
+// vocabulary (WL-REQ-1234). An absent name is the route's own default,
 // claude-code; a name worklode has no id for is recorded as other, so an
 // unfamiliar harness keeps its activity instead of losing the batch.
 func activityAgent(service string) string {
@@ -140,7 +140,7 @@ func activityAgent(service string) string {
 }
 
 // activityPageSize is the rows the task page loads and the rows one stream
-// poll may carry (WL-SPEC-80 §8.9). Both call sites pass this constant, so no
+// poll may carry (WL-REQ-1237). Both call sites pass this constant, so no
 // request-supplied limit ever reaches the store.
 const activityPageSize = 200
 

@@ -17,7 +17,7 @@ const closureDoc = "---\nstatus: draft\n---\n# T\n\n## 1. A {#sec-1}\n\none two 
 // TestRuleClosure: A needs B, B refines C, A references D. The closure of A
 // is A, B, C in breadth-first order with the edge each was reached by; D is
 // outside it. C needs A closes a cycle, and the walk still terminates with
-// each rule once (WL-SPEC-77 §4c).
+// each rule once (WL-REQ-1367).
 func TestRuleClosure(t *testing.T) {
 	s := openDocStore(t)
 	s.metrics = newStoreMetrics(prometheus.NewRegistry())

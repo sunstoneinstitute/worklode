@@ -25,7 +25,7 @@ type Ref struct {
 	Ref string
 	// Deferral is the defers entry this reference came from, non-nil only
 	// when Rel is "defers": that relation alone carries a named owner
-	// (WL-SPEC-78 §4). It is a copy, so writing through it does not reach the
+	// (WL-RULE-202). It is a copy, so writing through it does not reach the
 	// frontmatter.
 	Deferral *Deferral
 }
@@ -33,8 +33,8 @@ type Ref struct {
 // ActingRels is the acting-direction relation set: the spellings that assert a
 // relation rather than restate its inverse. A consumer recording one row per
 // fact keeps these and drops the rest — writing both directions would double
-// every edge and let the two disagree (WL-SPEC-77 §7).
-// Plan ordering is `blockedBy`, declared by the later plan (WL-SPEC-77 §8).
+// every edge and let the two disagree (WL-REQ-168).
+// Plan ordering is `blockedBy`, declared by the later plan (WL-REQ-169).
 var ActingRels = []string{"covers", "defers", "requires", "blockedBy", "wasDerivedFrom"}
 
 // StoredRels is what a consumer recording (or reporting) the rows a
@@ -44,7 +44,7 @@ var StoredRels = slices.Clone(ActingRels)
 
 // InverseOf maps each inverse-only spelling — the ones StoredRels excludes
 // because they merely restate an acting relation the other end declares
-// (WL-SPEC-77 §7) — to the acting relation it restates.
+// (WL-REQ-168) — to the acting relation it restates.
 //
 // A consumer checking "did the other end actually declare this back" reads
 // this map once rather than special-casing keys (WL-375); an inverse-only
@@ -71,7 +71,7 @@ var refListRelOrder = []struct {
 // order — coverage, the dependency lists, then provenance — so a caller's
 // output is stable run to run. The retired amendment and supersession keys
 // (RetiredRelKeys) are never walked: a stored body may still carry them, and
-// they mean nothing (WL-SPEC-77 §7).
+// they mean nothing (WL-REQ-168).
 //
 // A reference is trimmed of surrounding whitespace, and one that is then empty
 // is dropped: a coverage entry qualified with a level but no `spec:`, say,
@@ -86,11 +86,11 @@ func (f *Frontmatter) Refs() []Ref {
 			out = append(out, Ref{SrcAnchor: anchor, Rel: rel, Ref: ref, Deferral: def})
 		}
 	}
-	// covers reads the retired `implements` spelling too (WL-SPEC-78 §4).
+	// covers reads the retired `implements` spelling too (WL-RULE-202).
 	for _, entry := range f.CoverageEntries() {
 		add("", "covers", entry.Spec, nil)
 	}
-	// defers carries its owner with the reference (WL-SPEC-78 §4).
+	// defers carries its owner with the reference (WL-RULE-202).
 	for _, entry := range f.Defers {
 		add("", "defers", entry.Spec, &entry)
 	}

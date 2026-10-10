@@ -54,7 +54,7 @@ func newLoginCmd() *cobra.Command {
 			if err := cli.SaveConfig(cli.Config{ServerURL: cfg.ServerURL, Token: res.Token}); err != nil {
 				// The login itself worked, so the token exists and is the user's.
 				// A machine with no keychain now stores the token in a file
-				// instead (WL-SPEC-74 §8), so reaching here means a keychain that
+				// instead (WL-REQ-61), so reaching here means a keychain that
 				// exists and refused. Hand the token over rather than making them
 				// log in again to reach the same dead end.
 				return fmt.Errorf("%w\n\nThe login succeeded. To use the token without a keychain:\n\n  export LODE_TOKEN=%s\n", err, res.Token)

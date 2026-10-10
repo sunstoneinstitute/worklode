@@ -1,6 +1,6 @@
 package hooks
 
-// Artifact-evidence ingest — WL-SPEC-75 §13, §13, §13. A deliverable, task
+// Artifact-evidence ingest — WL-REQ-118. A deliverable, task
 // or doc declares how it is verified: an artifact address, or one or more
 // worklode.deliverable labels. An emitter reports facts about an address or
 // label, and worklode files each fact as evidence against every open entity
@@ -8,7 +8,7 @@ package hooks
 // the GitHub hook's repo → project mapping, the reported address or label
 // itself is the key.
 //
-// One handler shape, several sources (WL-SPEC-75 §13): the data catalog, CI, the
+// One handler shape, several sources (WL-REQ-118): the data catalog, CI, the
 // deploy pipeline and the CMS all emit the same payload over the same
 // signed-webhook scheme and differ only in identity (events.source /
 // evidence.source, the delivery header, and — per source — an extra
@@ -51,14 +51,14 @@ package hooks
 //	  also REQUIRED (non-blank after trimming): the publish fact without the
 //	  person would rebuild the invisible-sign-off problem WL-SPEC-75 exists to
 //	  remove, so a payload missing either is a 400 before any event is
-//	  recorded (WL-SPEC-75 §13).
+//	  recorded (WL-REQ-118).
 //	Ack:   200 {"status":"ok"|"duplicate"|"unrouted"}
 //
 // artifact is compared after trimming surrounding whitespace and nothing
 // else — no scheme or case normalisation, because dataset identifiers are
 // case-sensitive in the catalogs we care about. Each labels pair is rendered
 // "k=v" and routed the same way a declared worklode.deliverable label is
-// (WL-SPEC-75 §13). A delivery naming both is routed by both: evidence is filed
+// (WL-REQ-118). A delivery naming both is routed by both: evidence is filed
 // once per routed target per routing key, with evidence.artifact_uri set to
 // whichever key (the address, or one "k=v" label) matched — the reported
 // concrete address stays in version/url/detail, as the emitter sent them.
@@ -111,7 +111,7 @@ const maxCatalogBody = 5 << 20
 // against one list.
 var CatalogStates = model.ArtifactStates
 
-// ingestConfig names one signed artifact-evidence source (WL-SPEC-75 §13). All
+// ingestConfig names one signed artifact-evidence source (WL-REQ-118). All
 // instances share the payload contract at the top of this file, the HMAC
 // scheme, the dedupe rule, and the routing; they differ only in identity
 // and any per-source validation.
@@ -128,7 +128,7 @@ var (
 	cmsIngest      = ingestConfig{Source: "cms", DeliveryHeader: "X-CMS-Delivery", Validate: validateCMS}
 )
 
-// validateCMS is cmsIngest's extra check (WL-SPEC-75 §13): who hit publish and who
+// validateCMS is cmsIngest's extra check (WL-REQ-118): who hit publish and who
 // approved must both be named, or the publish fact would rebuild the
 // invisible-sign-off problem the whole spec exists to remove. It trims both
 // fields in place so the trimmed values are what apply() later merges into
@@ -391,7 +391,7 @@ func (a *catalogApplier) applyStored(payload []byte, out *catalogResult) (func(t
 // the event insert (via RecordEvent) so a delivery is all-or-nothing.
 //
 // Provenance is always "observed": every source here is an emitter, not a
-// person (WL-SPEC-75 §13). An entity that already has evidence from this event and
+// person (WL-REQ-118). An entity that already has evidence from this event and
 // key is skipped by the insert's conflict clause, so a replay writes nothing
 // twice.
 func (a *catalogApplier) apply(tx *sql.Tx, eventID int64, ev catalogEvent) (catalogResult, error) {
@@ -412,7 +412,7 @@ func (a *catalogApplier) apply(tx *sql.Tx, eventID int64, ev catalogEvent) (cata
 	}
 
 	// cms only: fold published_by/approved_by into the evidence detail
-	// alongside whatever the emitter itself sent (WL-SPEC-75 §13). validateCMS
+	// alongside whatever the emitter itself sent (WL-REQ-118). validateCMS
 	// already required both to be non-blank, so this always has something to
 	// add on this source.
 	detail := ev.Detail

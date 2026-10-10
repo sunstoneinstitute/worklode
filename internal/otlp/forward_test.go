@@ -120,7 +120,7 @@ func TestForwarderRun_NetworkErrorDropped(t *testing.T) {
 
 // assertNoRetry asserts post did not requeue or re-send the batch after a
 // non-2xx response — the forwarder drops on any outcome rather than
-// retrying (WL-SPEC-80 §8.8).
+// retrying (WL-REQ-1236).
 func assertNoRetry(t *testing.T, received chan gotRequest) {
 	t.Helper()
 	select {

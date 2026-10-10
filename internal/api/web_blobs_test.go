@@ -24,7 +24,7 @@ func getPage(t *testing.T, h http.Handler, path string) *httptest.ResponseRecord
 // TestTaskPageRendersMarkdown asserts the page renders a task body as
 // markdown rather than dumping it in a <pre>, that an embedded blob becomes a
 // real image, that a hostile body is neutered on the way, and that the page
-// carries the Content-Security-Policy that backs all of it up (WL-SPEC-78 §8.6).
+// carries the Content-Security-Policy that backs all of it up (WL-REQ-231).
 func TestTaskPageRendersMarkdown(t *testing.T) {
 	t.Parallel()
 	st, h, token, _ := newTestServerBlobs(t)

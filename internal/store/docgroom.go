@@ -14,14 +14,14 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/staleness"
 )
 
-// defaultDocStalenessDays is the instance default for the WL-SPEC-77 §9 clock (see
+// defaultDocStalenessDays is the instance default for the WL-REQ-170 clock (see
 // Store.docStalenessDays), overridden per project by
 // projects.doc_staleness_days and per instance by LODE_DOC_STALENESS_DAYS
 // (WithDocStalenessDays).
 const defaultDocStalenessDays = 30
 
 // staleEventSource is events.source of every doc.stale event, whichever path
-// wrote it: the WL-SPEC-77 §10 amendment path below and the WL-SPEC-77 §9 idle sweeper share the
+// wrote it: the WL-REQ-171 amendment path below and the WL-REQ-170 idle sweeper share the
 // (source, external_id) key, so a plan already marked by one is a no-op for
 // the other.
 const staleEventSource = "system"
@@ -34,21 +34,21 @@ func StaleExternalID(planSlug string, version int) string {
 	return "doc.stale:" + planSlug + ":" + strconv.Itoa(version)
 }
 
-// MarkPlansStale flips accepted plans to stale (WL-SPEC-77 §10) and records one
+// MarkPlansStale flips accepted plans to stale (WL-REQ-171) and records one
 // doc.stale event per plan, in the caller's transaction. These are the plans
 // PatchDoc reported in DocPatchResult.UnexecutedCoveringPlans: they cover a
 // section the amendment moved, and nobody has claimed work from them, so
-// WL-SPEC-77 §10 let the amendment through and this is what it owes them.
+// WL-REQ-171 let the amendment through and this is what it owes them.
 //
 // cause, specSlug and anchors say what happened, in the payload's
-// {"cause":...,"spec":...,"anchors":[...]}: cause is "amended" for WL-SPEC-77 §10
+// {"cause":...,"spec":...,"anchors":[...]}: cause is "amended" for WL-REQ-171
 // (specSlug and anchors name the spec and the sections that moved) and
 // "rule_withdrawn" for increment 3's S23 (specSlug carries the withdrawn
 // rule's ref, WL-RULE-<n>, and anchors is empty). eventID is the write this
 // is a consequence of.
 //
 // Nothing is minted here. The doc.stale event flows to the doc-lifecycle
-// subscriber, whose WL-SPEC-77 §9 rule mints the one "Re-plan: <title>" task behind
+// subscriber, whose WL-REQ-170 rule mints the one "Re-plan: <title>" task behind
 // its own open-design-task guard — one mint path for every cause.
 //
 // The count returned is the plans actually flipped: a plan already stale by
@@ -142,7 +142,7 @@ func (s *Store) StalePlanSlug(ctx context.Context, planDoc int64) (string, error
 }
 
 // docHasExecution is the one spelling of "this document has been executed"
-// (WL-SPEC-77 §9), as a SQL boolean over a `docs` row aliased `d`. A plan counts as
+// (WL-REQ-170), as a SQL boolean over a `docs` row aliased `d`. A plan counts as
 // executed when any task minted from it ever held a lease — active or expired,
 // since the fact that matters is that execution happened at all, not whether
 // it is still in progress. A spec counts as executed when an accepted or spent
@@ -165,7 +165,7 @@ const docHasExecution = `CASE d.kind
 	               AND p.status IN ('accepted', 'spent'))
 	        END`
 
-// StaleCandidate is one accepted spec or plan with the WL-SPEC-77 §9 clock facts.
+// StaleCandidate is one accepted spec or plan with the WL-REQ-170 clock facts.
 type StaleCandidate struct {
 	DocID        int64
 	Slug         string
@@ -177,7 +177,7 @@ type StaleCandidate struct {
 	HasExecution bool
 }
 
-// StaleCandidateDocs returns every accepted spec and plan with its WL-SPEC-77 §9
+// StaleCandidateDocs returns every accepted spec and plan with its WL-REQ-170
 // clock facts, ordered by doc id so the sweeper and its tests see a stable
 // scan order. It fetches facts only; the threshold verdict is
 // staleness.At's, the rule's one owner (internal/watcher.StaleAt is the same
@@ -209,7 +209,7 @@ func (s *Store) StaleCandidateDocs(ctx context.Context) ([]StaleCandidate, error
 }
 
 // UnresolvedDocs returns the accepted specs and plans nothing has executed
-// (WL-SPEC-77 §9) — what `lode doc list --unresolved` reports, oldest first, so a
+// (WL-REQ-170) — what `lode doc list --unresolved` reports, oldest first, so a
 // grooming pass reads down from the most overdue. The "executed" predicate is
 // docHasExecution, the same one the staleness sweeper applies; this differs
 // only in that it reports the documents rather than deciding a threshold.
@@ -221,7 +221,7 @@ func (s *Store) StaleCandidateDocs(ctx context.Context) ([]StaleCandidate, error
 //
 // project and kind narrow the answer; "" answers over every project, and over
 // both kinds. A withdrawn or stale document is not here — the selector is what
-// is still open and unresolved, and a withdrawal is WL-SPEC-77 §9's way of
+// is still open and unresolved, and a withdrawal is WL-REQ-170's way of
 // resolving one.
 func (s *Store) UnresolvedDocs(ctx context.Context, project, kind string, olderThanDays int) ([]model.Doc, error) {
 	var cutoff any
@@ -251,7 +251,7 @@ func (s *Store) UnresolvedDocs(ctx context.Context, project, kind string, olderT
 // withdrawn.
 //
 // Only accepted and stale are withdrawable. A draft is discarded instead
-// (`lode doc delete`, WL-SPEC-75 §12): nothing has been agreed, so there is nothing
+// (`lode doc delete`, WL-REQ-117): nothing has been agreed, so there is nothing
 // to withdraw from. A superseded document is already resolved, and a
 // withdrawn one already is what the call asks for; both are ErrBadTransition
 // rather than a silent no-op, because a caller withdrawing the wrong document
@@ -291,7 +291,7 @@ func WithdrawDoc(tx *sql.Tx, now time.Time, id, eventID int64) (*model.Doc, erro
 }
 
 // sweepStaleDocs emits doc.stale (cause "clock") for every accepted spec or
-// plan past its staleness threshold with no execution (WL-SPEC-77 §9), on the
+// plan past its staleness threshold with no execution (WL-REQ-170), on the
 // lease sweeper's tick (sweepLeases in sweeper.go). It reads
 // StaleCandidateDocs, applies staleness.At (the same calculation
 // internal/watcher.StaleAt uses — see internal/staleness's doc comment for
@@ -304,8 +304,8 @@ func WithdrawDoc(tx *sql.Tx, now time.Time, id, eventID int64) (*model.Doc, erro
 // re-arms, an unchanged doc collides on RecordEvent and is skipped, so
 // emitted only counts events actually inserted.
 //
-// A clock-fired document's status is untouched: WL-SPEC-77 §9 changes how a document
-// is served, not its status. Only the WL-SPEC-77 §10 amendment path (MarkPlansStale)
+// A clock-fired document's status is untouched: WL-REQ-170 changes how a document
+// is served, not its status. Only the WL-REQ-171 amendment path (MarkPlansStale)
 // flips a status, and only on plans — this runs on both specs and plans.
 // Unlike MarkPlansStale, this is not run inside a caller's transaction: each
 // candidate's event is its own RecordEvent call against s.db.

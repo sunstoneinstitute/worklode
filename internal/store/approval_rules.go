@@ -42,7 +42,7 @@ func QualifiedForRole(requiredRole *string, groups []string) bool {
 // IsSelfApproval reports whether authorLogin and deciderLogin name the same
 // GitHub account. GitHub logins are case-insensitive; either side being
 // unknown ("") is not self-approval — the check refuses only what it can
-// prove (WL-SPEC-75 §13.6's default refusal, not a guess).
+// prove (WL-REQ-124's default refusal, not a guess).
 func IsSelfApproval(authorLogin, deciderLogin string) bool {
 	if authorLogin == "" || deciderLogin == "" {
 		return false
@@ -51,7 +51,7 @@ func IsSelfApproval(authorLogin, deciderLogin string) bool {
 }
 
 // FlowEntityKinds are the entity kinds a review flow may demand a decision on
-// (WL-SPEC-75 §13.6): a subset of model.ApprovalEntityKinds, same spelling. 'pr' is
+// (WL-REQ-124): a subset of model.ApprovalEntityKinds, same spelling. 'pr' is
 // absent on purpose: PR approval rows come from the GitHub ingest, not from
 // a flow.
 var FlowEntityKinds = []string{"doc", "deliverable", "task"}
@@ -119,7 +119,7 @@ func matchesLabels(match, labels map[string]string) bool {
 }
 
 // RevisionOutcome is what designating a new revision does to an entity's
-// approval history (WL-SPEC-75 §13.6).
+// approval history (WL-REQ-124).
 type RevisionOutcome int
 
 const (
@@ -154,7 +154,7 @@ func OnNewRevision(open *Approval, hasDecided, boundAlready bool) RevisionOutcom
 }
 
 // PriorApprover reports whether actorID is the resolving actor of an
-// 'approved' review-kind row in history (WL-SPEC-75 §13.6: "a qualified prior
+// 'approved' review-kind row in history (WL-REQ-124: "a qualified prior
 // approver confirms the existing decision still holds or reopens it").
 // Impact rows in history prove nothing and are ignored.
 func PriorApprover(history []Approval, actorID string) bool {

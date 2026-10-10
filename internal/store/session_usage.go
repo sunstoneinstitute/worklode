@@ -423,7 +423,7 @@ func recomputeProjectOverheadDailyCostTx(ctx context.Context, tx *sql.Tx, projec
 // entire footprint in the project, task rows and overhead rows together, in
 // one transaction.
 //
-// That whole-session scope is the point (WL-SPEC-73 §8.2). The client re-parses
+// That whole-session scope is the point (WL-REQ-40). The client re-parses
 // its full transcript on every heartbeat and re-posts a running total, and a
 // turn's destination can change between two reports: a directory that
 // resolved to a task while its lease was held resolves to overhead once the
@@ -648,11 +648,11 @@ func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time
 // TaskCost reports a task's usage and cost per day over [from, to], inclusive
 // on both ends, plus per-currency totals and the number of agent sessions
 // that billed usage in the window. includeChildren widens the scope to the
-// task's child_of descendants (WL-SPEC-75 §5) — a container task holds no
+// task's child_of descendants (WL-REQ-88) — a container task holds no
 // lease itself, so without it a container's cost always reads as zero.
 // Returns ErrNotFound when taskID does not exist, so a typo'd id reports as
 // an error rather than a silent zero. The scope is deliberately not filtered on
-// deleted_at: this is a fetch by id (WL-SPEC-75 §12), and a tombstoned descendant's
+// deleted_at: this is a fetch by id (WL-REQ-117), and a tombstoned descendant's
 // tokens were still spent.
 func (s *Store) TaskCost(ctx context.Context, taskID string, includeChildren bool,
 	from, to time.Time) (*TaskCost, error) {
@@ -781,7 +781,7 @@ func scanCostReport(rows *sql.Rows, desc string) (*CostReport, error) {
 			return nil, fmt.Errorf("scan cost row for %s: %w", desc, err)
 		}
 		d.Day = d.Day.UTC()
-		d.OverheadCost = "0.000000" // TaskCost has no overhead concept (WL-SPEC-73 §8.2)
+		d.OverheadCost = "0.000000" // TaskCost has no overhead concept (WL-REQ-40)
 		report.Days = append(report.Days, d)
 
 		t, ok := totals[d.Currency]

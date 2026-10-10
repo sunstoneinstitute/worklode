@@ -53,7 +53,7 @@ const governedPlanBody = "---\nstatus: draft\ncovers: [P1-SPEC-1#sec-1, P1-SPEC-
 
 // TestAcceptPlanGovernsMintedTasks: accepting a plan gives every task it mints
 // a governedBy link to each rule the plan's covers edges point at (S2,
-// WL-SPEC-75 §4). Covering sec-1 and sec-1.1 governs by rules 1 and 2 and
+// WL-REQ-87). Covering sec-1 and sec-1.1 governs by rules 1 and 2 and
 // leaves rule 3 out.
 func TestAcceptPlanGovernsMintedTasks(t *testing.T) {
 	s := openDocStore(t)

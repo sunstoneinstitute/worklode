@@ -164,7 +164,7 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 // one retrieval path shared by recommendation (pins resolved just above) and
 // the task brief handler (pins already resolved by store.Brief).
 //
-// Retrieval is store.Search with kind=skill (WL-SPEC-79 §17): recommendation is a
+// Retrieval is store.Search with kind=skill (WL-REQ-261): recommendation is a
 // caller of the one hybrid path rather than a second embedding code path of
 // its own, which is what gives it the lexical arm — a brief naming a tool
 // literally now matches the skill that names it back.
@@ -246,7 +246,7 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 		matches = append(matches, model.SkillMatch{
 			Name: h.Title, Description: sk.Description, Hash: sk.ContentHash,
 			// Score is the fused reciprocal-rank sum store.Search returns, not
-			// a cosine similarity (WL-SPEC-79 §15). It orders matches; it does not
+			// a cosine similarity (WL-REQ-259). It orders matches; it does not
 			// measure them.
 			Score: h.Score,
 		})

@@ -1,6 +1,6 @@
 package model
 
-// ApprovalFlow is one named, versioned review flow (WL-SPEC-75 §13). Flows live in
+// ApprovalFlow is one named, versioned review flow (WL-REQ-118). Flows live in
 // instance configuration; a project stores the effective snapshot, so a later
 // configuration edit cannot silently change an open review.
 type ApprovalFlow struct {
@@ -9,7 +9,7 @@ type ApprovalFlow struct {
 	Match        map[string]string     `json:"match,omitempty"` // project label selector
 	Requirements []ApprovalRequirement `json:"requirements"`
 	// SelfReview names the entity kinds whose author may decide their own
-	// approval (WL-SPEC-75 §13.6).
+	// approval (WL-REQ-124).
 	SelfReview []string `json:"self_review,omitempty"`
 }
 

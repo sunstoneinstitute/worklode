@@ -22,7 +22,7 @@ import (
 )
 
 // docLifecycleSubscriberName is the subscriber the server runs the two
-// doc-lifecycle rules under (025 §15.4). It is deliberately spelled out here
+// doc-lifecycle rules under (WL-RULE-179). It is deliberately spelled out here
 // rather than imported: the name is part of the operator-facing surface this
 // test exercises through GET /api/v1/event-subscribers, so the test must fail
 // if it changes, not follow it.
@@ -162,7 +162,7 @@ func eventPayload(t *testing.T, ev model.Event) map[string]any {
 	return payload
 }
 
-// TestDocLifecycleWatcher drives spec 025 §15.4's doc-lifecycle subscriber
+// TestDocLifecycleWatcher drives WL-RULE-179's doc-lifecycle subscriber
 // end to end over public surfaces only, against the real subscriber loop
 // started by api.NewServer off cfg.BackgroundCtx — no store writes, no
 // handler called directly, no lode serve process.
@@ -233,7 +233,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 	// 1. A project, two actors with their own tokens, and a spec draft
 	// assigned to the actor that will accept it. The other actor submits it,
 	// which needs no owner relationship — submission is an observation
-	// anyone may make, acceptance is the owner's deliberate act (025 §7).
+	// anyone may make, acceptance is the owner's deliberate act (WL-REQ-170).
 	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "doclife", Name: "Doc Lifecycle", Key: "DL",
 	}); err != nil {
@@ -274,7 +274,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 	}
 
 	// 2. Submit. The document itself does not move — submission is an event,
-	// not a status (025 §3) — and the watcher turns that event into exactly
+	// not a status (WL-REQ-165) — and the watcher turns that event into exactly
 	// one ready review task.
 	submitted, _, err := submitter.SubmitDoc(ctx, doc.ID)
 	if err != nil {
@@ -437,7 +437,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 		t.Fatalf("mint event %d rule = %v, want plan-on-accept", mintEvent.ID, got)
 	}
 	// The minted id is allocated inside the mint transaction and completed
-	// onto the payload there (025 §15.2), so the events API alone says which
+	// onto the payload there (WL-RULE-179), so the events API alone says which
 	// task the rule created.
 	if got := mintPayload["task"]; got != design.ID {
 		t.Fatalf("mint event %d task = %v, want %q", mintEvent.ID, got, design.ID)

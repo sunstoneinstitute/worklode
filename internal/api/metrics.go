@@ -231,7 +231,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"entity", "op", "outcome"})
 	// A distinct counter, not left to http_requests_total, because a seek is
 	// the one admin-triggered write on this surface: it is the only way an
-	// operator moves a subscriber's offsets backwards (WL-SPEC-77 §18), and how
+	// operator moves a subscriber's offsets backwards (WL-REQ-182), and how
 	// often that happens is worth alerting on independently of request
 	// volume. The GET reads beside it (listEvents, listEventSubscribers) are
 	// ordinary reads with no derived outcome, so the generic HTTP middleware
@@ -270,7 +270,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_progress_stream_frames_sent_total",
 		Help: "Frames pushed to Progress page followers, summed across all open streams.",
 	})
-	// The task page's Activity follow (WL-SPEC-80 §8.9), the same two
+	// The task page's Activity follow (WL-REQ-1237), the same two
 	// instruments again: a follow lasts as long as the page is open, so
 	// http_requests_total says nothing about how many are running or how
 	// much they are pushing.
@@ -517,7 +517,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// nobody has deleted anything reads as a flat zero rather than as no-data
 	// — the difference between "no delete was refused" and "refusals are not
 	// being counted". Undelete asks for no justification on either instance
-	// (WL-SPEC-75 §12), so justification_required is unreachable there and would be a
+	// (WL-REQ-117), so justification_required is unreachable there and would be a
 	// permanently flat series claiming to mean something.
 	for _, entity := range deleteEntities {
 		for _, op := range deleteOps {
@@ -588,7 +588,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 
 // A follow that has gone quiet reads identically whether the log is quiet or
 // the commit horizon is stuck behind a long-running transaction: the stream
-// keeps heartbeating either way (WL-SPEC-77 §15). This gauge is the difference —
+// keeps heartbeating either way (WL-RULE-179). This gauge is the difference —
 // flat while events are still being recorded means the horizon is held back,
 // and pg_stat_activity is the next place to look.
 var eventLogHorizonDesc = prometheus.NewDesc(
@@ -664,7 +664,7 @@ func (c *eventHorizonCollector) Collect(ch chan<- prometheus.Metric) {
 // observeSkillSync records one sync pass, called from both syncOnce
 // (background) and the admin sync handler. A partial failure still carries a
 // summary of what landed before the error, so items are recorded on both
-// paths (WL-SPEC-73 §6).
+// paths (WL-REQ-32).
 // Nil-safe: tests build a *server directly without initMetrics.
 func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Duration) {
 	if s.syncDuration == nil {
@@ -713,7 +713,7 @@ func (s *server) observeAssignment(action string) {
 }
 
 // crewChangeActions are every action label worklode_crew_changes_total
-// carries: the two membership mutations WL-SPEC-75 §13.5 defines.
+// carries: the two membership mutations WL-REQ-123 defines.
 var crewChangeActions = []string{"add", "remove"}
 
 // crewChangeOutcomes are every outcome label worklode_crew_changes_total
@@ -778,7 +778,7 @@ func (s *server) observeMilestoneChange(action string, err error) {
 }
 
 // referenceRels are every rel label worklode_reference_writes_total carries:
-// the entity_edges vocabulary (WL-SPEC-75 §13.4, store.referenceShapes), pinned here so
+// the entity_edges vocabulary (WL-REQ-122, store.referenceShapes), pinned here so
 // an instance where nobody has declared a reference of a given rel reads as a
 // flat zero rather than as no-data. A rel outside this list (a caller's typo,
 // refused as ErrInvalidInput before the write reaches the table) is folded
@@ -1000,7 +1000,7 @@ var (
 )
 
 // approvalActKinds and approvalActOutcomes are the bounded label values of
-// worklode_approval_acts_total: WL-SPEC-75 §13.6's impact note. decisionInvalid
+// worklode_approval_acts_total: WL-REQ-124's impact note. decisionInvalid
 // stands for a submission refused before the act could run; "refused" is the
 // store declining the act itself.
 var (
@@ -1134,7 +1134,7 @@ func (s *server) observeFormSubmission(form, outcome string) {
 }
 
 // progressWriteRoutes and progressWriteOutcomes bound
-// worklode_progress_writes_total's two labels. The routes are WL-SPEC-85 §8's write
+// worklode_progress_writes_total's two labels. The routes are WL-REQ-1341's write
 // table plus publish (the task and plan pages' Publish); the outcomes are the gate's one ("refused") plus the three a write
 // handler reports for itself.
 var (
@@ -1155,7 +1155,7 @@ func (s *server) observeProgressWrite(route, outcome string) {
 
 // progressFragments and progressFragmentOutcomes bound
 // worklode_progress_fragment_renders_total's two labels: the two fragment
-// routes WL-SPEC-85 §6 adds, and the outcomes a GET on either of them can report.
+// routes WL-REQ-1339 adds, and the outcomes a GET on either of them can report.
 var (
 	progressFragments        = []string{"spec", "summary"}
 	progressFragmentOutcomes = []string{"ok", "not_found", "error"}
@@ -1346,7 +1346,7 @@ func (s *server) observeProgressStreamFrames(n int) {
 }
 
 // The Activity follow's three observers, the same shape as the Progress
-// follow's above (WL-SPEC-80 §8.9).
+// follow's above (WL-REQ-1237).
 func (s *server) observeActivityStreamOpen() {
 	if s.activityStreamsActive == nil {
 		return

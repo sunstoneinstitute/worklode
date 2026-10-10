@@ -14,7 +14,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// TestFollowUpLoop exercises 004 §1.3 end-to-end through public surfaces
+// TestFollowUpLoop exercises WL-REQ-87 end-to-end through public surfaces
 // only: an agent working a task files a follow-up in one call, the edge
 // shows on both task pages, and — the property that separates follow_up_to
 // from blocks — the follow-up is claimable while its origin is still open.

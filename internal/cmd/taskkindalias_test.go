@@ -66,7 +66,7 @@ func TestTaskKindCommandsArePinned(t *testing.T) {
 	walk = func(c *cobra.Command) {
 		if f := lookupFlag(c, "kind"); f != nil {
 			// Subset, not equality: the two claim surfaces name only the six
-			// kinds a ranked pick can hand out (WL-SPEC-77 §10), while `task add`
+			// kinds a ranked pick can hand out (WL-REQ-171), while `task add`
 			// and friends name all of ns.TaskKinds. No document, actor or
 			// search kind is a task kind, so a subset test still separates
 			// the two populations.
@@ -118,7 +118,7 @@ func TestTaskAddWarnsOnDeprecatedKind(t *testing.T) {
 
 // TestClaimNextKindListWarnsPerElement proves the --kind list form reaches
 // the server intact and that the deprecation warning fires for the one
-// element that needs it, not for the list as a whole (WL-SPEC-77 §10).
+// element that needs it, not for the list as a whole (WL-REQ-171).
 func TestClaimNextKindListWarnsPerElement(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

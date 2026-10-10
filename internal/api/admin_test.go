@@ -492,7 +492,7 @@ func TestPatchProjectCuratedCards(t *testing.T) {
 	}
 }
 
-// TestCreateProjectMetadata covers WL-SPEC-75 §13.1's optional labels/horizon body
+// TestCreateProjectMetadata covers WL-REQ-119's optional labels/horizon body
 // fields (migration 0074): supplied values round-trip through the create
 // response, and an omitted body gets the schema defaults ({} / standing) —
 // the shape a standing intake project needs to be created with over the API.
@@ -584,7 +584,7 @@ func TestCreateProjectKeyValidation(t *testing.T) {
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("duplicate WL status = %d, want 409; body %s", rr.Code, rr.Body.String())
 	}
-	// SPEC and ADR are the document shorthand's type token (WL-SPEC-77 §7) and are
+	// SPEC and ADR are the document shorthand's type token (WL-REQ-168) and are
 	// reserved, so they are a clean 422 rather than a raw CHECK violation.
 	for _, key := range []string{"SPEC", "ADR"} {
 		rr = doReq(t, h, "POST", "/api/v1/projects", token,

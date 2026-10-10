@@ -35,7 +35,7 @@ func OrList(values []string) string {
 	}
 }
 
-// EdgeTerm is one stored edge type and the terms it projects as (WL-SPEC-77 §8.1).
+// EdgeTerm is one stored edge type and the terms it projects as (WL-REQ-1288).
 type EdgeTerm struct {
 	Table     string // doc_edges, rule_edges or task_edges
 	Type      string // the stored type value

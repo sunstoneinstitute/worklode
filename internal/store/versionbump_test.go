@@ -9,7 +9,7 @@ import (
 )
 
 // TestOnlyBumpFunctionsWriteVersions holds every write path to versions.go: a
-// version that moves anywhere else moves without its snapshot (WL-SPEC-77 §3).
+// version that moves anywhere else moves without its snapshot (WL-REQ-164).
 // insertRule's version-1 rule_versions insert is creation, not a bump, and
 // is not matched.
 func TestOnlyBumpFunctionsWriteVersions(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 )
 
 // Branch is the fixed graph-server branch the work graph lives on — the
-// same value as projector.Branch (WL-SPEC-79 §13 item 5).
+// same value as projector.Branch (WL-REQ-252 item 5).
 const Branch = "main"
 
 // unsafeInIRI are the characters an N-Triples/SPARQL IRIREF may not contain;
@@ -37,7 +37,7 @@ func checkGraphIRI(graphIRI string) error {
 }
 
 // Result reports one deriver run. It is an alias: the shape crosses the HTTP
-// boundary, so WL-SPEC-73 §3.2a declares it once, in internal/model.
+// boundary, so WL-RULE-1349 declares it once, in internal/model.
 type Result = model.DeriveResult
 
 // ErrWouldEmptyGraph is returned when a run holding no triples would replace

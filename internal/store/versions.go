@@ -19,7 +19,7 @@ import (
 // docs.version and returns the new version. Call it before any other write of
 // the edit, so the snapshot holds the version being replaced.
 //
-// The snapshot holds the rendered text (WL-SPEC-77 §19.5), so a version keeps
+// The snapshot holds the rendered text (WL-REQ-1299), so a version keeps
 // what it showed even where a draft rule version it arranged is rewritten in
 // place later.
 func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
@@ -66,7 +66,7 @@ func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
 
 // moveSpecsToAcceptedRules moves every live spec arranging one of ruleIDs
 // at an older version than the rule's accepted one to that version
-// (WL-SPEC-77 §19.4). An accepted spec is bumped first, so its prior version
+// (WL-REQ-1298). An accepted spec is bumped first, so its prior version
 // keeps the rule versions it showed, and the sections whose rule moved are
 // stamped revised in the new version; a draft spec follows without a bump.
 // except is the spec whose own accept lands the rules, 0 for none. It

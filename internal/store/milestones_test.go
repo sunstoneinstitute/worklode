@@ -27,7 +27,7 @@ func createMilestone(s *Store, projectID, title string, position int) (*model.Mi
 	return m, nil
 }
 
-// TestCreateMilestone covers WL-SPEC-75 §13.4's id form (a milestone draws from
+// TestCreateMilestone covers WL-REQ-122's id form (a milestone draws from
 // its project's own MILE counter), position 0 appending after the project's
 // last milestone, and the two rejections happening before an ordinal is
 // burned.
@@ -187,7 +187,7 @@ func progressFixture(t *testing.T) (*Store, *model.Milestone, *model.Milestone) 
 	return s, m1, m2
 }
 
-// TestListMilestonesProgress checks WL-SPEC-75 §13.2's derived progress: a milestone's
+// TestListMilestonesProgress checks WL-REQ-120's derived progress: a milestone's
 // counts come from the children attached to it, an empty milestone derives
 // zeroes, and work attached to no milestone counts nowhere.
 func TestListMilestonesProgress(t *testing.T) {
@@ -450,7 +450,7 @@ func TestDeleteMilestoneCascade(t *testing.T) {
 	// has to take that with it rather than leave it naming a missing row.
 	withEvidence := before.Deliverables[0].ID
 
-	// An approval is a governance record (WL-SPEC-75 §13.6), so the cascade refuses
+	// An approval is a governance record (WL-REQ-124), so the cascade refuses
 	// rather than delete it — and nothing else goes either.
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO approvals (entity_kind, entity_id, subject_revision, state, created_at)

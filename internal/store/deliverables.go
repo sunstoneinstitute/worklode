@@ -1,9 +1,9 @@
-// deliverables.go implements WL-SPEC-75 §13.3's deliverable: a declared,
+// deliverables.go implements WL-RULE-121's deliverable: a declared,
 // checkable output of a project (a datapackage, a report PDF, a CMS post).
 // It is a first-class entity, not a task kind — it cannot be claimed, worked,
-// or closed — and it stores no state, because WL-SPEC-75 §13.3 makes deliverable state
+// or closed — and it stores no state, because WL-RULE-121 makes deliverable state
 // something emitters and probers report, never something a human asserts by
-// closing a task. Only the three descriptive fields WL-SPEC-75 §13.3 gives a custom
+// closing a task. Only the three descriptive fields WL-RULE-121 gives a custom
 // deliverable (name, description, optional URL) live in the row; the artifact
 // address it is verified by is a declaration (see artifactevidence.go), and
 // the state reported against that address is joined on read.
@@ -28,21 +28,21 @@ type DeliverableInput struct {
 	Name        string
 	Description string
 	URL         string
-	// Artifact is the address the deliverable is verified by (WL-SPEC-75 §13.3), or
+	// Artifact is the address the deliverable is verified by (WL-RULE-121), or
 	// "" when it declares none. It is not stored on the row: it becomes an
 	// artifact_declarations entry, which is what the catalog ingest routes on.
 	Artifact string
 	// Label mints the project-scoped worklode.deliverable selector instead of
-	// declaring an artifact address (WL-SPEC-75 §13.3).
+	// declaring an artifact address (WL-RULE-121).
 	Label     bool
 	CreatedBy string
 	// MilestoneID attaches the deliverable to a milestone in the same
-	// project at declaration time (WL-SPEC-75 §13.2), "" for none.
+	// project at declaration time (WL-REQ-120), "" for none.
 	MilestoneID string
 }
 
 // deliverableSeqKind is the deliverable's row key in project_entity_seq and
-// the type segment of its id (WL-SPEC-75 §13.4's COW-DEL-3).
+// the type segment of its id (WL-REQ-122's COW-DEL-3).
 const deliverableSeqKind = "DEL"
 
 // deliverableColumns is the deliverables table's own column list, in insert
@@ -52,7 +52,7 @@ const deliverableColumns = `id, project_id, name, description, url, created_by, 
 
 // deliverableSelect is what a read projects: the stored columns, then the
 // declared artifact address and the newest state reported about that address.
-// The last two are joined, never stored — WL-SPEC-75 §13.3 keeps deliverable state a
+// The last two are joined, never stored — WL-RULE-121 keeps deliverable state a
 // reported fact, so the row itself has nothing to say about it.
 const deliverableSelect = deliverableColumns + `,
 	COALESCE(decl.selector, ''), COALESCE(decl.artifact_uri, ''),
@@ -72,7 +72,7 @@ const deliverableSelect = deliverableColumns + `,
 //
 // The evidence correlation coalesces the declaration to the empty string, so a
 // deliverable that declares no address still shows what a person reported
-// about it (WL-SPEC-75 §13.3): ReportDeliverableState files against the empty address
+// about it (WL-RULE-121): ReportDeliverableState files against the empty address
 // in that case. For a deliverable that does declare one the COALESCE is the
 // identity, so the address it reports on is unchanged.
 const deliverableFrom = `FROM deliverables
@@ -94,7 +94,7 @@ const deliverableFrom = `FROM deliverables
 // the store's clock as now. An unknown project is ErrNotFound and a blank
 // name is ErrInvalidInput — both checked before the id is allocated, so a
 // rejected input never burns an ordinal. A non-empty MilestoneID is checked
-// the same way UpdateTaskFields checks a task's milestone (WL-SPEC-75 §13.2): it must
+// the same way UpdateTaskFields checks a task's milestone (WL-REQ-120): it must
 // name a milestone in the same project, or the create is ErrInvalidInput —
 // also checked before the ordinal is allocated.
 func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.Deliverable, error) {
@@ -274,7 +274,7 @@ func (s *Store) GetDeliverable(ctx context.Context, id string) (*model.Deliverab
 // deliverable's first declaration (the projection's rule: lowest declaration
 // id), or against an empty artifact_uri when it declares none — a state change
 // with no address still has a subject, and that is the entity itself
-// (WL-SPEC-75 §13.3). Provenance is user_reported unconditionally: this path
+// (WL-RULE-121). Provenance is user_reported unconditionally: this path
 // records what a person claims, never an observed fact, and the projection
 // carries that distinction to every reader.
 //
@@ -318,7 +318,7 @@ func ReportDeliverableState(tx *sql.Tx, eventID int64, now time.Time,
 }
 
 // SetDeliverableMilestone reparents one deliverable ("" detaches) inside
-// the given transaction. Same-project containment per WL-SPEC-75 §13.4; bumps
+// the given transaction. Same-project containment per WL-REQ-122; bumps
 // updated_at. Callers reach it through RecordEvent with event type
 // "deliverable.updated".
 func SetDeliverableMilestone(tx *sql.Tx, now time.Time, id, milestoneID string) error {
@@ -361,14 +361,14 @@ func SetDeliverableMilestone(tx *sql.Tx, now time.Time, id, milestoneID string) 
 // delete` would use it unchanged.
 //
 // Two kinds of row hang off a deliverable, and they are not the same kind of
-// fact. Its reported states (artifact_evidence, WL-SPEC-75 §13.3) and its references
-// (entity_edges, WL-SPEC-75 §13.4) describe the deliverable and say nothing once it is
+// fact. Its reported states (artifact_evidence, WL-RULE-121) and its references
+// (entity_edges, WL-REQ-122) describe the deliverable and say nothing once it is
 // gone, so they go with it — no surface can remove either on its own. Its
-// approvals (WL-SPEC-75 §13.6) are a governance record about a revision that was
+// approvals (WL-REQ-124) are a governance record about a revision that was
 // reviewed; deleting one is a decision this function will not take silently,
 // so a deliverable carrying approvals is refused instead, naming them.
 //
-// The event log keeps the deliverable's whole history either way (WL-SPEC-75 §1);
+// The event log keeps the deliverable's whole history either way (WL-REQ-77);
 // what goes is the row and the projections read off it.
 func DeleteDeliverable(tx *sql.Tx, id string) error {
 	ctx := context.Background()

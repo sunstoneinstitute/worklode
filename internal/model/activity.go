@@ -3,7 +3,7 @@ package model
 import "time"
 
 // TaskActivity is one row of a task's activity log: a decoded OTLP log
-// record attributed to a task (WL-SPEC-80 §8.6). It is distinct from the events
+// record attributed to a task (WL-REQ-1234). It is distinct from the events
 // table's append-only provenance — activity is high-volume, per-tool-call
 // telemetry with a retention window, not a durable audit trail.
 type TaskActivity struct {
@@ -18,7 +18,7 @@ type TaskActivity struct {
 }
 
 // ActivityAttrs is the allowlisted set of OTLP log-record attributes a
-// TaskActivity row may carry (WL-SPEC-80 §8.6). internal/otlp.DecodeLogs
+// TaskActivity row may carry (WL-REQ-1234). internal/otlp.DecodeLogs
 // is the only writer; the record body, prompt/response text, tool content,
 // and every other attribute are dropped before reaching here. Every field
 // is omitempty so an activity row with none of a kind of attribute doesn't

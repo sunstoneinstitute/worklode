@@ -352,7 +352,7 @@ func TestSpecReconcilerIgnoresUnmappedRepo(t *testing.T) {
 }
 
 // A section ref on a spec heading governs the task by every rule grouped
-// under it (WL-SPEC-77 §19.1).
+// under it (WL-REQ-1295).
 func TestSpecReconcilerHeadingGovernsByRulesUnderIt(t *testing.T) {
 	f := newReconcilerFixture(t)
 	ctx := context.Background()

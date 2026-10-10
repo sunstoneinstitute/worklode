@@ -1,5 +1,5 @@
 // progressmerge_test.go exercises POST /projects/{id}/progress/merge
-// (WL-SPEC-85 §4) against an httptest GitHub, white-box like the other
+// (WL-REQ-1337) against an httptest GitHub, white-box like the other
 // Progress writes: a web route takes its actor from a session, and these
 // tests configure no login provider.
 package api

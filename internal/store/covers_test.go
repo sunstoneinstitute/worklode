@@ -50,7 +50,7 @@ func externalCovers(t *testing.T, s *Store, planID int64) []string {
 }
 
 // TestCoversResolveToRules: each covers entry is stored as edges from the
-// plan to rules, resolved when the plan is written (WL-SPEC-77 §4). A rule
+// plan to rules, resolved when the plan is written (WL-REQ-165). A rule
 // ref, in either spelling, names that rule; a section ref names the rule at
 // that anchor and every rule under it; a whole-document ref names every rule
 // the document contains; an entry naming no rule is kept verbatim. Nested
@@ -106,10 +106,10 @@ func TestCoversResolveToRules(t *testing.T) {
 }
 
 // TestCoverageFollowsSupersession: a plan covering a rule counts as covering
-// every rule that supersedes it (WL-SPEC-77 §4). The successor's section is
+// every rule that supersedes it (WL-REQ-165). The successor's section is
 // discharged, the rule detail lists the plan, the successor's document lists
 // the inbound covers edge, and withdrawing the successor marks the plan
-// stale (WL-SPEC-77 §9).
+// stale (WL-REQ-170).
 func TestCoverageFollowsSupersession(t *testing.T) {
 	s := openDocStore(t)
 	specA := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
@@ -290,7 +290,7 @@ func TestPlanCoversMigration(t *testing.T) {
 }
 
 // TestCoversSubtreeMigration: 0092 extends each covers edge to the rules under
-// its rule's section (WL-SPEC-77 §4), with the edge's level and closure. A
+// its rule's section (WL-REQ-165), with the edge's level and closure. A
 // rule the plan already covers keeps its own edge, and a rule under two
 // covered ancestors takes the nearer one's level.
 func TestCoversSubtreeMigration(t *testing.T) {
@@ -555,7 +555,7 @@ func TestResolveExternalCovers(t *testing.T) {
 // TestSpecHeadingArrangesNoRule: an anchored heading followed directly by a
 // deeper anchored heading is a spec heading, a doc_rules row with heading set
 // and no rule, and a covers entry on its anchor resolves to the rules grouped
-// under it (WL-SPEC-77 §19.1).
+// under it (WL-REQ-1295).
 func TestSpecHeadingArrangesNoRule(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "h", CreatedBy: "stig",

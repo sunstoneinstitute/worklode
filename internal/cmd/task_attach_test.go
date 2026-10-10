@@ -49,7 +49,7 @@ func startBlobSrv(t *testing.T, mediaFor func(body []byte) string) *blobSrv {
 			"size": len(b), "url": "/blob/" + hash,
 		}
 		// What a server with ffmpeg answers a video upload with: the first
-		// frame, stored as a blob of its own (WL-SPEC-78 §8.5).
+		// frame, stored as a blob of its own (WL-REQ-230).
 		if strings.HasPrefix(media, "video/") {
 			resp["poster_url"] = "/blob/" + posterHash
 		}
@@ -163,7 +163,7 @@ func TestAttachEmbedsImagesOnly(t *testing.T) {
 }
 
 // TestAttachAlt: --alt supplies the embedded image's alt text instead of the
-// filename default (WL-SPEC-78 §8.3).
+// filename default (WL-REQ-228).
 func TestAttachAlt(t *testing.T) {
 	dir := t.TempDir()
 	png := writeFile(t, dir, "shot.png", "\x89PNG\r\n\x1a\n fake")
@@ -210,7 +210,7 @@ func TestAttachAltRejectsMultipleImages(t *testing.T) {
 
 // TestAttachEmbedsVideoWithPoster: a video embeds as <video>, not as an
 // image, and carries the poster frame the upload extracted — without it the
-// element is a black rectangle until someone presses play (WL-SPEC-78 §8.5).
+// element is a black rectangle until someone presses play (WL-REQ-230).
 func TestAttachEmbedsVideoWithPoster(t *testing.T) {
 	dir := t.TempDir()
 	mp4 := writeFile(t, dir, "flash.mp4", "fake video bytes")
