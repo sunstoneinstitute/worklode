@@ -20,4 +20,10 @@ regex = [
   # state machines and ranking in the store
   '^internal/store/(tasks|taskblockers|taskkind|leases|ranking|planlifecycle|approvalflow|escalate|sweeper)\.go$',
 ]
+# A change to a guarded path carries one trailer naming a rule (WL-REQ-7):
+#   Spec: WL-REQ-456            satisfies this rule as written
+#   Spec: WL-REQ-456 amended    this rule was amended for this change
+#   Spec: none refactor         fix needs a rule; refactor, perf, copy, tests, build, config
+# A section value (WL-SPEC-72 sec-4) is refused; `lode show <doc>#sec-N`
+# names the rule at that section.
 trailer = "Spec:"

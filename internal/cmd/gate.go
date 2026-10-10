@@ -1,18 +1,23 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+
 	"github.com/sunstoneinstitute/worklode/internal/gate"
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// newGateCmd is the design authority gate (WL-SPEC-72): the
+// newGateCmd is the design authority gate (WL-REQ-8): the
 // check CI runs on a pull request that touches a guarded path.
 func newGateCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -30,10 +35,13 @@ func newGateCheckCmd() *cobra.Command {
 		Short: "Refuse a change to a guarded path that names no design rule",
 		Long: `Reads the [gate] table of .worklode/config.toml, diffs --base to --head,
 and requires a Spec: trailer on the pull request body (--body-file) or in a
-commit message when a guarded path changed. Exit status 1 with the reason
+commit message when a guarded path changed. The trailer names a rule
+(Spec: WL-REQ-<n>, optionally followed by amended or a reason word) or
+says Spec: none <reason>. A section value (WL-SPEC-<n> sec-N) is refused,
+naming the rule it resolves to when a server is configured, else the
+lode show <doc>#sec-N command that reads it. Exit status 1 with the reason
 when the trailer is missing or malformed. Without a [gate] table it does
-nothing. The trailer is checked for form here; the server resolves the
-rule it names (12-spec-refactoring-design-tree.md S50).`,
+nothing. The server resolves the rule a well-formed trailer names.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dir, err := os.Getwd()
@@ -106,6 +114,7 @@ func runGateCheck(dir, base, head, bodyFile string) (string, error) {
 			in.Texts = append(in.Texts, m)
 		}
 	}
+	in.ResolveSection = resolveSectionRule
 	v, err := gate.Check(cfg, in)
 	if err != nil {
 		return "", fmt.Errorf("gate: %w", err)
@@ -114,6 +123,32 @@ func runGateCheck(dir, base, head, bodyFile string) (string, error) {
 		return "gate: no guarded path changed\n", nil
 	}
 	return fmt.Sprintf("gate: %s covers %s\n", cfg.Trailer+" "+v.Declaration.String(), strings.Join(v.Guarded, ", ")), nil
+}
+
+// resolveSectionRule names the rule a refused section value resolves to at
+// the document's current version, or "" when no server is configured (as in
+// CI, which makes no Worklode API call per WL-REQ-8), the call fails within
+// the hook timeout of WL-REQ-1722, or the anchor arranges no single rule.
+func resolveSectionRule(sec designdoc.SectionRef) string {
+	c, err := newAPIClient()
+	if err != nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	doc := fmt.Sprintf("%s-%s-%d", sec.Shorthand.Key, sec.Shorthand.Type, sec.Shorthand.Number)
+	rules, _, err := c.ListRules(ctx, model.RuleListParams{Doc: doc})
+	if err != nil {
+		return ""
+	}
+	for _, r := range rules {
+		for _, a := range r.ArrangedIn {
+			if a.DocRef == doc && a.Anchor == sec.Anchor {
+				return r.Ref
+			}
+		}
+	}
+	return ""
 }
 
 func init() {

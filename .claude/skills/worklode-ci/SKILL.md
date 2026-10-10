@@ -1,6 +1,6 @@
 ---
 name: worklode-ci
-description: Use when changing CI workflows or asking why a check did or did not run — "CI skipped my PR", "docs-only PR", "can-be-tested label", "lint/test did not run", "add a CI check", "the workflow", "paths filter", "www/ deploy", "e2e suite". Covers the docs-only skip and its plugins and agent-surface exemptions, and the code-scope gate on the Go jobs.
+description: Use when changing CI workflows or asking why a check did or did not run — "CI skipped my PR", "docs-only PR", "can-be-tested label", "lint/test did not run", "add a CI check", "the workflow", "paths filter", "www/ deploy", "e2e suite", "spec-gate failed", "Spec: trailer". Covers the docs-only skip and its plugins and agent-surface exemptions, the code-scope gate on the Go jobs, and the spec gate.
 ---
 
 # CI, workflows, and repo layout
@@ -31,6 +31,17 @@ patterns are `CODE_INERT` and `CODE_ANYWAY` in `pr-checks.yml`, tested by
 
 `can-be-tested` does **not** force it — that label authorises CI, it does not
 make untouched Go worth rebuilding.
+
+## The spec gate
+
+The `spec-gate` job runs `lode gate check` on every admitted pull request
+(WL-REQ-8). When a path in the `[gate]` table of `.worklode/config.toml`
+changes, the PR body or a commit message needs one trailer naming a rule:
+`Spec: WL-REQ-<n>` (optionally `amended`, or a reason word such as `fix`), or
+`Spec: none <reason>` (WL-REQ-7). A section value such as
+`Spec: WL-SPEC-72 sec-4` fails; run `lode show WL-SPEC-72#sec-4` to read the
+rule ref there. The job makes no Worklode API call, so CI names that command
+rather than the ref.
 
 ## `www/`
 

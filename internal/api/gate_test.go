@@ -158,14 +158,18 @@ func TestSpecReconcilerGovernsAPlanlessTask(t *testing.T) {
 		t.Errorf("already metric = %v, want 1", got)
 	}
 
-	// A section ref resolves to the rule at that anchor.
-	out, err = f.srv.handleSpecReconcile(ctx, prEvent(1002, task.Branch, "Spec: WL-SPEC-1 sec-1.1\n"))
-	if err != nil || out != eventbus.OutcomeApplied {
-		t.Fatalf("section ref: %v %v", out, err)
+	// A section value is counted and logged and writes nothing (WL-REQ-1552).
+	for i, trailer := range []string{"Spec: WL-SPEC-1 sec-1.1\n", "Spec: WL-SPEC-1#sec-2 amended\n"} {
+		out, err = f.srv.handleSpecReconcile(ctx, prEvent(int64(1002+i), task.Branch, trailer))
+		if err != nil || out != eventbus.OutcomeSuppressed {
+			t.Fatalf("section value %q: %v %v", trailer, out, err)
+		}
 	}
-	gov = f.governedBy(t, task.ID)
-	if len(gov) != 2 {
-		t.Fatalf("after section ref: %+v", gov)
+	if got := testutil.ToFloat64(f.srv.reconcilerMetrics.outcomes.WithLabelValues("section")); got != 2 {
+		t.Errorf("section metric = %v, want 2", got)
+	}
+	if gov = f.governedBy(t, task.ID); len(gov) != 1 {
+		t.Fatalf("a section value must write no link: %+v", gov)
 	}
 }
 
@@ -218,31 +222,6 @@ func TestSpecReconcilerIgnoresQualifierForIdempotency(t *testing.T) {
 		t.Errorf("task.governed events = %d, want 1", n)
 	}
 
-}
-
-// A section ref and the rule ref of the rule at that section are one link.
-func TestSpecReconcilerSectionAndRuleRefAreOneLink(t *testing.T) {
-	f := newReconcilerFixture(t)
-	task := f.createTask(t)
-	ctx := context.Background()
-
-	if out, err := f.srv.handleSpecReconcile(ctx, prEvent(7201, task.Branch, "Spec: WL-SPEC-1 sec-1.1\n")); err != nil || out != eventbus.OutcomeApplied {
-		t.Fatalf("section ref: %v %v", out, err)
-	}
-	gov := f.governedBy(t, task.ID)
-	if len(gov) != 1 {
-		t.Fatalf("governed_by = %+v", gov)
-	}
-	out, err := f.srv.handleSpecReconcile(ctx, pushEvent(7202, task.Branch, "more\n\nSpec: "+gov[0].Rule+"\n"))
-	if err != nil || out != eventbus.OutcomeSuppressed {
-		t.Fatalf("rule ref of the same rule: %v %v", out, err)
-	}
-	if got := testutil.ToFloat64(f.srv.reconcilerMetrics.outcomes.WithLabelValues("already")); got != 1 {
-		t.Errorf("already metric = %v, want 1", got)
-	}
-	if n := f.governedEvents(t, task.ID); n != 1 {
-		t.Errorf("task.governed events = %d, want 1", n)
-	}
 }
 
 func TestSpecReconcilerLeavesPlannedAndNoneAlone(t *testing.T) {
@@ -348,36 +327,5 @@ func TestSpecReconcilerIgnoresUnmappedRepo(t *testing.T) {
 	}
 	if gov := f.governedBy(t, task.ID); len(gov) != 0 {
 		t.Fatalf("nothing should be linked: %+v", gov)
-	}
-}
-
-// A section ref on a spec heading governs the task by every rule grouped
-// under it (WL-REQ-1295).
-func TestSpecReconcilerHeadingGovernsByRulesUnderIt(t *testing.T) {
-	f := newReconcilerFixture(t)
-	ctx := context.Background()
-	if _, _, err := f.st.RecordEvent(ctx, "cli", "seed-heading-doc", "doc.created", nil,
-		func(tx *sql.Tx, eventID int64) error {
-			_, err := store.CreateDoc(tx, f.st.Now(), store.DocInput{
-				Project: "wl", Kind: "spec", Number: 2, Slug: "h",
-				Body: "---\nstatus: draft\n---\n# H\n\n## 1. A {#sec-1}\n\n### 1.1 B {#sec-1.1}\n\nB.\n\n### 1.2 C {#sec-1.2}\n\nC.\n\n## 2. D {#sec-2}\n\nD.\n",
-			}, eventID)
-			return err
-		}); err != nil {
-		t.Fatalf("seed heading doc: %v", err)
-	}
-	task := f.createTask(t)
-
-	if out, err := f.srv.handleSpecReconcile(ctx, prEvent(7301, task.Branch, "Spec: WL-SPEC-2 sec-1\n")); err != nil || out != eventbus.OutcomeApplied {
-		t.Fatalf("heading ref: %v %v", out, err)
-	}
-	// Spec 1 holds rules 1-3; spec 2's sec-1.1, sec-1.2 and sec-2 are 4-6.
-	gov := f.governedBy(t, task.ID)
-	if len(gov) != 2 || gov[0].Rule != "WL-REQ-4" || gov[1].Rule != "WL-REQ-5" {
-		t.Fatalf("governed_by = %+v, want WL-REQ-4 and WL-REQ-5", gov)
-	}
-	out, err := f.srv.handleSpecReconcile(ctx, pushEvent(7302, task.Branch, "more\n\nSpec: WL-SPEC-2 sec-1\n"))
-	if err != nil || out != eventbus.OutcomeSuppressed {
-		t.Fatalf("repeat heading ref: %v %v", out, err)
 	}
 }

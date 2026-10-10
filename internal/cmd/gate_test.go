@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,5 +72,40 @@ func TestGateCheckIsANoOpWithoutTable(t *testing.T) {
 	out, err := runGateCheck(dir, base, head, "")
 	if err != nil || !strings.Contains(out, "no [gate] table") {
 		t.Fatalf("no table: out=%q err=%v", out, err)
+	}
+}
+
+// A section-valued trailer fails and names `lode show <doc>#sec-N` when no
+// server is configured (WL-REQ-7).
+func TestGateCheckRefusesSectionOffline(t *testing.T) {
+	dir, base, head := gateRepo(t, gateTable, "change a command\n\nSpec: WL-SPEC-72 sec-4\n")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", "")
+	_, err := runGateCheck(dir, base, head, "")
+	if err == nil || !strings.Contains(err.Error(), "lode show WL-SPEC-72#sec-4") {
+		t.Fatalf("offline section refusal must name lode show: %v", err)
+	}
+}
+
+// With a reachable server the refusal names the rule ref the section
+// resolves to (WL-REQ-7).
+func TestGateCheckRefusesSectionNamingItsRule(t *testing.T) {
+	dir, base, head := gateRepo(t, gateTable, "change a command\n\nSpec: WL-SPEC-72#sec-4\n")
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/rules" || r.URL.Query().Get("doc") != "WL-SPEC-72" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[{"ref":"WL-REQ-6","arranged_in":[{"doc_ref":"WL-SPEC-72","anchor":"sec-3"}]},
+			{"ref":"WL-REQ-7","arranged_in":[{"doc_ref":"WL-SPEC-72","anchor":"sec-4"}]}]`))
+	}))
+	t.Cleanup(ts.Close)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "wl_"+strings.Repeat("0", 40))
+	_, err := runGateCheck(dir, base, head, "")
+	if err == nil || !strings.Contains(err.Error(), "Spec: WL-REQ-7") || strings.Contains(err.Error(), "lode show") {
+		t.Fatalf("section refusal must name the rule ref: %v", err)
 	}
 }

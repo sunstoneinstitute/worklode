@@ -205,7 +205,7 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 		case !enabled:
 			checks = append(checks, skip("gate", "not enabled (no [gate] table)"))
 		default:
-			checks = append(checks, pass("gate", fmt.Sprintf("%d path patterns, %d regex, trailer %q", len(gcfg.Paths), len(gcfg.Regex), gcfg.Trailer)))
+			checks = append(checks, pass("gate", fmt.Sprintf("%d path patterns, %d regex, trailer %q (%s WL-REQ-<n> or %s none <reason>)", len(gcfg.Paths), len(gcfg.Regex), gcfg.Trailer, gcfg.Trailer, gcfg.Trailer)))
 			checks = append(checks, checkGatePRs(ctx, c, gitRemoteOrigin(ctx, root), serverReachable))
 		}
 	}

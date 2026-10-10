@@ -70,6 +70,13 @@ gh api -X PATCH repos/sunstoneinstitute/worklode -F allow_auto_merge=true
 - The `checks` job at the end: `if: always()`, needs every other job, and
   is the one check the ruleset names.
 
+The `spec-gate` job is one of the jobs `checks` needs. It skips merge-queue
+builds, which carry no PR body. On a pull request that changes a path in the
+`[gate]` table, it fails unless the PR body or a commit message carries a
+trailer naming a rule, `Spec: WL-REQ-<n>`, or `Spec: none <reason>`
+(WL-REQ-7). A section value such as `Spec: WL-SPEC-72 sec-4` fails and names
+`lode show WL-SPEC-72#sec-4`, which prints the rule ref to cite.
+
 ### 3. The ruleset
 
 Worklode's `main` ruleset is id `19780760` ("protect main"). Find another
