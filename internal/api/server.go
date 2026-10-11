@@ -734,15 +734,58 @@ func (cfg Config) requireWebSecrets(feature string) error {
 // registerRoutes builds the public mux: the whole route table in one place,
 // separate from NewServer's config validation and background startup.
 //
-// Every route is registered through r, which looks its guard up in
+// Every route is registered through a router, which looks its guard up in
 // routeGuards (router.go) and panics on a pattern the table does not name.
 // The permission a route requires is therefore stated as data, in one
 // reviewable place, rather than implied by how its handler is wrapped; see
 // authz.go for the policy it is checked against.
+//
+// When LODE_LEGACY_URL is set, pub and legacy are host-qualified siblings
+// (WL-REQ-1303): the templ cockpit keeps serving the legacy host, the JSON
+// API and webhooks move to the public host, and the few routes both kinds
+// of caller reach (login, callback, blob) register on both. Without a legacy
+// host, pub == legacy == r and every route registers host-less, as before.
 func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, error) {
 	mux := http.NewServeMux()
 	r := newRouter(s, mux)
 
+	pub, legacy := r, r
+	if s.cfg.LegacyURL != "" {
+		pub = r.on(hostOf(s.cfg.PublicURL))
+		legacy = r.on(hostOf(s.cfg.LegacyURL))
+	}
+
+	s.registerCockpit(legacy)
+	s.registerAPI(pub, reg)
+	if pub == legacy {
+		s.registerShared(pub)
+	} else {
+		s.registerShared(pub, legacy)
+	}
+
+	b, err := servedOpenAPI()
+	if err != nil {
+		return nil, err
+	}
+	s.openapiJSON = b
+
+	// The table describes exactly the routes above: an entry nothing
+	// registered is dead policy that reads like a guard, so it fails the boot
+	// rather than sitting in the file looking enforced.
+	if err := r.checkComplete(); err != nil {
+		return nil, err
+	}
+	// The nav zero-series are minted by the caller (NewServer), not here: they
+	// are derived from what registration collected, so anything that runs
+	// inside this function could be outrun by a route registered below it.
+	return mux, nil
+}
+
+// registerCockpit registers the templ cockpit — every page, fragment and
+// form, plus the static asset handler they load — through r. On a two-host
+// server (WL-REQ-1303) r is the legacy host's router; on a single-host
+// server it is the one router every route shares.
+func (s *server) registerCockpit(r *router) {
 	// Read-mostly web UI. These resolve a session cookie to a subject and
 	// apply the policy (webGuard); an unauthenticated visitor is sent to
 	// /auth/login, and when no login provider is configured the UI stays open
@@ -859,14 +902,13 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// and a web-session act for the same reason the decision is.
 	r.web("POST /approvals/{id}/note", s.navWrap("approval_note", s.requireSession(permApprovalNote, s.noteApproval)))
 	r.public("GET /assets/", s.assetHandler())
-	// The blob asset route (WL-REQ-229). Neither an API route nor a web
-	// page: a browser <img> on a task page fetches it with a session cookie
-	// and an agent fetches it with a bearer token, so it takes either — see
-	// eitherGuard in authz.go and r.asset in router.go.
-	r.asset("GET /blob/{hash}", s.serveBlob)
-	r.publicFunc("GET /auth/login", s.authLogin)
-	r.publicFunc("GET /auth/callback", s.authCallback)
+}
 
+// registerAPI registers the JSON API, its webhooks, and the CLI/OIDC auth
+// endpoints through r. On a two-host server (WL-REQ-1303) r is the public
+// host's router; on a single-host server it is the one router every route
+// shares.
+func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.
 	// onSkillPush triggers an async sync on a push matching a configured
@@ -899,7 +941,6 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
 	r.publicFunc("GET /auth/cli/login", s.cliLogin)
 	r.publicFunc("POST /auth/cli/token", s.cliToken)
-
 	// Agent telemetry ingest (WL-REQ-1234). Not under /api/v1: the path is
 	// the OTLP convention, so a stock exporter reaches it with
 	// OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=<server>/otlp/v1/logs. Bearer auth
@@ -1103,22 +1144,24 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/derive", s.postDerive)
 
 	r.publicFunc("GET /api/v1/openapi.json", s.serveOpenAPI)
-	b, err := servedOpenAPI()
-	if err != nil {
-		return nil, err
-	}
-	s.openapiJSON = b
+}
 
-	// The table describes exactly the routes above: an entry nothing
-	// registered is dead policy that reads like a guard, so it fails the boot
-	// rather than sitting in the file looking enforced.
-	if err := r.checkComplete(); err != nil {
-		return nil, err
+// registerShared registers the routes both the cockpit and the API reach:
+// the login/callback redirects a browser follows regardless of which host
+// served the page it started from, and the blob asset route an <img> on a
+// cockpit page and an agent's bearer-token fetch both load. rs is one router
+// when host-less (register once), or the public and legacy routers when
+// LODE_LEGACY_URL is set, so the route exists on both hosts (WL-REQ-1303).
+func (s *server) registerShared(rs ...*router) {
+	for _, r := range rs {
+		// The blob asset route (WL-REQ-229). Neither an API route nor a web
+		// page: a browser <img> on a task page fetches it with a session cookie
+		// and an agent fetches it with a bearer token, so it takes either — see
+		// eitherGuard in authz.go and r.asset in router.go.
+		r.asset("GET /blob/{hash}", s.serveBlob)
+		r.publicFunc("GET /auth/login", s.authLogin)
+		r.publicFunc("GET /auth/callback", s.authCallback)
 	}
-	// The nav zero-series are minted by the caller (NewServer), not here: they
-	// are derived from what registration collected, so anything that runs
-	// inside this function could be outrun by a route registered below it.
-	return mux, nil
 }
 
 // embeddingBudget validates the embedding configuration and derives the chunk

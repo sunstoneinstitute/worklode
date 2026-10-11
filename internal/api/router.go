@@ -529,6 +529,11 @@ type router struct {
 	// case about a malformed table never mutates the package-level one.
 	guards map[string]routeGuard
 	used   map[string]bool
+	// host prefixes every registered pattern ("worklode.example"); "" means
+	// host-less, today's single-host server. on() returns a sibling router
+	// for another host sharing guards and used, so one guard entry serves a
+	// route registered on both hosts (WL-REQ-1303).
+	host string
 }
 
 func newRouter(s *server, mux *http.ServeMux) *router {
@@ -537,6 +542,22 @@ func newRouter(s *server, mux *http.ServeMux) *router {
 
 func newRouterWithGuards(s *server, mux *http.ServeMux, guards map[string]routeGuard) *router {
 	return &router{srv: s, mux: mux, guards: guards, used: make(map[string]bool, len(guards))}
+}
+
+// on returns a sibling router that registers every pattern qualified for
+// host, while still checking and recording guard use against the same
+// table as r.
+func (r *router) on(host string) *router {
+	return &router{srv: r.srv, mux: r.mux, guards: r.guards, used: r.used, host: host}
+}
+
+// qualify turns "GET /x" into "GET host/x" when the router has a host.
+func (r *router) qualify(pattern string) string {
+	if r.host == "" {
+		return pattern
+	}
+	method, path, _ := strings.Cut(pattern, " ")
+	return method + " " + r.host + path
 }
 
 // guardFor returns the declared guard for pattern, panicking when the table
@@ -561,14 +582,14 @@ func (r *router) guardFor(pattern string) routeGuard {
 // check for the permission the table declares.
 func (r *router) api(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.Handle(pattern, r.srv.auth(r.srv.requirePerm(g.perm, r.srv.requireTaskScope(g, h))))
+	r.mux.Handle(r.qualify(pattern), r.srv.auth(r.srv.requirePerm(g.perm, r.srv.requireTaskScope(g, h))))
 }
 
 // web registers a web UI route behind webGuard, which resolves the session
 // (or the open-deployment subject) and applies the same policy.
 func (r *router) web(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.HandleFunc(pattern, r.srv.webGuard(g.perm, h))
+	r.mux.HandleFunc(r.qualify(pattern), r.srv.webGuard(g.perm, h))
 }
 
 // asset registers an asset route behind eitherGuard. An asset route is one
@@ -582,7 +603,7 @@ func (r *router) web(pattern string, h http.HandlerFunc) {
 // subresource fetch into a login page.
 func (r *router) asset(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.HandleFunc(pattern, r.srv.eitherGuard(g.perm, r.srv.requireTaskScope(g, h)))
+	r.mux.HandleFunc(r.qualify(pattern), r.srv.eitherGuard(g.perm, r.srv.requireTaskScope(g, h)))
 }
 
 // public registers a route that carries no worklode identity. It still goes
@@ -593,7 +614,7 @@ func (r *router) public(pattern string, h http.Handler) {
 	if g.perm != permPublic {
 		panic(fmt.Sprintf("route %q is registered as public but the table requires %q", pattern, g.perm))
 	}
-	r.mux.Handle(pattern, h)
+	r.mux.Handle(r.qualify(pattern), h)
 }
 
 // publicFunc is public for an http.HandlerFunc.
