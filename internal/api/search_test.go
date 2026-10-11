@@ -31,7 +31,8 @@ func seedChunk(t *testing.T, st *store.Store, subj store.ChunkSubject, text stri
 
 func TestSearchGuard(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	rr := doReq(t, h, "GET", "/api/v1/search?q=x", "", nil)
 	if rr.Code < 400 || rr.Code >= 500 {
 		t.Fatalf("anonymous search = %d, want a 4xx", rr.Code)

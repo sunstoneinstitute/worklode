@@ -12,12 +12,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/api"
 )
 
-// newSecretsTestServer is newTestServer with a secrets catalog on disk.
-//
-// WebOpen mirrors newTestServer deliberately rather than incidentally: it is
-// the instance shape where anonymous access is most permissive, so a 401 from
-// the catalog route proves /api/v1 requires a bearer token even there, instead
-// of passing because nothing on the instance was open in the first place.
+// newSecretsTestServer is newTestServer with a secrets catalog on disk, on a
+// closed instance: WL-1115 gives a non-bearer /api/v1 request the open
+// subject on a WebOpen instance, which would defeat
+// TestSecretsCatalogRequiresAuth's point (no credential is refused).
 func newSecretsTestServer(t *testing.T, catalogTOML string) (http.Handler, string) {
 	t.Helper()
 	st := newTestStore(t)
@@ -26,7 +24,7 @@ func newSecretsTestServer(t *testing.T, catalogTOML string) (http.Handler, strin
 	if err := os.WriteFile(path, []byte(catalogTOML), 0o600); err != nil {
 		t.Fatalf("write catalog: %v", err)
 	}
-	h, _, err := api.NewServer(st, api.Config{SecretsCatalogPath: path, WebOpen: true})
+	h, _, err := api.NewServer(st, api.Config{SecretsCatalogPath: path})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

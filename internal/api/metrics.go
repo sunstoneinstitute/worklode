@@ -109,6 +109,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_authz_decisions_total",
 		Help: "Authorization decisions, by permission and outcome (allow, deny). A deny rate above zero on a permission nobody should be attempting is the signal worth alerting on.",
 	}, []string{"permission", "outcome"})
+	s.apiSessionRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_api_session_requests_total",
+		Help: "GET and POST /api/v1 requests through apiGuard, by outcome (" +
+			strings.Join(apiSessionRequestOutcomes, ", ") +
+			"). allowed/unauthenticated/forbidden cover both the bearer-token and " +
+			"session paths; session_required is a sessionOnly route refusing a " +
+			"bearer token or the open subject (WL-REQ-1771).",
+	}, []string{"outcome"})
 	s.approvalDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_decisions_total",
 		Help: "Decisions submitted to POST /approvals/{id}/decide (WL-REQ-124), by decision (" +
@@ -358,7 +366,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.runBoardRenders, s.spaRequests, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions,
+		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.runBoardRenders, s.spaRequests, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions, s.apiSessionRequests,
 		s.approvalDecisions, s.approvalActs, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
@@ -401,6 +409,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		for _, outcome := range []string{"allow", "deny"} {
 			s.authzDecisions.WithLabelValues(string(perm), outcome)
 		}
+	}
+	for _, outcome := range apiSessionRequestOutcomes {
+		s.apiSessionRequests.WithLabelValues(outcome)
 	}
 	for _, surface := range []string{"api", "web"} {
 		for _, action := range crewChangeActions {
@@ -936,6 +947,10 @@ const (
 
 var runBoardRenderOutcomes = []string{runBoardRenderEmpty, runBoardRenderRendered}
 
+// apiSessionRequestOutcomes are the bounded label values of
+// worklode_api_session_requests_total.
+var apiSessionRequestOutcomes = []string{"allowed", "unauthenticated", "forbidden", "session_required"}
+
 // observeRunBoardRender records one project run board page render, by
 // outcome. Nil-safe: tests build a *server directly without initMetrics.
 func (s *server) observeRunBoardRender(outcome string) {
@@ -1006,7 +1021,7 @@ func formOutcome(err error) string {
 }
 
 // observeAuthz records one authorization decision, called exactly once per
-// guarded request from requirePerm (API) and webGuard (web). permPublic never
+// guarded request from apiGuard (API) and webGuard (web). permPublic never
 // reaches an enforcement point, so it never appears as a label value.
 // Nil-safe: tests build a *server directly without initMetrics.
 func (s *server) observeAuthz(perm Permission, d Decision) {
@@ -1018,6 +1033,15 @@ func (s *server) observeAuthz(perm Permission, d Decision) {
 		outcome = "allow"
 	}
 	s.authzDecisions.WithLabelValues(string(perm), outcome).Inc()
+}
+
+// observeAPISessionRequest records one apiGuard outcome (WL-REQ-1307).
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeAPISessionRequest(outcome string) {
+	if s.apiSessionRequests == nil {
+		return
+	}
+	s.apiSessionRequests.WithLabelValues(outcome).Inc()
 }
 
 // approvalDecisionKinds and approvalDecisionOutcomes are the bounded label

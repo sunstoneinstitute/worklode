@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -144,7 +145,8 @@ func TestReportMergeValidation(t *testing.T) {
 
 func TestReportMergeRequiresAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	rr := doReq(t, h, "POST", "/api/v1/merges", "", map[string]any{
 		"repo": "acme/app", "sha": "abc1234", "tasks": []string{"WL-1"},
 	})

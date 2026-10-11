@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/api"
 )
 
 // mapRepo creates a project and maps a repo to it.
@@ -74,7 +76,8 @@ func TestResolveRemoteInvalid(t *testing.T) {
 
 func TestResolveRemoteRequiresAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	rec := doReq(t, h, http.MethodGet,
 		"/api/v1/projects/resolve?remote=a%2Fb", "", nil)
 	if rec.Code != http.StatusUnauthorized {

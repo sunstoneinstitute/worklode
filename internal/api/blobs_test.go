@@ -174,7 +174,12 @@ func TestUploadBlobUnconfigured(t *testing.T) {
 
 func TestUploadBlobUnauthorized(t *testing.T) {
 	t.Parallel()
-	_, h, _, _ := newTestServerBlobs(t)
+	// A closed instance, not newTestServerBlobs: WL-1115 gives a non-bearer
+	// /api/v1 request the open subject on a WebOpen instance, and the blob
+	// route takes the same posture (eitherGuard) — this test is about having
+	// no credential at all, which TestServeBlobRefusedOnClosedInstance's
+	// fixture shape already covers for the closed case.
+	_, h, _ := newTestServerWithConfig(t, api.Config{BlobStoreForTest: blobstore.NewFake()})
 	rec := postBlob(t, h, "", "", pngBytes)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
