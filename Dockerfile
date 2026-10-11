@@ -1,6 +1,21 @@
 # Multi-stage build: compile the static lode binary, then ship it on a minimal,
 # non-root distroless base with no shell and no package manager.
 
+# Builds the SPA ahead of the Go build, so the server image embeds the real
+# dist/ output (WL-REQ-1310 §9) instead of the placeholder index.html checked
+# into internal/webapp/dist/.
+FROM node:24-bookworm-slim AS web
+WORKDIR /src/web/app
+RUN corepack enable pnpm
+# pnpm-workspace.yaml must come along with the lockfile: it carries the
+# allowBuilds approvals pnpm needs before it will run the postinstall
+# scripts for es5-ext, msw and ttf2woff2 (WL-PLAN-147 gap).
+COPY web/app/package.json web/app/pnpm-lock.yaml web/app/pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+COPY web/app/ ./
+RUN pnpm build
+
 FROM golang:1.27 AS build
 WORKDIR /src
 
@@ -12,6 +27,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 COPY . .
+# After COPY . ., so the real build output wins over the placeholder
+# internal/webapp/dist/index.html and go:embed picks up the SPA.
+COPY --from=web /src/internal/webapp/dist ./internal/webapp/dist
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /lode-server ./cmd/lode-server && \

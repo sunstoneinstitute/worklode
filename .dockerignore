@@ -1,6 +1,9 @@
-# Keep the build context to what the Go build needs.
+# Keep the build context to what the Go build and the web build need.
 .git
 data/
 *.db
 docs/
 README.md
+# Reinstalled in the web stage; a locally installed copy would bloat the
+# context and risk shadowing the frozen-lockfile install.
+web/app/node_modules
