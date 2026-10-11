@@ -36,12 +36,8 @@ type routeGuard struct {
 	// path's {id} is the bound task (taskScopeBound), or call it freely
 	// (taskScopeAny, for the worker surface that carries no task id).
 	taskScope taskScope
-	// optional marks an entry some deployment configurations never register
-	// at all — not every entry in this table applies to every boot. Today
-	// this is exactly one row: the SPA's "GET /" catch-all, registered only
-	// when LODE_LEGACY_URL splits the public host from the cockpit
-	// (WL-REQ-1304, registerSPA). unusedGuards does not flag it as dead
-	// policy on a boot where it legitimately never registers.
+	// optional exempts an entry from unusedGuards, for a route only some
+	// configurations register.
 	optional bool
 }
 
@@ -75,8 +71,7 @@ func guardedAny(perm Permission) routeGuard {
 // actor.
 func open(why string) routeGuard { return routeGuard{perm: permPublic, public: why} }
 
-// guardedOptional is guarded, exempted from checkComplete's "every entry
-// used" check: see routeGuard.optional.
+// guardedOptional is guarded for a route not every boot registers.
 func guardedOptional(perm Permission) routeGuard {
 	return routeGuard{perm: perm, optional: true}
 }
@@ -91,12 +86,8 @@ func guardedOptional(perm Permission) routeGuard {
 var routeGuards = map[string]routeGuard{
 	// --- web UI (WL-SPEC-82) ---------------------------------------------------
 	"GET /{$}": guarded(permWebRead),
-	// The SPA's shell on the public host (WL-REQ-1304): the catch-all behind
-	// everything registerAPI and registerSPA's own /assets/ route don't claim
-	// more specifically. Only registered when LODE_LEGACY_URL splits the two
-	// hosts (see registerSPA) — guardedOptional, not guarded, because a
-	// single-host boot (WL-REQ-1303: "serves no SPA" when LODE_LEGACY_URL is
-	// unset) never registers it at all.
+	// The SPA shell, the public host's catch-all (WL-REQ-1304). Registered
+	// only when LODE_LEGACY_URL is set (WL-REQ-1303).
 	"GET /": guardedOptional(permWebRead),
 	// The Morning Brief's one write (WL-REQ-346): advancing the actor's review
 	// boundary. requireSession, applied at registration like the decide

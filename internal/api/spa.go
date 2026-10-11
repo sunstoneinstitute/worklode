@@ -1,7 +1,4 @@
-// spa.go serves the embedded SPA on the public host (WL-REQ-1304), once
-// LODE_LEGACY_URL splits it from the templ cockpit kept on the legacy host
-// (see registerCockpit, router.go's "GET /" comment). Only registerRoutes
-// calls registerSPA, and only in the two-host case.
+// spa.go serves the embedded SPA on the public host (WL-REQ-1304).
 package api
 
 import (
@@ -26,17 +23,12 @@ func (s *server) registerSPA(r *router) {
 	r.web("GET /", s.spaShell)
 }
 
-// spaAssetHandler serves the SPA's content-hashed build output under
-// /assets/ (WL-REQ-1304): immutable caching, since the filename changes
-// whenever the content does, and a missing file is a plain 404 — never
-// index.html, unlike the shell's catch-all below.
+// spaAssetHandler serves the content-hashed build output, immutable. A
+// missing file is a 404, never index.html.
 func (s *server) spaAssetHandler() http.Handler {
 	assets, err := fs.Sub(s.spaFS(), "assets")
 	if err != nil {
-		// Unreachable in practice: "assets" is a valid fs.ValidPath name, so
-		// Sub only fails on a malformed root, and webapp.FS() already panics
-		// on that at embed time.
-		panic(err)
+		panic(err) // "assets" is a valid path; Sub cannot fail
 	}
 	fileServer := http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,15 +43,11 @@ func (s *server) spaAssetHandler() http.Handler {
 	})
 }
 
-// spaShell handles GET / on the public host: the SPA's single entry point.
-// Every path answers index.html in this task; a later task adds the
-// redirect for paths the SPA does not own (recording spaRedirect /
-// spaNotFound then).
+// spaShell answers every path with index.html.
 func (s *server) spaShell(w http.ResponseWriter, r *http.Request) {
 	b, err := fs.ReadFile(s.spaFS(), "index.html")
 	if err != nil {
-		// dist/index.html is committed (the placeholder, or a real build);
-		// an unreadable embed is a broken deploy, not a modeled SPA outcome.
+		// dist/index.html is committed, so this is a broken build.
 		s.log.Error("spa shell: index.html unreadable", "err", err)
 		webErr(w, http.StatusInternalServerError, "internal error")
 		return
