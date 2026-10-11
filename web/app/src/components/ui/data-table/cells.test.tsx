@@ -100,9 +100,16 @@ describe("DateCell", () => {
   })
 
   it("calls onChange with an ISO date when a day is picked", async () => {
+    // The calendar opens on the current month, not the selected value's
+    // month, so the value and the expectation are both derived from today
+    // rather than a fixed month — otherwise the "22" button picked belongs
+    // to whatever month the test happens to run in.
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, "0")
     const user = userEvent.setup()
     const onChange = vi.fn()
-    render(<DateCell value="2026-09-15" onChange={onChange} />)
+    render(<DateCell value={`${year}-${month}-15`} onChange={onChange} />)
 
     await user.click(screen.getByRole("button"))
     // React-day-picker v10 renders calendar days in a grid structure
@@ -111,7 +118,7 @@ describe("DateCell", () => {
     const day22Button = dayButtons.find(btn => btn.textContent?.trim() === "22")
     if (day22Button) await user.click(day22Button)
 
-    expect(onChange).toHaveBeenCalledWith("2026-09-22")
+    expect(onChange).toHaveBeenCalledWith(`${year}-${month}-22`)
   })
 })
 
