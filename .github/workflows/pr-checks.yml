@@ -178,6 +178,13 @@ jobs:
       # self-hosted alone.
       runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["self-hosted","gha-buildcache"]' || '["ubuntu-latest"]' }}
 
+  webapp:
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
+    uses: ./.github/workflows/_webapp.yml
+    with:
+      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["self-hosted","gha-buildcache"]' || '["ubuntu-latest"]' }}
+
   test:
     needs: gate
     if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
@@ -269,7 +276,7 @@ jobs:
   # one of them never reports; this job always runs, and passes when every
   # job it needs either succeeded or was skipped by its own `if:`.
   checks:
-    needs: [gate, lint, test, build-image, validate-kustomize, spec-gate]
+    needs: [gate, lint, webapp, test, build-image, validate-kustomize, spec-gate]
     if: always()
     # Needs only jq. An untrusted or failed gate leaves `trusted` unset, which
     # falls back to ubuntu-latest.
