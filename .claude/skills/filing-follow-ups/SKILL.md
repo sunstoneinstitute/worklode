@@ -35,7 +35,7 @@ step 2 even when the fix looks easy.
 lode task add --title "<the defect, not the area>" --kind bug --priority high \
   --follow-up-to "$(lode work status --json | jq -r .task.id)" \
   --body-file - <<'EOF'
-What is wrong, where it lives (file:line, spec §), what was ruled out, and why
+What is wrong, where it lives (file:line, rule ref), what was ruled out, and why
 it was deferred rather than fixed here.
 EOF
 ```

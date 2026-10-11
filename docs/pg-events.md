@@ -12,7 +12,7 @@ routes, both reading the same `events` table:
 - `GET /api/v1/events/stream`, the admin log follow, handled by `streamEvents`
   (`internal/api/eventstream.go:76`).
 - `GET /projects/{id}/progress/events`, the Progress page's live follow
-  (WL-SPEC-66 §5.1), handled by `progressEvents`
+  (WL-REQ-1339), handled by `progressEvents`
   (`internal/api/progress.go:610`).
 
 Both are pollers rather than Postgres `LISTEN`/`NOTIFY` listeners, and that is
