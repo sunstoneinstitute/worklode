@@ -1,4 +1,4 @@
--- Documents in the backbone (docs/specs/025-documents-in-the-backbone.md §5).
+-- Documents in the backbone (WL-REQ-164).
 --
 -- Replaces the git→backbone sync on-ramp's tables from 0011_docs and
 -- 0012_doc_edges_covers. That subsystem (WL-SPEC-77, superseded) projected files

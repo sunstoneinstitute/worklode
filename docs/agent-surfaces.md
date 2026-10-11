@@ -60,7 +60,7 @@ last checked against; bump the stamp whenever you touch it.
 `lode-hook <event>` and `lode-statusline`. The old subcommand spellings were
 removed with the WL-319 shim cleanup; `lode install` still recognises them in
 existing settings files so upgrades replace pre-split bindings. For Claude
-Code, install also points the OTel log exporter at Worklode (WL-SPEC-71 §5):
+Code, install also points the OTel log exporter at Worklode (WL-REQ-1726):
 when a server URL resolves, it sets the three `OTEL_*_LOGS_*` env keys and
 Claude Code's top-level `otelHeadersHelper` setting to `lode-hook
 otel-headers`, the credential helper that supplies the bearer token.
@@ -151,8 +151,8 @@ skill): the inline `> **Amended by spec NNN.**` note next to the heading, and
 a `lode rule link <renaming rule> --amends <renamed rule>` edge. A section that
 merely mentions a command in passing gets nothing.
 
-The current surface is `lode --help`, the generated command catalog, and 061
-§2.5. No spec is a substitute for any of the three.
+The current surface is `lode --help`, the generated command catalog, and
+WL-REQ-306. No spec is a substitute for any of the three.
 
 Rule refs follow the same rule. A rule is a `requirement` or `catalogue` (a
 plan builds it), an `invariant` (it binds every task in its project), a

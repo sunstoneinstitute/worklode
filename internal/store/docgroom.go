@@ -119,8 +119,8 @@ func (s *Store) RecordPlansStale(n int) {
 	}
 }
 
-// StalePlanSlug is the slug of plan document planDoc when it is stale (WL-SPEC-77
-// §10), and "" when it is not, when the document is gone, or when planDoc is
+// StalePlanSlug is the slug of plan document planDoc when it is stale (WL-REQ-171),
+// and "" when it is not, when the document is gone, or when planDoc is
 // 0. It is the claim-time flag: a task minted from a plan whose spec has been
 // amended since carries text that may predate the amendment, which the claim
 // response and the brief say and neither refuses.
@@ -244,8 +244,8 @@ func (s *Store) UnresolvedDocs(ctx context.Context, project, kind string, olderT
 	return collectRows(rows, "list unresolved docs", byValue(scanDoc))
 }
 
-// WithdrawDoc takes an accepted or stale document out of the corpus (WL-SPEC-77
-// §9): the close verb a grooming pass needs when a document will not be
+// WithdrawDoc takes an accepted or stale document out of the corpus (WL-REQ-170):
+// the close verb a grooming pass needs when a document will not be
 // executed and nothing replaces it. It is what makes 100% resolution
 // reachable — every accepted document ends up executed, superseded or
 // withdrawn.
@@ -267,7 +267,7 @@ func WithdrawDoc(tx *sql.Tx, now time.Time, id, eventID int64) (*model.Doc, erro
 	}
 	if d.status != "accepted" && d.status != "stale" {
 		return nil, fmt.Errorf(
-			"doc %d is %s; only an accepted or stale document can be withdrawn (WL-SPEC-77 §9): %w",
+			"doc %d is %s; only an accepted or stale document can be withdrawn (WL-REQ-170): %w",
 			id, d.status, ErrBadTransition)
 	}
 	// A withdrawn plan closes without executing the rest of its arrangement,

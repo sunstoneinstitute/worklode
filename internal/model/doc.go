@@ -60,10 +60,10 @@ type Doc struct {
 	// every row would turn a corpus-wide list into an N+1 query for a field
 	// almost nothing there needs.
 	Reviewers []string `json:"reviewers,omitempty"`
-	// ReviewersAwaiting is the subset of Reviewers who have not yet approved
-	// (or requested changes on) this document's current version — §7.3's
-	// "who still owes a review on this document" as a query. Same
-	// GetDoc-only population as Reviewers.
+	// ReviewersAwaiting is the subset of Reviewers who have not yet
+	// approved (or requested changes on) this document's current version —
+	// WL-REQ-1658's "who still owes a review on this document" as a query.
+	// Same GetDoc-only population as Reviewers.
 	ReviewersAwaiting []string `json:"reviewers_awaiting,omitempty"`
 	// Warnings are advisories about this write, never stored — e.g. a plan
 	// body over the soft token budget (S6, S19). Set only by the handler
@@ -384,12 +384,12 @@ type DocColumnsInput struct {
 // WL-REQ-171 in-place amendment of an accepted spec or ADR. Body is the whole
 // markdown source, headerless like UpdateDocBodyInput's.
 //
-// Substantive is the caller's own judgment (§8.3 leaves it to them once the
-// mechanical rules pass): true reopens the document's reviewers on the new
+// Substantive is the caller's own judgment (WL-REQ-1666 leaves it to them once
+// the mechanical rules pass): true reopens the document's reviewers on the new
 // version, false requires Note — what changed and why — which lands as an
 // anchored note. Task and Session are filled by the CLI from the worktree it
-// stands in, the way AddDocNoteInput's are; Task also names the plan whose
-// own tasks do not block the amendment.
+// stands in, the way AddDocNoteInput's are; Task also names the plan whose own
+// tasks do not block the amendment.
 //
 // IfVersion is the same optional compare-and-swap UpdateDocBodyInput carries.
 type PatchDocInput struct {
@@ -408,8 +408,8 @@ type PatchDocInput struct {
 //
 // UnexecutedCoveringPlans is informational and never blocking: accepted plans
 // covering a changed section that nobody has claimed work from yet. They state
-// an intention against text that just moved, which is §8.6's stale-marking
-// business rather than this patch's.
+// an intention against text that just moved, which is WL-REQ-1664's
+// stale-marking business rather than this patch's.
 type DocPatchResult struct {
 	ChangedAnchors          []string `json:"changed_anchors"`
 	Classification          string   `json:"classification"`

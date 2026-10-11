@@ -94,7 +94,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"result"}),
 		docGroomRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_groom_runs_total",
-			Help: "Stale-doc sweeper runs (WL-SPEC-77 §9) by outcome.",
+			Help: "Stale-doc sweeper runs (WL-REQ-170) by outcome.",
 		}, []string{"outcome"}),
 		activityPurgeRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_activity_purge_runs_total",
@@ -102,7 +102,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docsStaleEmitted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_docs_stale_emitted_total",
-			Help: "doc.stale events emitted by the §8.7 idle sweeper.",
+			Help: "doc.stale events emitted by the WL-REQ-170 idle sweeper.",
 		}),
 		projectWorkReads: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_project_work_reads_total",
@@ -110,15 +110,15 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document operations by op (create|update|patch|stale|accept|submit|revise|discard|withdraw|edges|resolve|note|delete|undelete|list-versions|get-version|arrange|unarrange) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (WL-SPEC-77 §9), or refused-mechanical|no-reviewers for patch's gate (WL-SPEC-77 §10)).",
+			Help: "Design-document operations by op (create|update|patch|stale|accept|submit|revise|discard|withdraw|edges|resolve|note|delete|undelete|list-versions|get-version|arrange|unarrange) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (WL-REQ-170), or refused-mechanical|no-reviewers for patch's gate (WL-REQ-171)).",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",
-			Help: "Tasks minted across all plan-document accepts (WL-SPEC-77 §11.2).",
+			Help: "Tasks minted across all plan-document accepts (WL-REQ-174).",
 		}),
 		skillAmbiguous: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_skill_name_ambiguous_total",
-			Help: "Bare skill-name lookups matching more than one qualified skill (WL-SPEC-81 §7.4).",
+			Help: "Bare skill-name lookups matching more than one qualified skill (WL-REQ-321).",
 		}),
 		instructions: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_task_instructions_total",
@@ -156,19 +156,19 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		escalations: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_task_escalations_total",
-			Help: "Task escalations by outcome (minted|joined|error) — WL-SPEC-77 §10's ladder, §15.5's funnel.",
+			Help: "Task escalations by outcome (minted|joined|error) — the escalation ladder (WL-REQ-171).",
 		}, []string{"outcome"}),
 		gaps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_task_gaps_total",
-			Help: "task.gap_found calls by outcome (recorded|replayed|error) — WL-SPEC-75 §9.6's funnel, the ladder's non-escalating rung.",
+			Help: "task.gap_found calls by outcome (recorded|replayed|error) — the ladder's non-escalating rung (WL-REQ-108).",
 		}, []string{"outcome"}),
 		fixes: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_task_fixes_total",
-			Help: "fix.started/fix.finished calls by phase (started|finished) and outcome (recorded|replayed|error) — WL-SPEC-75 §9.6's funnel.",
+			Help: "fix.started/fix.finished calls by phase (started|finished) and outcome (recorded|replayed|error) (WL-REQ-108).",
 		}, []string{"phase", "outcome"}),
 		termResolves: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_term_resolutions_total",
-			Help: "Term resolutions (WL-SPEC-77 §4d) by outcome (project|instance|not_found|error).",
+			Help: "Term resolutions (WL-REQ-1368) by outcome (project|instance|not_found|error).",
 		}, []string{"outcome"}),
 		ruleSupersedes: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_rule_supersede_total",
@@ -176,16 +176,16 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		ruleClosureSize: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "worklode_rule_closure_size",
-			Help:    "Rules in a context closure read (WL-SPEC-77 §4c), the rule itself included.",
+			Help:    "Rules in a context closure read (WL-REQ-1367), the rule itself included.",
 			Buckets: []float64{1, 2, 4, 8, 16, 32, 64, 128},
 		}),
 		ruleLints: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_rule_lint_total",
-			Help: "Corpus lint runs (lode rule lint, WL-SPEC-77 §4c) by outcome (clean|findings|error).",
+			Help: "Corpus lint runs (lode rule lint, WL-REQ-1367) by outcome (clean|findings|error).",
 		}, []string{"outcome"}),
 		ruleOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_rule_ops_total",
-			Help: "Standalone rule writes (WL-SPEC-77 §19.2) by op (add|edit|accept) and outcome (ok|invalid|not_found|forbidden|conflict|error).",
+			Help: "Standalone rule writes (WL-REQ-1296) by op (add|edit|accept) and outcome (ok|invalid|not_found|forbidden|conflict|error).",
 		}, []string{"op", "outcome"}),
 		// Query counters rather than a histogram: the question these answer
 		// is which store function the database time is going to, and

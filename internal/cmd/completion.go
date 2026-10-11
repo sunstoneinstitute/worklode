@@ -102,7 +102,7 @@ func taskIDs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Comp
 	}
 	// Sort the tasks, not the candidate strings: model.CompareTaskIDs parses
 	// a bare id's numeric suffix, and a candidate already carries a
-	// tab-joined title by the time it would be sorted (WL-REQ-307 vs. §3 C3).
+	// tab-joined title by the time it would be sorted (WL-REQ-307, C3).
 	slices.SortFunc(tasks, func(a, b model.Task) int {
 		return model.CompareTaskIDs(a.ID, b.ID)
 	})

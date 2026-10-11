@@ -22,9 +22,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	listen := fs.String("listen", ":8080", "address for the public app server (web UI, API, webhooks)")
 	admin := fs.String("admin-listen", ":9090", "address for the admin server (/healthz, /metrics)")
 	docDepth := fs.String("doc-depth-limit", os.Getenv("LODE_DOC_DEPTH_LIMIT"),
-		"deepest addressable anchored section in a document (WL-SPEC-77 §4); defaults to $LODE_DOC_DEPTH_LIMIT, then 3")
+		"deepest addressable anchored section in a document (WL-REQ-1636); defaults to $LODE_DOC_DEPTH_LIMIT, then 3")
 	glossary := fs.String("glossary-project", os.Getenv("LODE_GLOSSARY_PROJECT"),
-		"project id whose glossary spec is the instance glossary (WL-SPEC-77 §4d); defaults to $LODE_GLOSSARY_PROJECT, unset means none")
+		"project id whose glossary spec is the instance glossary (WL-REQ-1368); defaults to $LODE_GLOSSARY_PROJECT, unset means none")
 	version := fs.Bool("version", false, "print version")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {

@@ -110,15 +110,15 @@ func edgeRefFromInput(in model.DocEdgeInput) (docEdgeRef, error) {
 	typ := strings.TrimSpace(in.Type)
 	if acting, ok := designdoc.InverseOf[typ]; ok {
 		return docEdgeRef{}, fmt.Errorf(
-			"edge type %s is an inverse and is not stored: declare it on the other document as %s (WL-SPEC-77 §8.1): %w",
+			"edge type %s is an inverse and is not stored: declare it on the other document as %s (WL-REQ-1288): %w",
 			typ, acting, ErrInvalidInput)
 	}
 	if !slices.Contains(ns.DeclaredEdges("doc_edges"), typ) {
-		return docEdgeRef{}, fmt.Errorf("edge type %q is not a document edge type; use %s (WL-SPEC-77 §8.1): %w",
+		return docEdgeRef{}, fmt.Errorf("edge type %q is not a document edge type; use %s (WL-REQ-1288): %w",
 			typ, ns.OrList(designdoc.StoredRels), ErrInvalidInput)
 	}
 	if !slices.Contains(designdoc.StoredRels, typ) {
-		return docEdgeRef{}, fmt.Errorf("edge type %s has no writer (WL-SPEC-77 §8); use %s: %w",
+		return docEdgeRef{}, fmt.Errorf("edge type %s has no writer (WL-REQ-169); use %s: %w",
 			typ, ns.OrList(designdoc.StoredRels), ErrInvalidInput)
 	}
 	e := docEdgeRef{
@@ -131,7 +131,7 @@ func edgeRefFromInput(in model.DocEdgeInput) (docEdgeRef, error) {
 		return docEdgeRef{}, fmt.Errorf("a %s edge names its target: %w", typ, ErrInvalidInput)
 	}
 	if typ != "defers" && e.owner != "" {
-		return docEdgeRef{}, fmt.Errorf("owner belongs to a defers edge, not %s (WL-SPEC-77 §8): %w", typ, ErrInvalidInput)
+		return docEdgeRef{}, fmt.Errorf("owner belongs to a defers edge, not %s (WL-REQ-169): %w", typ, ErrInvalidInput)
 	}
 	return e, nil
 }
@@ -287,27 +287,27 @@ func writeEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Fro
 	if fm != nil {
 		if len(fm.Blocks) > 0 {
 			return fmt.Errorf(
-				"doc %d carries blocks, which is not stored: declare the ordering on the later plan as blockedBy (WL-SPEC-77 §8): %w",
+				"doc %d carries blocks, which is not stored: declare the ordering on the later plan as blockedBy (WL-REQ-169): %w",
 				docID, ErrInvalidInput)
 		}
 		if len(fm.IsRequiredBy) > 0 {
 			return fmt.Errorf(
-				"doc %d carries isRequiredBy, which is not stored: declare it on the other document as requires (WL-SPEC-77 §8): %w",
+				"doc %d carries isRequiredBy, which is not stored: declare it on the other document as requires (WL-REQ-169): %w",
 				docID, ErrInvalidInput)
 		}
 		if fm.Covers != nil && fm.Implements != nil {
 			return fmt.Errorf(
-				"doc %d carries both covers and implements, which are one key under two names (WL-SPEC-77 §8): %w",
+				"doc %d carries both covers and implements, which are one key under two names (WL-REQ-169): %w",
 				docID, ErrInvalidInput)
 		}
 		for i, c := range fm.CoverageEntries() {
 			if strings.TrimSpace(c.Spec) == "" {
-				return fmt.Errorf("doc %d covers[%d] names no spec (WL-SPEC-77 §8): %w",
+				return fmt.Errorf("doc %d covers[%d] names no spec (WL-REQ-169): %w",
 					docID, i, ErrInvalidInput)
 			}
 			if !c.Plain() {
 				return fmt.Errorf(
-					"doc %d covers %q is not a plain reference: coverage levels are retired, a covers entry means the plan builds the whole rule (WL-SPEC-78 §4.1, §4.5): %w",
+					"doc %d covers %q is not a plain reference: coverage levels are retired, a covers entry means the plan builds the whole rule (WL-REQ-203, WL-REQ-207): %w",
 					docID, c.Spec, ErrInvalidInput)
 			}
 		}
@@ -395,21 +395,21 @@ func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
 	var owner *ownerRef
 	if e.typ == "defers" {
 		if kind != "plan" {
-			return nil, nil, fmt.Errorf("doc %d defers %q, but defers is plan-only and doc %d is a %s (WL-SPEC-77 §8): %w",
+			return nil, nil, fmt.Errorf("doc %d defers %q, but defers is plan-only and doc %d is a %s (WL-REQ-169): %w",
 				docID, e.ref, docID, kind, ErrInvalidInput)
 		}
 		if fragment == "" {
 			return nil, nil, fmt.Errorf(
-				"doc %d defers %q with no #sec-N fragment: defers is section-scoped, unlike covers (WL-SPEC-77 §8): %w",
+				"doc %d defers %q with no #sec-N fragment: defers is section-scoped, unlike covers (WL-REQ-169): %w",
 				docID, e.ref, ErrInvalidInput)
 		}
 		if strings.TrimSpace(e.owner) == "" {
-			return nil, nil, fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (WL-SPEC-77 §8): %w",
+			return nil, nil, fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (WL-REQ-169): %w",
 				docID, e.ref, ErrInvalidInput)
 		}
 		if _, ownerFragment := designdoc.SplitFragment(e.owner); ownerFragment != "" {
 			return nil, nil, fmt.Errorf(
-				"doc %d defers %q to %q: the owner is a document, no fragment (WL-SPEC-77 §8): %w",
+				"doc %d defers %q to %q: the owner is a document, no fragment (WL-REQ-169): %w",
 				docID, e.ref, e.owner, ErrInvalidInput)
 		}
 		o, err := resolveOwner(tx, project, e.owner)
@@ -418,13 +418,13 @@ func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
 		}
 		if o.toDoc == docID {
 			return nil, nil, fmt.Errorf(
-				"doc %d defers %q to itself: a plan cannot defer a section to itself (WL-SPEC-77 §8): %w",
+				"doc %d defers %q to itself: a plan cannot defer a section to itself (WL-REQ-169): %w",
 				docID, e.ref, ErrInvalidInput)
 		}
 		owner = &o
 	}
 	if e.typ == "covers" && kind != "plan" {
-		return nil, nil, fmt.Errorf("doc %d covers %q, but covers is plan-only and doc %d is a %s (WL-SPEC-77 §8): %w",
+		return nil, nil, fmt.Errorf("doc %d covers %q, but covers is plan-only and doc %d is a %s (WL-REQ-169): %w",
 			docID, e.ref, docID, kind, ErrInvalidInput)
 	}
 
@@ -463,7 +463,7 @@ func resolveEdgeRef(tx *sql.Tx, docID int64, kind, project string, e docEdgeRef,
 func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, owner *ownerRef, seen map[docEdgeRow]*ownerRef, candidate bool) error {
 	if prior, ok := seen[row]; ok {
 		if e.typ == "defers" && *prior != *owner {
-			return fmt.Errorf("doc %d defers %q twice, deferred to two different owners (WL-SPEC-77 §8): %w",
+			return fmt.Errorf("doc %d defers %q twice, deferred to two different owners (WL-REQ-169): %w",
 				docID, e.ref, ErrInvalidInput)
 		}
 		return nil
@@ -944,8 +944,8 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 	return out, nil
 }
 
-// docEdgeInverse names the reading of each edge type from the far end (WL-SPEC-77
-// §7): one row carries both directions, so an inbound edge is the stored row
+// docEdgeInverse names the reading of each edge type from the far end:
+// one row carries both directions, so an inbound edge is the stored row
 // relabelled rather than a second row that could disagree. Every type in the
 // doc_edges CHECK has an entry; ListDocEdges refuses a type that does not,
 // because emitting the forward name would state the relation backwards.

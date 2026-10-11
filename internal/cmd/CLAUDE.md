@@ -15,7 +15,7 @@ picks the targets, calls one of them, and reports the result.
 
 ## Naming
 
-Every command name follows one of nine rules (`WL-SPEC-81` §1 has the
+Every command name follows one of nine rules (WL-REQ-305 has the
 reasoning). L1–L3, L5, L7–L9 are enforced by
 `internal/cmd/namerule_test.go`; L4 ("verbs are imperative verbs") and L6
 ("named views are nouns, never verbs") are enforced by review — a test cannot
@@ -42,9 +42,9 @@ tell an adjective from a verb or a view from an action.
   `request`, `pack`, `note`, `escalate`, `gap`, `fix`, `withdraw`, `report`,
   `check`, `supersede`, `arrange`.
 - **L4** — Verbs are imperative verbs. No adjectives: `task ready` becomes
-  `task publish`. No hyphenated verbs, with exceptions named in WL-SPEC-81
-  §5 allowlist. `set` is a verb like any other: the field it writes is an
-  argument, not part of its name.
+  `task publish`. No hyphenated verbs, with exceptions named in the
+  WL-REQ-308 allowlist. `set` is a verb like any other: the field it writes
+  is an argument, not part of its name.
 - **L5** — Inverses take `un-` on the forward verb: `block`/`unblock`,
   `assign`/`unassign`, `delete`/`undelete`, `install`/`uninstall`.
 - **L6** — Named views are nouns, never verbs. A read-only projection over one

@@ -3,7 +3,7 @@
 // into model.ProjectProgress by internal/progress, rendered by ui.Progress.
 // Nothing is stored and nothing is cached — every state on the page is
 // recomputed per request, so it can never disagree with the run board or
-// `lode doc todo` (§1).
+// `lode doc todo` (WL-REQ-1334).
 package api
 
 import (
@@ -65,7 +65,7 @@ func (s *server) progressPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // progressRowFragment handles GET /projects/{id}/progress/spec/{doc}: one
-// spec's row and detail block (§5.2), from a ProjectProgress read narrowed
+// spec's row and detail block (WL-REQ-1787), from a ProjectProgress read narrowed
 // to that spec so a fragment does not read the whole project. The group and
 // next act still derive from that spec's own covering plans, exactly as the
 // full page computes them — only the read is smaller. 404 for a doc that is
@@ -117,7 +117,7 @@ func progressDerivedSpec(p model.ProjectProgress, doc int64) (model.ProgressSpec
 
 // progressSummaryFragment handles GET /projects/{id}/progress/summary: the
 // rally band, the four group counts, the section bar and legend, and the
-// footer's content (§5.2) — everything the page draws outside the spec
+// footer's content (WL-REQ-1787) — everything the page draws outside the spec
 // groups themselves. These facts are project-wide, not one spec's, so the
 // read is the same unfiltered ProjectProgress the full page runs; a project
 // with no spec 404s the same way the page does.
@@ -188,7 +188,7 @@ func (s *server) getProjectProgress(w http.ResponseWriter, r *http.Request) {
 
 // --- writes (WL-REQ-1337) -------------------------------------------------
 
-// progressAccept handles POST /projects/{id}/progress/accept (§3.2). It
+// progressAccept handles POST /projects/{id}/progress/accept (WL-REQ-1783). It
 // performs exactly what POST /api/v1/docs/{id}/accept performs — the same
 // typed event, the same store.AcceptDoc — so the owner gate (WL-REQ-170) and, for
 // a plan, minting its tasks in the same transaction (WL-REQ-174) are the
@@ -197,7 +197,7 @@ func (s *server) getProjectProgress(w http.ResponseWriter, r *http.Request) {
 // Two refusals are the route's own. A document of another project is a 404:
 // the route is project-scoped, whatever the caller may do with that document
 // elsewhere. A document that is not draft is a 409, because draft is the
-// state the button is offered on (§3.2) and a plan is otherwise re-acceptable
+// state the button is offered on (WL-REQ-1783) and a plan is otherwise re-acceptable
 // while accepted, which would turn a stale page's second click into a silent
 // no-op reported as success. Neither discloses anything the viewer did not
 // just read off the page.
@@ -230,7 +230,7 @@ func (s *server) progressAccept(w http.ResponseWriter, r *http.Request) {
 	switch {
 	// The backbone refused the state, not the actor: the depth gate, a plan
 	// that will not parse, or a document that left draft between the check
-	// above and the row lock. §4.2 rule 4 makes that a 409 here rather than
+	// above and the row lock. WL-REQ-1338 rule 4 makes that a 409 here rather than
 	// mapStoreErr's 422, which on this route means a malformed body.
 	case errors.Is(err, store.ErrInvalidInput):
 		s.observeProgressWrite("accept", "conflict")
@@ -242,7 +242,7 @@ func (s *server) progressAccept(w http.ResponseWriter, r *http.Request) {
 		// Someone else accepted this document at this version while the
 		// request was in flight, so nothing was applied here. Reporting it as
 		// a success would credit this actor with an accept the owner gate
-		// never admitted (§4.2 rule 7).
+		// never admitted (WL-REQ-1338 rule 7).
 		s.observeProgressWrite("accept", "conflict")
 		writeErr(w, http.StatusConflict, fmt.Sprintf("doc %d was already accepted", doc.ID))
 	default:
@@ -265,14 +265,14 @@ func progressWriteOutcome(err error) string {
 	return "error"
 }
 
-// progressPlan handles POST /projects/{id}/progress/plan (§3.4): mint the
+// progressPlan handles POST /projects/{id}/progress/plan (WL-REQ-1783): mint the
 // planning task for a spec, the same task WL-RULE-179 mints when the spec is
 // accepted. Title and guard come from internal/watcher, so a task minted
 // here and one minted on acceptance are the same thing.
 //
 // The guard runs before anything else: an open design task about the spec is
 // returned as the answer, with existing true, so a second click on a stale
-// page mints nothing (§4.2 rule 7). Only then does the route check what the
+// page mints nothing (WL-REQ-1338 rule 7). Only then does the route check what the
 // button is offered on — an unplanned section — and refuse a spec that has
 // none with a 409.
 func (s *server) progressPlan(w http.ResponseWriter, r *http.Request) {
@@ -361,7 +361,7 @@ func (s *server) progressSpec(ctx context.Context, projectID string, doc int64) 
 }
 
 // specHasUnplannedSection reports whether the spec still has a section no
-// plan covers (§1.2) — §3.4's condition for offering the Plan button.
+// plan covers (WL-REQ-1335) — WL-REQ-1783's condition for offering the Plan button.
 func (s *server) specHasUnplannedSection(ctx context.Context, projectID string, doc int64) (bool, error) {
 	spec, err := s.progressSpec(ctx, projectID, doc)
 	if err != nil || spec == nil {
@@ -376,7 +376,7 @@ func (s *server) specHasUnplannedSection(ctx context.Context, projectID string, 
 }
 
 // mintPlanningTask creates WL-RULE-179's planning task about doc inside tx —
-// §3.4's act. Title and body come from internal/watcher, so a task minted
+// WL-REQ-1783's act. Title and body come from internal/watcher, so a task minted
 // here, one minted by the Plan button, and one minted when the spec was
 // accepted are all the same thing. The caller guards with OpenTaskForDoc
 // first; this mints unconditionally.
@@ -409,7 +409,7 @@ func (s *server) mintPlanningTask(tx *sql.Tx, doc *model.Doc, actorID string, ev
 // the draft rally is created if the project has none, the planning task and
 // the accept prompts are minted, and every member is added. Adding is
 // set-like in the store, so a second add of the same spec reuses what the
-// first minted and answers 200 with added 0 (§4.2 rule 7).
+// first minted and answers 200 with added 0 (WL-REQ-1338 rule 7).
 func (s *server) progressRallyAdd(w http.ResponseWriter, r *http.Request) {
 	var body model.ProgressRallyAddInput
 	sub, project, ok := s.beginJSONPost(w, r, "rally/add", &body)
@@ -445,7 +445,7 @@ func (s *server) progressRallyAdd(w http.ResponseWriter, r *http.Request) {
 
 	// The one fact RallyMembers needs and the derivation does not carry: the
 	// open prompt to accept each draft plan, which is a member in its own
-	// right once it exists (§3.5 case 3).
+	// right once it exists (WL-REQ-1784).
 	facts := map[string]progress.PlanFacts{}
 	for _, p := range spec.Plans {
 		if p.State != "draft" {
@@ -514,11 +514,11 @@ func (s *server) progressRallyAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 // progressRallyConfirm handles POST /projects/{id}/progress/rally/confirm:
-// publish the draft rally, which is what WL-SPEC-75 §8a calls activation. The
+// publish the draft rally, which is what WL-REQ-99 calls activation. The
 // backbone allows one active rally per project and migration 0069's partial
 // unique index is what enforces it, so a project that already has one is
 // refused there rather than by a check here — and the refusal names the rally
-// holding the slot, which is the sentence the footer shows (§3.5).
+// holding the slot, which is the sentence the footer shows (WL-REQ-1784).
 func (s *server) progressRallyConfirm(w http.ResponseWriter, r *http.Request) {
 	s.progressRallyMove(w, r, "rally/confirm", "ready")
 }
@@ -575,7 +575,7 @@ func (s *server) progressRallyMove(w http.ResponseWriter, r *http.Request, route
 }
 
 // writeRallyConflict writes the 409 a refused Confirm gets. When the project
-// has an active rally it is named, in the sentence §3.5 puts in the footer,
+// has an active rally it is named, in the sentence WL-REQ-1784 puts in the footer,
 // so the page can say which rally holds the slot without a second read; with
 // no active rally the store's own reason stands.
 func (s *server) writeRallyConflict(ctx context.Context, w http.ResponseWriter, projectID string, cause error) {
@@ -604,7 +604,7 @@ func (s *server) writeRallyConflict(ctx context.Context, w http.ResponseWriter, 
 // nothing.
 //
 // permWebRead, not permEventStream: unlike the admin-only log follow, this
-// route is open to every cockpit reader, which §4.5 allows because a frame
+// route is open to every cockpit reader, which WL-REQ-1786 allows because a frame
 // carries nothing about a task, plan or spec that reader could not already
 // read off the page itself.
 func (s *server) progressEvents(w http.ResponseWriter, r *http.Request) {
@@ -725,7 +725,7 @@ type progressOrigin struct {
 // progressFrames resolves one poll's events into the frames this project's
 // stream sends. Every event is reduced to a touch (progress.Resolve), every
 // touch's task or document id is batched into one store.ProgressRefs call —
-// never one call per event — and a ref outside projectID is dropped (§5.1).
+// never one call per event — and a ref outside projectID is dropped (WL-REQ-1339).
 //
 // A delivery event transitions a set of tasks, so its touch names them in
 // Tasks and fans out into one frame per task, batched into the same refs
@@ -736,7 +736,7 @@ type progressOrigin struct {
 // A document named by IRI rather than row id — the typed WL-RULE-179 events,
 // whose wl:subject is the only name they carry — is resolved in one further
 // batched call before the refs read, so a submission or an acceptance on a
-// plan reaches the page as the frame §5.1 asks for.
+// plan reaches the page as the frame WL-REQ-1339 asks for.
 func (s *server) progressFrames(ctx context.Context, projectID string, events []store.Event) ([]progressFrame, error) {
 	var taskIDs []string
 	var docIDs []int64

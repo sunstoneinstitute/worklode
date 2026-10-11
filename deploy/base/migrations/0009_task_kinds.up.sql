@@ -1,4 +1,4 @@
--- Task kinds (docs/specs/025-documents-in-the-backbone.md §10): widen
+-- Task kinds (WL-REQ-176): widen
 -- the kind enum by 'review' and 'spike', the two kinds WL-SPEC-79's wlc:TaskKind
 -- has always carried and the database never accepted. No rows change; 'epic'
 -- (WL-SPEC-75) stays. After this the CHECK and wlc:TaskKind hold the same seven.

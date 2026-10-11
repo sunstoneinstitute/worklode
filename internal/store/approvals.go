@@ -822,8 +822,8 @@ func projectForApproval(tx *sql.Tx, kind, entityID string) (string, error) {
 }
 
 // SelfReviewAllowed reports whether the project's stamped flow lets the
-// author of an entity of this kind decide their own approval (WL-SPEC-75
-// §13.6). False when the entity has no project or the project no flow.
+// author of an entity of this kind decide their own approval (WL-REQ-1606).
+// False when the entity has no project or the project no flow.
 func SelfReviewAllowed(tx *sql.Tx, kind, entityID string) (bool, error) {
 	projectID, err := projectForApproval(tx, kind, entityID)
 	if err != nil || projectID == "" {
@@ -947,8 +947,8 @@ const (
 //
 // This is a display filter, not a resolution: it never marks a row decided,
 // and OpenApprovalForEntity (unfiltered, ingest-only) still finds it if a
-// late review lands. Tasks carry no review requirement by default (WL-SPEC-75
-// §13.6) — the requirement pull_request_review ingest materializes as an
+// late review lands. Tasks carry no review requirement by default
+// — the requirement pull_request_review ingest materializes as an
 // awaiting row on every task-correlated PR open, regardless of policy — so
 // a closed PR's still-awaiting row is not evidence a required sign-off was
 // skipped, only that nobody can act on it any more (WL-663).
@@ -1161,7 +1161,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 	var exists bool
 	err := s.db.QueryRowContext(ctx,
 		`SELECT EXISTS (
-			-- WL-SPEC-82 §12 bucket 1: reviews assigned to the actor
+			-- WL-REQ-1769 bucket 1: reviews assigned to the actor
 			SELECT 1 FROM approvals a
 			 LEFT JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
@@ -1170,7 +1170,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 
 			UNION ALL
 
-			-- WL-SPEC-82 §12 bucket 2: unassigned reviews in a project the actor leads
+			-- WL-REQ-1769 bucket 2: unassigned reviews in a project the actor leads
 			SELECT 1 FROM approvals a
 			 JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
 			 JOIN tasks t ON t.id = pr.task_id
@@ -1182,7 +1182,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 
 			UNION ALL
 
-			-- WL-SPEC-82 §12 bucket 3: reviews the actor owns -- they authored the PR
+			-- WL-REQ-1769 bucket 3: reviews the actor owns -- they authored the PR
 			-- and somebody else is the required reviewer
 			SELECT 1 FROM approvals a
 			 JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
@@ -1195,7 +1195,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 
 			UNION ALL
 
-			-- WL-SPEC-82 §12 buckets 4-5: active-state work assigned to or created by
+			-- WL-REQ-1769 buckets 4-5: active-state work assigned to or created by
 			-- the actor
 			SELECT 1 FROM tasks t
 			 WHERE t.deleted_at IS NULL
@@ -1204,7 +1204,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 
 			UNION ALL
 
-			-- WL-SPEC-82 §12 bucket 6: other active-state work in a project the actor
+			-- WL-REQ-1769 bucket 6: other active-state work in a project the actor
 			-- is a member of
 			SELECT 1 FROM tasks t
 			 JOIN project_participants pp
@@ -1473,8 +1473,8 @@ func SetImpactNote(tx *sql.Tx, id int64, note string) error {
 	return nil
 }
 
-// GovernedRef is one revision-bound reference a designation recorded (WL-SPEC-75
-// §13.6): an entity_edges endpoint split back into its kind, id and revision.
+// GovernedRef is one revision-bound reference a designation recorded:
+// an entity_edges endpoint split back into its kind, id and revision.
 type GovernedRef struct {
 	Kind, ID, Revision string
 }

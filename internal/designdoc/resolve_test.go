@@ -113,7 +113,7 @@ func TestNoSpecError(t *testing.T) {
 	if !errors.Is(err, ErrNoSpec) {
 		t.Fatalf("err = %v, want it to wrap ErrNoSpec", err)
 	}
-	if got := err.Error(); got != "WL-SPEC-0 is the no-governing-spec sentinel (026 §4.3), not a document: no governing spec" {
+	if got := err.Error(); got != "WL-SPEC-0 is the no-governing-spec sentinel (WL-REQ-200), not a document: no governing spec" {
 		t.Errorf("Error() = %q", got)
 	}
 }

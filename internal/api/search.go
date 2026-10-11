@@ -1,7 +1,7 @@
 // search.go is the HTTP surface over the corpus index's hybrid search
 // (WL-REQ-261). The retrieval and its metrics live in store.Search; this handler
 // only parses the query, embeds it, and reports how it actually answered
-// (§11): a missing or failing embedding provider degrades every mode to
+// (WL-REQ-1718): a missing or failing embedding provider degrades every mode to
 // lexical rather than erroring or returning nothing.
 package api
 
@@ -63,7 +63,7 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		cancel()
 		if err != nil {
 			// A failing provider degrades exactly like no provider at all
-			// (§11): a 5xx here would turn a search into an outage.
+			// (WL-REQ-1718): a 5xx here would turn a search into an outage.
 			s.log.Error("search embedding failed", "err", err)
 			degraded = true
 		} else {

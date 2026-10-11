@@ -148,7 +148,8 @@ func LocalImages(body string) []string {
 // and nothing else, so a raw-HTML URL returned here could be fetched and
 // stored but never referenced: bytes in the bucket that no body points at,
 // which is exactly what GC then has to clean up. Raw-HTML remote images stay
-// remote, and §8's renderer drops them rather than rendering a beacon.
+// remote, and the renderer (WL-REQ-225) drops them rather than rendering a
+// beacon.
 func RemoteImages(body string) []string {
 	var out []string
 	seen := map[string]bool{}

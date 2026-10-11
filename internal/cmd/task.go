@@ -433,8 +433,8 @@ func newTaskListCmd() *cobra.Command {
 	// No --mine: the CLI has no caller identity to resolve it to (see
 	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
-	cmd.Flags().StringVar(&plan, "plan", "", "list only the tasks minted by this plan document (id or slug, WL-SPEC-77 §11.2)")
-	cmd.Flags().StringVar(&about, "about", "", "list only the tasks about this document — its review and planning tasks (id or slug, WL-SPEC-75 §9.6)")
+	cmd.Flags().StringVar(&plan, "plan", "", "list only the tasks minted by this plan document (id or slug, WL-REQ-174)")
+	cmd.Flags().StringVar(&about, "about", "", "list only the tasks about this document — its review and planning tasks (id or slug, WL-REQ-109)")
 	cmd.Flags().BoolVar(&deleted, "deleted", false,
 		"list deleted tasks instead of live ones, in any state unless --status is also given")
 	return cmd
@@ -705,7 +705,7 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil,
 		"declare a catalog address this task is verified by (repeat the flag for each; additive, never removes)")
 	cmd.Flags().StringVar(&milestone, "milestone", "",
-		"attach the task to a milestone in its own project (WL-SPEC-75 §13.2), or none to detach")
+		"attach the task to a milestone in its own project (WL-REQ-120), or none to detach")
 	cmd.Flags().StringVar(&plan, "plan", "",
 		"link the task to the plan document it executed (id or slug); refused if it already carries a different plan, no detach")
 	return cmd
@@ -877,7 +877,7 @@ func newTaskClaimCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&worktree, "worktree", "", "worktree identity (default: <hostname>:<git worktree root> of the current directory)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
-	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (WL-SPEC-75 §8.4 ranking)")
+	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (WL-REQ-100 ranking)")
 	addScopeFlags(cmd, &scope, "the project a bare task number belongs to; with --next, restrict the pick to a project")
 	cmd.Flags().StringSliceVar(&kinds, "kind", nil,
 		"with --next, restrict the pick to these kinds: "+claimKindEnum+" (comma-separated)")
@@ -1130,7 +1130,7 @@ func newTaskDeleteCmd() *cobra.Command {
 		Short: "Delete a task: hide a row that should not have existed",
 		Long: "Delete a task. Prefer `lode task abandon`, which keeps the decision\n" +
 			"record that work was considered and dropped; delete is for a row that\n" +
-			"should not have existed at all (WL-SPEC-75 §12). The row is tombstoned, not\n" +
+			"should not have existed at all (WL-REQ-117). The row is tombstoned, not\n" +
 			"removed: its events stay in the log, and `lode task undelete` restores\n" +
 			"it. A prod instance refuses a delete carrying no --justification.",
 		Args:              cobra.ExactArgs(1),
@@ -1671,7 +1671,7 @@ func newTaskAttachCmd() *cobra.Command {
 }
 
 // embedMarkup renders the body fragment that makes a freshly uploaded blob
-// render in place (WL-SPEC-78 §8.5, §9).
+// render in place (WL-REQ-230).
 //
 // An image is markdown. A video cannot be — `![](…)` is an <img>, which shows
 // a video file as a broken image — so it is the raw <video> the sanitiser's

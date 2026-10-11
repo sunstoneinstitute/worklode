@@ -83,7 +83,7 @@ func taskIDFromIRI(s string) string {
 	return ""
 }
 
-// Frontier returns the ranked ready set (backbone order, WL-SPEC-82 §16.2)
+// Frontier returns the ranked ready set (backbone order, WL-REQ-1362)
 // annotated with depth/fan-out/is_critical from the combined DAG.
 func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.FrontierTask, error) {
 	tasks, fanOut, err := s.Store.Frontier(ctx, projectID)
@@ -95,7 +95,7 @@ func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.Front
 		return nil, err
 	}
 	// Depth is historical (full DAG); criticality follows the open subgraph,
-	// matching CriticalPath (WL-SPEC-82 §16.3's closed-task rule, WL-354).
+	// matching CriticalPath (the closed-task rule, WL-354).
 	full := Analyze(pairs, nil)
 	openPairs, err := s.openSubgraph(ctx, pairs)
 	if err != nil {
@@ -116,7 +116,7 @@ func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.Front
 // CriticalPath computes the enriched cross-store critical path (overview
 // only, D12) plus any cycles found.
 //
-// Per WL-SPEC-82 §16.3's closed-task rule (WL-354): depth is historical — the
+// Per the closed-task rule (WL-354): depth is historical — the
 // full live DAG, closed predecessors included — while criticality and
 // fan-out are computed over the open subgraph, so a chain whose work is
 // entirely finished is never reported as the thing holding the project up.

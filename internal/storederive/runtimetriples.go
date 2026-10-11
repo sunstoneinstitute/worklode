@@ -30,7 +30,7 @@ func splitRepo(full string) (owner, name string, ok bool) {
 
 // artifactCoordinate returns the (name, IRI) coordinate for an artifact row.
 // git_tag names are stored as bare "owner/name" (applyRelease,
-// internal/hooks/github.go) and are host-qualified here to match the §10.1
+// internal/hooks/github.go) and are host-qualified here to match the IRI
 // grammar; the other kinds carry their registry coordinate already.
 func artifactCoordinate(a store.Artifact) (name, artifactIRI string) {
 	name = a.Name
@@ -115,8 +115,8 @@ func EnvironmentTriples() []graphproj.Triple {
 }
 
 // CommitTriples projects one main_commits row. repo is "owner/name"
-// (GitHub full_name); a malformed repo projects nothing — the §6 guard
-// posture, an unmintable node is omitted rather than fabricated.
+// (GitHub full_name); a malformed repo projects nothing — the guard
+// posture: an unmintable node is omitted rather than fabricated.
 func CommitTriples(host, repo, sha string) []graphproj.Triple {
 	owner, name, ok := splitRepo(repo)
 	if !ok {

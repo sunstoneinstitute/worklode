@@ -38,12 +38,12 @@ outright once it is fixed over annotating it as resolved.
   design act, not a transcription), so it needs a spec amendment: either the
   reader grows table support, or the gate becomes the presence of the corpus
   keys. `lode doc sync` has since been retired unshipped (`f11af04`,
-  2026-08-17), withdrawing the old §16 and §5.1 with it, so nothing reads a
+  2026-08-17), withdrawing the old WL-REQ-708 and WL-REQ-664 with it, so nothing reads a
   `[doc_sync]` block at all; WL-147 then re-pointed `lode show --spec/--adr`
   at the backbone and deleted the scalar keys, their reader
   (`internal/cli.CorporaFrom`) and their entry in `.worklode/config.toml`.
-  Neither shape survives in code. The contradiction is now confined to WL-SPEC-77
-  §5/§10's text, and the corpus cutover (WL-SPEC-77) removes its subject rather
+  Neither shape survives in code. The contradiction is now confined to WL-SPEC-77's
+  text, and the corpus cutover (WL-SPEC-77) removes its subject rather
   than reconciling it.
 - `[P2]` **Per-artifact delivery tracking** (WL-SPEC-75, already deferred there): a
   repo shipping two images plus a CLI binary has one `done_state`. The
@@ -54,10 +54,10 @@ outright once it is fixed over annotating it as resolved.
   "Nothing creates `docker_image`, `pypi` or `binary` rows" and calls
   `deployments.artifact_id` null in practice, but `applyRegistryPackage`
   (`internal/hooks/github.go`) mints `docker_image` artifacts from
-  `registry_package` webhooks and `FindArtifactByImage` resolves them. §15
+  `registry_package` webhooks and `FindArtifactByImage` resolves them. Its
   question 11 ("the artifact ingest gap is the real blocker") is therefore
   narrower than it reads — what remains is the App permission item below, not
-  the absence of a handler. Needs an amendment to WL-SPEC-79 and §15 item 11.
+  the absence of a handler. Needs an amendment to WL-SPEC-79 and its question 11.
   Noticed while executing the runtime-layer plan (WL-27), whose projection is
   correct either way: a nil artifact emits no `prov:used`.
 - `[P4]` **`registry_package` ignores non-container packages**: PyPI/npm
@@ -316,8 +316,8 @@ Design items landed in WL-SPEC-77. These are the mechanical leftovers.
   today (a default branch would have to start with an uppercase project key),
   but cheap to tighten to "task exists".
 - `[gated]` **`lode show --spec/--adr/<id>` shipped as the cat-mode slice of WL-SPEC-78
-  only (2026-08-07).** `--resolved` / `--with-drafts` consolidation (WL-SPEC-78
-  §3.1–§3.2) remains unimplemented. `lode doc list` now exists (WL-SPEC-77),
+  only (2026-08-07).** `--resolved` / `--with-drafts` consolidation remains
+  unimplemented. `lode doc list` now exists (WL-SPEC-77),
   carrying the WL-SPEC-78 planning-status flags (`--needs-planning` /
   `--needs-execution`); `lode doc sync` was retired unshipped (`f11af04`).
   `lode doc sections` shipped as the plain cross-corpus listing (WL-622): the
@@ -328,7 +328,7 @@ Design items landed in WL-SPEC-77. These are the mechanical leftovers.
   the resolution source from the file corpus to the backbone, so the command
   now needs a reachable server; the `--json` shape's `path` field became
   `doc` + `slug` with it.
-- `[P4]` **WL-SPEC-77 (draft; §18 and elsewhere) still spells the command `lode doc show`;
+- `[P4]` **WL-SPEC-77 (draft; WL-REQ-182 and elsewhere) still spells the command `lode doc show`;
   WL-SPEC-78 implements the same command spelled `lode show` (2026-08-07).**
   `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`
   (draft, implements WL-SPEC-78) is titled "consolidated `lode doc show`" too.
@@ -365,8 +365,8 @@ one pass.
   single-instance (one PVC + litestream)"; the backbone is Postgres today,
   not a single-instance litestream deployment.
 - `[P4]` **Folded WL-SPEC-80 relies on an `ExitWorktree` harness event its own event map
-  never covers.** §9 defines lease release on `ExitWorktree`/`SessionEnd`,
-  but §17.4's per-harness event map (derived from §9's vocabulary) has no
+  never covers.** It defines lease release on `ExitWorktree`/`SessionEnd`,
+  but its per-harness event map (derived from that vocabulary) has no
   `ExitWorktree`/`WorktreeExit` row — only `WorktreeEnter` is mapped per
   harness.
 - `[P4]` **Folded WL-SPEC-79 ships an implementation-status report verified in
@@ -378,7 +378,7 @@ one pass.
   the fold left frontmatter carrying only `status`, `issued` and `requires`.
   Same class as the three acceptance criteria ruling 23 retired: the machinery
   stays correct for a document written after the cutover, but nothing exercises
-  it today. §4.2 also still cites WL-SPEC-77's `amends: rdf-registry:ADR-0006` as "the
+  it today. It also still cites WL-SPEC-77's `amends: rdf-registry:ADR-0006` as "the
   corpus's one existing cross-project reference"; the fold dropped that key, so
   the corpus now has none and the unresolvable-reference example survives only
   in prose.
@@ -436,7 +436,7 @@ one pass.
   requirement.** The table still reads "defaults to `os.TempDir()`"; since
   WL-207 the server refuses to boot when blob storage is configured and that
   directory is unwritable, and the deployment mounts a volume for it. A
-  one-line amendment to §13 would make the corpus of record true — README.md
+  one-line amendment would make the corpus of record true — README.md
   and the manifests already are.
 - `[P4]` **Only the blob spool has a writable path; `os.TempDir()` is still
   read-only in-cluster.** Any future dependency that stages through it —
@@ -451,7 +451,7 @@ one pass.
 `internal/cmd/doctodo.go`) landed. These are the mechanical leftovers surfaced
 while dogfooding it against the real corpus.
 
-- ~~`[P1]` **`scripts/secmeta.py` has drifted from the amended 026 §2.1.**~~
+- ~~`[P1]` **`scripts/secmeta.py` has drifted from the amended rule it implements.**~~
   Resolved by deletion: the script went with the file corpus (055), leaving
   `designdoc.PlanIndex` as the only implementation of the rule.
 - `[P2]` **`TodoItem` should carry structured `Blockers []string`** instead of
@@ -511,7 +511,7 @@ while dogfooding it against the real corpus.
   settle it before plan 3 starts: either count raw-HTML `img` sources or
   state in WL-SPEC-78 that only markdown image syntax references a blob.
 - `[P4]` **Spec WL-SPEC-78's warning for a local file behind a plain link is not
-  implemented.** §7 says a link to a local file "is left alone and reported
+  implemented.** It says a link to a local file "is left alone and reported
   as a warning — use `lode task attach` for those". `uploadBodyImages`
   (`internal/cmd/task.go`) does leave it alone, correctly, but says nothing,
   so an author who wrote `[shot](./shot.png)` gets a task whose link resolves
@@ -655,10 +655,10 @@ while dogfooding it against the real corpus.
   WL-SPEC-75's tombstone review; WL-532 added Milestones — WL-SPEC-75's container.
   Both sit in `localNav` (`internal/ui/layout.templ`) outside WL-SPEC-82's fixed
   order, because each belongs to its own spec, not to the cockpit spec. WL-SPEC-82
-  §2 (or, for Deleted, WL-SPEC-75, which lists only the API and CLI surfaces) is
+  (or, for Deleted, WL-SPEC-75, which lists only the API and CLI surfaces) is
   owed an amendment naming both, so the destination list stops being a spec
-  that the page contradicts. Spec WL-SPEC-82 does not settle this: it amends WL-SPEC-82
-  §2's *global* list only and says project-local navigation is untouched.
+  that the page contradicts. Spec WL-SPEC-82 does not settle this: it amends WL-SPEC-82's
+  *global* list only and says project-local navigation is untouched.
 - `[P3]` **The Deleted page is per project and has no instance-wide view.** A
   document or task is always project-scoped, so nothing is unreachable, but
   reviewing every delete across an instance still means visiting each project.
@@ -697,13 +697,13 @@ Recorded by WL-347's housekeeping pass over the doc-version-history plan:
   WL-SPEC-77 (versions are immutable snapshots read whole). Check here before
   filing a diffing feature request as new.
 
-Recorded by WL-643's pass over WL-SPEC-79 and §7:
+Recorded by WL-643's pass over WL-SPEC-79:
 
 - `[P3]` **A chunker change does not make the index stale.** `content_hash`
-  (WL-SPEC-79, §7) covers a subject's source columns only, so `ChunkRunes`,
+  (WL-REQ-260) covers a subject's source columns only, so `ChunkRunes`,
   `ChunkOverlap` or a `context_header` format change leaves every existing
   chunk row looking fresh while the text it holds no longer matches what the
-  chunker would produce today. §8 handles the sibling case for the provider,
+  chunker would produce today. The sibling case for the provider is handled
   by nulling `embedding`; nothing handles it for the chunker. Re-indexing is
   a manual truncate until it does. Folding a chunker version into the hashed
   expression would fix it, at the cost of one full re-embed per bump.
@@ -716,7 +716,7 @@ Recorded by WL-633's pass over WL-SPEC-79:
   The brief path (`internal/api/brief.go`) passes the whole title plus body,
   and `websearch_to_tsquery` ANDs every unquoted term, so a brief of any
   length yields an empty `tsquery` match and the dense arm answers alone.
-  §9's "a task brief naming a tool by name now matches the skill that names
+  WL-SPEC-79's "a task brief naming a tool by name now matches the skill that names
   it back" therefore holds for short queries only. Extracting query terms
   from a brief (or OR-ing them) is a retrieval-quality change, not a wiring
   one, so it is not folded into this task.
@@ -725,7 +725,7 @@ Recorded by WL-634's pass over WL-SPEC-79:
 
 - `[P3]` **A document hit's address costs one extra request.**
   `model.SearchHit` carries the document's row id, not the `WL-SPEC-77`
-  reference §9's line renders, so `lode search` fetches the project's
+  reference WL-REQ-261's line renders, so `lode search` fetches the project's
   document list to map ids to references whenever the results hold a
   document. A `ref` on the hit itself — built where the store already
   builds a skill's qualified name — would drop the second request.
@@ -831,9 +831,9 @@ withdraw`, WL-SPEC-77):
 - `[P3]` **Spec WL-SPEC-81's L3 domain-action list does not name `escalate`, `gap`,
   `fix` or `withdraw`, so its transcription in code no longer matches it.**
   Spec WL-SPEC-77 specifies `lode task escalate --to plan|spec --reason "..."`
-  verbatim; §15.5 specifies only the events `task.gap_found`, `fix.started`
+  verbatim; WL-REQ-108 specifies only the events `task.gap_found`, `fix.started`
   and `fix.finished`, and the `lode task gap`/`lode task fix` commands that
-  emit them were named by the plan, not the spec; §8.7 likewise calls for a
+  emit them were named by the plan, not the spec; WL-SPEC-77 likewise called for a
   close verb that takes an unexecuted document out of the corpus but does not
   name one, so `lode doc withdraw` is the plan's name for it too. Shipping
   each needed its verb in `internal/cmd/namerule_test.go`'s `l3DomainActions`
@@ -850,7 +850,7 @@ withdraw`, WL-SPEC-77):
   and added it to both transcriptions too, so the one outstanding revise on
   WL-SPEC-81 now owes two verbs: `escalate` and `report`. Do them together.
 
-Recorded by WL-831 (§8.6 stale marking off the patch seam):
+Recorded by WL-831 (WL-REQ-170 stale marking off the patch seam):
 
 - `[P4]` **Re-accepting an unedited stale plan cannot clear the mark.**
   WL-SPEC-77 says the mark is "cleared by re-acceptance", and re-acceptance is
@@ -962,8 +962,8 @@ S14, S20):
 Recorded by the clause increment 4b final review:
 
 - `[P4]` **`internal/cmd/CLAUDE.md`'s L3 domain-action allowlist is missing
-  `fetch`.** `docs/specs2/09-cli-and-skills.md` §1 lists `fetch` in its L3
-  allowlist (it backs the not-yet-implemented `lode doc fetch`, §8.5), but the
+  `fetch`.** WL-REQ-305 lists `fetch` in its L3
+  allowlist (it backs the not-yet-implemented `lode doc fetch`, WL-REQ-327), but the
   table in `internal/cmd/CLAUDE.md`'s "Naming" section does not carry it.
   Neither does `internal/cmd/namerule_test.go`'s `l3DomainActions`, correctly,
   since no `fetch` command exists in `internal/cmd` today. The drift predates

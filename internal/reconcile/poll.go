@@ -482,8 +482,7 @@ func applyFacts(tx *sql.Tx, now time.Time, eventID int64, gathered []*repoFacts,
 		}
 	}
 	// One merge for the whole run: the transitions record no event of their
-	// own, so this event is the only record of which tasks reconcile moved
-	// (WL-SPEC-82 §15.5).
+	// own, so this event is the only record of which tasks reconcile moved.
 	if len(movedIDs) > 0 {
 		return store.MergeEventPayload(tx, eventID, map[string]any{"tasks": movedIDs})
 	}

@@ -100,7 +100,7 @@ func tooDeepAnchors(d *Document, limit int) []string {
 // tooDeepViolation is the one wording of the depth finding, shared by
 // DepthViolations and SectionDiff.Violations().
 func tooDeepViolation(anchor string) string {
-	return fmt.Sprintf("%s: exceeds the configured section depth limit (025 §6.1)", anchor)
+	return fmt.Sprintf("%s: exceeds the configured section depth limit (WL-REQ-1636)", anchor)
 }
 
 // Violations returns human-readable strings naming each offending anchor —
@@ -111,12 +111,12 @@ func (d SectionDiff) Violations() []string {
 	var out []string
 	for _, anchor := range d.Removed {
 		out = append(out, fmt.Sprintf(
-			"%s: section removed; accepted anchors are append-only (025 §6 rule 1)", anchor))
+			"%s: section removed; accepted anchors are append-only (WL-RULE-201)", anchor))
 	}
 	for _, anchor := range d.Renumbered {
 		nums := d.renumbers[anchor]
 		out = append(out, fmt.Sprintf(
-			"%s: renumbered from %q to %q; accepted anchors are immutable (025 §6 rule 3)",
+			"%s: renumbered from %q to %q; accepted anchors are immutable (WL-RULE-201)",
 			anchor, nums[0], nums[1]))
 	}
 	for _, anchor := range d.TooDeep {

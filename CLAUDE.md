@@ -185,8 +185,8 @@ default-deny `Decide`. There is no RBAC model yet — the two roles are the
 `user`/`admin` Keycloak already syncs (WL-REQ-49) — so add real roles by editing
 that table, never by adding a check inside a handler. A page-script write such
 as the Progress page's goes through one more gate on top of that table's
-permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-SPEC-85
-§5), which enforces same-origin, the page's `X-Requested-With` header, a
+permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-REQ-1338),
+which enforces same-origin, the page's `X-Requested-With` header, a
 JSON body, and an actor taken from the session rather than the request.
 Every `/api/v1` row also has a `routeDoc` (request body, success and
 distinct-error responses, query parameters) in the `internal/api` file

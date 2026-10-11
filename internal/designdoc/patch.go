@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Finding is one §8.3 mechanical-substantive rule firing on one section.
+// Finding is one WL-REQ-1666 mechanical-substantive rule firing on one section.
 type Finding struct {
 	Rule   string // ns-term | surface-token | acceptance-criteria
 	Anchor string
@@ -24,7 +24,7 @@ var nsTermPattern = regexp.MustCompile(`\bwlc?:[A-Za-z][A-Za-z0-9_]*\b`)
 // (see codeSurfaces), so a fancier CommonMark-correct scanner buys nothing.
 var inlineCodePattern = regexp.MustCompile("`[^`\n]+`")
 
-// acceptanceHeadingPattern is the §8.3 acceptance-criteria trigger.
+// acceptanceHeadingPattern is the WL-REQ-1666 acceptance-criteria trigger.
 var acceptanceHeadingPattern = regexp.MustCompile(`(?i)acceptance criteria|definition of done`)
 
 // ChangedAnchors returns the anchors whose section text differs between old
@@ -60,7 +60,7 @@ func ChangedAnchors(old, new *Document) []string {
 	return out
 }
 
-// MechanicalFindings runs the text-level §8.3 rules over the changed
+// MechanicalFindings runs the text-level WL-REQ-1666 rules over the changed
 // sections between old and new: ns-term, surface-token and
 // acceptance-criteria. The referrer rule is a corpus query and lives in the
 // store (WL-PLAN-109 Task 3), not here. A new dependency is an edge, written
@@ -151,11 +151,12 @@ func surfaceTokenFinding(anchor, oldText, newText string) *Finding {
 }
 
 // codeSurfaces returns text's inline code spans and fenced-code-block
-// lines, in order — the §8.3 surface-token rule's deliberately coarse unit.
+// lines, in order — the WL-REQ-1666 surface-token rule's deliberately
+// coarse unit.
 // Schema, DDL, API routes, CLI flags, event names, IRIs and enum values all
 // live in code formatting in this corpus, and a false positive here routes
 // an edit to review rather than refusing or silently landing it, which is
-// the side §8.3 says to fail toward. Fences are recognised the way
+// the side WL-REQ-1666 says to fail toward. Fences are recognised the way
 // scanHeadings recognises them, so the two never disagree about what counts
 // as fenced.
 func codeSurfaces(text string) []string {

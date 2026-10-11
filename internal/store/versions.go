@@ -9,8 +9,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// versions.go is the one place a document or rule version moves (WL-SPEC-77
-// §3). Each bump first copies the node's current row and its outgoing edges
+// versions.go is the one place a document or rule version moves (WL-REQ-1630).
+// Each bump first copies the node's current row and its outgoing edges
 // (and, for a document, its rule arrangement) into the snapshot tables at the
 // current version, then increments the version. TestOnlyBumpFunctionsWriteVersions
 // holds every other write path to that.

@@ -1,9 +1,9 @@
 // Mirroring remote images into blobs (WL-REQ-233). An issue body arrives
 // referencing https://user-images.githubusercontent.com/…; those URLs need
-// GitHub auth for private repos, do not last forever, and §8's renderer
+// GitHub auth for private repos, do not last forever, and WL-REQ-1698's renderer
 // blocks remote img src outright, so an imported bug report's screenshots
 // would render as nothing. Every remote reference therefore becomes a
-// /blob/<hash> through the same upload path as §5.
+// /blob/<hash> through the same upload path as WL-REQ-230.
 //
 // The caller is promoteInbox (admin.go), not importInbox: see the call site
 // there for why.
@@ -128,7 +128,7 @@ func (s *server) mirrorRemoteImages(ctx context.Context, repo, body string) stri
 		// an <img src>, so anything that cannot render in place is not
 		// mirrored: storing arbitrary attacker-supplied bytes under an image
 		// reference buys a hosting primitive and a broken image, and the
-		// original URL left in place renders as nothing (§8) instead.
+		// original URL left in place renders as nothing (WL-REQ-1698) instead.
 		if !blobref.Embeddable(mediaType) {
 			s.log.Warn("mirror image skipped", "url", src, "media_type", mediaType)
 			s.observeImageMirror(mirrorNotEmbeddable, 1)
@@ -178,12 +178,12 @@ func (s *server) mirrorRemoteImages(ctx context.Context, repo, body string) stri
 	return out
 }
 
-// mirrorToken mints the installation token §12 asks for, returning "" when
+// mirrorToken mints the installation token WL-REQ-233 asks for, returning "" when
 // there is none to be had.
 //
 // Failure is never fatal and never blocks the pass: a public repo's images
 // fetch fine unauthenticated, and a private repo's images then fail per-image
-// exactly as any other fetch failure does -- the original URL stays and §8
+// exactly as any other fetch failure does -- the original URL stays and WL-REQ-1698
 // renders it as nothing. That is strictly better than refusing the promote
 // over a credential most bodies do not need. It is minted once per pass rather
 // than per image because one promote's images are all one repo's.

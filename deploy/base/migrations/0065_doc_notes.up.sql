@@ -12,6 +12,6 @@ CREATE TABLE doc_notes (
 );
 CREATE INDEX doc_notes_doc_anchor ON doc_notes (doc_id, anchor);
 
--- WL-SPEC-77: approved text, modified since. Set by the §8.2 patch path,
+-- WL-SPEC-77: approved text, modified since. Set by the WL-REQ-171 patch path,
 -- cleared when the original approvers re-approve.
 ALTER TABLE doc_sections ADD COLUMN patched boolean NOT NULL DEFAULT false;

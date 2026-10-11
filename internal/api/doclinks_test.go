@@ -42,8 +42,8 @@ func TestDocEdgeRoutes(t *testing.T) {
 
 	rr = doReq(t, h, "POST", docPath(doc.ID, "/edges"), token, model.DocEdgeInput{Type: "isRequiredBy", To: "026-target"})
 	if msg, _ := decodeMap(t, rr)["error"].(string); rr.Code != http.StatusUnprocessableEntity ||
-		!strings.Contains(msg, "requires") || !strings.Contains(msg, "WL-SPEC-77 §8.1") {
-		t.Errorf("inverse link: status = %d, error = %q; want 422 naming requires and WL-SPEC-77 §8.1", rr.Code, msg)
+		!strings.Contains(msg, "requires") || !strings.Contains(msg, "WL-REQ-1288") {
+		t.Errorf("inverse link: status = %d, error = %q; want 422 naming requires and WL-REQ-1288", rr.Code, msg)
 	}
 	if rr := doReq(t, h, "POST", docPath(doc.ID, "/edges"), token, model.DocEdgeInput{Type: "bogus", To: "x"}); rr.Code != http.StatusUnprocessableEntity {
 		t.Errorf("undeclared type status = %d, want 422", rr.Code)

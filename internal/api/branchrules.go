@@ -19,7 +19,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// branchRulesInterval is §6.3's "once a day". A ruleset change is normally
+// branchRulesInterval is WL-REQ-1340's "once a day". A ruleset change is normally
 // picked up long before the next tick, by the repository_ruleset webhook
 // poking the kick channel; the tick is what covers a missed delivery.
 const branchRulesInterval = 24 * time.Hour

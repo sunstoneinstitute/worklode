@@ -286,7 +286,7 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 		return nil, err
 	}
 	if kind != "plan" && status != "draft" {
-		return nil, fmt.Errorf("doc %d is %s: revise it instead of editing the body (WL-SPEC-77 §9): %w",
+		return nil, fmt.Errorf("doc %d is %s: revise it instead of editing the body (WL-REQ-170): %w",
 			id, status, ErrInvalidInput)
 	}
 
@@ -294,8 +294,8 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 	if err != nil {
 		return nil, err
 	}
-	// A spec's editable form fed back unchanged writes nothing (WL-SPEC-77
-	// §19.5). docs.body is a template, so compare against the rendered text.
+	// A spec's editable form fed back unchanged writes nothing (WL-REQ-1299).
+	// docs.body is a template, so compare against the rendered text.
 	if kind != "plan" && pin == nil {
 		cur, err := getDocTx(tx, id)
 		if err != nil {
@@ -427,7 +427,7 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		// Only a plan can be stale, so no other kind reaches this branch.
 		if d.status != "draft" && d.status != "accepted" && d.status != "stale" {
 			return nil, nil, fmt.Errorf(
-				"doc %d is %s: a plan is accepted from draft, re-accepted while accepted, or re-accepted out of stale (WL-SPEC-77 §9, §9.2): %w",
+				"doc %d is %s: a plan is accepted from draft, re-accepted while accepted, or re-accepted out of stale (WL-REQ-170): %w",
 				id, d.status, ErrInvalidInput)
 		}
 		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
@@ -586,7 +586,7 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 	// Saying "not draft" would send the caller looking for the wrong problem.
 	if kind == "plan" && status == "stale" {
 		return false, fmt.Errorf(
-			"doc %d is stale and was already accepted at version %d: edit the plan, so re-accepting it clears the mark (WL-SPEC-77 §9): %w",
+			"doc %d is stale and was already accepted at version %d: edit the plan, so re-accepting it clears the mark (WL-REQ-170): %w",
 			id, version, ErrInvalidInput)
 	}
 	if status != "draft" {
@@ -724,12 +724,12 @@ type parsedDoc struct {
 // errStoredHeader is parseDocBody's refusal of a body that opens with a
 // header (WL-REQ-168).
 var errStoredHeader = fmt.Errorf(
-	"a stored body carries no header: set metadata with `lode doc edit --title/--issued` and edges with `lode doc link` (WL-SPEC-77 §7): %w",
+	"a stored body carries no header: set metadata with `lode doc edit --title/--issued` and edges with `lode doc link` (WL-REQ-168): %w",
 	ErrInvalidInput)
 
 // storedBody is body as docs.body keeps it: a spec written in the editable
-// form loses its rule= attributes once syncRules has read them (WL-SPEC-77
-// §19.5). A plan is stored as written.
+// form loses its rule= attributes once syncRules has read them (WL-REQ-1299).
+// A plan is stored as written.
 func storedBody(kind, body string) string {
 	if kind == "plan" {
 		return body
@@ -776,7 +776,7 @@ func checkSpecHeadings(kind string, doc *designdoc.Document) error {
 	if len(bad) == 0 {
 		return nil
 	}
-	return fmt.Errorf("a spec heading at depth %d or less needs an anchor (WL-SPEC-77 §19.1); anchor it, make it deeper, or remove it: %s: %w",
+	return fmt.Errorf("a spec heading at depth %d or less needs an anchor (WL-REQ-1295); anchor it, make it deeper, or remove it: %s: %w",
 		docDepthLimit, strings.Join(bad, ", "), ErrInvalidInput)
 }
 
@@ -819,7 +819,7 @@ func parseWrittenDocSource(kind, body string) (parsedDoc, error) {
 	}
 	if keys := p.doc.Frontmatter.RetiredRelKeys(); len(keys) > 0 {
 		return parsedDoc{}, fmt.Errorf(
-			"header key %s: amendment and supersession are rule edges, not document keys (WL-SPEC-77 §7); "+
+			"header key %s: amendment and supersession are rule edges, not document keys (WL-REQ-168); "+
 				"remove the key and use `lode rule link <A> --amends <B>` or `lode rule supersede`: %w",
 			strings.Join(keys, ", "), ErrInvalidInput)
 	}
@@ -1196,8 +1196,8 @@ func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out m
 		out.Issued = issued.Time.Format(docDateLayout)
 	}
 	out.CreatedAt = out.CreatedAt.UTC()
-	// A past version shows the rule versions it arranged then (WL-SPEC-77
-	// §19.4), not the ones its rules have moved to since.
+	// A past version shows the rule versions it arranged then (WL-REQ-1299),
+	// not the ones its rules have moved to since.
 	// A draft rule version may have been rewritten since, so only accepted
 	// ones are read back; the snapshot body holds the draft text as shown.
 	texts, err := arrangedTexts(ctx, s.db, "doc_rule_versions",

@@ -15,8 +15,8 @@ import (
 )
 
 // AddRule creates a rule arranged in no document, at draft version 1,
-// owned by actor and numbered from the project's RULE counter (WL-SPEC-77
-// §19.2). Its references edges are derived from its text as on any version
+// owned by actor and numbered from the project's RULE counter (WL-REQ-1296).
+// Its references edges are derived from its text as on any version
 // write. One rule.added event records it.
 func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string) (r *model.Rule, err error) {
 	defer func() { s.metrics.ruleOp("add", err) }()
@@ -74,7 +74,7 @@ func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string
 // ErrBadTransition.
 //
 // Every spec arranging the rule moves to the accepted version, an accepted
-// one through a version bump (§19.4). Section 10's gates then apply to the
+// one through a version bump (WL-REQ-1679). WL-REQ-171's gates then apply to the
 // version: when it trips a mechanical check (a wl: term, code surface or
 // acceptance criteria changed, or the rule has a referrer), or substantive
 // says its author judged it so, a review task is minted for the rule owner
@@ -298,7 +298,7 @@ func reviewRuleVersion(tx *sql.Tx, now time.Time, in ruleVersionReview, eventID 
 		Kind:      "review",
 		Priority:  "medium",
 		Title:     fmt.Sprintf("Review %s v%d", in.ref, in.version),
-		Body: fmt.Sprintf("Version %d of %s was accepted and is substantive (%s, WL-SPEC-77 §10).\n\nReviewers: %s.\n",
+		Body: fmt.Sprintf("Version %d of %s was accepted and is substantive (%s, WL-REQ-171).\n\nReviewers: %s.\n",
 			in.version, in.ref, in.gate, strings.Join(reviewers, ", ")),
 		AboutDoc:  about,
 		CreatedBy: in.actor,

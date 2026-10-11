@@ -6,8 +6,8 @@
 // cockpit page reads through the same `deleted_at IS NULL` store calls the
 // CLI does — so a deleted row correctly vanishes from all of them, and until
 // this page there was nowhere in a browser to see that it had. That matters
-// on a prod instance, where a delete is refused without a justification (WL-SPEC-75
-// §12) precisely so someone can review it later.
+// on a prod instance, where a delete is refused without a justification
+// (WL-REQ-1600) precisely so someone can review it later.
 //
 // The page reuses the store's existing `--deleted` filters (TaskFilter and
 // DocFilter's Deleted switch), so it lists exactly what `lode task list

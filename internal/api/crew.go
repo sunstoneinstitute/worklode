@@ -7,8 +7,8 @@
 // Each membership change has exactly one write function — recordCrewAdd and
 // recordCrewRemove — that both surfaces call, so a member added or removed
 // in a browser and one changed by the CLI are the same write, recorded under
-// the same event type ("crew.member_added" / "crew.member_removed", WL-SPEC-75
-// §8.4), and differ only in the event source that records which surface it
+// the same event type ("crew.member_added" / "crew.member_removed",
+// WL-REQ-1605), and differ only in the event source that records which surface it
 // came from.
 package api
 
@@ -282,7 +282,7 @@ func (s *server) recordCrewRemove(ctx context.Context, source, projectID, actorI
 
 // removeCrewMember handles DELETE /api/v1/projects/{id}/participants/{actor}:
 // drop every role row that actor holds on the project. 204 on success; the
-// §6.1 guards come back as 422 with the store's message, which names each
+// WL-REQ-1605 guards come back as 422 with the store's message, which names each
 // open item the member still owns, so the caller has the responsibility list
 // without a second request.
 func (s *server) removeCrewMember(w http.ResponseWriter, r *http.Request) {

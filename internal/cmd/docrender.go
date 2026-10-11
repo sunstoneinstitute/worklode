@@ -204,8 +204,8 @@ type unresolvedResult struct {
 	Unresolved string `json:"unresolved"`
 }
 
-// docShowResult is the --json shape of `lode show` for a spec or ADR (WL-SPEC-78
-// §2). Doc and Slug identify the rendered document; they replaced a "path"
+// docShowResult is the --json shape of `lode show` for a spec or ADR (WL-REQ-192).
+// Doc and Slug identify the rendered document; they replaced a "path"
 // field that named the corpus file, which no longer exists now that documents
 // are read from the backbone. WL-SPEC-78 does not pin this shape, and nothing
 // machine-readable consumed "path".

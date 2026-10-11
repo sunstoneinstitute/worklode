@@ -38,8 +38,8 @@ func BudgetFor(contextTokens int) Budget {
 var DefaultBudget = BudgetFor(2048)
 
 // Chunk is one embeddable unit of a doc, task, or skill's indexed text.
-// Header and Text are stored in separate columns (§4.3, §5): embedding or
-// lexical indexing concatenates them, and only Text is ever returned to a
+// Header and Text are stored in separate columns (WL-REQ-257, WL-REQ-258):
+// embedding or lexical indexing concatenates them, and only Text is ever returned to a
 // caller as an excerpt.
 type Chunk struct {
 	// Anchor is the frozen section anchor (WL-REQ-165) a doc sub-chunk
@@ -47,18 +47,18 @@ type Chunk struct {
 	// that names no real anchor (a plan heading, an unstructured fallback).
 	Anchor string
 	// Index is 0-based within this anchor's sub-chunks — matching the
-	// (doc_id, anchor, chunk_index) uniqueness §5 defines, not a position
+	// (doc_id, anchor, chunk_index) uniqueness WL-REQ-258 defines, not a position
 	// across the whole subject.
 	Index int
-	// Header is the context header (§4.3). It counts against Budget.Runes.
+	// Header is the context header (WL-REQ-257). It counts against Budget.Runes.
 	Header string
 	// Text is the indexed body text, header excluded.
 	Text string
 }
 
 // windowed splits text into Chunks that all share one header and anchor,
-// each capped at b.Runes runes including the header (§4.1, §4.3). Index
-// starts at start rather than always 0: §5's unique index is on
+// each capped at b.Runes runes including the header (WL-REQ-257). Index
+// starts at start rather than always 0: WL-REQ-258's unique index is on
 // (doc_id, anchor, chunk_index), so a caller that emits more than one span
 // under the same anchor — an anchorless plan heading, a depth-5/6 unanchored
 // section — must keep numbering across those spans rather than restart per
@@ -73,7 +73,7 @@ func windowed(b Budget, anchor, header, text string, start int) []Chunk {
 		// Empty text still yields one chunk. The header alone carries the
 		// subject's title and address, and more importantly a subject with no
 		// chunk rows is stale forever — the convergence loop would retry an
-		// empty document on every pass (§7).
+		// empty document on every pass (WL-REQ-260).
 		pieces = []string{""}
 	}
 	out := make([]Chunk, len(pieces))
@@ -83,8 +83,8 @@ func windowed(b Budget, anchor, header, text string, start int) []Chunk {
 	return out
 }
 
-// ChunkDoc splits a spec or ADR into one chunk per section (§4.2): sections
-// carries every doc_sections row for doc, in whatever order the caller has
+// ChunkDoc splits a spec or ADR into one chunk per section (WL-REQ-257):
+// sections carries every doc_sections row for doc, in whatever order the caller has
 // them. A plan (sections empty, WL-REQ-172) chunks on its own ##/### headings
 // instead, anchor always "", falling back to fixed windows when the body has
 // no heading structure at all — which also covers a spec or ADR somehow
@@ -108,7 +108,7 @@ func ChunkDoc(b Budget, doc model.Doc, sections []model.DocSection) []Chunk {
 // since internal/store builds sections the same way, via designdoc.Parse.
 // Indexing rather than matching on Anchor also copes with the anchorless
 // headings depth 5/6 legally carries — next tracks each anchor's running
-// chunk_index across every section sharing it (§5's unique index is
+// chunk_index across every section sharing it (WL-REQ-258's unique index is
 // (doc_id, anchor, chunk_index), not per-section).
 func chunkSections(b Budget, doc model.Doc, sections []model.DocSection, parsed *designdoc.Document) []Chunk {
 	ordered := append([]model.DocSection(nil), sections...)
@@ -151,8 +151,8 @@ func chunkPlan(b Budget, doc model.Doc, parsed *designdoc.Document) []Chunk {
 }
 
 // ChunkTask indexes a task as title + "\n\n" + body, one chunk unless the
-// combined text overflows the budget (§4.4). An empty body still indexes the
-// title: titles are the highest-signal text in the tracker.
+// combined text overflows the budget (WL-REQ-257). An empty body still
+// indexes the title: titles are the highest-signal text in the tracker.
 func ChunkTask(b Budget, task model.Task) []Chunk {
 	text := task.Title + "\n\n" + task.Body
 	return windowed(b, "", TaskHeader(task), text, 0)

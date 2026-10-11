@@ -28,7 +28,7 @@ Draft the markdown — frontmatter included — in a scratch file, then:
 lode doc lint <file>                                # local lint: anchors, plan ## Tasks
 lode doc add --kind <spec-or-plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body, or a plan's at any status
-lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec in place (WL-SPEC-77 §10)
+lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec in place (WL-REQ-171)
 lode doc edit <ref> --file <file> --substantive  # same, judged substantive: reviewers are asked again
 lode doc revise <ref>                        # open a candidate revision on an accepted doc
 lode doc revise <ref> --file <file>          # update the open candidate's body
@@ -54,7 +54,7 @@ and a plan's at any status (plans are edited in place — WL-REQ-172). On an
 accepted spec it is WL-REQ-171's in-place amendment, and the server
 gates it mechanically: an edit that changes a `wl:`/`wlc:` term, a code
 span or fenced block, an acceptance-criteria section, the frontmatter
-`requires` list, or a section that open work already points at (§8.2) is
+`requires` list, or a section that open work already points at is
 refused, naming the rule. That edit goes through `lode doc revise` instead:
 open a candidate, edit it, `--accept` to land it or `--discard` to drop it.
 An amendment that passes the gates needs `--note` saying what changed and

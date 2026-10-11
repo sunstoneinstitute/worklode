@@ -2,7 +2,7 @@
 // section state, spec grouping, and the next act — from typed facts about a
 // project's specs, plans and tasks. Every function is a pure function: no
 // I/O, no clock, no imports beyond stdlib and internal/model. Derive never
-// stores anything; a reader recomputes it per request (§1).
+// stores anything; a reader recomputes it per request (WL-REQ-1334).
 package progress
 
 import (
@@ -22,14 +22,15 @@ type Input struct {
 	Specs   []Spec
 	Plans   []Plan
 	Rally   *model.RallyBand
-	// Draft is the project's draft rally, the one §3.5's footer offers to
-	// confirm or discard. Nil when the project has none.
+	// Draft is the project's draft rally, the one WL-REQ-1784's footer
+	// offers to confirm or discard. Nil when the project has none.
 	Draft *model.RallyBand
 }
 
 // Spec is one spec document and its sections, in document order. Status and
-// Owner are carried for §3.2's Accept button, which is offered on a draft
-// spec and enabled only for its owner; the derivation itself reads neither.
+// Owner are carried for WL-REQ-1783's Accept button, which is offered on a
+// draft spec and enabled only for its owner; the derivation itself reads
+// neither.
 type Spec struct {
 	Doc     int64
 	Ref     string
@@ -38,8 +39,8 @@ type Spec struct {
 	Owner   string
 	Updated time.Time
 	// PlanningTask is the open design task about this spec, when one exists
-	// (WL-RULE-179). §3.4 shows it instead of the Plan button; the derivation
-	// itself never reads it.
+	// (WL-RULE-179). WL-REQ-1783 shows it instead of the Plan button; the
+	// derivation itself never reads it.
 	PlanningTask string
 	Sections     []Section
 }
@@ -57,13 +58,13 @@ type Section struct {
 
 // Plan is one plan document: its covers edges, its requires list, and every
 // task minted from it. Tasks includes abandoned ones; Derive drops them from
-// every count and strip (§1.1).
+// every count and strip (WL-REQ-1335).
 type Plan struct {
 	Doc      int64
 	Ref      string
 	Title    string
 	Status   string // draft | accepted | stale | withdrawn | superseded | spent
-	Owner    string // §3.2: the only actor who may accept it
+	Owner    string // WL-REQ-1783: the only actor who may accept it
 	Covers   []Cover
 	Requires []string
 	Tasks    []Task
@@ -78,8 +79,8 @@ type Cover struct {
 // Task is one task minted from a plan.
 type Task struct {
 	ID, Title, State, Position string
-	// Merge is the open pull request §3.6's button acts on, nil when the
-	// task has none. A reader fills it with MergeAct.
+	// Merge is the open pull request WL-REQ-1785's button acts on, nil when
+	// the task has none. A reader fills it with MergeAct.
 	Merge *model.ProgressMerge
 }
 
@@ -91,23 +92,23 @@ type CoverState struct {
 	State   string
 }
 
-// sectionRank is §1.2's "furthest along" order, most complete first.
+// sectionRank is WL-REQ-1335's "furthest along" order, most complete first.
 var sectionRank = []string{"built", "in_progress", "not_started", "no_record", "draft"}
 
-// BarOrder is §2.1's section-bar order: sectionRank plus "unplanned" at the
-// end. It is exported because every renderer of the derived model orders
+// BarOrder is WL-REQ-1336's section-bar order: sectionRank plus "unplanned" at
+// the end. It is exported because every renderer of the derived model orders
 // section states by it.
 var BarOrder = append(append([]string{}, sectionRank...), "unplanned")
 
-// groupOrder is §1.3's fixed group order.
+// groupOrder is WL-REQ-1335's fixed group order.
 var groupOrder = []string{"active", "planning", "no_record", "built"}
 
-// TaskClass is the one place §1.1's task classification lives; it reads the
-// state machine rather than listing states, so a state added to
+// TaskClass is the one place WL-REQ-1335's task classification lives; it reads
+// the state machine rather than listing states, so a state added to
 // model.TaskStates lands in a class without touching this function.
-// TestTaskClassPartitionsTaskStates fails the build until someone names the
-// new state's class. PlanState, Derive's counts and the task strip all call
-// this; nothing else compares a task state to a literal.
+// TestTaskClassPartitionsTaskStates fails the build until someone names the new
+// state's class. PlanState, Derive's counts and the task strip all call this;
+// nothing else compares a task state to a literal.
 func TaskClass(state string) string {
 	if slices.Contains(model.SettableTaskStates, state) {
 		return "landed"
@@ -121,8 +122,8 @@ func TaskClass(state string) string {
 	return "unstarted"
 }
 
-// PlanState is §1.1's table: a plan's state from its document status and its
-// minted tasks. Abandoned tasks are ignored.
+// PlanState is WL-REQ-1335's table: a plan's state from its document status and
+// its minted tasks. Abandoned tasks are ignored.
 func PlanState(status string, tasks []Task) string {
 	switch status {
 	case "draft":
@@ -154,8 +155,8 @@ func PlanState(status string, tasks []Task) string {
 	}
 }
 
-// SectionState is §1.2: a section's state is the furthest-along state among
-// its covers. A section with no covers at all is unplanned.
+// SectionState is WL-REQ-1335: a section's state is the furthest-along state
+// among its covers. A section with no covers at all is unplanned.
 func SectionState(covers []CoverState) string {
 	if len(covers) == 0 {
 		return "unplanned"
@@ -175,12 +176,12 @@ func SectionState(covers []CoverState) string {
 type planInfo struct {
 	Plan
 	State        string
-	TaskCells    []model.ProgressTask // abandoned tasks omitted, §2.3
+	TaskCells    []model.ProgressTask // abandoned tasks omitted, WL-REQ-1336
 	Landed, Open int                  // Open is active plus unstarted
 }
 
 // Derive turns one project's facts into model.ProjectProgress, holding every
-// rule of §1.1 to §1.3.
+// rule of WL-REQ-1335.
 func Derive(in Input) model.ProjectProgress {
 	// A withdrawn plan covers nothing (WL-REQ-1335); stale counts as accepted.
 	in.Plans = slices.DeleteFunc(slices.Clone(in.Plans), func(p Plan) bool { return p.Status == "withdrawn" })
@@ -329,7 +330,7 @@ func Derive(in Input) model.ProjectProgress {
 	return out
 }
 
-// nextAct is §1.3's next-act ladder: the first rule that applies wins.
+// nextAct is WL-REQ-1335's next-act ladder: the first rule that applies wins.
 func nextAct(openTasks int, openPlans, draftPlans []string, unplannedCount int, noRecordPlans []string) model.ProgressAct {
 	switch {
 	case len(openPlans) > 0:

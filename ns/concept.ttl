@@ -67,7 +67,7 @@ wlc:definition a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "def
 wlc:principle a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "principle" ;
     skos:definition "A design stance other rules refine; checkable only through its refiners, never covered, never a gap." .
 wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "informative" ;
-    skos:definition "Retired (WL-REQ-165): reads as a principle until the §19.7 migration reclassifies it; stays in the CHECK until then." .
+    skos:definition "Retired (WL-REQ-165): reads as a principle until the WL-REQ-1301 migration reclassifies it; stays in the CHECK until then." .
 
 
 # ---------------------------------------------------------------------------

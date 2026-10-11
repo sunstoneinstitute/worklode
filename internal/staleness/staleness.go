@@ -8,7 +8,7 @@ package staleness
 
 import "time"
 
-// Input is everything the §8.7 clock consults for one document.
+// Input is everything the WL-REQ-170 clock consults for one document.
 type Input struct {
 	DocKind      string // spec | adr | plan
 	Status       string
