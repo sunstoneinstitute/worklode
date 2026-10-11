@@ -15,7 +15,7 @@ import (
 )
 
 // typedID matches WL-REQ-168's <KEY>-<TYPE>-<n> grammar (generalized by WL-REQ-122
-// to plans, milestones and deliverables), with an optional #sec- fragment
+// to plans, milestones and deliverables), with an optional section-anchor fragment
 // for the SPEC case. It is checked before taskID: a document reference
 // must never parse as a task id (WL-REQ-168).
 var typedID = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-([A-Z][A-Z0-9]*)-(\d+(?:-\d+)?)(#sec-[\w.\-]+)?$`)
