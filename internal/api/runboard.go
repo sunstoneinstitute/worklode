@@ -2,7 +2,7 @@
 // (see docs/plans/2026-08-27-project-cockpit-3-run-board.md). It has
 // no store calls and no HTTP: it only turns already-fetched
 // store.ProjectWorkFact rows (plus session, PR/CI, and cost maps) into the
-// ui.RunBoardView a page renders. The rest of §8 — presets, scoped
+// ui.RunBoardView a page renders. The rest of WL-SPEC-86 — presets, scoped
 // authority, pre-run confirmation, retry/stop, Pause automation — has no
 // governed objects yet (see the plan's Coverage section) and is not
 // attempted here.
@@ -143,7 +143,7 @@ func runGroupOf(f store.ProjectWorkFact) runGroup {
 	}
 }
 
-// runGroupOrder is the §8 groups in the spec's own pinned order — the order
+// runGroupOrder is WL-REQ-1373's groups in the spec's own pinned order — the order
 // the board renders them in, and the only order runGroup's iota values are
 // allowed to imply.
 var runGroupOrder = []runGroup{
@@ -151,7 +151,7 @@ var runGroupOrder = []runGroup{
 	runGroupJudgment, runGroupFailed, runGroupCompleted,
 }
 
-// runGroupLabels are the §8 group headings, quoted exactly (Global
+// runGroupLabels are WL-REQ-1373's group headings, quoted exactly (Global
 // Constraints: "No seventh group, no renames, no reordering").
 var runGroupLabels = map[runGroup]string{
 	runGroupReady:     "Ready",
@@ -179,9 +179,9 @@ type runBoardInputs struct {
 	Now      time.Time
 }
 
-// assembleRunBoard derives the board: groups in the pinned §8 order, each
-// omitted when empty; Running and Needs judgment rows carry the full §8
-// fact list; Failed and Completed are bounded to the newest runBoardBound by
+// assembleRunBoard derives the board: groups in the pinned WL-REQ-1373 order, each
+// omitted when empty; Running and Needs judgment rows carry the full
+// WL-REQ-1373 fact list; Failed and Completed are bounded to the newest runBoardBound by
 // state event with an "and N more" count. Returns nil when no task
 // classifies into any group — the page then renders the empty-board line.
 func assembleRunBoard(in runBoardInputs) *ui.RunBoardView {
@@ -243,7 +243,8 @@ func boundToNewest(facts []store.ProjectWorkFact, n int) (bounded []store.Projec
 
 // runRow renders one task's row. Ready and terminal (Failed/Completed) rows
 // carry only the identifying fields; Waiting rows add Holds; Running and
-// Needs-judgment rows carry the full §8 active-item fact list.
+// Needs-judgment rows carry the full WL-REQ-1373 active-item fact
+// list.
 func runRow(f store.ProjectWorkFact, g runGroup, sessions map[string]store.ProjectAgentSession,
 	prs map[string]store.PullRequest, ci map[store.RepoSHA][]store.CIRun,
 	costs map[string][]store.CostTotal, now time.Time) ui.RunRowView {
@@ -288,8 +289,7 @@ func runRow(f store.ProjectWorkFact, g runGroup, sessions map[string]store.Proje
 }
 
 // holdsLabel names what holds a Waiting row: its open blocker task ids, then
-// its blocking plans' doc numbers — a plan carries no other number (WL-SPEC-77
-// §7), so the doc id is what "blocking plan numbers" means.
+// its blocking plans' doc numbers — a plan carries no other number, so the doc id is what "blocking plan numbers" means.
 func holdsLabel(f store.ProjectWorkFact) string {
 	parts := make([]string, 0, len(f.OpenBlockers)+len(f.BlockingPlans))
 	for _, b := range f.OpenBlockers {

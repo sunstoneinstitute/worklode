@@ -88,8 +88,8 @@ func (s *server) flowNamed(name string) *model.ApprovalFlow {
 	return nil
 }
 
-// applyApprovalFlow handles POST /api/v1/projects/{id}/approval-flow (WL-SPEC-75
-// §13.6): stamp the named flow's snapshot on the project, and materialize the
+// applyApprovalFlow handles POST /api/v1/projects/{id}/approval-flow
+// (WL-REQ-1607): stamp the named flow's snapshot on the project, and materialize the
 // requirements it demands of the deliverables the project already holds. The
 // stamp and the backfill share the transaction that records the event, so a
 // project is never left carrying a flow whose rows were not written.

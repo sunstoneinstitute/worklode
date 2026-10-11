@@ -95,8 +95,8 @@ const (
 	permMilestoneWrite Permission = "milestone.write"
 	permMilestoneRead  Permission = "milestone.read"
 
-	// permReferenceRead and permReferenceWrite cover entity_edges (WL-SPEC-75
-	// §5): typed references between entities of different kinds, the only
+	// permReferenceRead and permReferenceWrite cover entity_edges
+	// (WL-REQ-1604): typed references between entities of different kinds, the only
 	// edges allowed to cross a project boundary. Any crew member may declare
 	// a dependency, matching deliverable creation, so both grant to
 	// {RoleUser, RoleAdmin}.
@@ -248,8 +248,8 @@ const (
 	// answer separately from "who may read a task".
 	permApprovalRead Permission = "approval.read"
 
-	// permApprovalRequire covers filing an ad-hoc approval requirement (WL-SPEC-75
-	// §13.6): POST /api/v1/approvals. Separate from permApprovalDecide on
+	// permApprovalRequire covers filing an ad-hoc approval requirement
+	// (WL-REQ-1607): POST /api/v1/approvals. Separate from permApprovalDecide on
 	// purpose — saying "this needs review" is authoring, which an agent or a
 	// CI job holding a bearer token may do, while the decision itself stays
 	// a web-session act.

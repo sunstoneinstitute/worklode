@@ -107,7 +107,7 @@ func (a *applier) applyFunc(event string, env envelope, body []byte, resolvedCom
 			return a.applyRegistryPackage(tx, repo, body)
 		}
 	case "repository_ruleset":
-		// Nothing in the payload is the fact: §6.3's merge-queue rule is read
+		// Nothing in the payload is the fact: WL-REQ-1340's merge-queue rule is read
 		// per branch from the rules API. The event only says "look again", so
 		// there is no typed-table apply — just a poke at the refresh loop.
 		// Outside the apply callback on purpose: that one runs in an open

@@ -67,8 +67,7 @@ governs every part while being built by none of them, and it needs no
 
 For a spec section `S` whose rule is a requirement (an invariant or
 informative rule is never a gap), over accepted-or-superseded plans covering its rule
-(a superseded plan is spent, and discharges what it covered — WL-SPEC-78
-§1.3):
+(a superseded plan is spent, and discharges what it covered — WL-REQ-187):
 
 - some such plan covers it, and no draft plan also covers it →
   **planned**;
@@ -122,7 +121,7 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
 5. **Write every part's `covers:` block now**, including parts whose bodies
    come later. The blocks are the contract between parts.
 6. **Claim honestly.** A part that claims `#sec-11` and cannot demonstrate any
-   of §11's acceptance bullets should drop the section, or split the rule so
+   of that section's acceptance bullets should drop the section, or split the rule so
    the part covering it is the one that can. Claiming a section you cannot
    prove is the failure this format exists to catch.
 7. A plan is bounded by a token budget the server enforces (12 S19): about

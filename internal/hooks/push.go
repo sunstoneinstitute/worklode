@@ -170,7 +170,7 @@ func applyMainPush(tx *sql.Tx, eventID int64, repo string, now time.Time, p push
 	}
 	// A push transitions a set of tasks and the transitions record no event
 	// of their own, so this event is the only record of which tasks moved
-	// (WL-SPEC-82 §15.5).
+	// (WL-REQ-1339).
 	if len(movedIDs) > 0 {
 		return store.MergeEventPayload(tx, eventID, map[string]any{"tasks": movedIDs})
 	}

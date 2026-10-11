@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simulate the open-front term proposed for spec 005 §3's ranking key.
+"""Simulate the open-front term proposed for the ranking key (WL-REQ-100).
 
 The problem: `(is_critical, concern_rank, priority, blocking_fan_out)` has no
 term that prefers finishing a spec over starting one, so an agent loop spreads
@@ -15,7 +15,7 @@ applies **only inside an open front** -- see proposed_key for why extending it
 to untouched specs backfires. The pair picks *which spec* to work on;
 `priority` then orders within it. Like `concern_rank`, it only sorts -- it
 never removes rows, so an agent still drifts to an untouched spec rather than
-idle (005 §2).
+idle.
 
 What makes this worth simulating rather than reasoning about: the term is
 *dynamic*. Claiming a task from an untouched spec turns that spec into an open
@@ -80,7 +80,7 @@ def group_state(tasks, group, claimed):
 
 
 def current_key(task):
-    """spec 005 §3 today. fan_out is unavailable; created_at stands in."""
+    """The WL-REQ-100 ranking key without its rally arm. fan_out is unavailable; created_at stands in."""
     return (
         task["priority"] != "critical",
         0,  # concern_rank: every task's concern is null today

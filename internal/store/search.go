@@ -112,7 +112,7 @@ fused AS (
            -- query that is the chunk literally containing the identifier,
            -- which is the excerpt a reader wants to see.
            coalesce(l.chunk_id, d.chunk_id)         AS chunk_id,
-           -- Reciprocal rank, k = 60, weight 1.0 on both arms (WL-SPEC-79 §15). A
+           -- Reciprocal rank, k = 60, weight 1.0 on both arms (WL-REQ-1714). A
            -- missing arm contributes zero rather than dropping the row.
            coalesce(1.0 / (60 + d.rank), 0) + coalesce(1.0 / (60 + l.rank), 0) AS score,
            coalesce(d.rank, 0) AS dense_rank,

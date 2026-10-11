@@ -155,8 +155,8 @@ func (c *Client) ListCrew(ctx context.Context, project string) ([]model.CrewMemb
 }
 
 // RemoveCrewMember calls DELETE /api/v1/projects/{id}/participants/{actor},
-// removing every role that actor holds on the project in one act (WL-SPEC-75
-// §13.5). The server answers 204 with no body, so the returned raw bytes are
+// removing every role that actor holds on the project in one act (WL-REQ-1605).
+// The server answers 204 with no body, so the returned raw bytes are
 // always empty; it is returned anyway to match AddCrewMember/ListCrew's
 // shape, letting the caller's --json path print via printRaw the same way.
 // A removal refused because the member still owns open work comes back as a

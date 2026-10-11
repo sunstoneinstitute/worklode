@@ -14,9 +14,9 @@ import (
 // different corpora to match against — internal/cmd against the documents the
 // backbone serves, internal/store against the rows it holds (WL-REQ-1357) — so the grammar lives here, once, and each of them applies it.
 
-// SplitFragment separates a trailing "#sec-..." fragment from ref, per 026
-// §4's "narrows any of them to an anchor". base is ref with the fragment (and
-// its '#') removed; section is the fragment with the '#' stripped, or "" when
+// SplitFragment separates a trailing "#sec-..." fragment from ref, per
+// WL-REQ-198's "narrows any form to an anchor". base is ref with the
+// fragment (and its '#') removed; section is the fragment with the '#' stripped, or "" when
 // ref carried none.
 func SplitFragment(ref string) (base, section string) {
 	base, section, _ = strings.Cut(ref, "#")
@@ -147,7 +147,7 @@ const RuleRefText = `([A-Z][A-Z0-9]{1,9})-(?:REQ|RULE|CL)-(\d+)`
 
 // The rule kinds (WL-REQ-165), ns.Schemes["RuleKind"]. The store mints a
 // requirement by default. RuleKindInformative is retired and reads as a
-// principle until its rows are reclassified (§19.7).
+// principle until its rows are reclassified (WL-REQ-1301).
 const (
 	RuleKindRequirement = "requirement"
 	RuleKindCatalogue   = "catalogue"
@@ -157,8 +157,8 @@ const (
 	RuleKindInformative = "informative"
 )
 
-// RuleKinds are the kinds a rule may be given, in §4's order; the retired
-// informative is not one of them.
+// RuleKinds are the kinds a rule may be given, in WL-REQ-1642's order; the
+// retired informative is not one of them.
 var RuleKinds = []string{RuleKindRequirement, RuleKindCatalogue, RuleKindInvariant, RuleKindDefinition, RuleKindPrinciple}
 
 // RuleKindCovered reports whether a plan covers rules of this kind: a
@@ -259,5 +259,5 @@ var ErrNoSpec = errors.New("no governing spec")
 // printing the error as-is gets a self-explanatory message rather than the
 // bare sentinel text. errors.Is(err, ErrNoSpec) still holds through the wrap.
 func NoSpecError(ref string) error {
-	return fmt.Errorf("%s is the no-governing-spec sentinel (026 §4.3), not a document: %w", ref, ErrNoSpec)
+	return fmt.Errorf("%s is the no-governing-spec sentinel (WL-REQ-200), not a document: %w", ref, ErrNoSpec)
 }

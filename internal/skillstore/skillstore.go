@@ -58,8 +58,8 @@ func Root() (string, error) {
 
 // Dirs locates the two halves of the local skill cache. Links holds one
 // symlink per skill name and nothing else — harnesses walk it, so a hash
-// dir here would surface every version as a duplicate skill (WL-SPEC-80
-// §17.3). Store holds the immutable content-addressed version dirs.
+// dir here would surface every version as a duplicate skill
+// (WL-REQ-1743). Store holds the immutable content-addressed version dirs.
 type Dirs struct {
 	Links string // ~/.worklode/skills
 	Store string // ~/.worklode/store

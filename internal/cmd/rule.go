@@ -28,8 +28,7 @@ func init() {
 }
 
 // newRuleAddCmd is `lode rule add`: a rule in the current project, arranged
-// in no document, at draft version 1 and owned by the caller (WL-SPEC-77
-// §19.2).
+// in no document, at draft version 1 and owned by the caller (WL-REQ-1296).
 func newRuleAddCmd() *cobra.Command {
 	var scope scopeFlags
 	var heading, file, kind string
@@ -107,7 +106,7 @@ func newRuleAcceptCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&in.Substantive, "substantive", false,
-		"judge the version substantive (WL-SPEC-77 §10): mint a review and mark covering plans stale")
+		"judge the version substantive (WL-REQ-171): mint a review and mark covering plans stale")
 	return cmd
 }
 

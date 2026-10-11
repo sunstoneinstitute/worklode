@@ -1,11 +1,12 @@
 -- Corpus index: one chunk table over docs, tasks and skills, carrying both
 -- retrieval arms' inputs (WL-SPEC-79). Replaces skill_embeddings (0007).
 --
--- Two deviations from WL-SPEC-79's printed DDL, both forced:
---   * embedding is NULLABLE. §5 shows NOT NULL, but §8 invalidates a provider
---     change by nulling the column and §11 requires a no-provider instance to
---     write chunk rows with no vectors at all. §8/§11 win.
---   * doc_id is bigint REFERENCES docs(id). §5 writes "text REFERENCES
+-- Two deviations from WL-REQ-258's printed DDL, both forced:
+--   * embedding is NULLABLE. WL-REQ-258 shows NOT NULL, but WL-REQ-1715
+--     invalidates a provider change by nulling the column and WL-REQ-1718
+--     requires a no-provider instance to write chunk rows with no vectors at
+--     all. WL-REQ-1715 and WL-REQ-1718 win.
+--   * doc_id is bigint REFERENCES docs(id). WL-REQ-258 writes "text REFERENCES
 --     docs(doc_id)"; there is no such column — 0027 keys docs on a bigint id.
 
 CREATE TABLE index_chunks (
@@ -26,22 +27,22 @@ CREATE TABLE index_chunks (
     anchor       text NOT NULL DEFAULT '',
     chunk_index  int  NOT NULL,
 
-    -- The indexed text itself. Stored because the lexical arm (§6.2) matches
+    -- The indexed text itself. Stored because the lexical arm (WL-REQ-1713) matches
     -- against it, the API excerpts from it, and a re-embed that cannot be
     -- reproduced cannot be verified.
-    context_header text NOT NULL DEFAULT '',   -- §4.3
+    context_header text NOT NULL DEFAULT '',   -- WL-REQ-257
     chunk_text     text NOT NULL,
 
     -- Hash of the subject's indexed text, identical across all of one
-    -- subject's chunks. The convergence loop (§7) compares this against the
+    -- subject's chunks. The convergence loop (WL-REQ-260) compares this against the
     -- live subject; it is the whole freshness mechanism.
     content_hash text NOT NULL,
 
-    -- Fixed width (§2.2): a wrong-shaped vector is refused at INSERT, and the
-    -- typmod is what makes the HNSW index below legal. Nullable per §8/§11.
+    -- Fixed width (WL-REQ-255): a wrong-shaped vector is refused at INSERT, and the
+    -- typmod is what makes the HNSW index below legal. Nullable per WL-REQ-1715/1718.
     embedding    vector(768),
 
-    -- The lexical arm. 'simple', not 'english' — see §6.2; the choice is
+    -- The lexical arm. 'simple', not 'english' — see WL-REQ-1713; the choice is
     -- load-bearing, not stylistic. Generated rather than trigger-maintained so
     -- it cannot drift from chunk_text. Both to_tsvector(regconfig, text) and
     -- setweight are IMMUTABLE, which is what makes a generated column legal;

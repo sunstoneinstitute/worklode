@@ -1,20 +1,20 @@
--- Deliverables (docs/specs/029-research-work-in-the-backbone.md §3): a
+-- Deliverables (WL-RULE-121): a
 -- declared, checkable output of a project — a datapackage, a report PDF, a CMS
--- post. A deliverable is its own entity, never a task kind (§2): it cannot be
+-- post. A deliverable is its own entity, never a task kind (WL-REQ-120): it cannot be
 -- claimed, worked, or closed, so modelling it as a task would store a row that
 -- lies about what it is.
 --
--- It carries no state column, by design (§3.2). "Is it live" is answered by
+-- It carries no state column, by design (WL-RULE-121). "Is it live" is answered by
 -- facts reported by emitters and probers, never by a human closing a task;
 -- until those ingest paths exist the cockpit says the state is unreported
 -- rather than storing a claim nobody verified. The three descriptive fields
--- here are exactly the ones §3.1 allows a person to supply for a custom
+-- here are exactly the ones WL-RULE-121 allows a person to supply for a custom
 -- deliverable: name, description, and an optional URL.
 --
--- Milestones (§2) are not built yet, so a deliverable hangs off its project
+-- Milestones (WL-REQ-120) were not built yet, so a deliverable hangs off its project
 -- directly; the nullable milestone_id arrives with the milestone table.
 
--- Per-project ordinal counters for the non-task entity kinds (§4). Tasks keep
+-- Per-project ordinal counters for the non-task entity kinds (WL-REQ-122). Tasks keep
 -- their own projects.next_task_num counter; every other kind draws from a
 -- (project_id, kind) row here, which is what makes a deliverable COW-DEL-3.
 -- The CHECK carries only the kinds that exist — widen it when the entity

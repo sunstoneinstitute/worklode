@@ -58,9 +58,9 @@ materially, update this copy too — nothing derives it automatically.
 
 The Escalation section (`#ladder`) describes WL-REQ-171, which is fully specified
 and partly implemented: `lode task escalate` and its `task.gap_found` event
-ship (§8.1), the fixer subagent and the rest of the ladder do not. Its copy
+ship, the fixer subagent and the rest of the ladder do not. Its copy
 is deliberately future-tense ("will record", "will amend") to say so; as each
-part of §8 ships, update the tense along with whatever the shipped behaviour
+part of the ladder ships, update the tense along with whatever the shipped behaviour
 actually does.
 
 ## Logo

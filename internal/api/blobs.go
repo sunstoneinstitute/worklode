@@ -121,7 +121,7 @@ func blobURL(hash, filename string) string {
 //     RFC 8187 half of the header must be well-formed UTF-8.
 //
 // What it does not do is police extensions: naming a text file `.exe` is a
-// social problem, not a serving one, and §6's inline/attachment token — not
+// social problem, not a serving one, and WL-REQ-230's inline/attachment token — not
 // the filename — is what decides whether the bytes can execute.
 func sanitizeFilename(s string) string {
 	if s == "" || len(s) > maxFilenameBytes || !utf8.ValidString(s) {
@@ -160,7 +160,7 @@ func sanitizeFilename(s string) string {
 // — the parameter is unsigned, so a caller who may read a blob may choose
 // what their own browser saves it as. That grants no access: the bytes,
 // the media type and the inline/attachment token are all decided server-side
-// from `blobs`, and only the token carries §6's security weight. The residual
+// from `blobs`, and only the token carries WL-REQ-230's security weight. The residual
 // risk is a hand-crafted link that saves a known blob under a misleading
 // name, which is strictly weaker than the same actor hosting the file
 // themselves, and signing the parameter would not remove it — whoever can

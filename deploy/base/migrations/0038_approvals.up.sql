@@ -6,7 +6,7 @@ ALTER TABLE pull_requests ADD COLUMN author text;
 -- WL-SPEC-75: one table, every approval. A missing approval is a visible
 -- 'awaiting' row. entity_kind is unconstrained text: 'pr' is the only value
 -- this plan writes; part 2 adds documents/deliverables/tasks without a
--- migration. The UNIQUE key is §7.1's (entity_kind, entity_id,
+-- migration. The UNIQUE key is WL-REQ-124's (entity_kind, entity_id,
 -- subject_revision); part 2 widens it when one revision needs several lanes.
 CREATE TABLE approvals (
     id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

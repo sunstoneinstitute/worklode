@@ -121,7 +121,7 @@ func TestDocEditRefusesHeader(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "headers are accepted only by lode doc add and lode doc import (WL-SPEC-77 §7)") {
+	if err == nil || !strings.Contains(err.Error(), "headers are accepted only by lode doc add and lode doc import (WL-REQ-168)") {
 		t.Fatalf("err = %v; want the client-side header refusal", err)
 	}
 }

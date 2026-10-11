@@ -187,7 +187,7 @@ amendment → supersession:
 | `status` | `draft` \| `accepted` \| `superseded` | all |
 | `issued` | `YYYY-MM-DD` | specs |
 | `covers` | requirement ref(s) (`WL-REQ-<n>`), spec section reference(s), or whole-document reference(s) — plain references only, no coverage level — or `NO-SPEC` | **plans**, mandatory |
-| `defers` | list of `{spec, to}`: a section this plan hands off (`spec`, with `#sec-N`) and the document that owns it (`to`, no fragment) — reported `deferred` with its owner by `--needs-planning` until some plan covers it (026 §5.3) | **plans** |
+| `defers` | list of `{spec, to}`: a section this plan hands off (`spec`, with a section anchor) and the document that owns it (`to`, no fragment) — reported `deferred` with its owner by `--needs-planning` until some plan covers it (WL-REQ-204) | **plans** |
 | `requires` | reference list (`isRequiredBy` is refused) | all |
 | `blockedBy` | plan references — the named plans run first; both ends must be plans in the same project (`blocks` is refused) | **plans** |
 | `wasDerivedFrom` | scalar reference | specs |

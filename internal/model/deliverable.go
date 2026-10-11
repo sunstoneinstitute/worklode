@@ -28,9 +28,9 @@ type Deliverable struct {
 	// (WL-REQ-118). "" when it declares an artifact address or neither form.
 	Label string `json:"label"`
 
-	// Milestone is the milestone this deliverable is attached to (WL-SPEC-75
-	// §2), "" when it is attached to none. Always in the deliverable's own
-	// project — the store refuses a cross-project attach.
+	// Milestone is the milestone this deliverable is attached to
+	// (WL-REQ-120), "" when it is attached to none. Always in the
+	// deliverable's own project — the store refuses a cross-project attach.
 	Milestone string `json:"milestone,omitempty"`
 
 	// ReportedState is the state of the newest evidence for Artifact

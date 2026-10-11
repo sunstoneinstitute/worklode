@@ -11,7 +11,7 @@ old webhook (`lode inbox import`) is always safe.
 | Event / action | Records | Task-state effect |
 |---|---|---|
 | `pull_request` `opened` / `ready_for_review` | the PR row, correlated to a task by branch name | If the correlated task is `in_progress`, moves it to `in_review`. Any other task state (`ready`, `merged`, …) is left alone — a correlation must never fail delivery. |
-| `pull_request` `review_requested` | — | Reopens an approval row for the newly requested reviewer (spec 029 §7.1). |
+| `pull_request` `review_requested` | — | Reopens an approval row for the newly requested reviewer. |
 | `pull_request_review` `approved` / `changes_requested` / `commented` | the review | Resolves (closes) the open approval this review decides. |
 | `pull_request` `closed`, `merged: true` | the head SHA and merge-commit SHA as `task_commits` | **No state change yet.** The task advances only once one of these SHAs actually appears on the default branch via a `push` event — see below. The lease is deliberately left untouched (a merge doesn't free the worktree). |
 | `push` to a repo's default branch | new `main_commits`, then finds every task whose recorded commit sits at or below the new frontier | Calls `ResolveDelivery` for each — see below. |
@@ -56,7 +56,7 @@ git-commit SHA (`revision` field), whichever the event's payload carries.
 ## Data catalog (HMAC-signed, `POST /hooks/catalog`)
 
 Reports what a catalog knows about an artifact address, as **deliverable
-evidence** (spec 029 §3.2: deliverable state is reported by emitters, never
+evidence** (deliverable state is reported by emitters, never
 asserted by a human closing a task). **No task-state effect at all** — this
 path never calls `Transition` or `ResolveDelivery`.
 

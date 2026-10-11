@@ -444,8 +444,8 @@ func parseSettingsArgs(pairs []string) (map[string]any, error) {
 // newProjectSetFlowCmd is `lode project set flow <id> --name <flow>`: stamp
 // the named approval flow on a project and materialize the requirements it
 // demands of the deliverables the project already holds (WL-REQ-124). It is a
-// `set` field and not its own verb because the flow is a project field (WL-SPEC-81
-// §1 L3). The vocabulary of flow names is instance configuration, so an
+// `set` field and not its own verb because the flow is a project field (WL-REQ-305
+// L3). The vocabulary of flow names is instance configuration, so an
 // unknown name is the server's 404 rather than a client-side check.
 func newProjectSetFlowCmd() *cobra.Command {
 	var name string

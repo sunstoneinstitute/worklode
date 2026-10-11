@@ -2,8 +2,8 @@ package api
 
 import "fmt"
 
-// InstanceDev and InstanceProd are the only two instance environments (WL-SPEC-73
-// §4.2). They say which kind of worklode instance this process is — a dev
+// InstanceDev and InstanceProd are the only two instance environments
+// (WL-REQ-1556). They say which kind of worklode instance this process is — a dev
 // instance that re-seeds and discards data, or a prod instance that holds the
 // record. Unrelated to LODE_CLUSTER_ENV_MAP, which describes the environment
 // of the deployments worklode *observes*.

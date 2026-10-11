@@ -268,11 +268,11 @@ func refuseWithdrawnRule(tx *sql.Tx, id int64, ref string) error {
 	return fmt.Errorf("%s is %s; name a successor instead: %s: %w", ref, status, succ, ErrInvalidInput)
 }
 
-// isSpecHeading reports whether section i is a spec heading (WL-SPEC-77
-// §19.1): anchored, no text of its own, and followed directly by a deeper
+// isSpecHeading reports whether section i is a spec heading (WL-REQ-1295):
+// anchored, no text of its own, and followed directly by a deeper
 // anchored heading. syncRules writes one as a heading row only when no prior
 // rule matched it, so a heading-only rule written before spec headings
-// existed stays arranged until the §19.7 migration converts it.
+// existed stays arranged until the WL-REQ-1301 migration converts it.
 func isSpecHeading(secs []*designdoc.Section, i int) bool {
 	return i+1 < len(secs) && strings.TrimSpace(secs[i].Body) == "" &&
 		secs[i+1].Anchor != "" && secs[i+1].Level > secs[i].Level
@@ -782,7 +782,7 @@ func SetRuleMeta(tx *sql.Tx, ruleID int64, in model.RuleMetaInput) error {
 			return err
 		}
 		if len(plans) > 0 {
-			return fmt.Errorf("%s is covered by an accepted plan and stays a requirement or catalogue (WL-SPEC-77 §4): %w",
+			return fmt.Errorf("%s is covered by an accepted plan and stays a requirement or catalogue (WL-REQ-1642): %w",
 				ruleRefOf(tx, ruleID), ErrRuleCovered)
 		}
 	}

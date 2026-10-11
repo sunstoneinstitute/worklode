@@ -70,7 +70,7 @@ var touchKinds = map[string]string{
 // payload is the event's recorded payload. A type whose family is not in
 // touchKinds resolves to the zero Touch; a type that is resolves to its kind
 // even when the payload names no id, which is still a signal the page's
-// summary is stale (§5.2 refreshes it on any frame).
+// summary is stale (WL-REQ-1787 refreshes it on any frame).
 func Resolve(eventType string, payload []byte) Touch {
 	family, _, _ := strings.Cut(eventType, ".")
 	kind, ok := touchKinds[family]

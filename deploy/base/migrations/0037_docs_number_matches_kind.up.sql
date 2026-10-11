@@ -1,4 +1,4 @@
--- Tighten the docs number invariant (docs/specs/025-documents-in-the-backbone.md §14.3).
+-- Tighten the docs number invariant.
 --
 -- Migration 0027 shipped `CHECK (kind = 'plan' OR number IS NOT NULL)`, which
 -- says only half of what WL-SPEC-77 means: a spec or ADR must carry a corpus

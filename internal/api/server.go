@@ -159,7 +159,7 @@ type Config struct {
 	// EmbeddingModel names the model sent to EmbeddingURL.
 	EmbeddingModel string `env:"LODE_EMBEDDING_MODEL"`
 	// EmbeddingContextTokens is the model's context window in tokens, required
-	// whenever EmbeddingModel is set (07 §14.4). The chunk budget derives from
+	// whenever EmbeddingModel is set (WL-REQ-257). The chunk budget derives from
 	// it. A string because setEnvTaggedFields fills strings only; parsed in
 	// embeddingBudget.
 	EmbeddingContextTokens string `env:"LODE_EMBEDDING_CONTEXT_TOKENS"`
@@ -352,7 +352,7 @@ type server struct {
 	embedder      embed.Provider
 	queryEmbedder embed.Provider
 	// chunkBudget is the chunk sizing derived from EmbeddingContextTokens
-	// (07 §14.4), passed to the indexer.
+	// (WL-REQ-257), passed to the indexer.
 	chunkBudget      corpusindex.Budget
 	skillSyncer      *skillsync.Syncer
 	skillSources     []skillsync.Source
@@ -463,8 +463,8 @@ type server struct {
 	// says whether the viewer landed on a board with any live work on it.
 	runBoardRenders *prometheus.CounterVec
 
-	// inboxRenders counts cross-project inbox page renders (GET /inbox, WL-SPEC-82
-	// §12), by outcome (empty, rendered); see inbox.go's inboxPage and
+	// inboxRenders counts cross-project inbox page renders (GET /inbox,
+	// WL-REQ-347), by outcome (empty, rendered); see inbox.go's inboxPage and
 	// metrics.go's observeInboxRender. navWrap already counts the "inbox"
 	// destination by outcome — this one says whether the viewer had anything
 	// waiting on them.
@@ -480,8 +480,8 @@ type server struct {
 	// route and outcome; see webform.go and observeProgressWrite.
 	progressWrites *prometheus.CounterVec
 	// progressFragmentRenders counts the Progress page's row/summary fragment
-	// requests (GET .../progress/spec/{doc}, GET .../progress/summary, WL-SPEC-85
-	// §6), by fragment (spec, summary) and outcome; see progress.go and
+	// requests (GET .../progress/spec/{doc}, GET .../progress/summary,
+	// WL-REQ-1787), by fragment (spec, summary) and outcome; see progress.go and
 	// observeProgressFragmentRender.
 	progressFragmentRenders *prometheus.CounterVec
 	// dictations counts POST /dictate outcomes (WL-299); see metrics.go.
@@ -557,7 +557,7 @@ type server struct {
 	eventStreamEventsSent prometheus.Counter
 
 	// progressStreamsActive is the number of open Progress page follows
-	// (GET /projects/{id}/progress/events, §5.1) and progressStreamFramesSent
+	// (GET /projects/{id}/progress/events, WL-REQ-1339) and progressStreamFramesSent
 	// the frames pushed over them; see progress.go. A per-project label is
 	// deliberately not added: unlike the admin log follow, one of these opens
 	// per Progress page view, so a project label here would be the page's own
@@ -603,7 +603,7 @@ type server struct {
 	// observeImageMirror. Distinct from blobUploads because this is the one
 	// blob path driven by an outbound fetch of an attacker-chosen URL:
 	// sustained fetch_failed is GitHub or the SSRF guard refusing, and every
-	// such failure leaves a remote reference in a body that §8 then renders
+	// such failure leaves a remote reference in a body that WL-REQ-1698 then renders
 	// as nothing.
 	imageMirrors *prometheus.CounterVec
 
@@ -725,9 +725,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /{$}", s.navWrap("home", s.homePage))
 	r.web("POST /home/reviewed", s.navWrap("brief_review", s.requireSession(permWebWrite, s.reviewedThroughNow)))
 	r.web("GET /ideas", s.navWrap("ideas", s.globalPlaceholder("ideas", "Ideas",
-		"Low-friction idea capture, looser than and promotable into Intake, arrives with WL-SPEC-82 §7.")))
+		"Low-friction idea capture, looser than and promotable into Intake, arrives with WL-REQ-342.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
-		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with WL-SPEC-82 §7 and WL-SPEC-75 §13.7.")))
+		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with WL-REQ-342 and WL-REQ-125.")))
 	r.web("GET /projects", s.navWrap("projects", s.projectsPage))
 	r.web("GET /projects/{id}", s.navWrap("projects", s.projectPage))
 	// The literal-segment patterns win over the {section} wildcard below for
@@ -775,7 +775,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))
 	r.web("GET /approvals/{id}", s.navWrap("reviews", s.approvalPage))
 	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("", "Deliveries",
-		"Publication, deployment, and operational delivery evidence arrive with WL-SPEC-75 §10 and §13.3.")))
+		"Publication, deployment, and operational delivery evidence arrive with WL-RULE-112 and WL-RULE-121.")))
 	// Knowledge is the document corpus: WL-REQ-331 defines the destination
 	// as "documents and graph-backed expert views", and /docs is the half of
 	// it that exists. /knowledge stays as a redirect so the spec's own
@@ -1091,7 +1091,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 }
 
 // embeddingBudget validates the embedding configuration and derives the chunk
-// budget from it (07 §14.4): a model needs its context window declared, and
+// budget from it (WL-REQ-257): a model needs its context window declared, and
 // no provider means the lexical-only default.
 func embeddingBudget(cfg Config) (corpusindex.Budget, error) {
 	if cfg.EmbeddingModel == "" {
@@ -1385,7 +1385,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		// The corpus convergence loop (WL-REQ-260), gated the same way and for
 		// the same reason: it is a background loop with no configuration of
 		// its own to switch it on. It runs with no embedding provider too,
-		// writing the chunk text the lexical arm needs (§11).
+		// writing the chunk text the lexical arm needs (WL-REQ-1718).
 		go (&indexer.Indexer{
 			Store: st, Embed: s.embedder, Metrics: indexer.NewMetrics(reg), Log: s.log,
 			Budget: s.chunkBudget,

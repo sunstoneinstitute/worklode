@@ -1,4 +1,4 @@
-// Acting on a pull request (WL-SPEC-82 §15.3): enqueue it into the
+// Acting on a pull request (WL-REQ-1785): enqueue it into the
 // repository's merge queue, or merge it outright. Both act as the App's
 // installation, like every other per-repo write in this package.
 //
@@ -35,8 +35,8 @@ const maxGitHubBody = 1 << 20
 // githubCall performs an authenticated request, optionally carrying in as a
 // JSON body, and decodes a 2xx into out. Anything else becomes a
 // *GitHubError with GitHub's message. githubJSON cannot serve here: it sends
-// no body and drops the body of a non-2xx, which is exactly the text §3.6
-// passes back.
+// no body and drops the body of a non-2xx, which is exactly the text
+// WL-REQ-1785 passes back.
 func githubCall(ctx context.Context, method, url, auth string, in, out any) error {
 	var body io.Reader
 	if in != nil {

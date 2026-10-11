@@ -262,8 +262,8 @@ func (s *server) reportDeliverable(w http.ResponseWriter, r *http.Request) {
 
 // patchDeliverable handles PATCH /api/v1/deliverables/{id}: reparents a
 // deliverable to another milestone in its own project, or detaches it
-// ("" clears). The three descriptive fields stay immutable in P1 (WL-SPEC-75
-// §3.1), so milestone is the only field this route accepts.
+// ("" clears). The three descriptive fields stay immutable in P1
+// (WL-RULE-121), so milestone is the only field this route accepts.
 func (s *server) patchDeliverable(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req model.EditDeliverableInput

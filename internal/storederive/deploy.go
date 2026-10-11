@@ -13,7 +13,7 @@ import (
 )
 
 // DeployTriples derives the observed/deploy document (WL-SPEC-82 deriver 4,
-// vocabulary and guards per WL-SPEC-79 §3-§6): a projection of already-
+// vocabulary and guards per WL-SPEC-79): a projection of already-
 // ingested artifacts, deployments, environments, commit links and release
 // frontiers. Projection, not new build (D6) — every triple comes from a row.
 func DeployTriples(ctx context.Context, s *store.Store) ([]byte, error) {

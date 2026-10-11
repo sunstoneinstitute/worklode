@@ -25,8 +25,8 @@ type lintRule struct {
 	words         int
 }
 
-// RuleLint measures a project's rules against the targets of WL-SPEC-77
-// §4c: rules per spec, closure spread, and one finding per rule with one
+// RuleLint measures a project's rules against the targets of WL-REQ-1367:
+// rules per spec, closure spread, and one finding per rule with one
 // context edge, an undefined term, an open conflictsWith edge or a
 // positional reference. A term is the heading of a live definition rule in
 // the project; a rule whose body uses it as a whole word, case-insensitive,

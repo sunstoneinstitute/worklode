@@ -3,7 +3,7 @@
 
 The corpus carries four spellings of a document reference. Only one of them,
 `004-execution-backbone.md#sec-3`, names neither the project nor the kind, so
-it resolves same-project only (025 §14.3) and breaks on a renumbering. This
+it resolves same-project only and breaks on a renumbering. This
 rewrites that spelling to `WL-SPEC-4#sec-3` everywhere it resolves.
 
 Out of scope, deliberately: the `025 §7.3` and `spec 025` prose spellings stay
@@ -42,9 +42,9 @@ FENCE = re.compile(r"^\s*(```|~~~)")
 # corpus numbers specs and ADRs but dates plans:
 #
 #   004-execution-backbone.md#sec-3        spec and ADR
-#   2026-08-03-design-doc-queries-1-...    plan (029 §4 puts plans on their own
-#                                          sequence, so their filename never
-#                                          carried a corpus number)
+#   2026-08-03-design-doc-queries-1-...    plan (plans have their own sequence,
+#                                          so their filename never carried
+#                                          a corpus number)
 #
 # Deliberately loose — line ranges ("125-249") and prose compounds ("256-bit")
 # match the numbered shape too. Resolution is what rejects them: a candidate
@@ -113,8 +113,8 @@ MD_LINK = re.compile(r"\[[^\]\n]*\]\([^)\n]*\)")
 # quoted example destroys what the sentence is saying, and no rule separates a
 # quoted example from a citation, so these are named rather than detected.
 SKIP = {
-    "WL-SPEC-25",   # documents in the backbone: 025 §14.3 defines the shorthand
-    "WL-SPEC-26",   # the reference grammar (026 §3)
+    "WL-SPEC-25",   # documents in the backbone: defines the shorthand
+    "WL-SPEC-26",   # the reference grammar
     "WL-357",       # covers: resolution bug report
     "WL-358",       # ref-form ambiguity bug report, with a spelling table
     "WL-481",       # survey of stale command names, by file and line
@@ -204,7 +204,7 @@ class Corpus:
         number with a real spec and mean nothing like it.
 
         Nothing reaches into another project. The legacy spellings cannot cross
-        a corpus (025 §14.3), so a reference that misses at home names something
+        a corpus, so a reference that misses at home names something
         this corpus does not hold, and guessing across projects produced only
         false matches when tried.
         """
@@ -531,7 +531,7 @@ def cmd_apply(corpus_dir: Path, dry_run: bool, diff: bool, limit: int | None,
 
 
 def _rule_of(err: Exception) -> str:
-    """The §8.3 rule name out of a refusal message, for the run log."""
+    """The patch-gate rule name out of a refusal message, for the run log."""
     m = re.search(r"\((new-dependency|ns-term|surface-token|acceptance-criteria|referrer)\)", str(err))
     return m.group(1) if m else "refused"
 
@@ -558,19 +558,19 @@ def write_back(name: str, kind: str, status: str, version, body: str,
         if kind == "task":
             lode("task", "edit", name, "--body-file", path, "--no-upload")
         elif kind != "plan" and status == "accepted":
-            # An accepted spec or ADR is amended in place (025 §8.4), which
+            # An accepted spec or ADR is amended in place (WL-REQ-171), which
             # needs a note.
             try:
                 lode("doc", "edit", name, "--file", path, "--if-version", str(version),
                      "--note", "canonicalise legacy number-slug references to KEY-KIND-N")
             except RuntimeError as e:
-                # §8.3 refuses this edit on every accepted spec whose
+                # The patch gate refuses this edit on every accepted spec whose
                 # frontmatter it touches, and the rule that fires is
                 # new-dependency: it compares the literal strings in `requires:`,
                 # so rewriting `017-task-secrets.md` to `WL-SPEC-17` reads as one
                 # dependency dropped and another gained. The refusal names the
                 # way through itself — "revise it with `lode doc revise`" — which
-                # runs the 025 §6 anchor gate this edit does not disturb. Opt-in,
+                # runs the WL-REQ-167 anchor gate this edit does not disturb. Opt-in,
                 # because it lands a new version without asking the reviewers.
                 if not (revise_gated and "cannot be patched" in str(e)):
                     raise
@@ -615,7 +615,7 @@ def main() -> int:
             s.add_argument("--diff", action="store_true")
             s.add_argument("--limit", type=int)
             s.add_argument("--revise-gated", action="store_true",
-                           help="land an accepted spec that §8.3 refuses through "
+                           help="land an accepted spec that the patch gate refuses through "
                                 "the revision cycle instead of failing it")
     a = p.parse_args()
     if a.cmd == "export":

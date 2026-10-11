@@ -463,8 +463,7 @@ func (s *Store) AllReleaseFrontiers(ctx context.Context) ([]ReleaseFrontierRow, 
 }
 
 // HasMainCommit reports whether sha is a recorded main_commits row for
-// repo — the CommitKnown guard graphproj.ArtifactTriples requires (WL-SPEC-79
-// §12).
+// repo — the CommitKnown guard graphproj.ArtifactTriples requires (WL-REQ-251).
 func (s *Store) HasMainCommit(ctx context.Context, repo, sha string) (bool, error) {
 	var exists bool
 	err := s.db.QueryRowContext(ctx,

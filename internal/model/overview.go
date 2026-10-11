@@ -11,7 +11,7 @@ type DriftEdge struct {
 	To   string `json:"to"`
 }
 
-// Deviation is one wl:AcceptedDeviation (WL-SPEC-79 §Accepted deviations).
+// Deviation is one wl:AcceptedDeviation (WL-REQ-244).
 type Deviation struct {
 	From         string `json:"from"`
 	To           string `json:"to"`

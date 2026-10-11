@@ -1169,7 +1169,7 @@ func TestDocDepthLimit(t *testing.T) {
 		if !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("err = %v, want ErrInvalidInput", err)
 		}
-		for _, want := range []string{"sec-2.1", "orphans accepted anchors", "§6.1"} {
+		for _, want := range []string{"sec-2.1", "orphans accepted anchors", "never accepted"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to mention %q", err, want)
 			}
