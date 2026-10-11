@@ -59,7 +59,7 @@ func (s *server) spaShell(w http.ResponseWriter, r *http.Request) {
 		s.serveSPAShell(w, spaNotFound)
 		return
 	}
-	target := strings.TrimRight(s.cfg.LegacyURL, "/") + r.URL.Path + "?" + r.URL.RawQuery
+	target := strings.TrimRight(s.cfg.LegacyURL, "/") + r.URL.RequestURI()
 	http.Redirect(w, r, target, http.StatusFound)
 	s.observeSPA(spaRedirect)
 }

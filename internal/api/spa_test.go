@@ -52,12 +52,18 @@ func TestSPARedirectsToLegacy(t *testing.T) {
 		return rec
 	}
 
-	rec := get("/work?x=1")
-	if rec.Code != http.StatusFound {
-		t.Fatalf("redirect: got %d, want 302", rec.Code)
-	}
-	if loc := rec.Header().Get("Location"); loc != "https://worklold.test/work?x=1" {
-		t.Fatalf("redirect Location = %q, want https://worklold.test/work?x=1", loc)
+	for path, want := range map[string]string{
+		"/work?x=1":    "https://worklold.test/work?x=1",
+		"/work":        "https://worklold.test/work",
+		"/a%2Fb?q=a+b": "https://worklold.test/a%2Fb?q=a+b",
+	} {
+		rec := get(path)
+		if rec.Code != http.StatusFound {
+			t.Fatalf("%s: got %d, want 302", path, rec.Code)
+		}
+		if loc := rec.Header().Get("Location"); loc != want {
+			t.Fatalf("%s: Location = %q, want %q", path, loc, want)
+		}
 	}
 
 	if rec := get("/projects"); rec.Code != http.StatusOK {
