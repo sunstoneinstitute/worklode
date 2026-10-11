@@ -4,6 +4,11 @@
 .worktrees/
 /bin/
 /dist/
+# Build output (make web); the placeholder index.html stays committed. Vite
+# also copies web/app/public/* straight into dist/ root, not just assets/,
+# so everything under dist/ is ignored except that one file.
+internal/webapp/dist/*
+!internal/webapp/dist/index.html
 __pycache__/
 *.pyc
 

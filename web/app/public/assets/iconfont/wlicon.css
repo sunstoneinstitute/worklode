@@ -1,0 +1,117 @@
+@font-face {
+    font-family: "wlicon";
+    src: url("./wlicon.woff2?eb8272597bf46d53c115e33d4d000dd6") format("woff2"),
+url("./wlicon.woff?eb8272597bf46d53c115e33d4d000dd6") format("woff"),
+url("./wlicon.ttf?eb8272597bf46d53c115e33d4d000dd6") format("truetype");
+}
+
+i[class^="wlicon-"]:before, i[class*=" wlicon-"]:before {
+    font-family: wlicon !important;
+    font-style: normal;
+    font-weight: normal !important;
+    font-variant: normal;
+    text-transform: none;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.wlicon-visibility:before {
+    content: "\f101";
+}
+.wlicon-visibility-off:before {
+    content: "\f102";
+}
+.wlicon-view-column:before {
+    content: "\f103";
+}
+.wlicon-thumb-up:before {
+    content: "\f104";
+}
+.wlicon-swap-vert:before {
+    content: "\f105";
+}
+.wlicon-star:before {
+    content: "\f106";
+}
+.wlicon-settings:before {
+    content: "\f107";
+}
+.wlicon-search:before {
+    content: "\f108";
+}
+.wlicon-schedule:before {
+    content: "\f109";
+}
+.wlicon-preview:before {
+    content: "\f10a";
+}
+.wlicon-pending:before {
+    content: "\f10b";
+}
+.wlicon-notifications:before {
+    content: "\f10c";
+}
+.wlicon-menu:before {
+    content: "\f10d";
+}
+.wlicon-light-mode:before {
+    content: "\f10e";
+}
+.wlicon-history:before {
+    content: "\f10f";
+}
+.wlicon-forward:before {
+    content: "\f110";
+}
+.wlicon-filter_list:before {
+    content: "\f111";
+}
+.wlicon-fact-check:before {
+    content: "\f112";
+}
+.wlicon-error:before {
+    content: "\f113";
+}
+.wlicon-edit:before {
+    content: "\f114";
+}
+.wlicon-drag-indicator:before {
+    content: "\f115";
+}
+.wlicon-download:before {
+    content: "\f116";
+}
+.wlicon-description:before {
+    content: "\f117";
+}
+.wlicon-delete:before {
+    content: "\f118";
+}
+.wlicon-dashboard:before {
+    content: "\f119";
+}
+.wlicon-dark-mode:before {
+    content: "\f11a";
+}
+.wlicon-coffee:before {
+    content: "\f11b";
+}
+.wlicon-close:before {
+    content: "\f11c";
+}
+.wlicon-chevron-right:before {
+    content: "\f11d";
+}
+.wlicon-checklist:before {
+    content: "\f11e";
+}
+.wlicon-check:before {
+    content: "\f11f";
+}
+.wlicon-arrow-forward:before {
+    content: "\f120";
+}
+.wlicon-add:before {
+    content: "\f121";
+}

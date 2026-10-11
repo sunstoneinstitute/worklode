@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-clean FORCE
 
 # WL-REQ-15: six executables from one module. The three user binaries are what
 # Homebrew and Scoop install; the other three ship in the container images.
@@ -48,6 +48,13 @@ openapi: ## Write the generated OpenAPI 3.1 document to bin/openapi.json
 
 clean: ## Remove build output
 	rm -rf bin
+
+web: ## Build the SPA into internal/webapp/dist (needs Node.js and pnpm)
+	cd web/app && pnpm install --frozen-lockfile && pnpm build
+
+web-clean: ## Put the committed placeholder back after a local SPA build
+	git clean -fdx internal/webapp/dist
+	git checkout -- internal/webapp/dist/index.html
 
 .DEFAULT_GOAL := build
 
