@@ -85,8 +85,8 @@ type Config struct {
 	SessionSecret string `env:"LODE_SESSION_SECRET"`
 
 	// LegacyURL (LODE_LEGACY_URL) is the host the templ cockpit keeps serving
-	// from while pages move to the SPA (WL-SPEC-83 §1). Optional: unset means
-	// one host, the cockpit, no SPA (§2).
+	// from while pages move to the SPA (WL-RULE-1302). Optional: unset means
+	// one host, the cockpit, no SPA (WL-REQ-1303).
 	LegacyURL string `env:"LODE_LEGACY_URL"`
 
 	// WebOpen (LODE_WEB_OPEN) permits the web UI to serve anonymous callers on
