@@ -451,8 +451,8 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "projects page", ui.Projects(view))
 }
 
-// reviewsPage handles GET /reviews: the awaiting-approvals queue (WL-SPEC-75
-// §7.1), joining migration, store, and shell over real data. Every row
+// reviewsPage handles GET /reviews: the awaiting-approvals queue
+// (WL-REQ-344), the signed-in actor's rows first (see approvalsView). Every row
 // renders a decide form posting to the act route (WL-REQ-124).
 func (s *server) reviewsPage(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.st.ListAwaitingApprovals(r.Context())
@@ -460,7 +460,14 @@ func (s *server) reviewsPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	s.renderWeb(w, r, http.StatusOK, "reviews page", ui.Approvals(approvalsView(rows, s.st.Now())))
+	sub := subjectFrom(r)
+	selfReview, err := s.st.SelfReviewableApprovals(r.Context(), sub.ActorID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	s.renderWeb(w, r, http.StatusOK, "reviews page", ui.Approvals(
+		approvalsView(rows, s.st.Now(), sub.ActorID, sub.Groups, selfReview)))
 }
 
 // approvalPage handles GET /approvals/{id} (WL-REQ-344): one approval with
