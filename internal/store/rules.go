@@ -439,7 +439,7 @@ func (s *Store) GetRule(ctx context.Context, projectKey string, number int64) (*
 	c.ArrangedIn = nonNil(arr[c.ID])
 
 	prows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT d.id, p.key || '-PLAN-' || coalesce(d.number::text, d.slug), d.status
+		`SELECT DISTINCT d.id, coalesce(`+docRefSQL("p", "d")+`, d.slug), d.status
 		   FROM covered_rules c
 		   JOIN docs d ON d.id = c.plan_id AND d.deleted_at IS NULL
 		   JOIN projects p ON p.id = d.project_id

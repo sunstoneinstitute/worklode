@@ -246,8 +246,10 @@ const docTodoCorpusConcurrency = 8
 // all three, and a body may carry no header at all (WL-724, WL-914).
 func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]designdoc.CorpusDoc, error) {
 	pathBySlug := make(map[string]string, len(docs))
+	pathByRef := make(map[string]string, len(docs))
 	for _, d := range docs {
 		pathBySlug[d.Slug] = designdoc.CorpusPath(d.Kind, d.Slug)
+		pathByRef[d.FormatRef()] = pathBySlug[d.Slug]
 	}
 	out := make([]designdoc.CorpusDoc, len(docs))
 	g, ctx := errgroup.WithContext(ctx)
@@ -256,14 +258,14 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 		g.Go(func() error {
 			detail, _, err := c.GetDoc(ctx, d.ID)
 			if err != nil {
-				return fmt.Errorf("read document %s: %w", d.Slug, err)
+				return fmt.Errorf("read document %s: %w", cli.DocRef(d), err)
 			}
 			p := pathBySlug[d.Slug]
 			out[i] = designdoc.CorpusDoc{
 				Filename: path.Base(p), Path: p, Kind: d.Kind, Number: d.Number,
 				Status: detail.Doc.Status, Title: detail.Doc.Title,
 				Sections: docTodoSectionMetas(detail.Sections),
-				Edges:    docTodoEdgeMetas(detail.Edges, pathBySlug),
+				Edges:    docTodoEdgeMetas(detail.Edges, pathByRef),
 			}
 			return nil
 		})
@@ -293,9 +295,9 @@ func docTodoSectionMetas(secs []model.DocSection) []designdoc.SectionMeta {
 // edges to designdoc.EdgeMeta, the shape corpus.go's edgeMetas builds from a
 // header. The far end becomes its corpus path when the edge resolved to a
 // document, else its verbatim reference (ToExternal, "NO-SPEC" included)
-// split at its fragment. A defers owner is a slug when it resolved;
-// pathBySlug turns a slug of this corpus into its path.
-func docTodoEdgeMetas(edges []model.DocEdge, pathBySlug map[string]string) []designdoc.EdgeMeta {
+// split at its fragment. A defers owner is a ref when it resolved;
+// pathByRef turns a ref of this corpus into its path.
+func docTodoEdgeMetas(edges []model.DocEdge, pathByRef map[string]string) []designdoc.EdgeMeta {
 	var out []designdoc.EdgeMeta
 	for _, e := range edges {
 		if e.Type != "covers" && e.Type != "defers" && e.Type != "requires" {
@@ -306,7 +308,7 @@ func docTodoEdgeMetas(edges []model.DocEdge, pathBySlug map[string]string) []des
 			target, anchor = designdoc.SplitFragment(e.ToExternal)
 		}
 		owner := e.Owner
-		if p, ok := pathBySlug[owner]; ok {
+		if p, ok := pathByRef[owner]; ok {
 			owner = p
 		}
 		out = append(out, designdoc.EdgeMeta{

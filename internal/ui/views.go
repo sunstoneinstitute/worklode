@@ -427,7 +427,7 @@ func prereqDepth(levels, tasks int) string {
 // PrerequisitePlan is one plan ordered before the task's own plan. A draft
 // plan with no minted tasks shows here and nowhere in the graph.
 type PrerequisitePlan struct {
-	Slug, Title, Status, URL string
+	Ref, Title, Status, URL string
 }
 
 // ActivityRow is one row of a task's activity log as a page renders it (spec

@@ -147,7 +147,7 @@ lode doc add --kind spec --slug <slug> --file <draft.md>   # kind: spec, plan
 lode doc list --needs-planning     # accepted specs with a section no accepted plan covers
 lode doc list --needs-execution    # accepted plans whose minted task set still has an open task
 lode doc show <ref> --json        # body, sections, edges
-lode doc todo <slug> --deps             # one spec's remaining work, recursively
+lode doc todo <ref> --deps             # one spec's remaining work, recursively
 lode doc progress                       # every spec in the project: how much exists, what moves it next
 lode doc submit <id>
 lode doc accept <id>

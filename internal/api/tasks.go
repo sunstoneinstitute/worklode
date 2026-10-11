@@ -570,9 +570,8 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		req.Milestone = &empty
 	}
 	// planDoc is resolved outside the transaction the same way `--plan` on
-	// `task list` resolves one (id or slug, WL-REQ-174): store.ResolveDocRef
-	// alone, no KEY-TYPE-n grammar — plans carry no corpus number for that
-	// grammar to address. SetTaskPlan re-checks kind and project once the id
+	// `task list` resolves one (ref, id or slug, WL-REQ-174): store.ResolveDocRef.
+	// SetTaskPlan re-checks kind and project once the id
 	// is known, since a ref can resolve to a document that is not a plan.
 	var planDoc int64
 	if req.Plan != nil {

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1091,7 +1092,7 @@ func newDocWithdrawCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "withdrew doc %d: %s\n", d.ID, d.Slug)
+			fmt.Fprintf(cmd.OutOrStdout(), "withdrew %s: %s\n", cmp.Or(cli.DocRef(d), d.Slug), d.Title)
 			return nil
 		},
 	}
@@ -1134,7 +1135,7 @@ func newDocDeleteCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "deleted doc %d: %s\n", d.ID, d.Slug)
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted %s: %s\n", cmp.Or(cli.DocRef(d), d.Slug), d.Title)
 			if d.Tombstone != nil && d.Tombstone.Justification != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "reason: %s\n", d.Tombstone.Justification)
 			}
@@ -1175,7 +1176,7 @@ func newDocUndeleteCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "undeleted doc %d: %s\n", d.ID, d.Slug)
+			fmt.Fprintf(cmd.OutOrStdout(), "undeleted %s: %s\n", cmp.Or(cli.DocRef(d), d.Slug), d.Title)
 			return nil
 		},
 	}

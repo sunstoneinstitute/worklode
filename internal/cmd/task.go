@@ -433,8 +433,8 @@ func newTaskListCmd() *cobra.Command {
 	// No --mine: the CLI has no caller identity to resolve it to (see
 	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
-	cmd.Flags().StringVar(&plan, "plan", "", "list only the tasks minted by this plan document (id or slug, WL-REQ-174)")
-	cmd.Flags().StringVar(&about, "about", "", "list only the tasks about this document — its review and planning tasks (id or slug, WL-REQ-109)")
+	cmd.Flags().StringVar(&plan, "plan", "", "list only the tasks minted by this plan document (ref such as WL-PLAN-7, id, or slug, WL-REQ-174)")
+	cmd.Flags().StringVar(&about, "about", "", "list only the tasks about this document — its review and planning tasks (ref such as WL-PLAN-7, id, or slug, WL-REQ-109)")
 	cmd.Flags().BoolVar(&deleted, "deleted", false,
 		"list deleted tasks instead of live ones, in any state unless --status is also given")
 	return cmd
@@ -707,7 +707,7 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&milestone, "milestone", "",
 		"attach the task to a milestone in its own project (WL-REQ-120), or none to detach")
 	cmd.Flags().StringVar(&plan, "plan", "",
-		"link the task to the plan document it executed (id or slug); refused if it already carries a different plan, no detach")
+		"link the task to the plan document it executed (ref such as WL-PLAN-7, id, or slug); refused if it already carries a different plan, no detach")
 	return cmd
 }
 

@@ -172,7 +172,7 @@ func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
-		        coalesce(d.number,0), coalesce(d.status,''), coalesce(od.slug, e.owner_external, ''),
+		        coalesce(d.number,0), coalesce(d.status,''), coalesce(`+docRefSQL("op", "od")+`, od.slug, e.owner_external, ''),
 		        coalesce(`+ruleRefSQL("rp", "r")+`, ''), coalesce(d.title,''), coalesce(dp.key,'')
 		   FROM `+table+` e
 		   LEFT JOIN rules r ON r.id = e.to_rule
@@ -185,6 +185,7 @@ func (s *Store) storedEdgeSet(ctx context.Context, table, where string, args ...
 		   LEFT JOIN docs d ON d.id = coalesce(e.to_doc, ra.doc_id)
 		   LEFT JOIN projects dp ON dp.id = d.project_id
 		   LEFT JOIN docs od ON od.id = e.owner_doc
+		   LEFT JOIN projects op ON op.id = od.project_id
 		  WHERE `+where+`
 		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		           coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''), r.number`, args...)

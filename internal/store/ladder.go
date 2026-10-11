@@ -16,7 +16,7 @@ import (
 // inventing one would corrupt the funnel's label set (WL-RULE-179).
 type GapInput struct {
 	TaskID string
-	Doc    string // document slug, already resolved by the caller
+	Doc    string // document ref, already resolved by the caller
 	Anchor string
 	Reason string
 }
@@ -55,7 +55,7 @@ func (s *Store) RecordGap(ctx context.Context, in GapInput) (inserted bool, err 
 type FixStartedInput struct {
 	TaskID  string
 	Tier    string // "plan" | "spec"
-	Doc     string // document slug
+	Doc     string // document ref
 	Attempt int    // client-supplied ordinal, default 1
 }
 

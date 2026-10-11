@@ -485,8 +485,9 @@ func TestBriefPlanBlockers(t *testing.T) {
 	if len(b.OpenBlockers) != 1 || b.OpenBlockers[0].ID != blockers[0] {
 		t.Errorf("OpenBlockers = %#v, want plan A's open task %s", b.OpenBlockers, blockers[0])
 	}
-	if len(b.BlockingPlans) != 1 || b.BlockingPlans[0].Slug != "plan-a" {
-		t.Errorf("BlockingPlans = %#v, want plan-a", b.BlockingPlans)
+	if len(b.BlockingPlans) != 1 || b.BlockingPlans[0].Slug != "plan-a" ||
+		!strings.HasPrefix(b.BlockingPlans[0].Ref, "P1-PLAN-") {
+		t.Errorf("BlockingPlans = %#v, want plan-a with a P1-PLAN- ref", b.BlockingPlans)
 	}
 
 	walkTo(t, s, blockers[0], "merged")

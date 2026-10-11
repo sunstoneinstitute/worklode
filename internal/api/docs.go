@@ -273,12 +273,11 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/projects/resolve normalizes a remote URL server-side, and what
 // lets the ref grammar grow without a client upgrade.
 //
-// Two tiers (WL-358). The store's id/exact-slug lookup runs first — it alone
-// reaches tombstoned documents, which `lode doc undelete <slug>` needs. A
+// Two tiers (WL-358). The store's id/ref/exact-slug lookup runs first; it also
+// reaches tombstoned documents, which `lode doc undelete <ref>` needs. A
 // miss then goes through the full WL-REQ-192 grammar `lode show` and the /docs/ref/
 // redirect already resolve (designdoc.ResolveRef via resolveDocRefWeb), so
-// the <KEY>-<TYPE>-<n> shorthand, a corpus path, and the number forms name a
-// document on every doc surface, not just some.
+// a corpus path and the number forms name a document on every doc surface.
 //
 // The body is blanked as it is on a list: the caller wants an id, and follows
 // with GET /api/v1/docs/{id} when it wants the text.
@@ -805,7 +804,7 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 			// causes commit together or not at all. The re-planning task is
 			// minted by the doc-lifecycle subscriber off the doc.stale
 			// events this records, not here.
-			stale, err = store.MarkPlansStale(tx, now, p.UnexecutedCoveringPlans, "amended", d.Slug, p.ChangedAnchors, eventID)
+			stale, err = store.MarkPlansStale(tx, now, p.UnexecutedCoveringPlans, "amended", s.withProjectKey(r.Context(), *d).FormatRef(), p.ChangedAnchors, eventID)
 			if err != nil {
 				return err
 			}

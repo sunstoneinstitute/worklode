@@ -300,7 +300,7 @@ func TestRankSecondaryConcernsNamesBlockingPlan(t *testing.T) {
 	f := store.ProjectWorkFact{
 		Task: model.Task{ID: "WL-2", State: "ready"},
 		BlockingPlans: []model.DocRef{
-			{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"},
+			{ID: 7, Slug: "plan-a", Ref: "WL-PLAN-7", Title: "Plan A", Status: "draft"},
 		},
 	}
 	if !f.Blocked() {
@@ -310,7 +310,7 @@ func TestRankSecondaryConcernsNamesBlockingPlan(t *testing.T) {
 	if len(got) != 1 || got[0].Kind != "blocker" || got[0].Title != "Plan A" || got[0].URL != "/docs/7" {
 		t.Fatalf("concerns = %#v, want one blocker naming Plan A at /docs/7", got)
 	}
-	if !strings.Contains(got[0].Evidence.Summary, "plan-a") {
-		t.Errorf("evidence = %q, want it to name the blocking plan (slug plan-a)", got[0].Evidence.Summary)
+	if !strings.Contains(got[0].Evidence.Summary, "WL-PLAN-7") {
+		t.Errorf("evidence = %q, want it to name the blocking plan (WL-PLAN-7)", got[0].Evidence.Summary)
 	}
 }

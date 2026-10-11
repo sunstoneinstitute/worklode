@@ -122,7 +122,7 @@ func pages(t *testing.T) map[string]string {
 			// The list is what a narrow screen reads once the drawing is hidden.
 			Prerequisites: &Prerequisites{
 				Remaining: 2, Direct: 1, Candidates: []string{"WL-141"}, Levels: 2, Below: 2,
-				Plans: []PrerequisitePlan{{Slug: token, Title: longTitle, Status: "draft", URL: "/docs/7"}},
+				Plans: []PrerequisitePlan{{Ref: token, Title: longTitle, Status: "draft", URL: "/docs/7"}},
 				Tree: []PrerequisiteNode{{
 					ID: "WL-140", Title: longTitle, State: "ready", Levels: 1, Below: 1,
 					Children: []PrerequisiteNode{{ID: "WL-141", Title: longTitle, State: "ready"}},

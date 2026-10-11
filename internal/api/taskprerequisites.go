@@ -5,6 +5,7 @@
 package api
 
 import (
+	"cmp"
 	"slices"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -84,7 +85,7 @@ func prerequisitesView(tree model.BlockerTree) *ui.Prerequisites {
 	for _, p := range tree.BlockingPlans {
 		if !seenPlan[p.ID] {
 			seenPlan[p.ID] = true
-			v.Plans = append(v.Plans, ui.PrerequisitePlan{Slug: p.Slug, Title: p.Title, Status: p.Status, URL: model.DocPageURL(p.ID)})
+			v.Plans = append(v.Plans, ui.PrerequisitePlan{Ref: cmp.Or(p.Ref, p.Slug), Title: p.Title, Status: p.Status, URL: model.DocPageURL(p.ID)})
 		}
 	}
 

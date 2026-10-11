@@ -97,7 +97,7 @@ func TestEscalateTask(t *testing.T) {
 
 	// 4. The event says what happened, naming its subject under "task".
 	wantPayload(t, s, "task.gap_found", map[string]any{
-		"task": first.ID, "doc": plan.Slug, "anchor": "sec-3", "to": "plan",
+		"task": first.ID, "doc": "HDB-PLAN-7", "anchor": "sec-3", "to": "plan",
 		"reason": "the plan says nothing about the empty case",
 	})
 
