@@ -84,6 +84,11 @@ type Config struct {
 	PublicURL     string `env:"LODE_PUBLIC_URL"`
 	SessionSecret string `env:"LODE_SESSION_SECRET"`
 
+	// LegacyURL (LODE_LEGACY_URL) is the host the templ cockpit keeps serving
+	// from while pages move to the SPA (WL-SPEC-83 §1). Optional: unset means
+	// one host, the cockpit, no SPA (§2).
+	LegacyURL string `env:"LODE_LEGACY_URL"`
+
 	// WebOpen (LODE_WEB_OPEN) permits the web UI to serve anonymous callers on
 	// an instance with *no* login provider configured — the local stack and
 	// CI. It is ignored when OIDC is configured: the opt-in is about the
@@ -682,6 +687,32 @@ func validatePublicURL(publicURL string) error {
 	u, err := url.Parse(publicURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return fmt.Errorf("LODE_PUBLIC_URL must be an absolute http(s) URL (e.g. https://lode.example.com)")
+	}
+	return nil
+}
+
+// hostOf returns the host of an absolute URL without its port, which is
+// what ServeMux matches a host-qualified pattern against.
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+func validateLegacyURL(cfg Config) error {
+	if cfg.LegacyURL == "" {
+		return nil
+	}
+	if cfg.PublicURL == "" {
+		return errors.New("LODE_LEGACY_URL needs LODE_PUBLIC_URL")
+	}
+	if err := validatePublicURL(cfg.LegacyURL); err != nil {
+		return fmt.Errorf("LODE_LEGACY_URL: %w", err)
+	}
+	if hostOf(cfg.LegacyURL) == hostOf(cfg.PublicURL) {
+		return errors.New("LODE_LEGACY_URL must name a different host from LODE_PUBLIC_URL")
 	}
 	return nil
 }
@@ -1319,6 +1350,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// bootstrap on a fresh database (WL-545 regression).
 	if err := st.EnsureServiceActor(context.Background(), flowActorID, "approval flow rules"); err != nil {
 		return nil, nil, fmt.Errorf("ensure %s actor: %w", flowActorID, err)
+	}
+
+	if err := validateLegacyURL(cfg); err != nil {
+		return nil, nil, err
 	}
 
 	s.initMetrics(reg)

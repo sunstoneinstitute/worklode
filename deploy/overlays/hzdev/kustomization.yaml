@@ -30,6 +30,14 @@ patches:
       - op: add
         path: /data/LODE_PUBLIC_URL
         value: "https://worklode.dev.sunstoneinstitute.ai"
+      # The second host the templ cockpit keeps serving from while pages
+      # move to the SPA (WL-REQ-1303). DNS for this host and the
+      # worklode-dev Keycloak client's second redirect URI
+      # (https://worklold.dev.sunstoneinstitute.ai/auth/callback) are
+      # operator steps outside this repo.
+      - op: replace
+        path: /data/LODE_LEGACY_URL
+        value: "https://worklold.dev.sunstoneinstitute.ai"
       - op: replace
         path: /data/LODE_SKILL_SOURCES
         value: "sunstoneinstitute/claude-plugins@main:plugins/*/skills/*"
@@ -64,9 +72,23 @@ patches:
         path: /spec/tls/0/hosts
         value:
           - worklode.dev.sunstoneinstitute.ai
+          - worklold.dev.sunstoneinstitute.ai
       - op: replace
         path: /spec/rules/0/host
         value: worklode.dev.sunstoneinstitute.ai
+      - op: add
+        path: /spec/rules/1
+        value:
+          host: worklold.dev.sunstoneinstitute.ai
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: worklode
+                    port:
+                      number: 80
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
     newTag: latest
