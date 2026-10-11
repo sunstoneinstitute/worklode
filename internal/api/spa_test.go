@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func TestSPAShellAndAssets(t *testing.T) {
@@ -32,6 +35,56 @@ func TestSPAShellAndAssets(t *testing.T) {
 	}
 	if rec := get("/assets/missing.js"); rec.Code != 404 {
 		t.Fatalf("missing asset = %d, want 404", rec.Code)
+	}
+}
+
+// TestSPARedirectsToLegacy checks a path spaRoutes doesn't claim 302s to
+// LODE_LEGACY_URL, query kept, while a path it does claim still answers 200.
+func TestSPARedirectsToLegacy(t *testing.T) {
+	h := newTwoHostServer(t, withWebApp(fstest.MapFS{
+		"index.html": {Data: []byte("<div id=root></div>")},
+	}))
+	get := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Host = "worklode.test"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	rec := get("/work?x=1")
+	if rec.Code != http.StatusFound {
+		t.Fatalf("redirect: got %d, want 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "https://worklold.test/work?x=1" {
+		t.Fatalf("redirect Location = %q, want https://worklold.test/work?x=1", loc)
+	}
+
+	if rec := get("/projects"); rec.Code != http.StatusOK {
+		t.Fatalf("spa-handled path: got %d, want 200", rec.Code)
+	}
+}
+
+// TestSPAShellNotFoundWithoutLegacyHost checks spaShell's no-legacy-host
+// branch directly: registerSPA never registers it (registerRoutes only
+// calls it when LODE_LEGACY_URL splits the hosts), so it is unreachable
+// through the mux today.
+func TestSPAShellNotFoundWithoutLegacyHost(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{cfg: Config{WebAppForTest: fstest.MapFS{
+		"index.html": {Data: []byte("<div id=root></div>")},
+	}}}
+	s.initMetrics(reg)
+
+	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	rec := httptest.NewRecorder()
+	s.spaShell(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("spaShell without legacy host: got %d, want 200", rec.Code)
+	}
+	if got := testutil.ToFloat64(s.spaRequests.WithLabelValues(spaNotFound)); got != 1 {
+		t.Fatalf("spaRequests{outcome=not_found} = %v, want 1", got)
 	}
 }
 

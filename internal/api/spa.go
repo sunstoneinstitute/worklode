@@ -4,6 +4,7 @@ package api
 import (
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/webapp"
 )
@@ -43,8 +44,28 @@ func (s *server) spaAssetHandler() http.Handler {
 	})
 }
 
-// spaShell answers every path with index.html.
+// spaShell answers a path spaHandles with index.html. A path it does not
+// handle redirects to LODE_LEGACY_URL (WL-REQ-1305), kept as its own host so
+// the public host never serves the legacy one's content. Without a legacy
+// host it falls back to index.html, which the SPA renders as its own
+// not-found page; unreachable today, since registerSPA only registers while
+// a legacy host splits the two.
 func (s *server) spaShell(w http.ResponseWriter, r *http.Request) {
+	if spaHandles(r.URL.Path) {
+		s.serveSPAShell(w, spaPage)
+		return
+	}
+	if s.cfg.LegacyURL == "" {
+		s.serveSPAShell(w, spaNotFound)
+		return
+	}
+	target := strings.TrimRight(s.cfg.LegacyURL, "/") + r.URL.Path + "?" + r.URL.RawQuery
+	http.Redirect(w, r, target, http.StatusFound)
+	s.observeSPA(spaRedirect)
+}
+
+// serveSPAShell writes index.html and records outcome.
+func (s *server) serveSPAShell(w http.ResponseWriter, outcome string) {
 	b, err := fs.ReadFile(s.spaFS(), "index.html")
 	if err != nil {
 		// dist/index.html is committed, so this is a broken build.
@@ -56,5 +77,5 @@ func (s *server) spaShell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	w.Write(b)
-	s.observeSPA(spaPage)
+	s.observeSPA(outcome)
 }
