@@ -1,0 +1,416 @@
+/* Must stay first: Vite inlines the local imports below into real CSS
+   rules, and a literal `@import url(...)` is invalid once it follows a
+   rule (see https://developer.mozilla.org/en-US/docs/Web/CSS/@import). */
+@import url("/assets/iconfont/wlicon.css");
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/dm-sans";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'DM Sans Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+
+    /* Recurring Figma corner radii that don't land on the shadcn radius
+       scale above (rounded-card / rounded-panel). */
+    --radius-card: 0.9375rem; /* 15px */
+    --radius-panel: 1.5625rem; /* 25px */
+
+    /* Font sizes from the Figma type scale that fall outside Tailwind's
+       default named scale (text-13, text-15, text-22, ...). Sizes that
+       already match a default (16/18/20/24) just use text-base/lg/xl/2xl. */
+    --text-13: 0.8125rem; /* 13px */
+    --text-15: 0.9375rem; /* 15px */
+    --text-22: 1.375rem; /* 22px */
+    --text-80: 5rem; /* 80px — the meeting cards' clock icon (UpcomingMeetings) */
+
+    /* Named layout constants reused across several components, instead of
+       repeating the same arbitrary px value everywhere. */
+    --spacing-page: 4.375rem; /* 70px desktop page margin */
+    --spacing-panel: 1.875rem; /* 30px panel/card internal padding */
+
+    /* Worklode Figma variables, exposed directly as Tailwind color utilities
+       (bg-text-light, text-highlight, border-divider-line, etc). */
+    --color-text-primary: var(--color-text-primary);
+    --color-text-light: var(--color-text-light);
+    --color-text-dark: var(--color-text-dark);
+    --color-surface: var(--color-surface);
+    --color-highlight: var(--color-highlight);
+    --color-divider-line: var(--color-divider-line);
+    --color-on-primary: var(--color-on-primary);
+    --color-icons: var(--color-icons);
+    --color-icons-alt: var(--color-icons-alt);
+    --color-background-translucent: var(--color-background-translucent);
+    --color-overlay-bg: var(--color-overlay-bg);
+    --color-button-bg: var(--color-button-bg);
+    --color-button-text: var(--color-button-text);
+    --color-gradient-start: var(--color-gradient-start);
+    --color-gradient-end: var(--color-gradient-end);
+    /* accent / accent-warn / accent-success intentionally NOT exposed here —
+       see the comment above :root for why (name collision with shadcn's own
+       --accent slot, which is already mapped to --color-highlight below). */
+}
+
+/*
+ * Worklode design tokens — named to match the Figma Variables exactly
+ * (text-primary, text-light, surface, highlight, primary, divider-line,
+ * background, on-primary, icons-alt, background-translucent, gradient/*)
+ * so they stay traceable back to the Figma file. shadcn's generic slots
+ * below (--background, --foreground, --primary, ...) just point at these.
+ *
+ * accent / accent-warn / accent-success are also from Figma but named
+ * exactly the same as shadcn's own --accent slot would collide with if
+ * exposed as a Tailwind utility the same way the rest of these are (see
+ * @theme inline above) — defined here as plain CSS variables for now
+ * (usable via var(--color-accent-warn) etc., e.g. --destructive below)
+ * until something actually needs a bg-accent-warn-style utility, at which
+ * point pick a non-colliding exposed name.
+ */
+:root {
+    --color-text-primary: #071426;
+    --color-text-light: #f7faff;
+    --color-text-dark: #071426;
+    --color-surface: #ffffff;
+    --color-highlight: #4abdf0;
+    --color-primary: #2050cd;
+    --color-divider-line: #4a5768;
+    --color-background: #f7faff;
+    --color-on-primary: #ffffff;
+    --color-icons: #50709c;
+    --color-icons-alt: #27579a;
+    --color-background-translucent: #f7fafff2;
+    --color-overlay-bg: #ffffff99; /* surface @ 60% */
+    --color-button-bg: #3758af;
+    --color-button-text: #f7faff; /* = text-light */
+    --color-gradient-start: #4abdf0; /* = highlight */
+    --color-gradient-end: #2050cd; /* = primary */
+    --color-accent: #ff8d2a;
+    --color-accent-warn: #fe5f55;
+    --color-accent-success: #06a77d;
+    /* Colored badges (badgeStyle() in data-table/cells.tsx) are a fill of
+       one of these accents (or highlight) with text-dark on top: 8.0:1
+       (accent), 6.1:1 (warn), 6.0:1 (success), 8.6:1 (highlight) at full
+       strength — all over WCAG AA's 4.5:1. Light mode softens the fill to
+       80% (the light background showing through only lightens it, so the
+       dark text's contrast goes up). Dark mode tints instead — see .dark. */
+    --badge-fill-opacity: 80%;
+    --badge-text-hue: 0%; /* 0% = plain text-base */
+    --badge-text-base: var(--color-text-dark);
+
+    --background: var(--color-background);
+    --foreground: var(--color-text-primary);
+    --card: var(--color-surface);
+    --card-foreground: var(--color-text-primary);
+    --popover: var(--color-surface);
+    --popover-foreground: var(--color-text-primary);
+    --primary: var(--color-primary);
+    --primary-foreground: var(--color-on-primary);
+    --secondary: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+    --secondary-foreground: var(--color-text-primary);
+    --muted: color-mix(in srgb, var(--color-divider-line) 10%, var(--color-surface));
+    --muted-foreground: var(--color-divider-line);
+    --accent: var(--color-highlight);
+    --accent-foreground: var(--color-text-primary);
+    --destructive: var(--color-accent-warn);
+    --border: color-mix(in srgb, var(--color-divider-line) 25%, transparent);
+    --input: color-mix(in srgb, var(--color-divider-line) 25%, transparent);
+    --ring: var(--color-primary);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: var(--color-surface);
+    --sidebar-foreground: var(--color-text-primary);
+    --sidebar-primary: var(--color-primary);
+    --sidebar-primary-foreground: var(--color-on-primary);
+    --sidebar-accent: var(--color-highlight);
+    --sidebar-accent-foreground: var(--color-text-primary);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--color-primary);
+}
+
+/*
+ * Real dark-mode values, from the Figma team's "Worklode Theme" variables
+ * table (shared directly, not re-derived) — replaces the old placeholder
+ * that just repeated the light values. A few of these differ meaningfully
+ * from a naive "invert everything" approach, so don't assume symmetry:
+ *   - text-primary flips to a light color (#f7faff) — expected, since it's
+ *     "the primary text color for this mode" not "always-dark text".
+ *   - divider-line flips to a LIGHT gray (#dde1e8), not a darker navy —
+ *     intentional: it feeds --border/--muted below via color-mix(), and a
+ *     light divider color is what actually reads as a subtle line/tint on
+ *     a dark background.
+ *   - gradient-start is a distinct literal (#133284), not "= highlight" the
+ *     way it is in light mode — Figma defines it as its own value here.
+ *   - accent/accent-warn/accent-success/button-bg are identical in both
+ *     modes (brand accent colors, not surface/text colors that need to
+ *     invert for contrast).
+ *   - text-light and text-dark are theme-invariant by design (always a
+ *     light/dark value respectively, e.g. for text sitting on the
+ *     always-blue ProjectSummary card regardless of overall theme) — see
+ *     the identical values in :root above.
+ */
+.dark {
+    --color-text-primary: #f7faff;
+    --color-text-light: #f7faff;
+    --color-text-dark: #071426;
+    --color-surface: #10243e;
+    --color-highlight: #1299d5;
+    --color-primary: #0e2f83;
+    --color-divider-line: #dde1e8;
+    --color-background: #071426;
+    --color-on-primary: #ffffff;
+    --color-icons: #cdd6e5;
+    --color-icons-alt: #2b4d85;
+    --color-background-translucent: #071426f2;
+    --color-overlay-bg: #10243e99; /* surface @ 60% */
+    --color-button-bg: #3758af;
+    --color-button-text: #f7faff; /* = text-light */
+    --color-gradient-start: #133284;
+    --color-gradient-end: #10243e; /* = surface */
+    --color-accent: #ff8d2a;
+    --color-accent-warn: #fe5f55;
+    --color-accent-success: #06a77d;
+    /* Tinted badges in dark mode: solid saturated fills glare on the dark
+       navy and outweigh the row text. Instead the accent at 22% over the
+       surface, text a 50/50 mix of the accent and white.
+       Text contrast is 6.3–7.1:1 on surface and 7.6–8.4:1 on background,
+       across all four accents (worst: highlight on surface). */
+    --badge-fill-opacity: 22%;
+    --badge-text-hue: 50%;
+    --badge-text-base: #ffffff;
+
+    --background: var(--color-background);
+    --foreground: var(--color-text-primary);
+    --card: var(--color-surface);
+    --card-foreground: var(--color-text-primary);
+    --popover: var(--color-surface);
+    --popover-foreground: var(--color-text-primary);
+    --primary: var(--color-primary);
+    --primary-foreground: var(--color-on-primary);
+    --secondary: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+    --secondary-foreground: var(--color-text-primary);
+    --muted: color-mix(in srgb, var(--color-divider-line) 10%, var(--color-surface));
+    --muted-foreground: var(--color-divider-line);
+    --accent: var(--color-highlight);
+    --accent-foreground: var(--color-text-primary);
+    --destructive: var(--color-accent-warn);
+    --border: color-mix(in srgb, var(--color-divider-line) 25%, transparent);
+    --input: color-mix(in srgb, var(--color-divider-line) 25%, transparent);
+    --ring: var(--color-primary);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: var(--color-surface);
+    --sidebar-foreground: var(--color-text-primary);
+    --sidebar-primary: var(--color-primary);
+    --sidebar-primary-foreground: var(--color-on-primary);
+    --sidebar-accent: var(--color-highlight);
+    --sidebar-accent-foreground: var(--color-text-primary);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--color-primary);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+/*
+ * Header scroll show/hide (useHeaderScroll in src/hooks/use-header-scroll.ts
+ * toggles `header-hidden` on <html> on scroll). The CSS below keys off that
+ * class, which also drives the secondary toolbar (ProjectToolbar) and the
+ * ScrollLogo travel below.
+ */
+:root {
+  /* Matches Header's own h-13 / lg:h-19 — same --spacing multiplier Tailwind
+     uses to compile those utilities, kept here so this stays in sync. */
+  --header-height: calc(var(--spacing) * 13);
+}
+@media (min-width: 64rem) {
+  :root {
+    --header-height: calc(var(--spacing) * 19);
+  }
+}
+
+[data-header] {
+  transition: transform 300ms ease-in-out;
+}
+:root.header-hidden [data-header] {
+  transform: translateY(-100%);
+}
+
+/*
+ * Secondary sticky toolbar (ProjectToolbar, subpages only): normally sticks
+ * just below the header; once the header hides, it closes the gap by
+ * sticking to the very top instead. It never hides itself.
+ */
+[data-secondary-toolbar] {
+  position: sticky;
+  top: var(--header-height);
+  transition: top 300ms ease-in-out;
+}
+:root.header-hidden [data-secondary-toolbar] {
+  top: 0;
+}
+
+/*
+ * ScrollLogo: a single fixed-position mark that lives outside both Header
+ * and ProjectToolbar, so it visibly travels between the two (not two
+ * separate elements cross-fading). Header's own inline mark is hidden
+ * wherever this is used (Header's hideLogoMark prop). Position/size for
+ * both states are plain values tuned to match each bar's icon slot; the
+ * transition is driven by the same header-hidden class as everything else.
+ *
+ * Header state (top row, lg): vertically centered in the 76px header
+ * (h-19), left edge at Header's own 20px padding — i.e. sits exactly where
+ * Header's own (now-invisible) icon would be. Center: (41.5, 38).
+ *
+ * Toolbar state: shrinks to 18x21 — left is nudged from 20px to 31px to
+ * keep the horizontal CENTER constant (41.5px) as it shrinks, rather than
+ * anchoring the left edge (which would visually drift left as it shrank).
+ * top is set to vertically center it against the breadcrumb text's own
+ * measured center (35px, i.e. 26 + 18/2), not the toolbar bar's own
+ * center — measured directly since text line-height doesn't match the
+ * bar's height. The user asked for this to read as moving straight down;
+ * the resulting ~11px horizontal shift is only the optical recentering for
+ * the size change, not a sideways move.
+ */
+[data-scroll-logo] {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  height: 36px;
+  width: 43px;
+  z-index: 60;
+  transition:
+    top 300ms ease-in-out,
+    left 300ms ease-in-out,
+    height 300ms ease-in-out,
+    width 300ms ease-in-out;
+}
+:root.header-hidden [data-scroll-logo] {
+  top: 26px;
+  left: 31px;
+  height: 18px;
+  width: 21px;
+}
+
+/*
+ * Mobile menu (useMobileMenu (src/hooks/use-mobile-menu.ts) toggles
+ * `mobile-menu-open` on <html> when Header's hamburger/close button is
+ * clicked). Deliberately asymmetric open vs. close — each direction sets
+ * its own `transition` (not
+ * just the end-state values), which is what lets them have different
+ * durations/delays/stagger instead of one just being the reverse of the
+ * other:
+ *
+ * Opening: the blue panel rolls down first (scaleY from the top — a solid
+ * color, so the squish during the scale isn't visible), then each item
+ * fades in and slides up 50px on top of it, staggered per item via
+ * `--item-delay` (a CSS custom property set inline per item in
+ * MobileMenu.tsx, not a plain transitionDelay — that would apply to both
+ * directions equally, and closing needs a different, fixed delay instead).
+ *
+ * Closing: items fade out quickly with no stagger, then the panel folds
+ * back up — reversed order from opening, and faster overall.
+ */
+[data-mobile-menu] {
+  visibility: hidden;
+  transition: visibility 0s 320ms;
+}
+[data-mobile-menu-panel] {
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 200ms ease-in-out 140ms;
+}
+[data-mobile-menu-item] {
+  opacity: 0;
+  transform: translateY(50px);
+  transition:
+    opacity 140ms ease-in,
+    transform 140ms ease-in;
+}
+:root.mobile-menu-open [data-mobile-menu] {
+  visibility: visible;
+  transition-delay: 0s;
+}
+:root.mobile-menu-open [data-mobile-menu-panel] {
+  transform: scaleY(1);
+  transition: transform 260ms ease-in-out;
+}
+:root.mobile-menu-open [data-mobile-menu-item] {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 220ms ease-out,
+    transform 220ms ease-out;
+  transition-delay: var(--item-delay, 0ms);
+}
+
+/* Header's hamburger/close icon swap, same button, same trigger. */
+[data-menu-icon-close] {
+  opacity: 0;
+}
+[data-menu-icon-open],
+[data-menu-icon-close] {
+  transition: opacity 150ms ease-in-out;
+}
+:root.mobile-menu-open [data-menu-icon-open] {
+  opacity: 0;
+}
+:root.mobile-menu-open [data-menu-icon-close] {
+  opacity: 1;
+}
+

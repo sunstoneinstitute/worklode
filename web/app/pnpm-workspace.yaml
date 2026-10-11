@@ -1,0 +1,8 @@
+# Dependencies allowed to run install scripts (pnpm blocks all others).
+allowBuilds:
+  # Only prints a message on install
+  es5-ext: false
+  # Builds the WOFF2 converter used by `pnpm iconfont`
+  ttf2woff2: true
+  # Keeps public/mockServiceWorker.js in step with the installed MSW
+  msw: true
