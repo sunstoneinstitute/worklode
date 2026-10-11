@@ -3,6 +3,8 @@ package api_test
 import (
 	"net/http"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/api"
 )
 
 // TestProjectRallyRoute covers the active rally plus its transitive open
@@ -55,7 +57,8 @@ func TestProjectRallyRoute(t *testing.T) {
 // an anonymous read.
 func TestProjectRallyRequiresAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	rr := doReq(t, h, "GET", "/api/v1/projects/proj/rally", "", nil)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rr.Code)

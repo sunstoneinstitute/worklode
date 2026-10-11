@@ -8,8 +8,8 @@
 // It follows the split that keeps authorization honest in a Go service:
 //
 //   - **Subject** (who) is derived once per request by the authentication
-//     middleware — from a bearer token on /api/v1, from the session cookie on
-//     the web — and carried in the request context. Handlers never re-derive
+//     middleware — from a bearer token or the session cookie on /api/v1, from
+//     the session cookie on the web — and carried in the request context. Handlers never re-derive
 //     it and never inspect a cookie or a token themselves.
 //   - **Policy** (what may be done) is one declarative table, `grants`, read
 //     top to bottom. It is data, so it is reviewable in a diff and testable
@@ -17,10 +17,11 @@
 //   - **The decision point** (Decide) is a pure function of subject and
 //     permission. It is default-deny: a permission with no grant entry is
 //     refused, so forgetting to extend the table fails closed.
-//   - **The enforcement points** are three middlewares (requirePerm for the
-//     JSON API, webGuard for the web UI, eitherGuard for the asset routes both
-//     audiences fetch). They are the only places that write a 401/403, so the
-//     denial shape cannot drift per handler.
+//   - **The enforcement points** are three middlewares (apiGuard for the
+//     JSON API, which takes a bearer token or the session cookie, webGuard for
+//     the web UI, eitherGuard for the asset routes both audiences fetch).
+//     They are the only places that write a 401/403, so the denial shape
+//     cannot drift per handler.
 //
 // The route table in server.go names a permission for every route, and the
 // router refuses to boot with a route that names none (see router.go) — which
@@ -558,7 +559,7 @@ func actorIDFrom(r *http.Request) string {
 // --- enforcement ------------------------------------------------------------
 
 // requireTaskScope enforces WL-REQ-48's narrowing for task-scoped subjects
-// (WL-306). It composes ahead of the handler, after requirePerm: an
+// (WL-306). It composes ahead of the handler, after apiGuard's policy check: an
 // ordinary subject passes untouched; a task-scoped one is refused unless
 // this route's guard names a task scope, and on an {id}-bound route unless
 // the path's task is the bound one. Default-deny by construction — a route
@@ -587,21 +588,70 @@ func (s *server) requireTaskScope(g routeGuard, next http.HandlerFunc) http.Hand
 	}
 }
 
-// requirePerm is the /api/v1 policy enforcement point. It runs inside auth,
-// which authenticated the caller and put both the actor and the subject in
-// the context, so an unauthenticated request never reaches it — every denial
-// here is a 403, never a 401.
-func (s *server) requirePerm(perm Permission, next http.HandlerFunc) http.HandlerFunc {
+// apiGuard is router.api's authentication and policy enforcement point.
+// Authorization: Bearer … is checked first, exactly as before (st.Authenticate,
+// subjectFromActor, task scope) — nothing about that path changes. Without a
+// bearer token the request takes the asset routes' posture (D3, see
+// eitherGuard): s.webSubject resolves the session cookie, the
+// open-deployment subject, or nobody, and the same permission table decides
+// from there. Refusals are always writeErr JSON, never a redirect — a JSON
+// client cannot follow one.
+func (s *server) apiGuard(g routeGuard, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sub := subjectFrom(r)
-		d := Decide(Request{Subject: sub, Permission: perm})
-		s.observeAuthz(perm, d)
+		var sub Subject
+		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok && token != "" {
+			actor, boundTask, err := s.st.Authenticate(r.Context(), token)
+			if err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					// Never falls through to webSubject: on an instance with
+					// LODE_WEB_OPEN set, falling through would hand the open
+					// subject to a caller whose own credential was rejected
+					// (same reasoning as eitherGuard).
+					s.observeAPISessionRequest("unauthenticated")
+					writeErr(w, http.StatusUnauthorized, "unauthorized")
+					return
+				}
+				s.mapStoreErr(w, err)
+				return
+			}
+			sub = subjectFromActor(actor, authToken)
+			sub.TaskID = boundTask
+		} else {
+			sub = s.webSubject(r.Context(), r)
+		}
+
+		// sessionOnly routes (WL-REQ-1771): a bearer subject and the open
+		// subject are refused regardless of what Decide would allow.
+		if g.session && sub.Via != authSession {
+			d := Decision{Reason: "session_required"}
+			s.logDenial(r, sub, g.perm, d)
+			s.observeAPISessionRequest("session_required")
+			writeErr(w, http.StatusForbidden, "this route needs a signed-in browser session")
+			return
+		}
+
+		d := Decide(Request{Subject: sub, Permission: g.perm})
+		s.observeAuthz(g.perm, d)
 		if !d.Allowed {
-			s.logDenial(r, sub, perm, d)
+			s.logDenial(r, sub, g.perm, d)
+			if d.Reason == "unauthenticated" {
+				// No credential at all — sub carries no role (webSubject's
+				// authNone case). The caller needs to authenticate, not a
+				// different permission.
+				s.observeAPISessionRequest("unauthenticated")
+				writeErr(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			// A bearer subject, the open subject, or a session subject that
+			// Decide denied: all three HAVE an identity, so the answer is
+			// "no", not "who are you" (D3 — this is what makes the open
+			// subject get 403 on an admin-only route, not 401).
+			s.observeAPISessionRequest("forbidden")
 			writeErr(w, http.StatusForbidden, denialMessage(d))
 			return
 		}
-		next(w, r)
+		s.observeAPISessionRequest("allowed")
+		s.requireTaskScope(g, next)(w, withSubject(r, sub))
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -702,7 +703,8 @@ func TestGetDocNotFound(t *testing.T) {
 
 func TestDocsRequireAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	if rr := doReq(t, h, "GET", "/api/v1/docs", "", nil); rr.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rr.Code)
 	}

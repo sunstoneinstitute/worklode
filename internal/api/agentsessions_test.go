@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -348,7 +349,10 @@ func TestReportProjectSessionUsageRejectsMalformedUsage(t *testing.T) {
 
 func TestAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 	t.Parallel()
-	st, h, token := newTestServer(t)
+	// A closed instance: this test's unauthenticated case expects 401, which
+	// WL-1115 reserves for "no credential at all" (a WebOpen instance would
+	// hand it the open subject instead).
+	st, h, token := newTestServerWithConfig(t, api.Config{})
 	id := claimedTask(t, st, h, token)
 
 	other := secondActor(t, st, "bob")

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -518,7 +519,10 @@ func TestCockpitLinksToNewTask(t *testing.T) {
 // same rejections.
 func TestDeliverablesAPI(t *testing.T) {
 	t.Parallel()
-	st, h, token := newTestServer(t)
+	// A closed instance: the trailing assertion in this test expects an
+	// anonymous request to 401, which WL-1115 reserves for "no credential at
+	// all" — a WebOpen instance would hand it the open subject instead.
+	st, h, token := newTestServerWithConfig(t, api.Config{})
 	createProject(t, st, "proj")
 
 	rr := doReq(t, h, "POST", "/api/v1/projects/proj/deliverables", token, map[string]any{
