@@ -31,7 +31,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/graphproj"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
@@ -316,84 +315,79 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("list docs for project %s: %w", id, err)
 	}
+	// A rule ref names its project by key; its IRI by id (WL-REQ-247).
+	projects, err := p.st.ListProjects(ctx)
+	if err != nil {
+		return fmt.Errorf("list projects: %w", err)
+	}
+	projectIDs := make(map[string]string, len(projects))
+	for _, pr := range projects {
+		projectIDs[pr.Key] = pr.ID
+	}
 	for _, d := range docs {
-		sections, err := p.st.ListDocSections(ctx, d.ID)
+		// The rules d arranges, read from doc_rules and rules (WL-REQ-1710).
+		rules, err := p.st.ListRules(ctx, store.RuleFilter{Doc: d.ID})
 		if err != nil {
-			return fmt.Errorf("list sections of doc %s: %w", d.Slug, err)
+			return fmt.Errorf("list rules of doc %s: %w", d.Slug, err)
 		}
-		// Only the inbound edges are read: a section's supersession is stated
-		// by the document that replaced it, so it reaches this document as an
-		// inbound isReplacedBy (WL-REQ-167).
-		_, in, err := p.st.ListDocEdges(ctx, d.ID)
+		// A superseded rule needs its successor's dct:replaces (WL-REQ-1705),
+		// which only GetRule's edges carry.
+		for i, r := range rules {
+			if r.Status != "superseded" {
+				continue
+			}
+			full, err := p.st.GetRule(ctx, r.ProjectKey, r.Number)
+			if err != nil {
+				return fmt.Errorf("get rule %s: %w", r.Ref, err)
+			}
+			rules[i].Edges = full.Edges
+		}
+		out, _, err := p.st.ListDocEdges(ctx, d.ID)
 		if err != nil {
 			return fmt.Errorf("list edges of doc %s: %w", d.Slug, err)
 		}
 		var versions []model.DocVersionSummary
+		var lastRevisedIn map[string]int
 		if d.Status != "draft" {
 			versions, err = p.st.ListDocVersions(ctx, d.ID)
 			if err != nil {
 				return fmt.Errorf("list versions of doc %s: %w", d.Slug, err)
 			}
-			versionBodies := make(map[int]model.DocVersion, len(versions))
-			versionSectionsByVersion := make(map[int][]model.DocSection, len(versions))
-			versionDocuments := make(map[int]*designdoc.Document, len(versions))
-			for _, summary := range versions {
+			// The store returns newest first, while revision provenance is a
+			// forward fact: a rule arranged at an unchanged rule version keeps
+			// the document version in which it was last changed. Walk the
+			// immutable versions oldest first.
+			ordered := slices.Clone(versions)
+			slices.SortFunc(ordered, func(a, b model.DocVersionSummary) int { return a.Version - b.Version })
+			arranged := map[string]int{} // ref -> rule version at the prior document version
+			for _, summary := range ordered {
 				version, err := p.st.GetDocVersion(ctx, d.ID, summary.Version)
 				if err != nil {
 					return fmt.Errorf("get version %d of doc %s: %w", summary.Version, d.Slug, err)
 				}
-				versionBodies[summary.Version] = version
-				var parsedDocument *designdoc.Document
-				versionSectionsByVersion[summary.Version], parsedDocument = parseVersionSections(d.Kind, version.Body)
-				versionDocuments[summary.Version] = parsedDocument
-			}
-			// The store returns newest first, while revision provenance is a
-			// forward fact: an unchanged section inherits the version in which
-			// it was last changed. Walk the immutable bodies oldest first.
-			versionRevisions := make(map[int]map[string]int, len(versions))
-			var priorRevisions map[string]int
-			var priorDocument *designdoc.Document
-			ordered := slices.Clone(versions)
-			slices.SortFunc(ordered, func(a, b model.DocVersionSummary) int { return a.Version - b.Version })
-			for _, summary := range ordered {
-				parsed := versionSectionsByVersion[summary.Version]
-				document := versionDocuments[summary.Version]
-				changed := make(map[string]bool)
-				if document != nil && priorDocument != nil {
-					diff := designdoc.CompareSections(priorDocument, document, designdoc.DepthLimit)
-					for _, anchor := range diff.Added {
-						changed[anchor] = true
+				revisions := make(map[string]int, len(version.Rules))
+				now := make(map[string]int, len(version.Rules))
+				for _, r := range version.Rules {
+					if r.Rule == "" {
+						continue
 					}
-					for _, anchor := range diff.Changed {
-						changed[anchor] = true
+					now[r.Rule] = r.RuleVersion
+					revisions[r.Rule] = summary.Version
+					if v, ok := arranged[r.Rule]; ok && v == r.RuleVersion {
+						revisions[r.Rule] = lastRevisedIn[r.Rule]
 					}
 				}
-				revisions := make(map[string]int, len(parsed))
-				for _, section := range parsed {
-					anchor := section.Anchor
-					last := priorRevisions[anchor]
-					if priorDocument == nil || changed[anchor] {
-						last = summary.Version
-					}
-					revisions[anchor] = last
-				}
-				versionRevisions[summary.Version] = revisions
-				priorDocument, priorRevisions = document, revisions
-			}
-			for _, summary := range versions {
-				version := versionBodies[summary.Version]
-				parsedSections := versionSectionsByVersion[summary.Version]
-				for i := range parsedSections {
-					parsedSections[i].LastRevisedIn = versionRevisions[summary.Version][parsedSections[i].Anchor]
-				}
-				graph := graphproj.Document(graphproj.DocVersionTriples(d, version, parsedSections))
+				arranged, lastRevisedIn = now, revisions
+				graph := graphproj.Document(graphproj.DocVersionTriples(d, version, projectIDs))
 				if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredVersionGraph(graphproj.DocKey(d), summary.Version), graph); err != nil {
 					return fmt.Errorf("put version graph for doc %s v%d: %w", d.Slug, summary.Version, err)
 				}
 				p.m.recordDocVersionGraph()
 			}
 		}
-		triples := append(graphproj.DocTriples(d, versions), graphproj.SectionTriples(d, sections, in)...)
+		triples := graphproj.DocTriples(d, versions)
+		triples = append(triples, graphproj.RuleTriples(d, rules, lastRevisedIn, projectIDs)...)
+		triples = append(triples, graphproj.DocEdgeTriples(d, out, projectIDs)...)
 		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(graphproj.DocKey(d)), graphproj.Document(triples)); err != nil {
 			return fmt.Errorf("put declared graph for doc %s: %w", d.Slug, err)
 		}
@@ -431,40 +425,6 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 	}
 	p.m.recordProject()
 	return nil
-}
-
-// versionSections parses the section headings in one immutable document body.
-// Plans deliberately carry no section graph. A malformed historical body does
-// not prevent its version node from being projected; the node-only graph keeps
-// the version reachable while making the narrowing visible in the log.
-func versionSections(kind, body string) []model.DocSection {
-	sections, _ := parseVersionSections(kind, body)
-	return sections
-}
-
-func parseVersionSections(kind, body string) ([]model.DocSection, *designdoc.Document) {
-	if kind == "plan" {
-		return nil, nil
-	}
-	doc, err := designdoc.Parse([]byte(body))
-	if err != nil {
-		slog.Info("could not parse document version sections", "kind", kind, "err", err)
-		return nil, nil
-	}
-	sections := make([]model.DocSection, 0, len(doc.Sections))
-	for _, section := range doc.Sections {
-		if section.Anchor == "" {
-			continue
-		}
-		sections = append(sections, model.DocSection{
-			Anchor:   section.Anchor,
-			Number:   section.Number,
-			Heading:  section.Title,
-			Depth:    section.Level,
-			Position: section.Index,
-		})
-	}
-	return sections, doc
 }
 
 // toModelEdges converts store edges (FromTask/ToTask) into the model.Edge

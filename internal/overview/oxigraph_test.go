@@ -205,16 +205,16 @@ func TestGaps(t *testing.T) {
 // the shared endpoint holds — every id below is run-unique and every
 // assertion narrows to it.
 
-type fixtureSection struct {
-	anchor        string
+type fixtureRule struct {
+	number        int64
 	status        string // the wlc: concept local name
 	lastRevisedIn int
 }
 
-// fixtureClaim is one wl:implements claim. anchor may name no section at all,
-// which is what an orphaned claim looks like.
+// fixtureClaim is one wl:implements claim. number may name no rule of the
+// document at all, which is what an orphaned claim looks like.
 type fixtureClaim struct {
-	anchor string
+	number int64
 	pinned int
 }
 
@@ -226,9 +226,9 @@ func uniqueSlug(prefix string) string {
 
 // plantCoverage writes one document's canonical graph, one snapshot graph per
 // version, and one observed claims graph, in the shapes graphproj emits
-// (DocTriples/SectionTriples/DocVersionTriples) plus the RDF-1.2 claim shape
+// (DocTriples/RuleTriples/DocVersionTriples) plus the RDF-1.2 claim shape
 // of WL-REQ-239. It returns the document and component IRIs to filter on.
-func plantCoverage(t *testing.T, slug string, versions []int, secs []fixtureSection, cls []fixtureClaim) (docIRI, compIRI string) {
+func plantCoverage(t *testing.T, slug string, versions []int, rules []fixtureRule, cls []fixtureClaim) (docIRI, compIRI string) {
 	t.Helper()
 	base := graphtest.Endpoint(t)
 	docIRI = iri.Doc(slug)
@@ -242,9 +242,9 @@ func plantCoverage(t *testing.T, slug string, versions []int, secs []fixtureSect
 		fmt.Fprintf(&b, " ; dcat:hasVersion <%s>", iri.DocVersion(slug, v))
 	}
 	b.WriteString(" .\n")
-	for _, s := range secs {
-		fmt.Fprintf(&b, "<%s> a wl:Section ; dct:isPartOf <%s> ; wl:status wlc:%s ; wl:lastRevisedIn <%s> .\n",
-			iri.Section(slug, s.anchor), docIRI, s.status, iri.DocVersion(slug, s.lastRevisedIn))
+	for _, s := range rules {
+		fmt.Fprintf(&b, "<%s> a wl:Rule ; dct:isPartOf <%s> ; wl:status wlc:%s ; wl:lastRevisedIn <%s> .\n",
+			iri.Rule(slug, s.number), docIRI, s.status, iri.DocVersion(slug, s.lastRevisedIn))
 	}
 	graphtest.PutGraph(t, base, iri.DeclaredGraph(slug), []byte(b.String()))
 
@@ -256,7 +256,7 @@ func plantCoverage(t *testing.T, slug string, versions []int, secs []fixtureSect
 	b.Reset()
 	b.WriteString(ttlPrefixes)
 	for _, c := range cls {
-		sec := iri.Section(slug, c.anchor)
+		sec := iri.Rule(slug, c.number)
 		claim := iri.Claim(compIRI, sec)
 		fmt.Fprintf(&b, "<%s> wl:implements <%s> .\n<%s> rdf:reifies <<( <%s> wl:implements <%s> )>> .\n<%s> wl:pinnedVersion <%s> .\n",
 			compIRI, sec, claim, compIRI, sec, claim, iri.DocVersion(slug, c.pinned))
@@ -277,23 +277,22 @@ func ownClaims(rows []model.Claim, comp string) []model.Claim {
 	return out
 }
 
-// TestSectionCoverageQueries exercises all four §11.5 queries this package
-// implements against one fixture: sec-1 and sec-2 are claimed, sec-3 is not,
-// sec-old is superseded, and sec-gone is claimed but is no section of the
-// document at all.
-func TestSectionCoverageQueries(t *testing.T) {
+// TestRuleCoverageQueries exercises all four WL-REQ-1707 queries against one
+// fixture: rules 1 and 2 are claimed, 3 is not, 4 is superseded, and 9 is
+// claimed but is no rule of the document at all.
+func TestRuleCoverageQueries(t *testing.T) {
 	slug := uniqueSlug("cov")
 	doc, comp := plantCoverage(t, slug, []int{1, 2},
-		[]fixtureSection{
-			{"sec-1", "accepted", 1},
-			{"sec-2", "accepted", 2},
-			{"sec-3", "accepted", 1},
-			{"sec-old", "superseded", 1},
+		[]fixtureRule{
+			{1, "accepted", 1},
+			{2, "accepted", 2},
+			{3, "accepted", 1},
+			{4, "superseded", 1},
 		},
 		[]fixtureClaim{
-			{"sec-1", 2},    // pinned at the version that last revised it
-			{"sec-2", 1},    // pinned behind it: stale
-			{"sec-gone", 1}, // names no section of the document: orphaned
+			{1, 2}, // pinned at the version that last revised it
+			{2, 1}, // pinned behind it: stale
+			{9, 1}, // names no rule of the document: orphaned
 		})
 	c := graphClient(t)
 
@@ -307,8 +306,8 @@ func TestSectionCoverageQueries(t *testing.T) {
 			mine = append(mine, s)
 		}
 	}
-	if want := []string{iri.Section(slug, "sec-3")}; fmt.Sprint(mine) != fmt.Sprint(want) {
-		t.Errorf("unimplemented = %v, want %v (superseded and claimed sections excluded)", mine, want)
+	if want := []string{iri.Rule(slug, 3)}; fmt.Sprint(mine) != fmt.Sprint(want) {
+		t.Errorf("unimplemented = %v, want %v (superseded and claimed rules excluded)", mine, want)
 	}
 
 	cov, err := overview.Coverage(t.Context(), c)
@@ -322,14 +321,14 @@ func TestSectionCoverageQueries(t *testing.T) {
 		}
 	}
 	if row.Total != 3 || row.Implemented != 2 {
-		t.Errorf("coverage = %d/%d, want 2/3 (sec-old superseded, sec-gone is no section)", row.Implemented, row.Total)
+		t.Errorf("coverage = %d/%d, want 2/3 (rule 4 superseded, rule 9 is not arranged)", row.Implemented, row.Total)
 	}
 
 	stale, err := overview.StaleClaims(t.Context(), c)
 	if err != nil {
 		t.Fatalf("StaleClaims: %v", err)
 	}
-	want := []model.Claim{{Component: comp, Section: iri.Section(slug, "sec-2")}}
+	want := []model.Claim{{Component: comp, Rule: iri.Rule(slug, 2)}}
 	if got := ownClaims(stale, comp); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("stale claims = %v, want %v", got, want)
 	}
@@ -338,7 +337,7 @@ func TestSectionCoverageQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OrphanedClaims: %v", err)
 	}
-	want = []model.Claim{{Component: comp, Section: iri.Section(slug, "sec-gone")}}
+	want = []model.Claim{{Component: comp, Rule: iri.Rule(slug, 9)}}
 	if got := ownClaims(orphaned, comp); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("orphaned claims = %v, want %v", got, want)
 	}
@@ -351,17 +350,17 @@ func TestSectionCoverageQueries(t *testing.T) {
 func TestStaleClaimComparesVersionsNumerically(t *testing.T) {
 	slug := uniqueSlug("footgun")
 	_, comp := plantCoverage(t, slug, []int{3, 9, 10},
-		[]fixtureSection{
-			{"sec-old", "accepted", 3},
-			{"sec-new", "accepted", 10},
+		[]fixtureRule{
+			{1, "accepted", 3},
+			{2, "accepted", 10},
 		},
-		[]fixtureClaim{{"sec-old", 9}, {"sec-new", 9}})
+		[]fixtureClaim{{1, 9}, {2, 9}})
 
 	stale, err := overview.StaleClaims(t.Context(), graphClient(t))
 	if err != nil {
 		t.Fatalf("StaleClaims: %v", err)
 	}
-	want := []model.Claim{{Component: comp, Section: iri.Section(slug, "sec-new")}}
+	want := []model.Claim{{Component: comp, Rule: iri.Rule(slug, 2)}}
 	if got := ownClaims(stale, comp); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("stale claims at pin v9 = %v, want %v (numeric, not string or IRI, comparison)", got, want)
 	}
@@ -450,22 +449,22 @@ func plantDelivery(t *testing.T, slug, compIRI string) {
 func TestDeliveredCoverage(t *testing.T) {
 	slug := uniqueSlug("delivered")
 	_, comp := plantCoverage(t, slug, []int{1},
-		[]fixtureSection{{"sec-1", "accepted", 1}},
-		[]fixtureClaim{{"sec-1", 1}})
+		[]fixtureRule{{1, "accepted", 1}},
+		[]fixtureClaim{{1, 1}})
 	plantDelivery(t, slug, comp)
 
 	rows, err := overview.DeliveredCoverage(t.Context(), graphClient(t))
 	if err != nil {
 		t.Fatalf("DeliveredCoverage: %v", err)
 	}
-	sec := iri.Section(slug, "sec-1")
+	sec := iri.Rule(slug, 1)
 	var got []string
 	for _, r := range rows {
 		if r.Component != comp {
 			continue
 		}
-		if r.Section != sec {
-			t.Errorf("row %+v names a section this component does not claim", r)
+		if r.Rule != sec {
+			t.Errorf("row %+v names a rule this component does not claim", r)
 		}
 		got = append(got, r.Environment)
 	}
@@ -490,7 +489,7 @@ func TestDeliveredCoverageNeedsTheClaim(t *testing.T) {
 	}
 	for _, r := range rows {
 		if r.Component == comp {
-			t.Errorf("row %+v: the component claims no section, so it has no delivered coverage", r)
+			t.Errorf("row %+v: the component claims no rule, so it has no delivered coverage", r)
 		}
 	}
 }

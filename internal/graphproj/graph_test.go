@@ -47,7 +47,7 @@ func TestProjectGraphTriples(t *testing.T) {
 			t.Errorf("missing triple %s\n%s", w, doc)
 		}
 	}
-	if strings.Contains(doc, DCTIsReplacedBy) || strings.Contains(doc, iri.Term("amends")) {
+	if strings.Contains(doc, DCTReplaces) || strings.Contains(doc, iri.Term("amends")) {
 		t.Errorf("document-level amends/replaces must not be emitted:\n%s", doc)
 	}
 	if strings.Contains(doc, DCTRequires) {

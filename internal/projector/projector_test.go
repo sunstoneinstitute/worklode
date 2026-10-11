@@ -368,14 +368,31 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 			t.Errorf("declared graph missing %q:\n%s", want, declared)
 		}
 	}
-	scopeV1 := "<" + iri.Section("spec-alpha-008", "sec-1") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-008", 1) + ">"
-	scopeV3 := "<" + iri.Section("spec-alpha-008", "sec-1") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-008", 3) + ">"
-	model := "<" + iri.Section("spec-alpha-008", "sec-2") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-008", 1) + ">"
-	if !strings.Contains(v2, scopeV1) || !strings.Contains(v2, model) {
-		t.Errorf("v2 graph did not preserve immutable revision provenance:\n%s", v2)
+	// Every rule the version arranged is part of its snapshot, and the
+	// canonical graph names the version that last changed each rule.
+	rules, err := s.ListRules(ctx, store.RuleFilter{Doc: docID})
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
 	}
-	if !strings.Contains(v3, scopeV3) || !strings.Contains(v3, model) {
-		t.Errorf("v3 graph has wrong section revision provenance:\n%s", v3)
+	byHeading := map[string]string{}
+	for _, r := range rules {
+		byHeading[r.Heading] = "<" + iri.Rule(r.Project, r.Number) + ">"
+	}
+	scope, model := byHeading["Renamed scope"], byHeading["Model"]
+	if scope == "" || model == "" {
+		t.Fatalf("rules = %+v; want Renamed scope and Model", rules)
+	}
+	for _, v := range []string{v1, v2, v3} {
+		if !strings.Contains(v, model+" <"+graphproj.DCTIsPartOf+">") {
+			t.Errorf("version graph missing the Model rule:\n%s", v)
+		}
+	}
+	if want := model + " <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-008", 1) + ">"; !strings.Contains(declared, want) {
+		t.Errorf("declared graph missing %q:\n%s", want, declared)
+	}
+	// v2 renamed the scope rule, so v2 arranges its next rule version.
+	if want := scope + " <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-008", 2) + ">"; !strings.Contains(declared, want) {
+		t.Errorf("declared graph missing %q:\n%s", want, declared)
 	}
 	v2BeforeTouch := v2
 	createTask(t, s, "version-graphs-touch", "alpha", "touch project")
@@ -404,10 +421,10 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 	}
 }
 
-// TestRunOnceProjectsSections covers WL-REQ-165: once a document is accepted,
-// its sections are frozen and project as wl:Section nodes in the same declared
-// graph. A draft's sections stay out, because their anchors can still change.
-func TestRunOnceProjectsSections(t *testing.T) {
+// TestRunOnceProjectsRules covers WL-REQ-247 and WL-REQ-1709: a document's
+// arranged rules project as wl:Rule nodes in its declared graph, keyed by
+// rule/<project-id>/<number>, and no section node is emitted.
+func TestRunOnceProjectsRules(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
 	// CreateDoc defaults the owner to CreatedBy, and docs.owner is a
@@ -422,7 +439,7 @@ func TestRunOnceProjectsSections(t *testing.T) {
 			d, cerr := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
 				Project: "alpha", Kind: "spec", Number: 2, Slug: "002-sections",
 				Body: "---\nstatus: draft\n---\n# Spec 2 — Sections\n\n" +
-					"## 1. Scope {#sec-1}\n\nBody.\n",
+					"## 1. Scope {#sec-1}\n\nBody.\n\n## 2. Model {#sec-2}\n\nMore.\n",
 				CreatedBy: "author",
 			}, eventID)
 			if cerr != nil {
@@ -437,11 +454,6 @@ func TestRunOnceProjectsSections(t *testing.T) {
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("project the draft: %v", err)
 	}
-	section := "<" + iri.Section("spec-alpha-002", "sec-1") + ">"
-	if got := f.last(iri.DeclaredGraph("spec-alpha-002")); strings.Contains(got, section) {
-		t.Errorf("draft section projected before its anchor was frozen:\n%s", got)
-	}
-
 	_, _, err = s.RecordDocEvent(ctx, "accept", "cli", "doc-sec1-accept", "doc.accept", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			_, _, aerr := store.AcceptDoc(tx, s.Now(), docID, "author", eventID)
@@ -453,11 +465,23 @@ func TestRunOnceProjectsSections(t *testing.T) {
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("project the accepted doc: %v", err)
 	}
+	rules, err := s.ListRules(ctx, store.RuleFilter{Doc: docID})
+	if err != nil || len(rules) != 2 {
+		t.Fatalf("rules = %+v, %v; want two", rules, err)
+	}
 	declared := f.last(iri.DeclaredGraph("spec-alpha-002"))
+	if strings.Contains(declared, iri.Term("Section")) || strings.Contains(declared, iri.IDNS+"section/") {
+		t.Errorf("declared graph carries a section node:\n%s", declared)
+	}
+	if n := strings.Count(declared, "> <"+graphproj.RDFType+"> <"+iri.Term("Rule")+">"); n != 2 {
+		t.Errorf("declared graph has %d rule nodes, want 2:\n%s", n, declared)
+	}
+	rule := "<" + iri.Rule(rules[0].Project, rules[0].Number) + ">"
 	for _, want := range []string{
-		section + " <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + iri.Term("Section") + ">",
-		section + " <" + graphproj.DCTIsPartOf + "> <" + iri.Doc("spec-alpha-002") + ">",
-		section + " <" + iri.Term("status") + "> <" + iri.Concept("accepted") + ">",
+		rule + " <" + graphproj.RDFType + "> <" + iri.Term("Rule") + ">",
+		rule + " <" + graphproj.DCTIdentifier + "> \"" + rules[0].Ref + "\"",
+		rule + " <" + graphproj.DCTIsPartOf + "> <" + iri.Doc("spec-alpha-002") + ">",
+		rule + " <" + iri.Term("status") + "> <" + iri.Concept(rules[0].Status) + ">",
 	} {
 		if !strings.Contains(declared, want) {
 			t.Errorf("declared graph missing %q\n%s", want, declared)
