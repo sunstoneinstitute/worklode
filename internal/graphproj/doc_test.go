@@ -80,14 +80,14 @@ func TestDocTriples(t *testing.T) {
 // TestDocVersionTriples covers WL-REQ-166's immutable version-snapshot
 // projection: the snapshot node's type/title/version/timestamps, the
 // previousVersion/wasRevisionOf edges to the prior version, the optional
-// dct:issued, and one wl:Section node per parsed section pointing dct:isPartOf
-// at the snapshot rather than the canonical document.
+// dct:issued, and each rule the version arranged pointing dct:isPartOf at
+// the snapshot rather than the canonical document.
 func TestDocVersionTriples(t *testing.T) {
 	d := model.Doc{Slug: "025-backbone", Kind: "spec", Project: "alpha", Number: 25, Status: "accepted"}
 	v := model.DocVersion{Version: 3, Title: "Spec 025 — Backbone",
 		Issued: "2026-07-26", CreatedAt: time.Date(2026, 7, 26, 9, 0, 0, 0, time.UTC)}
-	secs := []model.DocSection{{Anchor: "sec-1", Heading: "Why"}}
-	doc := string(Document(DocVersionTriples(d, v, secs)))
+	v.Rules = []model.DocVersionRule{{Rule: "AL-REQ-12", RuleVersion: 1}, {Heading: "A spec heading"}}
+	doc := string(Document(DocVersionTriples(d, v, map[string]string{"AL": "alpha"})))
 	subj := "<" + iri.DocVersion("spec-alpha-025", 3) + ">"
 	for _, want := range []string{
 		subj + " <" + RDFType + "> <" + iri.Term("Spec") + ">",
@@ -95,7 +95,7 @@ func TestDocVersionTriples(t *testing.T) {
 		subj + " <" + DCATPreviousVersion + "> <" + iri.DocVersion("spec-alpha-025", 2) + ">",
 		subj + " <" + ProvWasRevisionOf + "> <" + iri.DocVersion("spec-alpha-025", 2) + ">",
 		subj + " <" + DCTIssued + "> \"2026-07-26\"^^<" + XSDDate + ">",
-		"<" + iri.Section("spec-alpha-025", "sec-1") + "> <" + DCTIsPartOf + "> " + subj,
+		"<" + iri.Rule("alpha", 12) + "> <" + DCTIsPartOf + "> " + subj,
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("version projection missing %q\n%s", want, doc)
@@ -125,76 +125,72 @@ func TestDocVersionTriples(t *testing.T) {
 	}
 }
 
-// TestSectionTriples covers WL-REQ-165's section projection: a wl:Section node
-// per published section, and the derived supersession the document store keeps
-// as a query rather than a column (WL-REQ-167).
-func TestSectionTriples(t *testing.T) {
+// TestRuleTriples covers the rule projection (WL-REQ-247, WL-REQ-1709): a
+// two-rule spec projects two wl:Rule nodes keyed rule/<project-id>/<number>
+// and no section node.
+func TestRuleTriples(t *testing.T) {
 	d := model.Doc{Slug: "025-backbone", Kind: "spec", Project: "alpha", Number: 25, Status: "accepted"}
-	sections := []model.DocSection{
-		{Anchor: "sec-1", Heading: "Scope", Published: true, LastRevisedIn: 2},
-		{Anchor: "sec-2", Heading: "Retired", Published: true},
-		{Anchor: "sec-3", Heading: "Gone", Published: true},
-		{Anchor: "sec-4", Heading: "Still drafting", Published: false},
+	rules := []model.Rule{
+		{Project: "alpha", ProjectKey: "AL", Ref: "AL-REQ-12", Number: 12, Kind: "requirement", Status: "accepted", Heading: "Scope"},
+		{Project: "alpha", ProjectKey: "AL", Ref: "AL-RULE-13", Number: 13, Kind: "invariant", Status: "superseded", Heading: "Retired",
+			Edges: []model.RuleEdge{
+				{Type: "supersedes", From: "BE-REQ-7", To: "AL-RULE-13"},
+				{Type: "references", From: "AL-REQ-12", To: "AL-RULE-13"},
+			}},
 	}
-	in := []model.DocEdge{
-		// sec-2 was replaced by a section that resolves to a document here.
-		{Type: "isReplacedBy", FromAnchor: "sec-2", ToSlug: "040-successor", ToKind: "spec", ToProject: "alpha", ToNumber: 40, ToAnchor: "sec-7"},
-		// sec-3 was replaced by something that resolves to no section.
-		{Type: "isReplacedBy", FromAnchor: "sec-3"},
-		// An unrelated inbound edge type must not supersede anything.
-		{Type: "isCoveredBy", FromAnchor: "sec-1", ToSlug: "some-plan"},
-	}
-	doc := string(Document(SectionTriples(d, sections, in)))
+	ids := map[string]string{"AL": "alpha", "BE": "beta"}
+	doc := string(Document(RuleTriples(d, rules, map[string]int{"AL-REQ-12": 2}, ids)))
 
-	sec1 := "<" + iri.Section("spec-alpha-025", "sec-1") + ">"
-	sec2 := "<" + iri.Section("spec-alpha-025", "sec-2") + ">"
-	sec3 := "<" + iri.Section("spec-alpha-025", "sec-3") + ">"
+	r12 := "<" + iri.Rule("alpha", 12) + ">"
+	r13 := "<" + iri.Rule("alpha", 13) + ">"
 	for _, want := range []string{
-		sec1 + " <" + RDFType + "> <" + iri.Term("Section") + ">",
-		sec1 + " <" + DCTTitle + "> \"Scope\"",
-		sec1 + " <" + DCTIsPartOf + "> <" + iri.Doc("spec-alpha-025") + ">",
-		// A live section carries its document's status, not a superseded one.
-		sec1 + " <" + iri.Term("status") + "> <" + iri.Concept("accepted") + ">",
-		sec2 + " <" + iri.Term("status") + "> <" + iri.Concept("superseded") + ">",
-		sec2 + " <" + DCTIsReplacedBy + "> <" + iri.Section("spec-alpha-040", "sec-7") + ">",
-		// Superseded with no nameable successor: status, and no dangling edge.
-		sec3 + " <" + iri.Term("status") + "> <" + iri.Concept("superseded") + ">",
-		// sec-1 was last revised in version 2: wl:lastRevisedIn names that
-		// snapshot.
-		sec1 + " <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-025", 2) + ">",
+		r12 + " <" + RDFType + "> <" + iri.Term("Rule") + ">",
+		r12 + " <" + DCTIdentifier + "> \"AL-REQ-12\"",
+		r12 + " <" + DCTTitle + "> \"Scope\"",
+		r12 + " <" + iri.Term("ruleKind") + "> <" + iri.Concept("requirement") + ">",
+		r12 + " <" + iri.Term("status") + "> <" + iri.Concept("accepted") + ">",
+		r12 + " <" + DCTIsPartOf + "> <" + iri.Doc("spec-alpha-025") + ">",
+		r12 + " <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("spec-alpha-025", 2) + ">",
+		r13 + " <" + RDFType + "> <" + iri.Term("Rule") + ">",
+		r13 + " <" + iri.Term("status") + "> <" + iri.Concept("superseded") + ">",
+		"<" + iri.Rule("beta", 7) + "> <" + DCTReplaces + "> " + r13,
 	} {
 		if !strings.Contains(doc, want) {
-			t.Errorf("section projection missing %q\n%s", want, doc)
+			t.Errorf("rule projection missing %q\n%s", want, doc)
 		}
 	}
-	if strings.Contains(doc, sec3+" <"+DCTIsReplacedBy+">") {
-		t.Errorf("sec-3 has no successor to name, but an isReplacedBy was emitted:\n%s", doc)
+	if n := strings.Count(doc, " <"+RDFType+"> <"+iri.Term("Rule")+">"); n != 2 {
+		t.Errorf("projected %d rule nodes, want 2:\n%s", n, doc)
 	}
-	if strings.Contains(doc, iri.Section("spec-alpha-025", "sec-4")) {
-		t.Errorf("unpublished section projected, so its anchor could still change:\n%s", doc)
+	if strings.Contains(doc, iri.Term("Section")) || strings.Contains(doc, iri.IDNS+"section/") {
+		t.Errorf("rule projection emitted a section node:\n%s", doc)
 	}
-	// sec-2 and sec-3 have LastRevisedIn: 0 (unset): no lastRevisedIn triple,
-	// since iri.DocVersion(slug, 0) would point at a snapshot that never
-	// exists.
-	for _, sec := range []string{sec2, sec3} {
-		if strings.Contains(doc, sec+" <"+iri.Term("lastRevisedIn")+">") {
-			t.Errorf("lastRevisedIn emitted for a section with LastRevisedIn 0:\n%s", doc)
-		}
+	if strings.Contains(doc, r13+" <"+iri.Term("lastRevisedIn")+">") {
+		t.Errorf("lastRevisedIn emitted for a rule with no revision version:\n%s", doc)
 	}
+}
 
-	// A superseded document supersedes every section it published, without
-	// needing an edge per section.
-	d.Status = "superseded"
-	doc = string(Document(SectionTriples(d, sections, nil)))
-	for _, subj := range []string{sec1, sec2, sec3} {
-		want := subj + " <" + iri.Term("status") + "> <" + iri.Concept("superseded") + ">"
+// TestDocEdgeTriples: a plan's covers edge names the rule IRI, never the
+// document or a section.
+func TestDocEdgeTriples(t *testing.T) {
+	d := model.Doc{Kind: "plan", Project: "alpha", Number: 4}
+	out := []model.DocEdge{
+		{Type: "covers", ToRule: "AL-REQ-12"},
+		{Type: "defers", ToRule: "AL-REQ-13"},
+		{Type: "requires", ToKind: "spec", ToProject: "alpha", ToNumber: 25},
+		{Type: "covers", ToRule: "ZZ-REQ-1"}, // unknown project key: skipped
+	}
+	doc := string(Document(DocEdgeTriples(d, out, map[string]string{"AL": "alpha"})))
+	plan := "<" + iri.Doc("plan-alpha-004") + ">"
+	for _, want := range []string{
+		plan + " <" + iri.Term("covers") + "> <" + iri.Rule("alpha", 12) + ">",
+		plan + " <" + iri.Term("defers") + "> <" + iri.Rule("alpha", 13) + ">",
+	} {
 		if !strings.Contains(doc, want) {
-			t.Errorf("section projection missing %q\n%s", want, doc)
+			t.Errorf("edge projection missing %q\n%s", want, doc)
 		}
 	}
-
-	// A plan carries no sections at all (WL-REQ-172), so it projects none.
-	if got := SectionTriples(model.Doc{Slug: "a-plan", Kind: "plan"}, nil, nil); got != nil {
-		t.Errorf("plan projected %d section triples, want none", len(got))
+	if n := strings.Count(strings.TrimSpace(doc), "\n") + 1; n != 2 {
+		t.Errorf("projected %d edges, want 2:\n%s", n, doc)
 	}
 }

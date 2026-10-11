@@ -37,7 +37,7 @@ func parseBoth(t *testing.T, implYAML string) (*implements.File, *manifest.Manif
 func TestResolveSplitsAcrossComponents(t *testing.T) {
 	f, m := parseBoth(t, `
 implements:
-  - section: wlid:section/spec-worklode-004/sec-4
+  - rule:    wlid:rule/worklode/4
     pinned:  wlid:doc/spec-worklode-004/v2
     by:      [internal/ingest/reader.go, internal/pfas/model.go]
 `)
@@ -49,9 +49,9 @@ implements:
 		t.Fatalf("claims = %+v; want 2 (one per component)", claims)
 	}
 	for _, c := range claims {
-		if c.Section != "https://worklode.io/ns/id/section/spec-worklode-004/sec-4" ||
+		if c.Rule != "https://worklode.io/ns/id/rule/worklode/4" ||
 			c.Pinned != "https://worklode.io/ns/id/doc/spec-worklode-004/v2" {
-			t.Fatalf("claim %+v carries the wrong section/pin", c)
+			t.Fatalf("claim %+v carries the wrong rule/pin", c)
 		}
 	}
 	if claims[0].Component == claims[1].Component {
@@ -62,7 +62,7 @@ implements:
 func TestResolveUnmatchedPathIsError(t *testing.T) {
 	f, m := parseBoth(t, `
 implements:
-  - section: wlid:section/spec-worklode-004/sec-4
+  - rule:    wlid:rule/worklode/4
     pinned:  wlid:doc/spec-worklode-004/v2
     by:      [README.md]
 `)
@@ -77,7 +77,7 @@ implements:
 func TestResolveImplicitComponent(t *testing.T) {
 	f, err := implements.Parse([]byte(`
 implements:
-  - section: wlid:section/spec-worklode-014/sec-6
+  - rule:    wlid:rule/worklode/6
     pinned:  wlid:doc/spec-worklode-014/v1
     by:      [internal/kg/implements/implements.go]
 `))
@@ -115,10 +115,10 @@ components:
 func TestResolveDeduplicatesAndRejectsConflictingPins(t *testing.T) {
 	f, m := parseBoth(t, `
 implements:
-  - section: wlid:section/spec-worklode-004/sec-4
+  - rule:    wlid:rule/worklode/4
     pinned:  wlid:doc/spec-worklode-004/v2
     by:      [internal/ingest/a.go]
-  - section: wlid:section/spec-worklode-004/sec-4
+  - rule:    wlid:rule/worklode/4
     pinned:  wlid:doc/spec-worklode-004/v2
     by:      [internal/ingest/b.go]
 `)
@@ -132,15 +132,15 @@ implements:
 
 	f2, _ := parseBoth(t, `
 implements:
-  - section: wlid:section/spec-worklode-004/sec-4
+  - rule:    wlid:rule/worklode/4
     pinned:  wlid:doc/spec-worklode-004/v1
     by:      [internal/ingest/a.go]
-  - section: wlid:section/spec-worklode-004/sec-4
+  - rule:    wlid:rule/worklode/4
     pinned:  wlid:doc/spec-worklode-004/v2
     by:      [internal/ingest/b.go]
 `)
 	if _, err := implements.Resolve(f2, m, "github.com/sunstoneinstitute/research-stack"); err == nil {
-		t.Fatal("conflicting pins for one (component, section) resolved without error")
+		t.Fatal("conflicting pins for one (component, rule) resolved without error")
 	}
 }
 
@@ -150,7 +150,7 @@ implements:
 func TestResolveRejectsRelativeComponentIRI(t *testing.T) {
 	f, err := implements.Parse([]byte(`
 implements:
-  - section: wlid:section/spec-worklode-004/sec-4
+  - rule:    wlid:rule/worklode/4
     pinned:  wlid:doc/spec-worklode-004/v2
     by:      [internal/ingest/reader.go]
 `))

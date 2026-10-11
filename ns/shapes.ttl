@@ -70,24 +70,25 @@ wl:PlanShape a sh:NodeShape ;
         sh:message "A Plan carries exactly one wl:status, drawn from wlc:DesignDocStatus (WL-SPEC-77; plans reuse the editorial lifecycle enum)." ;
     ] .
 
-wl:SectionShape a sh:NodeShape ;
-    sh:targetClass wl:Section ;
+# A section has no node (WL-REQ-247): what a section holds is the rule
+# arranged there, so the shape is the Rule's (WL-REQ-1705).
+wl:RuleShape a sh:NodeShape ;
+    sh:targetClass wl:Rule ;
     sh:property [
         sh:path wl:status ;
         sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:DesignDocStatus ] ] ;
-        sh:message "A Section's wl:status is drawn from wlc:DesignDocStatus (WL-SPEC-77)." ;
+        sh:message "A Rule's wl:status is drawn from wlc:DesignDocStatus (WL-REQ-1705)." ;
     ] ;
     # The version snapshot a claim is tested against is itself a DesignDoc, and
-    # it is ordered by dcat:version — never by comparing version IRIs (WL-SPEC-77).
+    # it is ordered by dcat:version, never by comparing version IRIs.
     sh:property [
         sh:path wl:lastRevisedIn ;
         sh:class wl:DesignDoc ;
         sh:node [ sh:property [ sh:path dcat:version ; sh:minCount 1 ] ] ;
-        sh:message "wl:lastRevisedIn names a versioned DesignDoc snapshot carrying dcat:version (WL-SPEC-77)." ;
+        sh:message "wl:lastRevisedIn names a versioned DesignDoc snapshot carrying dcat:version (WL-REQ-1705)." ;
     ] ;
-    # WL-SPEC-77 — a superseded section explains itself: a successor, or a reason it
-    # went away. A bare superseded section is a broken promise to whoever linked
-    # it. Read as an implication: not superseded, OR one of the two explanations.
+    # A superseded rule explains itself: a successor, or a reason it went
+    # away. Read as an implication: not superseded, OR one of the two.
     sh:or (
         [ sh:not [ sh:property [ sh:path wl:status ; sh:hasValue wlc:superseded ] ] ]
         # The path reads the declared direction, so the shape holds whether or
@@ -95,7 +96,7 @@ wl:SectionShape a sh:NodeShape ;
         [ sh:property [ sh:path [ sh:inversePath dct:replaces ] ; sh:minCount 1 ] ]
         [ sh:property [ sh:path dct:description ; sh:minCount 1 ] ]
     ) ;
-    sh:message "A superseded Section needs a successor that dct:replaces it, or a dct:description saying why it went away (WL-REQ-167)." .
+    sh:message "A superseded Rule needs a successor that dct:replaces it, or a dct:description saying why it went away (WL-REQ-1705)." .
 
 wl:DeliverableShape a sh:NodeShape ;
     # Targets wl:Effect too: sh:targetClass follows rdfs:subClassOf*.
@@ -114,7 +115,7 @@ wl:DeliverableShape a sh:NodeShape ;
         sh:path wl:deliveredBy ;
         sh:class wl:Component ;
         sh:minCount 1 ;
-        sh:message "A Deliverable names the Component that delivers it, closing the Component→Section join (WL-SPEC-79)." ;
+        sh:message "A Deliverable names the Component that delivers it, closing the Component→Rule join (WL-SPEC-79)." ;
     ] .
 
 wl:EffectShape a sh:NodeShape ;
@@ -242,7 +243,7 @@ wl:TaskShape a sh:NodeShape ;
 # Targeted with sh:targetSubjectsOf rather than the sh:targetClass the rest of
 # this file uses, because the constraint belongs to the predicate and not to a
 # class's instances: sh:targetClass wl:Plan cannot say that ONLY a Plan covers
-# a Section, since it never sees the subject that was typed wrong. One shape
+# a Rule, since it never sees the subject that was typed wrong. One shape
 # per predicate carries both ends — the node-level sh:class is the domain, the
 # sh:property the range — because every object of a predicate has a subject, so
 # one target set reaches both. Named <term>Shape like the class shapes above,
@@ -251,21 +252,21 @@ wl:TaskShape a sh:NodeShape ;
 wl:coversShape a sh:NodeShape ;
     sh:targetSubjectsOf wl:covers ;
     sh:class wl:Plan ;
-    sh:message "Only a Plan covers a Section: a plan writes no code, so what it declares is an undertaking (WL-SPEC-78)." ;
+    sh:message "Only a Plan covers a Rule: a plan writes no code, so what it declares is an undertaking (WL-REQ-1705)." ;
     sh:property [
         sh:path wl:covers ;
-        sh:class wl:Section ;
-        sh:message "wl:covers names a Section — a plan claiming a whole document says nothing a coverage query can use (WL-SPEC-78)." ;
+        sh:class wl:Rule ;
+        sh:message "wl:covers names a Rule: a plan claiming a whole document says nothing a coverage query can use (WL-REQ-1705)." ;
     ] .
 
 wl:defersShape a sh:NodeShape ;
     sh:targetSubjectsOf wl:defers ;
     sh:class wl:Plan ;
-    sh:message "Only a Plan defers a Section: a spec is what work is deferred from, never what defers (WL-SPEC-78)." ;
+    sh:message "Only a Plan defers a Rule: a spec is what work is deferred from, never what defers (WL-REQ-1705)." ;
     sh:property [
         sh:path wl:defers ;
-        sh:class wl:Section ;
-        sh:message "wl:defers names a Section — a whole-document deferral would silently defer future sections (WL-SPEC-78)." ;
+        sh:class wl:Rule ;
+        sh:message "wl:defers names a Rule: a whole-document deferral would silently defer future rules (WL-REQ-1705)." ;
     ] .
 
 wl:DeferralShape a sh:NodeShape ;
@@ -278,7 +279,7 @@ wl:DeferralShape a sh:NodeShape ;
     ] ;
     sh:property [
         sh:path wl:deferredSection ;
-        sh:class wl:Section ;
+        sh:class wl:Rule ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
@@ -290,7 +291,7 @@ wl:DeferralShape a sh:NodeShape ;
         sh:message "A deferral without an owner is just an uncovered section, which needs no syntax (WL-SPEC-78)." ;
     ] ;
     sh:sparql [
-        sh:message "A qualified deferral record must reify a direct wl:defers edge for the same Plan and Section (WL-SPEC-78)." ;
+        sh:message "A qualified deferral record must reify a direct wl:defers edge for the same Plan and Rule (WL-REQ-1705)." ;
         sh:select """
             PREFIX wl: <https://worklode.io/ns/ontology#>
             SELECT $this WHERE {
@@ -303,11 +304,11 @@ wl:DeferralShape a sh:NodeShape ;
 wl:implementsShape a sh:NodeShape ;
     sh:targetSubjectsOf wl:implements ;
     sh:class wl:Component ;
-    sh:message "Only a Component implements a Section: this edge is evidence that code landed, not intent to write it (WL-SPEC-78)." ;
+    sh:message "Only a Component implements a Rule: this edge is evidence that code landed, not intent to write it (WL-REQ-1705)." ;
     sh:property [
         sh:path wl:implements ;
-        sh:class wl:Section ;
-        sh:message "wl:implements names a Section, not a whole document — WL-SPEC-77 re-pointed WL-SPEC-79's DesignDoc range." ;
+        sh:class wl:Rule ;
+        sh:message "wl:implements names a Rule, not a whole document (WL-REQ-1705)." ;
     ] .
 
 wl:producesShape a sh:NodeShape ;
@@ -350,7 +351,7 @@ wl:ArtifactShape a sh:NodeShape ;
     sh:property [ sh:path dct:identifier  ; sh:minCount 1 ; sh:maxCount 1 ] .
 
 # Domain and range, on the pattern of the execution-layer block above. Spelled
-# wl:covers until WL-SPEC-78 moved that name to the Plan→Section undertaking, the
+# wl:covers until WL-SPEC-78 moved that name to the Plan→Rule undertaking, the
 # two domains being disjoint and so a contradiction rather than a clash of taste.
 wl:cutFromShape a sh:NodeShape ;
     sh:targetSubjectsOf wl:cutFrom ;

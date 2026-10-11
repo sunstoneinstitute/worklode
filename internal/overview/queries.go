@@ -117,7 +117,7 @@ const unmatchedQuery = sparqlPrefixes + `SELECT DISTINCT ?repo ?path WHERE {
   GRAPH ?g { ?repo wl:unmatchedPath ?path . }
 } ORDER BY ?repo ?path`
 
-// The WL-REQ-177 standing queries, over wl:implements claims and the sections
+// The WL-REQ-1707 standing queries, over wl:implements claims and the rules
 // they name.
 //
 // A claim's data shape is RDF 1.2 (WL-REQ-239, wl:pinnedVersion): the asserted
@@ -129,22 +129,22 @@ const unmatchedQuery = sparqlPrefixes + `SELECT DISTINCT ?repo ?path WHERE {
 // writes them.
 //
 
-// unimplementedQuery is WL-REQ-1673 row 1: an accepted section no component
-// claims. A section carries wl:status only in its document's canonical graph
-// (graphproj.SectionTriples), so the status pattern confines the read to that
-// graph without naming it — a version snapshot's sections are not candidates.
+// unimplementedQuery is WL-REQ-1673 row 1: an accepted rule
+// no component claims. A rule carries wl:status only in its document's
+// canonical graph (graphproj.RuleTriples), so the status pattern confines the
+// read to that graph without naming it.
 const unimplementedQuery = sparqlPrefixes + `SELECT DISTINCT ?s WHERE {
-  GRAPH ?g { ?s a wl:Section ; wl:status wlc:accepted . }
+  GRAPH ?g { ?s a wl:Rule ; wl:status wlc:accepted . }
   FILTER NOT EXISTS { GRAPH ?ig { ?c wl:implements ?s } }
 } ORDER BY ?s`
 
-// coverageQuery is WL-REQ-1673 row 2: implemented ÷ non-superseded sections,
-// per document. A section nobody claims contributes nothing through the
-// OPTIONAL, so a document at zero coverage still gets a row — which is the
-// whole corpus until observed/repo-implements writes its first claim, and the
-// honest answer meanwhile.
+// coverageQuery is WL-REQ-1673 row 2: implemented ÷ non-superseded
+// rules, per document. A rule nobody claims contributes nothing through the OPTIONAL,
+// so a document at zero coverage still gets a row — which is the whole corpus
+// until observed/repo-implements writes its first claim, and the honest
+// answer meanwhile.
 const coverageQuery = sparqlPrefixes + `SELECT ?doc (COUNT(DISTINCT ?s) AS ?total) (COUNT(DISTINCT ?impl) AS ?implemented) WHERE {
-  GRAPH ?g { ?s a wl:Section ; dct:isPartOf ?doc ; wl:status ?st . }
+  GRAPH ?g { ?s a wl:Rule ; dct:isPartOf ?doc ; wl:status ?st . }
   FILTER (?st != wlc:superseded)
   OPTIONAL {
     GRAPH ?ig { ?c wl:implements ?s }
@@ -152,8 +152,8 @@ const coverageQuery = sparqlPrefixes + `SELECT ?doc (COUNT(DISTINCT ?s) AS ?tota
   }
 } GROUP BY ?doc ORDER BY ?doc`
 
-// staleClaimQuery is WL-REQ-1673 row 3: a claim pinned at a version older than
-// the one that last revised the section it names. Both versions are compared as
+// staleClaimQuery is WL-REQ-1673 row 3: a claim pinned at a version
+// older than the one that last revised the rule it names. Both versions are compared as
 // xsd:integer, never as the strings or the IRIs carrying them — WL-REQ-166: v10
 // does not sort after v3 either way round.
 const staleClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
@@ -164,21 +164,20 @@ const staleClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
   FILTER (xsd:integer(?current) > xsd:integer(?pinned))
 } ORDER BY ?c ?s`
 
-// orphanedClaimQuery is WL-REQ-1673 row 4: a claim naming a section its
-// document no longer has. The document is reached from the pinned snapshot
-// through dcat:hasVersion, and its current section set is the canonical
-// graph's, since graphproj.SectionTriples projects the published sections of
-// the current version and nothing else.
+// orphanedClaimQuery is WL-REQ-1673 row 4: a claim naming a rule
+// its document no longer arranges. The document is reached from the pinned
+// snapshot through dcat:hasVersion, and its current arrangement is the
+// canonical graph's dct:isPartOf (graphproj.RuleTriples).
 const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
   GRAPH ?cg { << ?c wl:implements ?s >> wl:pinnedVersion ?pv . }
   GRAPH ?dg { ?doc dcat:hasVersion ?pv . }
   FILTER NOT EXISTS { GRAPH ?sg { ?s dct:isPartOf ?doc } }
 } ORDER BY ?c ?s`
 
-// deliveredCoverageQuery is WL-REQ-1673 row 5: for each wl:implements claim,
-// the environments the claiming component's deliverable is actually deployed
-// to. It is the join that turns "component A claims section S" into "section S
-// is live in prod", which is what WL-REQ-243 calls the vertical.
+// deliveredCoverageQuery is WL-REQ-1673 row 5: for each wl:implements claim, the
+// environments the claiming component's deliverable is actually deployed to.
+// It is the join that turns "component A claims rule S" into "rule S is
+// live in prod", which is what WL-REQ-243 calls the vertical.
 //
 // Two arms, because a deliverable is witnessed two ways (WL-REQ-243's witness
 // table) and there is no reasoner (WL-SPEC-79), so wl:Effect's subclass edge to
@@ -290,8 +289,8 @@ func Gaps(ctx context.Context, c *graphserver.Client) ([]model.Gap, error) {
 	return out, nil
 }
 
-// Unimplemented runs WL-REQ-1673's unimplemented-intent query, returning the
-// section IRIs no component claims.
+// Unimplemented runs WL-REQ-1673's unimplemented-intent query, returning the rule IRIs
+// no component claims.
 func Unimplemented(ctx context.Context, c *graphserver.Client) ([]string, error) {
 	rows, err := c.Select(ctx, unimplementedQuery)
 	if err != nil {
@@ -308,7 +307,7 @@ func Unimplemented(ctx context.Context, c *graphserver.Client) ([]string, error)
 func Coverage(ctx context.Context, c *graphserver.Client) ([]model.DocCoverage, error) {
 	rows, err := c.Select(ctx, coverageQuery)
 	if err != nil {
-		return nil, fmt.Errorf("section coverage: %w", err)
+		return nil, fmt.Errorf("rule coverage: %w", err)
 	}
 	out := make([]model.DocCoverage, 0, len(rows))
 	for _, r := range rows {
@@ -339,7 +338,7 @@ func OrphanedClaims(ctx context.Context, c *graphserver.Client) ([]model.Claim, 
 
 // DeliveredCoverage runs WL-REQ-1673's delivered-coverage query: one row per
 // (claim, environment) the claim is live in. A claim delivered to two
-// environments is two rows, which is what a caller asking "is this section in
+// environments is two rows, which is what a caller asking "is this rule in
 // prod" needs to see.
 func DeliveredCoverage(ctx context.Context, c *graphserver.Client) ([]model.DeliveredClaim, error) {
 	rows, err := c.Select(ctx, deliveredCoverageQuery)
@@ -349,7 +348,7 @@ func DeliveredCoverage(ctx context.Context, c *graphserver.Client) ([]model.Deli
 	out := make([]model.DeliveredClaim, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, model.DeliveredClaim{
-			Component: r["c"], Section: r["s"], Environment: r["env"]})
+			Component: r["c"], Rule: r["s"], Environment: r["env"]})
 	}
 	return out, nil
 }
@@ -357,7 +356,7 @@ func DeliveredCoverage(ctx context.Context, c *graphserver.Client) ([]model.Deli
 func claims(rows []map[string]string) []model.Claim {
 	out := make([]model.Claim, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, model.Claim{Component: r["c"], Section: r["s"]})
+		out = append(out, model.Claim{Component: r["c"], Rule: r["s"]})
 	}
 	return out
 }

@@ -34,10 +34,10 @@ type GapList struct {
 }
 
 // Claim is one wl:implements edge (WL-REQ-177): a component's claim that its
-// code satisfies a section.
+// code satisfies a rule.
 type Claim struct {
 	Component string `json:"component"`
-	Section   string `json:"section"`
+	Rule      string `json:"rule"`
 }
 
 // DeliveredClaim is one wl:implements claim shown live: the environment the
@@ -45,12 +45,12 @@ type Claim struct {
 // per environment, so a claim live in two of them appears twice.
 type DeliveredClaim struct {
 	Component   string `json:"component"`
-	Section     string `json:"section"`
+	Rule        string `json:"rule"`
 	Environment string `json:"environment"`
 }
 
 // DocCoverage is one document's implementation coverage: how many of its
-// non-superseded sections some component claims.
+// non-superseded rules some component claims.
 type DocCoverage struct {
 	Doc         string `json:"doc"`
 	Implemented int    `json:"implemented"`

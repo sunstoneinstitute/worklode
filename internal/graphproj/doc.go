@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -12,7 +13,7 @@ import (
 const (
 	ProvWasGeneratedBy    = "http://www.w3.org/ns/prov#wasGeneratedBy"
 	DCATVersion           = "http://www.w3.org/ns/dcat#version"
-	DCTIsReplacedBy       = "http://purl.org/dc/terms/isReplacedBy"
+	DCTReplaces           = "http://purl.org/dc/terms/replaces"
 	DCATPreviousVersion   = "http://www.w3.org/ns/dcat#previousVersion"
 	ProvWasRevisionOf     = "http://www.w3.org/ns/prov#wasRevisionOf"
 	DCTIssued             = "http://purl.org/dc/terms/issued"
@@ -36,6 +37,10 @@ func docClass(kind string) string {
 	}
 }
 
+// DocKey is d's document key (WL-REQ-247), the one identity every
+// document, version and declared-graph IRI is built on.
+func DocKey(d model.Doc) string { return iri.DocKey(d.Kind, d.Project, d.Number) }
+
 // DocTriples projects one backbone document row into its canonical node's
 // triples — the v1 of WL-REQ-164's "the graph receives them by projection"
 // (WL-289): type, title, status (a wlc:DesignDocStatus concept, per
@@ -52,13 +57,9 @@ func docClass(kind string) string {
 // byte-identical to before this pointer machinery existed. Non-nil, each
 // entry gets a dcat:hasVersion edge to its snapshot node
 // (iri.DocVersion(DocKey(d), v.Version)), plus one dcat:hasCurrentVersion naming
-// d.Version's snapshot (WL-REQ-166). Sections are separate subjects and have
-// their own projection, SectionTriples. Subject-complete for iri.Doc(DocKey(d)),
+// d.Version's snapshot (WL-REQ-166). Rules are separate subjects and have
+// their own projection, RuleTriples. Subject-complete for iri.Doc(DocKey(d)),
 // like TaskTriples.
-// DocKey is d's document key (WL-REQ-247), the one identity every
-// document, section, version and declared-graph IRI is built on.
-func DocKey(d model.Doc) string { return iri.DocKey(d.Kind, d.Project, d.Number) }
-
 func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
 	subj := iri.Doc(DocKey(d))
 	triples := []Triple{
@@ -83,19 +84,16 @@ func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
 
 // DocVersionTriples projects one immutable document version into the
 // snapshot graph of WL-REQ-166: the version's own node — iri.DocVersion(DocKey(d),
-// v.Version) — plus one wl:Section node per entry in sections, the parsed
-// content of that version's body. Section IRIs are version-free
-// (iri.Section(DocKey(d), anchor): the anchor is the identity, and the graph a
-// caller loads them from already carries the version), but each section's
-// dct:isPartOf names the snapshot node, not the canonical document — that is
-// what makes this projection distinct from SectionTriples, which targets the
-// canonical graph.
+// v.Version) — plus, for each rule v.Rules arranged, a dct:isPartOf naming the
+// snapshot. Rule IRIs are version-free (WL-REQ-247); the graph a caller loads
+// them from carries the version. Spec headings arrange no rule and project
+// nothing. projectIDs maps a rule ref's project key to its project id.
 //
 // prov:wasAttributedTo from WL-REQ-166's example is deliberately not emitted
 // here: doc_versions stores no per-version author (WL-REQ-164's scope), and the
 // document-level prov:wasGeneratedBy on the canonical node (DocTriples)
 // already carries authorship.
-func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSection) []Triple {
+func DocVersionTriples(d model.Doc, v model.DocVersion, projectIDs map[string]string) []Triple {
 	subj := iri.DocVersion(DocKey(d), v.Version)
 	triples := []Triple{
 		{S: subj, P: RDFType, O: IRIRef(iri.Term(docClass(d.Kind)))},
@@ -113,87 +111,76 @@ func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSect
 	if v.Issued != "" {
 		triples = append(triples, Triple{S: subj, P: DCTIssued, O: Typed(v.Issued, XSDDate)})
 	}
-	for _, sec := range sections {
-		secSubj := iri.Section(DocKey(d), sec.Anchor)
-		triples = append(triples,
-			Triple{S: secSubj, P: RDFType, O: IRIRef(iri.Term("Section"))},
-			Triple{S: secSubj, P: DCTTitle, O: Text(sec.Heading)},
-			Triple{S: secSubj, P: DCTIsPartOf, O: IRIRef(subj)},
-		)
-		if sec.LastRevisedIn > 0 {
-			triples = append(triples, Triple{S: secSubj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(DocKey(d), sec.LastRevisedIn))})
+	for _, r := range v.Rules {
+		if rule := RuleIRI(r.Rule, projectIDs); rule != "" {
+			triples = append(triples, Triple{S: rule, P: DCTIsPartOf, O: IRIRef(subj)})
 		}
 	}
 	return triples
 }
 
-// SectionTriples projects one document's sections as wl:Section nodes in that
-// document's own declared graph (WL-REQ-165). Each section is its own subject —
-// iri.Section(key, anchor) — so this is deliberately not part of DocTriples,
-// which stays subject-complete for the document node.
+// RuleIRI is the IRI of the rule ref names ("WL-REQ-12"), resolved through
+// projectIDs (project key to project id). It is "" for a ref that does not
+// parse or names an unknown project.
+func RuleIRI(ref string, projectIDs map[string]string) string {
+	r, ok := designdoc.ParseRuleRef(ref)
+	if !ok {
+		return ""
+	}
+	id, ok := projectIDs[r.Key]
+	if !ok {
+		return ""
+	}
+	return iri.Rule(id, r.Number)
+}
+
+// RuleTriples projects the rules d arranges as wl:Rule nodes in its declared
+// graph (WL-REQ-1709): ref, kind, heading, status, the arranging document,
+// and wl:lastRevisedIn naming the document version that last changed the
+// rule's arranged text (lastRevisedIn, keyed by ref; absent or 0 emits
+// nothing). No section node is emitted (WL-REQ-247).
 //
-// Only published sections are projected. An unpublished section belongs to a
-// draft that has not been accepted, and WL-REQ-165 freezes an anchor at first
-// publication: minting an IRI from an anchor that may still change would put a
-// mutable identity in a graph whose whole value is that section IRIs are
-// durable.
-//
-// Status is derived, never stored: WL-REQ-167 keeps section-level supersession a
-// query rather than a column, and the graph is where that derivation becomes
-// visible. A section is superseded when an inbound replaces edge names its
-// anchor, or when its document is superseded as a whole; otherwise it carries
-// its document's status. The inbound edges are the `in` list from
-// Store.ListDocEdges, where FromAnchor is the anchor *in this document* the
-// edge lands on and ToAnchor is the anchor it left from.
-//
-// WL-REQ-167 rule 2's other branch — a dct:description saying why a section went
-// away with no successor to point at — has no author-facing home yet, so
-// nothing here emits one (WL-150).
-func SectionTriples(d model.Doc, sections []model.DocSection, in []model.DocEdge) []Triple {
-	// replacedBy maps an anchor in this document to the section that replaced
-	// it, "" when a replacement names the anchor without resolving to a far
-	// section (an unresolved external reference).
-	replacedBy := map[string]string{}
-	for _, e := range in {
-		if e.Type != "isReplacedBy" || e.FromAnchor == "" {
-			continue
+// A rule's supersession is the successor's dct:replaces (the Rule shape,
+// WL-REQ-1705), read from each rule's incoming supersedes edges; a rule's
+// Edges are only consulted for that. projectIDs resolves the successor's ref.
+func RuleTriples(d model.Doc, rules []model.Rule, lastRevisedIn map[string]int, projectIDs map[string]string) []Triple {
+	var triples []Triple
+	for _, r := range rules {
+		subj := iri.Rule(r.Project, r.Number)
+		triples = append(triples,
+			Triple{S: subj, P: RDFType, O: IRIRef(iri.Term("Rule"))},
+			Triple{S: subj, P: DCTIdentifier, O: Text(r.Ref)},
+			Triple{S: subj, P: DCTTitle, O: Text(r.Heading)},
+			Triple{S: subj, P: iri.Term("ruleKind"), O: IRIRef(iri.Concept(r.Kind))},
+			Triple{S: subj, P: iri.Term("status"), O: IRIRef(iri.Concept(r.Status))},
+			Triple{S: subj, P: DCTIsPartOf, O: IRIRef(iri.Doc(DocKey(d)))},
+		)
+		if v := lastRevisedIn[r.Ref]; v > 0 {
+			triples = append(triples, Triple{S: subj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(DocKey(d), v))})
 		}
-		successor := ""
-		if e.ToKind != "" && e.ToAnchor != "" {
-			successor = iri.Section(iri.DocKey(e.ToKind, e.ToProject, e.ToNumber), e.ToAnchor)
-		}
-		// A later successor never unsets an earlier one: a section replaced by
-		// something nameable stays pointed at it.
-		if _, seen := replacedBy[e.FromAnchor]; !seen || successor != "" {
-			replacedBy[e.FromAnchor] = successor
+		for _, e := range r.Edges {
+			if e.Type != "supersedes" || e.To != r.Ref {
+				continue
+			}
+			if succ := RuleIRI(e.From, projectIDs); succ != "" {
+				triples = append(triples, Triple{S: succ, P: DCTReplaces, O: IRIRef(subj)})
+			}
 		}
 	}
+	return triples
+}
 
+// DocEdgeTriples projects d's outgoing covers and defers edges onto the rule
+// IRIs they name (WL-REQ-1709). An edge naming no rule, or a rule whose
+// project key projectIDs does not know, is skipped.
+func DocEdgeTriples(d model.Doc, out []model.DocEdge, projectIDs map[string]string) []Triple {
 	var triples []Triple
-	for _, sec := range sections {
-		if !sec.Published {
+	for _, e := range out {
+		if e.Type != "covers" && e.Type != "defers" {
 			continue
 		}
-		subj := iri.Section(DocKey(d), sec.Anchor)
-		status := d.Status
-		successor, replaced := replacedBy[sec.Anchor]
-		if replaced {
-			status = "superseded"
-		}
-		triples = append(triples,
-			Triple{S: subj, P: RDFType, O: IRIRef(iri.Term("Section"))},
-			Triple{S: subj, P: DCTTitle, O: Text(sec.Heading)},
-			Triple{S: subj, P: DCTIsPartOf, O: IRIRef(iri.Doc(DocKey(d)))},
-			Triple{S: subj, P: iri.Term("status"), O: IRIRef(iri.Concept(status))},
-		)
-		if successor != "" {
-			triples = append(triples, Triple{S: subj, P: DCTIsReplacedBy, O: IRIRef(successor)})
-		}
-		// LastRevisedIn is 0 when unset; iri.DocVersion(DocKey(d), 0) would point
-		// at a "v0" snapshot that never exists, so the edge is only emitted
-		// once a real version has revised the section.
-		if sec.LastRevisedIn > 0 {
-			triples = append(triples, Triple{S: subj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(DocKey(d), sec.LastRevisedIn))})
+		if rule := RuleIRI(e.ToRule, projectIDs); rule != "" {
+			triples = append(triples, Triple{S: iri.Doc(DocKey(d)), P: iri.Term(e.Type), O: IRIRef(rule)})
 		}
 	}
 	return triples

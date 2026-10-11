@@ -5,7 +5,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 )
 
-// Triples renders the claim set as <component> wl:implements <section>
+// Triples renders the claim set as <component> wl:implements <rule>
 // edges, each annotated with its pinned document version — the payload of
 // the WL-REQ-177 observed/repo-implements named graph, and what the
 // stale-claim query compares against wl:lastRevisedIn.
@@ -17,7 +17,7 @@ import (
 // and Oxigraph rejects it; iri.Claim explains why the reifier is an IRI and
 // not a blank node.
 //
-// The claim set is deduplicated on (component, section), so two claims that
+// The claim set is deduplicated on (component, rule), so two claims that
 // differ only in Pinned collapse to the first one's three lines. Resolve
 // cannot hand that pair over — it errors on conflicting pins first — so this
 // only matters for a hand-built slice, but it keeps wl:pinnedVersion single-
@@ -26,7 +26,7 @@ func Triples(claims []Claim) []graphproj.Triple {
 	ts := make([]graphproj.Triple, 0, 3*len(claims))
 	seen := make(map[[2]string]bool, len(claims))
 	for _, c := range claims {
-		key := [2]string{c.Component, c.Section}
+		key := [2]string{c.Component, c.Rule}
 		if seen[key] {
 			continue
 		}
@@ -34,9 +34,9 @@ func Triples(claims []Claim) []graphproj.Triple {
 		edge := graphproj.Triple{
 			S: c.Component,
 			P: iri.Term("implements"),
-			O: graphproj.IRIRef(c.Section),
+			O: graphproj.IRIRef(c.Rule),
 		}
-		reifier := iri.Claim(c.Component, c.Section)
+		reifier := iri.Claim(c.Component, c.Rule)
 		ts = append(ts, edge,
 			graphproj.Triple{S: reifier, P: graphproj.RDFReifies, O: graphproj.TripleTerm(edge)},
 			graphproj.Triple{S: reifier, P: iri.Term("pinnedVersion"), O: graphproj.IRIRef(c.Pinned)},

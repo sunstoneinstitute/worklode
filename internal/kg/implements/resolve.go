@@ -10,10 +10,10 @@ import (
 )
 
 // Claim is one derived implementation claim: Component (derived from paths,
-// WL-REQ-177 — never declared) satisfies Section, validated against Pinned.
+// WL-REQ-177 — never declared) satisfies Rule, validated against Pinned.
 type Claim struct {
 	Component string
-	Section   string
+	Rule      string
 	Pinned    string
 }
 
@@ -38,7 +38,7 @@ func Resolve(f *File, m *manifest.Manifest, repoCoords string) ([]Claim, error) 
 	}
 
 	seen := map[Claim]bool{}
-	pins := map[[2]string]string{} // (component, section) -> pinned
+	pins := map[[2]string]string{} // (component, rule) -> pinned
 	var out []Claim
 	for _, e := range f.Implements {
 		components := map[string]bool{}
@@ -61,13 +61,13 @@ func Resolve(f *File, m *manifest.Manifest, repoCoords string) ([]Claim, error) 
 		// below names one of these components, and which one must not depend
 		// on map iteration order.
 		for _, comp := range sortedKeys(components) {
-			key := [2]string{comp, e.Section}
+			key := [2]string{comp, e.Rule}
 			if prev, ok := pins[key]; ok && prev != e.Pinned {
-				return nil, fmt.Errorf("implements: %s claims %s at both %s and %s — one pin per (component, section)",
-					comp, e.Section, prev, e.Pinned)
+				return nil, fmt.Errorf("implements: %s claims %s at both %s and %s — one pin per (component, rule)",
+					comp, e.Rule, prev, e.Pinned)
 			}
 			pins[key] = e.Pinned
-			c := Claim{Component: comp, Section: e.Section, Pinned: e.Pinned}
+			c := Claim{Component: comp, Rule: e.Rule, Pinned: e.Pinned}
 			if !seen[c] {
 				seen[c] = true
 				out = append(out, c)
@@ -78,7 +78,7 @@ func Resolve(f *File, m *manifest.Manifest, repoCoords string) ([]Claim, error) 
 		if out[i].Component != out[j].Component {
 			return out[i].Component < out[j].Component
 		}
-		return out[i].Section < out[j].Section
+		return out[i].Rule < out[j].Rule
 	})
 	return out, nil
 }
