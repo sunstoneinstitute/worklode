@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"maps"
 	"net"
@@ -229,6 +230,11 @@ type Config struct {
 	// registry through POST /api/v1/skills/sync — the only public surface
 	// that creates one — without a GitHub App and a stubbed api.github.com.
 	SkillFetchForTest skillsync.FetchFunc
+
+	// WebAppForTest injects the SPA's build output, bypassing webapp.FS(). Nil
+	// means webapp.FS(). Used by newTwoHostServer's withWebApp option
+	// (router_host_test.go) so SPA tests don't depend on a real `pnpm build`.
+	WebAppForTest fs.FS
 
 	// BackgroundCtx governs goroutines NewServer starts on its own (boot
 	// skill sync, webhook-triggered skill syncs) — not any HTTP request.
@@ -468,6 +474,10 @@ type server struct {
 	// navWrap already counts the "work" destination by outcome — this one
 	// says whether the viewer landed on a board with any live work on it.
 	runBoardRenders *prometheus.CounterVec
+
+	// spaRequests counts requests the SPA handler answered on the public host
+	// (WL-REQ-1304), by outcome; see spaOutcomes.
+	spaRequests *prometheus.CounterVec
 
 	// inboxRenders counts cross-project inbox page renders (GET /inbox,
 	// WL-REQ-347), by outcome (empty, rendered); see inbox.go's inboxPage and
@@ -771,6 +781,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 		s.registerShared(pub)
 	} else {
 		s.registerShared(pub, legacy)
+		s.registerSPA(pub)
 	}
 
 	b, err := servedOpenAPI()

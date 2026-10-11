@@ -271,6 +271,40 @@ func TestObserveNavigationNilSafe(t *testing.T) {
 	s.observeNavigation("home", "ok")
 }
 
+func TestObserveSPANilSafe(t *testing.T) {
+	t.Parallel()
+	s := &server{}
+	s.observeSPA(spaPage)
+}
+
+func TestObserveSPA(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeSPA(spaPage)
+	s.observeSPA(spaPage)
+	s.observeSPA(spaAsset)
+	s.observeSPA(spaAssetNotFound)
+
+	for _, tc := range []struct {
+		outcome string
+		want    float64
+	}{
+		{spaPage, 2},
+		{spaAsset, 1},
+		{spaAssetNotFound, 1},
+		// Pre-initialised but unreached in this task.
+		{spaRedirect, 0},
+		{spaNotFound, 0},
+	} {
+		if got := testutil.ToFloat64(s.spaRequests.WithLabelValues(tc.outcome)); got != tc.want {
+			t.Fatalf("spaRequests{outcome=%s} = %v, want %v", tc.outcome, got, tc.want)
+		}
+	}
+}
+
 func TestObserveHomeRender(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
