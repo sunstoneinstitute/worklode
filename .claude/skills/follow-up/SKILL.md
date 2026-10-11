@@ -62,7 +62,7 @@ registry_package webhooks`) are not — regardless of their priority tag.
    Leave it draft: accepting it mints its tasks, which is a decision for
    whoever picks the work up.
 2. Replace the follow-ups entry with one that keeps the original priority tag
-   and title, whose body is a single sentence naming the new plan by slug,
+   and title, whose body is a single sentence naming the new plan by ref (`WL-PLAN-7`),
    and that it should be executed with subagents.
 3. Land that entry as the change. The plan itself is already in the backbone,
    so the commit is the follow-ups edit alone — docs-only.

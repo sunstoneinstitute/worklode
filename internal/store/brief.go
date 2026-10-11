@@ -40,7 +40,7 @@ type Brief struct {
 	// parse markdown to find them. A vision-capable agent can read the
 	// screenshot the reporter actually saw; any agent can pull the log.
 	Blobs []model.TaskBlob
-	// StalePlan is the slug of the task's plan document when that plan is
+	// StalePlan is the ref of the task's plan document when that plan is
 	// stale (WL-REQ-171), "" otherwise.
 	StalePlan string
 }
@@ -95,7 +95,7 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		return nil, err
 	}
 
-	stalePlan, err := s.StalePlanSlug(ctx, t.PlanDoc)
+	stalePlan, err := s.StalePlanRef(ctx, t.PlanDoc)
 	if err != nil {
 		return nil, err
 	}
@@ -242,10 +242,11 @@ func (s *Store) blockingPlansFor(ctx context.Context, ids []string) (map[string]
 		return out, nil
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
+		`SELECT DISTINCT dep.id, bd.id, bd.slug, coalesce(`+docRefSQL("bp", "bd")+`, bd.slug), bd.title, bd.status
 		   FROM tasks dep
 		   JOIN doc_edges de ON de.type = 'blockedBy' AND de.from_doc = dep.plan_doc
 		   JOIN docs bd ON bd.id = de.to_doc
+		   JOIN projects bp ON bp.id = bd.project_id
 		  WHERE dep.id = ANY($1)
 		    AND `+planUnfinished("bd")+`
 		  ORDER BY dep.id, bd.id`, ids)
@@ -256,7 +257,7 @@ func (s *Store) blockingPlansFor(ctx context.Context, ids []string) (map[string]
 	for rows.Next() {
 		var task string
 		var ref model.DocRef
-		if err := rows.Scan(&task, &ref.ID, &ref.Slug, &ref.Title, &ref.Status); err != nil {
+		if err := rows.Scan(&task, &ref.ID, &ref.Slug, &ref.Ref, &ref.Title, &ref.Status); err != nil {
 			return nil, fmt.Errorf("scan blocking plan: %w", err)
 		}
 		out[task] = append(out[task], ref)

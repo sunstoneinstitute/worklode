@@ -172,7 +172,7 @@ func resolveExternalCovers(tx *sql.Tx, target, eventID int64) (model.CoversResol
 		project, planRef, ref string
 	}
 	rows, err := tx.Query(
-		`SELECT e.id, d.id, d.project_id, p.key || '-PLAN-' || coalesce(d.number::text, d.slug), e.to_external
+		`SELECT e.id, d.id, d.project_id, coalesce(`+docRefSQL("p", "d")+`, d.slug), e.to_external
 		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc JOIN projects p ON p.id = d.project_id
 		  WHERE e.type = 'covers' AND e.to_external IS NOT NULL
 		    AND d.kind = 'plan' AND d.deleted_at IS NULL

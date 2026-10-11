@@ -24,7 +24,7 @@ unbounded.
 | nothing | any ready task | `lode work next --json` |
 | `--kind <k>`, `--strict-focus` | narrowed frontier | the same, with those flags |
 | bugs, bugfixes, chores, "clean up" | maintenance | `lode task list --status ready --kind bug --json`, then `--kind chore` once bugs run dry |
-| a spec (`032`, `WL-SPEC-32`), a plan slug, or "finish <feature>" | one spec through to done | see **Spec focus** |
+| a spec (`032`, `WL-SPEC-32`), a plan ref (`WL-PLAN-7`), or "finish <feature>" | one spec through to done | see **Spec focus** |
 | unblock, unblocking, "get things moving" | clear blockers | see **Unblock focus** |
 | a bare task id (`WL-429`) | that task, then stop | `lode work next WL-429 --json` |
 
@@ -35,7 +35,7 @@ say that you did.
 **Spec focus.** `lode doc todo <ref> --json` is the spec's execution queue,
 already in dependency order. Walk it each pass:
 
-- `unexecuted` — `lode task list --plan <that item's plan slug> --status ready
+- `unexecuted` — `lode task list --plan <that item's plan ref> --status ready
   --json`; the first task it returns is the pick.
 - `unplanned`, `plan-draft`, `blocked` — not loop work. Each needs a
   plan written or a human to accept one. Note it and move to the next item.

@@ -51,7 +51,7 @@ func (c *Client) ListCorpusSections(ctx context.Context, project, number string)
 }
 
 // ResolveDoc calls GET /api/v1/docs/resolve?ref=, returning the document a
-// reference names — an id or an exact slug (WL-REQ-168). The server owns the
+// reference names — an id, a ref or an exact slug (WL-REQ-168). The server owns the
 // grammar and its ambiguity rule, so a ref costs one indexed lookup rather
 // than a listing of the whole corpus, and a grammar extension needs no client
 // upgrade. A *ClientError with Status 404 means no document holds that ref;
@@ -407,11 +407,9 @@ func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc
 }
 
 // DocLintTable prints `lode doc lint`'s corpus-wide dangling-reference
-// report: one row per finding — the source document by slug (a finding
-// carries no project key to build the WL-REQ-168 shorthand from, unlike a
-// document listing), the section it was declared from, the edge type, and
-// what's wrong: the verbatim unresolved reference, or the anchor missing
-// from its resolved target.
+// report: one row per finding — the source document by ref, the section it
+// was declared from, the edge type, and what's wrong: the verbatim
+// unresolved reference, or the anchor missing from its resolved target.
 func DocLintTable(w io.Writer, findings []model.DocLintFinding) {
 	tbl := newTable(
 		column{header: "DOC"},
@@ -423,9 +421,9 @@ func DocLintTable(w io.Writer, findings []model.DocLintFinding) {
 	for _, f := range findings {
 		detail := f.Ref
 		if f.Kind == "missing-anchor" {
-			detail = fmt.Sprintf("%s#%s: no such section", f.ToSlug, f.ToAnchor)
+			detail = fmt.Sprintf("%s#%s: no such section", cmp.Or(f.ToRef, f.ToSlug), f.ToAnchor)
 		}
-		tbl.add(f.Slug, f.Kind, dash(f.FromAnchor), f.Type, detail)
+		tbl.add(cmp.Or(f.DocRef, f.Slug), f.Kind, dash(f.FromAnchor), f.Type, detail)
 	}
 	tbl.flush(w)
 }
@@ -617,6 +615,9 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	if d.Number != 0 {
 		fmt.Fprintf(w, "  number:   %d\n", d.Number)
 	}
+	if ref := DocRef(d.Doc); ref != d.Kind {
+		fmt.Fprintf(w, "  ref:      %s\n", ref)
+	}
 	fmt.Fprintf(w, "  slug:     %s\n", d.Slug)
 	fmt.Fprintf(w, "  status:   %s\n", d.Status)
 	fmt.Fprintf(w, "  version:  %d\n", d.Version)
@@ -660,10 +661,10 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	if len(d.Edges) > 0 || len(d.EdgesIn) > 0 {
 		fmt.Fprintln(w, "\nedges:")
 		for _, e := range d.Edges {
-			fmt.Fprintf(w, "  %s %s %s\n", d.Slug, e.Type, docEdgeTarget(e))
+			fmt.Fprintf(w, "  %s %s %s\n", cmp.Or(DocRef(d.Doc), d.Slug), e.Type, docEdgeTarget(e))
 		}
 		for _, e := range d.EdgesIn {
-			fmt.Fprintf(w, "  %s %s %s\n", docEdgeTarget(e), e.Type, d.Slug)
+			fmt.Fprintf(w, "  %s %s %s\n", docEdgeTarget(e), e.Type, cmp.Or(DocRef(d.Doc), d.Slug))
 		}
 	}
 }
@@ -763,7 +764,7 @@ func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSect
 }
 
 // docEdgeTarget renders one edge's far end: a covers edge's rule, the
-// document's slug and optional anchor — the id only when a read did not resolve the slug — or the external
+// document's ref (its slug when unnumbered, the id when neither resolved) and optional anchor, or the external
 // reference an unresolved edge carries. A far end that has gone stale carries
 // docStaleSuffix, so a `requires` line says its target is owed a re-plan
 // (WL-REQ-170) without the reader following the reference to find out.
@@ -771,7 +772,7 @@ func docEdgeTarget(e model.DocEdge) string {
 	if e.ToDoc == 0 {
 		return cmp.Or(e.ToRule, e.ToExternal)
 	}
-	name := e.ToSlug
+	name := cmp.Or(e.ToRef(), e.ToSlug)
 	if name == "" {
 		name = strconv.FormatInt(e.ToDoc, 10)
 	}

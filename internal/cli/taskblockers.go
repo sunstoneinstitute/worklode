@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -81,7 +82,7 @@ func BlockerTreeRender(w io.Writer, t model.BlockerTree) {
 	if len(t.BlockingPlans) > 0 {
 		fmt.Fprintln(w, "and by plans:")
 		for _, p := range t.BlockingPlans {
-			fmt.Fprintf(w, "  %s  %s  (%s)\n", p.Slug, p.Title, p.Status)
+			fmt.Fprintf(w, "  %s  %s  (%s)\n", cmp.Or(p.Ref, p.Slug), p.Title, p.Status)
 		}
 	}
 }

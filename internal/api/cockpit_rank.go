@@ -316,7 +316,7 @@ func rootEvidence(r *concernRoot, fanOut int, oldestAt, now time.Time) string {
 func rootHeader(r *concernRoot) string {
 	switch {
 	case r.ref.isPlan:
-		return fmt.Sprintf("%s plan %s (%s)", r.ref.title, r.ref.doc.Slug, r.ref.state)
+		return fmt.Sprintf("%s plan %s (%s)", r.ref.title, cmp.Or(r.ref.doc.Ref, r.ref.doc.Slug), r.ref.state)
 	case r.fact != nil:
 		claimed := "unclaimed"
 		if r.fact.Lease != nil {

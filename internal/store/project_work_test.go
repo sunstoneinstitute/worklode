@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 )
@@ -322,8 +323,9 @@ func TestListProjectWorkFactsPlanBlocked(t *testing.T) {
 	if len(dep.OpenBlockers) != 1 || dep.OpenBlockers[0].ID != blockers[0] {
 		t.Errorf("OpenBlockers = %#v, want plan A's open task %s", dep.OpenBlockers, blockers[0])
 	}
-	if len(dep.BlockingPlans) != 1 || dep.BlockingPlans[0].Slug != "plan-a" {
-		t.Errorf("BlockingPlans = %#v, want plan-a", dep.BlockingPlans)
+	if len(dep.BlockingPlans) != 1 || dep.BlockingPlans[0].Slug != "plan-a" ||
+		!strings.HasPrefix(dep.BlockingPlans[0].Ref, "P1-PLAN-") {
+		t.Errorf("BlockingPlans = %#v, want plan-a with a P1-PLAN- ref", dep.BlockingPlans)
 	}
 	if b := factFor(t, facts, blockers[0]); b.Blocked() {
 		t.Errorf("Blocked() = true for %s, the blocking plan's own task", blockers[0])

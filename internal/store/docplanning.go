@@ -358,21 +358,22 @@ func blocksPath(tx *sql.Tx, start, target int64) ([]int64, error) {
 }
 
 // blocksChainText renders a chain of document ids as "a blockedBy b blockedBy a", by
-// slug, so a refused write names the cycle rather than just reporting one. A
-// document whose slug cannot be read falls back to its id — the caller is
+// ref (slug when it has no number), so a refused write names the cycle rather
+// than just reporting one. A document that cannot be read falls back to its id — the caller is
 // already on an error path and a lookup failure must not mask what refused the
 // write.
 func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 	parts := make([]string, 0, len(chain))
 	for _, id := range chain {
-		var slug string
-		if err := tx.QueryRow(`SELECT slug FROM docs WHERE id = $1`, id).Scan(&slug); err != nil {
+		var name string
+		if err := tx.QueryRow(`SELECT coalesce(`+docRefSQL("p", "d")+`, d.slug)
+			FROM docs d JOIN projects p ON p.id = d.project_id WHERE d.id = $1`, id).Scan(&name); err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
-				return "", fmt.Errorf("read slug of doc %d: %w", id, err)
+				return "", fmt.Errorf("read ref of doc %d: %w", id, err)
 			}
-			slug = fmt.Sprintf("doc %d", id)
+			name = fmt.Sprintf("doc %d", id)
 		}
-		parts = append(parts, slug)
+		parts = append(parts, name)
 	}
 	return strings.Join(parts, " blockedBy "), nil
 }
@@ -392,7 +393,7 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // An unplanned section reports the strongest outcome that applies:
 // "plan-draft" when a draft plan covers it, "deferred" when an accepted or
 // superseded plan defers it to a named owner (reported beside the anchor: a
-// slug, or the reference verbatim when it did not resolve), "unplanned"
+// ref, or the reference verbatim when it did not resolve), "unplanned"
 // otherwise. A draft plan's deferral classifies nothing. `covers: NO-SPEC`
 // resolves to no rule and falls out of the join, and a tombstoned document
 // participates on neither end (WL-REQ-117).
@@ -411,11 +412,12 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		     SELECT e.to_doc AS doc_id, e.to_anchor AS anchor,
 		            -- Comma without a space: the CLI joins anchors with spaces,
 		            -- so a spaced separator would split one gap across tokens.
-		            string_agg(DISTINCT coalesce(o.slug, e.owner_external), ','
-		                       ORDER BY coalesce(o.slug, e.owner_external)) AS owner
+		            string_agg(DISTINCT coalesce(`+docRefSQL("op", "o")+`, o.slug, e.owner_external), ','
+		                       ORDER BY coalesce(`+docRefSQL("op", "o")+`, o.slug, e.owner_external)) AS owner
 		       FROM doc_edges e
 		       JOIN docs p ON p.id = e.from_doc
 		       LEFT JOIN docs o ON o.id = e.owner_doc
+		       LEFT JOIN projects op ON op.id = o.project_id
 		      WHERE e.type = 'defers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')

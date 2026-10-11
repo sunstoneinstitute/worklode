@@ -352,7 +352,7 @@ yet and never mutates a body. Nothing reports the divergence, so the edit is
 not finished until you have walked it yourself:
 
 ```bash
-lode task list --plan <slug> --status all --json   # every task the plan minted
+lode task list --plan <ref> --status all --json   # every task the plan minted
 lode show <task-id> --json                         # the body as minted
 lode task edit <task-id> --body-file <file>        # re-body a drifted one
 ```

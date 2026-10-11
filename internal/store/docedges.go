@@ -750,23 +750,14 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	}
 
 	if sh, ok := designdoc.ParseShorthand(base); ok {
-		// A retired <KEY>-ADR-<n> names the spec that took its place
-		// (WL-REQ-1357); no row has kind adr any more.
-		match, args := `d.kind = $2 AND d.number = $3`, []any{sh.Key, sh.Kind(), sh.Number}
-		if sh.Type == "ADR" {
-			match, args = `d.former_adr = $2`, []any{sh.Key, sh.Number}
+		id, err := docIDByShorthand(tx, sh)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, false, nil
 		}
-		err := tx.QueryRow(
-			`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
-			  WHERE p.key = $1 AND `+match+`
-			  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`, args...).Scan(&id)
-		if err == nil {
-			return id, true, nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
+		if err != nil {
 			return 0, false, fmt.Errorf("resolve doc ref %q by shorthand: %w", base, err)
 		}
-		return 0, false, nil
+		return id, true, nil
 	}
 
 	// Bare numbers only — a number-*prefixed* reference is a filename, and
@@ -794,6 +785,28 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	return 0, false, nil
 }
 
+// rowQuerier is the QueryRow both *sql.DB and *sql.Tx provide.
+type rowQuerier interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// docIDByShorthand looks up a <KEY>-<TYPE>-<n> reference by project key, kind
+// and number, live row before tombstone. A retired <KEY>-ADR-<n> names the
+// spec that took its place (WL-REQ-1357); no row has kind adr any more.
+// sql.ErrNoRows means no such document.
+func docIDByShorthand(q rowQuerier, sh designdoc.Shorthand) (int64, error) {
+	match, args := `d.kind = $2 AND d.number = $3`, []any{sh.Key, sh.Kind(), sh.Number}
+	if sh.Type == "ADR" {
+		match, args = `d.former_adr = $2`, []any{sh.Key, sh.Number}
+	}
+	var id int64
+	err := q.QueryRow(
+		`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
+		  WHERE p.key = $1 AND `+match+`
+		  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`, args...).Scan(&id)
+	return id, err
+}
+
 // docsByNumber returns up to two spec ids in project with the given corpus
 // number, restricted to one liveness class. Two is all resolveDocRef needs: it
 // resolves exactly one match and calls anything more ambiguous.
@@ -810,9 +823,8 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 }
 
 // ResolveDocRef resolves a document reference to its row (WL-REQ-168): a
-// positive integer is the id itself, anything else is matched against slugs,
-// exact match only — corpus-number and SPEC/ADR shorthand resolution stay
-// unbuilt. The rule lives here, beside the data, so resolving a ref costs one
+// positive integer is the id itself, then a <KEY>-<TYPE>-<n> ref, then an
+// exact slug. The rule lives here, beside the data, so resolving a ref costs one
 // indexed lookup instead of a listing of the whole corpus, and so every
 // client answers a given ref the same way.
 //
@@ -825,6 +837,16 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 // a tombstone never shadows a live document.
 func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, error) {
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		return s.GetDoc(ctx, id)
+	}
+	if sh, ok := designdoc.ParseShorthand(ref); ok {
+		id, err := docIDByShorthand(s.db, sh)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("no document %q: %w", ref, ErrNotFound)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("resolve doc %q by shorthand: %w", ref, err)
+		}
 		return s.GetDoc(ctx, id)
 	}
 	rows, err := s.db.QueryContext(ctx,
@@ -888,9 +910,10 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT 'unresolved', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
 		        coalesce(e.from_anchor,''), e.type, e.to_external,
-		        0::bigint, '', ''
+		        0::bigint, '', '', coalesce(`+docRefSQL("dp", "d")+`, d.slug), ''
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
+		   JOIN projects dp ON dp.id = d.project_id
 		  WHERE e.to_external IS NOT NULL AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 
@@ -898,9 +921,10 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 
 		 SELECT 'unresolved', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
 		        coalesce(e.from_anchor,''), e.type, e.owner_external,
-		        0::bigint, '', ''
+		        0::bigint, '', '', coalesce(`+docRefSQL("dp", "d")+`, d.slug), ''
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
+		   JOIN projects dp ON dp.id = d.project_id
 		  WHERE e.owner_external IS NOT NULL AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 
@@ -908,10 +932,13 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 
 		 SELECT 'missing-anchor', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
 		        coalesce(e.from_anchor,''), e.type, '',
-		        e.to_doc, td.slug, e.to_anchor
+		        e.to_doc, td.slug, e.to_anchor, coalesce(`+docRefSQL("dp", "d")+`, d.slug),
+		        coalesce(`+docRefSQL("tp", "td")+`, td.slug)
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
+		   JOIN projects dp ON dp.id = d.project_id
 		   JOIN docs td ON td.id = e.to_doc
+		   JOIN projects tp ON tp.id = td.project_id
 		  WHERE e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		    AND d.deleted_at IS NULL AND td.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
@@ -925,7 +952,7 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 	findings, err := collectRows(rows, "lint docs", func(r rowScanner) (model.DocLintFinding, error) {
 		var f model.DocLintFinding
 		err := r.Scan(&f.Kind, &f.Doc, &f.Project, &f.Number, &f.Slug, &f.DocKind,
-			&f.FromAnchor, &f.Type, &f.Ref, &f.ToDoc, &f.ToSlug, &f.ToAnchor)
+			&f.FromAnchor, &f.Type, &f.Ref, &f.ToDoc, &f.ToSlug, &f.ToAnchor, &f.DocRef, &f.ToRef)
 		return f, err
 	})
 	if err != nil {
@@ -988,7 +1015,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		        coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''),
 		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
-		        coalesce(d.number,0), coalesce(d.status,''), coalesce(od.slug, e.owner_external, ''),
+		        coalesce(d.number,0), coalesce(d.status,''), coalesce(`+docRefSQL("op", "od")+`, od.slug, e.owner_external, ''),
 		        coalesce(`+ruleRefSQL("rp", "r")+`, ''), coalesce(d.title,''), coalesce(dp.key,'')
 		   FROM doc_edges e
 		   LEFT JOIN rules r ON r.id = e.to_rule
@@ -1001,6 +1028,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		   LEFT JOIN docs d ON d.id = coalesce(e.to_doc, ra.doc_id)
 		   LEFT JOIN projects dp ON dp.id = d.project_id
 		   LEFT JOIN docs od ON od.id = e.owner_doc
+		   LEFT JOIN projects op ON op.id = od.project_id
 		  WHERE e.from_doc = $1
 		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc, ra.doc_id, 0),
 		           coalesce(e.to_anchor, ra.anchor, ''), coalesce(e.to_external,''), r.number`, docID)
@@ -1023,7 +1051,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	inRows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
 		        d.project_id, d.slug, d.kind, coalesce(d.number,0), d.status,
-		        coalesce(od.slug, e.owner_external, ''), '', d.title, dp.key
+		        coalesce(`+docRefSQL("op", "od")+`, od.slug, e.owner_external, ''), '', d.title, dp.key
 		   FROM (SELECT type, from_doc, from_anchor, to_anchor, owner_doc, owner_external
 		           FROM doc_edges WHERE to_doc = $1
 		         UNION ALL
@@ -1032,6 +1060,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		   JOIN docs d ON d.id = e.from_doc
 		   JOIN projects dp ON dp.id = d.project_id
 		   LEFT JOIN docs od ON od.id = e.owner_doc
+		   LEFT JOIN projects op ON op.id = od.project_id
 		  WHERE d.deleted_at IS NULL
 		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
 	if err != nil {

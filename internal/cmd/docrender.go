@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -114,13 +115,13 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 
 	parsed, err := designdoc.Parse(data)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", doc.Slug, err)
+		return fmt.Errorf("parse %s: %w", cmp.Or(doc.Ref, doc.Slug), err)
 	}
 	// WL-REQ-192: a section is always its whole subtree. designdoc cuts it from
 	// the spans Parse already found, so nothing here re-scans the source.
 	text, ok := parsed.Subtree(section)
 	if !ok {
-		return fmt.Errorf("no section %s in %s", section, doc.Slug)
+		return fmt.Errorf("no section %s in %s", section, cmp.Or(doc.Ref, doc.Slug))
 	}
 	return writeDocShow(cmd, doc, section, []byte(text))
 }
