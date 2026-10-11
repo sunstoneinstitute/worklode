@@ -89,6 +89,11 @@ func mergeRouteDocs(parts ...map[string]routeDoc) map[string]routeDoc {
 
 const openAPISecurity = "bearerToken"
 
+// openAPICookieSecurity names the web session cookie as an alternative to
+// openAPISecurity on routes that accept it (sessionOnly routes accept only
+// this one).
+const openAPICookieSecurity = "sessionCookie"
+
 // servedOpenAPI is the document every NewServer serves, built once per process.
 // Its inputs are package-level tables, and the schema reflection is slow
 // enough under -race that rebuilding it per server dominated test time.
@@ -134,6 +139,8 @@ func buildOpenAPI(guards map[string]routeGuard, docs map[string]routeDoc) ([]byt
 	r.Spec.Info.Version = buildinfo.Version
 	r.Spec.SetHTTPBearerTokenSecurity(openAPISecurity, "wl_ + 40 hex",
 		"A worklode token (bootstrap, minted, or task-scoped).")
+	r.Spec.SetAPIKeySecurity(openAPICookieSecurity, sessionCookieName, openapi.InCookie,
+		"The web session cookie set by /auth/callback.")
 
 	for _, pattern := range slices.Sorted(maps.Keys(docs)) {
 		doc := docs[pattern]
@@ -168,8 +175,15 @@ func buildOpenAPI(guards map[string]routeGuard, docs map[string]routeDoc) ([]byt
 			cu.IsDefault = true
 			cu.Description = "Any non-2xx answer"
 		})
-		if guards[pattern].perm != permPublic {
+		switch g := guards[pattern]; {
+		case g.perm == permPublic:
+			// No security.
+		case g.session:
+			oc.AddSecurity(openAPICookieSecurity)
+		default:
+			// Two separate calls register alternatives, not a combined requirement.
 			oc.AddSecurity(openAPISecurity)
+			oc.AddSecurity(openAPICookieSecurity)
 		}
 		if err := r.AddOperation(oc); err != nil {
 			return nil, fmt.Errorf("openapi: %s: %w", pattern, err)
