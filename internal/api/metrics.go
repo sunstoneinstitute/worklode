@@ -94,6 +94,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(runBoardRenderOutcomes, ", ") +
 			"). A rising \"empty\" share means projects are landing on a run board with no live work. Bounded by construction: no project or task id is a label here.",
 	}, []string{"outcome"})
+	s.spaRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_web_spa_requests_total",
+		Help: "Requests the SPA handler answered on the public host (WL-REQ-1304), by outcome (" +
+			strings.Join(spaOutcomes, ", ") + "). Bounded by construction: no path is a label.",
+	}, []string{"outcome"})
 	s.inboxRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_inbox_renders_total",
 		Help: "Cross-project inbox page renders (GET /inbox, WL-REQ-347), by outcome (" +
@@ -353,7 +358,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions,
+		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.runBoardRenders, s.spaRequests, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions, s.approvalActs, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
@@ -428,6 +433,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// reads as a flat zero rather than as no-data.
 	for _, outcome := range runBoardRenderOutcomes {
 		s.runBoardRenders.WithLabelValues(outcome)
+	}
+	for _, outcome := range spaOutcomes {
+		s.spaRequests.WithLabelValues(outcome)
 	}
 	// Both inbox outcomes, so an instance where nobody has anything waiting
 	// on them reads as a flat zero rather than as no-data.
@@ -935,6 +943,28 @@ func (s *server) observeRunBoardRender(outcome string) {
 		return
 	}
 	s.runBoardRenders.WithLabelValues(outcome).Inc()
+}
+
+// The SPA handler's outcomes (spa.go): "page" for the shell, "asset"/
+// "asset_not_found" for /assets/, "redirect"/"not_found" reserved for the
+// task that adds the SPA-miss redirect.
+const (
+	spaPage          = "page"
+	spaAsset         = "asset"
+	spaAssetNotFound = "asset_not_found"
+	spaRedirect      = "redirect"
+	spaNotFound      = "not_found"
+)
+
+var spaOutcomes = []string{spaPage, spaAsset, spaAssetNotFound, spaRedirect, spaNotFound}
+
+// observeSPA records one SPA-handler outcome. Nil-safe: tests build a
+// *server directly without initMetrics.
+func (s *server) observeSPA(outcome string) {
+	if s.spaRequests == nil {
+		return
+	}
+	s.spaRequests.WithLabelValues(outcome).Inc()
 }
 
 // The inbox's two render outcomes (see inbox.go's inboxPage), which are also
