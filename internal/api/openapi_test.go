@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -32,6 +33,9 @@ type openAPIDoc struct {
 	Components struct {
 		SecuritySchemes map[string]struct {
 			Scheme string `json:"scheme"`
+			Type   string `json:"type"`
+			In     string `json:"in"`
+			Name   string `json:"name"`
 		} `json:"securitySchemes"`
 	} `json:"components"`
 }
@@ -122,8 +126,19 @@ func TestOpenAPIDocument(t *testing.T) {
 	if ref := op.Responses["default"].Content["application/json"].Schema.Ref; !strings.HasSuffix(ref, "ErrorResponse") {
 		t.Errorf("default schema $ref = %q, want ErrorResponse", ref)
 	}
-	if op.Security == nil || len(*op.Security) != 1 || (*op.Security)[0]["bearerToken"] == nil {
-		t.Errorf("security = %v, want [{bearerToken: []}]", op.Security)
+	if op.Security == nil || len(*op.Security) != 2 {
+		t.Errorf("security = %v, want two alternatives (bearerToken, sessionCookie)", op.Security)
+	} else {
+		var names []string
+		for _, alt := range *op.Security {
+			for name := range alt {
+				names = append(names, name)
+			}
+		}
+		slices.Sort(names)
+		if !slices.Equal(names, []string{"bearerToken", "sessionCookie"}) {
+			t.Errorf("security alternatives = %v, want [bearerToken sessionCookie]", names)
+		}
 	}
 	if pub := d.Paths["/api/v1/openapi.json"]["get"]; pub.Security != nil {
 		t.Errorf("open route carries security %v", *pub.Security)
@@ -196,5 +211,43 @@ func TestOpenAPIWrite(t *testing.T) {
 	}
 	if err := os.WriteFile(out, b, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOpenAPISecuritySchemes(t *testing.T) {
+	t.Parallel()
+	guards := map[string]routeGuard{
+		"GET /api/v1/a":  guarded(permTaskRead),
+		"POST /api/v1/b": sessionOnly(permApprovalDecide),
+		"GET /api/v1/c":  open("test"),
+	}
+	docs := map[string]routeDoc{
+		"GET /api/v1/a":  {summary: "a", responses: map[int]any{200: struct{}{}}},
+		"POST /api/v1/b": {summary: "b", responses: map[int]any{200: struct{}{}}},
+		"GET /api/v1/c":  {summary: "c", responses: map[int]any{200: struct{}{}}},
+	}
+	d := renderOpenAPI(t, guards, docs)
+	if s := d.Components.SecuritySchemes["sessionCookie"]; s.Type != "apiKey" || s.In != "cookie" || s.Name != "wl_session" {
+		t.Fatalf("sessionCookie scheme = %+v", s)
+	}
+	want := map[string][]string{
+		"/api/v1/a get":  {"bearerToken", "sessionCookie"},
+		"/api/v1/b post": {"sessionCookie"},
+		"/api/v1/c get":  nil,
+	}
+	for key, names := range want {
+		path, method, _ := strings.Cut(key, " ")
+		var got []string
+		if sec := d.Paths[path][method].Security; sec != nil {
+			for _, alt := range *sec {
+				for name := range alt {
+					got = append(got, name)
+				}
+			}
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, names) {
+			t.Errorf("%s security = %v, want %v", key, got, names)
+		}
 	}
 }
