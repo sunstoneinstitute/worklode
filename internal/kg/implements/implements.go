@@ -1,6 +1,6 @@
 // Package implements reads .worklode/implements.yaml (WL-REQ-177): the
 // machine-readable claim that this repository's code satisfies specific
-// design-document sections, pinned to the document version validated
+// rules, pinned to the document version validated
 // against. The manifest deliberately has no component field — the claiming
 // component is derived from the by: paths (resolve.go, WL-REQ-177),
 // never declared.
@@ -17,34 +17,32 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 )
 
 // Derived from iri.IDNS, the single owner of the id/ instance namespace.
 const (
-	sectionPrefix = iri.IDNS + "section/"
-	docPrefix     = iri.IDNS + "doc/"
+	rulePrefix = iri.IDNS + "rule/"
+	docPrefix  = iri.IDNS + "doc/"
 )
 
 var (
 	versionRE = regexp.MustCompile(`^v[1-9][0-9]*$`)
-	// slugRE holds a document slug to the same shape as an anchor
-	// (designdoc.ValidAnchor) minus the sec- prefix. Nothing else validates
-	// it — docs.slug carries no CHECK constraint — and an unvalidated slug
-	// reaches graphproj.IRIRef, which wraps its value in <> without escaping.
-	// A slug holding a space or an angle bracket would then fail as a broken
-	// N-Triples document at PUT time instead of here, naming the entry.
+	numberRE  = regexp.MustCompile(`^[1-9][0-9]*$`)
+	// slugRE holds a document key or project id to a lower-case path-safe
+	// shape. An unvalidated value reaches graphproj.IRIRef, which wraps it in
+	// <> without escaping, so a space or an angle bracket would fail as a
+	// broken N-Triples document at PUT time instead of here, naming the entry.
 	slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*$`)
 )
 
-// Entry is one claim: this repo's files in By satisfy Section, validated
-// against the Pinned document version. Parse normalizes Section and Pinned
-// to full IRIs.
+// Entry is one claim: this repo's files in By satisfy Rule, validated
+// against the Pinned document version. Parse normalizes Rule and Pinned to
+// full IRIs.
 type Entry struct {
-	Section string   `yaml:"section"`
-	Pinned  string   `yaml:"pinned"`
-	By      []string `yaml:"by"`
+	Rule   string   `yaml:"rule"`
+	Pinned string   `yaml:"pinned"`
+	By     []string `yaml:"by"`
 }
 
 // File is a parsed .worklode/implements.yaml.
@@ -85,7 +83,7 @@ func Parse(data []byte) (*File, error) {
 	}
 	for i := range f.Implements {
 		e := &f.Implements[i]
-		docKey, anchor, err := sectionDoc(expand(e.Section))
+		project, number, err := ruleRef(expand(e.Rule))
 		if err != nil {
 			return nil, fmt.Errorf("implements entry %d: %w", i, err)
 		}
@@ -96,12 +94,8 @@ func Parse(data []byte) (*File, error) {
 		// Re-mint from the validated parts rather than keep the input
 		// string, so the stored form is whatever internal/kg/iri says the
 		// grammar is even if the two ever diverge.
-		e.Section = iri.Section(docKey, anchor)
+		e.Rule = iri.Rule(project, number)
 		e.Pinned = iri.DocVersion(pinKey, version)
-		if pinKey != docKey {
-			return nil, fmt.Errorf("implements entry %d: pinned %q names doc %q, but the section belongs to %q",
-				i, e.Pinned, pinKey, docKey)
-		}
 		if len(e.By) == 0 {
 			return nil, fmt.Errorf("implements entry %d: by needs at least one path", i)
 		}
@@ -129,24 +123,25 @@ func expand(v string) string {
 	return strings.TrimSpace(v)
 }
 
-// sectionDoc validates a section IRI — id/section/<doc-key>/<anchor> — and
-// returns its doc slug and anchor.
-func sectionDoc(ref string) (docKey, anchor string, err error) {
-	rest, ok := strings.CutPrefix(ref, sectionPrefix)
+// ruleRef validates a rule IRI — id/rule/<project-id>/<number> (WL-REQ-247) —
+// and returns its project id and number.
+func ruleRef(ref string) (project string, number int64, err error) {
+	rest, ok := strings.CutPrefix(ref, rulePrefix)
 	if !ok {
-		return "", "", fmt.Errorf("section %q is not a %s IRI", ref, sectionPrefix)
+		return "", 0, fmt.Errorf("rule %q is not a %s IRI", ref, rulePrefix)
 	}
-	slug, anchor, ok := strings.Cut(rest, "/")
-	if !ok || strings.Contains(anchor, "/") {
-		return "", "", fmt.Errorf("section %q is not id/section/<doc-key>/<anchor>", ref)
+	project, n, ok := strings.Cut(rest, "/")
+	if !ok || !numberRE.MatchString(n) {
+		return "", 0, fmt.Errorf("rule %q is not id/rule/<project-id>/<number>", ref)
 	}
-	if !slugRE.MatchString(slug) {
-		return "", "", fmt.Errorf("section %q: doc key %q does not match the doc-key grammar", ref, slug)
+	if !slugRE.MatchString(project) {
+		return "", 0, fmt.Errorf("rule %q: project id %q does not match the id grammar", ref, project)
 	}
-	if !designdoc.ValidAnchor(anchor) {
-		return "", "", fmt.Errorf("section %q: anchor %q does not match the sec- grammar", ref, anchor)
+	number, err = strconv.ParseInt(n, 10, 64)
+	if err != nil {
+		return "", 0, fmt.Errorf("rule %q: number %q is out of range", ref, n)
 	}
-	return slug, anchor, nil
+	return project, number, nil
 }
 
 // pinnedDoc validates a versioned doc IRI — id/doc/<doc-key>/v<n> (WL-REQ-166) —

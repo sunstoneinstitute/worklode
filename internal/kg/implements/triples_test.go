@@ -19,12 +19,12 @@ const (
 // lines renders the three N-Triples lines one claim contributes: the
 // asserted edge, the reifier's rdf:reifies link to its triple term, and the
 // pin on that reifier.
-func lines(component, section, pinned string) []string {
+func lines(component, rule, pinned string) []string {
 	reifier := idNS + "claim/" +
-		strings.TrimPrefix(component, idNS) + "/" + strings.TrimPrefix(section, idNS)
+		strings.TrimPrefix(component, idNS) + "/" + strings.TrimPrefix(rule, idNS)
 	return []string{
-		"<" + component + "> <" + wlImplements + "> <" + section + "> .",
-		"<" + reifier + "> <" + rdfReifies + "> <<( <" + component + "> <" + wlImplements + "> <" + section + "> )>> .",
+		"<" + component + "> <" + wlImplements + "> <" + rule + "> .",
+		"<" + reifier + "> <" + rdfReifies + "> <<( <" + component + "> <" + wlImplements + "> <" + rule + "> )>> .",
 		"<" + reifier + "> <" + wlPinnedVersion + "> <" + pinned + "> .",
 	}
 }
@@ -33,8 +33,8 @@ func TestTriples(t *testing.T) {
 	const (
 		worklode = idNS + "component/github.com/sunstoneinstitute/worklode"
 		ingest   = idNS + "component/github.com/sunstoneinstitute/research-stack/ingest"
-		sec4     = idNS + "section/spec-worklode-004/sec-4"
-		sec31    = idNS + "section/spec-worklode-013/sec-3.1"
+		sec4     = idNS + "rule/worklode/4"
+		sec31    = idNS + "rule/worklode/31"
 		v2       = idNS + "doc/spec-worklode-004/v2"
 		v1       = idNS + "doc/spec-worklode-013/v1"
 	)
@@ -46,22 +46,22 @@ func TestTriples(t *testing.T) {
 	}{
 		{
 			name:   "one claim",
-			claims: []implements.Claim{{Component: worklode, Section: sec4, Pinned: v2}},
+			claims: []implements.Claim{{Component: worklode, Rule: sec4, Pinned: v2}},
 			want:   lines(worklode, sec4, v2),
 		},
 		{
 			name: "multi-claim, one component",
 			claims: []implements.Claim{
-				{Component: worklode, Section: sec4, Pinned: v2},
-				{Component: worklode, Section: sec31, Pinned: v1},
+				{Component: worklode, Rule: sec4, Pinned: v2},
+				{Component: worklode, Rule: sec31, Pinned: v1},
 			},
 			want: append(lines(worklode, sec4, v2), lines(worklode, sec31, v1)...),
 		},
 		{
-			name: "one section, split across components",
+			name: "one rule, split across components",
 			claims: []implements.Claim{
-				{Component: worklode, Section: sec4, Pinned: v2},
-				{Component: ingest, Section: sec4, Pinned: v2},
+				{Component: worklode, Rule: sec4, Pinned: v2},
+				{Component: ingest, Rule: sec4, Pinned: v2},
 			},
 			want: append(lines(worklode, sec4, v2), lines(ingest, sec4, v2)...),
 		},
@@ -82,16 +82,16 @@ func TestTriples(t *testing.T) {
 	}
 }
 
-// Two claims on one section differing only in pin (two entries pre-dedupe,
+// Two claims on one rule differing only in pin (two entries pre-dedupe,
 // or historic data) collapse to the first claim's lines: one edge, one
 // reifier, one pin — wl:pinnedVersion is functional.
 func TestTriplesDedupesOnTheEdge(t *testing.T) {
 	claims := []implements.Claim{
-		{Component: idNS + "component/c", Section: idNS + "section/d/sec-1", Pinned: idNS + "doc/d/v1"},
-		{Component: idNS + "component/c", Section: idNS + "section/d/sec-1", Pinned: idNS + "doc/d/v2"},
+		{Component: idNS + "component/c", Rule: idNS + "rule/d/1", Pinned: idNS + "doc/d/v1"},
+		{Component: idNS + "component/c", Rule: idNS + "rule/d/1", Pinned: idNS + "doc/d/v2"},
 	}
 	got := string(graphproj.Document(implements.Triples(claims)))
-	want := lines(idNS+"component/c", idNS+"section/d/sec-1", idNS+"doc/d/v1")
+	want := lines(idNS+"component/c", idNS+"rule/d/1", idNS+"doc/d/v1")
 	slices.Sort(want)
 	if w := strings.Join(want, "\n") + "\n"; got != w {
 		t.Fatalf("Document =\n%s\nwant\n%s", got, w)
