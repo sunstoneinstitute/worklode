@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -558,13 +559,13 @@ func GovernanceRender(w io.Writer, indent string, gov []model.TaskGovernance) {
 }
 
 // StalePlanWarning prints WL-REQ-171's claim-time flag, and nothing at all when
-// slug is empty. Shared by `lode work next`, `lode work resume` and `lode task
+// ref is empty. Shared by `lode work next`, `lode work resume` and `lode task
 // claim`, which is why the sentence lives here rather than in each of them.
-func StalePlanWarning(w io.Writer, slug string) {
-	if slug == "" {
+func StalePlanWarning(w io.Writer, ref string) {
+	if ref == "" {
 		return
 	}
-	fmt.Fprintf(w, "warning: plan %s is stale — task text may predate the amendment (WL-REQ-170)\n", slug)
+	fmt.Fprintf(w, "warning: plan %s is stale — task text may predate the amendment (WL-REQ-170)\n", ref)
 }
 
 // BlockersRender prints what is holding a task up, shared by `lode task
@@ -587,7 +588,7 @@ func BlockersRender(w io.Writer, blockers []model.BriefBlocker, plans []model.Do
 	if len(plans) > 0 {
 		fmt.Fprintln(w, "blocked by plans:")
 		for _, p := range plans {
-			fmt.Fprintf(w, "  - %s: %s (%s)\n", p.Slug, p.Title, p.Status)
+			fmt.Fprintf(w, "  - %s: %s (%s)\n", cmp.Or(p.Ref, p.Slug), p.Title, p.Status)
 		}
 	}
 }

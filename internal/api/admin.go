@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -799,7 +800,7 @@ func bucketWorkFacts(facts []store.ProjectWorkFact) workBuckets {
 }
 
 // blockerNames lists what holds a task: its open blocker tasks by id, then
-// the slug of any unfinished plan ordered before its plan. A draft plan has
+// the ref of any unfinished plan ordered before its plan. A draft plan has
 // minted no task, so it names nothing in OpenBlockers and would otherwise
 // leave a blocked task with no visible reason.
 func blockerNames(f store.ProjectWorkFact) []string {
@@ -811,7 +812,7 @@ func blockerNames(f store.ProjectWorkFact) []string {
 		names = append(names, b.ID)
 	}
 	for _, p := range f.BlockingPlans {
-		names = append(names, p.Slug)
+		names = append(names, cmp.Or(p.Ref, p.Slug))
 	}
 	return names
 }

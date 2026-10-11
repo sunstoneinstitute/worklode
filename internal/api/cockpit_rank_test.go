@@ -238,12 +238,12 @@ func TestRankSecondaryConcernsCrossProjectBlocker(t *testing.T) {
 func TestRankSecondaryConcernsBlockingPlan(t *testing.T) {
 	t.Parallel()
 	f := fact("WL-2", "medium", "ready", time.Hour)
-	f.BlockingPlans = []model.DocRef{{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"}}
+	f.BlockingPlans = []model.DocRef{{ID: 7, Slug: "plan-a", Ref: "WL-PLAN-7", Title: "Plan A", Status: "draft"}}
 	got, _ := rankSecondaryConcerns([]store.ProjectWorkFact{f}, fixedNow)
 	if len(got) != 1 || got[0].Title != "Plan A" || got[0].URL != "/docs/7" {
 		t.Fatalf("concerns = %#v, want one root naming Plan A at /docs/7", got)
 	}
-	const want = "Plan A plan plan-a (draft) has held 1 task for 1 hour — WL-2 (medium)."
+	const want = "Plan A plan WL-PLAN-7 (draft) has held 1 task for 1 hour — WL-2 (medium)."
 	if got[0].Evidence.Summary != want {
 		t.Errorf("evidence.summary = %q, want %q", got[0].Evidence.Summary, want)
 	}

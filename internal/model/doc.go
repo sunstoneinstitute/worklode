@@ -254,8 +254,8 @@ type AddDocNoteInput struct {
 // then name a section arranging that rule. Empty on every other edge and on
 // every inbound one.
 //
-// Owner is a defers edge's owner (WL-REQ-204): a slug when it resolved
-// to a document, the reference verbatim when it did not. Empty on every
+// Owner is a defers edge's owner (WL-REQ-204): the document's ref when it
+// resolved to one, the reference verbatim when it did not. Empty on every
 // other type.
 type DocEdge struct {
 	Type       string `json:"type"`
@@ -274,9 +274,17 @@ type DocEdge struct {
 	ToKey      string `json:"to_key,omitempty"` // the far end's project key
 }
 
+// ToRef is the far end's ref ("WL-SPEC-25"), "" on an unresolved edge.
+func (e DocEdge) ToRef() string {
+	if e.ToDoc == 0 {
+		return ""
+	}
+	return Doc{ProjectKey: e.ToKey, Kind: e.ToKind, Number: e.ToNumber}.FormatRef()
+}
+
 // DocReferrer is one piece of open work pointing at a document section
 // (WL-REQ-171) — the fact a patch of that section has to answer to. Kind is
-// "doc", "rule" or "task"; Ref is the citable id (a document's slug, a
+// "doc", "rule" or "task"; Ref is the citable id (a document's ref, a
 // rule's WL-RULE-<n>, a task's id); Title is the rule's heading for a rule;
 // Rel is the relation doing the pointing: the document's own edge type, the
 // rule's amends or supersedes edge onto the section's rule, or, for a task,
@@ -457,6 +465,7 @@ type DocAmendment struct {
 type DocRef struct {
 	ID     int64  `json:"id"`
 	Slug   string `json:"slug"`
+	Ref    string `json:"ref"` // Doc.FormatRef: "WL-PLAN-7"
 	Title  string `json:"title"`
 	Status string `json:"status"`
 }
@@ -468,7 +477,7 @@ type DocRef struct {
 type DocSectionGap struct {
 	Anchor   string `json:"anchor"`
 	Coverage string `json:"coverage"` // plan-draft | deferred | unplanned
-	// Owner is the deferral's named owner — a slug, or the external reference
+	// Owner is the deferral's named owner — a ref, or the external reference
 	// verbatim when it did not resolve — set only when Coverage is "deferred".
 	Owner string `json:"owner,omitempty"`
 }
@@ -520,12 +529,14 @@ type DocLintFinding struct {
 	Project    string `json:"project"`
 	Number     int    `json:"number"`
 	Slug       string `json:"slug"`
+	DocRef     string `json:"doc_ref"`  // Doc.FormatRef of Doc
 	DocKind    string `json:"doc_kind"` // spec | adr | plan
 	FromAnchor string `json:"from_anchor,omitempty"`
 	Type       string `json:"type"`
 	Ref        string `json:"ref,omitempty"`
 	ToDoc      int64  `json:"to_doc,omitempty"`
 	ToSlug     string `json:"to_slug,omitempty"`
+	ToRef      string `json:"to_ref,omitempty"` // Doc.FormatRef of ToDoc
 	ToAnchor   string `json:"to_anchor,omitempty"`
 }
 

@@ -3,7 +3,7 @@ package model
 import "time"
 
 // ClaimResponse is the response body of POST /api/v1/tasks/{id}/claim.
-// StalePlan is set to the plan document's slug when the task was minted from
+// StalePlan is set to the plan document's ref when the task was minted from
 // a plan that is now stale (WL-REQ-171) — a flag, never a refusal.
 type ClaimResponse struct {
 	Lease     Lease  `json:"lease"`
@@ -52,7 +52,7 @@ type ClaimNextPick struct {
 	FanOut   int                 `json:"fan_out"`
 	Project  string              `json:"project"`
 	Lease    *ClaimNextPickLease `json:"lease,omitempty"`
-	// StalePlan is the slug of the plan this task was minted from when that
+	// StalePlan is the ref of the plan this task was minted from when that
 	// plan is stale (WL-REQ-171): the task text may predate an amendment to the
 	// spec it covers. A flag on the pick, never a refusal to claim it.
 	StalePlan string `json:"stale_plan,omitempty"`

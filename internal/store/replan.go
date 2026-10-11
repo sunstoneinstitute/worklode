@@ -95,7 +95,6 @@ type stalePlanDoc struct {
 	ID    int64
 	Ref   string
 	Title string
-	Slug  string
 }
 
 // stalePlan resolves the plan ReplanNext hands out: the document ref names
@@ -135,10 +134,10 @@ func (s *Store) stalePlan(ctx context.Context, project, ref string) (stalePlanDo
 		var number int
 		var key string
 		err := tx.QueryRowContext(ctx,
-			`SELECT d.kind, d.status, d.title, d.slug, coalesce(d.number, 0), coalesce(p.key, '')
+			`SELECT d.kind, d.status, d.title, coalesce(d.number, 0), coalesce(p.key, '')
 			   FROM docs d JOIN projects p ON p.id = d.project_id
 			  WHERE d.id = $1 AND d.deleted_at IS NULL`, id,
-		).Scan(&kind, &status, &plan.Title, &plan.Slug, &number, &key)
+		).Scan(&kind, &status, &plan.Title, &number, &key)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -182,9 +181,9 @@ func (s *Store) stalePlan(ctx context.Context, project, ref string) (stalePlanDo
 // transaction it does not unconditionally want a row from.
 func (s *Store) mintReplanTask(ctx context.Context, o ReplanOpts, plan stalePlanDoc) (taskID string, minted bool, err error) {
 	body := fmt.Sprintf(
-		"Plan %s (%s) is stale. Read it with `lode show %s --inline`, decide which "+
+		"Plan %s is stale. Read it with `lode show %s --inline`, decide which "+
 			"declarations stand, edit the plan with `lode doc edit`, and re-accept it.",
-		plan.Ref, plan.Slug, plan.Ref)
+		plan.Ref, plan.Ref)
 
 	txErr := s.Tx(ctx, func(tx *sql.Tx) error {
 		if _, err := lockDoc(tx, plan.ID); err != nil {

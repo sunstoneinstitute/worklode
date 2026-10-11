@@ -549,7 +549,7 @@ func TestDocPatch(t *testing.T) {
 			Body: noHeader(t, gateSpecV2b), Note: "Another pass at the model.",
 		})
 		return err
-	}(), "patch a section a second spec requires", "referrer", "sec-2", "requiring-spec")
+	}(), "patch a section a second spec requires", "referrer", "sec-2", "DP-SPEC-2")
 
 	// 5. A substantive amendment on the section nothing points at: the
 	// document stays accepted, the section carries §7.3's patched mark, the

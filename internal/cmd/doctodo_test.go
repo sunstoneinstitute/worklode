@@ -225,9 +225,9 @@ func testDocDetail(t *testing.T, d model.Doc, docs []model.Doc) ([]model.DocSect
 	for _, other := range docs {
 		byPath[designdoc.CorpusPath(other.Kind, other.Slug)] = other
 	}
-	slugOr := func(ref string) string {
+	refOr := func(ref string) string {
 		if other, ok := byPath[ref]; ok {
-			return other.Slug
+			return other.FormatRef()
 		}
 		return ref
 	}
@@ -246,7 +246,7 @@ func testDocDetail(t *testing.T, d model.Doc, docs []model.Doc) ([]model.DocSect
 			de.ToExternal = r.Ref
 		}
 		if r.Deferral != nil {
-			de.Owner = slugOr(r.Deferral.To)
+			de.Owner = refOr(r.Deferral.To)
 		}
 		edges = append(edges, de)
 	}
@@ -961,7 +961,7 @@ var todoStoredEdges = map[string][]model.DocEdge{
 	"001-example": {{Type: "requires", ToDoc: 2, ToKind: "spec", ToSlug: "002-other", ToNumber: 2, ToStatus: "accepted", ToProject: "proj"}},
 	"001-1-first": {
 		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-1"},
-		{Type: "defers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-4", Owner: "002-other"},
+		{Type: "defers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-4", Owner: "WL-SPEC-2"},
 	},
 	"001-2-second": {
 		{Type: "covers", ToDoc: 1, ToKind: "spec", ToSlug: "001-example", ToAnchor: "sec-2"},

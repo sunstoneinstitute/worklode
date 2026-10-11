@@ -7,6 +7,7 @@
 package api
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -579,7 +580,7 @@ func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 // md may be nil, which renders every body afresh; see the mdcache field.
 func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail, body string, consolidated bool, path string) ui.DocView {
 	return ui.DocView{
-		Page: ui.PageProps{Title: "worklode: " + d.Slug, ActiveGlobal: "knowledge"},
+		Page: ui.PageProps{Title: "worklode: " + cmp.Or(d.Ref, d.Slug), ActiveGlobal: "knowledge"},
 		Doc:  d.Doc,
 		// Rendered here rather than in ui for the reason taskView gives.
 		// DocBody rather than Body: a document's {#sec-N} headings are
@@ -640,7 +641,7 @@ func docReviewerRows(d model.Doc) []ui.DocReviewerRow {
 func docVersionView(md *mdrender.Cache, keys mdrender.ProjectKeys, doc model.Doc, ver model.DocVersion) ui.DocVersionView {
 	docURL := model.DocCanonicalURL(doc)
 	return ui.DocVersionView{
-		Page:     ui.PageProps{Title: "worklode: " + doc.Slug + " v" + strconv.Itoa(ver.Version), ActiveGlobal: "knowledge"},
+		Page:     ui.PageProps{Title: "worklode: " + cmp.Or(doc.Ref, doc.Slug) + " v" + strconv.Itoa(ver.Version), ActiveGlobal: "knowledge"},
 		Doc:      doc,
 		Ref:      docRef(doc),
 		Version:  ver,

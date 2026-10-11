@@ -212,8 +212,8 @@ func TestPatchMarksUnexecutedPlansStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if brief.StalePlan != plan.Slug {
-		t.Errorf("brief.StalePlan = %q, want %q", brief.StalePlan, plan.Slug)
+	if brief.StalePlan != "P1-PLAN-211" {
+		t.Errorf("brief.StalePlan = %q, want P1-PLAN-211", brief.StalePlan)
 	}
 
 	// Re-acceptance clears the mark (WL-REQ-171). The re-planning edit bumps the

@@ -40,10 +40,10 @@ func StaleExternalID(planSlug string, version int) string {
 // section the amendment moved, and nobody has claimed work from them, so
 // WL-REQ-171 let the amendment through and this is what it owes them.
 //
-// cause, specSlug and anchors say what happened, in the payload's
+// cause, specRef and anchors say what happened, in the payload's
 // {"cause":...,"spec":...,"anchors":[...]}: cause is "amended" for WL-REQ-171
-// (specSlug and anchors name the spec and the sections that moved) and
-// "rule_withdrawn" for increment 3's S23 (specSlug carries the withdrawn
+// (specRef and anchors name the spec and the sections that moved) and
+// "rule_withdrawn" for increment 3's S23 (specRef carries the withdrawn
 // rule's ref, WL-RULE-<n>, and anchors is empty). eventID is the write this
 // is a consequence of.
 //
@@ -54,7 +54,7 @@ func StaleExternalID(planSlug string, version int) string {
 // The count returned is the plans actually flipped: a plan already stale by
 // any cause collides on the event key and is skipped, so it is not counted
 // twice on the metric.
-func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, cause, specSlug string, anchors []string, eventID int64) (int, error) {
+func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, cause, specRef string, anchors []string, eventID int64) (int, error) {
 	if len(anchors) == 0 {
 		anchors = []string{}
 	}
@@ -73,7 +73,7 @@ func MarkPlansStale(tx *sql.Tx, now time.Time, planIDs []int64, cause, specSlug 
 		payload, err := EventPayload(map[string]any{
 			"doc":                id,
 			"cause":              cause,
-			"spec":               specSlug,
+			"spec":               specRef,
 			"anchors":            anchors,
 			"prov:wasInformedBy": iri.CURIE(iri.Event(eventID)),
 		})
@@ -119,26 +119,28 @@ func (s *Store) RecordPlansStale(n int) {
 	}
 }
 
-// StalePlanSlug is the slug of plan document planDoc when it is stale (WL-REQ-171),
-// and "" when it is not, when the document is gone, or when planDoc is
+// StalePlanRef is the ref of plan document planDoc when it is stale
+// (WL-REQ-171), and "" when it is not, when the document is gone, or when planDoc is
 // 0. It is the claim-time flag: a task minted from a plan whose spec has been
 // amended since carries text that may predate the amendment, which the claim
 // response and the brief say and neither refuses.
-func (s *Store) StalePlanSlug(ctx context.Context, planDoc int64) (string, error) {
+func (s *Store) StalePlanRef(ctx context.Context, planDoc int64) (string, error) {
 	if planDoc == 0 {
 		return "", nil
 	}
-	var slug string
+	var ref string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT slug FROM docs WHERE id = $1 AND status = 'stale' AND deleted_at IS NULL`,
-		planDoc).Scan(&slug)
+		`SELECT coalesce(`+docRefSQL("p", "d")+`, d.slug)
+		   FROM docs d JOIN projects p ON p.id = d.project_id
+		  WHERE d.id = $1 AND d.status = 'stale' AND d.deleted_at IS NULL`,
+		planDoc).Scan(&ref)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("read stale plan %d: %w", planDoc, err)
 	}
-	return slug, nil
+	return ref, nil
 }
 
 // docHasExecution is the one spelling of "this document has been executed"

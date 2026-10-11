@@ -1654,7 +1654,7 @@ func TestDocSectionReferrers(t *testing.T) {
 		t.Fatalf("DocSectionReferrers: %v", err)
 	}
 	want := []model.DocReferrer{
-		{Kind: "doc", Ref: "026-b", Rel: "requires", Title: "Referring spec"},
+		{Kind: "doc", Ref: "P1-SPEC-26", Rel: "requires", Title: "Referring spec"},
 		{Kind: "rule", Ref: "P1-REQ-4", Rel: "amends", Title: "Scope"},
 		{Kind: "rule", Ref: "P1-REQ-5", Rel: "supersedes", Title: "Scope"},
 		{Kind: "task", Ref: claimed.ID, Rel: "covers", Title: "the claimed one"},

@@ -93,7 +93,7 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	// WL-REQ-171's claim-time flag: the plan this task was minted from may have
 	// gone stale under it. Reported, never refused — deciding what survives
 	// is the re-planning task's job, not this claim's.
-	stalePlan, err := s.st.StalePlanSlug(r.Context(), t.PlanDoc)
+	stalePlan, err := s.st.StalePlanRef(r.Context(), t.PlanDoc)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -182,7 +182,7 @@ func (s *server) writeClaimNextResult(w http.ResponseWriter, r *http.Request, re
 	// Same WL-REQ-171 flag claimTask carries, on the pick rather than the
 	// response: a dry run reports it too, since it is a fact about the task
 	// the ranking picked and not about the claim.
-	stalePlan, err := s.st.StalePlanSlug(r.Context(), res.Task.PlanDoc)
+	stalePlan, err := s.st.StalePlanRef(r.Context(), res.Task.PlanDoc)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

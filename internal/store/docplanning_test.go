@@ -879,8 +879,8 @@ func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 deferred to owner-spec", gaps)
+		[]string{"sec-1(deferred:P1-SPEC-6)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred to P1-SPEC-6", gaps)
 	}
 }
 
@@ -903,8 +903,8 @@ func TestDocNeedsPlanningTwoDeferralOwnersAggregated(t *testing.T) {
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(deferred:owner-a,owner-b)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
-		t.Fatalf("gaps = %v, want sec-1 deferred to owner-a,owner-b", gaps)
+		[]string{"sec-1(deferred:P1-SPEC-6,P1-SPEC-7)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred to P1-SPEC-6,P1-SPEC-7", gaps)
 	}
 }
 
@@ -982,7 +982,7 @@ func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
 
 	_, gaps := needsPlanningSlugs(t, s, "p1")
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
-		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		[]string{"sec-1(deferred:P1-SPEC-6)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
 		t.Fatalf("gaps = %v, want sec-1 still deferred: a superseded plan's deferral stands", gaps)
 	}
 }

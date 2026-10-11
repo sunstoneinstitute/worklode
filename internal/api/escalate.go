@@ -4,6 +4,7 @@
 package api
 
 import (
+	"cmp"
 	"errors"
 	"net/http"
 	"strings"
@@ -113,7 +114,7 @@ func (s *server) escalationTarget(r *http.Request, taskID string, req model.Esca
 	default:
 		names := make([]string, 0, len(covered))
 		for _, e := range covered {
-			names = append(names, e.ToSlug)
+			names = append(names, cmp.Or(e.ToRef(), e.ToSlug))
 		}
 		return 0, &ambiguousTargetError{"task " + taskID + "'s plan covers " +
 			strings.Join(names, ", ") + ": say which with --doc"}

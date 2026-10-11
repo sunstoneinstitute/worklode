@@ -138,7 +138,7 @@ func TestEscalateTaskToSpecAmbiguous(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"escalate-spec-a", "escalate-spec-b", "--doc"} {
+	for _, want := range []string{"WL-SPEC-1", "WL-SPEC-2", "--doc"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("422 body %q does not name %q", body, want)
 		}

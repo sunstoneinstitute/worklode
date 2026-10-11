@@ -31,7 +31,7 @@ type Brief struct {
 	Lease         *Lease              `json:"lease"`
 	Skills        SkillRecommendation `json:"skills"`
 	Blobs         []TaskBlob          `json:"blobs"`
-	// StalePlan is the slug of the plan this task was minted from when that
+	// StalePlan is the ref of the plan this task was minted from when that
 	// plan is stale (WL-REQ-171), "" otherwise: the task text may predate an
 	// amendment to the spec the plan covers.
 	StalePlan string `json:"stale_plan,omitempty"`
