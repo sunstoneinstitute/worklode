@@ -167,14 +167,14 @@ func TestDependsOnPath(t *testing.T) {
 	}
 }
 
-// buildStaleFixture projects a document with the given versions and
-// sections (anchor -> version that last revised it) the way a real
-// projection run would: DocTriples/SectionTriples into the document's
-// DeclaredGraph, DocVersionTriples for each version into its own
-// DeclaredVersionGraph (WL-REQ-166). d.Version is the last entry of versions,
-// so DocTriples emits dcat:hasCurrentVersion at it. Returns the run-unique
-// doc key the caller builds query IRIs from.
-func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revisedIn map[string]int) string {
+// buildStaleFixture projects a document with the given versions and rules
+// (rule number -> version that last revised it) the way a real projection
+// run would: DocTriples/RuleTriples into the document's DeclaredGraph,
+// DocVersionTriples for each version into its own DeclaredVersionGraph
+// (WL-REQ-166). d.Version is the last entry of versions, so DocTriples emits
+// dcat:hasCurrentVersion at it. Returns the run-unique doc key and project id
+// the caller builds query IRIs from.
+func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revisedIn map[int64]int) (string, string) {
 	t.Helper()
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	d := model.Doc{
@@ -193,42 +193,39 @@ func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revise
 		summaries = append(summaries, model.DocVersionSummary{Version: v, Title: d.Title, CreatedAt: ts})
 	}
 
-	anchors := make([]string, 0, len(revisedIn))
-	for a := range revisedIn {
-		anchors = append(anchors, a)
+	var rules []model.Rule
+	revised := map[string]int{}
+	for n, v := range revisedIn {
+		ref := fmt.Sprintf("ST-REQ-%d", n)
+		rules = append(rules, model.Rule{Project: d.Project, Number: n, Ref: ref, Kind: "requirement", Status: "accepted", Heading: ref})
+		revised[ref] = v
 	}
-	sort.Strings(anchors)
-	var sections []model.DocSection
-	for i, a := range anchors {
-		sections = append(sections, model.DocSection{
-			Anchor: a, Heading: a, Position: i, LastRevisedIn: revisedIn[a], Published: true,
-		})
-	}
+	sort.Slice(rules, func(i, j int) bool { return rules[i].Number < rules[j].Number })
 
 	key := DocKey(d)
-	declared := append(DocTriples(d, summaries), SectionTriples(d, sections, nil)...)
+	declared := append(DocTriples(d, summaries), RuleTriples(d, rules, revised, nil)...)
 	graphtest.PutGraph(t, base, iri.DeclaredGraph(key), Document(declared))
 	for _, v := range versions {
 		dv := model.DocVersion{Version: v, Title: d.Title, CreatedAt: ts}
 		graphtest.PutGraph(t, base, iri.DeclaredVersionGraph(key, v), Document(DocVersionTriples(d, dv, nil)))
 	}
-	return key
+	return key, d.Project
 }
 
 // stalenessQuery is WL-REQ-166's query shape verbatim: a claim pinned at pin
-// is stale for any section whose wl:lastRevisedIn snapshot's dcat:version
+// is stale for any rule whose wl:lastRevisedIn snapshot's dcat:version
 // exceeds pin, compared as xsd:integer rather than as strings or IRIs. ?g
 // and ?vg are unbound — the query does not know in advance which graph
-// holds a section's declaration or which holds its snapshot's version, the
+// holds a rule's declaration or which holds its snapshot's version, the
 // way a real reader over the graph union would not either.
-// ownSections keeps the rows naming slug's own sections. The staleness query
+// ownRules keeps the rows naming project's own rules. The staleness query
 // leaves ?g unbound on purpose, so it also answers for whatever else the
 // endpoint holds — another run of this package against the same Oxigraph, for
-// one. The run-unique slug is what makes an exact-set assertion safe anyway.
-func ownSections(rows []map[string]string, slug string) []string {
+// one. The run-unique project is what makes an exact-set assertion safe anyway.
+func ownRules(rows []map[string]string, project string) []string {
 	var got []string
 	for _, r := range rows {
-		if strings.Contains(r["sec"], slug) {
+		if strings.HasPrefix(r["sec"], iri.IDNS+"rule/"+project+"/") {
 			got = append(got, r["sec"])
 		}
 	}
@@ -245,34 +242,34 @@ SELECT ?sec WHERE {
 }
 
 // TestOxigraphStalenessQuery proves WL-REQ-166's staleness query: a claim
-// pinned at v1 is stale against any section last revised after v1. sec-a
-// (revised in v1) is current at that pin; sec-b (revised in v2) is stale.
+// pinned at v1 is stale against any rule last revised after v1. Rule 1
+// (revised in v1) is current at that pin; rule 2 (revised in v2) is stale.
 func TestOxigraphStalenessQuery(t *testing.T) {
 	base := graphtest.Endpoint(t)
-	slug := buildStaleFixture(t, base, "stale", []int{1, 2}, map[string]int{"sec-a": 1, "sec-b": 2})
+	_, project := buildStaleFixture(t, base, "stale", []int{1, 2}, map[int64]int{1: 1, 2: 2})
 
-	got := ownSections(graphtest.Select(t, base, stalenessQuery(1)), slug)
-	want := []string{iri.Section(slug, "sec-b")}
+	got := ownRules(graphtest.Select(t, base, stalenessQuery(1)), project)
+	want := []string{iri.Rule(project, 2)}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Errorf("sections stale at pin v1 = %v, want %v", got, want)
+		t.Errorf("rules stale at pin v1 = %v, want %v", got, want)
 	}
 }
 
 // TestOxigraphStalenessQueryNumericComparison proves WL-REQ-166's footgun: v3
 // and v10 sort backwards both as strings ("10" < "3") and as their
 // DocVersion IRIs (".../v10" < ".../v3"), so a claim pinned at v9 only
-// resolves correctly if dcat:version is compared as a number. sec-old
-// (revised in v3) is current at that pin under numeric comparison; sec-new
+// resolves correctly if dcat:version is compared as a number. Rule 1
+// (revised in v3) is current at that pin under numeric comparison; rule 2
 // (revised in v10) is stale. A string or IRI comparison would call v3 the
 // newer one and get this backwards.
 func TestOxigraphStalenessQueryNumericComparison(t *testing.T) {
 	base := graphtest.Endpoint(t)
-	slug := buildStaleFixture(t, base, "footgun", []int{3, 10}, map[string]int{"sec-old": 3, "sec-new": 10})
+	_, project := buildStaleFixture(t, base, "footgun", []int{3, 10}, map[int64]int{1: 3, 2: 10})
 
-	got := ownSections(graphtest.Select(t, base, stalenessQuery(9)), slug)
-	want := []string{iri.Section(slug, "sec-new")}
+	got := ownRules(graphtest.Select(t, base, stalenessQuery(9)), project)
+	want := []string{iri.Rule(project, 2)}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Errorf("sections stale at pin v9 = %v, want %v (numeric, not string/IRI, comparison of dcat:version)", got, want)
+		t.Errorf("rules stale at pin v9 = %v, want %v (numeric, not string/IRI, comparison of dcat:version)", got, want)
 	}
 }
 
@@ -282,7 +279,7 @@ func TestOxigraphStalenessQueryNumericComparison(t *testing.T) {
 // "current" to a version number.
 func TestOxigraphCurrentVersionRoundTrip(t *testing.T) {
 	base := graphtest.Endpoint(t)
-	slug := buildStaleFixture(t, base, "current", []int{1, 2}, map[string]int{"sec-a": 1, "sec-b": 2})
+	slug, _ := buildStaleFixture(t, base, "current", []int{1, 2}, map[int64]int{1: 1, 2: 2})
 
 	q := fmt.Sprintf(`SELECT ?n WHERE {
   GRAPH <%s> { <%s> <%s> ?snap }

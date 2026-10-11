@@ -22,11 +22,11 @@ func TestPinAnnotationRoundTrip(t *testing.T) {
 	// cleanup (graphtest.PutGraph).
 	graph := iri.GraphNS + fmt.Sprintf("test/observed/repo-implements-%d", time.Now().UnixNano())
 	component := iri.Component("github.com/sunstoneinstitute/worklode")
-	section := iri.Section("spec-worklode-025", "sec-11.5")
+	rule := iri.Rule("worklode", 1707)
 	pinned := iri.DocVersion("spec-worklode-025", 3)
 
 	doc := graphproj.Document(implements.Triples([]implements.Claim{
-		{Component: component, Section: section, Pinned: pinned},
+		{Component: component, Rule: rule, Pinned: pinned},
 	}))
 	graphtest.PutGraph(t, base, graph, doc)
 
@@ -38,7 +38,7 @@ func TestPinAnnotationRoundTrip(t *testing.T) {
 		t.Fatalf("annotation query returned %d rows, want 1: %v\ndocument:\n%s", len(rows), rows, doc)
 	}
 	got := rows[0]
-	if got["c"] != component || got["s"] != section || got["v"] != pinned {
-		t.Errorf("got %v; want component %s, section %s, pin %s", got, component, section, pinned)
+	if got["c"] != component || got["s"] != rule || got["v"] != pinned {
+		t.Errorf("got %v; want component %s, rule %s, pin %s", got, component, rule, pinned)
 	}
 }

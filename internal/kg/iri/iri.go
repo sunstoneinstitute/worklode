@@ -81,11 +81,11 @@ func CURIE(instance string) string {
 	return "wlid:" + strings.TrimPrefix(instance, IDNS)
 }
 
-// Section returns the IRI of an addressable design-document section
-// (WL-REQ-165): id/section/<doc-key>/<anchor>. The anchor is assigned at first
-// publication and never changes, so the IRI is as durable as the document's.
-func Section(docKey, anchor string) string {
-	return IDNS + "section/" + docKey + "/" + anchor
+// Rule returns the IRI of a rule (WL-REQ-247): id/rule/<project-id>/<number>,
+// the number being the one in its ref. A section has no IRI: its number and
+// anchor are derived from the arrangement, and what it holds is the rule.
+func Rule(projectID string, number int64) string {
+	return IDNS + "rule/" + projectID + "/" + strconv.FormatInt(number, 10)
 }
 
 // DocVersion returns the immutable versioned sibling IRI of a design
@@ -101,13 +101,13 @@ func DocVersion(docKey string, version int) string {
 // graphproj.Document replaces a whole named graph and has to render
 // byte-identical output for the same claim set, which a blank node's
 // arbitrary label would break. Keying it on the edge it reifies —
-// id/claim/<component local id>/<section local id> — makes the same claim
+// id/claim/<component local id>/<rule local id> — makes the same claim
 // mint the same IRI on every run and keeps the node readable in the store.
 // Both arguments are id/ IRIs whose local ids are already path-safe.
-func Claim(componentIRI, sectionIRI string) string {
+func Claim(componentIRI, ruleIRI string) string {
 	return IDNS + "claim/" +
 		strings.TrimPrefix(componentIRI, IDNS) + "/" +
-		strings.TrimPrefix(sectionIRI, IDNS)
+		strings.TrimPrefix(ruleIRI, IDNS)
 }
 
 // Deliverable returns the instance IRI of a deliverable.

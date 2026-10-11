@@ -64,7 +64,7 @@ components:
     paths: ["**"]
 `
 	impl := `implements:
-  - section: wlid:section/spec-worklode-025/sec-11.3
+  - rule:    wlid:rule/worklode/1707
     pinned:  wlid:doc/spec-worklode-025/v3
     by:      [main.go]
 `
@@ -87,7 +87,7 @@ components:
 	}
 	wantEdge := "<https://worklode.io/ns/id/component/github.com/acme/app> " +
 		"<https://worklode.io/ns/ontology#implements> " +
-		"<https://worklode.io/ns/id/section/spec-worklode-025/sec-11.3> .\n"
+		"<https://worklode.io/ns/id/rule/worklode/1707> .\n"
 	if !strings.Contains(out, wantEdge) {
 		t.Fatalf("dry-run output missing the implements edge %q:\n%s", wantEdge, out)
 	}
@@ -139,7 +139,7 @@ components:
     paths: ["src/**"]
 `
 	impl := `implements:
-  - section: wlid:section/spec-worklode-025/sec-11.3
+  - rule:    wlid:rule/worklode/1707
     pinned:  wlid:doc/spec-worklode-025/v3
     by:      [outside/main.go]
 `
