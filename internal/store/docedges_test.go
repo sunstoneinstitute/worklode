@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strconv"
@@ -107,6 +108,28 @@ func TestResolveDocRef(t *testing.T) {
 	_, err = s.ResolveDocRef(t.Context(), "025-x")
 	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "025-x") {
 		t.Fatalf("ResolveDocRef(ambiguous) = %v, want ErrInvalidInput naming the slug", err)
+	}
+}
+
+// TestResolveDocRefShorthand pins <KEY>-PLAN-<n> resolution, and that an
+// unmatched shorthand is ErrNotFound naming the ref.
+func TestResolveDocRefShorthand(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "some-plan", Body: planBody, CreatedBy: "stig",
+	})
+	ref := fmt.Sprintf("P1-PLAN-%d", plan.Number)
+	got, err := s.ResolveDocRef(t.Context(), ref)
+	if err != nil {
+		t.Fatalf("ResolveDocRef(%s): %v", ref, err)
+	}
+	if got.ID != plan.ID {
+		t.Errorf("ResolveDocRef(%s) = %d, want %d", ref, got.ID, plan.ID)
+	}
+	missing := fmt.Sprintf("P1-PLAN-%d", plan.Number+100)
+	if _, err := s.ResolveDocRef(t.Context(), missing); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), missing) {
+		t.Errorf("ResolveDocRef(%s) = %v, want ErrNotFound naming the ref", missing, err)
 	}
 }
 

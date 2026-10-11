@@ -750,23 +750,14 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	}
 
 	if sh, ok := designdoc.ParseShorthand(base); ok {
-		// A retired <KEY>-ADR-<n> names the spec that took its place
-		// (WL-REQ-1357); no row has kind adr any more.
-		match, args := `d.kind = $2 AND d.number = $3`, []any{sh.Key, sh.Kind(), sh.Number}
-		if sh.Type == "ADR" {
-			match, args = `d.former_adr = $2`, []any{sh.Key, sh.Number}
+		id, err := docIDByShorthand(tx, sh)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, false, nil
 		}
-		err := tx.QueryRow(
-			`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
-			  WHERE p.key = $1 AND `+match+`
-			  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`, args...).Scan(&id)
-		if err == nil {
-			return id, true, nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
+		if err != nil {
 			return 0, false, fmt.Errorf("resolve doc ref %q by shorthand: %w", base, err)
 		}
-		return 0, false, nil
+		return id, true, nil
 	}
 
 	// Bare numbers only — a number-*prefixed* reference is a filename, and
@@ -792,6 +783,28 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 		}
 	}
 	return 0, false, nil
+}
+
+// rowQuerier is the QueryRow both *sql.DB and *sql.Tx provide.
+type rowQuerier interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// docIDByShorthand looks up a <KEY>-<TYPE>-<n> reference by project key, kind
+// and number, live row before tombstone. A retired <KEY>-ADR-<n> names the
+// spec that took its place (WL-REQ-1357); no row has kind adr any more.
+// sql.ErrNoRows means no such document.
+func docIDByShorthand(q rowQuerier, sh designdoc.Shorthand) (int64, error) {
+	match, args := `d.kind = $2 AND d.number = $3`, []any{sh.Key, sh.Kind(), sh.Number}
+	if sh.Type == "ADR" {
+		match, args = `d.former_adr = $2`, []any{sh.Key, sh.Number}
+	}
+	var id int64
+	err := q.QueryRow(
+		`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
+		  WHERE p.key = $1 AND `+match+`
+		  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`, args...).Scan(&id)
+	return id, err
 }
 
 // docsByNumber returns up to two spec ids in project with the given corpus
@@ -825,6 +838,16 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 // a tombstone never shadows a live document.
 func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, error) {
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		return s.GetDoc(ctx, id)
+	}
+	if sh, ok := designdoc.ParseShorthand(ref); ok {
+		id, err := docIDByShorthand(s.db, sh)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("no document %q: %w", ref, ErrNotFound)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("resolve doc %q by shorthand: %w", ref, err)
+		}
 		return s.GetDoc(ctx, id)
 	}
 	rows, err := s.db.QueryContext(ctx,
