@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -111,5 +113,18 @@ func TestCLIIntentRoundTrip(t *testing.T) {
 	// Expired fails.
 	if _, ok := verifyCLIIntent(secret, val, now.Add(2*cliCodeTTL)); ok {
 		t.Fatal("expired intent should not verify")
+	}
+}
+
+// TestAuthCookieIsHostOnly pins setAuthCookie's flags: no Domain (host-only,
+// so a cookie set on one host is never sent to the other), HttpOnly, Secure,
+// SameSite=Lax.
+func TestAuthCookieIsHostOnly(t *testing.T) {
+	t.Parallel()
+	rec := httptest.NewRecorder()
+	setAuthCookie(rec, sessionCookieName, "/", "v", time.Hour)
+	c := rec.Result().Cookies()[0]
+	if c.Domain != "" || !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("cookie flags: %+v", c)
 	}
 }
