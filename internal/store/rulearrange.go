@@ -34,7 +34,7 @@ func openEditableSpec(tx *sql.Tx, now time.Time, docID int64, actorID string, ev
 		return editableSpec{}, err
 	}
 	if d.kind != "spec" {
-		return editableSpec{}, fmt.Errorf("doc %d is a %s: only a spec arranges rules (WL-SPEC-77 §4): %w", docID, d.kind, ErrInvalidInput)
+		return editableSpec{}, fmt.Errorf("doc %d is a %s: only a spec arranges rules (WL-REQ-165): %w", docID, d.kind, ErrInvalidInput)
 	}
 	if d.status == "draft" {
 		return editableSpec{id: docID, text: d.body, table: "doc_rules", anchors: "doc_entries"}, nil
@@ -126,7 +126,7 @@ func ruleByRefString(tx *sql.Tx, ref string) (int64, error) {
 
 // ArrangeRule places an existing rule in a spec (WL-REQ-1297): its
 // newest accepted version's heading and body (a first draft's, when none is
-// accepted, §19.4) are written into the spec's editable text at the chosen
+// accepted) are written into the spec's editable text at the chosen
 // position, its heading naming the rule, and the spec's arrangement holds
 // the rule there. Its number and anchor, and those of every entry after it,
 // are derived from the new arrangement (WL-REQ-165). A draft spec is

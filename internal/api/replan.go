@@ -11,8 +11,8 @@ import (
 )
 
 // replan handles POST /api/v1/work/replan: hand a stale plan out as a
-// claimed design task (S28), reusing the one the §8.7 doc-lifecycle
-// rule minted when there is one. Project is required; Plan is optional and, when set, must name a
+// claimed design task (S28), reusing the one the doc-lifecycle
+// rule (WL-REQ-109) minted when there is one. Project is required; Plan is optional and, when set, must name a
 // stale plan or the call is refused (store.ReplanNext's ErrInvalidInput).
 // The response renders through writeClaimNextResult, the same conversion
 // claimNext uses, so a replanned claim looks like an ordinary one.

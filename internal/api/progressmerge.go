@@ -1,6 +1,6 @@
 // The Progress page's one outward write (WL-REQ-1337): queue a task's
 // pull request for merge, or merge it. Everything else this page writes goes
-// to the backbone alone; this route also calls GitHub, so §4.2 rule 9
+// to the backbone alone; this route also calls GitHub, so WL-REQ-1338 rule 9
 // applies — the request is in the event log before the call leaves.
 
 package api
@@ -62,7 +62,7 @@ func (s *server) progressMerge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The page renders the button from facts that may have moved on. Each of
-	// these is the backbone refusing the act, not the actor (§4.2 rule 4),
+	// these is the backbone refusing the act, not the actor (WL-REQ-1338 rule 4),
 	// and repeating a request that already took effect lands here rather
 	// than acting twice (rule 7).
 	var conflict string
@@ -82,7 +82,7 @@ func (s *server) progressMerge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// One row per repo, for its default branch (§6.3), so the lookup needs
+	// One row per repo, for its default branch (WL-REQ-1340), so the lookup needs
 	// no branch. Unknown reads as no queue, which is the plain merge.
 	queues, err := s.st.BranchRulesForRepos(ctx, []string{pr.Repo})
 	if err != nil {

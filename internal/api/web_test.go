@@ -222,9 +222,9 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 		path string
 		want string
 	}{
-		{"/ideas", "WL-SPEC-82 §7"},
-		{"/intake", "WL-SPEC-82 §7"},
-		{"/deliveries", "WL-SPEC-75 §10"},
+		{"/ideas", "WL-REQ-342"},
+		{"/intake", "WL-REQ-342"},
+		{"/deliveries", "WL-RULE-112"},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
 			rr := doReq(t, h, "GET", tt.path, "", nil)
@@ -516,7 +516,7 @@ func TestProjectSections(t *testing.T) {
 	// destinations now, with their own pages (see webform_test.go,
 	// TestCrewPage and TestProjectDocsPage below).
 	sections := map[string]string{
-		"reviews":   "WL-SPEC-75 §13.6",
+		"reviews":   "WL-REQ-124",
 		"decisions": "specs 025 and 029",
 		"activity":  "ordered event view",
 	}

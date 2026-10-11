@@ -11,8 +11,8 @@ import (
 )
 
 // RequestDocApproval calls POST /api/v1/docs/{id}/request-approval, opening
-// one awaiting lane per reviewer in the document's durable reviewer set (WL-SPEC-77
-// §9; assigned separately, see SetDocReviewers) on its current version. A
+// one awaiting lane per reviewer in the document's durable reviewer set
+// (WL-REQ-1658; assigned separately, see SetDocReviewers) on its current version. A
 // document with no reviewers assigned is a 422 naming it. Re-requesting the
 // same set at the same version changes nothing.
 //

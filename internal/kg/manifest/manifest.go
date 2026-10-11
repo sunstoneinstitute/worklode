@@ -1,6 +1,5 @@
 // Package manifest reads the per-repo component-boundary manifest
-// .worklode/components.yaml (WL-SPEC-82 §16.1 — the authoring burden the spec
-// accepts). The manifest is the single place component boundaries are
+// .worklode/components.yaml. The manifest is the single place component boundaries are
 // declared: it fixes each component's IRI-bearing slug, and its path globs
 // are the path→component index the observed-layer derivers consume.
 package manifest
@@ -29,7 +28,7 @@ type Manifest struct {
 
 // Load reads and parses the manifest at p. A missing file surfaces as
 // os.IsNotExist so callers can treat "no manifest" distinctly (a
-// single-component repo may get a default instead — WL-SPEC-82 §16.1).
+// single-component repo may get a default instead).
 func Load(p string) (*Manifest, error) {
 	data, err := os.ReadFile(p)
 	if err != nil {
@@ -78,7 +77,7 @@ func Parse(data []byte) (*Manifest, error) {
 }
 
 // Match maps a repo-relative, slash-separated path to its owning component.
-// First match wins (WL-SPEC-82 §16.1); ok=false means the path belongs to no
+// First match wins; ok=false means the path belongs to no
 // component — a gap the caller reports, never an error.
 func (m *Manifest) Match(p string) (*Component, bool) {
 	p = strings.TrimPrefix(p, "./")

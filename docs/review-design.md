@@ -60,7 +60,7 @@ pages, and static HTML besides. It is a single Go binary with vendored,
 `go:embed`ded browser libraries — no Node at build or runtime — and it ships
 a documented JSON contract plus command hooks. galley (13 stars, static since
 July, Node ≥22, unauthenticated desk) is dropped as a client; its
-`ReviewResult` round semantics remain the contract worth copying (§Contract).
+`ReviewResult` round semantics remain the contract worth copying (see Contract below).
 
 Integration is through crit's `on_finish_*` command hooks: crit pipes the
 review JSON to stdin after persisting it, so the bridge is
@@ -69,7 +69,7 @@ holding a token. `lode review desk` launches crit with the hook configured.
 
 Known gaps, accepted for the interim: crit's document anchoring is
 line-based (`{#sec-N}` is not honored; `.qmd` renders as code), so the ingest
-maps lines to section anchors via the export sidecar (§5). crit is pre-1.0
+maps lines to section anchors via the export sidecar (decision 5). crit is pre-1.0
 and single-author; a golden copy of its contract is checked in so upstream
 drift is a red test.
 
@@ -182,7 +182,7 @@ Proposed `lode` items on approval, ordered by `blocks`:
    anchors. References rewritten against the folded corpus (former 000, 011,
    014, 023, 027, 028 → 001/004/025); `tasks.assignee` dropped (shipped as
    migration 0010).
-3. **WL-SPEC-NN "Reading diffs"** — PR #29's 029 with the §4 amendments,
+3. **WL-SPEC-NN "Reading diffs"** — PR #29's 029 with the amendments from decision 4,
    renumbered (029 is taken on `main`). Independent of 2; its output feeds
    review surfaces when both exist.
 

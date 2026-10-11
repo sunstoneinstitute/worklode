@@ -27,7 +27,7 @@ func newDocTodoCmd() *cobra.Command {
 		Long: `Join a spec's planning gap, its unexecuted plans, and the ordering
 between them into one work list.
 
-<ref> is any reference §4 resolves: a slug, a bare number, or the
+<ref> is any reference WL-REQ-193 resolves: a slug, a bare number, or the
 WL-SPEC-77 shorthand. Every item is typed by the act that discharges
 it — writing a plan (unplanned), a human accepting one
 (plan-draft), executing one (unexecuted), or landing the plan that holds

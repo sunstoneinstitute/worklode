@@ -19,9 +19,9 @@ lode task claim <design-task-id> --json
 ```
 
 Claiming first is not bookkeeping. Agent sessions hang off leases, a lease
-binds a task to a worktree, and each turn bills to the worktree it ran in
-(spec 012 §4) — so planning done in the main checkout, which holds no lease,
-is spent tokens nobody can attribute (WL-RULE-179). Claiming also gets planning
+binds a task to a worktree, and each turn bills to the worktree it ran in —
+so planning done in the main checkout, which holds no lease, is spent tokens
+nobody can attribute (WL-RULE-179). Claiming also gets planning
 the brief, the secrets and the hook wiring every other kind of work gets,
 which is the better reason. Tokens spent before the claim — the exploration
 that decided which task to pick up — stay unattributed by design.

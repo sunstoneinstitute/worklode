@@ -121,8 +121,8 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 
 // recommendation resolves pins (inline content) and retrieval matches
 // excluding the pinned names. A provider failure degrades to the lexical arm
-// with a warning, and no provider at all to pins plus lexical matches (WL-SPEC-79
-// §17) — recommendations never block work. Matching itself is shared with
+// with a warning, and no provider at all to pins plus lexical matches
+// (WL-REQ-1718) — recommendations never block work. Matching itself is shared with
 // the task brief via skillMatches: the
 // brief already has its pins resolved by store.Brief, so taskBrief calls
 // skillMatches directly instead of re-resolving them here.
@@ -171,7 +171,7 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 //
 // It never fails. Every way matching can break degrades to fewer matches
 // plus a warning, never an error: no provider or a provider that is down or
-// slower than recommendTimeout drops to the lexical arm alone (§11), and a
+// slower than recommendTimeout drops to the lexical arm alone (WL-REQ-1718), and a
 // query the store rejects drops to no matches at all. Pins-only is a fully
 // functional mode per WL-SPEC-81, and this path serves the task brief: an
 // error here would stop anyone from starting work.

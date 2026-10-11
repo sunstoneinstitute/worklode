@@ -227,8 +227,8 @@ func WorktreeDirFrom(startDir string) string {
 // contract WorktreeDirFrom has, for a caller (internal/hookrun) that must
 // resolve a project ahead of a backbone call from a directory that is not
 // necessarily the process's own cwd. Returns "" when neither config sets
-// one. Does not attempt the git-remote tier of project resolution (WL-SPEC-81
-// §6.1, ResolveScope) -- a caller that also wants that tier still needs
+// one. Does not attempt the git-remote tier of project resolution (WL-REQ-311,
+// ResolveScope) -- a caller that also wants that tier still needs
 // ResolveScope with a real client.
 func CurrentProjectFrom(startDir string) string {
 	if repoPath, ok := findRepoConfig(startDir); ok {

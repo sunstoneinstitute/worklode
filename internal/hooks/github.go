@@ -65,7 +65,7 @@ type githubHandler struct {
 // release falls back to main's head, as it did before this App integration.
 //
 // onRuleset, if non-nil, is called when a mapped repo's rulesets change
-// (WL-SPEC-82 §15.6). The event carries no fact worth storing — the merge-queue
+// (WL-REQ-1340). The event carries no fact worth storing — the merge-queue
 // rule is read per branch from the rules API — so all it does is tell the
 // server's refresh loop to look again.
 func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, appAuth *githubauth.AppAuth, onRuleset func(), m *Metrics) http.Handler {
@@ -411,7 +411,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 	// The delivery body is GitHub's, and names no worklode task; the
 	// correlation only exists once UpsertPR has run. Recording it on the
 	// event is what lets a reader name the task without re-joining
-	// (WL-SPEC-82 §15.5).
+	// (WL-REQ-1339).
 	if err := store.MergeEventPayload(tx, eventID, map[string]any{"task": taskID}); err != nil {
 		return err
 	}
@@ -464,8 +464,8 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		case store.RevisionCandidate:
 			a.metrics.approvalIngest("candidate")
 		}
-		// One per impact review the designation opened on a dependent (029
-		// §7.1), so the fan-out is visible separately from the designation
+		// One per impact review the designation opened on a dependent
+		// (WL-REQ-124), so the fan-out is visible separately from the designation
 		// that caused it.
 		for range impacts {
 			a.metrics.approvalIngest("impact_opened")
@@ -506,7 +506,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 var mergeGroupHeadRef = regexp.MustCompile(`/pr-(\d+)-[0-9a-f]+$`)
 
 // applyMergeGroup sets or clears pull_requests.queued_at for the PR named in
-// the merge_group's head_ref (WL-SPEC-82 §15.6): checks_requested marks the PR
+// the merge_group's head_ref (WL-REQ-1340): checks_requested marks the PR
 // queued as of now, destroyed clears it. action is caller-guaranteed to be
 // one of those two (applyFunc filters). A head_ref that does not match the
 // expected shape names no PR to update; that is logged and treated as a
@@ -542,7 +542,7 @@ func (a *applier) applyMergeGroup(tx *sql.Tx, eventID int64, repo, action string
 	// The delivery names a queue entry, not a task; the correlation lives on
 	// the PR row. Recording it on the event is what lets the Progress page's
 	// stream resolve this to a task and refresh its position line
-	// (WL-SPEC-82 §15.5) without re-joining.
+	// (WL-REQ-1339) without re-joining.
 	taskID, err := store.PRTaskID(tx, repo, number)
 	if err != nil {
 		return err
@@ -769,7 +769,7 @@ type ghPRRef struct {
 }
 
 // applyCheck names the task(s) a check_run or check_suite delivery is about
-// on its event (WL-SPEC-82 §15.5). There is no typed table: workflow_run
+// on its event (WL-REQ-1339). There is no typed table: workflow_run
 // already carries the run-level facts.
 func (a *applier) applyCheck(tx *sql.Tx, eventID int64, repo, event string, body []byte) error {
 	type check struct {

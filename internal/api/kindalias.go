@@ -36,7 +36,7 @@ func (s *server) normalizeTaskKind(kind, surface string) string {
 //
 // An empty element is one of the rejections, not a value to drop. A trailing
 // comma that silently emptied the list would turn a tier filter into "claim
-// anything", which is the leak §8.8 exists to close.
+// anything", which is the leak WL-REQ-171 exists to close.
 func (s *server) normalizeTaskKindList(list, surface string) (normalized, bad string, ok bool) {
 	if strings.TrimSpace(list) == "" {
 		return "", "", true

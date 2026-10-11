@@ -128,7 +128,7 @@ func Crew(v CrewView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if len(v.Members) == 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<p class=\"muted\">No Crew yet. Crew is the time-limited group of people contributing to this project (WL-SPEC-82 §8).</p>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<p class=\"muted\">No Crew yet. Crew is the time-limited group of people contributing to this project (WL-REQ-343).</p>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -201,7 +201,7 @@ func crewAddForm(v CrewView) templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<section class=\"card pad form\"><h3>Add a Crew member</h3><p class=\"muted small\">Crew is the time-limited group contributing to this project (WL-SPEC-82 §8). A role is drawn from the project-role vocabulary; a project has at most one lead.</p><div aria-live=\"polite\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<section class=\"card pad form\"><h3>Add a Crew member</h3><p class=\"muted small\">Crew is the time-limited group contributing to this project (WL-REQ-343). A role is drawn from the project-role vocabulary; a project has at most one lead.</p><div aria-live=\"polite\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

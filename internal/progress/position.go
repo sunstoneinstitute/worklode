@@ -44,7 +44,7 @@ type CIFact struct {
 	Conclusion string
 }
 
-// deliveryText renders TaskClass's "landed" states per §2.4's ladder.
+// deliveryText renders TaskClass's "landed" states per WL-REQ-1782's ladder.
 var deliveryText = map[string]string{
 	"merged":        "merged",
 	"deployed_dev":  "deployed to dev",
@@ -84,8 +84,8 @@ func Position(f PositionFacts) string {
 	}
 }
 
-// MergeAct describes §3.6's act on a task's open pull request: which PR the
-// button posts about, whether the base branch runs a merge queue (which
+// MergeAct describes WL-REQ-1785's act on a task's open pull request: which PR
+// the button posts about, whether the base branch runs a merge queue (which
 // decides queue-or-merge), and the reason the act is unavailable. Nil when
 // there is nothing to act on — no open PR, or a task whose delivery state
 // already outran it.

@@ -42,8 +42,8 @@ func canonDirs(specDir, planDir string) (specCanon, planCanon string) {
 }
 
 // findRepoRoot walks up from dir to the nearest directory holding a
-// ".worklode" directory — the repo root a corpus path is relative to (025
-// §16.1). "" when there is none. Unexported: canonDir is the only caller,
+// ".worklode" directory — the repo root a corpus path is relative to.
+// "" when there is none. Unexported: canonDir is the only caller,
 // and WL-147 retired the exported filesystem resolver this used to belong to.
 func findRepoRoot(dir string) string {
 	d, err := filepath.Abs(dir)
@@ -114,7 +114,7 @@ func discharges(status string) bool {
 	return status == "accepted" || status == "superseded" || status == "spent"
 }
 
-// sectionKey identifies a spec section by its repo-relative spec path (§4
+// sectionKey identifies a spec section by its repo-relative spec path (a
 // reference, fragment split off) and bare anchor, both fully resolved
 // (WL-RULE-202) — never the raw string a document happened to write.
 type sectionKey struct {
@@ -260,9 +260,9 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 //  2. Already starts with canon+"/": left unchanged, checked by an exact
 //     prefix at position 0 — never a scan of the rest of the string. Tried
 //     again with a leading "/" stripped if the first attempt (and case 3)
-//     fail — §4 makes that "/" optional on a repo-relative reference — but
-//     only as a fallback, so an absolute CorpusDoc.Path (which also starts
-//     with "/", as a real filesystem root, not a §4 reference) resolves on
+//     fail — that "/" is optional on a repo-relative reference — but only
+//     as a fallback, so an absolute CorpusDoc.Path (which also starts with
+//     "/", as a real filesystem root, not a repo-relative reference) resolves on
 //     its unmodified form first (026 review round 3, R3-1).
 //  3. Otherwise: recognised only if ref sits under dir at a real directory
 //     boundary (underDir), and rewritten onto canon.
@@ -280,13 +280,13 @@ func resolveDoc(ref, canon, dir string) string {
 	if resolved, ok := resolveDocOnce(ref, canon, dir); ok {
 		return resolved
 	}
-	// §4: a repo-relative reference's leading "/" is optional —
+	// A repo-relative reference's leading "/" is optional —
 	// "docs/specs/x.md" and "/docs/specs/x.md" are the same reference. Only
 	// retried here, after ref failed to resolve as written: an absolute
 	// CorpusDoc.Path also starts with "/", but names a real filesystem
 	// location that underDir needs intact, so it must get first try
 	// unmodified rather than have that "/" stripped on the assumption it is
-	// a §4 reference.
+	// a repo-relative reference.
 	resolved, ok := resolveDocOnce(strings.TrimPrefix(ref, "/"), canon, dir)
 	if !ok {
 		return ref
@@ -296,7 +296,7 @@ func resolveDoc(ref, canon, dir string) string {
 
 // resolveDocOnce is resolveDoc's canon-prefix/underDir attempt, tried twice
 // (verbatim, then with a leading "/" stripped) so the two meanings of a
-// leading "/" — an OS filesystem root and §4's optional repo-relative
+// leading "/" — an OS filesystem root and the optional repo-relative
 // marker — never collide.
 func resolveDocOnce(ref, canon, dir string) (string, bool) {
 	if strings.HasPrefix(ref, canon+"/") {
@@ -323,7 +323,7 @@ func underDir(p, dir string) (rel string, ok bool) {
 	return filepath.ToSlash(p[len(prefix):]), true
 }
 
-// normalizeRef resolves one §4 reference against home, the referring
+// normalizeRef resolves one reference against home, the referring
 // document's own corpus-relative directory ("docs/plans"): a "./" or
 // "../"-prefixed reference is resolved against home and cleaned, and an
 // already corpus-relative reference ("docs/specs/...", "docs/plans/...") is
@@ -354,7 +354,7 @@ func (ix *PlanIndex) normalizeRef(ref, home string) string {
 		}
 		return guess
 	}
-	// §4: a repo-relative reference's leading "/" is optional —
+	// A repo-relative reference's leading "/" is optional —
 	// "docs/specs/x.md" and "/docs/specs/x.md" are the same reference.
 	ref = strings.TrimPrefix(ref, "/")
 	if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") {

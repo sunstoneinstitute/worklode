@@ -187,7 +187,7 @@ type EditTaskInput struct {
 	// milestone in the task's own project.
 	Milestone *string `json:"milestone,omitempty"`
 	// Plan, when non-nil, links the task to the plan document it executed
-	// (WL-SPEC-82 §15.6): an id or slug, resolved server-side the same way
+	// (WL-REQ-1340): an id or slug, resolved server-side the same way
 	// `--plan` on `task list` resolves one. Refused if the task already
 	// carries a different plan document, or the resolved document is not a
 	// plan in the task's own project. There is no detach — once set, a
@@ -235,7 +235,7 @@ type DecomposeInput struct {
 // TaskPublishInput is the body POST /projects/{id}/tasks/publish takes: the
 // cockpit's Publish button, `lode task publish` (draft -> ready) from a page.
 // It names one task, or a plan whose draft tasks are all published. The
-// acting actor is the session's (WL-SPEC-82 §15.4 rule 6).
+// acting actor is the session's (WL-REQ-1338 rule 6).
 type TaskPublishInput struct {
 	Task string `json:"task,omitempty"`
 	Plan int64  `json:"plan,omitempty"`
@@ -272,10 +272,10 @@ type TaskListParams struct {
 	// UpdatedSince is an RFC3339 instant that narrows to the tasks touched at
 	// or after it (the incremental fetch a polling mirror makes).
 	UpdatedSince string `query:"updated_since,omitempty"`
-	// PlanDoc narrows to the tasks minted from this plan document id (025
-	// §9.2). nil (the parameter absent) does not filter; a non-positive
-	// value is refused, so a caller cannot distinguish "0" from "absent" on
-	// the wire.
+	// PlanDoc narrows to the tasks minted from this plan document id
+	// (WL-REQ-172). nil (the parameter absent) does not filter; a
+	// non-positive value is refused, so a caller cannot distinguish "0"
+	// from "absent" on the wire.
 	PlanDoc *int64 `query:"plan_doc,omitempty"`
 	// AboutDoc narrows to the tasks that reference this document id — the
 	// review and planning tasks the doc-lifecycle watcher mints (WL-RULE-179).

@@ -640,7 +640,7 @@ func (s *server) sameOriginFetch(r *http.Request) bool {
 // route that takes no fields.
 //
 // Every reply it writes, refusals included, carries the page's
-// Content-Security-Policy (§4.4) and is JSON, never HTML (§4.2 rule 4), so a
+// Content-Security-Policy and is JSON, never HTML (WL-REQ-1338 rule 4), so a
 // navigation can never render one as a page. route is the metric label, not
 // a path.
 func (s *server) beginJSONPost(w http.ResponseWriter, r *http.Request, route string, dst any) (Subject, ui.CockpitProject, bool) {

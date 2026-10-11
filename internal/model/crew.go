@@ -2,8 +2,8 @@ package model
 
 import "time"
 
-// CrewMember is the wire form of one Crew member of a project (WL-SPEC-75
-// §6.1): an actor holding at least one role-labelled participation row,
+// CrewMember is the wire form of one Crew member of a project (WL-REQ-1605):
+// an actor holding at least one role-labelled participation row,
 // folded to one entry per actor. Roles is the sorted set of labels that
 // actor holds on the project; at most one member of a project has Lead set
 // (WL-REQ-343's accountable human). AddedAt is the earliest of the actor's

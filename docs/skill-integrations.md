@@ -55,7 +55,7 @@ themselves.
 
 **What `lode` gives us.** Not the git → backbone sync this brief was drafted
 against: `lode doc sync` and `POST /api/v1/docs/sync` were deleted, and the old WL-REQ-708
-and §5.1 are withdrawn. What shipped instead is the authoring surface of WL-SPEC-77, with
+and WL-REQ-664 are withdrawn. What shipped instead is the authoring surface of WL-SPEC-77, with
 the backbone — not git — as the place a document lives:
 
 - `lode doc add` / `edit` / `submit` / `accept` / `revise` — create a spec
@@ -262,7 +262,7 @@ and does not preserve the file corpus.
 The sequencing consequence this brief stated has since been discharged. The old spec 025
 (now WL-SPEC-77) made the backbone a projection of reviewed git, so lode-first authoring
 needed that model amended and a write path built before these skills had
-anywhere to write. Both landed: the projection model is withdrawn with §16, and
+anywhere to write. Both landed: the projection model is withdrawn with WL-REQ-708, and
 `lode doc add`/`edit`/`submit`/`accept`/`revise` is the write path. Track B is
 no longer blocked on `lode` — what remains is the vendoring itself, and the fact
 that this repo still edits its own corpus as files, so a skill writing only to

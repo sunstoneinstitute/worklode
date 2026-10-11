@@ -35,7 +35,7 @@ func coversRules(tx *sql.Tx, project, ref string) (rules []int64, named bool, er
 			return nil, false, fmt.Errorf("resolve covers %s: %w", ref, err)
 		}
 		if !designdoc.RuleKindCovered(kind) {
-			return nil, true, fmt.Errorf("covers %s: %s is a %s rule, and a plan covers only requirements and catalogues (WL-SPEC-78 §4.1): %w",
+			return nil, true, fmt.Errorf("covers %s: %s is a %s rule, and a plan covers only requirements and catalogues (WL-REQ-203): %w",
 				ref, designdoc.FormatRuleRef(r.Key, r.Number, kind), kind, ErrInvalidInput)
 		}
 		return []int64{id}, true, nil
@@ -103,8 +103,7 @@ func planRules(tx *sql.Tx, planID int64) ([]int64, error) {
 
 // acceptedPlansCovering is the accepted, live plans covering any of the rules,
 // through the covered_rules view, so a plan covering a predecessor covers its
-// successors too. These are the plans a withdrawal marks stale (WL-SPEC-77
-// §9).
+// successors too. These are the plans a withdrawal marks stale (WL-REQ-170).
 func acceptedPlansCovering(tx *sql.Tx, ruleIDs []int64) ([]int64, error) {
 	rows, err := tx.Query(
 		`SELECT DISTINCT d.id FROM covered_rules c JOIN docs d ON d.id = c.plan_id

@@ -33,7 +33,7 @@ The scope is free text. Empty means every spec in the current project. Examples:
   When it is unclear which, it is an owner question.
 - **Flat current state.** Each spec says what the system does today. No amendment notes, no "as of",
   "previously" or "superseded by" text, no changelog. History lives in version control and the spec store's
-  own version history. A stub the store requires (for example a frozen anchor kept as "Merged into §7.") is
+  own version history. A stub the store requires (for example a frozen anchor kept as a "Merged into ..." pointer) is
   store metadata, not content, and is the one allowed exception.
 - **One "Designed, not built" section per spec,** at the end. It lists decided-but-unbuilt capabilities, each
   with the task that builds it. Undecided ideas are not in it.
@@ -119,7 +119,7 @@ For each wave:
      for changes made since and re-verifies the claims they touch.
 3. As reports arrive, the coordinator:
    - **routes cross-target findings** to the agent that owns the other doc, by message, while it is still
-     running if possible ("T6, absorb DP-SPEC-12 §10.1 and report the anchor; T2 will cut it to a pointer");
+     running if possible ("T6, absorb DP-REQ-56 from DP-SPEC-12 and report the anchor; T2 will cut it to a pointer");
    - **files code leftovers** as tasks right away, grouping small ones into one chore and widening an
      existing chore instead of creating near-duplicates;
    - **adds owner questions** to the running list;

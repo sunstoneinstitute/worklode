@@ -247,8 +247,7 @@ it to the same local endpoint.
 
 ## Setup checks & reconciliation
 
-Three commands answer "is this wired up, and did anything get missed" (WL-SPEC-80
-§10):
+Three commands answer "is this wired up, and did anything get missed" (WL-REQ-294):
 
 - `lode doctor` — client-side setup checks: config, token, server
   reachability, `current_project`, git hooks, worktree lease. It exits

@@ -29,8 +29,9 @@ import (
 // not the TTL, are what make the code safe (WL-REQ-59).
 const cliCodeTTL = 5 * time.Minute
 
-// The two shapes a `lode login` can take: the default loopback redirect (§8) and
-// manual mode, where the code is rendered for the user to copy (§8.7).
+// The two shapes a `lode login` can take: the default loopback redirect (WL-REQ-57)
+// and manual mode, where the code is rendered for the user to copy
+// (WL-REQ-58).
 const (
 	cliModeLoopback = "loopback"
 	cliModeManual   = "manual"
@@ -130,7 +131,7 @@ func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, ne
 	// Clear both transient cookies.
 	clearAuthCookie(w, cliCookieName)
 	clearAuthCookie(w, oauthCookieName)
-	// Manual mode (§8.7) has no loopback to redirect to: show the code
+	// Manual mode (WL-REQ-58) has no loopback to redirect to: show the code
 	// so the user can carry it to the terminal themselves.
 	if ci.Mode == cliModeManual {
 		s.renderCLICode(w, r, actorID, code)
@@ -158,7 +159,7 @@ func (s *server) finishLoginWeb(w http.ResponseWriter, r *http.Request, actorID,
 }
 
 // renderCLICode shows the one-time code for the user to copy back into their
-// terminal, ending a manual-mode login (§8.7). Only the code reaches the page:
+// terminal, ending a manual-mode login (WL-REQ-58). Only the code reaches the page:
 // the 30-day token it redeems for is minted later, at /auth/cli/token, and
 // never leaves the CLI process.
 func (s *server) renderCLICode(w http.ResponseWriter, r *http.Request, actorID, code string) {

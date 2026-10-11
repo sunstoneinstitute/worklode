@@ -28,7 +28,7 @@ import (
 // destinations. It is left empty on project-scoped pages, whose project-local
 // nav carries the current-page marker instead, and on pages that name no
 // destination: the task page, Home, Reviews and Deliveries, which kept their
-// routes when §1 took them off the list, and the inbox (WL-REQ-347), which never
+// routes when they left the list, and the inbox (WL-REQ-347), which never
 // had one. No page ever sets aria-current="page" twice, or on both navs.
 type PageProps struct {
 	Title        string
@@ -1804,8 +1804,8 @@ func progressReviewAction(doc int64, ref string, reviewEnabled bool) ProgressAct
 // progressRallyAction is WL-REQ-1337's Rally button. Every spec row carries one,
 // whatever group it is in: a spec with nothing outstanding is a no-op the
 // route answers with added 0, not an act to hide. Any signed-in viewer may
-// assemble a rally — a draft rally is inert until someone confirms it (WL-SPEC-75
-// §8.3) — so having no session is the only reason it is ever disabled.
+// assemble a rally — a draft rally is inert until someone confirms it
+// (WL-REQ-99) — so having no session is the only reason it is ever disabled.
 func progressRallyAction(doc int64, ref, viewer string) ProgressAction {
 	a := ProgressAction{
 		Route:   "rally/add",

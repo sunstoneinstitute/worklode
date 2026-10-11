@@ -92,32 +92,32 @@ var routeGuards = map[string]routeGuard{
 	"POST /projects/{id}/crew/remove": guarded(permWebWrite),
 	"GET /projects/{id}/work":         guarded(permWebRead),
 	"GET /projects/{id}/progress":     guarded(permWebRead),
-	// The Progress page's live update stream (§5.1): permWebRead like the
+	// The Progress page's live update stream (WL-REQ-1339): permWebRead like the
 	// page itself, not permEventStream — a frame carries nothing the page's
-	// own reader could not already see (§4.5).
+	// own reader could not already see (WL-REQ-1786).
 	"GET /projects/{id}/progress/events": guarded(permWebRead),
-	// The Progress page's row and summary fragments (§5.2): permWebRead like
+	// The Progress page's row and summary fragments (WL-REQ-1787): permWebRead like
 	// the page itself, since either fragment shows only what the page's own
 	// reader could already see.
 	"GET /projects/{id}/progress/spec/{doc}": guarded(permWebRead),
 	"GET /projects/{id}/progress/summary":    guarded(permWebRead),
 	// The Progress page's writes (WL-REQ-1341). permDocWrite for accepting a
 	// document, matching POST /api/v1/docs/{id}/accept — the owner gate that
-	// decides who may actually accept it stays inside the store (§4.2 rule 5).
+	// decides who may actually accept it stays inside the store (WL-REQ-1338 rule 5).
 	"POST /projects/{id}/progress/accept": guarded(permDocWrite),
-	// permTaskWrite for minting the planning task (§3.4): the act creates a
+	// permTaskWrite for minting the planning task (WL-REQ-1783): the act creates a
 	// task, whatever document it is about.
 	"POST /projects/{id}/progress/plan": guarded(permTaskWrite),
-	// permTaskWrite for the rally acts (§3.5): assembling one mints and links
+	// permTaskWrite for the rally acts (WL-REQ-1784): assembling one mints and links
 	// tasks, and confirming or discarding it moves a task's state. The rally
 	// is a task like any other (WL-REQ-97).
 	"POST /projects/{id}/progress/rally/add":     guarded(permTaskWrite),
 	"POST /projects/{id}/progress/rally/confirm": guarded(permTaskWrite),
 	"POST /projects/{id}/progress/rally/discard": guarded(permTaskWrite),
-	// permTaskWrite for the merge act (§3.6): it is the last step of
+	// permTaskWrite for the merge act (WL-REQ-1785): it is the last step of
 	// delivering a task, and it moves that task's state by way of the
 	// webhooks the merge produces. The App's installation token, not the
-	// caller's, does the writing at GitHub (§4.2 rule 9).
+	// caller's, does the writing at GitHub (WL-REQ-1338 rule 9).
 	"POST /projects/{id}/progress/merge": guarded(permTaskWrite),
 	// The task and plan pages' Publish button: `lode task publish` (draft ->
 	// ready) from the cockpit, permTaskWrite like PATCH /api/v1/tasks/{id}.
@@ -292,7 +292,7 @@ var routeGuards = map[string]routeGuard{
 	// authz.go). The accept routes are permDocWrite like the rest: whether a
 	// given actor may accept a given document is the owner gate of WL-REQ-170,
 	// a per-document fact the store checks, not a role. Owner transfer
-	// (§7.3) is the same shape: guarded rather than guardedAny, matching
+	// (WL-REQ-1658) is the same shape: guarded rather than guardedAny, matching
 	// accept and revision/accept, since it is another deliberate act on the
 	// document's identity rather than routine authoring.
 	"POST /api/v1/docs":        guardedAny(permDocWrite),
@@ -354,7 +354,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/undelete": guarded(permDocWrite),
 
 	// --- approvals (WL-REQ-124) --------------------------------------------
-	// Reading the queue and filing an ad-hoc requirement (§7.2). Deciding is
+	// Reading the queue and filing an ad-hoc requirement (WL-REQ-1607). Deciding is
 	// not on the JSON API at all: WL-REQ-124 makes it a web-session act, and
 	// its route is "POST /approvals/{id}/decide" above.
 	"GET /api/v1/approvals":  guarded(permApprovalRead),

@@ -20,7 +20,7 @@ PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
 `
 
-// The two named-graph families WL-SPEC-82 §16.1 partitions the layers by. Both
+// The two named-graph families WL-REQ-1706 partitions the layers by. Both
 // are derived from iri, which owns the grammar (iri.DeclaredGraph and
 // iri.ObservedGraph mint members of exactly these families).
 const (
@@ -36,7 +36,7 @@ const (
 // it) answers an unwrapped pattern with nothing. Wrapping is correct under
 // either configuration, so the query does not depend on the endpoint's.
 
-// violationsQuery is WL-SPEC-82 §16.2 (violation direction):
+// violationsQuery is WL-REQ-1362's violation direction:
 // observed − declared − un-expired acknowledged. The layer partition is the
 // graph-name family; today's date is injected from Go (design call 8).
 //
@@ -71,7 +71,7 @@ func violationsQuery(today string) string {
 } ORDER BY ?from ?to`, observedFamily, declaredFamily, declaredFamily, today)
 }
 
-// staleIntentQuery is §4.1's other direction: declared − observed.
+// staleIntentQuery is WL-REQ-1362's other direction: declared − observed.
 func staleIntentQuery() string {
 	return sparqlPrefixes + fmt.Sprintf(`SELECT DISTINCT ?from ?to WHERE {
   GRAPH ?dg { ?from dct:requires ?to . }
@@ -100,7 +100,8 @@ func acknowledgedQuery() string {
 } ORDER BY ?from ?to`, declaredFamily)
 }
 
-// docGapsQuery is §4.2: components with no governing DesignDoc.
+// docGapsQuery is WL-REQ-1673's documentation gap: components with no governing
+// DesignDoc.
 //
 // Co-location assumption: the type and the wl:governs edge must be in the
 // same named graph (?dg). The projector writes a document's declaration as a
@@ -128,8 +129,8 @@ const unmatchedQuery = sparqlPrefixes + `SELECT DISTINCT ?repo ?path WHERE {
 // writes them.
 //
 
-// unimplementedQuery is §11.5 row 1: an accepted section no component claims.
-// A section carries wl:status only in its document's canonical graph
+// unimplementedQuery is WL-REQ-1673 row 1: an accepted section no component
+// claims. A section carries wl:status only in its document's canonical graph
 // (graphproj.SectionTriples), so the status pattern confines the read to that
 // graph without naming it — a version snapshot's sections are not candidates.
 const unimplementedQuery = sparqlPrefixes + `SELECT DISTINCT ?s WHERE {
@@ -137,11 +138,11 @@ const unimplementedQuery = sparqlPrefixes + `SELECT DISTINCT ?s WHERE {
   FILTER NOT EXISTS { GRAPH ?ig { ?c wl:implements ?s } }
 } ORDER BY ?s`
 
-// coverageQuery is §11.5 row 2: implemented ÷ non-superseded sections, per
-// document. A section nobody claims contributes nothing through the OPTIONAL,
-// so a document at zero coverage still gets a row — which is the whole corpus
-// until observed/repo-implements writes its first claim, and the honest
-// answer meanwhile.
+// coverageQuery is WL-REQ-1673 row 2: implemented ÷ non-superseded sections,
+// per document. A section nobody claims contributes nothing through the
+// OPTIONAL, so a document at zero coverage still gets a row — which is the
+// whole corpus until observed/repo-implements writes its first claim, and the
+// honest answer meanwhile.
 const coverageQuery = sparqlPrefixes + `SELECT ?doc (COUNT(DISTINCT ?s) AS ?total) (COUNT(DISTINCT ?impl) AS ?implemented) WHERE {
   GRAPH ?g { ?s a wl:Section ; dct:isPartOf ?doc ; wl:status ?st . }
   FILTER (?st != wlc:superseded)
@@ -151,8 +152,8 @@ const coverageQuery = sparqlPrefixes + `SELECT ?doc (COUNT(DISTINCT ?s) AS ?tota
   }
 } GROUP BY ?doc ORDER BY ?doc`
 
-// staleClaimQuery is §11.5 row 3: a claim pinned at a version older than the
-// one that last revised the section it names. Both versions are compared as
+// staleClaimQuery is WL-REQ-1673 row 3: a claim pinned at a version older than
+// the one that last revised the section it names. Both versions are compared as
 // xsd:integer, never as the strings or the IRIs carrying them — WL-REQ-166: v10
 // does not sort after v3 either way round.
 const staleClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
@@ -163,21 +164,21 @@ const staleClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
   FILTER (xsd:integer(?current) > xsd:integer(?pinned))
 } ORDER BY ?c ?s`
 
-// orphanedClaimQuery is §11.5 row 4: a claim naming a section its document no
-// longer has. The document is reached from the pinned snapshot through
-// dcat:hasVersion, and its current section set is the canonical graph's, since
-// graphproj.SectionTriples projects the published sections of the current
-// version and nothing else.
+// orphanedClaimQuery is WL-REQ-1673 row 4: a claim naming a section its
+// document no longer has. The document is reached from the pinned snapshot
+// through dcat:hasVersion, and its current section set is the canonical
+// graph's, since graphproj.SectionTriples projects the published sections of
+// the current version and nothing else.
 const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
   GRAPH ?cg { << ?c wl:implements ?s >> wl:pinnedVersion ?pv . }
   GRAPH ?dg { ?doc dcat:hasVersion ?pv . }
   FILTER NOT EXISTS { GRAPH ?sg { ?s dct:isPartOf ?doc } }
 } ORDER BY ?c ?s`
 
-// deliveredCoverageQuery is §11.5 row 5: for each wl:implements claim, the
-// environments the claiming component's deliverable is actually deployed to.
-// It is the join that turns "component A claims section S" into "section S is
-// live in prod", which is what WL-REQ-243 calls the vertical.
+// deliveredCoverageQuery is WL-REQ-1673 row 5: for each wl:implements claim,
+// the environments the claiming component's deliverable is actually deployed
+// to. It is the join that turns "component A claims section S" into "section S
+// is live in prod", which is what WL-REQ-243 calls the vertical.
 //
 // Two arms, because a deliverable is witnessed two ways (WL-REQ-243's witness
 // table) and there is no reasoner (WL-SPEC-79), so wl:Effect's subclass edge to
@@ -289,7 +290,7 @@ func Gaps(ctx context.Context, c *graphserver.Client) ([]model.Gap, error) {
 	return out, nil
 }
 
-// Unimplemented runs §11.5's unimplemented-intent query, returning the
+// Unimplemented runs WL-REQ-1673's unimplemented-intent query, returning the
 // section IRIs no component claims.
 func Unimplemented(ctx context.Context, c *graphserver.Client) ([]string, error) {
 	rows, err := c.Select(ctx, unimplementedQuery)
@@ -303,7 +304,7 @@ func Unimplemented(ctx context.Context, c *graphserver.Client) ([]string, error)
 	return out, nil
 }
 
-// Coverage runs §11.5's per-document coverage query.
+// Coverage runs WL-REQ-1673's per-document coverage query.
 func Coverage(ctx context.Context, c *graphserver.Client) ([]model.DocCoverage, error) {
 	rows, err := c.Select(ctx, coverageQuery)
 	if err != nil {
@@ -318,7 +319,7 @@ func Coverage(ctx context.Context, c *graphserver.Client) ([]model.DocCoverage, 
 	return out, nil
 }
 
-// StaleClaims runs §11.5's stale-claim query.
+// StaleClaims runs WL-REQ-1673's stale-claim query.
 func StaleClaims(ctx context.Context, c *graphserver.Client) ([]model.Claim, error) {
 	rows, err := c.Select(ctx, staleClaimQuery)
 	if err != nil {
@@ -327,7 +328,7 @@ func StaleClaims(ctx context.Context, c *graphserver.Client) ([]model.Claim, err
 	return claims(rows), nil
 }
 
-// OrphanedClaims runs §11.5's orphaned-claim query.
+// OrphanedClaims runs WL-REQ-1673's orphaned-claim query.
 func OrphanedClaims(ctx context.Context, c *graphserver.Client) ([]model.Claim, error) {
 	rows, err := c.Select(ctx, orphanedClaimQuery)
 	if err != nil {
@@ -336,7 +337,7 @@ func OrphanedClaims(ctx context.Context, c *graphserver.Client) ([]model.Claim, 
 	return claims(rows), nil
 }
 
-// DeliveredCoverage runs §11.5's delivered-coverage query: one row per
+// DeliveredCoverage runs WL-REQ-1673's delivered-coverage query: one row per
 // (claim, environment) the claim is live in. A claim delivered to two
 // environments is two rows, which is what a caller asking "is this section in
 // prod" needs to see.

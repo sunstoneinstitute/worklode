@@ -1,5 +1,5 @@
--- Rule edges gain amends, and supersession is stored new -> old (WL-SPEC-77
--- §4): supersededBy rows swap their ends and become supersedes. The inverses
+-- Rule edges gain amends, and supersession is stored new -> old
+-- (WL-REQ-1644, WL-REQ-1645): supersededBy rows swap their ends and become supersedes. The inverses
 -- (amendedBy, supersededBy) are read from the far end and never stored.
 BEGIN;
 

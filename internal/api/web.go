@@ -191,8 +191,8 @@ func (s *server) webStoreErr(w http.ResponseWriter, err error) {
 
 // homePage handles GET / (routed as "GET /{$}" — see server.go — so it
 // matches only the exact root path, not every otherwise-unmatched GET): the
-// default post-login destination, which is the actor's project list (WL-SPEC-82
-// §9). It renders in one of three modes, which are also the bounded label
+// default post-login destination, which is the actor's project list
+// (WL-REQ-346). It renders in one of three modes, which are also the bounded label
 // values of worklode_web_home_renders_total:
 //
 //   - "open": no actor (LODE_WEB_OPEN, or no login provider). Every project
@@ -439,8 +439,8 @@ func (s *server) driftPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "drift page", ui.Drift(view))
 }
 
-// projectsPage handles GET /projects: the cross-project portfolio (WL-SPEC-82
-// §2), linking each project to its canonical cockpit URL.
+// projectsPage handles GET /projects: the cross-project portfolio
+// (WL-REQ-331), linking each project to its canonical cockpit URL.
 func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 	projects, err := s.st.ListProjects(r.Context())
 	if err != nil {
@@ -557,7 +557,7 @@ func (s *server) globalPlaceholder(destination, heading, message string) http.Ha
 // deliverablesPage), routed ahead of this wildcard. Crew and Documents are
 // absent for the same reason (crew.go's crewPage, projectDocsPage below).
 var projectSections = map[string]struct{ Title, Message string }{
-	"reviews":   {"Reviews", "Governed approval reviews arrive with WL-SPEC-75 §13.6."},
+	"reviews":   {"Reviews", "Governed approval reviews arrive with WL-REQ-124."},
 	"decisions": {"Decisions", "Research decisions arrive with specs 025 and 029."},
 	"activity":  {"Activity", "Project activity arrives when the ordered event view is implemented."},
 }

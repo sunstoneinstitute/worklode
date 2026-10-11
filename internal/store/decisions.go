@@ -36,8 +36,8 @@ var decisionTypesWithOptions = []string{
 	"pick_or_freetext",
 }
 
-// ValidateDecisionSpec checks the shape of a decision as it is posed (WL-SPEC-77
-// §12): a routable key, a response_type the store recognizes with the
+// ValidateDecisionSpec checks the shape of a decision as it is posed (WL-REQ-1671):
+// a routable key, a response_type the store recognizes with the
 // options it needs and none it doesn't, and no answer yet. It does not
 // check that the key is unique within the task — the database's UNIQUE
 // constraint on (task, key) is the backstop for that.
