@@ -2,22 +2,22 @@ package model
 
 import "time"
 
-// ProjectProgress is WL-SPEC-82 §15.1 derived for one project: what each spec
+// ProjectProgress is WL-REQ-1335 derived for one project: what each spec
 // says, and how much of it exists. Nothing here is stored; a reader
 // recomputes it per request.
 type ProjectProgress struct {
 	Project string          `json:"project"`
-	Rally   *RallyBand      `json:"rally,omitempty"` // the active rally, if any (§2.1)
-	Draft   *RallyBand      `json:"draft,omitempty"` // the draft rally the footer offers, if any (§3.5)
+	Rally   *RallyBand      `json:"rally,omitempty"` // the active rally, if any (WL-REQ-1336)
+	Draft   *RallyBand      `json:"draft,omitempty"` // the draft rally the footer offers, if any (WL-REQ-1784)
 	Counts  ProgressCounts  `json:"counts"`
 	Bar     []ProgressSlice `json:"bar"`    // owed sections by state, in state order
-	Groups  []ProgressGroup `json:"groups"` // §1.3 order: active, planning, no_record, built
+	Groups  []ProgressGroup `json:"groups"` // WL-REQ-1335 order: active, planning, no_record, built
 }
 
 // RallyBand is one rally reduced to what a fixed-height bar can show. The
-// active rally fills §2.1's band, where Landed is the number that moves; the
-// draft rally fills §3.5's footer, where Specs is — "Rally: N tasks from M
-// specs". Each reads the field the other leaves at zero.
+// active rally fills WL-REQ-1336's band, where Landed is the number that moves;
+// the draft rally fills WL-REQ-1784's footer, where Specs is — "Rally: N tasks
+// from M specs". Each reads the field the other leaves at zero.
 type RallyBand struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
@@ -50,13 +50,14 @@ type ProgressSpec struct {
 	Ref     string    `json:"ref"`
 	Title   string    `json:"title"`
 	Updated time.Time `json:"updated_at"`
-	// Status and Owner are the document's own, not derived: §3.2's Accept
-	// button is offered on a draft spec and enabled only for its owner.
+	// Status and Owner are the document's own, not derived: WL-REQ-1783's
+	// Accept button is offered on a draft spec and enabled only for its
+	// owner.
 	Status string `json:"status"`
 	Owner  string `json:"owner,omitempty"`
 	// PlanningTask is the open design task about this spec (WL-RULE-179's
 	// planning task), when one exists. The row shows it as a link instead of
-	// §3.4's Plan button, which mints exactly that task.
+	// WL-REQ-1783's Plan button, which mints exactly that task.
 	PlanningTask string            `json:"planning_task,omitempty"`
 	Group        string            `json:"group"`
 	Next         ProgressAct       `json:"next"`
@@ -64,8 +65,8 @@ type ProgressSpec struct {
 	Plans        []ProgressPlan    `json:"plans"`
 }
 
-// ProgressAct is §1.3's next act: Kind names the state that decides it and
-// Text is the rendered line, plans never shortened.
+// ProgressAct is WL-REQ-1335's next act: Kind names the state that decides it
+// and Text is the rendered line, plans never shortened.
 type ProgressAct struct {
 	Kind  string   `json:"kind"`
 	Text  string   `json:"text"`
@@ -97,16 +98,16 @@ type ProgressTask struct {
 	ID       string `json:"id"`
 	Title    string `json:"title"`
 	State    string `json:"state"`
-	Class    string `json:"class"`    // landed | active | unstarted (§1.1)
-	Position string `json:"position"` // §2.4's ladder, one line
-	// Merge is the open pull request §3.6's button acts on, nil when the
-	// task has none.
+	Class    string `json:"class"`    // landed | active | unstarted (WL-REQ-1335)
+	Position string `json:"position"` // WL-REQ-1782's ladder, one line
+	// Merge is the open pull request WL-REQ-1785's button acts on, nil when
+	// the task has none.
 	Merge *ProgressMerge `json:"merge,omitempty"`
 }
 
-// ProgressMerge is what the Progress page needs to offer §3.6's act on a
+// ProgressMerge is what the Progress page needs to offer WL-REQ-1785's act on a
 // task's open pull request: which PR it is, whether its base branch runs a
-// merge queue (§6.3, so the button says "Queue for merge" rather than
+// merge queue (WL-REQ-1340, so the button says "Queue for merge" rather than
 // "Merge"), and the reason the act cannot be taken now. An empty Reason
 // means the button is live.
 type ProgressMerge struct {
@@ -117,18 +118,18 @@ type ProgressMerge struct {
 }
 
 // ProgressAcceptInput is the body POST /projects/{id}/progress/accept takes
-// (WL-SPEC-82 §15.3): the document to accept, and nothing else. The acting
-// actor is the session's, never the body's (§4.2 rule 6), and the write gate
+// (WL-REQ-1783): the document to accept, and nothing else. The acting actor is
+// the session's, never the body's (WL-REQ-1338 rule 6), and the write gate
 // refuses a body that names one.
 type ProgressAcceptInput struct {
 	Doc int64 `json:"doc"`
 }
 
 // ProgressAcceptResponse is the reply to POST /projects/{id}/progress/accept
-// (WL-SPEC-82 §15.3): the document that was accepted, the status it now
+// (WL-REQ-1783): the document that was accepted, the status it now
 // carries, and how many tasks the acceptance minted (WL-REQ-172 — zero for a
 // spec or ADR). The page applies none of it; it re-reads the row from the
-// backbone (§3.1).
+// backbone (WL-REQ-1337).
 type ProgressAcceptResponse struct {
 	Doc    int64  `json:"doc"`
 	Status string `json:"status"`
@@ -136,8 +137,8 @@ type ProgressAcceptResponse struct {
 }
 
 // ProgressPlanInput is the body POST /projects/{id}/progress/plan takes
-// (WL-SPEC-82 §15.3): the spec to mint a planning task for. Like every other
-// act on this page, the acting actor is the session's (§4.2 rule 6).
+// (WL-REQ-1783): the spec to mint a planning task for. Like every other
+// act on this page, the acting actor is the session's (WL-REQ-1338 rule 6).
 type ProgressPlanInput struct {
 	Doc int64 `json:"doc"`
 }
@@ -145,22 +146,22 @@ type ProgressPlanInput struct {
 // ProgressPlanResponse is the reply to POST /projects/{id}/progress/plan: the
 // planning task about the spec. Existing is true when an open one was already
 // there and nothing was minted — repeating the request returns the same task
-// rather than a second one (§4.2 rule 7).
+// rather than a second one (WL-REQ-1338 rule 7).
 type ProgressPlanResponse struct {
 	Task     string `json:"task"`
 	Existing bool   `json:"existing"`
 }
 
 // ProgressRallyAddInput is the body POST /projects/{id}/progress/rally/add
-// takes (WL-SPEC-82 §15.3): the spec whose remaining work joins the draft
-// rally. The acting actor is the session's (§4.2 rule 6).
+// takes (WL-REQ-1783): the spec whose remaining work joins the draft
+// rally. The acting actor is the session's (WL-REQ-1338 rule 6).
 type ProgressRallyAddInput struct {
 	Doc int64 `json:"doc"`
 }
 
 // ProgressRallyAddResponse is the reply to one add: the draft rally, how many
 // members this call was the first to add, and what the footer now says.
-// Added is 0 with a 200 when the spec had nothing outstanding (§3.5).
+// Added is 0 with a 200 when the spec had nothing outstanding (WL-REQ-1784).
 type ProgressRallyAddResponse struct {
 	Rally   string `json:"rally"`
 	Added   int    `json:"added"`
@@ -184,10 +185,10 @@ type ProgressRallyConflict struct {
 }
 
 // ProgressMergeInput is the body POST /projects/{id}/progress/merge takes
-// (WL-SPEC-82 §15.3): the task whose pull request to act on, and the PR
+// (WL-REQ-1783): the task whose pull request to act on, and the PR
 // itself. Both are named so the route can refuse a page whose facts have
 // gone stale — a PR that no longer carries the task is a 409, not a merge.
-// The acting actor is the session's (§4.2 rule 6).
+// The acting actor is the session's (WL-REQ-1338 rule 6).
 type ProgressMergeInput struct {
 	Task string     `json:"task"`
 	PR   ProgressPR `json:"pr"`
@@ -202,14 +203,14 @@ type ProgressPR struct {
 // ProgressMergeResponse is the reply to one merge act: which operation the
 // branch's rules called for ("enqueue" or "merge"), and whether the PR is
 // now in a merge queue. The page applies neither — the position line changes
-// on the stream event that follows (§3.6).
+// on the stream event that follows (WL-REQ-1785).
 type ProgressMergeResponse struct {
 	Op     string `json:"op"`
 	Queued bool   `json:"queued"`
 }
 
 // ProgressEventFrame is the data: payload of GET /projects/{id}/progress/events
-// (WL-SPEC-82 §15.5): what one backbone event moved, reduced to the fields
+// (WL-REQ-1339): what one backbone event moved, reduced to the fields
 // the page redraws on. Event is the event's own type, e.g. "task.transition";
 // Task is empty when the touch is about a plan or spec rather than a task, in
 // which case Plan or Specs carries the touch instead. No field is omitted:

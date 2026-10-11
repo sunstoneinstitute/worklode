@@ -72,8 +72,8 @@ func newGraphQuarantinesCmd() *cobra.Command {
 // command may use, and "export" is not in it; "triples" is a named view (L6),
 // the same pattern as the existing "graph quarantines".
 //
-// internal/graphproj already builds and serializes these triples (WL-SPEC-79
-// §12) for the server-side projector; this command is the first thing that
+// internal/graphproj already builds and serializes these triples (WL-REQ-251)
+// for the server-side projector; this command is the first thing that
 // writes them to a file or stdout instead.
 func newGraphTriplesCmd() *cobra.Command {
 	var scope scopeFlags
@@ -359,7 +359,7 @@ func newGraphDriftCmd() *cobra.Command {
 	var component string
 	cmd := &cobra.Command{
 		Use:   "drift",
-		Short: "Architectural drift: violations and stale intent (WL-SPEC-82 §2.5)",
+		Short: "Architectural drift: violations and stale intent (WL-REQ-1362)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newAPIClientWithConfig()
 			if err != nil {

@@ -176,8 +176,8 @@ func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (
 
 // DiscardDocRevision calls DELETE /api/v1/docs/{id}/revision, withdrawing the
 // open candidate without landing it and freeing the document's one candidate
-// slot. Either the document's owner or the revision's author may (WL-SPEC-77
-// §9); anyone else gets 403. The document itself is unchanged, and is what
+// slot. Either the document's owner or the revision's author may (WL-REQ-1661);
+// anyone else gets 403. The document itself is unchanged, and is what
 // the response carries.
 func (c *Client) DiscardDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodDelete, docPath(id, "/revision"), nil)
@@ -554,13 +554,13 @@ func docStaleSuffix(status string) string {
 func docStatusBanner(d model.Doc) string {
 	switch d.Status {
 	case "draft":
-		return "DRAFT — not accepted yet (WL-SPEC-77 §9)"
+		return "DRAFT — not accepted yet (WL-REQ-170)"
 	case "superseded":
-		return fmt.Sprintf("SUPERSEDED since %s — a newer version replaces this one (WL-SPEC-77 §9)", LocalTime(d.UpdatedAt))
+		return fmt.Sprintf("SUPERSEDED since %s — a newer version replaces this one (WL-REQ-170)", LocalTime(d.UpdatedAt))
 	case "stale":
-		return fmt.Sprintf("STALE since %s — re-planning owed (WL-SPEC-77 §9)", LocalTime(d.UpdatedAt))
+		return fmt.Sprintf("STALE since %s — re-planning owed (WL-REQ-170)", LocalTime(d.UpdatedAt))
 	case "withdrawn":
-		return fmt.Sprintf("WITHDRAWN since %s — closed without execution (WL-SPEC-77 §9)", LocalTime(d.UpdatedAt))
+		return fmt.Sprintf("WITHDRAWN since %s — closed without execution (WL-REQ-170)", LocalTime(d.UpdatedAt))
 	case "spent":
 		return fmt.Sprintf("SPENT since %s — every minted task has closed (12 S5)", LocalTime(d.UpdatedAt))
 	}
@@ -698,7 +698,7 @@ func DocNoteRender(w io.Writer, d model.Doc, n model.DocNote) {
 // docPatchedMarker is what a section amended in place since it was last
 // approved renders as (WL-REQ-170): one blockquoted line above the section's
 // notes, so the reader sees which paragraph has not passed the gate.
-const docPatchedMarker = "> **patched** — approved text, amended in place since (WL-SPEC-77 §9)."
+const docPatchedMarker = "> **patched** — approved text, amended in place since (WL-REQ-170)."
 
 // InlineDocNotes returns body with each note folded in under the section it is
 // anchored to, as a blockquoted one-liner (WL-REQ-171), and a patched marker

@@ -22,7 +22,7 @@ const maxOTLPBody = 4 << 20
 // ingestOTLPLogs handles POST /otlp/v1/logs: an OTLP/JSON
 // ExportLogsServiceRequest from a coding agent's log exporter (WL-REQ-1234).
 // Attributed records are stored as task activity, the raw body is queued for
-// the otel-gateway (§3), and the answer is an empty
+// the otel-gateway (WL-REQ-1236), and the answer is an empty
 // ExportLogsServiceResponse.
 //
 // The status codes are the exporter's retry contract: 400 on an undecodable
@@ -31,7 +31,7 @@ func (s *server) ingestOTLPLogs(w http.ResponseWriter, r *http.Request) {
 	sub := subjectFrom(r)
 	// Per-actor budget, checked before the body is read so a throttled
 	// request costs nothing but the lookup (WL-863). The gateway's own
-	// throttle (§3) protects the gateway, not this table.
+	// throttle protects the gateway, not this table.
 	if !s.otlpLimit.Allow(otlpLimitKey(sub)) {
 		s.otlpMetrics.Ingest("throttled")
 		w.Header().Set("Retry-After", "1")
@@ -152,7 +152,7 @@ const activityPageSize = 200
 // away — over task_activity instead of the event log.
 //
 // The data of a frame is the server-rendered row, so the page inserts markup
-// it never built (§4). SSE has no multi-line data field, so the markup is
+// it never built (WL-REQ-1732). SSE has no multi-line data field, so the markup is
 // split across data: lines and the browser rejoins them.
 //
 // permWebRead, like the page itself: a frame carries nothing a reader could

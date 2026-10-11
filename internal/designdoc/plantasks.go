@@ -20,7 +20,7 @@ type PlanTask struct {
 	Number    int
 	Title     string   // heading text after "Task N — "
 	Body      string   // the section's own content, yaml fence excluded
-	Kind      string   // required; one of the §4.1 mintable four
+	Kind      string   // required; one of the plan-mintable kinds (WL-REQ-173)
 	Priority  string   // default "medium"
 	Skills    []string // plugin:skill ids the executing agent loads
 	BlockedBy []int    // task numbers within this plan
@@ -76,7 +76,7 @@ func PlanTasks(d *Document) ([]PlanTask, error) {
 
 	if strings.TrimSpace(tasksSec.Body) != "" {
 		return nil, fmt.Errorf(
-			"\"## Tasks\": non-blank content before the first task heading (§4.1 allows only task subsections): %q",
+			"\"## Tasks\": non-blank content before the first task heading (WL-REQ-173 allows only task subsections): %q",
 			strings.TrimSpace(tasksSec.Body))
 	}
 	if len(tasksSec.Children) == 0 {
@@ -221,7 +221,7 @@ func splitPlanTaskFence(body string) (fenceContent, rest string, found bool) {
 }
 
 // checkPlanTaskNumbering enforces that N runs 1, 2, 3… in document order
-// without gaps (§4.1).
+// without gaps (WL-REQ-173).
 func checkPlanTaskNumbering(defs []PlanTask) error {
 	for i, def := range defs {
 		if def.Number != i+1 {
@@ -244,7 +244,7 @@ func checkPlanTaskTitles(defs []PlanTask) error {
 	for _, def := range defs {
 		if first, dup := seen[def.Title]; dup {
 			return fmt.Errorf(
-				"tasks %d and %d share the title %q: a title is a task declaration's identity across a re-accept (025 §9.2)",
+				"tasks %d and %d share the title %q: a title is a task declaration's identity across a re-accept (WL-REQ-173)",
 				first, def.Number, def.Title)
 		}
 		seen[def.Title] = def.Number

@@ -25,5 +25,5 @@ var payloadProperties = map[string][]string{
 }
 
 // KnownType reports whether typ is a generated domain-event type. Metrics
-// use it to bound the type label (§8: unknown counts as "other").
+// use it to bound the type label (unknown counts as "other").
 func KnownType(typ string) bool { _, ok := payloadProperties[typ]; return ok }

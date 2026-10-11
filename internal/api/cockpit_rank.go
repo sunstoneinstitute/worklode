@@ -28,8 +28,8 @@ import (
 
 // blockerRef is one direct blocker edge read off a ready-and-blocked task's
 // facts: either an open blocker task (from OpenBlockers) or an unfinished
-// blocking plan with no task yet minted to name (from BlockingPlans, WL-SPEC-77
-// §11.3). id namespaces plan blockers as "plan:<docID>" — a form no real task
+// blocking plan with no task yet minted to name (from BlockingPlans,
+// WL-REQ-175). id namespaces plan blockers as "plan:<docID>" — a form no real task
 // id takes — so the two kinds never collide as map keys.
 type blockerRef struct {
 	isPlan bool

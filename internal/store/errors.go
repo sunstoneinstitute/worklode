@@ -76,8 +76,8 @@ var (
 	// Only the insert direction of task_blobs_hash_fkey maps to this: the
 	// delete direction is a GC bug, and must stay a 500.
 	ErrUnknownBlob = errors.New("body references an unknown blob")
-	// ErrMissingApprovals means AcceptDoc's mechanical reviewer gate (WL-SPEC-77
-	// §9) is not satisfied: at least one reviewer in the document's stored
+	// ErrMissingApprovals means AcceptDoc's mechanical reviewer gate (WL-REQ-170)
+	// is not satisfied: at least one reviewer in the document's stored
 	// set has not approved its current version. It wraps ErrForbidden — the
 	// actor is not the one blocked, the document's review state is — so a
 	// caller mapping errors to HTTP status needs no new case for it.

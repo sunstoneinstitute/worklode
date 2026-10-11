@@ -15,7 +15,7 @@ const (
 // DenseRank and LexicalRank are the per-arm ranks that produced Score, 0
 // meaning the arm did not return this subject at all. They are part of the
 // response rather than an implementation detail: a fused score alone makes a
-// bad result disappointing, and the two ranks make it diagnosable (§9).
+// bad result disappointing, and the two ranks make it diagnosable (WL-REQ-261).
 type SearchHit struct {
 	Kind    string `json:"kind"` // doc | task | skill
 	DocID   int64  `json:"doc_id,omitempty"`
@@ -31,16 +31,16 @@ type SearchHit struct {
 	// subject actually contains.
 	Excerpt string `json:"excerpt"`
 	// Score is the fused reciprocal-rank sum, not a similarity. Comparing it
-	// to a similarity floor is a category error (§6.1).
+	// to a similarity floor is a category error (WL-REQ-259).
 	Score       float64 `json:"score"`
 	DenseRank   int     `json:"dense_rank"`
 	LexicalRank int     `json:"lexical_rank"`
 }
 
 // SearchResponse is one search result page (WL-REQ-261). Provider and Mode are
-// the response's own report of how it was answered: a degraded instance with
-// no embedding provider answers provider "none", mode "lexical" and returns
-// real results rather than an empty set (§11), and a caller can tell that
+// the response's own report of how it was answered: a degraded instance with no
+// embedding provider answers provider "none", mode "lexical" and returns real
+// results rather than an empty set (WL-REQ-1718), and a caller can tell that
 // apart from a well-configured instance without log-diving.
 type SearchResponse struct {
 	// Provider is "none" on an instance with no embedding provider

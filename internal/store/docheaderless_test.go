@@ -296,8 +296,8 @@ func TestLinkRefusesInverse(t *testing.T) {
 	for typ, declared := range map[string]string{"blocks": "blockedBy", "isRequiredBy": "requires"} {
 		err := linkDocEdge(t, s, plan.ID, model.DocEdgeInput{Type: typ, To: "a-plan"})
 		if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), declared) ||
-			!strings.Contains(err.Error(), "WL-SPEC-77 §8.1") {
-			t.Errorf("link %s = %v, want ErrInvalidInput naming %s and WL-SPEC-77 §8.1", typ, err, declared)
+			!strings.Contains(err.Error(), "WL-REQ-1288") {
+			t.Errorf("link %s = %v, want ErrInvalidInput naming %s and WL-REQ-1288", typ, err, declared)
 		}
 	}
 	for _, typ := range []string{"bogus", "implements"} {

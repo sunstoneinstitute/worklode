@@ -68,7 +68,7 @@ func LayoutTriples(ctx context.Context, root, host, owner, name string, m *manif
 // no dot-prefix rule catches — worklode's own lists `bin/`, `data/`, `wl`,
 // `*.db` — so a walk reports whatever happens to be lying around as unmatched
 // paths, and the document's content hash then depends on whether anyone ran a
-// build. That breaks WL-SPEC-82 §16.1's deriver contract ("Deterministic. Same
+// build. That breaks the deriver contract ("Deterministic. Same
 // inputs -> same triples") both ways: Run's hash short-circuit never fires, so
 // every run re-PUTs, and `lode graph gaps` reports `bin` to a user as a component
 // coverage gap. Untracked files are not part of the repo's layout; the tracked

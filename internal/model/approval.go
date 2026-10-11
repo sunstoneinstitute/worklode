@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// ApprovalEntityKinds are the entity_kind values an approvals row takes (029
-// §7.1). Declared here because three layers need the same list: the API
+// ApprovalEntityKinds are the entity_kind values an approvals row takes
+// (WL-REQ-124). Declared here because three layers need the same list: the API
 // validates an ad-hoc requirement against it, the CLI spells it in help and
 // completion, and the store reads it back. A document is 'doc' — the table's
 // own spelling, and what DocEntityID's ids agree with.

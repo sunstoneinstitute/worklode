@@ -3,7 +3,7 @@
 // Postgres) owns execution facts and — since WL-REQ-164 moved authoring there —
 // the design documents, and both are projected read-only into the graph.
 // Tasks render into the project's own named graph; each document's canonical
-// node renders into its per-document declared graph (WL-SPEC-82 §16.1's
+// node renders into its per-document declared graph (WL-REQ-1706's
 // declared/<doc-key>, iri.DeclaredGraph), whose writer is this projector now
 // that the backbone is the authoring surface (WL-289). graph-server
 // exposes no SPARQL Update, so there is no per-subject patch and no

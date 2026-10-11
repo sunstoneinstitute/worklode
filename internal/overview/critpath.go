@@ -19,11 +19,11 @@ type Analysis struct {
 	Critical map[string]bool
 	// Cycles lists strongly connected components with a cycle (size > 1, or
 	// a self-loop) — data errors excluded from the numbers above and
-	// surfaced as their own finding (WL-SPEC-82 §Cycle handling).
+	// surfaced as their own finding.
 	Cycles [][]string
 }
 
-// Analyze runs the longest-path pass of WL-SPEC-82 §Critical path v1 over edges
+// Analyze runs the critical path's longest-path pass over edges
 // (from must precede to) plus any isolated extra nodes (tasks with no edges
 // still appear with depth 0). Depth, Critical and Cycles cost one topological
 // pass; FanOut is left nil.
@@ -224,7 +224,7 @@ func cyclicSCCs(edges [][2]string) [][]string {
 }
 
 // OpenSubgraph filters a task DAG to the edges whose both ends are open:
-// WL-SPEC-82 §16.3's rule that criticality and fan-out are computed over
+// the rule that criticality and fan-out are computed over
 // remaining work. A closed task no longer blocks its dependents and has
 // nothing left to unblock, so edges touching one contribute history (depth,
 // which Analyze still computes over the full DAG) and never criticality.

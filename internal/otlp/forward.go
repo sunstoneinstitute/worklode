@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// queueSize and maxQueuedBytes bound the in-memory forward queue (WL-SPEC-80
-// §8.8): gateway latency never delays the agent's export, and a full queue
+// queueSize and maxQueuedBytes bound the in-memory forward queue (WL-REQ-1236):
+// gateway latency never delays the agent's export, and a full queue
 // drops rather than blocks. Both bounds matter — 256 batches of the 4 MiB
 // the ingest route accepts would be a gigabyte of retained payloads, so the
 // byte bound is what keeps the pod inside its memory limit.

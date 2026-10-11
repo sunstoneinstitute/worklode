@@ -1,6 +1,6 @@
 // Package iri is the single owner of the IRI grammar of WL-REQ-246:
 // namespaces, the instance grammar and named graphs. Callers never
-// concatenate IRIs themselves (§10.4). Constructors are pure concatenation:
+// concatenate IRIs themselves (WL-REQ-249). Constructors are pure concatenation:
 // no validation, no error return. Slashes inside a local id are permitted
 // (slash namespace, opaque path).
 package iri
@@ -148,7 +148,7 @@ func Commit(host, owner, repo, sha string) string {
 }
 
 // DeclaredGraph returns the named graph holding one design doc's declared
-// edges (WL-SPEC-82 §Representation: one graph per design doc, so acceptance
+// edges (WL-REQ-1706: one graph per design doc, so acceptance
 // gating and re-authoring replace exactly one graph).
 func DeclaredGraph(docKey string) string { return GraphNS + "declared/" + docKey }
 
@@ -162,13 +162,13 @@ func DeclaredVersionGraph(docKey string, version int) string {
 // ObservedGraph returns the org-global named graph of a backbone-derived
 // deriver source — computed server-side over all-repo state by a single
 // writer: pr-affects, deploy, repo-implements (WL-REQ-177). Repo-local sources
-// use RepoObservedGraph instead; WL-SPEC-82 §16.1 owns the split.
+// use RepoObservedGraph instead; WL-REQ-1706 owns the split.
 func ObservedGraph(source string) string { return GraphNS + "observed/" + source }
 
 // RepoObservedGraph returns the per-repo named graph of a repo-local deriver
 // source (go-imports, repo-layout). `lode graph derive` runs from each repo's
-// checkout, and the whole-graph-replace contract needs one graph per writer
-// (WL-SPEC-82 §16.1); the repo segment mirrors Repo's <host>/<owner>/<name>.
+// checkout, and the whole-graph-replace contract needs one graph per writer;
+// the repo segment mirrors Repo's <host>/<owner>/<name>.
 func RepoObservedGraph(source, host, owner, name string) string {
 	return GraphNS + "observed/" + source + "/" + host + "/" + owner + "/" + name
 }

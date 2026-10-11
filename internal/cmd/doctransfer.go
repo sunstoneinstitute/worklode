@@ -44,7 +44,7 @@ func newDocTransferCmd() *cobra.Command {
 		Use:               "transfer [ref...] --to <actor>",
 		ValidArgsFunction: docRefs,
 		Short:             "Transfer document ownership to another actor",
-		Long: "Transfer ownership of one or more documents (WL-SPEC-77 §9).\n\n" +
+		Long: "Transfer ownership of one or more documents (WL-REQ-1658).\n\n" +
 			"Name documents by ref:\n" +
 			"  lode doc transfer WL-SPEC-77 --to ada\n\n" +
 			"Or move everything one actor owns — the rescue for a departed owner:\n" +

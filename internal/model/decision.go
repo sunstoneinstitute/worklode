@@ -27,7 +27,7 @@ type DecisionOption struct {
 	Description string `json:"description,omitempty"`
 }
 
-// DecisionAnswer is §10.1's answer JSON; Value is the yes_no third field
+// DecisionAnswer is WL-REQ-1671's answer JSON; Value is the yes_no third field
 // ("yes" | "no" | "unsure").
 type DecisionAnswer struct {
 	Picked   []string `json:"picked,omitempty"`

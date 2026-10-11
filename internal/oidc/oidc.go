@@ -18,8 +18,8 @@ type Claims struct {
 	Name              string   `json:"name"`
 	Email             string   `json:"email"`
 	Groups            []string `json:"groups"`
-	// GitHubUsername is the realm's githubUsername user attribute (WL-SPEC-74
-	// §9.2): the GitHub login Keycloak asserts for this actor. Empty when the
+	// GitHubUsername is the realm's githubUsername user attribute (WL-SPEC-74):
+	// the GitHub login Keycloak asserts for this actor. Empty when the
 	// attribute is unset on the Keycloak account; never required to log in.
 	GitHubUsername string `json:"githubUsername"`
 }

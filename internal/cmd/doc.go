@@ -215,7 +215,7 @@ func newDocListCmd() *cobra.Command {
 				return err
 			}
 			if olderThanDays > 0 && !unresolved {
-				return errors.New("--older-than applies to --unresolved only (WL-SPEC-77 §9)")
+				return errors.New("--older-than applies to --unresolved only (WL-REQ-1663)")
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -265,13 +265,13 @@ func newDocListCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&bareSuperseded, "bare-superseded", false,
 		"withdrawn rules no rule supersedes")
 	cmd.Flags().BoolVar(&unresolved, "unresolved", false,
-		"accepted specs and plans nothing has executed (WL-SPEC-77 §9)")
+		"accepted specs and plans nothing has executed (WL-REQ-1663)")
 	cmd.Flags().StringVar(&olderThan, "older-than", "",
 		`with --unresolved, only those untouched for at least this long, in days ("30d")`)
 	cmd.Flags().BoolVar(&deleted, "deleted", false,
-		"list deleted documents instead of live ones (WL-SPEC-75 §12)")
+		"list deleted documents instead of live ones (WL-REQ-117)")
 	cmd.Flags().BoolVar(&hasNotes, "has-notes", false,
-		"only documents carrying an anchored note (WL-SPEC-77 §10)")
+		"only documents carrying an anchored note (WL-REQ-1667)")
 	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution", "bare-superseded", "unresolved")
 	return cmd
 }
@@ -503,8 +503,8 @@ type docLintFileReport struct {
 	Findings []string `json:"findings"`
 }
 
-// newDocShowCmd reads back one document: body, sections, and edges. WL-SPEC-81
-// §1 (L7) requires every entity to keep its own typed "show", superseding
+// newDocShowCmd reads back one document: body, sections, and edges. WL-REQ-305
+// (L7) requires every entity to keep its own typed "show", superseding
 // WL-REQ-192's rule that "show" stay exclusive to `lode show`.
 //
 // The split with `lode show` is settled (WL-129): both read the backbone,
@@ -563,8 +563,8 @@ func newDocShowCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&version, "version", 0, "get a specific past version instead of the current one (WL-SPEC-77 §5)")
-	cmd.Flags().BoolVar(&editable, "editable", false, "print only the body, each rule's heading naming it ({#sec-3 rule=WL-REQ-12}), to edit and feed back to doc edit or doc revise --file (WL-SPEC-77 §19.5)")
+	cmd.Flags().IntVar(&version, "version", 0, "get a specific past version instead of the current one (WL-REQ-166)")
+	cmd.Flags().BoolVar(&editable, "editable", false, "print only the body, each rule's heading naming it ({#sec-3 rule=WL-REQ-12}), to edit and feed back to doc edit or doc revise --file (WL-REQ-1680)")
 	cmd.MarkFlagsMutuallyExclusive("version", "editable")
 	return cmd
 }
@@ -725,7 +725,7 @@ func newDocEditCmd() *cobra.Command {
 					return err
 				}
 				if doc, err := designdoc.Parse([]byte(body)); err == nil && doc.Frontmatter != nil {
-					return errors.New("headers are accepted only by lode doc add and lode doc import (WL-SPEC-77 §7): " +
+					return errors.New("headers are accepted only by lode doc add and lode doc import (WL-REQ-168): " +
 						"set the title and issued date with --title and --issued, and edges with lode doc link")
 				}
 			}
@@ -753,7 +753,7 @@ func newDocEditCmd() *cobra.Command {
 			// reference. Insert with a letter suffix (WL-REQ-165) instead.
 			if updateAnchors {
 				if detail.Status == "accepted" || detail.Status == "superseded" {
-					return fmt.Errorf("--update-section-anchors: %s is %s, and WL-SPEC-77 §4 freezes a published anchor; insert a lettered section (2.1a) instead",
+					return fmt.Errorf("--update-section-anchors: %s is %s, and WL-RULE-201 freezes a published anchor; insert a lettered section (2.1a) instead",
 						args[0], detail.Status)
 				}
 				if body, err = renumberAnchors(body); err != nil {
@@ -806,7 +806,7 @@ func newDocEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&title, "title", "", "set the document's title")
 	cmd.Flags().StringVar(&issued, "issued", "", "set the document's issued date (YYYY-MM-DD)")
 	cmd.Flags().BoolVar(&substantive, "substantive", false,
-		"amending an accepted spec: the change is substantive, so its reviewers are asked again (WL-SPEC-77 §10)")
+		"amending an accepted spec: the change is substantive, so its reviewers are asked again (WL-REQ-171)")
 	cmd.Flags().StringVar(&note, "note", "",
 		"amending an accepted spec: what changed and why, required unless --substantive")
 	cmd.Flags().IntVar(&ifVersion, "if-version", 0,
@@ -941,7 +941,7 @@ func newDocNoteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref, anchor := designdoc.SplitFragment(args[0])
 			if anchor == "" {
-				return fmt.Errorf("a note needs the section it is about: pass %s#sec-N (WL-SPEC-77 §10)", args[0])
+				return fmt.Errorf("a note needs the section it is about: pass %s#sec-N (WL-REQ-1667)", args[0])
 			}
 			text, err := resolveBody(body, bodyFile, cmd.InOrStdin())
 			if err != nil {

@@ -211,8 +211,8 @@ func withinStore(path, store string) bool {
 
 // linkVersion points linkPath at versionDir (an absolute path), replacing
 // whatever publishEntry already determined is safe to remove: nothing, or a
-// symlink Worklode created itself. If symlinks are unavailable (WL-SPEC-80
-// §18 row 5), it falls back to copying versionDir's content in full so the
+// symlink Worklode created itself. If symlinks are unavailable (WL-REQ-280
+// row 5), it falls back to copying versionDir's content in full so the
 // harness still sees the skill, and reports "copied" so a stale copy is
 // diagnosable.
 func linkVersion(versionDir, linkPath string) (string, error) {

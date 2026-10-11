@@ -192,5 +192,5 @@ func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, erro
 // PendingMarker is the line a rendered spec shows under a rule whose newer
 // draft version it does not show yet (WL-REQ-1298).
 func PendingMarker(rule string, version int) string {
-	return fmt.Sprintf("> **pending** — draft version %d of %s awaits `lode rule accept %s` (WL-SPEC-77 §19.4).", version, rule, rule)
+	return fmt.Sprintf("> **pending** — draft version %d of %s awaits `lode rule accept %s` (WL-REQ-1298).", version, rule, rule)
 }

@@ -48,10 +48,10 @@ type CorpusDoc struct {
 	Sections        []SectionMeta   // empty for plans (WL-REQ-172)
 	Edges           []EdgeMeta
 	// Number is this document's own corpus number — the <n> a <KEY>-<TYPE>-<n>
-	// shorthand or a bare-number reference names it by (WL-SPEC-78 §2-4) — 0 when
+	// shorthand or a bare-number reference names it by (WL-REQ-193) — 0 when
 	// unknown. Loaded from a spec/ADR's filename (both loaders can read it: it
-	// leads the filename); a plan loaded from local files carries 0, since 029
-	// §4's plan sequence is a backbone fact no plan file records anywhere. A
+	// leads the filename); a plan loaded from local files carries 0, since
+	// its plan sequence is a backbone fact no plan file records anywhere. A
 	// plan loaded from the backbone carries its real one.
 	Number int
 }
@@ -292,7 +292,7 @@ func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
 	}
 	n, ok := leadingNumber(path.Base(base))
 	if !ok {
-		return 0, fmt.Errorf("%s: covers %q has no leading spec number to derive the plan id from (025 §16.3)", name, base)
+		return 0, fmt.Errorf("%s: covers %q has no leading spec number to derive the plan id from", name, base)
 	}
 	return n, nil
 }

@@ -74,7 +74,7 @@ type TodoOptions struct {
 // Todo walks specPath's current sections, the plans covering them, and those
 // plans' execution tasks, and returns one ordered work list (WL-REQ-186).
 //
-// specPath is any §4 path reference — bare filename, repo-relative with or
+// specPath is any path reference — bare filename, repo-relative with or
 // without a leading "/", or an absolute CorpusDoc.Path; a "#sec-N" fragment
 // is ignored, since the walk is always whole-document. NO-SPEC is an error
 // rather than an empty run: an empty list means the spec is finished, and
@@ -96,7 +96,7 @@ func Todo(docs []CorpusDoc, specPath string, opts TodoOptions) ([]TodoItem, Diag
 	if opts.Tasks == nil {
 		w.diag.Notes = append(w.diag.Notes,
 			"no task lookup: every plan's execution state reads as unknown, "+
-				"and no `blocked` item is emitted (026 §2.4)")
+				"and no `blocked` item is emitted (WL-REQ-191)")
 	}
 	w.walk(start)
 	return w.ordered(), w.diag, nil
@@ -299,7 +299,7 @@ func (w *todoWalk) emitDoc(docPath string) {
 		w.add(rankedItem{
 			item: TodoItem{
 				Type: TodoPlanDraft, Doc: docPath, Heading: d.Title,
-				Detail: "document is draft: acceptance is the first act (026 §2.4)",
+				Detail: "document is draft: acceptance is the first act (WL-REQ-191)",
 			},
 			docOrder: w.docOrder[docPath], position: posAcceptance,
 		})
@@ -355,8 +355,8 @@ func gapDetail(typ string, n int) string {
 // emitSection emits one section's plan-level items and reports whether the
 // section is unplanned, which emitDoc collapses into one item per document.
 func (w *todoWalk) emitSection(docPath string, sec SectionMeta) bool {
-	// The owner is §1.3's business, not §1.7's: no item type here names a
-	// deferred section, so a deferred section yields no item.
+	// No item type here names a deferred section, so a deferred section
+	// yields no item.
 	outcome, covering, _ := w.ix.Section(docPath, sec.Anchor)
 
 	// Every accepted covering plan is descended into, whatever the section's
@@ -374,7 +374,7 @@ func (w *todoWalk) emitSection(docPath string, sec SectionMeta) bool {
 		switch plan.Status {
 		case "draft":
 			w.emitPlan(docPath, sec, plan, TodoPlanDraft,
-				"plan is draft: accepting it is a human act (025 §7)")
+				"plan is draft: accepting it is a human act (WL-REQ-1659)")
 		case "accepted":
 			w.emitAcceptedPlan(docPath, sec, plan)
 		}

@@ -12,7 +12,7 @@
 // Two verbs are the exception to the RecordDocEvent shape above: submit and
 // accept emit WL-RULE-179's typed JSON-LD events (wl:DocumentSubmitted,
 // wl:DocumentAccepted) through eventbus.Emit, because those are the two the
-// doc-lifecycle subscriber consumes (§15.4). Every other verb still writes a
+// doc-lifecycle subscriber consumes (WL-REQ-109). Every other verb still writes a
 // dotted doc.* event; retyping the rest is a separate decision, not made here.
 package api
 
@@ -508,8 +508,8 @@ type docDerivedSelector struct {
 // The four plain filters take any value — an unknown one filters to nothing,
 // the same way the task list treats a state nobody uses. The three derived
 // selectors do not: each implies a status, and needs_planning/needs_execution
-// each imply a single kind while bare_superseded implies one of two (WL-SPEC-78
-// §1.3, §1.6; WL-REQ-167 rule 2) — so a contradicting kind or status is an error
+// each imply a single kind while bare_superseded implies one of two (WL-REQ-187,
+// WL-REQ-190; WL-REQ-167 rule 2) — so a contradicting kind or status is an error
 // rather than an empty result, which would read as "nothing to plan".
 // Requesting more than one derived selector at once is an error for the same
 // reason: needs_planning and needs_execution select disjoint kinds, and
@@ -553,18 +553,18 @@ func docSelectorFrom(p model.DocListParams) (docListSelector, error) {
 			return docListSelector{}, fmt.Errorf("older_than_days must be a non-negative integer, got %d", p.OlderThanDays)
 		}
 		if !sel.unresolved {
-			return docListSelector{}, errors.New("older_than_days applies to unresolved=true only (WL-SPEC-77 §9)")
+			return docListSelector{}, errors.New("older_than_days applies to unresolved=true only (WL-REQ-170)")
 		}
 	}
 
 	derived := []docDerivedSelector{
-		{sel.needsPlanning, "needs_planning", "accepted", "WL-SPEC-77 §13",
+		{sel.needsPlanning, "needs_planning", "accepted", "WL-REQ-187",
 			func(k string) bool { return k == "spec" }, "spec"},
-		{sel.needsExecution, "needs_execution", "accepted", "WL-SPEC-77 §13",
+		{sel.needsExecution, "needs_execution", "accepted", "WL-REQ-188",
 			func(k string) bool { return k == "plan" }, "plan"},
-		{sel.bareSuperseded, "bare_superseded", "superseded", "WL-SPEC-77 §4",
+		{sel.bareSuperseded, "bare_superseded", "superseded", "WL-REQ-190",
 			func(k string) bool { return k == "spec" }, "spec"},
-		{sel.unresolved, "unresolved", "accepted", "WL-SPEC-77 §9",
+		{sel.unresolved, "unresolved", "accepted", "WL-REQ-170",
 			func(k string) bool { return k == "spec" || k == "plan" }, "spec or plan"},
 	}
 	var on []string
@@ -576,10 +576,10 @@ func docSelectorFrom(p model.DocListParams) (docListSelector, error) {
 	if len(on) > 1 {
 		if len(on) == 2 && on[0] == "needs_planning" && on[1] == "needs_execution" {
 			return docListSelector{}, errors.New(
-				"needs_planning and needs_execution select disjoint kinds; pass one (WL-SPEC-77 §13)")
+				"needs_planning and needs_execution select disjoint kinds; pass one (WL-REQ-187, WL-REQ-188)")
 		}
 		return docListSelector{}, fmt.Errorf(
-			"%s are mutually exclusive selectors; pass one (WL-SPEC-77 §13)", strings.Join(on, " and "))
+			"%s are mutually exclusive selectors; pass one", strings.Join(on, " and "))
 	}
 	for _, c := range derived {
 		if !c.on {
@@ -709,7 +709,7 @@ func (s *server) listDocReferrers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p.Anchor == "" {
-		writeErr(w, http.StatusBadRequest, "anchor is required: a referrer names one section (WL-SPEC-77 §4)")
+		writeErr(w, http.StatusBadRequest, "anchor is required: a referrer names one section (WL-REQ-165)")
 		return
 	}
 	refs, err := s.st.DocSectionReferrers(r.Context(), id, p.Anchor)
@@ -765,7 +765,7 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 
 // patchDoc handles POST /api/v1/docs/{id}/patch: WL-REQ-171's in-place
 // amendment of an accepted spec or ADR, the one write that changes accepted
-// text without a revision cycle. The §8.3 gates are the store's — the CLI
+// text without a revision cycle. Its gates are the store's — the CLI
 // re-checks none of them, so the rule that refuses an edit is stated in one
 // place — and a refusal is a 422 carrying the rule's own message.
 //

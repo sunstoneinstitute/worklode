@@ -1,7 +1,7 @@
 // inbox.go assembles the cross-project inbox page (WL-REQ-347): what is
-// waiting on the signed-in actor, in the six buckets §3.2 fixes the order of.
+// waiting on the signed-in actor, in the six buckets WL-REQ-1769 fixes the order of.
 // The derivation is pure — everything it reads is fetched by the caller and
-// handed in — so the bucket rules and the §3.3 ordering are testable without
+// handed in — so the bucket rules and the WL-REQ-1769 ordering are testable without
 // a database.
 //
 // Unrelated to inbox_mirror.go, which is WL-SPEC-80's GitHub issue and
@@ -79,8 +79,8 @@ func (s *server) inboxPage(w http.ResponseWriter, r *http.Request) {
 // inboxInputs is everything the inbox derivation reads, already fetched.
 // Reviews are every open pr-kind approval org-wide with its project, PR
 // title/URL, and author login; Facts are the all-projects work facts — fed
-// whole so det-v1 resolves blocked-by chains across project boundaries (WL-SPEC-82
-// §12) — and Membership/Led come from ProjectsForActor.
+// whole so det-v1 resolves blocked-by chains across project boundaries
+// (WL-REQ-1769) — and Membership/Led come from ProjectsForActor.
 type inboxInputs struct {
 	ActorID    string
 	ActorLogin string // the actor's GitHub login, "" when none stored
@@ -91,14 +91,14 @@ type inboxInputs struct {
 	Now        time.Time
 }
 
-// activeTaskStates are the states §3.1 calls in-progress work. It matches
-// store.HasInboxItems' state filter, which answers §4's indicator over the
+// activeTaskStates are the states WL-REQ-347 calls in-progress work. It matches
+// store.HasInboxItems' state filter, which answers WL-REQ-333's indicator over the
 // same six buckets.
 var activeTaskStates = map[string]bool{"ready": true, "in_progress": true, "in_review": true}
 
 // assembleInbox derives WL-REQ-347's six buckets in order. Work buckets rank by
 // rankConcernRoots over the full facts slice, filtered to membership
-// afterwards — never before (§3.3). nil when every bucket is empty. Each item
+// afterwards — never before (WL-REQ-1769). nil when every bucket is empty. Each item
 // carries the text and href the page renders.
 func assembleInbox(in inboxInputs) *ui.InboxView {
 	reviews := slices.Clone(in.Reviews)
@@ -118,7 +118,7 @@ func assembleInbox(in inboxInputs) *ui.InboxView {
 		case r.RequiredActor == nil && in.Led[r.Project]:
 			unassignedLed = append(unassignedLed, item)
 		case authored(r.AuthorLogin, in.ActorLogin) && r.RequiredActor != nil:
-			// §3.1: owned means the actor's own pull request with somebody
+			// WL-REQ-347: owned means the actor's own pull request with somebody
 			// else deciding. The first case already took a review required
 			// of the actor themselves.
 			ownedReviews = append(ownedReviews, item)
@@ -161,13 +161,13 @@ func assembleInbox(in inboxInputs) *ui.InboxView {
 
 // authored reports whether a pull request's GitHub login is the actor's.
 // Empty never matches empty: an actor with no stored login owns nothing, and
-// a pull request with no recorded author is owned by nobody (§3.1).
+// a pull request with no recorded author is owned by nobody (WL-REQ-347).
 func authored(prAuthor, actorLogin string) bool {
 	return prAuthor != "" && actorLogin != "" && strings.EqualFold(prAuthor, actorLogin)
 }
 
 // concernPositions maps each ready-and-blocked task to the position of the
-// root-cause concern holding it, per §3.3: det-v1 scores the whole
+// root-cause concern holding it, per WL-REQ-1769: det-v1 scores the whole
 // all-projects fact set, and only then are concerns dropped when nothing they
 // hold sits in a project the actor belongs to. A task held by two roots takes
 // the better position. Tasks no concern holds are absent.
@@ -196,7 +196,7 @@ func concernPositions(facts []store.ProjectWorkFact, membership map[string]bool,
 	return out
 }
 
-// workItems renders a work bucket in §3.3's order: by the position of the
+// workItems renders a work bucket in WL-REQ-1769's order: by the position of the
 // root-cause concern holding the task, then the tasks no concern holds — a
 // deterministic tail by priority rank then id, since det-v1 only ranks
 // blocked roots.

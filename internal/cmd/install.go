@@ -220,8 +220,8 @@ type installResult struct {
 	// Instructions is the shared block and root read pointers, not a
 	// per-harness integration: nil when there was no repo root to write to.
 	Instructions *instructionsResult `json:"instructions,omitempty"`
-	// Skills is one entry per --skills publish target (WL-SPEC-80
-	// §5.2), empty/omitted when --skills was not given.
+	// Skills is one entry per --skills publish target (WL-REQ-276),
+	// empty/omitted when --skills was not given.
 	Skills []skillstore.PublishResult `json:"skills,omitempty"`
 }
 

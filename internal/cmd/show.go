@@ -14,8 +14,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// typedID matches WL-REQ-168's <KEY>-<TYPE>-<n> grammar (generalized by WL-SPEC-75
-// §13.4 to plans, milestones and deliverables), with an optional #sec- fragment
+// typedID matches WL-REQ-168's <KEY>-<TYPE>-<n> grammar (generalized by WL-REQ-122
+// to plans, milestones and deliverables), with an optional #sec- fragment
 // for the SPEC case. It is checked before taskID: a document reference
 // must never parse as a task id (WL-REQ-168).
 var typedID = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-([A-Z][A-Z0-9]*)-(\d+(?:-\d+)?)(#sec-[\w.\-]+)?$`)

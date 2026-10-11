@@ -90,12 +90,12 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 		return nil, nil, err
 	}
 	if d.kind == "plan" {
-		return nil, nil, fmt.Errorf("doc %d is a plan: plans are edited in place (WL-SPEC-77 §11): %w",
+		return nil, nil, fmt.Errorf("doc %d is a plan: plans are edited in place (WL-REQ-172): %w",
 			in.ID, ErrInvalidInput)
 	}
 	if d.status != "accepted" {
 		return nil, nil, fmt.Errorf(
-			"doc %d is %s: only an accepted document is amended in place (WL-SPEC-77 §10): %w",
+			"doc %d is %s: only an accepted document is amended in place (WL-REQ-171): %w",
 			in.ID, d.status, ErrInvalidInput)
 	}
 	if storedBody(d.kind, in.Body) == storedBody(d.kind, d.body) {
@@ -133,7 +133,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 
 	if !in.Substantive && strings.TrimSpace(in.Note) == "" {
 		return nil, nil, fmt.Errorf(
-			"doc %d: a non-substantive patch needs a note saying what changed and why (WL-SPEC-77 §10): %w",
+			"doc %d: a non-substantive patch needs a note saying what changed and why (WL-REQ-171): %w",
 			in.ID, ErrInvalidInput)
 	}
 
@@ -358,7 +358,7 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 			return 0, fmt.Errorf("stamp last_revised_in on doc %d: %w", in.ID, err)
 		}
 	}
-	// A patch's own §10 gate covers its rule versions; they are not gated again.
+	// A patch's own WL-REQ-171 gate covers its rule versions; they are not gated again.
 	if _, _, err := publishDocSections(tx, in.ID); err != nil {
 		return 0, err
 	}

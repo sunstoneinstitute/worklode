@@ -80,7 +80,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if reservedProjectKeys[req.Key] {
 		writeErr(w, http.StatusUnprocessableEntity,
-			"key SPEC and ADR are reserved by the document shorthand (WL-SPEC-77 §7)")
+			"key SPEC and ADR are reserved by the document shorthand (WL-REQ-77)")
 		return
 	}
 	horizon := req.Horizon
@@ -362,7 +362,7 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	s.observeRepoMapping("add", "ok")
 	// A newly mapped repo's branch rules are unknown until something reads
-	// them; §6.3 wants that at mapping time, not a day later.
+	// them; WL-REQ-1340 wants that at mapping time, not a day later.
 	s.kickBranchRules()
 	doneState := store.DefaultDoneState
 	var warnings []string

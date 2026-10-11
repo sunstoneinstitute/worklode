@@ -176,8 +176,8 @@ templ menuIcon() {
 // destinations in the exact order
 // WL-REQ-331 requires (Ideas,
 // Intake, Projects, Work, Knowledge), marking the one matching active as both
-// aria-current="page" and .active. §1 amends WL-REQ-331: Home, Reviews and
-// Deliveries left the list, keeping their routes and pages. Page renders this
+// aria-current="page" and .active. Home, Reviews and Deliveries left
+// WL-REQ-331's list, keeping their routes and pages. Page renders this
 // inside the top bar, so global navigation is reachable everywhere from one
 // row. Project-scoped pages, and the pages that are no longer destinations,
 // pass "" — matching none of these; a project page's local nav carries the
@@ -293,8 +293,8 @@ templ modePillIcon() {
 // Documents, Activity), marking the item matching active as
 // aria-current="page".
 //
-// Progress sits after Work and only when the project has a spec — WL-SPEC-85
-// §8 adds it to WL-REQ-332's list, and a project with no spec has no Progress page
+// Progress sits after Work and only when the project has a spec, as
+// WL-REQ-332 lists it, and a project with no spec has no Progress page
 // (its route 404s), so linking to it would be a dead entry.
 //
 // Milestones sits between Crew and Work, ahead of that list: a milestone

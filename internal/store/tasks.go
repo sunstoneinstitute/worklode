@@ -714,8 +714,8 @@ func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error 
 		fmt.Errorf("task %s: %w", id, ErrNotFound))
 }
 
-// SetTaskPlan links task id to the plan document it executed (WL-SPEC-85
-// §6.2): `lode task edit --plan` retrofitting a plan onto a task that was not
+// SetTaskPlan links task id to the plan document it executed:
+// `lode task edit --plan` retrofitting a plan onto a task that was not
 // minted from it. plan_task_key is set to the task's current title, the same
 // value AcceptDoc's mint records for a task minted straight from a plan's
 // `## Tasks` declaration (migration 0043) — there is no declaration behind

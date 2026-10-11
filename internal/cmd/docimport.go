@@ -111,7 +111,7 @@ re-baselines at import.
 Re-running is safe. A slug already present with an identical body is left
 alone, and its edges are re-wired from its header, so an interrupted import is
 finished by running it again. Bodies are compared and stored without their
-header (WL-SPEC-77 §7). A body that drifted from the backbone is updated in place
+header (WL-REQ-168). A body that drifted from the backbone is updated in place
 where an in-place edit is legal (a plan at any status, a draft spec);
 a drifted accepted spec is reported on stderr instead — revise it with
 lode doc revise. A dry run is entirely local and cannot see drift.
@@ -295,19 +295,19 @@ func readImportDoc(file, defaultKind string) (importDoc, error) {
 		for _, c := range d.fm.CoverageEntries() {
 			if !c.Plain() {
 				return importDoc{}, fmt.Errorf(
-					"%s covers %q with a coverage level: levels are retired, write a plain reference (WL-SPEC-78 §4.1)", file, c.Spec)
+					"%s covers %q with a coverage level: levels are retired, write a plain reference (WL-REQ-203)", file, c.Spec)
 			}
 		}
 	}
 	if d.fm != nil && d.fm.Kind == "adr" {
 		return importDoc{}, fmt.Errorf(
-			"%s declares kind: adr, which is retired: drop the key to import it as a spec (WL-SPEC-77 §2)", file)
+			"%s declares kind: adr, which is retired: drop the key to import it as a spec (WL-REQ-163)", file)
 	}
 	if d.kind != "plan" {
 		m := importLeadingNumber.FindStringSubmatch(name)
 		if m == nil {
 			return importDoc{}, fmt.Errorf(
-				"%s has no leading corpus number: a %s is identified by its number (WL-SPEC-77 §7)", file, d.kind)
+				"%s has no leading corpus number: a %s is identified by its number (WL-REQ-168)", file, d.kind)
 		}
 		// The regexp matched digits, so the conversion cannot fail.
 		d.number, _ = strconv.Atoi(m[1])
