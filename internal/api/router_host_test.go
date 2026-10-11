@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,16 +11,29 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
+// twoHostOption configures newTwoHostServer's Config before NewServer runs.
+type twoHostOption func(*Config)
+
+// withWebApp injects fsys as the SPA's build output (Config.WebAppForTest),
+// so SPA tests don't depend on a real pnpm build.
+func withWebApp(fsys fs.FS) twoHostOption {
+	return func(cfg *Config) { cfg.WebAppForTest = fsys }
+}
+
 // newTwoHostServer boots a server with LODE_LEGACY_URL set, so the route
 // table splits across the public and legacy hosts (WL-REQ-1303).
-func newTwoHostServer(t *testing.T) http.Handler {
+func newTwoHostServer(t *testing.T, opts ...twoHostOption) http.Handler {
 	t.Helper()
 	st := store.OpenTestStore(t)
-	h, _, err := NewServer(st, Config{
+	cfg := Config{
 		PublicURL: "https://worklode.test",
 		LegacyURL: "https://worklold.test",
 		WebOpen:   true,
-	})
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	h, _, err := NewServer(st, cfg)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -97,6 +111,7 @@ func TestHostRoutingNoUnusedGuards(t *testing.T) {
 	s.registerCockpit(legacy)
 	s.registerAPI(pub, prometheus.NewRegistry())
 	s.registerShared(pub, legacy)
+	s.registerSPA(pub)
 
 	if unused := r.unusedGuards(); len(unused) != 0 {
 		t.Errorf("unusedGuards = %v, want none", unused)
