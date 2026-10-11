@@ -946,8 +946,9 @@ func (s *server) observeRunBoardRender(outcome string) {
 }
 
 // The SPA handler's outcomes (spa.go): "page" for the shell, "asset"/
-// "asset_not_found" for /assets/, "redirect"/"not_found" reserved for the
-// task that adds the SPA-miss redirect.
+// "asset_not_found" for /assets/, "redirect" for a path spaHandles misses
+// (sent to LODE_LEGACY_URL), "not_found" for the same miss with no legacy
+// host configured.
 const (
 	spaPage          = "page"
 	spaAsset         = "asset"

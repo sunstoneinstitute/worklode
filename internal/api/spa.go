@@ -1,12 +1,10 @@
-// spa.go serves the embedded SPA on the public host (WL-REQ-1304), once
-// LODE_LEGACY_URL splits it from the templ cockpit kept on the legacy host
-// (see registerCockpit, router.go's "GET /" comment). Only registerRoutes
-// calls registerSPA, and only in the two-host case.
+// spa.go serves the embedded SPA on the public host (WL-REQ-1304).
 package api
 
 import (
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/webapp"
 )
@@ -26,17 +24,12 @@ func (s *server) registerSPA(r *router) {
 	r.web("GET /", s.spaShell)
 }
 
-// spaAssetHandler serves the SPA's content-hashed build output under
-// /assets/ (WL-REQ-1304): immutable caching, since the filename changes
-// whenever the content does, and a missing file is a plain 404 — never
-// index.html, unlike the shell's catch-all below.
+// spaAssetHandler serves the content-hashed build output, immutable. A
+// missing file is a 404, never index.html.
 func (s *server) spaAssetHandler() http.Handler {
 	assets, err := fs.Sub(s.spaFS(), "assets")
 	if err != nil {
-		// Unreachable in practice: "assets" is a valid fs.ValidPath name, so
-		// Sub only fails on a malformed root, and webapp.FS() already panics
-		// on that at embed time.
-		panic(err)
+		panic(err) // "assets" is a valid path; Sub cannot fail
 	}
 	fileServer := http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,15 +44,31 @@ func (s *server) spaAssetHandler() http.Handler {
 	})
 }
 
-// spaShell handles GET / on the public host: the SPA's single entry point.
-// Every path answers index.html in this task; a later task adds the
-// redirect for paths the SPA does not own (recording spaRedirect /
-// spaNotFound then).
+// spaShell answers a path spaHandles with index.html. A path it does not
+// handle redirects to LODE_LEGACY_URL (WL-REQ-1305), kept as its own host so
+// the public host never serves the legacy one's content. Without a legacy
+// host it falls back to index.html, which the SPA renders as its own
+// not-found page; unreachable today, since registerSPA only registers while
+// a legacy host splits the two.
 func (s *server) spaShell(w http.ResponseWriter, r *http.Request) {
+	if spaHandles(r.URL.Path) {
+		s.serveSPAShell(w, spaPage)
+		return
+	}
+	if s.cfg.LegacyURL == "" {
+		s.serveSPAShell(w, spaNotFound)
+		return
+	}
+	target := strings.TrimRight(s.cfg.LegacyURL, "/") + r.URL.RequestURI()
+	http.Redirect(w, r, target, http.StatusFound)
+	s.observeSPA(spaRedirect)
+}
+
+// serveSPAShell writes index.html and records outcome.
+func (s *server) serveSPAShell(w http.ResponseWriter, outcome string) {
 	b, err := fs.ReadFile(s.spaFS(), "index.html")
 	if err != nil {
-		// dist/index.html is committed (the placeholder, or a real build);
-		// an unreadable embed is a broken deploy, not a modeled SPA outcome.
+		// dist/index.html is committed, so this is a broken build.
 		s.log.Error("spa shell: index.html unreadable", "err", err)
 		webErr(w, http.StatusInternalServerError, "internal error")
 		return
@@ -68,5 +77,5 @@ func (s *server) spaShell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	w.Write(b)
-	s.observeSPA(spaPage)
+	s.observeSPA(outcome)
 }
