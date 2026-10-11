@@ -45,9 +45,32 @@ func safeNext(next string) string {
 	return next
 }
 
-// callbackURL is the web redirect URI, derived from the configured public URL.
-func (s *server) callbackURL() string {
-	return strings.TrimRight(s.cfg.PublicURL, "/") + "/auth/callback"
+// servedBase returns the configured base URL (scheme and host) the request
+// arrived on: PublicURL or LegacyURL. "" when neither matches, which
+// authLogin and authCallback answer with 404: a login must start and finish
+// on a host this server was told it serves.
+//
+// Single-host servers (LegacyURL unset) return PublicURL unconditionally,
+// without comparing hosts — today's behaviour exactly, and necessary because
+// r.Host in that mode can be an httptest address or a bare IP behind an
+// ingress that never equals hostOf(PublicURL) literally.
+func (s *server) servedBase(r *http.Request) string {
+	if s.cfg.LegacyURL == "" {
+		return strings.TrimRight(s.cfg.PublicURL, "/")
+	}
+	host := strings.ToLower(stripPort(r.Host))
+	for _, base := range []string{s.cfg.PublicURL, s.cfg.LegacyURL} {
+		if hostOf(base) == host {
+			return strings.TrimRight(base, "/")
+		}
+	}
+	return ""
+}
+
+// callbackURL is the web redirect URI for the host the request arrived on
+// (WL-REQ-1308): never a raw Host header, only a configured base.
+func (s *server) callbackURL(r *http.Request) string {
+	return s.servedBase(r) + "/auth/callback"
 }
 
 // loginTarget returns where webGuard sends unauthenticated users. Keycloak is
@@ -60,6 +83,10 @@ func (s *server) loginTarget(next string) string {
 // authLogin handles GET /auth/login: begin the auth-code + PKCE flow.
 func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 	if s.oidc == nil {
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	if s.servedBase(r) == "" {
 		webErr(w, http.StatusNotFound, "not found")
 		return
 	}
@@ -78,13 +105,17 @@ func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 		signOAuthState(s.cfg.SessionSecret, oauthState{State: state, Verifier: verifier, Next: next, Exp: now.Add(oauthStateMaxAge).Unix()}),
 		oauthStateMaxAge)
 
-	cfg := s.oidc.OAuth2Config(s.callbackURL(), oidcScopes)
+	cfg := s.oidc.OAuth2Config(s.callbackURL(r), oidcScopes)
 	http.Redirect(w, r, cfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier)), http.StatusFound)
 }
 
 // authCallback handles GET /auth/callback: finish the flow and set the session.
 func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 	if s.oidc == nil {
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	if s.servedBase(r) == "" {
 		webErr(w, http.StatusNotFound, "not found")
 		return
 	}
@@ -109,7 +140,7 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg := s.oidc.OAuth2Config(s.callbackURL(), oidcScopes)
+	cfg := s.oidc.OAuth2Config(s.callbackURL(r), oidcScopes)
 	tok, err := cfg.Exchange(r.Context(), code, oauth2.VerifierOption(st.Verifier))
 	if err != nil {
 		s.log.Error("oidc code exchange", "err", err)

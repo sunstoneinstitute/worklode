@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"net/url"
@@ -701,6 +702,15 @@ func hostOf(rawURL string) string {
 	return strings.ToLower(u.Hostname())
 }
 
+// stripPort returns host without a trailing ":port", so it can be compared
+// against hostOf's bare hostnames.
+func stripPort(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return host
+}
+
 func validateLegacyURL(cfg Config) error {
 	if cfg.LegacyURL == "" {
 		return nil
@@ -1159,8 +1169,8 @@ func (s *server) registerShared(rs ...*router) {
 		// and an agent fetches it with a bearer token, so it takes either — see
 		// eitherGuard in authz.go and r.asset in router.go.
 		r.asset("GET /blob/{hash}", s.serveBlob)
-		r.publicFunc("GET /auth/login", s.authLogin)
-		r.publicFunc("GET /auth/callback", s.authCallback)
+		r.publicFunc("GET /auth/login", s.navWrap("auth", s.authLogin))
+		r.publicFunc("GET /auth/callback", s.navWrap("auth", s.authCallback))
 	}
 }
 
