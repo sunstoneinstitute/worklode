@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -33,7 +34,9 @@ func TestWhoami(t *testing.T) {
 
 func TestWhoamiRequiresAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: WL-1115 gives a non-bearer /api/v1 request the open
+	// subject on a WebOpen instance, which this test must not get.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	if rec := doReq(t, h, http.MethodGet, "/api/v1/whoami", "", nil); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no token: %d; want 401", rec.Code)
 	}

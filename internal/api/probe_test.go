@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -203,7 +204,8 @@ func TestArtifactReportUnroutedAddress(t *testing.T) {
 // guarded, not public.
 func TestArtifactReportsRequireAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 
 	rr := doReq(t, h, "POST", "/api/v1/artifact-reports", "", artifactReportBody("https://data.example/cow.zip"))
 	if rr.Code != http.StatusUnauthorized {

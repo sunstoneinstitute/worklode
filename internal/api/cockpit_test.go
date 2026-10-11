@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -174,7 +175,8 @@ func TestProjectCockpitPinnedByUnresolvedName(t *testing.T) {
 // route (404) or an anonymous read.
 func TestProjectCockpitRequiresAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	rr := doReq(t, h, "GET", "/api/v1/projects/proj/cockpit", "", nil)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rr.Code)

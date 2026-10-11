@@ -381,17 +381,22 @@ func TestListDeletedRejectsNonBoolean(t *testing.T) {
 // All four routes are behind the bearer-token guard. The router's own boot
 // check already refuses a route the table does not name; this is the other
 // half — that the table entry is actually enforced on the wire.
+//
+// A closed instance, built directly rather than through newDeleteFixture: the
+// guard denies before any handler runs, so no real task or document is
+// needed, and WL-1115 gives a non-bearer /api/v1 request the open subject on
+// a WebOpen instance — not what "unauthenticated" means here.
 func TestDeleteRoutesRequireAuth(t *testing.T) {
 	t.Parallel()
-	f := newDeleteFixture(t, api.InstanceDev)
+	_, h, _ := newTestServerWithConfig(t, api.Config{InstanceEnv: api.InstanceDev})
 
 	for _, tc := range []struct{ method, path string }{
-		{"DELETE", f.taskPath("")},
-		{"POST", f.taskPath("/undelete")},
-		{"DELETE", f.docPath("")},
-		{"POST", f.docPath("/undelete")},
+		{"DELETE", "/api/v1/tasks/WL-1"},
+		{"POST", "/api/v1/tasks/WL-1/undelete"},
+		{"DELETE", "/api/v1/docs/1"},
+		{"POST", "/api/v1/docs/1/undelete"},
 	} {
-		rr := doReq(t, f.h, tc.method, tc.path, "", nil)
+		rr := doReq(t, h, tc.method, tc.path, "", nil)
 		if rr.Code != http.StatusUnauthorized {
 			t.Fatalf("%s %s unauthenticated = %d, want 401", tc.method, tc.path, rr.Code)
 		}

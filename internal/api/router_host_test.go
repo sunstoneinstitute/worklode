@@ -44,19 +44,19 @@ func newTwoHostServer(t *testing.T, opts ...twoHostOption) http.Handler {
 // the legacy host, the JSON API only on the public host, and a route
 // registered on both (login) answers on either.
 //
-// /api/v1/whoami on the public host returns 401, not 200: an unauthenticated
-// /api/v1 request being handed the open subject is WL-1115's change (a
-// session cookie accepted on /api/v1), not this task's.
+// /api/v1/whoami on the public host returns 200: with no bearer token on a
+// WebOpen instance with no OIDC, /api/v1 gets the open subject, same as the
+// web UI (WL-1115).
 func TestHostRouting(t *testing.T) {
 	h := newTwoHostServer(t)
 	for _, tc := range []struct {
 		host, path string
 		want       int
 	}{
-		{"worklold.test", "/projects", http.StatusOK},                // templ page on the legacy host
-		{"worklode.test", "/api/v1/whoami", http.StatusUnauthorized}, // API on the public host; no bearer token
-		{"worklold.test", "/api/v1/whoami", http.StatusNotFound},     // the API route does not exist on the legacy host
-		{"worklode.test", "/auth/login", http.StatusNotFound},        // no OIDC configured: handler 404s, but the route exists on both
+		{"worklold.test", "/projects", http.StatusOK},            // templ page on the legacy host
+		{"worklode.test", "/api/v1/whoami", http.StatusOK},       // API on the public host; no bearer token, open subject
+		{"worklold.test", "/api/v1/whoami", http.StatusNotFound}, // the API route does not exist on the legacy host
+		{"worklode.test", "/auth/login", http.StatusNotFound},    // no OIDC configured: handler 404s, but the route exists on both
 		{"worklold.test", "/auth/login", http.StatusNotFound},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
@@ -83,7 +83,7 @@ func TestHostRoutingSingleHost(t *testing.T) {
 			want int
 		}{
 			{"/projects", http.StatusOK},
-			{"/api/v1/whoami", http.StatusUnauthorized},
+			{"/api/v1/whoami", http.StatusOK}, // no bearer token on WebOpen without OIDC: the open subject
 		} {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			req.Host = host

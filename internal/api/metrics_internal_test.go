@@ -472,6 +472,61 @@ func TestObserveRunBoardRenderNilSafe(t *testing.T) {
 	s.observeRunBoardRender(runBoardRenderEmpty)
 }
 
+func TestObserveAPISessionRequest(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	// Pre-initialised: every outcome is gatherable as a flat zero before any
+	// request, rather than as no-data.
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var outcomes []string
+	for _, mf := range mfs {
+		if mf.GetName() != "worklode_api_session_requests_total" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			if v := m.GetCounter().GetValue(); v != 0 {
+				t.Fatalf("pre-initialised series %v = %v, want 0", m.GetLabel(), v)
+			}
+			for _, l := range m.GetLabel() {
+				outcomes = append(outcomes, l.GetName()+"="+l.GetValue())
+			}
+		}
+	}
+	// The label is bounded to exactly the four outcomes: never an actor,
+	// route or token.
+	want := []string{"outcome=allowed", "outcome=forbidden", "outcome=session_required", "outcome=unauthenticated"}
+	slices.Sort(outcomes)
+	if !slices.Equal(outcomes, want) {
+		t.Fatalf("worklode_api_session_requests_total series = %v, want %v", outcomes, want)
+	}
+
+	counts := map[string]int{"allowed": 3, "unauthenticated": 2, "forbidden": 1, "session_required": 4}
+	for outcome, n := range counts {
+		for range n {
+			s.observeAPISessionRequest(outcome)
+		}
+	}
+	for outcome, n := range counts {
+		if got := testutil.ToFloat64(s.apiSessionRequests.WithLabelValues(outcome)); got != float64(n) {
+			t.Fatalf("apiSessionRequests{outcome=%s} = %v, want %v", outcome, got, n)
+		}
+	}
+}
+
+// TestObserveAPISessionRequestNilSafe checks a *server built without
+// initMetrics does not panic when apiGuard calls observeAPISessionRequest.
+func TestObserveAPISessionRequestNilSafe(t *testing.T) {
+	t.Parallel()
+	s := &server{}
+	s.observeAPISessionRequest("allowed")
+}
+
 func TestObserveListExpansion(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()

@@ -201,7 +201,10 @@ func TestHealthzAndMetricsNotOnPublicHandler(t *testing.T) {
 
 func TestAPIRequiresAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance, not newTestServer: WL-1115 gives a non-bearer
+	// /api/v1 request the open subject on a WebOpen instance, which this
+	// test must not get — it is about having no credential at all.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	for name, token := range map[string]string{
 		"missing token": "",
 		"bad token":     "wl_deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
@@ -220,7 +223,8 @@ func TestAPIRequiresAuth(t *testing.T) {
 
 func TestAPIRejectsMalformedAuthHeader(t *testing.T) {
 	t.Parallel()
-	_, h, token := newTestServer(t)
+	// A closed instance: see TestAPIRequiresAuth.
+	_, h, token := newTestServerWithConfig(t, api.Config{})
 	req := httptest.NewRequest("GET", "/api/v1/tasks", nil)
 	req.Header.Set("Authorization", "Token "+token) // not Bearer
 	rr := httptest.NewRecorder()

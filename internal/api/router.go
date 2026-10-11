@@ -39,6 +39,9 @@ type routeGuard struct {
 	// optional exempts an entry from unusedGuards, for a route only some
 	// configurations register.
 	optional bool
+	// session refuses a bearer token and the open subject: only a live web
+	// session reaches the route (WL-REQ-1771).
+	session bool
 }
 
 type taskScope int
@@ -63,6 +66,15 @@ func guardedBound(perm Permission) routeGuard {
 // reads, follow-up filing, document authoring.
 func guardedAny(perm Permission) routeGuard {
 	return routeGuard{perm: perm, taskScope: taskScopeAny}
+}
+
+// sessionOnly is guarded plus the session-only flag (WL-REQ-1771): the route
+// refuses a bearer token and the open-deployment subject, accepting only a
+// live web session. No route in this plan uses it yet — Task 10 reads the
+// field to pick the OpenAPI security scheme, and the Reviews page's approval
+// acts get it when they are ported.
+func sessionOnly(perm Permission) routeGuard {
+	return routeGuard{perm: perm, session: true}
 }
 
 // open marks a route as deliberately unauthenticated, with the reason it can
@@ -589,11 +601,12 @@ func (r *router) guardFor(pattern string) routeGuard {
 	return g
 }
 
-// api registers a /api/v1 route: bearer-token authentication, then the policy
-// check for the permission the table declares.
+// api registers a /api/v1 route behind apiGuard: bearer-token authentication
+// exactly as before, or (D3) the web session's posture when there is no
+// bearer token.
 func (r *router) api(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.Handle(r.qualify(pattern), r.srv.auth(r.srv.requirePerm(g.perm, r.srv.requireTaskScope(g, h))))
+	r.mux.Handle(r.qualify(pattern), r.srv.apiGuard(g, h))
 }
 
 // web registers a web UI route behind webGuard, which resolves the session

@@ -124,7 +124,9 @@ func TestAPIDeniesWithoutPermission(t *testing.T) {
 // clients end up retrying a login they do not need.
 func TestAPIUnauthenticatedIs401(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: WL-1115 gives a non-bearer /api/v1 request the open
+	// subject on a WebOpen instance, which is not what "no credential" means.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	for _, path := range []string{"/api/v1/tasks", "/api/v1/projects", "/api/v1/board"} {
 		rr := doReq(t, h, "GET", path, "", nil)
 		if rr.Code != http.StatusUnauthorized {
