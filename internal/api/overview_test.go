@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -17,7 +18,8 @@ var overviewReadPaths = []string{
 
 func TestOverviewEndpointsRequireAuth(t *testing.T) {
 	t.Parallel()
-	_, h, _ := newTestServer(t)
+	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	for _, path := range overviewReadPaths {
 		if rec := doReq(t, h, http.MethodGet, path, "", nil); rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s without token: %d; want 401", path, rec.Code)

@@ -532,6 +532,10 @@ type server struct {
 	// authzDecisions counts policy decisions by permission and outcome; see
 	// authz.go and observeAuthz.
 	authzDecisions *prometheus.CounterVec
+	// apiSessionRequests counts /api/v1 requests through apiGuard, by outcome
+	// (allowed, unauthenticated, forbidden, session_required); see authz.go's
+	// apiGuard and observeAPISessionRequest (WL-REQ-1307).
+	apiSessionRequests *prometheus.CounterVec
 
 	// approvalDecisions counts decisions submitted to POST
 	// /approvals/{id}/decide, by decision and outcome; see webform.go and
@@ -1646,33 +1650,6 @@ func (s *server) observe(next http.Handler) http.Handler {
 			"status", sw.status,
 			"duration", elapsed,
 		)
-	})
-}
-
-// auth wraps an /api/v1 handler with bearer-token authentication: it is the
-// authentication half only, and puts the derived Subject — the one identity
-// a handler reads, for the policy check and for attributing a write — into
-// the request context. Authorization is requirePerm's job, which the router
-// always composes inside this — see authz.go.
-func (s *server) auth(next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || token == "" {
-			writeErr(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		actor, boundTask, err := s.st.Authenticate(r.Context(), token)
-		if err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				writeErr(w, http.StatusUnauthorized, "unauthorized")
-				return
-			}
-			s.mapStoreErr(w, err)
-			return
-		}
-		sub := subjectFromActor(actor, authToken)
-		sub.TaskID = boundTask
-		next(w, withSubject(r, sub))
 	})
 }
 

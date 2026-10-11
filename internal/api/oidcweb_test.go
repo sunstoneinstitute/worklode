@@ -346,3 +346,32 @@ func TestAuthLoginUnknownHostMetric(t *testing.T) {
 		t.Errorf("metrics body missing %q:\n%s", want, scrape.Body.String())
 	}
 }
+
+// loginSession drives the OIDC login walk (/auth/login, the issuer's token
+// endpoint via /auth/callback) and returns the wl_session cookie it sets, so
+// a test can authenticate as username without repeating the round-trip
+// inline.
+func loginSession(t *testing.T, h http.Handler, iss *oidctest.Issuer, username string) *http.Cookie {
+	t.Helper()
+	iss.TokenClaims = map[string]any{
+		"preferred_username": username, "name": username, "aud": iss.ClientID,
+		"groups": []string{"user"},
+	}
+	login := doReq(t, h, "GET", "/auth/login?next=/", "", nil)
+	oauthCookie := cookieValue(login, "wl_oauth")
+	loc, _ := url.Parse(login.Header().Get("Location"))
+	state := loc.Query().Get("state")
+
+	req := httptest.NewRequest("GET", "/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	req.AddCookie(&http.Cookie{Name: "wl_oauth", Value: oauthCookie})
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("login callback for %q: %d %s", username, rr.Code, rr.Body.String())
+	}
+	session := cookieValue(rr, "wl_session")
+	if session == "" {
+		t.Fatalf("login callback for %q set no wl_session cookie", username)
+	}
+	return &http.Cookie{Name: "wl_session", Value: session}
+}
