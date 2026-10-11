@@ -1,4 +1,4 @@
-# Component-boundary manifest (spec 007 §2.2). Worklode is a
+# Component-boundary manifest. Worklode is a
 # single-component repo: the whole-repo form.
 repo: github.com/sunstoneinstitute/worklode
 components:

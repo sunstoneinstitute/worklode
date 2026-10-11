@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /lode-watch ./cmd/lode-watch
 
 # ffmpeg extracts the first frame of an uploaded video as its poster image
-# (spec 021 §5), so an embedded <video> is a picture of the bug rather than a
+# (WL-REQ-230), so an embedded <video> is a picture of the bug rather than a
 # black rectangle. It arrives as one statically linked binary copied out of an
 # upstream image rather than as an apt install: a distro package would mean
 # giving up the distroless base — no shell, no package manager, nothing else

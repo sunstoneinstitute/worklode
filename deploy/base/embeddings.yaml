@@ -6,7 +6,7 @@
 # LODE_EMBEDDING_URL in configmap.yaml pointed at the Service below.
 #
 # In base rather than in the overlays: dev and prod embed the same corpus with
-# the same model at the same width (§2.2), and nothing about this deployment is
+# the same model at the same width (WL-REQ-255), and nothing about this deployment is
 # environment-specific. The overlays carry environment identity — hostnames,
 # OIDC clients, the cluster env map — and this has none.
 apiVersion: apps/v1
@@ -60,7 +60,7 @@ spec:
             # a larger client batch, not as a requirement.
             - --max-client-batch-size=256
             # A chunk over the model's 2048-token window truncates instead of
-            # failing the whole pass. §4.1's chunk budget is what keeps chunks
+            # failing the whole pass. WL-REQ-257's chunk budget is what keeps chunks
             # inside the window; this is the net under it, not a substitute.
             - --auto-truncate
             # The queue behind the backend is bounded by this, and the backend
@@ -105,8 +105,7 @@ spec:
               # safetensors text-embeddings-inference actually loads are fp32,
               # 1.21 GB on disk and about that resident. Still one small pod,
               # not a node pool — but requesting 200 Mi would get it OOM-killed
-              # on the first pass. Quantised serving (llama.cpp, the §2.3
-              # alternative) is what would earn the smaller number.
+              # on the first pass. Quantised serving (llama.cpp) is what would earn the smaller number.
               memory: "1536Mi"
               # The pod embeds continuously until the corpus index converges,
               # so it is not the bursty workload a 500m request describes: it

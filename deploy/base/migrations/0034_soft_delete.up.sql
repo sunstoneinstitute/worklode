@@ -1,4 +1,4 @@
--- Deleting tasks and documents (docs/specs/044-deleting-tasks-and-documents.md §2).
+-- Deleting tasks and documents (WL-REQ-117).
 --
 -- Delete is a tombstone, not a state: the events log is append-only and every
 -- event, state_log row, edge and artifact referencing a task or document stays

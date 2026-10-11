@@ -58,8 +58,8 @@ services:
       LODE_CATALOG_WEBHOOK_SECRET: ${LODE_CATALOG_WEBHOOK_SECRET:-}
       LODE_CMS_WEBHOOK_SECRET: ${LODE_CMS_WEBHOOK_SECRET:-}
       LODE_CLUSTER_ENV_MAP: ${LODE_CLUSTER_ENV_MAP:-}
-      # The local stack is a dev instance (039 §3): it re-seeds and discards
-      # data, so a delete does not have to carry a justification.
+      # The local stack is a dev instance: it re-seeds and discards data, so a
+      # delete does not have to carry a justification (WL-REQ-1600).
       LODE_INSTANCE_ENV: ${LODE_INSTANCE_ENV:-dev}
       LODE_BRANCH_TEMPLATE: ${LODE_BRANCH_TEMPLATE:-}
       # Plan token budget, soft and hard (12 S19). Unset means the server

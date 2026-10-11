@@ -426,8 +426,8 @@ wl:ruleKind a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:comment """The rule's kind, from wlc:RuleKind: wlc:requirement, wlc:catalogue,
         wlc:invariant, wlc:definition or wlc:principle (WL-REQ-165). A plan covers
         requirements and catalogues; an invariant governs every task in its project; a
-        definition and a principle are read through a rule's context closure (§4c).
-        wlc:informative is retired and reads as a principle until the migration (§19.7).""" .
+        definition and a principle are read through a rule's context closure (WL-REQ-1367).
+        wlc:informative is retired and reads as a principle until the migration (WL-REQ-1301).""" .
 
 wl:Arrangement a owl:Class ;
     skos:definition "arrangement" ;

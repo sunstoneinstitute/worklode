@@ -45,7 +45,7 @@ data:
   # EmbeddingGemma is asymmetric: a query and a document must be embedded with
   # different instruction prefixes (WL-REQ-255), and getting it wrong costs
   # retrieval quality without ever raising an error. The trailing spaces are
-  # part of the prefixes. A symmetric model (§2.4) sets both to "".
+  # part of the prefixes. A symmetric model (WL-REQ-255) sets both to "".
   LODE_EMBEDDING_QUERY_PREFIX: "task: search result | query: "
   LODE_EMBEDDING_DOCUMENT_PREFIX: "title: none | text: "
   # How often the corpus index converges (WL-REQ-260); empty means 5m. The loop
