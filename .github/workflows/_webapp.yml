@@ -28,6 +28,12 @@ jobs:
       - name: Install
         working-directory: web/app
         run: pnpm install --frozen-lockfile
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: API client is current
+        run: ./scripts/check-openapi-client.sh
       - name: Typecheck
         working-directory: web/app
         run: pnpm typecheck
