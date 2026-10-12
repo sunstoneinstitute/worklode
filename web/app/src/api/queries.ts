@@ -1,6 +1,6 @@
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query"
-import { apiFetch } from "./client"
-import type { CrewMember, Meeting, Project, Task } from "./types"
+import { apiFetch } from "./mock-client"
+import type { CrewMember, Meeting, MockProject, Task } from "./mock-types"
 
 /**
  * Query keys follow the URL path, so everything under /api/tasks is
@@ -33,7 +33,7 @@ export function useCrew() {
 }
 
 export function useProjects() {
-  return useQuery({ queryKey: queryKeys.projects, queryFn: () => apiFetch<Project[]>("/api/projects") })
+  return useQuery({ queryKey: queryKeys.projects, queryFn: () => apiFetch<MockProject[]>("/api/projects") })
 }
 
 /** All tasks, or one project's */
