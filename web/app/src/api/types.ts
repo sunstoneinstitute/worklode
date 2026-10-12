@@ -1,5 +1,4 @@
-// Re-exports from the generated schema. Dummy shapes for pages not yet
-// on the real API live in mock-types.ts.
+// Re-exports from the generated schema (src/api/schema.d.ts).
 import type { components } from "./schema"
 
 export type Project = components["schemas"]["Project"]
