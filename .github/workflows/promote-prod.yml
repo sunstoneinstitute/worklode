@@ -55,7 +55,7 @@ jobs:
 
       - name: Promote image to hzprod
         id: promote
-        uses: sunstoneinstitute/actions/promote-images@c1b0fe620bef4371fad2ed9424573cb4c816fa08 # v1.8.0
+        uses: sunstoneinstitute/actions/promote-images@1dc757461086ff5f3f3765eea6089d9c8af46930 # v1.8.1
         with:
           from-env: dev
           to-env: prod
