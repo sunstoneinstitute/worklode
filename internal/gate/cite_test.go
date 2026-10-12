@@ -95,6 +95,14 @@ func TestAddedCitations(t *testing.T) {
 		"+++ b/internal/designdoc/x.go",
 		"@@ -1,0 +1,1 @@",
 		"+// WL-SPEC-1 §1 exempt",
+		"diff --git a/b.go b/b.go",
+		"--- a/b.go",
+		"+++ b/b.go",
+		"@@ -1,1 +1,4 @@",
+		" // spec-gate:ignore (context line, covers the next)",
+		"+// links to \"#sec-4\" on the page",
+		"+// \"#sec-5\" here spec-gate:ignore",
+		"+// \"#sec-6\" is checked again",
 	}, "\n")
 	got, err := cfg.AddedCitations(diff)
 	if err != nil {
@@ -104,7 +112,7 @@ func TestAddedCitations(t *testing.T) {
 	for _, c := range got {
 		where = append(where, c.Where+" "+c.Text)
 	}
-	want := []string{"a.go:3 WL-SPEC-77 §4", "doc.md:11 #sec-2"}
+	want := []string{"a.go:3 WL-SPEC-77 §4", "doc.md:11 #sec-2", "b.go:4 #sec-6"}
 	if strings.Join(where, "|") != strings.Join(want, "|") {
 		t.Errorf("AddedCitations = %q, want %q", where, want)
 	}
