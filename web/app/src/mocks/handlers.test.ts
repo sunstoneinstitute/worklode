@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { apiFetch } from "@/api/client"
-import type { Task } from "@/api/types"
+import { apiFetch } from "@/api/mock-client"
+import type { Task } from "@/api/mock-types"
 import { db } from "./db"
 
 describe("mock API", () => {

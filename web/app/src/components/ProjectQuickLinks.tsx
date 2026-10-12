@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { useProjects } from "@/api/queries"
-import type { Project } from "@/api/types"
+import type { MockProject } from "@/api/mock-types"
 import { ArrowRightIcon } from "@/components/icons"
 import { Card } from "@/components/ui/card"
 import { LoadError, LoadingBlock } from "@/components/ui/load-state"
@@ -16,7 +16,7 @@ const QUICK_LINK_COUNT = 4
 // 1024–1160px squeeze) everything stacks in DOM order. A container query
 // rather than breakpoints, since card width doesn't track the viewport:
 // tablet's full-width 2-col grid gives wider cards than small desktop's.
-function ProjectQuickLinkCard({ project }: { project: Project }) {
+function ProjectQuickLinkCard({ project }: { project: MockProject }) {
   return (
     <Card
       asChild

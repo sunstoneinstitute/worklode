@@ -1,8 +1,8 @@
 import { type QueryClient, type QueryKey, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { apiFetch } from "./client"
+import { apiFetch } from "./mock-client"
 import { queryKeys } from "./queries"
-import type { NewTask, Task, TaskPatch } from "./types"
+import type { NewTask, Task, TaskPatch } from "./mock-types"
 
 // Writes. Edits and deletes are optimistic: every cached task list changes
 // at once, rolls back if the server says no, and is refetched either way.
