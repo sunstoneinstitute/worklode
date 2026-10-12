@@ -622,9 +622,14 @@ const maxJSONPost = 64 << 10
 // script sends on every write. An HTML form cannot set it, and a cross-origin script that tries
 // triggers a preflight this server never answers, so it is a lock
 // independent of the session cookie and of the origin check.
+//
+// sessionPageHeaderValue is the same header's value for a non-bearer /api/v1
+// write (WL-REQ-1770), kept distinct from the cockpit's value so retiring
+// one does not silently accept the other.
 const (
-	pageHeaderName  = "X-Requested-With"
-	pageHeaderValue = "lode-cockpit"
+	pageHeaderName         = "X-Requested-With"
+	pageHeaderValue        = "lode-cockpit"
+	sessionPageHeaderValue = "lode-web"
 )
 
 // sameOriginFetch is sameOriginForm's strict twin for script-issued writes
@@ -636,6 +641,36 @@ func (s *server) sameOriginFetch(r *http.Request) bool {
 		return site == "same-origin"
 	}
 	return s.originAllowed(r)
+}
+
+// sessionWriteAllowed is apiGuard's CSRF gate for a non-bearer subject on a
+// state-changing /api/v1 request (WL-REQ-1770): same origin, the page
+// header, and — when the request carries a body — a JSON content type. It
+// writes the refusal itself and returns false; the caller then returns.
+//
+// beginJSONPost will call this too once the cockpit's own page header is
+// retired; until then it keeps its own checks and its "lode-cockpit" value
+// unchanged.
+func (s *server) sessionWriteAllowed(w http.ResponseWriter, r *http.Request) bool {
+	if !s.sameOriginFetch(r) {
+		s.observeAPISessionRequest("refused_origin")
+		writeErr(w, http.StatusForbidden, "cross-site request refused")
+		return false
+	}
+	if r.Header.Get(pageHeaderName) != sessionPageHeaderValue {
+		s.observeAPISessionRequest("refused_header")
+		writeErr(w, http.StatusForbidden, "missing page header")
+		return false
+	}
+	hasBody := r.ContentLength != 0 || len(r.TransferEncoding) > 0
+	if hasBody {
+		if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
+			s.observeAPISessionRequest("refused_content_type")
+			writeErr(w, http.StatusUnsupportedMediaType, "the body must be application/json")
+			return false
+		}
+	}
+	return true
 }
 
 // beginJSONPost is the write gate for page-script requests (WL-REQ-1338): POST,

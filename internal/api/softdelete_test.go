@@ -385,7 +385,11 @@ func TestListDeletedRejectsNonBoolean(t *testing.T) {
 // A closed instance, built directly rather than through newDeleteFixture: the
 // guard denies before any handler runs, so no real task or document is
 // needed, and WL-1115 gives a non-bearer /api/v1 request the open subject on
-// a WebOpen instance — not what "unauthenticated" means here.
+// a WebOpen instance — not what "unauthenticated" means here. A credential-
+// less request is also a non-bearer one, so the session-write checks
+// (WL-REQ-1770) refuse it first, before Decide ever gets to say
+// "unauthenticated": the request here carries none of the three headers, so
+// it is the page-header check that answers.
 func TestDeleteRoutesRequireAuth(t *testing.T) {
 	t.Parallel()
 	_, h, _ := newTestServerWithConfig(t, api.Config{InstanceEnv: api.InstanceDev})
@@ -397,8 +401,8 @@ func TestDeleteRoutesRequireAuth(t *testing.T) {
 		{"POST", "/api/v1/docs/1/undelete"},
 	} {
 		rr := doReq(t, h, tc.method, tc.path, "", nil)
-		if rr.Code != http.StatusUnauthorized {
-			t.Fatalf("%s %s unauthenticated = %d, want 401", tc.method, tc.path, rr.Code)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("%s %s unauthenticated = %d, want 403", tc.method, tc.path, rr.Code)
 		}
 	}
 }

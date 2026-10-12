@@ -205,11 +205,15 @@ func TestArtifactReportUnroutedAddress(t *testing.T) {
 func TestArtifactReportsRequireAuth(t *testing.T) {
 	t.Parallel()
 	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	// A credential-less POST is a non-bearer one, so the session-write
+	// checks (WL-REQ-1770) refuse it — here on the missing page header —
+	// before Decide ever gets to say "unauthenticated". GET is a safe
+	// method, so it is unaffected and still gets 401.
 	_, h, _ := newTestServerWithConfig(t, api.Config{})
 
 	rr := doReq(t, h, "POST", "/api/v1/artifact-reports", "", artifactReportBody("https://data.example/cow.zip"))
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("POST status = %d, want 401", rr.Code)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("POST status = %d, want 403", rr.Code)
 	}
 
 	rr = doReq(t, h, "GET", "/api/v1/probe-targets", "", nil)

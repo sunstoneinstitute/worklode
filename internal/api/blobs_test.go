@@ -178,11 +178,14 @@ func TestUploadBlobUnauthorized(t *testing.T) {
 	// /api/v1 request the open subject on a WebOpen instance, and the blob
 	// route takes the same posture (eitherGuard) — this test is about having
 	// no credential at all, which TestServeBlobRefusedOnClosedInstance's
-	// fixture shape already covers for the closed case.
+	// fixture shape already covers for the closed case. A credential-less
+	// POST is also a non-bearer one, so the session-write checks
+	// (WL-REQ-1770) refuse it — here on the missing page header — before
+	// Decide ever gets to say "unauthenticated".
 	_, h, _ := newTestServerWithConfig(t, api.Config{BlobStoreForTest: blobstore.NewFake()})
 	rec := postBlob(t, h, "", "", pngBytes)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
 	}
 }
 
