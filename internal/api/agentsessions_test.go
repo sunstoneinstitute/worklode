@@ -380,10 +380,13 @@ func TestAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 		t.Fatalf("unknown task: got %d, want 404, body %s", rr.Code, rr.Body.String())
 	}
 
+	// A credential-less POST is a non-bearer one, so the session-write
+	// checks (WL-REQ-1770) refuse it — here on the missing page header —
+	// before Decide ever gets to say "unauthenticated".
 	rr = doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", "",
 		map[string]any{"agent": "claude-code", "session_id": "sess-1"})
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated: got %d, want 401, body %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("unauthenticated: got %d, want 403, body %s", rr.Code, rr.Body.String())
 	}
 
 	// Start a session so the /end cases below have one to act on.

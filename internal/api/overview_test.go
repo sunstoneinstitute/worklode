@@ -25,8 +25,11 @@ func TestOverviewEndpointsRequireAuth(t *testing.T) {
 			t.Errorf("%s without token: %d; want 401", path, rec.Code)
 		}
 	}
-	if rec := doReq(t, h, http.MethodPost, "/api/v1/derive", "", nil); rec.Code != http.StatusUnauthorized {
-		t.Errorf("POST /api/v1/derive without token: %d; want 401", rec.Code)
+	// A credential-less POST is a non-bearer one, so the session-write
+	// checks (WL-REQ-1770) refuse it — here on the missing page header —
+	// before Decide ever gets to say "unauthenticated".
+	if rec := doReq(t, h, http.MethodPost, "/api/v1/derive", "", nil); rec.Code != http.StatusForbidden {
+		t.Errorf("POST /api/v1/derive without token: %d; want 403", rec.Code)
 	}
 }
 

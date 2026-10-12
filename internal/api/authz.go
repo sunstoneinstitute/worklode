@@ -618,6 +618,18 @@ func (s *server) apiGuard(g routeGuard, next http.HandlerFunc) http.HandlerFunc 
 			sub.TaskID = boundTask
 		} else {
 			sub = s.webSubject(r.Context(), r)
+
+			// A non-bearer subject on a state-changing method gets the
+			// same-origin, page-header and content-type checks (WL-REQ-1770)
+			// before anything else: unskippable, and applied whether the
+			// subject is a session, the open subject, or none at all.
+			switch r.Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+			default:
+				if !s.sessionWriteAllowed(w, r) {
+					return
+				}
+			}
 		}
 
 		// sessionOnly routes (WL-REQ-1771): a bearer subject and the open

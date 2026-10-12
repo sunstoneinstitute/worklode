@@ -27,10 +27,13 @@ func runtimeEventBody() map[string]any {
 func TestRuntimeEventsRequireAuth(t *testing.T) {
 	t.Parallel()
 	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	// A credential-less POST is a non-bearer one, so the session-write
+	// checks (WL-REQ-1770) refuse it — here on the missing page header —
+	// before Decide ever gets to say "unauthenticated".
 	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	rr := doReq(t, h, "POST", "/api/v1/runtime-events", "", runtimeEventBody())
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rr.Code)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rr.Code)
 	}
 }
 
