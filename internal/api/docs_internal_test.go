@@ -109,3 +109,24 @@ func TestDocViewRendersBody(t *testing.T) {
 		t.Fatalf("script survived the document render:\n%s", got)
 	}
 }
+
+// TestDocViewLinksArrangedRulesInPage covers WL-REQ-1633: a ref to a rule the
+// spec arranges links to its section on the same page, any other rule ref to
+// the /rules/ redirect.
+func TestDocViewLinksArrangedRulesInPage(t *testing.T) {
+	t.Parallel()
+	body := "## 4. Routes {#sec-4}\n\nSee WL-REQ-1305 and WL-REQ-334.\n"
+	v := docView(nil, mdrender.ProjectKeys{}, &model.DocDetail{
+		Doc:      model.Doc{ID: 83, Kind: "spec", Body: body},
+		Sections: []model.DocSection{{Anchor: "sec-4", Rule: "WL-REQ-1305"}},
+	}, body, false, "/docs/WL-SPEC-83")
+	got := string(v.BodyHTML)
+	for _, want := range []string{
+		`<a href="#sec-4" rel="nofollow">WL-REQ-1305</a>`,
+		`<a href="/rules/WL-REQ-334" rel="nofollow">WL-REQ-334</a>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
+	}
+}

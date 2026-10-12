@@ -39,6 +39,25 @@ func TestRuleRefAutolink(t *testing.T) {
 }
 
 // TestDocRefAutolinkLeavesCodeAndLinks pins the skip contexts.
+// TestRuleRefAutolinkInPage covers WL-REQ-1633: on a spec page, a ref to a
+// rule the spec arranges links to its section in the same page; any other
+// rule ref keeps the redirect.
+func TestRuleRefAutolinkInPage(t *testing.T) {
+	keys := ProjectKeys{}.InPage(map[string]string{"WL-REQ-13": "sec-4"})
+	got := string(DocBody(keys, "see WL-REQ-13 and WL-RULE-12."))
+	for _, want := range []string{
+		`<a href="#sec-4" rel="nofollow">WL-REQ-13</a>`,
+		`<a href="/rules/WL-RULE-12" rel="nofollow">WL-RULE-12</a>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
+	}
+	if keys.fingerprint == (ProjectKeys{}).fingerprint {
+		t.Error("in-page anchors must change the cache fingerprint")
+	}
+}
+
 func TestDocRefAutolinkLeavesCodeAndLinks(t *testing.T) {
 	got := string(Body(ProjectKeys{}, "Keep `WL-SPEC-9` and [text](/docs/3) with spec 5 §1 inside: [spec 7 §2](/x).\n\n```\nspec 042 §10\n```"))
 	if strings.Contains(got, "/docs/ref/9") {

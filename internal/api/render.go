@@ -579,6 +579,7 @@ func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 //
 // md may be nil, which renders every body afresh; see the mdcache field.
 func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail, body string, consolidated bool, path string) ui.DocView {
+	keys = keys.InPage(arrangedAnchors(d.Sections))
 	return ui.DocView{
 		Page: ui.PageProps{Title: "worklode: " + cmp.Or(d.Ref, d.Slug), ActiveGlobal: "knowledge"},
 		Doc:  d.Doc,
@@ -597,6 +598,18 @@ func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail, 
 		Notes:           docNoteRows(md, keys, d.Notes),
 		Reviewers:       docReviewerRows(d.Doc),
 	}
+}
+
+// arrangedAnchors maps each rule a document arranges to its section anchor,
+// so the page links refs to those rules in place (WL-REQ-1633).
+func arrangedAnchors(sections []model.DocSection) map[string]string {
+	out := make(map[string]string)
+	for _, s := range sections {
+		if s.Rule != "" {
+			out[s.Rule] = s.Anchor
+		}
+	}
+	return out
 }
 
 // docNoteRows renders each anchored note's body as markdown — a note is
