@@ -157,10 +157,14 @@ export function userHandle(user: DataTableUser): string {
 export function UserCell({
   value,
   users,
+  options = users,
   onChange,
 }: {
   value: string
+  /** Everyone, for showing the selected person */
   users: DataTableUser[]
+  /** Who the picker offers (defaults to users) */
+  options?: DataTableUser[]
   onChange: (nextUserId: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -189,7 +193,7 @@ export function UserCell({
           <CommandList>
             <CommandEmpty>No one found.</CommandEmpty>
             <CommandGroup>
-              {users.map((user) => (
+              {options.map((user) => (
                 <CommandItem
                   key={user.id}
                   // Findable by handle or full name
@@ -220,10 +224,14 @@ const USERS_SHOWN = 3
 export function UsersCell({
   value,
   users,
+  options = users,
   onChange,
 }: {
   value: string[]
+  /** Everyone, for showing the selected people */
   users: DataTableUser[]
+  /** Who the picker offers (defaults to users) */
+  options?: DataTableUser[]
   onChange: (nextUserIds: string[]) => void
 }) {
   const selected = users.filter((user) => value.includes(user.id))
@@ -258,7 +266,7 @@ export function UsersCell({
           <CommandList>
             <CommandEmpty>No one found.</CommandEmpty>
             <CommandGroup>
-              {users.map((user) => (
+              {options.map((user) => (
                 <CommandItem
                   key={user.id}
                   value={`${userHandle(user)} ${user.name}`}

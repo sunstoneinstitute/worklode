@@ -66,34 +66,3 @@ export function useTableUrlState<T>(
 
   return enabled ? { viewState: local, onViewStateChange } : {}
 }
-
-/**
- * A chip category kept in the URL as `?category=`. An unknown value reads
- * as `fallback`, and choosing `fallback` removes the param, so plain links
- * stay clean. Choosing pushes a history entry, so Back returns to the
- * previous category.
- */
-export function useCategoryParam<V extends string>(
-  allowed: readonly V[],
-  fallback: V,
-): [V, (next: V) => void] {
-  const search = useSearch({ strict: false }) as Record<string, unknown>
-  const navigate = useNavigate()
-  const raw = search.category
-  const value = allowed.includes(raw as V) ? (raw as V) : fallback
-
-  const setValue = useCallback(
-    (next: V) =>
-      void navigate({
-        to: ".",
-        search: (prev: Record<string, unknown>) => {
-          const kept = keptSearch(prev, ["category"])
-          return next === fallback ? kept : { ...kept, category: next }
-        },
-        resetScroll: false,
-      }),
-    [navigate, fallback],
-  )
-
-  return [value, setValue]
-}
