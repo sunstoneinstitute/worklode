@@ -146,12 +146,21 @@ Every read goes through `src/api/`:
 
 - `schema.d.ts`: generated from the server's OpenAPI document
   (`make web-gen`). Never edit it by hand.
-- `client.ts`: `api`, the `openapi-fetch` client over that schema.
+- `client.ts`: `api`, the `openapi-fetch` client over that schema. Its
+  middleware adds `X-Requested-With: lode-web` and a JSON content type to
+  every write, which the server requires of a cookie-authorized write
+  (WL-REQ-1770); the browser adds `Sec-Fetch-Site`.
 - `queries.ts`: read hooks (`useMe`, `useProjects`). An error body is
   `ErrorResponse` (`{ "error": string }`); a hook throws it as an
   `HttpError` carrying the status.
 - `query-client.ts`: a failed read is retried once, never on a 4xx.
 - `types.ts`: re-exports of the generated shapes.
+
+`queries.ts` covers only what `/projects` reads. Page
+code from the `worklode-design` prototype (ideas, intake, documents, crew,
+the project summary, its optimistic list helpers) comes in when its page is
+ported, written against `schema.d.ts`. That repo's `docs/API.md` describes
+its mock API; the server's contract is `GET /api/v1/openapi.json`.
 
 MSW answers `/api/v1/*` with dummy data in `pnpm dev`
 (`src/mocks/browser.ts`) and in tests (`src/mocks/node.ts`).

@@ -202,6 +202,26 @@ descriptor without a route; `make openapi` writes the document to
 sides share one declaration and `queryrule_test.go` fails a handler that
 reads the query string any other way.
 
+**Two hosts and the SPA.** With `LODE_LEGACY_URL` set, `lode-server`
+answers two hosts (WL-REQ-1303). The public host (`LODE_PUBLIC_URL`)
+serves `/api/v1` and the React SPA, and redirects any path the SPA does not
+route to the same path on the legacy host, which serves the templ cockpit
+and no `/api/v1`. Unset, one host serves the cockpit and no SPA. The SPA's
+source is `web/app/` (read its `AGENTS.md`). `make web` builds it into
+`internal/webapp/dist`, which the binary embeds, and `make web-clean` puts
+the committed placeholder back. `web/app/src/routes.json` lists the SPA's
+paths: `spa_routes_test.go` fails when `spaRoutes` disagrees with it, and
+`router.test.tsx` fails when the router does (WL-REQ-1305). A `/api/v1`
+request without a bearer token acts as the session's actor, or the open
+subject on a `LODE_WEB_OPEN` instance; its writes must also send
+`Sec-Fetch-Site: same-origin`, `X-Requested-With: lode-web` and a JSON
+content type (WL-REQ-1307, WL-REQ-1770). The SPA's types come from the
+OpenAPI document: `make web-gen` regenerates
+`web/app/src/api/schema.d.ts`, which is never edited by hand, and CI fails
+when it drifts (`scripts/check-openapi-client.sh`, WL-REQ-1309). The MSW
+mocks are typed from it, so a mock shaped unlike the Go type fails
+`pnpm typecheck`. `e2e/webapp_test.go` drives both hosts end to end.
+
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks — including `merge_group` and `repository_ruleset` for the merge
 queue — and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer
