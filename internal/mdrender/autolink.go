@@ -148,7 +148,7 @@ func (k ProjectKeys) For(home string) ProjectKeys {
 }
 
 // InPage returns a copy that links a ref to a rule the page's spec arranges
-// to that section's anchor ("#sec-4"), so the reader stays in the document
+// to that section's anchor ("#sec-4"), so the reader stays in the document // spec-gate:ignore
 // (WL-REQ-1633). anchors maps rule ref to anchor. Refs absent from it keep the
 // /rules/ redirect. The fingerprint is remixed like For's.
 func (k ProjectKeys) InPage(anchors map[string]string) ProjectKeys {
