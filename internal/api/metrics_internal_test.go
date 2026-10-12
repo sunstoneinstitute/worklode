@@ -498,15 +498,22 @@ func TestObserveAPISessionRequest(t *testing.T) {
 			}
 		}
 	}
-	// The label is bounded to exactly the four outcomes: never an actor,
-	// route or token.
-	want := []string{"outcome=allowed", "outcome=forbidden", "outcome=session_required", "outcome=unauthenticated"}
+	// The label is bounded to exactly these outcomes: never an actor, route
+	// or token.
+	want := []string{
+		"outcome=allowed", "outcome=forbidden", "outcome=refused_content_type",
+		"outcome=refused_header", "outcome=refused_origin",
+		"outcome=session_required", "outcome=unauthenticated",
+	}
 	slices.Sort(outcomes)
 	if !slices.Equal(outcomes, want) {
 		t.Fatalf("worklode_api_session_requests_total series = %v, want %v", outcomes, want)
 	}
 
-	counts := map[string]int{"allowed": 3, "unauthenticated": 2, "forbidden": 1, "session_required": 4}
+	counts := map[string]int{
+		"allowed": 3, "unauthenticated": 2, "forbidden": 1, "session_required": 4,
+		"refused_origin": 5, "refused_header": 6, "refused_content_type": 7,
+	}
 	for outcome, n := range counts {
 		for range n {
 			s.observeAPISessionRequest(outcome)

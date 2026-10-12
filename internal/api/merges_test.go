@@ -146,11 +146,14 @@ func TestReportMergeValidation(t *testing.T) {
 func TestReportMergeRequiresAuth(t *testing.T) {
 	t.Parallel()
 	// A closed instance: see TestAPIUnauthenticatedIs401 in authz_test.go.
+	// A credential-less POST is a non-bearer one, so the session-write
+	// checks (WL-REQ-1770) refuse it — here on the missing page header —
+	// before Decide ever gets to say "unauthenticated".
 	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	rr := doReq(t, h, "POST", "/api/v1/merges", "", map[string]any{
 		"repo": "acme/app", "sha": "abc1234", "tasks": []string{"WL-1"},
 	})
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated status = %d, want 401", rr.Code)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("unauthenticated status = %d, want 403", rr.Code)
 	}
 }
