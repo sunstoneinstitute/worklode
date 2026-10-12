@@ -1,5 +1,5 @@
 import { HttpResponse, delay, http } from "msw"
-import type { NewTask, TaskPatch } from "@/api/types"
+import type { NewTask, TaskPatch } from "@/api/mock-types"
 import { db } from "./db"
 
 // One handler per endpoint. These double as a working example of what the
