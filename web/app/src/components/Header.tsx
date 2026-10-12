@@ -6,21 +6,9 @@ import { initials } from "@/lib/initials"
 import { ColorModeToggle } from "@/components/ColorModeToggle"
 import { CloseIcon, MenuIcon, NotificationsIcon } from "@/components/icons"
 
-const NAV_ITEMS = [
-  { label: "Ideas", to: "/ideas" },
-  { label: "Projects", to: "/projects" },
-  { label: "Tasks", to: "/tasks" },
-] as const
+const NAV_ITEMS = [{ label: "Projects", to: "/projects" }] as const
 
-export function Header({
-  hideLogoMark = false,
-  menuOpen,
-  onToggleMenu,
-}: {
-  hideLogoMark?: boolean
-  menuOpen: boolean
-  onToggleMenu: () => void
-}) {
+export function Header({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: () => void }) {
   const me = useMe()
   return (
     <header
@@ -33,15 +21,8 @@ export function Header({
         it lets the mark sit further left while the "Worklode" wordmark's
         left edge still lines up with the 70px content column below.
       */}
-      <Link to="/" className="flex items-center gap-2.5">
-        {/* On pages with a ProjectToolbar, the visible mark is the single
-            floating <ScrollLogo> instead (see index.css's [data-scroll-logo])
-            — invisible (not removed) so "Worklode" doesn't shift. */}
-        <img
-          src={worklodeMark}
-          alt=""
-          className={`h-7 w-8.25 lg:h-9 lg:w-10.75 ${hideLogoMark ? "lg:invisible" : ""}`}
-        />
+      <Link to="/projects" className="flex items-center gap-2.5">
+        <img src={worklodeMark} alt="" className="h-7 w-8.25 lg:h-9 lg:w-10.75" />
         <span className="text-15 font-medium text-text-primary lg:text-lg">
           Worklode
         </span>
@@ -69,7 +50,7 @@ export function Header({
             Projects" variants drop it, but the user asked to keep it. */}
         <Avatar>
           <AvatarFallback className="bg-primary text-xs text-primary-foreground">
-            {initials(me.name)}
+            {initials(me.id ?? "")}
           </AvatarFallback>
         </Avatar>
         {/* Toggles the mobile menu; the icon swaps between hamburger and

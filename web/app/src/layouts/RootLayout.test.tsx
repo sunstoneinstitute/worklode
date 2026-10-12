@@ -11,7 +11,7 @@ describe("mobile menu", () => {
 
   it("opens and closes from the header button", async () => {
     const user = userEvent.setup()
-    await renderApp("/")
+    await renderApp("/projects")
 
     const toggle = screen.getByRole("button", { name: "Open menu" })
     expect(toggle).toHaveAttribute("aria-expanded", "false")
@@ -25,7 +25,7 @@ describe("mobile menu", () => {
 
   it("closes on Escape", async () => {
     const user = userEvent.setup()
-    await renderApp("/")
+    await renderApp("/projects")
     await user.click(screen.getByRole("button", { name: "Open menu" }))
     await user.keyboard("{Escape}")
     expect(menuOpen()).toBe(false)
@@ -33,27 +33,18 @@ describe("mobile menu", () => {
 
   it("closes when a menu link navigates", async () => {
     const user = userEvent.setup()
-    const { router } = await renderApp("/")
+    const { router } = await renderApp("/nope")
     await user.click(screen.getByRole("button", { name: "Open menu" }))
-    await user.click(menu().getByRole("link", { name: "Tasks" }))
-    expect(router.state.location.pathname).toBe("/tasks")
+    await user.click(menu().getByRole("link", { name: "Projects" }))
+    expect(router.state.location.pathname).toBe("/projects")
     expect(menuOpen()).toBe(false)
   })
 
   it("closes when the link is for the page already showing", async () => {
     const user = userEvent.setup()
-    await renderApp("/tasks")
+    await renderApp("/projects")
     await user.click(screen.getByRole("button", { name: "Open menu" }))
-    await user.click(menu().getByRole("link", { name: "Tasks" }))
-    expect(menuOpen()).toBe(false)
-  })
-
-  it("closes from a project folder card link", async () => {
-    const user = userEvent.setup()
-    const { router } = await renderApp("/projects/the-grid")
-    await user.click(screen.getByRole("button", { name: "Open menu" }))
-    await user.click(menu().getByRole("link", { name: "Documents" }))
-    expect(router.state.location.pathname).toBe("/projects/the-grid/documents")
+    await user.click(menu().getByRole("link", { name: "Projects" }))
     expect(menuOpen()).toBe(false)
   })
 })

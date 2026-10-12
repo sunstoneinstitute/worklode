@@ -21,6 +21,8 @@ export interface BuildColumnsContext<T> {
   updateRow: (rowId: string, patch: Partial<T>) => void
   removeRow: (rowId: string) => void
   addRow: (row: T) => void
+  /** Who the row's person pickers offer */
+  pickableUsers: (row: T) => DataTableUser[]
 }
 
 function compareIsoDates<T>(a: Row<T>, b: Row<T>, columnId: string) {
@@ -299,6 +301,7 @@ export function buildColumns<T>(
             <UserCell
               value={row.getValue<string>(column.key) ?? ""}
               users={ctx.users}
+              options={ctx.pickableUsers(row.original)}
               onChange={(next) =>
                 ctx.updateRow(ctx.getRowId(row.original), {
                   [column.key]: next,
@@ -328,6 +331,7 @@ export function buildColumns<T>(
             <UsersCell
               value={row.getValue<string[]>(column.key) ?? []}
               users={ctx.users}
+              options={ctx.pickableUsers(row.original)}
               onChange={(next) =>
                 ctx.updateRow(ctx.getRowId(row.original), {
                   [column.key]: next,

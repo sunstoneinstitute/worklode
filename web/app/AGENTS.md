@@ -3,13 +3,9 @@
 Context for whoever (human or agent) picks this project up next. The app is
 a React single-page app that the Go backend serves: one `index.html`, with
 the router picking the page from the URL. See `README.md` to build and run
-it, `docs/API.md` for the API contract and how Go serves `dist/`, and
-`FIGMA.md` for how pages are imported from Figma.
-
-The design for the SPA is
-`docs/superpowers/specs/2026-09-24-react-spa-conversion-design.md`, split
-into plans under `docs/superpowers/plans/`. Plans 1 (toolchain, routing),
-1b (project summary card) and 2a (Home's data from the API) are done.
+it and `FIGMA.md` for how pages are imported from Figma. WL-SPEC-83 is the
+design: how Go serves the build, which routes the SPA owns, and the API it
+calls.
 
 ## Stack
 
@@ -83,8 +79,8 @@ are intentionally asymmetric:
   name.
 
 
-The dark-mode toggle (`src/hooks/use-dark-mode.ts`) is not persisted yet.
-The spec keeps it in localStorage.
+The dark-mode toggle (`src/hooks/use-dark-mode.ts`) keeps the choice in
+`localStorage` under `worklode.theme` (WL-REQ-1772).
 
 ## Icons
 
@@ -97,8 +93,9 @@ instead of the full `material-symbols` package (~4MB).
   `viewBox="0 0 960 960"` with a `<g transform="translate(0,960)">`
   wrapper, since some tooling mishandles negative-origin viewBoxes.
 - Config: `.fantasticonrc.json`. `pnpm iconfont` writes
-  `public/assets/iconfont/wlicon.{css,ttf,woff,woff2}`, imported at the top
-  of `src/index.css` (it must stay first, see the comment there).
+  `src/assets/iconfont/wlicon.{css,ttf,woff,woff2}`, imported at the top
+  of `src/index.css`, so Vite bundles and hashes the font files. Nothing
+  unhashed may live under `/assets/`: the server marks it immutable.
 - Usage: `src/components/icons.tsx` exports named components
   (`ScheduleIcon`, `ArrowRightIcon`, ...) that render
   `<i className="wlicon-{name}">`. To add an icon: drop the SVG in
@@ -115,8 +112,8 @@ any future page:
 
 - The mobile horizontal-bleed-scroll trick: negative margin cancels the
   parent's padding so a row can be dragged edge-to-edge, matching positive
-  padding re-adds it as scroll padding so items still start inset. See
-  `ProjectQuickLinks.tsx`.
+  padding re-adds it as scroll padding so items still start inset. The
+  design repo's `ProjectQuickLinks.tsx` has an example.
 - Watch for the CSS Grid "1fr won't shrink below content" bug: a plain `1fr`
   track (or a flex child) won't shrink below its content's intrinsic width
   unless it has `min-w-0`. We hit this with the Tasks table (`min-w-[1000px]`)
@@ -129,57 +126,39 @@ any future page:
 
 `src/router.tsx` declares every route in code. URLs are real paths
 (browser history), and `<Link to="...">` is typed, so a link to a missing
-route fails the type check.
+route fails the type check. The only page is `/projects`; anything else
+renders `NotFound`. `src/routes.json` lists the same paths for the Go
+server (WL-REQ-1305), and `src/router.test.tsx` fails when the tree and
+the file disagree. Add a page to both, and to `spaRoutes` in
+`internal/api/spa_routes.go`.
 
-| Path | Page |
-|---|---|
-| `/` | `Home` |
-| `/tasks` | `Tasks` (every task across projects, `<TaskList showProject />`) |
-| `/ideas`, `/ideas/new`, `/ideas/$ideaId/edit`, `/ideas/$ideaId/intake` | `Ideas`, `NewIdea`, `EditIdea`, `IdeaIntake` |
-| `/projects` | `Projects` |
-| `/projects/$projectId` | `ProjectOverview` |
-| `/projects/$projectId/tasks` | `ProjectTasks` |
-| `/projects/$projectId/documents` | `ProjectDocuments` (one category at a time via a `ChipNav`) |
-| anything else | `NotFound` |
+`src/layouts/RootLayout.tsx` renders what every page shares: `Header` and
+`MobileMenu`. The root route's loader fetches `/api/v1/whoami` before any
+page renders. A 401 sends the browser to `/auth/login?next=<this page>`;
+any other failure shows `RootError` with Retry.
 
-Layouts:
-
-- `src/layouts/RootLayout.tsx` renders what every page shares: `Header`,
-  `MobileMenu`, `Toaster`, and on project pages `ScrollLogo`. The root
-  route's loader fetches `/api/me` before any page renders. `RootError`
-  shows a Retry page if that fails.
-- `src/layouts/ProjectLayout.tsx` puts `ProjectToolbar` above every
-  project page.
-
-Table pages use `validateSearch: coerceSearch` so their sort, filters,
-search and chip category live in the URL (`src/hooks/use-table-url-state.ts`).
+Table pages use `validateSearch: coerceSearch` so their sort, filters and
+search live in the URL (`src/hooks/use-table-url-state.ts`).
 
 ## Data layer (`src/api/`, `src/mocks/`)
 
-Every read and write goes through `src/api/`:
+Every read goes through `src/api/`:
 
-- `client.ts`: `apiFetch`, a fetch wrapper that throws `ApiError` on
-  non-2xx.
-- `queries.ts`: read hooks (`useMe`, `useCrew`, `useProjects`, `useTasks`,
-  `useMeetings`). Query keys follow the URL path, so invalidating
-  `["tasks"]` refreshes every task list.
-- `mutations.ts`: task writes. Edits and deletes are optimistic and roll
-  back on error.
-- `types.ts`: the data shapes.
+- `schema.d.ts`: generated from the server's OpenAPI document
+  (`make web-gen`). Never edit it by hand.
+- `client.ts`: `api`, the `openapi-fetch` client over that schema.
+- `queries.ts`: read hooks (`useMe`, `useProjects`). An error body is
+  `ErrorResponse` (`{ "error": string }`); a hook throws it as an
+  `HttpError` carrying the status.
+- `query-client.ts`: a failed read is retried once, never on a 4xx.
+- `types.ts`: re-exports of the generated shapes.
 
-MSW answers `/api/*` with dummy data in `pnpm dev` (`src/mocks/browser.ts`)
-and in tests (`src/mocks/node.ts`). `src/mocks/handlers.ts` is the reference
-implementation of the contract in `docs/API.md`, and `src/mocks/db.ts`
-holds the data. `VITE_API_MOCKS=off` turns MSW off and proxies `/api` to
-the Go server (see `.env.example`).
-
-Only Home's data is on the API so far: `/api/me`, `/api/crew`,
-`/api/projects`, `/api/tasks`, `/api/meetings`. `DocumentList`, `IdeaList`,
-`ProjectList`, `ProjectSummary`, `IdeaIntake` and `src/lib/crew.ts` /
-`src/lib/ideas.ts` still hold local dummy data, and `RootLayout` passes a
-hard-coded `projectName="The Grid"`. Moving them is the remaining plans'
-work. When you add an endpoint, add its MSW handler and document it in
-`docs/API.md` in the same change.
+MSW answers `/api/v1/*` with dummy data in `pnpm dev`
+(`src/mocks/browser.ts`) and in tests (`src/mocks/node.ts`).
+`src/mocks/handlers.ts` and `src/mocks/db.ts` type every mock body with
+`Ok<path, method>` from `src/mocks/typed.ts`, so a mock shaped unlike the
+Go type fails `pnpm typecheck` (WL-REQ-1309). `VITE_API_MOCKS=off` turns
+MSW off and proxies `/api` to the Go server (see `.env.example`).
 
 ## DataTable: generic, schema-driven table component
 
@@ -192,9 +171,8 @@ for `select`) and renders `<DataTable columns={...} data={...} />`. See
 
 - **Rows are controlled or uncontrolled.** Pass `onUpdateRow` /
   `onRemoveRow` / `onAddRow` and the table shows `data` as given and
-  reports changes, which the page sends through a mutation (`TaskList`
-  does this). Leave them out and the table edits its own copy (the tables
-  not yet on the API).
+  reports changes, which the page sends through a mutation. Leave them out
+  and the table edits its own copy.
 - **Row actions are per content type.** Each `RowAction` is declared by the
   consumer and gets `addRow` / `removeRow` / `updateRow` helpers. A
   "duplicate" action is `addRow` with a copy of the row. In uncontrolled
@@ -207,7 +185,7 @@ for `select`) and renders `<DataTable columns={...} data={...} />`. See
   stays last and visible. The layout is not saved yet; the spec saves it
   per user through `/api/me/preferences`.
 
-## Page chrome: header, mobile menu, ScrollLogo
+## Page chrome: header, mobile menu
 
 These toggle a class on `<html>`, and `src/index.css` does the rest, so
 any element can react with a `:root.<class>` selector:
@@ -217,22 +195,6 @@ any element can react with a `:root.<class>` selector:
 - `useMobileMenu` (`src/hooks/use-mobile-menu.ts`) sets `mobile-menu-open`.
   The panel's roll-down, the staggered item fade-in and the icon swap are
   CSS keyed off it. It closes on Escape and on navigation.
-
-Project pages add two elements that follow `header-hidden`:
-
-- `ProjectToolbar` is sticky at `top: var(--header-height)`, and at
-  `top: 0` once the header hides. Keep `--header-height` in sync with the
-  header's `h-13` / `lg:h-19`.
-- `ScrollLogo` is one `position: fixed` logo mark that moves between the
-  header and the toolbar with a CSS transition. The user rejected two
-  cross-fading logos: it must read as one object moving. `Header` hides its
-  own mark (`hideLogoMark`) wherever `ScrollLogo` shows. The toolbar-state
-  position is derived from the breadcrumb's `TEXT_INSET` in
-  `ProjectToolbar.tsx`, so keep the two in sync.
-
-`ProjectSummary` switches between the summary and "What is everyone
-working on?" with React state, rendered as `data-view` / `data-selected` /
-`data-open` attributes that Tailwind variants style.
 
 **Sticky gotcha:** a `position: sticky` element needs its DOM parent to be
 taller than itself. Wrapping it in a container sized to fit it (e.g. a
@@ -248,15 +210,4 @@ responsive visibility classes on the sticky element itself.
 
 ## Known gaps / follow-ups
 
-- See `FIGMA.md` for Figma-side gaps (unbuilt pages, placeholder
-  decorative icons on Home and Project Overview).
-- `ProjectToolbar`'s nav is icon-only from `lg` (1024px) and shows labels
-  from `xl` (1280px), because the labeled nav needs ~896px.
-- The breadcrumb ("Projects / Project Name") aligns with the header's
-  "Worklode" wordmark (73px, `TEXT_INSET`), not the 70px page margin. The
-  user asked for this.
-- The toolbar's light "tab" is a `bg-background` rectangle that stops at
-  `right-64`, plus `FolderCurve` (a `w-64` inline SVG filled with
-  `fill-background`, so it follows dark mode). The curve is a transparent
-  cutout showing the gradient behind it. Extending the rectangle under the
-  curve fills the cutout and the curve disappears.
+- See `FIGMA.md` for Figma-side gaps and the pages not yet ported.
