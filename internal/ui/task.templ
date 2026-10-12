@@ -133,6 +133,22 @@ templ Task(v TaskView) {
 					</details>
 				}
 
+				if len(v.Generated) > 0 {
+					<details class="card" open aria-labelledby="generated-heading">
+						<summary class="hd"><h3 id="generated-heading">Generated documents</h3></summary>
+						<div class="bd">
+							<ul>
+								for _, g := range v.Generated {
+									<li>
+										<a href={ model.DocPageURL(g.ID) }>{ g.Ref }</a> { g.Title } <span class={ "chip " + docStatusChip(g.Status) }>{ g.Status }</span>
+										@taskReviews(g.Reviews)
+									</li>
+								}
+							</ul>
+						</div>
+					</details>
+				}
+
 				<details class="card" aria-labelledby="edges-heading">
 					<summary class="hd"><h3 id="edges-heading">Edges</h3></summary>
 					<div class="bd">
@@ -238,6 +254,21 @@ templ taskEdgeIDs(label string, ids []string) {
 			}
 		}
 	</li>
+}
+
+// taskReviews renders the review tasks minted for a generated document, or
+// an honest "none" when no review task exists.
+templ taskReviews(reviews []model.Task) {
+	<div class="meta">
+		Review:
+		if len(reviews) == 0 {
+			<span class="muted">none</span>
+		} else {
+			for _, r := range reviews {
+				<a href={ "/tasks/" + r.ID }>{ r.ID }</a> <span class="muted">({ r.State })</span>{ " " }
+			}
+		}
+	</div>
 }
 
 // taskEdgeID renders one labelled edge row that holds at most one task id
