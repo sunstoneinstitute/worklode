@@ -140,10 +140,32 @@ func Describe(cs []Citation, resolve func(designdoc.SectionRef) string) string {
 // hunkHeader reads the new-file start line of a unified diff hunk.
 var hunkHeader = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
+// ignoreDirective exempts a line from the citation test, for text that
+// mentions a section anchor without citing one, such as an HTML fragment
+// in code. A comment that starts with it covers the next line; anywhere
+// else on a line it covers that line, the way linters' nolint comments do.
+const ignoreDirective = "spec-gate:ignore"
+
+// commentLead is what can open a comment before an ignore directive.
+var commentLead = regexp.MustCompile(`^\s*(?://|#|<!--|/\*|--|\*)?\s*`)
+
+// ignores reports whether line carries the directive, and whether the
+// directive stands alone and so covers the line after it instead.
+func ignores(line string) (here, next bool) {
+	if !strings.Contains(line, ignoreDirective) {
+		return false, false
+	}
+	if strings.HasPrefix(commentLead.ReplaceAllString(line, ""), ignoreDirective) {
+		return false, true
+	}
+	return true, false
+}
+
 // AddedCitations runs the test over the lines a unified diff adds, skipping
-// files the [gate] exempt list names. In a Go file only a line's comment is
-// prose, so string literals are never tested; elsewhere fenced code blocks
-// are skipped, tracked over the hunk's context and added lines.
+// files the [gate] exempt list names and lines an ignore directive covers.
+// In a Go file only a line's comment is prose, so string literals are never
+// tested; elsewhere fenced code blocks are skipped, tracked over the hunk's
+// context and added lines.
 //
 // ponytail: line-level, so a Go block comment or a fence opened outside a
 // hunk's context is not seen; widen the diff context if that bites.
@@ -158,6 +180,7 @@ func (c Config) AddedCitations(diff string) ([]Citation, error) {
 		skip    bool
 		fenced  bool
 		lineNum int
+		covered bool // the previous line was a standalone ignore directive
 	)
 	for _, l := range strings.Split(diff, "\n") {
 		switch {
@@ -177,6 +200,7 @@ func (c Config) AddedCitations(diff string) ([]Citation, error) {
 			}
 			lineNum, _ = strconv.Atoi(m[1])
 			fenced = false
+			covered = false
 			continue
 		}
 		if l == "" || skip {
@@ -188,6 +212,11 @@ func (c Config) AddedCitations(diff string) ([]Citation, error) {
 		}
 		n := lineNum
 		lineNum++
+		here, next := ignores(text)
+		if covered || here {
+			kind = ' '
+		}
+		covered = next
 		if path.Ext(file) == ".go" {
 			if kind == '+' {
 				out = appendWhere(out, lineCitations(goComment(text)), file, n)

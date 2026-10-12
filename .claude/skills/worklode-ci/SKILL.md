@@ -43,6 +43,12 @@ changes, the PR body or a commit message needs one trailer naming a rule:
 rule ref there. The job makes no Worklode API call, so CI names that command
 rather than the ref.
 
+The job also fails an added line that cites a spec section by number
+instead of by rule ref (WL-REQ-1791). In Go only comments are checked. When
+a line names an anchor without citing a section, such as an HTML fragment in
+code, put `spec-gate:ignore` at the end of the line, or on its own comment
+line to cover the next line.
+
 ## `www/`
 
 `www/` is the static marketing site: own deploy workflow, shares no code with

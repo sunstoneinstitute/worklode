@@ -103,7 +103,8 @@ var (
 // one key set is never served under another.
 type ProjectKeys struct {
 	set         map[string]struct{}
-	home        string // the project a bare corpus number is scoped to; "" when unknown
+	home        string            // the project a bare corpus number is scoped to; "" when unknown
+	inPage      map[string]string // rule ref → section anchor of the spec being rendered; see InPage
 	fingerprint string
 }
 
@@ -142,6 +143,25 @@ func (k ProjectKeys) For(home string) ProjectKeys {
 	}
 	k.home = home
 	sum := sha256.Sum256([]byte(k.fingerprint + "\x00" + home))
+	k.fingerprint = hex.EncodeToString(sum[:])
+	return k
+}
+
+// InPage returns a copy that links a ref to a rule the page's spec arranges
+// to that section's anchor ("#sec-4"), so the reader stays in the document // spec-gate:ignore
+// (WL-REQ-1633). anchors maps rule ref to anchor. Refs absent from it keep the
+// /rules/ redirect. The fingerprint is remixed like For's.
+func (k ProjectKeys) InPage(anchors map[string]string) ProjectKeys {
+	if len(anchors) == 0 {
+		return k
+	}
+	refs := make([]string, 0, len(anchors))
+	for ref, anchor := range anchors {
+		refs = append(refs, ref+"="+anchor)
+	}
+	slices.Sort(refs)
+	k.inPage = anchors
+	sum := sha256.Sum256([]byte(k.fingerprint + "\x00" + strings.Join(refs, ",")))
 	k.fingerprint = hex.EncodeToString(sum[:])
 	return k
 }
@@ -283,7 +303,12 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 		if taken(loc[0], loc[1]) {
 			continue
 		}
-		out = append(out, refMatch{loc[0], loc[1], ruleRefPrefix + string(value[loc[0]:loc[1]])})
+		ref := string(value[loc[0]:loc[1]])
+		href := ruleRefPrefix + ref
+		if anchor, ok := keys.inPage[ref]; ok {
+			href = "#" + anchor
+		}
+		out = append(out, refMatch{loc[0], loc[1], href})
 	}
 	section := func(loc []int, numStart, numEnd, secStart, secEnd int) refMatch {
 		end := loc[1]
