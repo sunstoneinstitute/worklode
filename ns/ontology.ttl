@@ -724,6 +724,14 @@ wl:plannedIn a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:range wl:Plan ;
     rdfs:comment "The plan whose acceptance minted this task (WL-SPEC-77; backbone tasks.plan_doc)." .
 
+wl:plans a owl:ObjectProperty, owl:InverseFunctionalProperty ;
+    skos:definition "plans" ;
+    wl:layer wlc:execution ;
+    owl:inverseOf wl:plannedIn ;
+    rdfs:domain wl:Plan ;
+    rdfs:range wl:Task ;
+    rdfs:comment "This plan minted that task, its task set (WL-RULE-1793): inferred, never stored." .
+
 wl:about a owl:ObjectProperty, owl:FunctionalProperty ;
     skos:definition "is about" ;
     wl:layer wlc:execution ;
