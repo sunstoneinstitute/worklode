@@ -1,6 +1,6 @@
 {
   "inputDir": "./src/assets/icons",
-  "outputDir": "./public/assets/iconfont",
+  "outputDir": "./src/assets/iconfont",
   "name": "wlicon",
   "prefix": "wlicon",
   "tag": "i",

@@ -111,6 +111,13 @@ export interface DataTableProps<T> {
   getRowId: (row: T) => string
   /** Roster for "user"-type columns. */
   users?: DataTableUser[]
+  /**
+   * Who a "user" or "users" cell's picker offers, per row: for example the
+   * crew of the row's project. `users` stays the list names are shown
+   * from, so someone outside that list still shows where they're
+   * assigned. Without this, pickers offer `users`.
+   */
+  pickableUsers?: (row: T) => DataTableUser[]
   title?: string
   titleIcon?: ReactNode
   /**

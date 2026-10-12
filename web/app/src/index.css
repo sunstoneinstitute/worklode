@@ -1,7 +1,6 @@
-/* Must stay first: Vite inlines the local imports below into real CSS
-   rules, and a literal `@import url(...)` is invalid once it follows a
-   rule (see https://developer.mozilla.org/en-US/docs/Web/CSS/@import). */
-@import url("/assets/iconfont/wlicon.css");
+/* A relative import, so Vite bundles the icon font and hashes its files:
+   everything under /assets/ is served immutable. */
+@import "./assets/iconfont/wlicon.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
