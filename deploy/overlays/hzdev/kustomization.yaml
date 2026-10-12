@@ -91,5 +91,5 @@ patches:
                       number: 80
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
-    newTag: "9107db7"
+    newTag: "9eb5525"
     newName: ghcr.io/sunstoneinstitute/worklode
