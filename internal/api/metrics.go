@@ -115,7 +115,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(apiSessionRequestOutcomes, ", ") +
 			"). allowed/unauthenticated/forbidden cover both the bearer-token and " +
 			"session paths; session_required is a sessionOnly route refusing a " +
-			"bearer token or the open subject (WL-REQ-1771).",
+			"bearer token or the open subject (WL-REQ-1771); the refused_* " +
+			"outcomes are a non-bearer state-changing request failing the " +
+			"origin, page-header or content-type check (WL-REQ-1770).",
 	}, []string{"outcome"})
 	s.approvalDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_decisions_total",
@@ -949,7 +951,10 @@ var runBoardRenderOutcomes = []string{runBoardRenderEmpty, runBoardRenderRendere
 
 // apiSessionRequestOutcomes are the bounded label values of
 // worklode_api_session_requests_total.
-var apiSessionRequestOutcomes = []string{"allowed", "unauthenticated", "forbidden", "session_required"}
+var apiSessionRequestOutcomes = []string{
+	"allowed", "unauthenticated", "forbidden", "session_required",
+	"refused_origin", "refused_header", "refused_content_type",
+}
 
 // observeRunBoardRender records one project run board page render, by
 // outcome. Nil-safe: tests build a *server directly without initMetrics.
