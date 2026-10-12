@@ -69,6 +69,18 @@ describe("DataTable rendering", () => {
 
     expect(screen.getAllByText("@Claudicia")).toHaveLength(2)
   })
+
+  it("offers each row's own people in its picker, and still names someone who isn't one of them", async () => {
+    const user = userEvent.setup()
+    renderTable({ pickableUsers: (task) => (task.id === "t1" ? [USERS[1]] : USERS) })
+
+    const row = screen.getByRole("row", { name: /Write copy/ })
+    const cell = row.querySelector('[data-column-id="assignee"]') as HTMLElement
+    // t1 is assigned to Claudicia, who isn't in t1's picker list: still shown
+    await user.click(within(cell).getByRole("button", { name: /@Claudicia/ }))
+
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["@Marcus"])
+  })
 })
 
 describe("sorting", () => {

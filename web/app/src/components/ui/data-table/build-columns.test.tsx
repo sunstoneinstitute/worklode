@@ -12,6 +12,7 @@ const ctx = {
   updateRow: vi.fn(),
   removeRow: vi.fn(),
   addRow: vi.fn(),
+  pickableUsers: () => [],
 }
 
 describe("buildColumns", () => {
@@ -219,6 +220,7 @@ describe("user column filtering", () => {
     updateRow: vi.fn(),
     removeRow: vi.fn(),
     addRow: vi.fn(),
+    pickableUsers: () => [],
   }
 
   // The multiselect filter UI picks specific people (by id) from the roster

@@ -20,6 +20,8 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: '../../internal/webapp/dist',
       emptyOutDir: true,
+      // No data: URIs: the server's CSP allows fonts and images from 'self' only
+      assetsInlineLimit: 0,
     },
     // With the mock API off, /api goes to the Go server
     server: mocksOff

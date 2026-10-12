@@ -26,6 +26,7 @@ export function DataTable<T>({
   data,
   getRowId,
   users = [],
+  pickableUsers,
   title,
   titleIcon,
   toolbarActions,
@@ -67,8 +68,8 @@ export function DataTable<T>({
   // stable across a rows/onUpdateRow/onRemoveRow/onAddRow/commit change,
   // which otherwise remounted every cell (closing an open picker or delete
   // dialog) on every unrelated data change in controlled mode.
-  const latest = useRef({ controlledRows, rows, onUpdateRow, onRemoveRow, onAddRow, commit })
-  latest.current = { controlledRows, rows, onUpdateRow, onRemoveRow, onAddRow, commit }
+  const latest = useRef({ controlledRows, rows, onUpdateRow, onRemoveRow, onAddRow, commit, users, pickableUsers })
+  latest.current = { controlledRows, rows, onUpdateRow, onRemoveRow, onAddRow, commit, users, pickableUsers }
 
   const updateRow = useCallback(
     (rowId: string, patch: Partial<T>) => {
@@ -94,9 +95,17 @@ export function DataTable<T>({
     else commit([...rows, row])
   }, [])
 
+  // Read through the ref for the same reason as the callbacks above: a page
+  // rebuilds its per-row lists whenever crews load, and that must not
+  // rebuild every column
+  const pickableFor = useCallback((row: T) => {
+    const { pickableUsers, users } = latest.current
+    return pickableUsers ? pickableUsers(row) : users
+  }, [])
+
   const columnDefs = useMemo(
-    () => buildColumns(columns, { users, getRowId, updateRow, removeRow, addRow }),
-    [columns, users, getRowId, updateRow, removeRow, addRow],
+    () => buildColumns(columns, { users, getRowId, updateRow, removeRow, addRow, pickableUsers: pickableFor }),
+    [columns, users, getRowId, updateRow, removeRow, addRow, pickableFor],
   )
 
   // Schema lookup by column id, so globalFilterFn (which only gets a

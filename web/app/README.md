@@ -1,7 +1,7 @@
 # Worklode design
 
 The Worklode web UI: Vite + React 19 + TypeScript, Tailwind CSS v4, shadcn/ui.
-See `AGENTS.md` for how the code is organized and `docs/API.md` for the backend API.
+See `AGENTS.md` for how the code is organized.
 
 ## Prerequisites
 
