@@ -1,4 +1,4 @@
-import type { CrewMember, Meeting, Project, Task } from "@/api/types"
+import type { CrewMember, Meeting, MockProject, Task } from "@/api/mock-types"
 import { CREW } from "@/lib/crew"
 
 // The dummy database MSW answers from. Held in memory: changes last until
@@ -16,7 +16,7 @@ function seed() {
   // CREW stays in src/lib/crew.ts until plan 2 moves every table to the API
   const users: CrewMember[] = CREW.map((member) => ({ ...member }))
 
-  const projects: Project[] = [
+  const projects: MockProject[] = [
     { id: "the-grid", title: "The Grid", author: "u1", type: "data-story", status: "accepted", submitted: "2026-07-14", progress: 55, daysRemaining: 20, attention: "5 past due tasks" },
     { id: "melting-glaciers", title: "Melting Glaciers", author: "u2", type: "data-story", status: "accepted", submitted: "2026-07-30", progress: 30, daysRemaining: 20, attention: "2 reviews waiting" },
     { id: "night-shift", title: "Night shift at the reservoir", author: "u3", type: "short-story", status: "litmus", submitted: "2026-09-08", progress: 10, daysRemaining: 45, attention: "1 review waiting" },
