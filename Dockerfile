@@ -4,7 +4,7 @@
 # Builds the SPA ahead of the Go build, so the server image embeds the real
 # dist/ output (WL-REQ-1310 §9) instead of the placeholder index.html checked
 # into internal/webapp/dist/.
-FROM node:24-bookworm-slim AS web
+FROM node:26-bookworm-slim AS web
 WORKDIR /src/web/app
 RUN corepack enable pnpm
 # pnpm-workspace.yaml must come along with the lockfile: it carries the
