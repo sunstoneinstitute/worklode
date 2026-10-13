@@ -124,6 +124,30 @@ func currentSessionID() string {
 	return id
 }
 
+// linkClaudeSession links the Claude Code session running this command to
+// taskID: it writes the session marker in root (skipped when root is "") and
+// reports the session on the task, as `lode-hook session-start` would. Claude
+// Code exports CLAUDE_CODE_SESSION_ID to every Bash subprocess, subagents
+// included, so a claim made from a Bash call is linked even when no
+// SessionStart or EnterWorktree hook fires in the worktree (WL-942). Outside
+// Claude Code it does nothing. Failures warn and never fail the claim.
+func linkClaudeSession(cmd *cobra.Command, c *cli.Client, taskID, root string) {
+	sessionID := os.Getenv("CLAUDE_CODE_SESSION_ID")
+	if sessionID == "" {
+		return
+	}
+	if root != "" {
+		if err := worktree.WriteSessionMarker(root, worktree.SessionMarker{
+			SessionID: sessionID, PID: os.Getpid(), StartedAt: time.Now().Format(time.RFC3339),
+		}); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: write session marker: %v\n", err)
+		}
+	}
+	if _, _, err := c.TouchAgentSession(cmd.Context(), taskID, "claude-code", "", sessionID, nil); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: link session to %s: %v\n", taskID, err)
+	}
+}
+
 // unboundHelp renders the two ways out of an unbound checkout: say which task,
 // or claim one into a worktree that carries the binding. The description
 // column is sized to the widest form so a long one (`lode task block <id>
@@ -434,6 +458,8 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kinds []string, s
 	// WL-REQ-71: consent + materialization while the operator is present.
 	// Never fails the claim; writes to stderr only.
 	runSecretsCeremony(ctx, cmd, c, taskID, dir, brief.Task.Secrets)
+
+	linkClaudeSession(cmd, c, taskID, dir)
 
 	if jsonOut(cmd) {
 		return printJSON(cmd, nextResult{
