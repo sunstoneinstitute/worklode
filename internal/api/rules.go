@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"database/sql"
-	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -286,25 +284,13 @@ func (s *server) listRules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rules)
 }
 
-// docIDByRef resolves a document ref the way GET /api/v1/docs/resolve does:
-// an id or slug first, then the <KEY>-<TYPE>-<n> grammar. An ambiguous
-// grammar ref is ErrInvalidInput.
+// docIDByRef resolves a document ref to its id; see resolveAnyDocRef.
 func (s *server) docIDByRef(ctx context.Context, ref string) (int64, error) {
-	d, err := s.st.ResolveDocRef(ctx, ref)
-	if err == nil {
-		return d.ID, nil
-	}
-	if !errors.Is(err, store.ErrNotFound) {
+	d, err := s.resolveAnyDocRef(ctx, ref)
+	if err != nil {
 		return 0, err
 	}
-	gd, gerr := s.resolveDocRefWeb(ctx, ref, "")
-	if gerr == nil {
-		return gd.ID, nil
-	}
-	if amb := (*designdoc.AmbiguousRefError)(nil); errors.As(gerr, &amb) {
-		return 0, fmt.Errorf("%s: %w", gerr.Error(), store.ErrInvalidInput)
-	}
-	return 0, err
+	return d.ID, nil
 }
 
 // ruleRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.

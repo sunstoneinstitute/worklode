@@ -3,6 +3,7 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -84,6 +85,25 @@ func TestTaskGapRefusesUnknownDoc(t *testing.T) {
 	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/gap", token,
 		model.GapTaskInput{Doc: "no-such-doc", Reason: "why"})
 	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `no document found for \"no-such-doc\"`) {
+		t.Errorf("body %s does not name the ref", rr.Body.String())
+	}
+}
+
+// TestTaskGapResolvesFullDocRef: the <KEY>-<TYPE>-<n> ref every read command
+// prints names the document, the same as its slug does (WL-869).
+func TestTaskGapResolvesFullDocRef(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	_, task := ladderFixture(t, h, token)
+	id, _ := task["id"].(string)
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/gap", token,
+		model.GapTaskInput{Doc: "WL-SPEC-1", Reason: "why"})
+	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 }

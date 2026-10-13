@@ -41,7 +41,7 @@ func (s *server) escalateTask(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusUnprocessableEntity, amb.Error())
 			return
 		}
-		s.mapStoreErr(w, err)
+		s.mapDocRefErr(w, err)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (e *ambiguousTargetError) Error() string { return e.msg }
 // than guessing, when the plan covers several.
 func (s *server) escalationTarget(r *http.Request, taskID string, req model.EscalateTaskInput) (int64, error) {
 	if ref := strings.TrimSpace(req.Doc); ref != "" {
-		d, err := s.st.ResolveDocRef(r.Context(), ref)
+		d, err := s.resolveAnyDocRef(r.Context(), ref)
 		if err != nil {
 			return 0, err
 		}
