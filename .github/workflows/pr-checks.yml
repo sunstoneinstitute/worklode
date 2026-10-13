@@ -232,17 +232,9 @@ jobs:
           overlay-base: deploy/overlays
           environments: hzdev hzprod
 
-  # Refuses a pull request that changes a guarded path without a Spec:
-  # trailer (11-design-authority-gate.md). Runs only for a real pull
-  # request, since a merge_group build has no PR body to read. It keys on
-  # `run` alone, deliberately skipping `gate`'s `code` output: `code` is the
-  # scope of the Go build, while a [gate] table may guard paths the Go build
-  # ignores, such as deploy/base/**. Under the `code` scope a pull request
-  # confined to one of those would be a guarded change the gate never saw.
-  # A docs-only pull request has run=false, so docs/** is not gateable
-  # (WL-REQ-7). The job is a Go build plus one git diff, so running it on every pull
-  # request costs little. It prints a notice and exits 0 on a repo with no
-  # [gate] table in .worklode/config.toml, which this repo does not have yet.
+  # A [gate] path needs a Spec: trailer (a rule ref or none <reason>), and the PR
+  # body and added lines must not cite a spec section by number (WL-REQ-1791).
+  # Keys on `run`, not `code`, since gated paths include deploy/base/**.
   spec-gate:
     needs: gate
     if: github.event_name == 'pull_request' && needs.gate.outputs.run == 'true'
