@@ -92,6 +92,11 @@ func TestResolveDocRef(t *testing.T) {
 	if got.ID != spec.ID {
 		t.Errorf("ResolveDocRef(slug) = %d, want %d", got.ID, spec.ID)
 	}
+	// A zero-padded number is never read as a row id.
+	padded := fmt.Sprintf("0%d", spec.ID)
+	if _, err := s.ResolveDocRef(t.Context(), padded); !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), padded) {
+		t.Errorf("ResolveDocRef(%s) = %v, want ErrInvalidInput naming the ref", padded, err)
+	}
 	if _, err := s.ResolveDocRef(t.Context(), "no-such-slug"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("ResolveDocRef(unmatched) = %v, want ErrNotFound", err)
 	}
