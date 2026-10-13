@@ -1026,12 +1026,13 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 
 // submitDoc handles POST /api/v1/docs/{id}/submit: the document enters review.
 // Submission is an event, not a status (WL-RULE-179) — no document column moves
-// — so this emits wl:DocumentSubmitted with no apply at all and answers with
-// the document unchanged.
+// — so this emits wl:DocumentSubmitted and answers with the document
+// unchanged. The one effect applied with it is closing the open design task
+// that wrote the document (WL-REQ-1629).
 //
 // A second submit of the same version is a 200 that inserts nothing: the
 // deterministic external id collapses it at the log, before any guard could
-// run. What the submission means is the doc-lifecycle watcher's to decide.
+// run. What else the submission means is the doc-lifecycle watcher's to decide.
 func (s *server) submitDoc(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -1045,7 +1046,9 @@ func (s *server) submitDoc(w http.ResponseWriter, r *http.Request) {
 	ev := eventbus.DocumentSubmitted{
 		Doc: store.DocIRI(*d), Actor: actorIDFrom(r), At: s.st.Now(), Version: d.Version,
 	}
-	_, _, err = eventbus.Emit(r.Context(), s.st, docSource, ev, nil)
+	_, _, err = eventbus.Emit(r.Context(), s.st, docSource, ev, func(tx *sql.Tx, eventID int64) error {
+		return store.CloseAuthoringTask(tx, s.st.Now(), d.ID, eventID)
+	})
 	s.st.RecordDocOp("submit", err)
 	if err != nil {
 		s.mapStoreErr(w, err)
