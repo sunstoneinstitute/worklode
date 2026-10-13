@@ -713,6 +713,10 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 
 	view := taskView(s.mdcache, s.projectKeys(ctx, t.Project), t, project, blocked, entries, out, in)
 	view.PRs = taskPRRows(openPRs, ci)
+	if view.Generated, err = s.st.GeneratedDocs(ctx, id); err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
 	view.Attachments = refs
 	view.Viewer = actorIDFrom(r)
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {

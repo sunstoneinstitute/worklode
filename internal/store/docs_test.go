@@ -1552,6 +1552,48 @@ func TestCreateDocRecordsGeneratedByTask(t *testing.T) {
 	}
 }
 
+// TestGeneratedDocsListsDocsAndReviews pins WL-927: a task lists the documents
+// it wrote and, for each, the review tasks minted about it; a design task
+// about the same document is not a review.
+func TestGeneratedDocsListsDocsAndReviews(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	seedDocsTask(t, s, "P1-100")
+
+	none, err := s.GeneratedDocs(t.Context(), "P1-100")
+	if err != nil || len(none) != 0 {
+		t.Fatalf("GeneratedDocs before any doc = %v, %v; want empty", none, err)
+	}
+
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x",
+		Body: specBody, CreatedBy: "stig", GeneratedByTask: "P1-100",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 26, Slug: "026-x",
+		Body: specBody, CreatedBy: "stig",
+	})
+	review := createTask(t, s, s.Now(), TaskInput{
+		ProjectID: "p1", Title: "Review it", Body: "body", Priority: "medium",
+		Kind: "review", AboutDoc: doc.ID, CreatedBy: "stig",
+	})
+	createTask(t, s, s.Now(), TaskInput{
+		ProjectID: "p1", Title: "Plan it", Body: "body", Priority: "medium",
+		Kind: "design", AboutDoc: doc.ID, CreatedBy: "stig",
+	})
+
+	got, err := s.GeneratedDocs(t.Context(), "P1-100")
+	if err != nil {
+		t.Fatalf("GeneratedDocs: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != doc.ID || got[0].Ref != "P1-SPEC-25" {
+		t.Fatalf("GeneratedDocs = %+v, want only %d (P1-SPEC-25)", got, doc.ID)
+	}
+	if len(got[0].Reviews) != 1 || got[0].Reviews[0].ID != review.ID {
+		t.Fatalf("Reviews = %+v, want only %s", got[0].Reviews, review.ID)
+	}
+}
+
 // referrerSpecBody is an accepted-shaped spec body pointing at one section of
 // another document: the `requires` half of a WL-REQ-171 referrer. anchor is ""
 // for a document-level reference, which claims the document rather than a

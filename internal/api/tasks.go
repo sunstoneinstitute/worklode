@@ -253,7 +253,13 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions, GovernedBy: governed}
+	generated, err := s.st.GeneratedDocs(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions, GovernedBy: governed, Generated: generated}
 	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)

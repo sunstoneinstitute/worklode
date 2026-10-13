@@ -73,6 +73,18 @@ type TaskDetail struct {
 	Decisions []Decision `json:"decisions,omitempty"`
 	// GovernedBy is the task's governing rules (S2), omitted when none.
 	GovernedBy []TaskGovernance `json:"governed_by,omitempty"`
+	// Generated is the live documents the task wrote (WL-REQ-177), each with
+	// the review tasks minted for it, so a design task links to its plan and
+	// to whoever is reviewing it (WL-927).
+	Generated []TaskGeneratedDoc `json:"generated,omitempty"`
+}
+
+// TaskGeneratedDoc is one document a task wrote (docs.generated_by_task) and
+// the review tasks doc-lifecycle minted about it (tasks.about_doc,
+// kind review, WL-RULE-179). Reviews is always an array.
+type TaskGeneratedDoc struct {
+	DocRef
+	Reviews []Task `json:"reviews"`
 }
 
 // TaskListDetail is one row of GET /api/v1/tasks?detail=true: the base task
