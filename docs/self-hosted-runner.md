@@ -41,14 +41,15 @@ reach the Docker socket. That is a materially weaker boundary than the rest
 of this setup: a user who can talk to the Docker socket can run a container
 that bind-mounts the host root and is, for practical purposes, root on
 hel01. Docker-group membership is root-equivalent — there is no
-Docker-socket ACL that stops short of that. Weigh that against `trusted`
+Docker-socket ACL that stops short of that. `test` also uses it, to start
+its per-run Oxigraph. Weigh that against `trusted`
 above before adding another job here: the whole isolation model now rests on
 `trusted` being right, not on `ghrunner` being unprivileged.
 
 Registered as two repo-level runners (not org-level), `hel01` and `hel01-2`,
 both carrying labels `self-hosted, Linux, X64, hel01, gha-pgvector, docker,
 gha-buildcache`. `lint` targets `self-hosted` and `gha-buildcache`; `test`
-targets `gha-pgvector` and `gha-buildcache`; `build-image` targets `docker`
+targets `gha-pgvector`, `gha-buildcache` and `docker`; `build-image` targets `docker`
 and `gha-buildcache` — see the sections below for why each label exists
 rather than every job sharing `self-hosted`. Either runner can pick up any
 of the three jobs; GitHub schedules to whichever is idle.
@@ -192,32 +193,25 @@ implies the other.
 ## Oxigraph for `test`
 
 The knowledge-graph tests (`internal/graphproj`, `internal/overview`,
-`internal/projector`, `internal/kg/...`) need a SPARQL endpoint.
-`ubuntu-latest` starts an ephemeral Oxigraph per job. The self-hosted path
-points at an always-on container on hel01, like Postgres:
+`internal/projector`, `internal/kg/...`) need a SPARQL endpoint. Unlike
+Postgres, every `test` run on both runner kinds starts its own Oxigraph
+container (WL-904). `_test.yml` names it after the run id and attempt,
+publishes it on a random free port bound to `127.0.0.1`, exports that URL as
+`TEST_SPARQL_URL`, and removes the container in an `if: always()` step. The
+store lives on tmpfs inside the container.
 
-```
-docker run -d --name gha-ci-oxigraph --restart=always \
-  -p 127.0.0.1:17878:7878 --tmpfs /data:rw,size=4g \
-  ghcr.io/oxigraph/oxigraph:0.5.9 serve --location /data --bind 0.0.0.0:7878
-```
+A shared endpoint on a fixed port broke CI once: an orphaned Oxigraph serving
+a since-deleted relative `./oxidata` directory held the port and failed every
+write with `IO error ... 000040.log`. A per-run container on a random port
+cannot be answered by a stray process, and two concurrent runs never share a
+store.
 
-- Port 17878, not 7878, keeps it clear of a local-dev Oxigraph on the
-  default port, the same reason Postgres uses 15432.
-- The store lives on tmpfs. Every restart wipes it, which clears graphs a
-  crashed run left behind, and no job checkout can delete its files. An
-  earlier Oxigraph serving a relative `./oxidata` directory lost its files
-  that way and failed every merge-queue run with `IO error ... 000040.log`.
+This is why `test` also requires the `docker` label on a self-hosted runner.
+Under `CI`, `graphtest.Endpoint` fails when `TEST_SPARQL_URL` is unset or
+unreachable, and never falls back to `localhost:7878`.
 
-`pr-checks.yml` passes `sparql-url: http://localhost:17878` to `_test.yml`
-when `trusted`, and `_test.yml` sets `TEST_SPARQL_URL` from it. With it set
-on CI, an unreachable endpoint fails the tests instead of skipping them. The
-`gha-pgvector` label covers this container too: label a new runner once both
-exist.
-
-The store is shared by every concurrent `test` job. A test must write only
-run-unique graph IRIs and assert only on its own graphs or subjects, never
-on a store-wide count. `graphtest.PutGraph` drops each graph on cleanup.
+The always-on `gha-ci-oxigraph` container (port 17878) that trusted runs
+used before is no longer read by CI and can be removed from hel01.
 
 ## Persistent build caches (`gha-buildcache`)
 
