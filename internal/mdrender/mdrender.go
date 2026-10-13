@@ -17,14 +17,11 @@ import (
 	"bytes"
 	"errors"
 	"html/template"
-	"io"
 	"regexp"
-	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
-	meta "github.com/yuin/goldmark-meta"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	mdhtml "github.com/yuin/goldmark/renderer/html"
@@ -134,27 +131,6 @@ var mdDoc = goldmark.New(
 	goldmark.WithParserOptions(parser.WithAttribute(), withDocRefLinks),
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
 )
-
-// mdMeta parses only front matter, into the parser.Context DocMeta hands it —
-// it never renders a body and is never given to render(), so it shares
-// nothing with the sanitised pipeline above and cannot affect what a page
-// shows. mdDoc's own frontmatter is stripped as raw text by stripFrontmatter
-// before Convert ever sees it (WL-301), so wiring this extension into mdDoc
-// itself would parse nothing; DocMeta exists to reach the fields that removal
-// throws away.
-var mdMeta = goldmark.New(goldmark.WithExtensions(meta.Meta))
-
-// DocMeta parses a design-document body's YAML front matter and returns it as
-// a plain map, for callers that want the fields programmatically rather than
-// rendered. It does no sanitisation and returns no HTML, so it is safe to
-// call on an untrusted body without going through render.
-func DocMeta(body string) (map[string]any, error) {
-	ctx := parser.NewContext()
-	if err := mdMeta.Convert([]byte(body), io.Discard, parser.WithContext(ctx)); err != nil {
-		return nil, err
-	}
-	return meta.Get(ctx), nil
-}
 
 var (
 	policy    = buildPolicy()
@@ -431,31 +407,8 @@ func DocBody(keys ProjectKeys, body string) template.HTML {
 	return html
 }
 
-// stripFrontmatter drops a leading YAML frontmatter block from a document
-// body (WL-301): the doc page renders those fields structurally, and a
-// frontmatter fence rendered as markdown is a thematic break plus prose
-// noise. Applied to the doc flavour only, inside render, so the cached and
-// uncached paths agree and the cache key stays the stored body.
-func stripFrontmatter(body string) string {
-	rest, ok := strings.CutPrefix(body, "---\n")
-	if !ok {
-		return body
-	}
-	if i := strings.Index(rest, "\n---\n"); i >= 0 {
-		return rest[i+5:]
-	}
-	if trimmed, ok := strings.CutSuffix(rest, "\n---"); ok {
-		_ = trimmed
-		return ""
-	}
-	return body
-}
-
 // render is Body plus the outcome label the cache reports.
 func render(f flavour, keys ProjectKeys, body string) (template.HTML, string) {
-	if f.kind == kindDoc {
-		body = stripFrontmatter(body)
-	}
 	if len(body) > f.maxBody {
 		return template.HTML(template.HTMLEscapeString(body)), outcomeOversize
 	}
