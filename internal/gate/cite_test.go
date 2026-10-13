@@ -104,7 +104,7 @@ func TestAddedCitations(t *testing.T) {
 		"+// \"#sec-5\" here spec-gate:ignore",
 		"+// \"#sec-6\" is checked again",
 	}, "\n")
-	got, err := cfg.AddedCitations(diff)
+	got, err := cfg.AddedCitations(diff, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +113,38 @@ func TestAddedCitations(t *testing.T) {
 		where = append(where, c.Where+" "+c.Text)
 	}
 	want := []string{"a.go:3 WL-SPEC-77 §4", "doc.md:11 #sec-2", "b.go:4 #sec-6"}
+	if strings.Join(where, "|") != strings.Join(want, "|") {
+		t.Errorf("AddedCitations = %q, want %q", where, want)
+	}
+}
+
+func TestAddedCitationsPostImage(t *testing.T) {
+	cfg := Config{Paths: []string{"x"}}
+	files := map[string]string{
+		"doc.md": "intro\n```\nsee #sec-2\n```\nWL-SPEC-77 §4 prose\n",
+		"a.go":   "package a\n/*\nblock\n#sec-3 in block\n*/\nvar s = `\n#sec-4 in raw\n`\n",
+	}
+	diff := strings.Join([]string{
+		"+++ b/doc.md",
+		"@@ -3,0 +3,1 @@",
+		"+see #sec-2",
+		"@@ -5,0 +5,1 @@",
+		"+WL-SPEC-77 §4 prose",
+		"+++ b/a.go",
+		"@@ -4,0 +4,1 @@",
+		"+#sec-3 in block",
+		"@@ -7,0 +7,1 @@",
+		"+#sec-4 in raw",
+	}, "\n")
+	got, err := cfg.AddedCitations(diff, func(f string) (string, bool) { s, ok := files[f]; return s, ok })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var where []string
+	for _, c := range got {
+		where = append(where, c.Where+" "+c.Text)
+	}
+	want := []string{"doc.md:5 WL-SPEC-77 §4", "a.go:4 #sec-3"}
 	if strings.Join(where, "|") != strings.Join(want, "|") {
 		t.Errorf("AddedCitations = %q, want %q", where, want)
 	}
