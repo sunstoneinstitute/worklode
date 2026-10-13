@@ -587,7 +587,9 @@ func TestSubscriberLockSurvivesPoolChurn(t *testing.T) {
 // Raw(driver.ErrBadConn) — re-acquiring on a recycled session is just a
 // re-entrant grant to the same session, so it still reports ok=true either
 // way. This checks the backend actually disconnects: its pg_stat_activity
-// row must disappear, not merely go idle.
+// row must disappear, not merely go idle. It counts client backends only:
+// an autovacuum worker visiting the per-test database also shows up in
+// pg_stat_activity under its datname.
 func TestSubscriberLockReleaseDiscardsSession(t *testing.T) {
 	t.Parallel()
 	s := openTestStore(t)
@@ -597,7 +599,7 @@ func TestSubscriberLockReleaseDiscardsSession(t *testing.T) {
 		t.Helper()
 		var n int
 		if err := s.db.QueryRowContext(ctx,
-			`SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()`,
+			`SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND backend_type = 'client backend' AND pid <> pg_backend_pid()`,
 		).Scan(&n); err != nil {
 			t.Fatalf("count pg_stat_activity: %v", err)
 		}
