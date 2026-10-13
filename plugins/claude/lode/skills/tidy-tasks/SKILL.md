@@ -58,12 +58,13 @@ batches in parallel.
 > 4. **§ citation**: look up the ref with `lode show '<SPEC>#sec-<N>'`. The
 >    ref is in the heading, e.g. `## 12. ... (DP-REQ-58) {#sec-12}`. A bare
 >    "§N" refers to the spec named nearby. A range lists every section's
->    ref. Rewrite the sentence so it still reads naturally: "Governing:
->    DP-SPEC-12 §12" becomes "Governing: DP-REQ-58", and "Decompose DP-SPEC-1
->    §15 into plans" becomes "Decompose DP-REQ-238 (DP-SPEC-1) into plans".
+>    ref. Rewrite the sentence so it still reads naturally:
+>    `Governing: DP-SPEC-12 §12` becomes `Governing: DP-REQ-58`, and
+>    `Decompose DP-SPEC-1 §15 into plans` becomes
+>    `Decompose DP-REQ-238 (DP-SPEC-1) into plans`.
 >    Add a `governs` edge for refs on a "Governing:" line. A task body can
->    predate a renumbering, so lettered anchors such as §9a or §5.1a often
->    no longer exist. If `lode show` fails, list the spec's rules with
+>    predate a renumbering, so lettered anchors such as `§9a` or `§5.1a`
+>    often no longer exist. If `lode show` fails, list the spec's rules with
 >    `lode rule list --doc <SPEC>`, pick the one whose topic matches the
 >    sentence, and report that choice. A section with no rule ref of its
 >    own: cite the nearest rule that carries the content, and report it.
