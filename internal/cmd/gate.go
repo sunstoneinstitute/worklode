@@ -114,7 +114,11 @@ func runGateCheck(dir, base, head, bodyFile string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("gate: %w", err)
 	}
-	inDiff, err := cfg.AddedCitations(added)
+	postImage := func(file string) (string, bool) {
+		b, err := gitexec.Bytes(root, "show", head+":"+file)
+		return string(b), err == nil
+	}
+	inDiff, err := cfg.AddedCitations(added, postImage)
 	if err != nil {
 		return "", fmt.Errorf("gate: %w", err)
 	}
