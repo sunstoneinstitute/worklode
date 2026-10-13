@@ -8552,6 +8552,12 @@ export interface components {
             pin?: boolean;
             rule?: string;
         };
+        GraphCover: {
+            /** Format: int64 */
+            from_doc?: number;
+            /** Format: int64 */
+            rule?: number;
+        };
         GraphDocEdge: {
             /** Format: int64 */
             from_doc?: number;
@@ -8849,6 +8855,7 @@ export interface components {
             } | null;
         };
         ProjectGraph: {
+            covers?: components["schemas"]["GraphCover"][] | null;
             doc_edges?: components["schemas"]["GraphDocEdge"][] | null;
             docs?: components["schemas"]["Doc"][] | null;
             links?: components["schemas"]["GraphLink"][] | null;

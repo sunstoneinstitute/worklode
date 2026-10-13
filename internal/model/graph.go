@@ -15,7 +15,10 @@ type ProjectGraph struct {
 	// render them.
 	Docs     []Doc          `json:"docs"`
 	DocEdges []GraphDocEdge `json:"doc_edges"`
-	Links    []GraphLink    `json:"links"`
+	// Covers are the plan-to-rule covers edges (WL-REQ-1709) of the plans
+	// among Docs. DocEdges draws covers at document level for the page.
+	Covers []GraphCover `json:"covers"`
+	Links  []GraphLink  `json:"links"`
 }
 
 // GraphDocEdge is one doc_edges relation collapsed to document level: one
@@ -26,6 +29,13 @@ type GraphDocEdge struct {
 	From int64  `json:"from_doc"`
 	To   int64  `json:"to_doc"`
 	Type string `json:"type"`
+}
+
+// GraphCover is one covers edge from plan From to rule number Rule of the
+// same project.
+type GraphCover struct {
+	From int64 `json:"from_doc"`
+	Rule int64 `json:"rule"`
 }
 
 // GraphLink joins a task to a document. Type is planned_in (tasks.plan_doc:
