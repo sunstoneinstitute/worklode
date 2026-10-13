@@ -353,6 +353,9 @@ type TaskView struct {
 	// merged and closed PRs stay in Timeline only. internal/api rolls each
 	// one's CI up from its head SHA's runs (prCIState, runboard.go).
 	PRs []TaskPR
+	// Generated is the documents the task wrote and their review tasks
+	// (WL-927). Empty omits the card.
+	Generated []model.TaskGeneratedDoc
 }
 
 // TaskPR is one open pull request linked from the task page header. Label is

@@ -9328,6 +9328,7 @@ export interface components {
                 in?: components["schemas"]["TaskEdgeIn"][] | null;
                 out?: components["schemas"]["TaskEdgeOut"][] | null;
             };
+            generated?: components["schemas"]["TaskGeneratedDoc"][];
             governed_by?: components["schemas"]["TaskGovernance"][];
             hierarchy?: components["schemas"]["TaskHierarchy"];
             human_only?: boolean;
@@ -9355,6 +9356,15 @@ export interface components {
         TaskEdgeOut: {
             to?: string;
             type?: string;
+        };
+        TaskGeneratedDoc: {
+            /** Format: int64 */
+            id?: number;
+            ref?: string;
+            reviews?: components["schemas"]["Task"][] | null;
+            slug?: string;
+            status?: string;
+            title?: string;
         };
         TaskGovernance: {
             current?: number;

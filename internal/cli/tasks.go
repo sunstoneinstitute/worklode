@@ -478,6 +478,15 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 			fmt.Fprintf(w, "  %s %s %s\n", e.From, e.Type, t.ID)
 		}
 	}
+	if len(t.Generated) > 0 {
+		fmt.Fprintln(w, "\ngenerated:")
+		for _, g := range t.Generated {
+			fmt.Fprintf(w, "  %s  %s (%s)\n", g.Ref, g.Title, g.Status)
+			for _, r := range g.Reviews {
+				fmt.Fprintf(w, "    review %s  %s (%s)\n", r.ID, r.Title, r.State)
+			}
+		}
+	}
 	if len(t.Blobs) > 0 {
 		fmt.Fprintln(w, "\nattachments:")
 		tw := newTabwriter(w)
