@@ -586,9 +586,9 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusUnprocessableEntity, "plan must not be blank")
 			return
 		}
-		d, err := s.st.ResolveDocRef(r.Context(), ref)
+		d, err := s.resolveAnyDocRef(r.Context(), ref)
 		if err != nil {
-			s.mapStoreErr(w, err)
+			s.mapDocRefErr(w, err)
 			return
 		}
 		planDoc = d.ID
