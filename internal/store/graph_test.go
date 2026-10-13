@@ -95,6 +95,14 @@ func TestProjectGraph(t *testing.T) {
 	if n != 1 {
 		t.Errorf("covers edges plan->spec = %d, want 1", n)
 	}
+	if len(g.Covers) == 0 {
+		t.Errorf("graph carries no rule-level covers")
+	}
+	for _, c := range g.Covers {
+		if c.From != planID || c.Rule == 0 {
+			t.Errorf("cover %+v: want from plan %d onto a rule", c, planID)
+		}
+	}
 }
 
 func TestProjectGraphEmptyProjectHasEmptySlices(t *testing.T) {
