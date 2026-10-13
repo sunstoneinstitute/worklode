@@ -238,7 +238,7 @@ jobs:
   spec-gate:
     needs: gate
     if: github.event_name == 'pull_request' && needs.gate.outputs.run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.gate.outputs.trusted == 'true' && 'self-hosted' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
