@@ -58,6 +58,33 @@ func TestGateCheckPassesWithTrailerInCommit(t *testing.T) {
 	}
 }
 
+// The verdict prints the infix of the rule's current kind (WL-REQ-1642), and
+// echoes the trailer's spelling when no server answers.
+func TestGateCheckVerdictPrintsRuleKindInfix(t *testing.T) {
+	dir, base, head := gateRepo(t, gateTable, "change a command\n\nSpec: WL-RULE-7\n")
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/rules/WL-RULE-7" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ref":"WL-REQ-7","kind":"requirement"}`))
+	}))
+	t.Cleanup(ts.Close)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "wl_"+strings.Repeat("0", 40))
+	out, err := runGateCheck(dir, base, head, "")
+	if err != nil || !strings.Contains(out, "Spec: WL-REQ-7 covers") {
+		t.Fatalf("verdict must name WL-REQ-7: out=%q err=%v", out, err)
+	}
+	t.Setenv("LODE_SERVER", "")
+	out, err = runGateCheck(dir, base, head, "")
+	if err != nil || !strings.Contains(out, "Spec: WL-RULE-7 covers") {
+		t.Fatalf("offline verdict must echo the trailer: out=%q err=%v", out, err)
+	}
+}
+
 func TestGateCheckPassesWithTrailerInBodyFile(t *testing.T) {
 	dir, base, head := gateRepo(t, gateTable, "change a command")
 	body := filepath.Join(dir, "body.md")
