@@ -823,7 +823,7 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 }
 
 // ResolveDocRef resolves a document reference to its row (WL-REQ-168): a
-// positive integer is the id itself, then a <KEY>-<TYPE>-<n> ref, then an
+// positive integer is the id itself (a zero-padded one is refused), then a <KEY>-<TYPE>-<n> ref, then an
 // exact slug. The rule lives here, beside the data, so resolving a ref costs one
 // indexed lookup instead of a listing of the whole corpus, and so every
 // client answers a given ref the same way.
@@ -837,6 +837,13 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 // a tombstone never shadows a live document.
 func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, error) {
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		// A zero-padded number is the corpus's document-number spelling
+		// ("071"), and this resolver has no project to read it against, so
+		// it is refused instead of read as row id 71.
+		if strings.HasPrefix(ref, "0") {
+			return nil, fmt.Errorf("ref %q is a zero-padded document number, not a document id; use <KEY>-SPEC-%d or the unpadded id: %w",
+				ref, id, ErrInvalidInput)
+		}
 		return s.GetDoc(ctx, id)
 	}
 	if sh, ok := designdoc.ParseShorthand(ref); ok {
