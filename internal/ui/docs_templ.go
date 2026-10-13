@@ -12,7 +12,7 @@ import "strconv"
 
 // docs.templ renders the backbone's document corpus (WL-REQ-164): the index
 // at /docs and one document at /docs/{id}. Both are read-only. Authoring is
-// not a page: a document's body is a markdown artifact with frontmatter,
+// not a page: a document's body is a markdown body,
 // submitted whole through the API or `lode doc`, and a textarea in a browser
 // would be a worse editor pretending to be the source of truth.
 //

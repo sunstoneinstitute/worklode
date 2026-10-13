@@ -158,20 +158,3 @@ func TestProjectKeysFingerprintIsOrderIndependent(t *testing.T) {
 		t.Error("an empty key set must fingerprint like the zero value")
 	}
 }
-
-// TestDocBodyStripsFrontmatter pins WL-301's other half: the doc flavour
-// drops the leading frontmatter fence, which the page shows structurally.
-func TestDocBodyStripsFrontmatter(t *testing.T) {
-	got := string(DocBody(ProjectKeys{}, "---\nstatus: draft\nrequires:\n- 004-execution-backbone.md\n---\n# Title\n\nBody text."))
-	if strings.Contains(got, "status: draft") || strings.Contains(got, "requires") {
-		t.Errorf("frontmatter leaked into the rendered body:\n%s", got)
-	}
-	if !strings.Contains(got, "Body text.") || !strings.Contains(got, "Title") {
-		t.Errorf("body content lost:\n%s", got)
-	}
-	// A body with no frontmatter is untouched, and a task body keeps its
-	// leading thematic break.
-	if got := string(DocBody(ProjectKeys{}, "# Plain\n\ntext")); !strings.Contains(got, "Plain") {
-		t.Errorf("plain body mangled: %s", got)
-	}
-}
