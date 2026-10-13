@@ -7,7 +7,7 @@ import (
 
 // ProjectGraphTriples projects one model.ProjectGraph: every task through
 // TaskTriples, every document through DocTriples (without version pointers —
-// the graph read carries none), and one triple per document edge and per
+// the graph read carries none), and one triple per document edge, one covers triple per rule a plan covers, and per
 // task-to-document link. A generated_by link is not emitted here because
 // DocTriples already states it as prov:wasGeneratedBy. An edge whose far end
 // is not among g.Docs names nothing this graph knows and is skipped.
@@ -39,7 +39,7 @@ func ProjectGraphTriples(g model.ProjectGraph) []Triple {
 		s, o := iri.Doc(from), iri.Doc(to)
 		var p string
 		switch e.Type {
-		case "covers", "implements", "defers":
+		case "implements", "defers":
 			p = iri.Term(e.Type)
 		case "blockedBy":
 			p = iri.Term("blockedByPlan")
@@ -51,6 +51,12 @@ func ProjectGraphTriples(g model.ProjectGraph) []Triple {
 			continue
 		}
 		triples = append(triples, Triple{S: s, P: p, O: IRIRef(o)})
+	}
+	// covers runs plan to rule (WL-REQ-247), never document to document.
+	for _, c := range g.Covers {
+		if from, ok := key[c.From]; ok {
+			triples = append(triples, Triple{S: iri.Doc(from), P: iri.Term("covers"), O: IRIRef(iri.Rule(g.Project, c.Rule))})
+		}
 	}
 	for _, l := range g.Links {
 		to, ok := key[l.Doc]

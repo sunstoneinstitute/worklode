@@ -27,6 +27,7 @@ func TestProjectGraphTriples(t *testing.T) {
 			{From: 30, To: 10, Type: "amends"},   // not emitted (WL-REQ-169)
 			{From: 20, To: 99, Type: "requires"}, // 99 is not in Docs: skipped
 		},
+		Covers: []model.GraphCover{{From: 20, Rule: 1}, {From: 20, Rule: 2}},
 		Links: []model.GraphLink{
 			{Task: "WL-1", Doc: 20, Type: "planned_in"},
 			{Task: "WL-1", Doc: 10, Type: "about"},
@@ -37,7 +38,8 @@ func TestProjectGraphTriples(t *testing.T) {
 	want := []string{
 		"<" + iri.Task("WL-1") + "> <" + iri.Term("blocks") + "> <" + iri.Task("WL-2") + ">",
 		"<" + iri.Task("WL-2") + "> <" + iri.Term("dependsOn") + "> <" + iri.Task("WL-1") + ">",
-		"<" + iri.Doc("plan-worklode-020") + "> <" + iri.Term("covers") + "> <" + iri.Doc("spec-worklode-010") + ">",
+		"<" + iri.Doc("plan-worklode-020") + "> <" + iri.Term("covers") + "> <" + iri.Rule("worklode", 1) + ">",
+		"<" + iri.Doc("plan-worklode-020") + "> <" + iri.Term("covers") + "> <" + iri.Rule("worklode", 2) + ">",
 		"<" + iri.Task("WL-1") + "> <" + iri.Term("plannedIn") + "> <" + iri.Doc("plan-worklode-020") + ">",
 		"<" + iri.Task("WL-1") + "> <" + iri.Term("about") + "> <" + iri.Doc("spec-worklode-010") + ">",
 		"<" + iri.Doc("plan-worklode-020") + "> <" + ProvWasGeneratedBy + "> <" + iri.Task("WL-2") + ">",
@@ -49,6 +51,9 @@ func TestProjectGraphTriples(t *testing.T) {
 	}
 	if strings.Contains(doc, DCTReplaces) || strings.Contains(doc, iri.Term("amends")) {
 		t.Errorf("document-level amends/replaces must not be emitted:\n%s", doc)
+	}
+	if strings.Count(doc, "<"+iri.Term("covers")+">") != 2 {
+		t.Errorf("want exactly two rule-level covers triples:\n%s", doc)
 	}
 	if strings.Contains(doc, DCTRequires) {
 		t.Errorf("edge to an unknown doc must be skipped:\n%s", doc)

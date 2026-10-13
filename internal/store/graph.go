@@ -30,7 +30,7 @@ func (s *Store) ProjectGraph(ctx context.Context, projectID string) (model.Proje
 	g := model.ProjectGraph{
 		Project: projectID,
 		Tasks:   []model.Task{}, TaskEdges: []model.Edge{},
-		Docs: []model.Doc{}, DocEdges: []model.GraphDocEdge{}, Links: []model.GraphLink{},
+		Docs: []model.Doc{}, DocEdges: []model.GraphDocEdge{}, Covers: []model.GraphCover{}, Links: []model.GraphLink{},
 	}
 	tasks, err := s.graphTasks(ctx, projectID)
 	if err != nil {
@@ -45,6 +45,11 @@ func (s *Store) ProjectGraph(ctx context.Context, projectID string) (model.Proje
 		return g, err
 	}
 	docEdges, err := s.graphDocEdges(ctx, projectID)
+	if err != nil {
+		return g, err
+	}
+
+	covers, err := s.graphCovers(ctx, projectID)
 	if err != nil {
 		return g, err
 	}
@@ -112,6 +117,11 @@ func (s *Store) ProjectGraph(ctx context.Context, projectID string) (model.Proje
 	for _, e := range docEdges {
 		if keep[e.From] && keep[e.To] {
 			g.DocEdges = append(g.DocEdges, e)
+		}
+	}
+	for _, c := range covers {
+		if keep[c.From] {
+			g.Covers = append(g.Covers, c)
 		}
 	}
 	g.Links = append(g.Links, links...)
@@ -219,6 +229,34 @@ SELECT DISTINCT e.from_doc, e.to_doc, e.type
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("graph doc edges of %s: %w", projectID, err)
+	}
+	return out, nil
+}
+
+// graphCovers reads the rule each live plan of the project covers, one row
+// per covers edge onto a rule of the same project (WL-REQ-1709).
+func (s *Store) graphCovers(ctx context.Context, projectID string) ([]model.GraphCover, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT e.from_doc, r.number
+  FROM doc_edges e
+  JOIN docs a ON a.id = e.from_doc
+  JOIN rules r ON r.id = e.to_rule AND r.project_id = a.project_id
+ WHERE e.type = 'covers' AND a.project_id = $1 AND a.deleted_at IS NULL
+ ORDER BY e.from_doc, r.number`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("graph covers of %s: %w", projectID, err)
+	}
+	defer rows.Close()
+	var out []model.GraphCover
+	for rows.Next() {
+		var c model.GraphCover
+		if err := rows.Scan(&c.From, &c.Rule); err != nil {
+			return nil, fmt.Errorf("scan graph cover: %w", err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("graph covers of %s: %w", projectID, err)
 	}
 	return out, nil
 }
