@@ -36,13 +36,13 @@ func (s *server) reportGap(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "reason is required: it is what the fixer reads")
 		return
 	}
-	doc, err := s.st.ResolveDocRef(r.Context(), req.Doc)
+	doc, err := s.resolveAnyDocRef(r.Context(), req.Doc)
 	if err != nil {
-		s.mapStoreErr(w, err)
+		s.mapDocRefErr(w, err)
 		return
 	}
 	inserted, err := s.st.RecordGap(r.Context(), store.GapInput{
-		TaskID: id, Doc: s.withProjectKey(r.Context(), *doc).FormatRef(), Anchor: strings.TrimSpace(req.Anchor), Reason: req.Reason,
+		TaskID: id, Doc: s.withProjectKey(r.Context(), doc).FormatRef(), Anchor: strings.TrimSpace(req.Anchor), Reason: req.Reason,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -78,13 +78,13 @@ func (s *server) reportFix(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusUnprocessableEntity, "doc is required")
 			return
 		}
-		doc, err := s.st.ResolveDocRef(r.Context(), req.Doc)
+		doc, err := s.resolveAnyDocRef(r.Context(), req.Doc)
 		if err != nil {
-			s.mapStoreErr(w, err)
+			s.mapDocRefErr(w, err)
 			return
 		}
 		inserted, err = s.st.RecordFixStarted(r.Context(), store.FixStartedInput{
-			TaskID: id, Tier: req.Tier, Doc: s.withProjectKey(r.Context(), *doc).FormatRef(), Attempt: req.Attempt,
+			TaskID: id, Tier: req.Tier, Doc: s.withProjectKey(r.Context(), doc).FormatRef(), Attempt: req.Attempt,
 		})
 		if err != nil {
 			s.mapStoreErr(w, err)

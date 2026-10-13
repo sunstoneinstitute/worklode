@@ -11,6 +11,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -34,6 +35,39 @@ func (s *server) docRefRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, model.DocCanonicalURL(d), http.StatusFound)
+}
+
+// resolveAnyDocRef resolves a document ref the way GET /api/v1/docs/resolve
+// does: an id or slug first, then the whole WL-REQ-192 grammar, so
+// <KEY>-<TYPE>-<n> works wherever a route takes a document ref. An ambiguous
+// grammar ref is ErrInvalidInput. A miss is an ErrNotFound naming the ref and
+// the accepted forms; answer it with mapDocRefErr to keep that message.
+func (s *server) resolveAnyDocRef(ctx context.Context, ref string) (model.Doc, error) {
+	d, err := s.st.ResolveDocRef(ctx, ref)
+	if err == nil {
+		return *d, nil
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		return model.Doc{}, err
+	}
+	gd, gerr := s.resolveDocRefWeb(ctx, ref, "")
+	if gerr == nil {
+		return gd, nil
+	}
+	if amb := (*designdoc.AmbiguousRefError)(nil); errors.As(gerr, &amb) {
+		return model.Doc{}, fmt.Errorf("%s: %w", gerr.Error(), store.ErrInvalidInput)
+	}
+	return model.Doc{}, fmt.Errorf("no document found for %q (an id, slug, number, path, or <KEY>-<TYPE>-<n> shorthand): %w", ref, store.ErrNotFound)
+}
+
+// mapDocRefErr answers an error from resolveAnyDocRef: a miss keeps its
+// message, which names the ref, where mapStoreErr would say only "not found".
+func (s *server) mapDocRefErr(w http.ResponseWriter, err error) {
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	s.mapStoreErr(w, err)
 }
 
 // resolveDocRefWeb resolves ref against every live document, using the same
