@@ -773,6 +773,21 @@ func currentWorktreeIdentity() (string, error) {
 	return worktree.IdentityOf(root)
 }
 
+// cwdRoot is the git worktree root of the working directory when the claim
+// leased it (fromCwd: no --worktree given), else "": an explicit --worktree
+// may name a checkout on another host, so no marker is written for it.
+func cwdRoot(fromCwd bool) string {
+	if !fromCwd {
+		return ""
+	}
+	dir, err := workingDir()
+	if err != nil {
+		return ""
+	}
+	root, _ := worktree.Root(dir)
+	return root
+}
+
 func newTaskClaimCmd() *cobra.Command {
 	var worktree string
 	var ttl time.Duration
@@ -789,6 +804,7 @@ func newTaskClaimCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			fromCwd := worktree == ""
 
 			if !next {
 				if len(args) == 0 {
@@ -812,6 +828,7 @@ func newTaskClaimCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				linkClaudeSession(cmd, c, id, cwdRoot(fromCwd))
 				if jsonOut(cmd) {
 					printRaw(cmd, raw)
 					return nil
@@ -850,6 +867,9 @@ func newTaskClaimCmd() *cobra.Command {
 			resp, raw, err := c.ClaimNext(cmd.Context(), in)
 			if err != nil {
 				return err
+			}
+			if resp.Claimed && resp.Task != nil && !resp.DryRun {
+				linkClaudeSession(cmd, c, resp.Task.ID, cwdRoot(fromCwd))
 			}
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)

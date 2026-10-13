@@ -62,6 +62,9 @@ func testServer(t *testing.T, cfg api.Config, wrap func(http.Handler) http.Handl
 
 	t.Setenv("LODE_SERVER", ts.URL)
 	t.Setenv("LODE_TOKEN", token)
+	// Run under Claude Code, every claim would otherwise link the developer's
+	// own session (linkClaudeSession); tests that want that set it themselves.
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
 
 	return st, cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token})
 }
@@ -763,6 +766,35 @@ func TestNextRollsBackOnWorktreeAddFailure(t *testing.T) {
 	}
 	if detail.Lease != nil {
 		t.Fatalf("task lease after rollback = %+v, want nil", detail.Lease)
+	}
+}
+
+// TestNextLinksClaudeSession pins WL-942: a claim made from a Claude Code
+// Bash call writes the session marker in the new worktree and reports the
+// session on the task, with no SessionStart or EnterWorktree hook involved.
+func TestNextLinksClaudeSession(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Link session")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "sess-942")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	if out, err := runLode(t, "work", "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
+	}
+
+	wtDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-link-session")
+	if id, ok := worktree.SessionID(wtDir); !ok || id != "sess-942" {
+		t.Fatalf("worktree.SessionID(%s) = (%q, %v), want (sess-942, true)", wtDir, id, ok)
+	}
+	detail, _, err := c.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if len(detail.AgentSessions) != 1 || detail.AgentSessions[0].SessionID != "sess-942" {
+		t.Fatalf("agent sessions = %+v, want one with session id sess-942", detail.AgentSessions)
 	}
 }
 
