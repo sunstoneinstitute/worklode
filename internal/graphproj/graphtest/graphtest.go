@@ -22,8 +22,8 @@ import (
 	"time"
 )
 
-// DefaultEndpoint is the compose/CI Oxigraph address used when
-// TEST_SPARQL_URL is unset.
+// DefaultEndpoint is the compose Oxigraph address a local run uses when
+// TEST_SPARQL_URL is unset. CI never falls back to it.
 const DefaultEndpoint = "http://localhost:7878"
 
 var client = &http.Client{Timeout: 15 * time.Second}
@@ -31,21 +31,25 @@ var client = &http.Client{Timeout: 15 * time.Second}
 // Endpoint returns the base URL of the test SPARQL endpoint, from
 // TEST_SPARQL_URL or DefaultEndpoint, after probing it with an ASK {}.
 //
-// An unreachable endpoint is fatal only when CI *and* TEST_SPARQL_URL are
-// both set; otherwise the test skips. CI sets TEST_SPARQL_URL on every
-// runner (hel01's always-on Oxigraph, or ubuntu-latest's ephemeral one;
-// docs/self-hosted-runner.md), so there a down endpoint is a broken run. A
-// local run without Oxigraph skips.
+// Under CI, TEST_SPARQL_URL must name the run's own Oxigraph, which
+// _test.yml starts on a random port: an unset variable or an unreachable
+// endpoint is fatal, because a fixed fallback port can be answered by a
+// stray process (WL-904). A local run falls back to DefaultEndpoint and
+// skips when nothing answers.
 func Endpoint(t *testing.T) string {
 	t.Helper()
-	base, explicit := os.LookupEnv("TEST_SPARQL_URL")
+	ci := os.Getenv("CI") != ""
+	base := os.Getenv("TEST_SPARQL_URL")
 	if base == "" {
-		base, explicit = DefaultEndpoint, false
+		if ci {
+			t.Fatal("TEST_SPARQL_URL is not set: CI must point graph tests at the run's own Oxigraph")
+		}
+		base = DefaultEndpoint
 	}
 	base = strings.TrimSuffix(base, "/")
 
 	if err := probe(base); err != nil {
-		if explicit && os.Getenv("CI") != "" {
+		if ci {
 			t.Fatalf("SPARQL endpoint unreachable at %s: %v", base, err)
 		}
 		t.Skipf("SPARQL endpoint unreachable at %s: %v", base, err)
