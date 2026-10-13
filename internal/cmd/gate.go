@@ -143,7 +143,28 @@ func runGateCheck(dir, base, head, bodyFile string) (string, error) {
 	if len(v.Guarded) == 0 {
 		return "gate: no guarded path changed\n", nil
 	}
-	return fmt.Sprintf("gate: %s covers %s\n", cfg.Trailer+" "+v.Declaration.String(), strings.Join(v.Guarded, ", ")), nil
+	return fmt.Sprintf("gate: %s covers %s\n", cfg.Trailer+" "+verdictDeclaration(*v.Declaration), strings.Join(v.Guarded, ", ")), nil
+}
+
+// verdictDeclaration prints a cited rule with the infix of its current kind
+// (WL-REQ-1642) when the server answers, and with the trailer's own spelling
+// when it does not (as in CI, WL-REQ-8). The qualifier follows either way.
+func verdictDeclaration(d gate.Declaration) string {
+	if d.Rule == nil {
+		return d.String()
+	}
+	ref := strings.Fields(d.Line)[1] // the word after the trailer key
+	if c, err := newAPIClient(); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if r, _, err := c.GetRule(ctx, ref); err == nil {
+			ref = designdoc.FormatRuleRef(d.Rule.Key, d.Rule.Number, r.Kind)
+		}
+	}
+	if d.Qualifier != "" {
+		ref += " " + d.Qualifier
+	}
+	return ref
 }
 
 // resolveSectionRule names the rule a section resolves to at the
