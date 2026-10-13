@@ -164,12 +164,11 @@ func ignores(line string) (here, next bool) {
 // AddedCitations runs the test over the lines a unified diff adds, skipping
 // files the [gate] exempt list names and lines an ignore directive covers.
 // In a Go file only a line's comment is prose, so string literals are never
-// tested; elsewhere fenced code blocks are skipped, tracked over the hunk's
-// context and added lines.
-//
-// ponytail: line-level, so a Go block comment or a fence opened outside a
-// hunk's context is not seen; widen the diff context if that bites.
-func (c Config) AddedCitations(diff string) ([]Citation, error) {
+// tested; elsewhere fenced code blocks are skipped. postImage returns a
+// file's text after the change, so fence, block comment and multi-line
+// literal state is read from the whole file. When it is nil or reports no
+// file, state is tracked per line over the hunk's context and added lines.
+func (c Config) AddedCitations(diff string, postImage func(file string) (string, bool)) ([]Citation, error) {
 	exempt := make([]*regexp.Regexp, 0, len(c.Exempt))
 	for _, p := range c.Exempt {
 		exempt = append(exempt, globRegexp(p))
@@ -181,12 +180,20 @@ func (c Config) AddedCitations(diff string) ([]Citation, error) {
 		fenced  bool
 		lineNum int
 		covered bool // the previous line was a standalone ignore directive
+		prose   []string
+		whole   bool // prose holds the post-image's classification of file
 	)
 	for _, l := range strings.Split(diff, "\n") {
 		switch {
 		case strings.HasPrefix(l, "+++ "):
 			file = strings.TrimPrefix(strings.TrimPrefix(l, "+++ "), "b/")
 			skip = file == "/dev/null"
+			prose, whole = nil, false
+			if postImage != nil && !skip {
+				if text, ok := postImage(file); ok {
+					prose, whole = proseLines(file, text), true
+				}
+			}
 			for _, re := range exempt {
 				skip = skip || re.MatchString(file)
 			}
@@ -217,6 +224,12 @@ func (c Config) AddedCitations(diff string) ([]Citation, error) {
 			kind = ' '
 		}
 		covered = next
+		if whole {
+			if kind == '+' && n >= 1 && n <= len(prose) {
+				out = appendWhere(out, lineCitations(prose[n-1]), file, n)
+			}
+			continue
+		}
 		if path.Ext(file) == ".go" {
 			if kind == '+' {
 				out = appendWhere(out, lineCitations(goComment(text)), file, n)
@@ -232,6 +245,68 @@ func (c Config) AddedCitations(diff string) ([]Citation, error) {
 		}
 	}
 	return out, nil
+}
+
+// proseLines returns, for each line of a whole file, the part of it that is
+// prose: a Go file's comments, outside string, raw string and rune literals
+// that may span lines; any other file's lines outside fenced code blocks.
+func proseLines(file, text string) []string {
+	lines := strings.Split(text, "\n")
+	out := make([]string, len(lines))
+	if path.Ext(file) != ".go" {
+		fenced := false
+		for i, l := range lines {
+			if isFence(l) {
+				fenced = !fenced
+			} else if !fenced {
+				out[i] = l
+			}
+		}
+		return out
+	}
+	var inBlock, inRaw bool
+	for n, line := range lines {
+		var b strings.Builder
+		for i := 0; i < len(line); i++ {
+			switch {
+			case inBlock:
+				end := strings.Index(line[i:], "*/")
+				if end < 0 {
+					b.WriteString(line[i:])
+					i = len(line)
+				} else {
+					b.WriteString(line[i : i+end])
+					i += end + 1
+					inBlock = false
+				}
+			case inRaw:
+				end := strings.IndexByte(line[i:], '`')
+				if end < 0 {
+					i = len(line)
+				} else {
+					i += end
+					inRaw = false
+				}
+			case line[i] == '`':
+				inRaw = true
+			case line[i] == '"' || line[i] == '\'':
+				q := line[i]
+				for i++; i < len(line) && line[i] != q; i++ {
+					if line[i] == '\\' {
+						i++
+					}
+				}
+			case line[i] == '/' && i+1 < len(line) && line[i+1] == '/':
+				b.WriteString(line[i+2:])
+				i = len(line)
+			case line[i] == '/' && i+1 < len(line) && line[i+1] == '*':
+				inBlock = true
+				i++
+			}
+		}
+		out[n] = b.String()
+	}
+	return out
 }
 
 func appendWhere(out, cs []Citation, file string, n int) []Citation {
