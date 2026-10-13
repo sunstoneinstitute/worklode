@@ -44,8 +44,10 @@ rule ref there. The job makes no Worklode API call, so CI names that command
 rather than the ref.
 
 The job also fails an added line that cites a spec section by number
-instead of by rule ref (WL-REQ-1791). In Go only comments are checked. When
-a line names an anchor without citing a section, such as an HTML fragment in
+instead of by rule ref (WL-REQ-1791). In Go only comments are checked.
+Fenced code blocks, inline code spans and double-quoted text are skipped, so
+put a section marker you mention rather than cite in backticks. When a line
+still names an anchor without citing a section, such as an HTML fragment in
 code, put `spec-gate:ignore` at the end of the line, or on its own comment
 line to cover the next line.
 

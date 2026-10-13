@@ -15,13 +15,16 @@ import (
 // changes when the spec's arrangement does, where a rule ref does not.
 // specSection is a spec ref followed by a section sign or a spaced sec- word,
 // anchorSection is any #sec- fragment (with the document before it when there
-// is one), bareSection is a section sign followed by a digit.
+// is one), bareSection is a section sign followed by a digit. mentioned is an
+// inline code span or a double-quoted string on one line: a marker there is
+// mentioned, not cited, so it is cut out like a URL.
 var (
 	specSection   = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-SPEC-\d+)(?: §| sec-) ?([0-9][0-9A-Za-z.]*)?`)
 	anchorSection = regexp.MustCompile(`(\b[A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+)?#sec-([0-9][0-9A-Za-z.]*)?`)
 	bareSection   = regexp.MustCompile(`§ ?([0-9][0-9A-Za-z.]*)`)
 	ruleRefBefore = regexp.MustCompile(designdoc.RuleRefText + ` ?$`)
 	urlInText     = regexp.MustCompile(`[a-z][a-z0-9+.-]*://\S+`)
+	mentioned     = regexp.MustCompile("`[^`]*`|\"[^\"]*\"|“[^”]*”")
 )
 
 // Citation is one match of the test. Section is set when the match names its
@@ -34,7 +37,8 @@ type Citation struct {
 }
 
 // Citations runs the test over prose: lines inside a fenced code block are
-// skipped and URLs are cut out of a line before it is tested.
+// skipped, and URLs, inline code spans and quoted strings are cut out of a
+// line before it is tested.
 func Citations(text string) []Citation {
 	var out []Citation
 	fenced := false
@@ -57,7 +61,7 @@ func isFence(line string) bool {
 
 // lineCitations is the test over one line of prose, matches in order.
 func lineCitations(line string) []Citation {
-	line = urlInText.ReplaceAllString(line, "")
+	line = mentioned.ReplaceAllString(urlInText.ReplaceAllString(line, ""), "")
 	type span struct {
 		start, end int
 		c          Citation
