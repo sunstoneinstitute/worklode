@@ -305,6 +305,11 @@ func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string
 	if current != from {
 		return fmt.Errorf("task %s is in state %s, not %s: %w", taskID, current, from, ErrBadTransition)
 	}
+	if to == "in_review" {
+		if err := checkAuthoringReviewable(tx, taskID); err != nil {
+			return err
+		}
+	}
 
 	_, err := tx.Exec(
 		`UPDATE tasks SET state = $1, updated_at = $2 WHERE id = $3`,

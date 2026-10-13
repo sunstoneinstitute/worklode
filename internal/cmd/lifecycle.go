@@ -623,17 +623,18 @@ func newSubmitCmd() *cobra.Command {
 	return cmd
 }
 
-// submitForReview moves taskID to in_review, tolerating a task already there:
-// a worker that ran `lode task submit` before `lode work submit` should still get its
-// lease released rather than a transition error. Any other refusal is the
-// server's to report, unchanged.
+// submitForReview moves taskID to in_review, tolerating a task already there
+// or already closed: a worker that ran `lode task submit` before `lode work
+// submit`, or a design task that `lode doc submit` closed (WL-REQ-1629),
+// should still get its lease released rather than a transition error. Any
+// other refusal is the server's to report, unchanged.
 func submitForReview(ctx context.Context, c *cli.Client, taskID string) (model.Task, []byte, error) {
 	t, raw, err := c.SubmitTask(ctx, taskID)
 	if err == nil {
 		return t, raw, nil
 	}
 	detail, _, getErr := c.GetTask(ctx, taskID)
-	if getErr != nil || detail.State != "in_review" {
+	if getErr != nil || (detail.State != "in_review" && !detail.Closed) {
 		return model.Task{}, nil, err
 	}
 	raw, marshalErr := json.Marshal(detail.Task)
