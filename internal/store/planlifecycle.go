@@ -1,9 +1,11 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -86,33 +88,117 @@ func settlePlan(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
 	if !planID.Valid {
 		return nil
 	}
-	var status string
-	err := tx.QueryRow(`SELECT status FROM docs WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, planID.Int64).Scan(&status)
+	status, done, err := planFinished(tx, planID.Int64)
+	if err != nil || !done {
+		return err
+	}
+	return spendPlan(tx, now, planID.Int64, status, eventID)
+}
+
+// planFinished locks plan planID and reports whether it is due to be spent:
+// accepted or stale, with at least one live minted task and none open. The
+// status it returns is the one spendPlan logs as the old value.
+func planFinished(tx *sql.Tx, planID int64) (status string, done bool, err error) {
+	err = tx.QueryRow(`SELECT status FROM docs WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, planID).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil
+		return "", false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("status of plan %d: %w", planID.Int64, err)
+		return "", false, fmt.Errorf("status of plan %d: %w", planID, err)
 	}
 	if status != "accepted" && status != "stale" {
-		return nil
+		return status, false, nil
 	}
 	var total, open int
 	if err := tx.QueryRow(
 		`SELECT count(*), count(*) FILTER (WHERE NOT `+taskClosed("t")+`)
 		   FROM tasks t WHERE t.plan_doc = $1 AND t.deleted_at IS NULL`,
-		planID.Int64).Scan(&total, &open); err != nil {
-		return fmt.Errorf("live tasks of plan %d: %w", planID.Int64, err)
+		planID).Scan(&total, &open); err != nil {
+		return status, false, fmt.Errorf("live tasks of plan %d: %w", planID, err)
 	}
-	if total == 0 || open > 0 {
-		return nil
-	}
-	if err := governPlanTasks(tx, planID.Int64); err != nil {
+	return status, total > 0 && open == 0, nil
+}
+
+// spendPlan governs the plan's tasks and flips it from status to spent,
+// attributed to eventID. Callers check planFinished first.
+func spendPlan(tx *sql.Tx, now time.Time, planID int64, status string, eventID int64) error {
+	if err := governPlanTasks(tx, planID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE docs SET status = 'spent', updated_at = $2 WHERE id = $1`,
-		planID.Int64, now.UTC().Truncate(time.Second)); err != nil {
-		return fmt.Errorf("spend plan %d: %w", planID.Int64, err)
+		planID, now.UTC().Truncate(time.Second)); err != nil {
+		return fmt.Errorf("spend plan %d: %w", planID, err)
 	}
-	return logDocChange(tx, planID.Int64, eventID, map[string]string{"field": "status", "old": status, "new": "spent"})
+	return logDocChange(tx, planID, eventID, map[string]string{"field": "status", "old": status, "new": "spent"})
+}
+
+// SettleFinishedPlans spends every accepted or stale plan whose minted tasks
+// have all closed. settlePlan does this as each task closes, but a plan whose
+// tasks closed before that hook existed, or that went stale after they did,
+// is reached only here. The sweeper runs it on every tick; it returns the
+// number of plans spent.
+//
+// Each plan is settled in its own transaction: planFinished re-checks under
+// the row lock, and the doc.spent event is inserted only once that check
+// passes, keyed on (slug, version) so a plan is spent by at most one event.
+func (s *Store) SettleFinishedPlans(ctx context.Context) (spent int, err error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.id, d.slug, d.version FROM docs d
+		  WHERE d.kind = 'plan' AND d.status IN ('accepted', 'stale') AND d.deleted_at IS NULL
+		    AND EXISTS (SELECT 1 FROM tasks t WHERE t.plan_doc = d.id AND t.deleted_at IS NULL)
+		    AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.plan_doc = d.id AND t.deleted_at IS NULL
+		                       AND NOT `+taskClosed("t")+`)
+		  ORDER BY d.id`)
+	if err != nil {
+		return 0, fmt.Errorf("list finished plans: %w", err)
+	}
+	type cand struct {
+		id      int64
+		slug    string
+		version int
+	}
+	cands, err := collectRows(rows, "list finished plans", func(r rowScanner) (cand, error) {
+		var c cand
+		err := r.Scan(&c.id, &c.slug, &c.version)
+		return c, err
+	})
+	if err != nil {
+		return 0, err
+	}
+	for _, c := range cands {
+		err := s.Tx(ctx, func(tx *sql.Tx) error {
+			status, done, err := planFinished(tx, c.id)
+			if err != nil || !done {
+				return err
+			}
+			payload, err := EventPayload(map[string]any{"doc": c.id, "cause": "sweep"})
+			if err != nil {
+				return err
+			}
+			var eventID int64
+			err = tx.QueryRowContext(ctx,
+				`INSERT INTO events (source, external_id, type, payload, received_at)
+				 VALUES ($1, $2, 'doc.spent', $3, $4)
+				 ON CONFLICT (source, external_id) DO NOTHING
+				 RETURNING id`,
+				staleEventSource, "doc.spent:"+c.slug+":"+strconv.Itoa(c.version), payload, s.nowFn().UTC(),
+			).Scan(&eventID)
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("record doc.spent for plan %d: %w", c.id, err)
+			}
+			if err := spendPlan(tx, s.nowFn(), c.id, status, eventID); err != nil {
+				return err
+			}
+			spent++
+			s.metrics.docOp("spent", nil)
+			return nil
+		})
+		if err != nil {
+			return spent, fmt.Errorf("settle plan %d: %w", c.id, err)
+		}
+	}
+	return spent, nil
 }
