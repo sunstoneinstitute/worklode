@@ -23,7 +23,7 @@ jobs:
 
   deploy:
     needs: build-image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: dev
     timeout-minutes: 10
     steps:
