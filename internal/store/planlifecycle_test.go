@@ -287,3 +287,39 @@ func TestDeleteLastOpenReadyTaskSpendsPlan(t *testing.T) {
 		t.Fatalf("last open task deleted while ready: plan should be spent, got %s %v", d.Status, err)
 	}
 }
+
+// TestSettleFinishedPlans: a plan whose minted tasks all closed before the
+// settle hook saw them (here: forced back to stale by hand) is spent by the
+// sweeper pass, once, and a plan with an open task is left alone.
+func TestSettleFinishedPlans(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	finished := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "done", Body: governedPlanBody, CreatedBy: "stig"})
+	_, tasks, err := acceptDoc(t, s, finished.ID, "stig")
+	if err != nil || len(tasks) != 2 {
+		t.Fatalf("accept: %d tasks, %v", len(tasks), err)
+	}
+	for _, task := range tasks {
+		abandon(t, s, task.ID)
+	}
+	setDocStatus(t, s, finished.ID, "stale")
+
+	live := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "live", Body: governedPlanBody, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, live.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := s.SettleFinishedPlans(t.Context())
+	if err != nil || n != 1 {
+		t.Fatalf("SettleFinishedPlans = %d, %v; want 1 spent", n, err)
+	}
+	if d, _ := s.GetDoc(t.Context(), finished.ID); d.Status != "spent" {
+		t.Fatalf("finished plan should be spent, got %s", d.Status)
+	}
+	if d, _ := s.GetDoc(t.Context(), live.ID); d.Status != "accepted" {
+		t.Fatalf("plan with open tasks should stay accepted, got %s", d.Status)
+	}
+	if n, err := s.SettleFinishedPlans(t.Context()); err != nil || n != 0 {
+		t.Fatalf("second pass = %d, %v; want nothing to spend", n, err)
+	}
+}
