@@ -9,14 +9,14 @@ on:
         default: true
       runs-on:
         description: >-
-          Runner label(s) as a JSON array — '["ubuntu-latest"]' for a hosted
+          Runner label(s) as a JSON array — '["ubuntu-26.04"]' for a hosted
           PR, '["docker","gha-buildcache"]' for a trusted one and for
           deploy-dev. This job needs both the Docker socket and a runner whose
           build-cache state survives between runs, two independent environment
           facts a future runner could have one of without the other — see
           docs/self-hosted-runner.md.
         type: string
-        default: '["ubuntu-latest"]'
+        default: '["ubuntu-26.04"]'
     outputs:
       image-tag:
         description: Git short SHA used as the image tag

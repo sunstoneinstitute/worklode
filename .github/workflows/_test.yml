@@ -5,14 +5,14 @@ on:
     inputs:
       runs-on:
         description: >-
-          Runner label(s) as a JSON array — '["ubuntu-latest"]' for a hosted
+          Runner label(s) as a JSON array — '["ubuntu-26.04"]' for a hosted
           PR, '["gha-pgvector","gha-buildcache","docker"]' for a trusted one.
           This job needs the always-on Postgres, the persistent Go cache and
           the Docker daemon those labels mark — see docs/self-hosted-runner.md.
         type: string
-        default: '["ubuntu-latest"]'
+        default: '["ubuntu-26.04"]'
       postgres-dsn:
-        description: TEST_POSTGRES_DSN. Ignored on ubuntu-latest, which always uses the ephemeral service container below.
+        description: TEST_POSTGRES_DSN. Ignored on ubuntu-26.04, which always uses the ephemeral service container below.
         type: string
         default: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
 
@@ -32,12 +32,12 @@ jobs:
           go-version-file: go.mod
           cache: false
       # `services:` starts unconditionally the moment a job declares it, so a
-      # job that might land on self-hosted can't have one. ubuntu-latest gets
+      # job that might land on self-hosted can't have one. ubuntu-26.04 gets
       # the same ephemeral container `services:` gave it, just started by
       # hand; self-hosted skips this and reaches hel01's always-on instance,
       # where each test creates and drops its own database.
-      - name: Start ephemeral Postgres (ubuntu-latest only)
-        if: contains(inputs.runs-on, 'ubuntu-latest')
+      - name: Start ephemeral Postgres (ubuntu-26.04 only)
+        if: contains(inputs.runs-on, 'ubuntu-26.04')
         run: |
           docker run -d --name pg-ci -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
             --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10 \
@@ -75,7 +75,7 @@ jobs:
           exit 1
       - name: Go cache paths
         id: go-cache
-        if: contains(inputs.runs-on, 'ubuntu-latest')
+        if: contains(inputs.runs-on, 'ubuntu-26.04')
         run: |
           echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
           echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
@@ -85,7 +85,7 @@ jobs:
       # runs, so there's nothing to fetch and nothing to overwrite it with.
       - name: Restore Go cache
         id: go-cache-restore
-        if: contains(inputs.runs-on, 'ubuntu-latest')
+        if: contains(inputs.runs-on, 'ubuntu-26.04')
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -106,7 +106,7 @@ jobs:
           TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
       # Only main writes the cache, and only when go.sum changed (exact-key miss).
       - name: Save Go cache
-        if: contains(inputs.runs-on, 'ubuntu-latest') && github.ref == 'refs/heads/main' && steps.go-cache-restore.outputs.cache-hit != 'true'
+        if: contains(inputs.runs-on, 'ubuntu-26.04') && github.ref == 'refs/heads/main' && steps.go-cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |

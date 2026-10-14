@@ -120,7 +120,7 @@ jobs:
   release:
     name: Publish bottles to GitHub Release
     needs: bottle
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       arm64_sequoia_sha256: ${{ steps.shas.outputs.arm64_sequoia }}
       arm64_tahoe_sha256: ${{ steps.shas.outputs.arm64_tahoe }}
