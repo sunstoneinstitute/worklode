@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     # HF_TOKEN lives on this environment, not on the repo: it pulls weights
     # under a licence the org accepted by name, so who can spend it is a

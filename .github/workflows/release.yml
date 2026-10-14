@@ -32,7 +32,7 @@ jobs:
 
   homebrew:
     needs: build-bottles
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Resolves TAP_DEPLOY_KEY and gates it to the refs the environment's branch
     # policy allows. See the same job in promote-prod.yml for why the
     # environment sits here rather than behind a reusable workflow.
@@ -63,7 +63,7 @@ jobs:
 
   scoop:
     needs: build-windows
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Same reasoning as the homebrew job: environment secret must be resolved
     # in a job that declares `environment: release`, not across a reusable
     # workflow boundary.

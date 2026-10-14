@@ -5,10 +5,10 @@ on:
     inputs:
       runs-on:
         description: >-
-          Runner label(s) as a JSON array — '["ubuntu-latest"]' for a hosted
+          Runner label(s) as a JSON array — '["ubuntu-26.04"]' for a hosted
           PR, '["self-hosted","gha-buildcache"]' for a trusted one.
         type: string
-        default: '["ubuntu-latest"]'
+        default: '["ubuntu-26.04"]'
 
 permissions:
   contents: read
