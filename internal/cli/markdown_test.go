@@ -67,3 +67,22 @@ func TestMarkdownWidthClamps(t *testing.T) {
 		}
 	}
 }
+
+// TestTerminalHyperlinksUnderTmux: tmux 3.4 and later pass OSC 8 through, so
+// a session inside one gets hyperlinks; older tmux and screen do not.
+func TestTerminalHyperlinksUnderTmux(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1,0")
+	t.Setenv("TERM_PROGRAM", "tmux")
+	for version, want := range map[string]bool{"3.5a": true, "3.4": true, "3.3a": false, "2.9": false, "": false, "junk": false} {
+		t.Setenv("TERM_PROGRAM_VERSION", version)
+		if got := TerminalHyperlinks(); got != want {
+			t.Errorf("TERM_PROGRAM_VERSION=%q: TerminalHyperlinks() = %v, want %v", version, got, want)
+		}
+	}
+	t.Setenv("TMUX", "")
+	t.Setenv("TERM", "screen-256color")
+	t.Setenv("TERM_PROGRAM", "")
+	if TerminalHyperlinks() {
+		t.Error("screen: TerminalHyperlinks() = true, want false")
+	}
+}
