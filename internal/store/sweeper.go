@@ -33,7 +33,8 @@ func (s *Store) StartLeaseSweeper(ctx context.Context) {
 // context.Canceled — so matching on the error alone would count shutdown as a
 // failed sweep.
 //
-// Each tick also runs the WL-REQ-170 stale-doc sweep (sweepStaleDocs, docgroom.go)
+// Each tick also runs the WL-REQ-170 stale-doc sweep (sweepStaleDocs, docgroom.go),
+// the finished-plan settle (SettleFinishedPlans, planlifecycle.go)
 // and the WL-REQ-1235 task-activity purge (PurgeTaskActivity, activity.go), after
 // the lease sweep, on this same goroutine and ticker rather than a second
 // one each — they are independent operations the tick performs, not a
@@ -69,6 +70,17 @@ func (s *Store) sweepLeases(ctx context.Context, every time.Duration) {
 				slog.Error("sweep stale docs", "err", groomErr)
 			case emitted > 0:
 				slog.Info("emitted doc.stale", "count", emitted)
+			}
+
+			spent, spendErr := s.SettleFinishedPlans(ctx)
+			if spendErr != nil && ctx.Err() != nil {
+				return
+			}
+			switch {
+			case spendErr != nil:
+				slog.Error("settle finished plans", "err", spendErr)
+			case spent > 0:
+				slog.Info("spent finished plans", "count", spent)
 			}
 
 			purged, purgeErr := s.PurgeTaskActivity(ctx, s.nowFn().UTC())
