@@ -14,11 +14,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -156,7 +158,8 @@ func scopeDocsToProject(docs []model.Doc, project string) []model.Doc {
 // claims.
 //
 // A rule ref (WL-REQ-<n>, WL-RULE-<n> or WL-CL-<n>) goes to the same redirect
-// /rules/{ref} serves. Task ids resolve next because the lookup is one indexed
+// /rules/{ref} serves. A milestone or deliverable id goes to its entry on
+// its project's page (entityRefPage), after the task lookup. Task ids resolve next because the lookup is one indexed
 // row, and because <KEY>-<n> and <KEY>-<TYPE>-<n> are not distinguishable by
 // shape alone — model.SplitTaskID reads "WL-SPEC-59" as key "WL-SPEC".
 // Whatever the task lookup misses falls through to the same resolver
@@ -181,5 +184,42 @@ func (s *server) refShortcut(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
+	if target, page := s.entityRefPage(r.Context(), ref); target != "" {
+		if page == "" {
+			writeErr(w, http.StatusNotFound, fmt.Sprintf("no %s %s", target, ref))
+			return
+		}
+		http.Redirect(w, r, page, http.StatusFound)
+		return
+	}
 	s.docRefRedirect(w, r)
 }
+
+// entityRefPage resolves a ref whose infix names an entity other than a
+// document or a rule (refkind's registry) to that entity's page. It returns
+// the target with page "" when the entity does not exist, and target "" when
+// the ref is not such a ref, so the caller falls through to documents.
+// A target this switch does not handle fails TestRefShortcutCoversRegistry.
+func (s *server) entityRefPage(ctx context.Context, ref string) (refkind.Target, string) {
+	m := entityRefShape.FindStringSubmatch(ref)
+	if m == nil {
+		return "", ""
+	}
+	target, _ := refkind.Lookup(m[1])
+	switch target {
+	case refkind.Milestone:
+		if ms, err := s.st.GetMilestone(ctx, ref); err == nil {
+			return target, "/projects/" + url.PathEscape(ms.Project) + "/milestones#" + url.PathEscape(ms.ID)
+		}
+		return target, ""
+	case refkind.Deliverable:
+		if d, err := s.st.GetDeliverable(ctx, ref); err == nil {
+			return target, "/projects/" + url.PathEscape(d.Project) + "/deliverables#" + url.PathEscape(d.ID)
+		}
+		return target, ""
+	}
+	return "", ""
+}
+
+// entityRefShape captures the infix of a <KEY>-<INFIX>-<n> ref.
+var entityRefShape = regexp.MustCompile(`^` + refkind.KeyPattern + `-([A-Z]+)-\d+$`)

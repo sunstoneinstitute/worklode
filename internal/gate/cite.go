@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // The citation test of WL-REQ-1791: a spec section cited by number, which
@@ -17,8 +18,8 @@ import (
 // anchorSection is any #sec- fragment (with the document before it when there
 // is one), bareSection is a section sign followed by a digit.
 var (
-	specSection   = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-SPEC-\d+)(?: §| sec-) ?([0-9][0-9A-Za-z.]*)?`)
-	anchorSection = regexp.MustCompile(`(\b[A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+)?#sec-([0-9][0-9A-Za-z.]*)?`)
+	specSection   = regexp.MustCompile(`\b(` + refkind.KeyPattern + `-` + refkind.SPEC + `-\d+)(?: §| sec-) ?([0-9][0-9A-Za-z.]*)?`)
+	anchorSection = regexp.MustCompile(`(\b` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Doc) + `)-\d+)?#sec-([0-9][0-9A-Za-z.]*)?`)
 	bareSection   = regexp.MustCompile(`§ ?([0-9][0-9A-Za-z.]*)`)
 	ruleRefBefore = regexp.MustCompile(designdoc.RuleRefText + ` ?$`)
 	urlInText     = regexp.MustCompile(`[a-z][a-z0-9+.-]*://\S+`)

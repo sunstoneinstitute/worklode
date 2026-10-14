@@ -5,10 +5,12 @@ package api_test
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // TestDocRefRedirect resolves the ref grammar's forms to a 302 at the
@@ -94,7 +96,28 @@ func TestRefShortcut(t *testing.T) {
 		Project: "proj", Kind: "spec", Number: 45, Slug: "per-project-workflows",
 		Body: "---\nstatus: draft\n---\n# Spec 45 — Workflows\n\n## 1. One {#sec-1}\n\nText.\n",
 	})
+	mrr := doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token, model.CreateMilestoneInput{Title: "First"})
+	if mrr.Code != http.StatusCreated {
+		t.Fatalf("create milestone = %d: %s", mrr.Code, mrr.Body.String())
+	}
+	milestoneID := decodeMap(t, mrr)["id"].(string)
+	drr := doReq(t, h, "POST", "/api/v1/projects/proj/deliverables", token, model.CreateDeliverableInput{Name: "Report"})
+	if drr.Code != http.StatusCreated {
+		t.Fatalf("create deliverable = %d: %s", drr.Code, drr.Body.String())
+	}
+	deliverableID := decodeMap(t, drr)["id"].(string)
 
+	// Every target in refkind's registry must have a case here, so a new
+	// infix cannot ship without the shortcut resolving it.
+	covered := map[refkind.Target]bool{}
+	typedRef := regexp.MustCompile(`^WL-([A-Z]+)-\d+$`)
+	defer func() {
+		for _, target := range refkind.Targets {
+			if !covered[target] {
+				t.Errorf("no /<ref> case for refkind target %s", target)
+			}
+		}
+	}()
 	for _, tc := range []struct{ ref, want string }{
 		{taskID, "/projects/proj/feature/" + strings.TrimPrefix(taskID, "WL-")},
 		{"WL-SPEC-45", "/projects/proj/spec/45"},
@@ -103,8 +126,21 @@ func TestRefShortcut(t *testing.T) {
 		{"WL-REQ-1", "/projects/proj/rule/1"},
 		{"WL-RULE-1", "/projects/proj/rule/1"},
 		{"WL-CL-1", "/projects/proj/rule/1"},
+		{milestoneID, "/projects/proj/milestones#" + milestoneID},
+		{deliverableID, "/projects/proj/deliverables#" + deliverableID},
+		{"WL-MILE-99", ""},
 	} {
+		if m := typedRef.FindStringSubmatch(tc.ref); m != nil {
+			target, _ := refkind.Lookup(m[1])
+			covered[target] = true
+		}
 		rr := doReq(t, h, "GET", "/"+tc.ref, "", nil)
+		if tc.want == "" {
+			if rr.Code != http.StatusNotFound {
+				t.Fatalf("ref %q status = %d, want 404", tc.ref, rr.Code)
+			}
+			continue
+		}
 		if rr.Code != http.StatusFound {
 			t.Fatalf("ref %q status = %d, want 302; body %s", tc.ref, rr.Code, rr.Body.String())
 		}

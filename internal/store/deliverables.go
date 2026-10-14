@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // DeliverableInput carries the fields for declaring a new deliverable.
@@ -43,7 +44,7 @@ type DeliverableInput struct {
 
 // deliverableSeqKind is the deliverable's row key in project_entity_seq and
 // the type segment of its id (WL-REQ-122's COW-DEL-3).
-const deliverableSeqKind = "DEL"
+const deliverableSeqKind = refkind.DEL
 
 // deliverableColumns is the deliverables table's own column list, in insert
 // and scan order. milestone_id (migration 0062) is last, append-only, so a

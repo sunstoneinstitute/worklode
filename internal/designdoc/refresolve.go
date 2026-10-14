@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // ResolveRef resolves ref against docs — the documents the backbone
@@ -109,7 +110,7 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 		return model.Doc{}, "", NoSpecError(ref)
 	}
 	if sh, ok := ParseShorthand(base); ok {
-		if sh.Type == "SPEC" && sh.Number == 0 {
+		if sh.Type == refkind.SPEC && sh.Number == 0 {
 			return model.Doc{}, "", NoSpecError(ref)
 		}
 		if projectKey == "" || sh.Key != projectKey {
@@ -117,7 +118,7 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 		}
 		// A retired ADR number names the spec that took its place
 		// (WL-REQ-1357). RetiredADRNotice tells the reader.
-		if sh.Type == "ADR" {
+		if sh.Type == refkind.ADR {
 			return finishRef(ref, filterRefDocs(candidates, func(d model.Doc) bool { return d.FormerADR == sh.Number }), section)
 		}
 		// Numbers are unique per kind, not per corpus: WL-REQ-118 gives each kind
@@ -149,7 +150,7 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 // It is "" for every other ref.
 func RetiredADRNotice(ref string, doc model.Doc) string {
 	base, _ := SplitFragment(ref)
-	if sh, ok := ParseShorthand(base); !ok || sh.Type != "ADR" {
+	if sh, ok := ParseShorthand(base); !ok || sh.Type != refkind.ADR {
 		return ""
 	}
 	return fmt.Sprintf("%s is retired; showing its successor %s.", base, doc.FormatRef())

@@ -236,14 +236,11 @@ func deliverableRow(t *testing.T, baseURL, deliverableID string) string {
 	if status != http.StatusOK {
 		t.Fatalf("GET the Deliverables page: status = %d", status)
 	}
-	const rowOpen = `<div class="dodrow">`
-	at := strings.Index(page, deliverableID)
-	if at < 0 {
-		t.Fatalf("deliverable %s is not on the Deliverables page", deliverableID)
-	}
-	start := strings.LastIndex(page[:at], rowOpen)
+	// Each row carries its deliverable id as its anchor.
+	const rowOpen = `<div class="dodrow"`
+	start := strings.Index(page, rowOpen+` id="`+deliverableID+`"`)
 	if start < 0 {
-		t.Fatalf("deliverable %s appears outside any row on the Deliverables page", deliverableID)
+		t.Fatalf("deliverable %s has no row on the Deliverables page", deliverableID)
 	}
 	// The last row ends at the list, not at the next row — and what follows
 	// the list is a paragraph explaining the provenance split, which names

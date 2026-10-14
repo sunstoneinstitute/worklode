@@ -14,6 +14,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // ruleRow is one rule as a document's current arrangement holds it.
@@ -306,7 +307,7 @@ func arrangedRules(tx *sql.Tx, table string, docID int64) ([]ruleRow, error) {
 
 // ruleSeqKind is the rule's row key in project_entity_seq — the counter
 // behind its number, shared by every kind (WL-REQ-165).
-const ruleSeqKind = "RULE"
+const ruleSeqKind = refkind.RULE
 
 // insertRule mints a rule at version 1 with the project's next RULE number.
 // The upsert is the same counter CreateDoc uses for document numbers, held
