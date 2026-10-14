@@ -54,10 +54,12 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("LODE_SKILLS_DIR", skills)
 	// A terminal the hook believes renders OSC 8 would add the ref-link hint
-	// to every brief; TMUX forces TerminalHyperlinks to no, so the package's
-	// expectations do not depend on the developer's terminal. The tests that
-	// want the hint clear it (see hyperlinkTerminal).
+	// to every brief; an old tmux forces TerminalHyperlinks to no, so the
+	// package's expectations do not depend on the developer's terminal. The
+	// tests that want the hint clear it (see hyperlinkTerminal).
 	os.Setenv("TMUX", "hookrun-test")
+	os.Setenv("TERM_PROGRAM", "tmux")
+	os.Setenv("TERM_PROGRAM_VERSION", "3.3a")
 	os.Setenv("HOME", home)
 	keyring.MockInit()
 	code := m.Run()
