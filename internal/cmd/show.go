@@ -12,6 +12,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // typedID matches WL-REQ-168's <KEY>-<TYPE>-<n> grammar (generalized by WL-REQ-122
@@ -70,12 +71,13 @@ func classify(arg string) showTarget {
 	}
 	if m := typedID.FindStringSubmatch(arg); m != nil {
 		typ := m[2]
-		switch typ {
-		case "SPEC", "ADR", "PLAN":
+		target, _ := refkind.Lookup(typ)
+		switch target {
+		case refkind.Doc:
 			return showTarget{Kind: targetDoc}
-		case "MILE":
+		case refkind.Milestone:
 			return showTarget{Kind: targetMilestone}
-		case "DEL":
+		case refkind.Deliverable:
 			return showTarget{Kind: targetDeliverable}
 		default:
 			return showTarget{Kind: targetUnknownType, Type: typ}

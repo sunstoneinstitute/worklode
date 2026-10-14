@@ -15,11 +15,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // milestoneSeqKind is the milestone's row key in project_entity_seq and the
 // type segment of its id (WL-REQ-122's COW-MILE-2).
-const milestoneSeqKind = "MILE"
+const milestoneSeqKind = refkind.MILE
 
 // maxMilestoneTitle bounds a title in runes, matching a deliverable's name.
 // It keeps a stray paste out of the row and out of a list cell; WL-REQ-120 puts

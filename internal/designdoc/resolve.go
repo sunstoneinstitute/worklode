@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // This file holds the vocabulary of document-reference resolution: the
@@ -28,7 +30,7 @@ func SplitFragment(ref string) (base, section string) {
 // zero-padding, optionally followed by the rest of a slug. Both are anchored
 // end to end and expect a base — a ref with any fragment already removed.
 var (
-	shorthandPattern  = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR|PLAN)-(\d+)$`)
+	shorthandPattern  = regexp.MustCompile(`^(` + refkind.KeyPattern + `)-(` + refkind.Alternation(refkind.Doc) + `)-(\d+)$`)
 	numberFormPattern = regexp.MustCompile(`^(\d+)(-.*)?$`)
 )
 
@@ -143,7 +145,7 @@ func kindArticle(kind string) string {
 // rule's citable ref. Every kind shares one counter, so any infix resolves
 // any rule by its number: REQ, RULE, and CL, the pre-S64 spelling that
 // accepted document text still carries. FormatRuleRef writes the kind's own.
-const RuleRefText = `([A-Z][A-Z0-9]{1,9})-(?:REQ|RULE|CL)-(\d+)`
+var RuleRefText = `(` + refkind.KeyPattern + `)-(?:` + refkind.Alternation(refkind.Rule) + `)-(\d+)`
 
 // The rule kinds (WL-REQ-165), ns.Schemes["RuleKind"]. The store mints a
 // requirement by default. RuleKindInformative is retired and reads as a
@@ -172,9 +174,9 @@ func RuleKindCovered(kind string) bool {
 // covered kind, RULE for any other (WL-REQ-165). Every printed rule ref
 // goes through here, or through the store's SQL mirror of it.
 func FormatRuleRef(key string, number int64, kind string) string {
-	infix := "RULE"
+	infix := refkind.RULE
 	if RuleKindCovered(kind) {
-		infix = "REQ"
+		infix = refkind.REQ
 	}
 	return fmt.Sprintf("%s-%s-%d", key, infix, number)
 }
@@ -208,7 +210,7 @@ func ParseRuleRef(base string) (RuleRef, bool) {
 // arrangement, and edges run between rules.
 var (
 	ruleRefInText    = regexp.MustCompile(`\b` + RuleRefText + `\b`)
-	sectionRefInText = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+)#(sec-[0-9A-Za-z._-]+)\b`)
+	sectionRefInText = regexp.MustCompile(`\b(` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Doc) + `)-\d+)#(sec-[0-9A-Za-z._-]+)\b`)
 )
 
 // SectionRef is a document shorthand plus a section anchor found in prose.
