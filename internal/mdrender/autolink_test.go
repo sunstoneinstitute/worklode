@@ -38,6 +38,20 @@ func TestRuleRefAutolink(t *testing.T) {
 	}
 }
 
+// TestEntityRefAutolink: a milestone or deliverable ref links to the root
+// shortcut, which redirects to its page.
+func TestEntityRefAutolink(t *testing.T) {
+	got := string(Body(ProjectKeys{}, "see WL-MILE-2 and WL-DEL-4."))
+	for _, want := range []string{
+		`<a href="/WL-MILE-2" rel="nofollow">WL-MILE-2</a>`,
+		`<a href="/WL-DEL-4" rel="nofollow">WL-DEL-4</a>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
+	}
+}
+
 // TestDocRefAutolinkLeavesCodeAndLinks pins the skip contexts.
 // TestRuleRefAutolinkInPage covers WL-REQ-1633: on a spec page, a ref to a
 // rule the spec arranges links to its section in the same page; any other
