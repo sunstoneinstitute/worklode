@@ -58,8 +58,12 @@ func (d Declaration) String() string {
 	return ref
 }
 
+// Aliases are keys accepted alongside the configured one (WL-REQ-7).
+var Aliases = []string{"Rule:", "Requirement:", "Governed by:"}
+
 // Find scans text line by line and parses the first line that starts with
-// key. A later Spec: line is ignored: one declaration per body (WL-REQ-7).
+// key or an alias. A later trailer line is ignored: one declaration per body
+// (WL-REQ-7).
 func Find(key, text string) (Declaration, error) {
 	for _, line := range strings.Split(text, "\n") {
 		d, matched, err := ParseLine(key, line)
@@ -71,13 +75,24 @@ func Find(key, text string) (Declaration, error) {
 	return Declaration{}, ErrNoTrailer
 }
 
-// ParseLine parses one line. matched reports whether the line starts with
-// key followed by a space or the end of the line; err is set when it does
-// and the rest is not a valid declaration.
+// normKey folds a key for comparison: lower case, inner whitespace collapsed,
+// no colon.
+func normKey(k string) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSuffix(k, ":"))), " ")
+}
+
+// ParseLine parses one line. matched reports whether the line starts, with no
+// leading whitespace, with key or an alias, compared case-insensitively and
+// ignoring whitespace inside the key and before its colon; err is set when it
+// does and the rest is not a valid declaration.
 func ParseLine(key, line string) (d Declaration, matched bool, err error) {
-	line = strings.TrimSpace(line)
-	rest, ok := strings.CutPrefix(line, key)
-	if !ok || (rest != "" && rest[0] != ' ' && rest[0] != '\t') {
+	line = strings.TrimRight(line, " \t\r")
+	head, rest, ok := strings.Cut(line, ":")
+	if !ok || head == "" || head[0] == ' ' || head[0] == '\t' {
+		return Declaration{}, false, nil
+	}
+	h := normKey(head)
+	if h != normKey(key) && !slices.ContainsFunc(Aliases, func(a string) bool { return h == normKey(a) }) {
 		return Declaration{}, false, nil
 	}
 	d.Line = line

@@ -15,7 +15,11 @@ func TestParseLineForms(t *testing.T) {
 		"Spec: WL-RULE-456 fix":     func(d Declaration) bool { return d.Rule != nil && d.Qualifier == "fix" },
 		"Spec: WL-REQ-456":          func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 456 },
 		"Spec: none refactor":       func(d Declaration) bool { return d.None == "refactor" && d.Rule == nil },
-		"  Spec:   none   tests  ":  func(d Declaration) bool { return d.None == "tests" },
+		"Spec:   none   tests  ":    func(d Declaration) bool { return d.None == "tests" },
+		"spec : WL-REQ-1":           func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 1 },
+		"Rule: WL-REQ-2":            func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 2 },
+		"REQUIREMENT:WL-REQ-3":      func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 3 },
+		"Governed  by : WL-REQ-4":   func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 4 },
 	}
 	for line, check := range ok {
 		d, matched, err := ParseLine("Spec:", line)
@@ -45,6 +49,11 @@ func TestParseLineForms(t *testing.T) {
 	}
 	if _, matched, _ := ParseLine("Spec:", "Specification: WL-RULE-1"); matched {
 		t.Error("a longer word starting with the key is not the trailer")
+	}
+	for _, line := range []string{"  Spec: WL-REQ-1", "\tRule: WL-REQ-1", "Governedby: WL-REQ-1"} {
+		if _, matched, _ := ParseLine("Spec:", line); matched {
+			t.Errorf("ParseLine(%q) matched: leading whitespace or a mangled key is not the trailer", line)
+		}
 	}
 }
 
