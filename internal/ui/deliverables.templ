@@ -82,7 +82,7 @@ templ deliverableGroup(g DeliverableGroup) {
 // back to "Declared", the only evidence category a typed-in deliverable can
 // honestly carry on its own (WL-REQ-329).
 templ deliverableRow(d DeliverableRow) {
-	<div class="dodrow">
+	<div class="dodrow" id={ d.ID }>
 		<div>
 			<div class="name">{ d.Name }</div>
 			<div class="def mono">{ d.ID }</div>

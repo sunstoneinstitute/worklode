@@ -54,6 +54,7 @@ import (
 	"github.com/yuin/goldmark/util"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // docRefPrefix is where a linked reference points: the cockpit's resolving
@@ -78,7 +79,10 @@ const taskRefPrefix = "/tasks/"
 // "WL-REQ-168".
 var (
 	// WL-SPEC-74, WL-ADR-7, optionally #sec-10 / #sec-3.1a.
-	shorthandRef = regexp.MustCompile(`\b[A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+(?:#sec-[0-9A-Za-z._-]+)?`)
+	shorthandRef = regexp.MustCompile(`\b` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Doc) + `)-\d+(?:#sec-[0-9A-Za-z._-]+)?`)
+	// WL-MILE-2, WL-DEL-4 — every other registered infix. It links to the
+	// root shortcut /<ref>, which redirects to the entity's page.
+	entityRef = regexp.MustCompile(`\b` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Milestone, refkind.Deliverable) + `)-\d+\b`)
 	// WL-REQ-12, WL-RULE-12 or WL-CL-12 — the rule arm of the shorthand grammar
 	// (WL-REQ-165). It links to the resolving redirect /rules/<ref>, the counterpart of docRefPrefix.
 	ruleRefRe = regexp.MustCompile(`\b` + designdoc.RuleRefText + `\b`)
@@ -309,6 +313,12 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 			href = "#" + anchor
 		}
 		out = append(out, refMatch{loc[0], loc[1], href})
+	}
+	for _, loc := range entityRef.FindAllIndex(value, -1) {
+		if taken(loc[0], loc[1]) {
+			continue
+		}
+		out = append(out, refMatch{loc[0], loc[1], "/" + string(value[loc[0]:loc[1]])})
 	}
 	section := func(loc []int, numStart, numEnd, secStart, secEnd int) refMatch {
 		end := loc[1]
