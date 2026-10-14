@@ -28,7 +28,7 @@ runs:
   steps:
     # uv is set up inside the action so callers (release.yml, promote-prod.yml)
     # need no uv-specific wiring — the dependency lives with the step that uses
-    # it. ubuntu-latest has no uv preinstalled. Pin to the current release SHA,
+    # it. ubuntu-26.04 has no uv preinstalled. Pin to the current release SHA,
     # matching the sha-pinning convention every other action in this repo uses.
     - name: Set up uv
       uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
