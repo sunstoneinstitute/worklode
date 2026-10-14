@@ -159,9 +159,13 @@ func Hyperlinks(w io.Writer) bool {
 // Unknown means no: a missed link costs nothing, a printed escape sequence
 // costs the line.
 func TerminalHyperlinks() bool {
-	// A multiplexer below the terminal decides what reaches it, and tmux
-	// before 3.4 drops the escape's text with it.
-	if os.Getenv("TMUX") != "" || strings.HasPrefix(os.Getenv("TERM"), "screen") {
+	// A multiplexer below the terminal decides what reaches it. tmux passes
+	// OSC 8 through from 3.4 and names its version in TERM_PROGRAM_VERSION;
+	// older tmux and screen drop the escape's text with it.
+	if os.Getenv("TMUX") != "" {
+		return os.Getenv("TERM_PROGRAM") == "tmux" && tmuxPassesHyperlinks(os.Getenv("TERM_PROGRAM_VERSION"))
+	}
+	if strings.HasPrefix(os.Getenv("TERM"), "screen") {
 		return false
 	}
 	for _, key := range []string{"KITTY_WINDOW_ID", "WT_SESSION", "ALACRITTY_WINDOW_ID", "KONSOLE_VERSION"} {
@@ -176,4 +180,20 @@ func TerminalHyperlinks() bool {
 	// GNOME Terminal and every other VTE terminal, from 0.50.
 	v, err := strconv.Atoi(os.Getenv("VTE_VERSION"))
 	return err == nil && v >= 5000
+}
+
+// tmuxPassesHyperlinks reports whether a tmux version string such as "3.5a"
+// or "3.4" is 3.4 or later, the first release that passes OSC 8 through.
+func tmuxPassesHyperlinks(version string) bool {
+	major, minor, ok := strings.Cut(version, ".")
+	if !ok {
+		return false
+	}
+	minor = strings.TrimRightFunc(minor, func(r rune) bool { return r < '0' || r > '9' })
+	maj, err1 := strconv.Atoi(major)
+	min, err2 := strconv.Atoi(minor)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return maj > 3 || (maj == 3 && min >= 4)
 }
