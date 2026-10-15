@@ -36,9 +36,6 @@ type routeGuard struct {
 	// path's {id} is the bound task (taskScopeBound), or call it freely
 	// (taskScopeAny, for the worker surface that carries no task id).
 	taskScope taskScope
-	// optional exempts an entry from unusedGuards, for a route only some
-	// configurations register.
-	optional bool
 	// session refuses a bearer token and the open subject: only a live web
 	// session reaches the route (WL-REQ-1771).
 	session bool
@@ -83,11 +80,6 @@ func sessionOnly(perm Permission) routeGuard {
 // actor.
 func open(why string) routeGuard { return routeGuard{perm: permPublic, public: why} }
 
-// guardedOptional is guarded for a route not every boot registers.
-func guardedOptional(perm Permission) routeGuard {
-	return routeGuard{perm: perm, optional: true}
-}
-
 // routeGuards names the guard for every route the server serves, keyed by the
 // exact ServeMux pattern (method included — GET and POST on one path are
 // different capabilities and get different rows).
@@ -98,16 +90,14 @@ func guardedOptional(perm Permission) routeGuard {
 var routeGuards = map[string]routeGuard{
 	// --- web UI (WL-SPEC-82) ---------------------------------------------------
 	"GET /{$}": guarded(permWebRead),
-	// The SPA shell, the public host's catch-all (WL-REQ-1304). Registered
-	// only when LODE_LEGACY_URL is set (WL-REQ-1303).
-	"GET /": guardedOptional(permWebRead),
 	// The Morning Brief's one write (WL-REQ-346): advancing the actor's review
 	// boundary. requireSession, applied at registration like the decide
 	// route below, because a forged cutoff needs a live session's identity
 	// to attribute the advance to.
-	"POST /home/reviewed":             guarded(permWebWrite),
-	"GET /ideas":                      guarded(permWebRead),
-	"GET /intake":                     guarded(permWebRead),
+	"POST /home/reviewed": guarded(permWebWrite),
+	"GET /ideas":          guarded(permWebRead),
+	"GET /intake":         guarded(permWebRead),
+	// The SPA shell (WL-REQ-1303): registerSPA registers each spaRoutes path.
 	"GET /projects":                   guarded(permWebRead),
 	"GET /projects/{id}":              guarded(permWebRead),
 	"GET /projects/{id}/crew":         guarded(permWebRead),
@@ -217,9 +207,7 @@ var routeGuards = map[string]routeGuard{
 	// --- unauthenticated by design ------------------------------------------
 	"GET /assets/": open("stylesheet and fonts; no project data, and a " +
 		"stylesheet request has no session to attach a login redirect to"),
-	// Only the public host of a two-host boot registers it (spa.go).
-	"GET /static/": routeGuard{perm: permPublic, optional: true,
-		public: "the SPA's content-hashed build output; no project data"},
+	"GET /static/":                open("the SPA's content-hashed build output; no project data"),
 	"GET /auth/login":             open("starts the login flow"),
 	"GET /auth/callback":          open("finishes the login flow"),
 	"POST /hooks/github":          open("authenticated by HMAC signature, not by an actor"),
@@ -555,11 +543,6 @@ type router struct {
 	// case about a malformed table never mutates the package-level one.
 	guards map[string]routeGuard
 	used   map[string]bool
-	// host prefixes every registered pattern ("worklode.example"); "" means
-	// host-less, today's single-host server. on() returns a sibling router
-	// for another host sharing guards and used, so one guard entry serves a
-	// route registered on both hosts (WL-REQ-1303).
-	host string
 }
 
 func newRouter(s *server, mux *http.ServeMux) *router {
@@ -568,22 +551,6 @@ func newRouter(s *server, mux *http.ServeMux) *router {
 
 func newRouterWithGuards(s *server, mux *http.ServeMux, guards map[string]routeGuard) *router {
 	return &router{srv: s, mux: mux, guards: guards, used: make(map[string]bool, len(guards))}
-}
-
-// on returns a sibling router that registers every pattern qualified for
-// host, while still checking and recording guard use against the same
-// table as r.
-func (r *router) on(host string) *router {
-	return &router{srv: r.srv, mux: r.mux, guards: r.guards, used: r.used, host: host}
-}
-
-// qualify turns "GET /x" into "GET host/x" when the router has a host.
-func (r *router) qualify(pattern string) string {
-	if r.host == "" {
-		return pattern
-	}
-	method, path, _ := strings.Cut(pattern, " ")
-	return method + " " + r.host + path
 }
 
 // guardFor returns the declared guard for pattern, panicking when the table
@@ -609,14 +576,14 @@ func (r *router) guardFor(pattern string) routeGuard {
 // bearer token.
 func (r *router) api(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.Handle(r.qualify(pattern), r.srv.apiGuard(g, h))
+	r.mux.Handle(pattern, r.srv.apiGuard(g, h))
 }
 
 // web registers a web UI route behind webGuard, which resolves the session
 // (or the open-deployment subject) and applies the same policy.
 func (r *router) web(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.HandleFunc(r.qualify(pattern), r.srv.webGuard(g.perm, h))
+	r.mux.HandleFunc(pattern, r.srv.webGuard(g.perm, h))
 }
 
 // asset registers an asset route behind eitherGuard. An asset route is one
@@ -630,7 +597,7 @@ func (r *router) web(pattern string, h http.HandlerFunc) {
 // subresource fetch into a login page.
 func (r *router) asset(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.HandleFunc(r.qualify(pattern), r.srv.eitherGuard(g.perm, r.srv.requireTaskScope(g, h)))
+	r.mux.HandleFunc(pattern, r.srv.eitherGuard(g.perm, r.srv.requireTaskScope(g, h)))
 }
 
 // public registers a route that carries no worklode identity. It still goes
@@ -641,7 +608,7 @@ func (r *router) public(pattern string, h http.Handler) {
 	if g.perm != permPublic {
 		panic(fmt.Sprintf("route %q is registered as public but the table requires %q", pattern, g.perm))
 	}
-	r.mux.Handle(r.qualify(pattern), h)
+	r.mux.Handle(pattern, h)
 }
 
 // publicFunc is public for an http.HandlerFunc.
@@ -652,8 +619,8 @@ func (r *router) publicFunc(pattern string, h http.HandlerFunc) { r.public(patte
 // does not exist.
 func (r *router) unusedGuards() []string {
 	var unused []string
-	for pattern, g := range r.guards {
-		if !r.used[pattern] && !g.optional {
+	for pattern := range r.guards {
+		if !r.used[pattern] {
 			unused = append(unused, pattern)
 		}
 	}

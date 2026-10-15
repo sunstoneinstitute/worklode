@@ -287,8 +287,6 @@ func TestObserveSPA(t *testing.T) {
 	s.observeSPA(spaPage)
 	s.observeSPA(spaAsset)
 	s.observeSPA(spaAssetNotFound)
-	s.observeSPA(spaRedirect)
-	s.observeSPA(spaNotFound)
 
 	for _, tc := range []struct {
 		outcome string
@@ -297,8 +295,6 @@ func TestObserveSPA(t *testing.T) {
 		{spaPage, 2},
 		{spaAsset, 1},
 		{spaAssetNotFound, 1},
-		{spaRedirect, 1},
-		{spaNotFound, 1},
 	} {
 		if got := testutil.ToFloat64(s.spaRequests.WithLabelValues(tc.outcome)); got != tc.want {
 			t.Fatalf("spaRequests{outcome=%s} = %v, want %v", tc.outcome, got, tc.want)

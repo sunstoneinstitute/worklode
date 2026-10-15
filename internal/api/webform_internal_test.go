@@ -26,24 +26,11 @@ func TestDecideReturn(t *testing.T) {
 	}
 }
 
-// TestOriginAllowedAcceptsLegacyHost checks originAllowed also accepts an
-// Origin matching LegacyURL's host (WL-REQ-1308), not only PublicURL's.
-func TestOriginAllowedAcceptsLegacyHost(t *testing.T) {
-	t.Parallel()
-	s := &server{cfg: Config{PublicURL: "https://worklode.test", LegacyURL: "https://worklold.test"}}
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
-	req.Host = "worklode.test"
-	req.Header.Set("Origin", "https://worklold.test")
-	if !s.originAllowed(req) {
-		t.Error("originAllowed should accept an Origin matching LegacyURL's host")
-	}
-}
-
-// TestOriginAllowedRejectsUnknownHost checks the fallback stays bounded: an
-// Origin matching neither configured base is still refused.
+// TestOriginAllowedRejectsUnknownHost checks an Origin matching neither the
+// request host nor LODE_PUBLIC_URL is refused (WL-REQ-1308).
 func TestOriginAllowedRejectsUnknownHost(t *testing.T) {
 	t.Parallel()
-	s := &server{cfg: Config{PublicURL: "https://worklode.test", LegacyURL: "https://worklold.test"}}
+	s := &server{cfg: Config{PublicURL: "https://worklode.test"}}
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.Host = "worklode.test"
 	req.Header.Set("Origin", "https://evil.example")

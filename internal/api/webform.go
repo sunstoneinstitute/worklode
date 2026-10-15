@@ -91,8 +91,8 @@ type deliverableFormValues struct {
 // this application's own pages. Sec-Fetch-Site is authoritative where the
 // browser sends it ("none" is a direct navigation, which a form POST is not,
 // but curl and the e2e harness send neither header and must still work);
-// otherwise an Origin, if present, must match the request host or a
-// configured base URL (public or legacy).
+// otherwise an Origin, if present, must match the request host or
+// LODE_PUBLIC_URL's.
 func (s *server) sameOriginForm(r *http.Request) bool {
 	switch r.Header.Get("Sec-Fetch-Site") {
 	case "same-origin", "none":
@@ -105,7 +105,7 @@ func (s *server) sameOriginForm(r *http.Request) bool {
 
 // originAllowed is the Sec-Fetch-Site-less half of the origin check, shared
 // by the form guard and the JSON one: an Origin, if present, must match the
-// request host or a configured base URL (public or legacy). No Origin at
+// request host or LODE_PUBLIC_URL's (WL-REQ-1308). No Origin at
 // all passes — curl and the e2e harness send neither header.
 func (s *server) originAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
@@ -121,11 +121,6 @@ func (s *server) originAllowed(r *http.Request) bool {
 	}
 	if s.cfg.PublicURL != "" {
 		if pub, err := url.Parse(s.cfg.PublicURL); err == nil && pub.Host != "" && strings.EqualFold(u.Host, pub.Host) {
-			return true
-		}
-	}
-	if s.cfg.LegacyURL != "" {
-		if legacy, err := url.Parse(s.cfg.LegacyURL); err == nil && legacy.Host != "" && strings.EqualFold(u.Host, legacy.Host) {
 			return true
 		}
 	}
