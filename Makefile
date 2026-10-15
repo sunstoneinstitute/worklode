@@ -1,9 +1,10 @@
 .PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean FORCE
 
-# WL-REQ-15: six executables from one module. The three user binaries are what
-# Homebrew installs; the other three ship in the container images.
+# WL-REQ-15: seven executables from one module. The three user binaries are what
+# Homebrew installs; three more ship in the container images, and
+# lode-gate-check runs only in CI.
 USER_BINARIES := lode lode-hook lode-statusline
-ALL_BINARIES := $(USER_BINARIES) lode-server lode-watch lode-migrate
+ALL_BINARIES := $(USER_BINARIES) lode-server lode-watch lode-migrate lode-gate-check
 
 PREFIX := $(if $(shell test -w /usr/local/bin && echo yes),/usr/local,$(HOME))
 
@@ -19,7 +20,7 @@ build: bin/lode ## Build the lode binary into bin/lode
 
 build-user: $(addprefix bin/,$(USER_BINARIES)) ## Build the three end-user binaries
 
-build-all: $(addprefix bin/,$(ALL_BINARIES)) ## Build all six executables
+build-all: $(addprefix bin/,$(ALL_BINARIES)) ## Build all seven executables
 
 install: ## Build and install the three end-user binaries to $(PREFIX)/bin
 	@for b in $(USER_BINARIES); do \
