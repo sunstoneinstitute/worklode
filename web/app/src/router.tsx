@@ -10,6 +10,7 @@ import {
 import { LoginRedirect, meQueryOptions } from "@/api/queries"
 import { coerceSearch } from "@/components/ui/data-table/url-state"
 import { LoadError } from "@/components/ui/load-state"
+import { ProjectLayout } from "@/layouts/ProjectLayout"
 import { RootLayout } from "@/layouts/RootLayout"
 import { NotFound } from "@/pages/NotFound"
 import { Projects } from "@/pages/Projects"
@@ -44,7 +45,14 @@ const projectsRoute = createRoute({
   validateSearch: coerceSearch,
 })
 
-export const routeTree = rootRoute.addChildren([projectsRoute])
+// Pages under a project hang off this route as they are ported
+const projectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "projects/$projectId",
+  component: ProjectLayout,
+})
+
+export const routeTree = rootRoute.addChildren([projectsRoute, projectRoute])
 
 /**
  * The app's router. Browser history by default; tests pass a memory
