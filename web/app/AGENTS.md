@@ -95,7 +95,7 @@ instead of the full `material-symbols` package (~4MB).
 - Config: `.fantasticonrc.json`. `pnpm iconfont` writes
   `src/assets/iconfont/wlicon.{css,ttf,woff,woff2}`, imported at the top
   of `src/index.css`, so Vite bundles and hashes the font files. Nothing
-  unhashed may live under `/assets/`: the server marks it immutable.
+  unhashed may live under `/static/`: the server marks it immutable.
 - Usage: `src/components/icons.tsx` exports named components
   (`ScheduleIcon`, `ArrowRightIcon`, ...) that render
   `<i className="wlicon-{name}">`. To add an icon: drop the SVG in

@@ -217,6 +217,9 @@ var routeGuards = map[string]routeGuard{
 	// --- unauthenticated by design ------------------------------------------
 	"GET /assets/": open("stylesheet and fonts; no project data, and a " +
 		"stylesheet request has no session to attach a login redirect to"),
+	// Only the public host of a two-host boot registers it (spa.go).
+	"GET /static/": routeGuard{perm: permPublic, optional: true,
+		public: "the SPA's content-hashed build output; no project data"},
 	"GET /auth/login":             open("starts the login flow"),
 	"GET /auth/callback":          open("finishes the login flow"),
 	"POST /hooks/github":          open("authenticated by HMAC signature, not by an actor"),

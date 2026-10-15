@@ -966,7 +966,7 @@ func (s *server) observeRunBoardRender(outcome string) {
 }
 
 // The SPA handler's outcomes (spa.go): "page" for the shell, "asset"/
-// "asset_not_found" for /assets/, "redirect" for a path spaHandles misses
+// "asset_not_found" for /static/, "redirect" for a path spaHandles misses
 // (sent to LODE_LEGACY_URL), "not_found" for the same miss with no legacy
 // host configured.
 const (

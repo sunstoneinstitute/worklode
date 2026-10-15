@@ -14,7 +14,7 @@ import (
 func TestSPAShellAndAssets(t *testing.T) {
 	h := newTwoHostServer(t, withWebApp(fstest.MapFS{
 		"index.html":           {Data: []byte("<div id=root></div>")},
-		"assets/app-abc123.js": {Data: []byte("console.log(1)")},
+		"static/app-abc123.js": {Data: []byte("console.log(1)")},
 	}))
 	get := func(path string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -29,11 +29,11 @@ func TestSPAShellAndAssets(t *testing.T) {
 		!strings.Contains(rec.Header().Get("Content-Security-Policy"), "script-src 'self'") {
 		t.Fatalf("shell: %d %v", rec.Code, rec.Header())
 	}
-	rec = get("/assets/app-abc123.js")
+	rec = get("/static/app-abc123.js")
 	if rec.Code != 200 || rec.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
 		t.Fatalf("asset: %d %q", rec.Code, rec.Header().Get("Cache-Control"))
 	}
-	if rec := get("/assets/missing.js"); rec.Code != 404 {
+	if rec := get("/static/missing.js"); rec.Code != 404 {
 		t.Fatalf("missing asset = %d, want 404", rec.Code)
 	}
 }
