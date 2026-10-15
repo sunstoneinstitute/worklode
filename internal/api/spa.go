@@ -20,18 +20,18 @@ func (s *server) spaFS() fs.FS {
 
 // registerSPA registers the SPA's two routes on r, the public host's router.
 func (s *server) registerSPA(r *router) {
-	r.public("GET /assets/", s.spaAssetHandler())
+	r.public("GET /static/", s.spaAssetHandler())
 	r.web("GET /", s.spaShell)
 }
 
 // spaAssetHandler serves the content-hashed build output, immutable. A
 // missing file is a 404, never index.html.
 func (s *server) spaAssetHandler() http.Handler {
-	assets, err := fs.Sub(s.spaFS(), "assets")
+	assets, err := fs.Sub(s.spaFS(), "static")
 	if err != nil {
-		panic(err) // "assets" is a valid path; Sub cannot fail
+		panic(err) // "static" is a valid path; Sub cannot fail
 	}
-	fileServer := http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))
+	fileServer := http.StripPrefix("/static/", http.FileServer(http.FS(assets)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}

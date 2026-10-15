@@ -153,9 +153,9 @@ func TestWebAppTwoHosts(t *testing.T) {
 	})
 	wantStatus(resp, body, http.StatusCreated)
 
-	// 5. /assets/ belongs to the SPA on the public host and to the templ
-	// cockpit on the legacy host.
-	resp, body = do(http.MethodGet, webPublicHost, "/assets/nope.js", "", nil)
+	// 5. /static/ belongs to the SPA on the public host, /assets/ to the
+	// templ cockpit on the legacy host.
+	resp, body = do(http.MethodGet, webPublicHost, "/static/nope.js", "", nil)
 	wantStatus(resp, body, http.StatusNotFound)
 	resp, body = do(http.MethodGet, webLegacyHost, "/assets/app.css", "", nil)
 	wantStatus(resp, body, http.StatusOK)

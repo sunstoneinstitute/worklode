@@ -21,8 +21,8 @@ func FS() fs.FS {
 }
 
 // Built reports whether a real build is embedded: the placeholder ships no
-// assets/ directory.
+// static/ directory.
 func Built() bool {
-	_, err := fs.Stat(FS(), "assets")
+	_, err := fs.Stat(FS(), "static")
 	return err == nil
 }
