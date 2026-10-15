@@ -10,13 +10,15 @@ import (
 // their own arguments with the stdlib, so their transitive graphs must stay
 // clear of the command tree, the document renderer, and everything the server
 // and watcher pull in. Nothing else in the build fails when one of these
-// creeps back, hence this guard.
+// creeps back, hence this guard. lode-gate-check is held to the same bound
+// so CI's spec-gate job keeps building it in seconds.
 
 const modulePath = "github.com/sunstoneinstitute/worklode"
 
 var hotPathTargets = []string{
 	modulePath + "/cmd/lode-hook",
 	modulePath + "/cmd/lode-statusline",
+	modulePath + "/cmd/lode-gate-check",
 }
 
 // forbidden reports why dep is not allowed in a hot path, or "" if it is.
