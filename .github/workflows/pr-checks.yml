@@ -17,9 +17,6 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  # _build-image.yml declares packages: write; a called reusable workflow may
-  # not request more than the caller grants, or GitHub fails the run at startup.
-  packages: write
 
 concurrency:
   # One group per PR, or per merge-queue ref (a merge_group event has no PR
@@ -205,6 +202,12 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
     uses: ./.github/workflows/_build-image.yml
+    # _build-image.yml declares packages: write, and a called workflow may not
+    # request more than its caller grants, or GitHub fails the run at startup.
+    # Granted to this job alone: with push: false it never writes a package.
+    permissions:
+      contents: read
+      packages: write
     with:
       push: false
       # `docker` + `gha-buildcache`, not the bare `self-hosted` lint uses:
