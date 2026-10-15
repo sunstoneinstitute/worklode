@@ -1,11 +1,11 @@
 # Self-hosted CI runner (hel01)
 
-`gate`, `test`, `lint`, `build-image` and `checks` in `pr-checks.yml` run on a self-hosted
+`triage`, `test`, `lint`, `build-image` and `checks` in `pr-checks.yml` run on a self-hosted
 GitHub Actions runner on `hel01` when the triggering PR is trustworthy;
-`validate-kustomize` and every PR the gate doesn't trust stay on
+`validate-kustomize` and every PR `triage` doesn't trust stay on
 `ubuntu-latest`. `deploy-dev.yml`'s `build-image` targets hel01
 unconditionally — a push to `main` has no fork head, so it is trusted by
-construction and never needs the gate. The payoff is a warm, persistent
+construction and never needs `triage`. The payoff is a warm, persistent
 `GOCACHE`/`GOMODCACHE` — no `actions/cache` round trip for Go, no re-fetching
 `go.sum` on every run — plus 48 cores and a persistent Docker build cache
 instead of a hosted runner's 4 cores and a from-scratch layer cache each
@@ -14,14 +14,14 @@ time.
 ## Trust boundary
 
 `worklode` is a **public** repo, and a self-hosted runner executes arbitrary
-job code with the runner user's access to the host. `pr-checks.yml`'s `gate`
+job code with the runner user's access to the host. `pr-checks.yml`'s `triage`
 job computes a `trusted` output — true only when the PR's head repo is this
 repo (`github.event.pull_request.head.repo.full_name ==
 github.repository`), independent of `run` (which the `can-be-tested` label
 or author association can also set true). **A fork PR never gets `trusted`,
 regardless of label or association** — it always runs on `ubuntu-latest`.
 `lint`/`test`/`build-image`/`checks` route their `runs-on` off `trusted`, not
-`run`. `gate` cannot read its own output, so its `runs-on` repeats the same
+`run`. `triage` cannot read its own output, so its `runs-on` repeats the same
 head-repo test inline, plus `merge_group`.
 
 Do not widen `trusted` to include forks from collaborators/members: hosted
@@ -513,7 +513,7 @@ the tmux server included.
 `_test.yml`, `_lint.yml` and `_build-image.yml` all take a `runs-on` input
 (default `ubuntu-latest` / `["ubuntu-latest"]`) — any reusable workflow gains
 hel01 the same way, by threading that input through from its caller's
-`gate.trusted` output. Pick the label for what the job actually needs, not
+`triage.trusted` output. Pick the label for what the job actually needs, not
 for convenience: `gha-pgvector` for Postgres, `docker` for the Docker
 socket, `gha-buildcache` for skipping a cache round trip, the bare
 `self-hosted` for none of the above. If a job needs

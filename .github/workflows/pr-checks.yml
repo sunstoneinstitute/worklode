@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
     # `labeled` is included so that applying `can-be-tested` to a PR from an
-    # outside contributor re-triggers the checks (the gate job below
+    # outside contributor re-triggers the checks (the triage job below
     # re-evaluates and lets it through). opened/synchronize/reopened are the
     # normal triggers.
     types: [opened, synchronize, reopened, labeled]
@@ -31,7 +31,7 @@ jobs:
   # Decide whether this PR may consume CI, keeping fork / drive-by PRs from
   # auto-running the build on a public repo. Docs-only PRs also skip; jobs
   # skipped via `if:` count as satisfied for branch protection.
-  gate:
+  triage:
     # hel01 for a merge-queue build or a same-repo PR, the `trusted` test
     # below computed from the payload, since this job cannot read its own
     # output. A fork PR stays on ubuntu-26.04. The script checks out nothing
@@ -168,26 +168,26 @@ jobs:
           echo "run=false" >> "$GITHUB_OUTPUT"
 
   lint:
-    needs: gate
-    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
+    needs: triage
+    if: needs.triage.outputs.run == 'true' && needs.triage.outputs.code == 'true'
     uses: ./.github/workflows/_lint.yml
     with:
       # `gha-buildcache`, not the bare `self-hosted` build-image/test also
       # moved off: this job's Go cache skip is a real environment
       # requirement (see docs/self-hosted-runner.md), not implied by
       # self-hosted alone.
-      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["self-hosted","gha-buildcache"]' || '["ubuntu-26.04"]' }}
+      runs-on: ${{ needs.triage.outputs.trusted == 'true' && '["self-hosted","gha-buildcache"]' || '["ubuntu-26.04"]' }}
 
   webapp:
-    needs: gate
-    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
+    needs: triage
+    if: needs.triage.outputs.run == 'true' && needs.triage.outputs.code == 'true'
     uses: ./.github/workflows/_webapp.yml
     with:
-      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["self-hosted","gha-buildcache"]' || '["ubuntu-26.04"]' }}
+      runs-on: ${{ needs.triage.outputs.trusted == 'true' && '["self-hosted","gha-buildcache"]' || '["ubuntu-26.04"]' }}
 
   test:
-    needs: gate
-    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
+    needs: triage
+    if: needs.triage.outputs.run == 'true' && needs.triage.outputs.code == 'true'
     uses: ./.github/workflows/_test.yml
     with:
       # `gha-pgvector` + `gha-buildcache` + `docker`, not the bare
@@ -196,14 +196,14 @@ jobs:
       # the per-run Oxigraph container (see docs/self-hosted-runner.md) are
       # all real environment requirements of this job, so a self-hosted
       # runner missing any of them must not be scheduled here.
-      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["gha-pgvector","gha-buildcache","docker"]' || '["ubuntu-26.04"]' }}
+      runs-on: ${{ needs.triage.outputs.trusted == 'true' && '["gha-pgvector","gha-buildcache","docker"]' || '["ubuntu-26.04"]' }}
       # hel01's own always-on container (see docs/self-hosted-runner.md);
       # `ubuntu-26.04` keeps the ephemeral `services:` postgres below.
-      postgres-dsn: ${{ needs.gate.outputs.trusted == 'true' && 'postgres://postgres:postgres@localhost:15432/postgres?sslmode=disable' || 'postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable' }}
+      postgres-dsn: ${{ needs.triage.outputs.trusted == 'true' && 'postgres://postgres:postgres@localhost:15432/postgres?sslmode=disable' || 'postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable' }}
 
   build-image:
-    needs: gate
-    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
+    needs: triage
+    if: needs.triage.outputs.run == 'true' && needs.triage.outputs.code == 'true'
     uses: ./.github/workflows/_build-image.yml
     with:
       push: false
@@ -212,11 +212,11 @@ jobs:
       # survives between runs, only because this job needs both (see
       # docs/self-hosted-runner.md) — two real environment requirements,
       # scheduled on, not a default.
-      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["docker","gha-buildcache"]' || '["ubuntu-26.04"]' }}
+      runs-on: ${{ needs.triage.outputs.trusted == 'true' && '["docker","gha-buildcache"]' || '["ubuntu-26.04"]' }}
 
   validate-kustomize:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
+    needs: triage
+    if: needs.triage.outputs.run == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
@@ -236,9 +236,9 @@ jobs:
   # body and added lines must not cite a spec section by number (WL-REQ-1791).
   # Keys on `run`, not `code`, since gated paths include deploy/base/**.
   spec-gate:
-    needs: gate
-    if: github.event_name == 'pull_request' && needs.gate.outputs.run == 'true'
-    runs-on: ${{ needs.gate.outputs.trusted == 'true' && 'self-hosted' || 'ubuntu-26.04' }}
+    needs: triage
+    if: github.event_name == 'pull_request' && needs.triage.outputs.run == 'true'
+    runs-on: ${{ needs.triage.outputs.trusted == 'true' && 'self-hosted' || 'ubuntu-26.04' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -265,11 +265,11 @@ jobs:
   # one of them never reports; this job always runs, and passes when every
   # job it needs either succeeded or was skipped by its own `if:`.
   checks:
-    needs: [gate, lint, webapp, test, build-image, validate-kustomize, spec-gate]
+    needs: [triage, lint, webapp, test, build-image, validate-kustomize, spec-gate]
     if: always()
-    # Needs only jq. An untrusted or failed gate leaves `trusted` unset, which
+    # Needs only jq. An untrusted or failed triage leaves `trusted` unset, which
     # falls back to ubuntu-26.04.
-    runs-on: ${{ needs.gate.outputs.trusted == 'true' && 'self-hosted' || 'ubuntu-26.04' }}
+    runs-on: ${{ needs.triage.outputs.trusted == 'true' && 'self-hosted' || 'ubuntu-26.04' }}
     timeout-minutes: 2
     steps:
       - name: Fail if any job failed or was cancelled
