@@ -439,18 +439,6 @@ func (s *server) driftPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "drift page", ui.Drift(view))
 }
 
-// projectsPage handles GET /projects: the cross-project portfolio
-// (WL-REQ-331), linking each project to its canonical cockpit URL.
-func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
-	projects, err := s.st.ListProjects(r.Context())
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	view := projectsView(projects, "worklode: projects", "projects")
-	s.renderWeb(w, r, http.StatusOK, "projects page", ui.Projects(view))
-}
-
 // reviewsPage handles GET /reviews: the awaiting-approvals queue
 // (WL-REQ-344), the signed-in actor's rows first (see approvalsView). Every row
 // renders a decide form posting to the act route (WL-REQ-124).

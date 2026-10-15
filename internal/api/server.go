@@ -14,7 +14,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
-	"net"
 	"net/http"
 	"net/http/pprof"
 	"net/url"
@@ -85,11 +84,6 @@ type Config struct {
 	OIDCClientID  string `env:"LODE_OIDC_CLIENT_ID"`
 	PublicURL     string `env:"LODE_PUBLIC_URL"`
 	SessionSecret string `env:"LODE_SESSION_SECRET"`
-
-	// LegacyURL (LODE_LEGACY_URL) is the host the templ cockpit keeps serving
-	// from while pages move to the SPA (WL-RULE-1302). Optional: unset means
-	// one host, the cockpit, no SPA (WL-REQ-1303).
-	LegacyURL string `env:"LODE_LEGACY_URL"`
 
 	// WebOpen (LODE_WEB_OPEN) permits the web UI to serve anonymous callers on
 	// an instance with *no* login provider configured — the local stack and
@@ -706,41 +700,6 @@ func validatePublicURL(publicURL string) error {
 	return nil
 }
 
-// hostOf returns the host of an absolute URL without its port, which is
-// what ServeMux matches a host-qualified pattern against.
-func hostOf(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return strings.ToLower(u.Hostname())
-}
-
-// stripPort returns host without a trailing ":port", so it can be compared
-// against hostOf's bare hostnames.
-func stripPort(host string) string {
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		return h
-	}
-	return host
-}
-
-func validateLegacyURL(cfg Config) error {
-	if cfg.LegacyURL == "" {
-		return nil
-	}
-	if cfg.PublicURL == "" {
-		return errors.New("LODE_LEGACY_URL needs LODE_PUBLIC_URL")
-	}
-	if err := validatePublicURL(cfg.LegacyURL); err != nil {
-		return fmt.Errorf("LODE_LEGACY_URL: %w", err)
-	}
-	if hostOf(cfg.LegacyURL) == hostOf(cfg.PublicURL) {
-		return errors.New("LODE_LEGACY_URL must name a different host from LODE_PUBLIC_URL")
-	}
-	return nil
-}
-
 // requireWebSecrets checks the two settings every browser-facing login
 // provider needs, naming the feature in the refusal. Both providers stated
 // these checks identically before, which also meant parsing PublicURL twice
@@ -763,30 +722,14 @@ func (cfg Config) requireWebSecrets(feature string) error {
 // The permission a route requires is therefore stated as data, in one
 // reviewable place, rather than implied by how its handler is wrapped; see
 // authz.go for the policy it is checked against.
-//
-// When LODE_LEGACY_URL is set, pub and legacy are host-qualified siblings
-// (WL-REQ-1303): the templ cockpit keeps serving the legacy host, the JSON
-// API and webhooks move to the public host, and the few routes both kinds
-// of caller reach (login, callback, blob) register on both. Without a legacy
-// host, pub == legacy == r and every route registers host-less, as before.
 func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, error) {
 	mux := http.NewServeMux()
 	r := newRouter(s, mux)
 
-	pub, legacy := r, r
-	if s.cfg.LegacyURL != "" {
-		pub = r.on(hostOf(s.cfg.PublicURL))
-		legacy = r.on(hostOf(s.cfg.LegacyURL))
-	}
-
-	s.registerCockpit(legacy)
-	s.registerAPI(pub, reg)
-	if pub == legacy {
-		s.registerShared(pub)
-	} else {
-		s.registerShared(pub, legacy)
-		s.registerSPA(pub)
-	}
+	s.registerCockpit(r)
+	s.registerAPI(r, reg)
+	s.registerShared(r)
+	s.registerSPA(r)
 
 	b, err := servedOpenAPI()
 	if err != nil {
@@ -807,9 +750,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 }
 
 // registerCockpit registers the templ cockpit — every page, fragment and
-// form, plus the static asset handler they load — through r. On a two-host
-// server (WL-REQ-1303) r is the legacy host's router; on a single-host
-// server it is the one router every route shares.
+// form, plus the static asset handler they load — through r. A path the SPA
+// handles is registered by registerSPA instead (WL-REQ-1303).
 func (s *server) registerCockpit(r *router) {
 	// Read-mostly web UI. These resolve a session cookie to a subject and
 	// apply the policy (webGuard); an unauthenticated visitor is sent to
@@ -827,7 +769,6 @@ func (s *server) registerCockpit(r *router) {
 		"Low-friction idea capture, looser than and promotable into Intake, arrives with WL-REQ-342.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
 		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with WL-REQ-342 and WL-REQ-125.")))
-	r.web("GET /projects", s.navWrap("projects", s.projectsPage))
 	r.web("GET /projects/{id}", s.navWrap("projects", s.projectPage))
 	// The literal-segment patterns win over the {section} wildcard below for
 	// the destinations that are built; everything else still lands on the
@@ -1172,21 +1113,16 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 }
 
 // registerShared registers the routes both the cockpit and the API reach:
-// the login/callback redirects a browser follows regardless of which host
-// served the page it started from, and the blob asset route an <img> on a
-// cockpit page and an agent's bearer-token fetch both load. rs is one router
-// when host-less (register once), or the public and legacy routers when
-// LODE_LEGACY_URL is set, so the route exists on both hosts (WL-REQ-1303).
-func (s *server) registerShared(rs ...*router) {
-	for _, r := range rs {
-		// The blob asset route (WL-REQ-229). Neither an API route nor a web
-		// page: a browser <img> on a task page fetches it with a session cookie
-		// and an agent fetches it with a bearer token, so it takes either — see
-		// eitherGuard in authz.go and r.asset in router.go.
-		r.asset("GET /blob/{hash}", s.serveBlob)
-		r.publicFunc("GET /auth/login", s.navWrap("auth", s.authLogin))
-		r.publicFunc("GET /auth/callback", s.navWrap("auth", s.authCallback))
-	}
+// the login/callback redirects, and the blob asset route an <img> on a
+// cockpit page and an agent's bearer-token fetch both load.
+func (s *server) registerShared(r *router) {
+	// The blob asset route (WL-REQ-229). Neither an API route nor a web
+	// page: a browser <img> on a task page fetches it with a session cookie
+	// and an agent fetches it with a bearer token, so it takes either — see
+	// eitherGuard in authz.go and r.asset in router.go.
+	r.asset("GET /blob/{hash}", s.serveBlob)
+	r.publicFunc("GET /auth/login", s.navWrap("auth", s.authLogin))
+	r.publicFunc("GET /auth/callback", s.navWrap("auth", s.authCallback))
 }
 
 // embeddingBudget validates the embedding configuration and derives the chunk
@@ -1418,10 +1354,6 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// bootstrap on a fresh database (WL-545 regression).
 	if err := st.EnsureServiceActor(context.Background(), flowActorID, "approval flow rules"); err != nil {
 		return nil, nil, fmt.Errorf("ensure %s actor: %w", flowActorID, err)
-	}
-
-	if err := validateLegacyURL(cfg); err != nil {
-		return nil, nil, err
 	}
 
 	s.initMetrics(reg)

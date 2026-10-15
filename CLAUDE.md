@@ -202,15 +202,16 @@ descriptor without a route; `make openapi` writes the document to
 sides share one declaration and `queryrule_test.go` fails a handler that
 reads the query string any other way.
 
-**Two hosts and the SPA.** With `LODE_LEGACY_URL` set, `lode-server`
-answers two hosts (WL-REQ-1303). The public host (`LODE_PUBLIC_URL`)
-serves `/api/v1` and the React SPA, and redirects any path the SPA does not
-route to the same path on the legacy host, which serves the templ cockpit
-and no `/api/v1`. Unset, one host serves the cockpit and no SPA. The SPA's
-source is `web/app/` (read its `AGENTS.md`). `make web` builds it into
-`internal/webapp/dist`, which the binary embeds, and `make web-clean` puts
-the committed placeholder back. `web/app/src/routes.json` lists the SPA's
-paths: `spa_routes_test.go` fails when `spaRoutes` disagrees with it, and
+**One host, two surfaces.** `lode-server` serves the React SPA and the templ
+cockpit from one host, `LODE_PUBLIC_URL` (WL-REQ-1303). `registerSPA`
+registers each `spaRoutes` path to the SPA shell and its build output at
+`/static/`; every other cockpit path keeps its templ route, and porting a
+page deletes the templ route it replaces. One login session covers both
+(WL-REQ-1308). The SPA's source is `web/app/` (read its `AGENTS.md`). `make
+web` builds it into `internal/webapp/dist`, which the binary embeds, and
+`make web-clean` puts the committed placeholder back.
+`web/app/src/routes.json` lists the SPA's paths: `spa_routes_test.go`
+fails when `spaRoutes` disagrees with it, and
 `router.test.tsx` fails when the router does (WL-REQ-1305). A `/api/v1`
 request without a bearer token acts as the session's actor, or the open
 subject on a `LODE_WEB_OPEN` instance; its writes must also send
@@ -220,7 +221,7 @@ OpenAPI document: `make web-gen` regenerates
 `web/app/src/api/schema.d.ts`, which is never edited by hand, and CI fails
 when it drifts (`scripts/check-openapi-client.sh`, WL-REQ-1309). The MSW
 mocks are typed from it, so a mock shaped unlike the Go type fails
-`pnpm typecheck`. `e2e/webapp_test.go` drives both hosts end to end.
+`pnpm typecheck`. `e2e/webapp_test.go` drives both surfaces end to end.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks — including `merge_group` and `repository_ruleset` for the merge

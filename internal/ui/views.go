@@ -134,15 +134,6 @@ type RunRowView struct {
 	Costs                  []string
 }
 
-// --- projects portfolio -----------------------------------------------------
-
-// ProjectsView is the cross-project portfolio. It embeds model.Project rows
-// directly; the template reads ID/Name/Key.
-type ProjectsView struct {
-	Page     PageProps
-	Projects []model.Project
-}
-
 // --- reviews (WL-REQ-344) -------------------------------------------------
 
 // ApprovalsView is the /reviews queue: every approval still awaiting a

@@ -130,7 +130,9 @@ route fails the type check. The only page is `/projects`; anything else
 renders `NotFound`. `src/routes.json` lists the same paths for the Go
 server (WL-REQ-1305), and `src/router.test.tsx` fails when the tree and
 the file disagree. Add a page to both, and to `spaRoutes` in
-`internal/api/spa_routes.go`.
+`internal/api/spa_routes.go`, which routes it to the SPA shell on the same
+host as the templ cockpit (WL-REQ-1303). Porting a page deletes the templ
+route it replaces in the same change.
 
 `src/layouts/RootLayout.tsx` renders what every page shares: `Header` and
 `MobileMenu`. The root route's loader fetches `/api/v1/whoami` before any
