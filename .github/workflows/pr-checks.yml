@@ -250,6 +250,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # lode-gate-check needs two small modules; restoring the shared
+          # module cache costs more than fetching them.
+          cache: false
       - name: Build lode-gate-check
         run: go build -trimpath -o bin/lode-gate-check ./cmd/lode-gate-check
       - name: Check the Spec trailer on guarded paths
