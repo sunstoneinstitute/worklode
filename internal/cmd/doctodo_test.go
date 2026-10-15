@@ -718,7 +718,7 @@ func TestDocTodoRefsLinkAndAlign(t *testing.T) {
 	}, "https://lode.example")
 
 	link := refs.ref("docs/plans/001-1-first.md")
-	if !strings.Contains(link, "https://lode.example/docs/ref/WL-PLAN-7") ||
+	if !strings.Contains(link, "https://lode.example/WL-PLAN-7") ||
 		!strings.Contains(link, "WL-PLAN-7") {
 		t.Fatalf("plan reference is not a link to its cockpit page: %q", link)
 	}

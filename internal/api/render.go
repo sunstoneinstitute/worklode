@@ -678,16 +678,13 @@ func docEdgeRows(edges []model.DocEdge, keys mdrender.ProjectKeys) []ui.DocEdgeR
 				row.Label += " " + far.Title
 			}
 		case e.ToExternal != "":
-			// A reference the store kept verbatim — a corpus filename like
-			// "004-execution-backbone.md#sec-5.1" — still resolves at read
-			// time through the reference redirect (WL-301): the href's own
-			// #fragment survives the 302. A ref outside the grammar keeps
-			// URL "" and renders as text.
+			// A reference the store kept verbatim. A bare number is a spec
+			// on the referring project's sequence (WL-723), linked through the
+			// root shortcut like an autolinked one; the href's #fragment
+			// survives the redirect. A slug or corpus filename renders as text.
 			base, frag := designdoc.SplitFragment(e.ToExternal)
-			if _, ok := designdoc.ParseNumberForm(base); ok || designdoc.LooksLikePath(base) {
-				// The number is on the referring project's sequence, so the
-				// link carries its key the way an autolinked one does (WL-723).
-				row.URL = "/docs/ref/" + base + keys.HomeQuery()
+			if nf, ok := designdoc.ParseNumberForm(base); ok && nf.Rest == "" && nf.Number > 0 && keys.Home() != "" {
+				row.URL = "/" + keys.Home() + "-SPEC-" + strconv.Itoa(nf.Number)
 				if frag != "" {
 					row.URL += "#" + frag
 				}
@@ -1000,7 +997,7 @@ func ruleView(md *mdrender.Cache, keys mdrender.ProjectKeys, c *model.Rule, vers
 			DocRef: a.DocRef,
 			Anchor: a.Anchor,
 			Depth:  a.Depth,
-			Href:   "/docs/ref/" + a.DocRef + "#" + a.Anchor,
+			Href:   "/" + a.DocRef + "#" + a.Anchor,
 		})
 	}
 	return v

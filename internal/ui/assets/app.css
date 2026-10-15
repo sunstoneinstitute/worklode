@@ -2015,6 +2015,9 @@ nav.local a .cnt {
   max-width: 100%;
   overflow-x: auto;
 }
+.prose a.ref-link {
+  white-space: nowrap;
+}
 .prose th,.prose td {
   border: 1px solid var(--line);
   padding: 5px 9px;

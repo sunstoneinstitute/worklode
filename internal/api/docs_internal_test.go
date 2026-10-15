@@ -122,8 +122,8 @@ func TestDocViewLinksArrangedRulesInPage(t *testing.T) {
 	}, body, false, "/docs/WL-SPEC-83")
 	got := string(v.BodyHTML)
 	for _, want := range []string{
-		`<a href="#sec-4" rel="nofollow">WL-REQ-1305</a>`,
-		`<a href="/rules/WL-REQ-334" rel="nofollow">WL-REQ-334</a>`,
+		`<a class="ref-link" href="#sec-4" rel="nofollow">WL-REQ-1305</a>`,
+		`<a class="ref-link" href="/rules/WL-REQ-334" rel="nofollow">WL-REQ-334</a>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
