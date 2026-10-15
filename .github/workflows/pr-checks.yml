@@ -95,17 +95,21 @@ jobs:
           # The agent-surface paths carry the same exemption they have in the
           # docs skip below: TestAgentSurfaces reads them.
           #
+          # Under .github/ only the workflows that define these jobs, and the
+          # files internal/disttest reads (_build-image.yml, homebrew/), can
+          # change their result. Release, deploy and other workflows cannot.
+          #
           # Independent of `can-be-tested`: the label authorises CI on an untrusted PR, it does not make untouched Go
           # worth rebuilding.
           # These two patterns are the whole decision, named so
           # scripts/ci-code-scope_test.sh can read them straight out of this
           # file and test the real thing rather than a copy that drifts.
-          CODE_INERT='(^docs/|^www/|^deploy/|\.md$)'
-          CODE_ANYWAY='^(deploy/base/migrations/|docs/agent-surfaces\.md|plugins/|\.claude/skills/|CLAUDE\.md|internal/cmd/CLAUDE\.md)'
+          CODE_INERT='(^docs/|^www/|^deploy/|^\.github/|\.md$)'
+          CODE_ANYWAY='^(deploy/base/migrations/|docs/agent-surfaces\.md|plugins/|\.claude/skills/|CLAUDE\.md|internal/cmd/CLAUDE\.md|\.github/workflows/(pr-checks|_lint|_test|_webapp|_build-image)\.yml|\.github/homebrew/)'
           if [ -n "$CHANGED" ] \
              && ! echo "$CHANGED" | grep -qvE "$CODE_INERT" \
              && ! echo "$CHANGED" | grep -qE "$CODE_ANYWAY"; then
-            echo "::notice::PR changes nothing the Go build reads — skipping lint, test and build-image. validate-kustomize still runs."
+            echo "::notice::PR changes nothing the Go build reads — skipping lint, webapp, test and build-image. validate-kustomize still runs."
             echo "code=false" >> "$GITHUB_OUTPUT"
           else
             echo "code=true" >> "$GITHUB_OUTPUT"
