@@ -49,7 +49,6 @@ make install    # builds all three with -trimpath into /usr/local/bin or ~/bin
 Or via a package manager:
 
 - macOS (Homebrew): `brew install sunstoneinstitute/tap/worklode`
-- Windows (Scoop): `scoop bucket add sunstone https://github.com/sunstoneinstitute/scoop-bucket && scoop install sunstone/worklode`
 
 Point the CLI at it, either via `~/.config/worklode/config.toml`:
 
