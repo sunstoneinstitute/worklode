@@ -48,6 +48,20 @@ func TestCrewTableFallsBackToActorID(t *testing.T) {
 	}
 }
 
+func TestInstanceCrewTable(t *testing.T) {
+	var b strings.Builder
+	InstanceCrewTable(&b, []model.CrewMember{
+		{Actor: "ada", DisplayName: "Ada Lovelace"},
+		{Actor: "bob"},
+	})
+	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
+	if len(lines) != 3 || strings.Fields(lines[0])[0] != "ACTOR" ||
+		strings.Join(strings.Fields(lines[1]), " ") != "ada Ada Lovelace" ||
+		strings.Join(strings.Fields(lines[2]), " ") != "bob bob" {
+		t.Fatalf("InstanceCrewTable output:\n%s", b.String())
+	}
+}
+
 // TestDocRefFormsTheShorthand: a spec or ADR renders as the WL-REQ-168
 // shorthand a person cites; a plan, which carries no number and so has no
 // shorthand, renders as its kind alone; and a document whose project key did
