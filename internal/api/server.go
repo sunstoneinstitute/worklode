@@ -481,7 +481,7 @@ type server struct {
 	inboxRenders *prometheus.CounterVec
 
 	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
-	// deliverable, crew_add, crew_remove) and outcome; see webform.go and
+	// deliverable, ...) and outcome; see webform.go and
 	// observeFormSubmission.
 	// These are the cockpit's form writes; the Progress page's script writes
 	// are counted by progressWrites.
@@ -499,7 +499,7 @@ type server struct {
 	// taskTokens counts task-scoped token mints (WL-306); see metrics.go.
 	taskTokens *prometheus.CounterVec
 
-	// crewChanges counts Crew membership changes, by surface (api, web),
+	// crewChanges counts Crew membership changes, by surface (api),
 	// action (add, remove), and outcome; see crew.go and observeCrewChange. Labels
 	// are bounded on purpose: a project id, an actor id or a role label
 	// would each be unbounded cardinality, and none of the three belongs in
@@ -773,9 +773,6 @@ func (s *server) registerCockpit(r *router) {
 	// The literal-segment patterns win over the {section} wildcard below for
 	// the destinations that are built; everything else still lands on the
 	// honest placeholder.
-	r.web("GET /projects/{id}/crew", s.navWrap("crew", s.crewPage))
-	r.web("POST /projects/{id}/crew", s.navWrap("crew", s.addCrewMemberFromForm))
-	r.web("POST /projects/{id}/crew/remove", s.navWrap("crew", s.removeCrewMemberFromForm))
 	r.web("GET /projects/{id}/milestones", s.navWrap("milestones", s.milestonesPage))
 	r.web("POST /projects/{id}/milestones/{mid}/references", s.navWrap("milestones", s.addMilestoneReferenceFromForm))
 	r.web("GET /projects/{id}/work", s.navWrap("work", s.runBoardPage))

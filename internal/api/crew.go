@@ -1,73 +1,24 @@
-// crew.go serves a project's Crew (WL-REQ-123, WL-REQ-343): the roster
-// page (GET /projects/{id}/crew), the JSON API's add and remove routes (POST
-// /api/v1/projects/{id}/participants, DELETE
-// /api/v1/projects/{id}/participants/{actor}), and the page's own add and
-// remove forms (POST /projects/{id}/crew, POST /projects/{id}/crew/remove).
+// crew.go serves a project's Crew (WL-REQ-123, WL-REQ-343) through the JSON
+// API: the roster (GET /api/v1/projects/{id}/participants) and its add and
+// remove routes (POST /api/v1/projects/{id}/participants, DELETE
+// /api/v1/projects/{id}/participants/{actor}). The SPA's Crew page
+// (WL-REQ-1802) and the CLI both call them.
 //
-// Each membership change has exactly one write function — recordCrewAdd and
-// recordCrewRemove — that both surfaces call, so a member added or removed
-// in a browser and one changed by the CLI are the same write, recorded under
-// the same event type ("crew.member_added" / "crew.member_removed",
-// WL-REQ-1605), and differ only in the event source that records which surface it
-// came from.
+// Each membership change has exactly one write function, recordCrewAdd and
+// recordCrewRemove, recorded under event type "crew.member_added" /
+// "crew.member_removed" (WL-REQ-1605).
 package api
 
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
-	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
-
-// crewPage handles GET /projects/{id}/crew. It loads the project header for
-// shell identity (so an unknown project 404s the same way every other
-// project route does), then the roster; an empty roster renders the honest
-// "No Crew yet" state, never a fabricated row.
-func (s *server) crewPage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	project, err := s.projectHeader(ctx, r.PathValue("id"))
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	participants, err := s.st.ListParticipants(ctx, project.ID)
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	s.renderWeb(w, r, http.StatusOK, "crew page", ui.Crew(crewView(project, participants)))
-}
-
-// crewView maps a project's Crew roster (internal/store's Participant, one
-// per actor holding at least one role) into the Crew page's view type.
-func crewView(project ui.CockpitProject, participants []store.Participant) ui.CrewView {
-	v := ui.CrewView{
-		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Crew"},
-		CanonicalURL: "/projects/" + project.ID + "/crew",
-		Project:      project,
-		Members:      make([]ui.CrewMember, 0, len(participants)),
-		AddAction:    "/projects/" + project.ID + "/crew",
-		RemoveAction: "/projects/" + project.ID + "/crew/remove",
-		Roles:        formOptions(store.ParticipantRoles(), defaultCrewRole, ""),
-	}
-	for _, p := range participants {
-		v.Members = append(v.Members, ui.CrewMember{
-			ActorID:     p.ActorID,
-			DisplayName: p.DisplayName,
-			Roles:       p.Roles,
-			IsLead:      p.IsLead,
-		})
-	}
-	return v
-}
 
 // defaultCrewRole is what an add with no role means. Adding someone to the
 // Crew without an opinion about what they do is the common case, and spec
@@ -78,9 +29,8 @@ const defaultCrewRole = "member"
 // recordCrewAdd adds one role-labelled Crew row through RecordEvent under
 // event type "crew.member_added" (WL-REQ-126) and returns the member as
 // the roster now shows them — every role they hold, not just the one just
-// added. source is "cli" for the JSON API and "web" for the cockpit form,
-// which is the only difference between the two paths. by is the acting actor
-// ("" on an open instance, stored as NULL).
+// added. source is the event source; by is the acting actor ("" on an open
+// instance, stored as NULL).
 func (s *server) recordCrewAdd(ctx context.Context, source, projectID, actorID, role string, lead, deputy bool, by string) (model.CrewMember, error) {
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
@@ -178,68 +128,6 @@ func (s *server) addCrewMember(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, member)
 }
 
-// addCrewMemberFromForm handles POST /projects/{id}/crew, the roster page's
-// own add affordance. A rejected add re-renders the roster with the message
-// and the typed values; a successful one 303s back to the roster, so a
-// reload never adds a second row.
-func (s *server) addCrewMemberFromForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	project, ok := s.beginFormPost(w, r, "crew_add")
-	if !ok {
-		return
-	}
-
-	values := ui.CrewFormValues{
-		Actor:  strings.TrimSpace(r.PostFormValue("actor")),
-		Role:   strings.TrimSpace(r.PostFormValue("role")),
-		Lead:   r.PostFormValue("lead") != "",
-		Deputy: r.PostFormValue("deputy") != "",
-	}
-	if _, err := s.recordCrewAdd(ctx, "web", project.ID, values.Actor, values.Role, values.Lead, values.Deputy, actorIDFrom(r)); err != nil {
-		s.observeCrewChange("web", "add", crewOutcome(err))
-		s.observeFormSubmission("crew_add", formOutcome(err))
-		// A refused add is about what was typed — an unknown actor id, a
-		// role already held, a second lead — so it belongs back on the form,
-		// not on an error page. Only a genuine fault falls through.
-		if !errors.Is(err, store.ErrInvalidInput) && !errors.Is(err, store.ErrNotFound) {
-			s.webStoreErr(w, err)
-			return
-		}
-		participants, listErr := s.st.ListParticipants(ctx, project.ID)
-		if listErr != nil {
-			s.webStoreErr(w, listErr)
-			return
-		}
-		v := crewView(project, participants)
-		v.Add = values
-		if values.Role != "" {
-			v.Roles = formOptions(store.ParticipantRoles(), values.Role, "")
-		}
-		v.AddError = crewFormMessage(err)
-		s.renderWeb(w, r, http.StatusUnprocessableEntity, "crew page", ui.Crew(v))
-		return
-	}
-	s.observeCrewChange("web", "add", "ok")
-	s.observeFormSubmission("crew_add", "created")
-	http.Redirect(w, r, "/projects/"+project.ID+"/crew", http.StatusSeeOther)
-}
-
-// crewFormMessage turns a refused add into the sentence the form shows. An
-// unknown actor gets its own wording because the id was typed and the fix is
-// to check it; every other refusal already names the conflict in the store's
-// own message, which is what the person has to act on.
-func crewFormMessage(err error) string {
-	if errors.Is(err, store.ErrNotFound) {
-		return "No actor with that id. Check the id, or create the actor first."
-	}
-	msg := strings.TrimSuffix(err.Error(), ": "+store.ErrInvalidInput.Error())
-	if msg == "" {
-		return "That add was refused."
-	}
-	r, size := utf8.DecodeRuneInString(msg)
-	return string(unicode.ToUpper(r)) + msg[size:] + "."
-}
-
 // crewMember reads one member off a project's roster. It is how the remove
 // path learns the facts only the store holds — the role rows about to be
 // deleted — and an actor with no row is ErrNotFound, the same answer
@@ -260,9 +148,8 @@ func (s *server) crewMember(ctx context.Context, projectID, actorID string) (mod
 
 // recordCrewRemove removes one member from a project's Crew — every role row
 // they hold, in one act — through RecordEvent under event type
-// "crew.member_removed" (WL-REQ-126). source is "cli" for the JSON API
-// and "web" for the cockpit form; by is the acting actor ("" on an open
-// instance).
+// "crew.member_removed" (WL-REQ-126). source is the event source; by is the
+// acting actor ("" on an open instance).
 //
 // The payload has to name the roles being removed, and s.recordEvent
 // marshals the payload before it runs the mutation, so the roster is read
@@ -305,102 +192,6 @@ func (s *server) removeCrewMember(w http.ResponseWriter, r *http.Request) {
 	}
 	s.observeCrewChange("api", "remove", "ok")
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// removeCrewMemberFromForm handles POST /projects/{id}/crew/remove, the
-// per-row Remove button. A refused removal re-renders the roster with the
-// reason and, when the reason is open work, that work listed and linked; a
-// successful one 303s back to the roster.
-func (s *server) removeCrewMemberFromForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	project, ok := s.beginFormPost(w, r, "crew_remove")
-	if !ok {
-		return
-	}
-
-	actor := strings.TrimSpace(r.PostFormValue("actor"))
-	if err := s.recordCrewRemove(ctx, "web", project.ID, actor, actorIDFrom(r)); err != nil {
-		s.observeCrewChange("web", "remove", crewOutcome(err))
-		s.observeFormSubmission("crew_remove", formOutcome(err))
-		// A refused removal is about the project's state — the member owns
-		// open work, or is the lead — so it belongs back on the roster, not
-		// on an error page. Only a genuine fault falls through.
-		if !errors.Is(err, store.ErrInvalidInput) && !errors.Is(err, store.ErrNotFound) {
-			s.webStoreErr(w, err)
-			return
-		}
-		s.renderCrewRemovalRefusal(w, r, project, actor, err)
-		return
-	}
-	s.observeCrewChange("web", "remove", "ok")
-	// "created" is this metric's word for an accepted submission; the
-	// outcome label set is shared with the creation forms, and a
-	// removal-only value would leave a dead series on every other form.
-	s.observeFormSubmission("crew_remove", "created")
-	http.Redirect(w, r, "/projects/"+project.ID+"/crew", http.StatusSeeOther)
-}
-
-// renderCrewRemovalRefusal re-renders the roster with a refused removal
-// explained. When the member still owns open work, that work is the
-// explanation — listed and linked (WL-REQ-343's responsibility review),
-// read from the same query the store's guard ran, so the page shows exactly
-// what is blocking the removal rather than a restatement of the refusal.
-func (s *server) renderCrewRemovalRefusal(w http.ResponseWriter, r *http.Request,
-	project ui.CockpitProject, actor string, cause error) {
-	ctx := r.Context()
-	participants, err := s.st.ListParticipants(ctx, project.ID)
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	v := crewView(project, participants)
-
-	var open []store.OwnedWork
-	if actor != "" {
-		if open, err = s.st.OpenWorkOwnedBy(ctx, project.ID, actor); err != nil {
-			s.webStoreErr(w, err)
-			return
-		}
-	}
-	for _, item := range open {
-		v.Responsibilities = append(v.Responsibilities, ui.CrewWorkItem{
-			Kind: item.Kind, ID: item.ID, Title: item.Title, State: item.State,
-		})
-	}
-	if len(open) > 0 {
-		v.RemoveError = crewMemberLabel(v.Members, actor) +
-			" still owns open work on this project. Reassign or close each item below, then remove them."
-	} else {
-		v.RemoveError = crewRemovalMessage(cause)
-	}
-	s.renderWeb(w, r, http.StatusUnprocessableEntity, "crew page", ui.Crew(v))
-}
-
-// crewMemberLabel names a member the way the roster does — display name when
-// there is one, the actor id otherwise — so a message about them reads the
-// same as the row it is about.
-func crewMemberLabel(members []ui.CrewMember, actorID string) string {
-	for _, m := range members {
-		if m.ActorID == actorID && m.DisplayName != "" {
-			return m.DisplayName
-		}
-	}
-	return actorID
-}
-
-// crewRemovalMessage turns a refused removal that is not about open work
-// into the sentence the roster shows: an actor who is not on the Crew, or
-// the lead, whose refusal already says why in the store's own words.
-func crewRemovalMessage(err error) string {
-	if errors.Is(err, store.ErrNotFound) {
-		return "That actor is not on this project's Crew."
-	}
-	msg := strings.TrimSuffix(err.Error(), ": "+store.ErrInvalidInput.Error())
-	if msg == "" {
-		return "That removal was refused."
-	}
-	r, size := utf8.DecodeRuneInString(msg)
-	return string(unicode.ToUpper(r)) + msg[size:] + "."
 }
 
 // crewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.

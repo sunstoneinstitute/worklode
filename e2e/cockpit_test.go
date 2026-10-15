@@ -308,26 +308,6 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		}
 	}
 
-	// Crew is a built, writable destination: it renders the roster the
-	// mutations wrote — Dana, added above so she could be assigned the task
-	// — rather than a placeholder message, and it carries the one affordance
-	// the page is entitled to: the add-member form (spec 029 §6.1). Removal
-	// is a later task. The empty state is covered in internal/api's web
-	// tests, which have a crewless project to show it with.
-	{
-		code, body := getPage(t, srv.URL+"/projects/proj/crew")
-		if code != http.StatusOK {
-			t.Fatalf("GET /projects/proj/crew: status = %d, want 200", code)
-		}
-		if !strings.Contains(body, "Dana") {
-			t.Fatalf("GET /projects/proj/crew: body missing the roster's one member:\n%s", body)
-		}
-		main := mainContent(t, body)
-		if !strings.Contains(main, `<form method="post" action="/projects/proj/crew">`) {
-			t.Fatalf("GET /projects/proj/crew is missing the add-member form:\n%s", body)
-		}
-	}
-
 	// Milestones is a built, read-only destination (spec 029 §2). This
 	// project has none, so the page states that honestly rather than
 	// fabricating a section; a seeded page is covered in internal/api's web

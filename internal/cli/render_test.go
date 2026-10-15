@@ -24,7 +24,7 @@ func TestProjectTableShowsKey(t *testing.T) {
 
 // TestCrewTableFallsBackToActorID: display_name is a nullable column, so a
 // member added before their actor had one shows a blank NAME cell unless the
-// table falls back to the actor id — matching what internal/ui/crew.templ
+// table falls back to the actor id — matching what the SPA's Crew page
 // already does for the web page.
 func TestCrewTableFallsBackToActorID(t *testing.T) {
 	var b strings.Builder

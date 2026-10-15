@@ -98,13 +98,11 @@ var routeGuards = map[string]routeGuard{
 	"GET /ideas":          guarded(permWebRead),
 	"GET /intake":         guarded(permWebRead),
 	// The SPA shell (WL-REQ-1303): registerSPA registers each spaRoutes path.
-	"GET /projects":                   guarded(permWebRead),
-	"GET /projects/{id}":              guarded(permWebRead),
-	"GET /projects/{id}/crew":         guarded(permWebRead),
-	"POST /projects/{id}/crew":        guarded(permWebWrite),
-	"POST /projects/{id}/crew/remove": guarded(permWebWrite),
-	"GET /projects/{id}/work":         guarded(permWebRead),
-	"GET /projects/{id}/progress":     guarded(permWebRead),
+	"GET /projects":                  guarded(permWebRead),
+	"GET /projects/{projectId}/crew": guarded(permWebRead),
+	"GET /projects/{id}":             guarded(permWebRead),
+	"GET /projects/{id}/work":        guarded(permWebRead),
+	"GET /projects/{id}/progress":    guarded(permWebRead),
 	// The Progress page's live update stream (WL-REQ-1339): permWebRead like the
 	// page itself, not permEventStream — a frame carries nothing the page's
 	// own reader could not already see (WL-REQ-1786).

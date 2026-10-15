@@ -44,9 +44,8 @@ func crewHasMember(members []model.CrewMember, actor string) bool {
 }
 
 // TestCrewLifecycle proves the Crew journey end to end: add a lead and a
-// member through the public API, see both on the JSON roster and the
-// rendered page, prove the removal guard refuses while the member owns open
-// work (naming the task), then prove it succeeds once the work is
+// member through the public API, see both on the JSON roster, prove the
+// removal guard refuses while the member owns open work (naming the task), then prove it succeeds once the work is
 // reassigned away, and prove the lead can never be removed at all (lead
 // handoff is deliberately not implemented).
 func TestCrewLifecycle(t *testing.T) {
@@ -56,9 +55,6 @@ func TestCrewLifecycle(t *testing.T) {
 	handler, _, err := api.NewServer(st, api.Config{
 		BootstrapToken:      bootstrapToken,
 		GitHubWebhookSecret: githubSecret,
-		// This test drives web pages anonymously; without a login provider
-		// the cockpit refuses to serve unless the deployment opted in.
-		WebOpen: true,
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -118,25 +114,6 @@ func TestCrewLifecycle(t *testing.T) {
 		t.Fatalf("mo.Roles = %+v, want [member]", mo.Roles)
 	}
 
-	// --- Step 3: the rendered roster page ------------------------------------
-
-	code, body := getPage(t, srv.URL+"/projects/crewproj/crew")
-	if code != http.StatusOK {
-		t.Fatalf("GET /projects/crewproj/crew: status = %d, want 200", code)
-	}
-	if !strings.Contains(body, "Lucy Lead") {
-		t.Fatalf("crew page missing display name Lucy Lead:\n%s", body)
-	}
-	if !strings.Contains(body, "Mo Member") {
-		t.Fatalf("crew page missing display name Mo Member:\n%s", body)
-	}
-	if got := strings.Count(body, `<span class="chip lead">`); got != 1 {
-		t.Fatalf("Lead badge count = %d, want exactly 1:\n%s", got, body)
-	}
-	if strings.Contains(body, "No Crew yet") {
-		t.Fatalf("crew page renders the empty-state placeholder despite a populated roster:\n%s", body)
-	}
-
 	// --- Step 4: removal refused while the member owns open work ------------
 
 	task, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
@@ -182,20 +159,6 @@ func TestCrewLifecycle(t *testing.T) {
 	}
 	if !crewHasMember(crew, "lucy") {
 		t.Fatalf("crew = %+v, want lucy still present", crew)
-	}
-
-	code, body = getPage(t, srv.URL+"/projects/crewproj/crew")
-	if code != http.StatusOK {
-		t.Fatalf("GET /projects/crewproj/crew after removing mo: status = %d, want 200", code)
-	}
-	if strings.Contains(body, "Mo Member") {
-		t.Fatalf("crew page still shows Mo Member after her removal:\n%s", body)
-	}
-	if !strings.Contains(body, "Lucy Lead") {
-		t.Fatalf("crew page missing Lucy Lead after mo's removal:\n%s", body)
-	}
-	if got := strings.Count(body, `<span class="chip lead">`); got != 1 {
-		t.Fatalf("Lead badge count after mo's removal = %d, want exactly 1:\n%s", got, body)
 	}
 
 	// --- Step 5b: a deputy is added, shown as acting-lead --------------------
