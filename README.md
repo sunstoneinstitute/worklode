@@ -861,8 +861,8 @@ runbook `docs/runbooks/2026-07-22-worklode-projector-acceptance.md`.
 
 ### CI gate (who may run PR checks)
 
-`pr-checks.yml` opens with a cheap `gate` job; the lint/test/build/kustomize
-jobs `needs: gate` and run only when `gate.outputs.run == 'true'`. A PR runs
+`pr-checks.yml` opens with a cheap `triage` job; the lint/test/build/kustomize
+jobs `needs: triage` and run only when `triage.outputs.run == 'true'`. A PR runs
 the checks when its author is the repo owner, an org member, or an invited
 collaborator (GitHub's `author_association`), or when a maintainer has applied
 the `can-be-tested` label. Applying labels needs Triage+ on the repo, so an

@@ -24,7 +24,7 @@ for injected instructions, so do not add paths to the exemption on that basis.
 ## The code-scope gate
 
 The Go jobs (lint, test, build-image) run only when a PR touches something
-that can change their result, decided by the `gate` job's `code` output rather
+that can change their result, decided by the `triage` job's `code` output rather
 than a `paths:` filter, because a reusable workflow cannot take one. The
 patterns are `CODE_INERT` and `CODE_ANYWAY` in `pr-checks.yml`, tested by
 `scripts/ci-code-scope_test.sh`.
