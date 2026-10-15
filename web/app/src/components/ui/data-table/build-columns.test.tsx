@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { buildColumns } from "./build-columns"
+import { buildColumns, displayText } from "./build-columns"
 import type { DataTableColumn } from "./types"
 
 type Row = { id: string; name: string; due: string; status: string }
@@ -320,5 +320,13 @@ describe("date column sorting", () => {
 
   it("puts empty dates last", () => {
     expect(sortDates(["", "2026-09-15"])).toEqual(["2026-09-15", ""])
+  })
+})
+
+describe("displayText unknownLabel", () => {
+  it("uses unknownLabel for a value that is not an option", () => {
+    const column = { key: "p", label: "Project", type: "select", options: [], unknownLabel: "Deleted project" } as never
+    expect(displayText("p-gone", column, [])).toBe("Deleted project")
+    expect(displayText("", column, [])).toBe("")
   })
 })
