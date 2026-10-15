@@ -254,8 +254,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: Build lode
-        run: go build -trimpath -o bin/lode ./cmd/lode
+          # lode-gate-check needs two small modules; restoring the shared
+          # module cache costs more than fetching them.
+          cache: false
+      - name: Build lode-gate-check
+        run: go build -trimpath -o bin/lode-gate-check ./cmd/lode-gate-check
       - name: Check the Spec trailer on guarded paths
         env:
           GH_TOKEN: ${{ github.token }}
@@ -265,7 +268,7 @@ jobs:
         run: |
           set -euo pipefail
           gh pr view "$PR_NUMBER" --json body --jq .body > "$RUNNER_TEMP/pr-body.md"
-          bin/lode gate check --base "$BASE" --head "$HEAD" --body-file "$RUNNER_TEMP/pr-body.md"
+          bin/lode-gate-check --base "$BASE" --head "$HEAD" --body-file "$RUNNER_TEMP/pr-body.md"
 
   # The one job the main ruleset requires (docs/github-advanced-setup.md).
   # Requiring the conditional jobs above directly leaves a PR blocked whenever

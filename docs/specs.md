@@ -5,7 +5,7 @@ Specs live in the backbone, not in this tree. Read one with `lode show <ref> --i
 | Spec | Title | Covers |
 |---|---|---|
 | [WL-SPEC-72](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-72) | The design authority gate | Code changes that alter behavior land with the spec sentence that describes them, and what the merge gate checks. |
-| [WL-SPEC-73](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-73) | System and deployment | Glossary, the six executables and their import boundaries, deployment, worker sandboxes, metrics. |
+| [WL-SPEC-73](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-73) | System and deployment | Glossary, the seven executables and their import boundaries, deployment, worker sandboxes, metrics. |
 | [WL-SPEC-74](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-74) | Identity, actors and secrets | Tokens, Keycloak login, agent actors, the route guard table and the grants policy. |
 | [WL-SPEC-75](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-75) | Tasks and execution | Projects, tasks, the state machine, edges, leases, atomic claim, the event log, delivery facts. |
 | [WL-SPEC-76](https://worklode.dev.sunstoneinstitute.ai/WL-SPEC-76) | Done, verification and workflows | Done declarations, workflows and automations. |

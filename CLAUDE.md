@@ -8,10 +8,10 @@ specs, plans, docs, or other prose in this repo.
 ## What this is
 
 Worklode is Sunstone's org-wide work tracker and coordination layer for
-multi-agent, multi-repo work. It ships as six Go executables from one module
+multi-agent, multi-repo work. It builds seven Go executables from one module
 (WL-REQ-15): `lode` (CLI), `lode-hook` and `lode-statusline` (short-lived agent
-hot paths), and `lode-server`, `lode-watch`, `lode-migrate` (operator side),
-backed by Postgres with an append-only event log for provenance. The old
+hot paths), `lode-server`, `lode-watch`, `lode-migrate` (operator side), and
+`lode-gate-check` (CI's spec gate, never shipped), backed by Postgres with an append-only event log for provenance. The old
 subcommand shims (hook, statusline, serve, watch, migrate) were removed
 after the first split release shipped (WL-REQ-18, WL-319).
 
@@ -97,8 +97,8 @@ shares one build cache instead of recompiling the world per worktree:
 ```bash
 make build      # go build -trimpath -o bin/lode ./cmd/lode
 make build-user # the three end-user binaries: lode, lode-hook, lode-statusline
-make build-all  # all six executables
-make bin/lode-server   # one executable, by name: bin/<any of the six>
+make build-all  # all seven executables
+make bin/lode-server   # one executable, by name: bin/<any of the seven>
 make install    # build and install the three end-user binaries to /usr/local/bin
 make test       # go test -trimpath -race -count=1 ./...
 make test-e2e   # e2e suite (build tag required, TEST_POSTGRES_DSN reachable)
