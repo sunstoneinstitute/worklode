@@ -966,18 +966,14 @@ func (s *server) observeRunBoardRender(outcome string) {
 }
 
 // The SPA handler's outcomes (spa.go): "page" for the shell, "asset"/
-// "asset_not_found" for /static/, "redirect" for a path spaHandles misses
-// (sent to LODE_LEGACY_URL), "not_found" for the same miss with no legacy
-// host configured.
+// "asset_not_found" for /static/.
 const (
 	spaPage          = "page"
 	spaAsset         = "asset"
 	spaAssetNotFound = "asset_not_found"
-	spaRedirect      = "redirect"
-	spaNotFound      = "not_found"
 )
 
-var spaOutcomes = []string{spaPage, spaAsset, spaAssetNotFound, spaRedirect, spaNotFound}
+var spaOutcomes = []string{spaPage, spaAsset, spaAssetNotFound}
 
 // observeSPA records one SPA-handler outcome. Nil-safe: tests build a
 // *server directly without initMetrics.

@@ -71,20 +71,6 @@ func driftView(frontier []model.FrontierTask, cp *model.CriticalPath, drift *mod
 	return v
 }
 
-// projectsView maps the cross-project portfolio, dropping store.Project's
-// curated cockpit-only fields (WL-RULE-1349) down to the model.Project shape
-// the page actually renders (id, name, key).
-func projectsView(projects []store.Project, title, active string) ui.ProjectsView {
-	out := make([]model.Project, 0, len(projects))
-	for _, p := range projects {
-		out = append(out, model.Project{ID: p.ID, Name: p.Name, Key: p.Key, Focus: p.Focus})
-	}
-	return ui.ProjectsView{
-		Page:     ui.PageProps{Title: title, ActiveGlobal: active},
-		Projects: out,
-	}
-}
-
 // approvalsView maps the awaiting-approvals queue (WL-REQ-124) into the
 // Reviews page's view type; now is the reference point FmtAge renders each
 // row's age against. ID carries through because each row renders the decide

@@ -24,16 +24,13 @@ func TestSPARoutesMatchRouter(t *testing.T) {
 	}
 }
 
-func TestSPAHandles(t *testing.T) {
-	saved := spaRoutes
-	spaRoutes = []string{"/projects", "/projects/$projectId/tasks"}
-	t.Cleanup(func() { spaRoutes = saved })
-	for path, want := range map[string]bool{
-		"/projects": true, "/projects/": false, "/projects/p1/tasks": true,
-		"/projects//tasks": false, "/projects/p1": false, "/work": false,
+func TestMuxPattern(t *testing.T) {
+	for route, want := range map[string]string{
+		"/projects":                  "/projects",
+		"/projects/$projectId/tasks": "/projects/{projectId}/tasks",
 	} {
-		if got := spaHandles(path); got != want {
-			t.Errorf("spaHandles(%q) = %v, want %v", path, got, want)
+		if got := muxPattern(route); got != want {
+			t.Errorf("muxPattern(%q) = %q, want %q", route, got, want)
 		}
 	}
 }

@@ -218,13 +218,6 @@ func pages(t *testing.T) map[string]string {
 			},
 			CanonicalURL: "/projects/worklode/rule/10",
 		}),
-		"projects": Projects(ProjectsView{
-			Page: PageProps{Title: "Projects", ActiveGlobal: "projects"},
-			Projects: []model.Project{
-				{ID: "worklode", Name: "Worklode backbone", Key: "WL"},
-				{ID: "casualty-reconciliation", Name: "Casualty reconciliation data platform", Key: "CRD"},
-			},
-		}),
 		// GraphEnabled, so the two drift tables and the gap table render
 		// alongside the frontier and critical-path ones.
 		"drift": Drift(DriftView{

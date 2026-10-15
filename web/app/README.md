@@ -58,9 +58,7 @@ the MSW mocks, so no server is needed.
 To use a local Go server instead, copy `.env.example` to `.env.local` and
 set `VITE_API_MOCKS=off`, or run `VITE_API_MOCKS=off pnpm dev`. Vite then
 proxies `/api` to `VITE_API_TARGET` (default `http://localhost:8080`).
-Start that server with `LODE_WEB_OPEN=1` and without `LODE_LEGACY_URL`: a
-two-host server answers only its named hosts, and the proxy passes on the
-dev server's `localhost:5173`.
+Start that server with `LODE_WEB_OPEN=1`.
 
 ## Other commands
 
