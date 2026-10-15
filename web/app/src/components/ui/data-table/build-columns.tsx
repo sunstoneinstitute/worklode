@@ -62,7 +62,9 @@ export function displayText<T>(
     }
     case "select": {
       const option = (column.options ?? []).find((o) => o.value === value)
-      return option?.label ?? (value == null ? "" : String(value))
+      if (option) return option.label
+      if (value == null || value === "") return ""
+      return column.unknownLabel ?? String(value)
     }
     default:
       return value === null || value === undefined ? "" : String(value)
@@ -245,6 +247,7 @@ export function buildColumns<T>(
             <SelectCell
               value={row.getValue<string>(column.key) ?? ""}
               options={column.options ?? []}
+              unknownLabel={column.unknownLabel}
               onChange={(next) =>
                 ctx.updateRow(ctx.getRowId(row.original), {
                   [column.key]: next,

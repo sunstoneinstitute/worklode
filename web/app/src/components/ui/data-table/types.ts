@@ -94,6 +94,8 @@ export interface DataTableColumn<T> {
   width?: string
   /** Required for type "select". */
   options?: SelectOption[]
+  /** Select columns: label for a value that is not among the options (e.g. a deleted project). */
+  unknownLabel?: string
   /** Required for type "actions". */
   actions?: RowAction<T>[]
   /** Defaults to true, except "actions" which is always false. */
