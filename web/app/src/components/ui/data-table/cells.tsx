@@ -41,10 +41,12 @@ export function badgeStyle(option: SelectOption | undefined) {
 export function SelectCell({
   value,
   options,
+  unknownLabel,
   onChange,
 }: {
   value: string
   options: SelectOption[]
+  unknownLabel?: string
   onChange: (next: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -64,7 +66,7 @@ export function SelectCell({
             the badge's rounded ones. */}
         <button type="button" className="cursor-pointer">
           <Badge className={className} style={style}>
-            {selected?.label ?? value}
+            {selected?.label ?? unknownLabel ?? value}
           </Badge>
         </button>
       </PopoverTrigger>
@@ -122,6 +124,7 @@ export function DateCell({
   onChange: (nextIso: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const selected = value ? new Date(`${value}T00:00:00Z`) : undefined
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -133,7 +136,8 @@ export function DateCell({
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="single"
-          selected={value ? new Date(`${value}T00:00:00Z`) : undefined}
+          selected={selected}
+          defaultMonth={selected}
           onSelect={(date) => {
             if (date) onChange(toIsoDate(date))
             setOpen(false)

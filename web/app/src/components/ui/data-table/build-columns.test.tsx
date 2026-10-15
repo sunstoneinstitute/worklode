@@ -322,3 +322,11 @@ describe("date column sorting", () => {
     expect(sortDates(["", "2026-09-15"])).toEqual(["2026-09-15", ""])
   })
 })
+
+describe("displayText unknownLabel", () => {
+  it("uses unknownLabel for a value that is not an option", () => {
+    const column = { key: "p", label: "Project", type: "select", options: [], unknownLabel: "Deleted project" } as never
+    expect(displayText("p-gone", column, [])).toBe("Deleted project")
+    expect(displayText("", column, [])).toBe("")
+  })
+})

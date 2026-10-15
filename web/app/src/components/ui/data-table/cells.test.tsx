@@ -33,6 +33,13 @@ describe("SelectCell", () => {
     expect(screen.queryByText("in-progress")).not.toBeInTheDocument()
   })
 
+  it("shows unknownLabel, not the raw value, when the value is not an option", () => {
+    render(<SelectCell value="p-gone" options={STATUS_OPTIONS} unknownLabel="Deleted project" onChange={vi.fn()} />)
+
+    expect(screen.getByRole("button")).toHaveTextContent("Deleted project")
+    expect(screen.queryByText("p-gone")).not.toBeInTheDocument()
+  })
+
   it("tints a colored badge with its colorVar, text via the --badge-* tokens", () => {
     render(<SelectCell value="done" options={STATUS_OPTIONS} onChange={vi.fn()} />)
 
@@ -97,6 +104,15 @@ describe("DateCell", () => {
     await user.click(screen.getByRole("button"))
 
     expect(screen.getByRole("grid")).toBeInTheDocument()
+  })
+
+  it("opens the calendar on the month of the set date", async () => {
+    const user = userEvent.setup()
+    render(<DateCell value="2020-03-15" onChange={vi.fn()} />)
+
+    await user.click(screen.getByRole("button"))
+
+    expect(screen.getByRole("grid")).toHaveAccessibleName(/March 2020/)
   })
 
   it("calls onChange with an ISO date when a day is picked", async () => {
