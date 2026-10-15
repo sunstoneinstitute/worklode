@@ -153,6 +153,49 @@ func TestWebAppOneHost(t *testing.T) {
 	})
 	wantStatus(resp, body, http.StatusCreated)
 
+	// 4b. The Crew page's two surfaces on the session: the instance roster,
+	// then add, list and remove a participant (WL-REQ-1795, WL-REQ-1802).
+	webWrite := map[string]string{
+		"Cookie":           "wl_session=" + session,
+		"Sec-Fetch-Site":   "same-origin",
+		"X-Requested-With": "lode-web",
+		"Content-Type":     "application/json",
+	}
+	webSession(t, srv.URL, iss, "bob")
+	resp, body = do(http.MethodGet, "/api/v1/crew", "", cookie)
+	wantStatus(resp, body, http.StatusOK)
+	var roster model.CrewListResponse
+	if err := json.Unmarshal([]byte(body), &roster); err != nil {
+		t.Fatalf("decode crew: %v (body %s)", err, body)
+	}
+	have := map[string]bool{}
+	for _, m := range roster.Crew {
+		have[m.Actor] = true
+	}
+	if !have["alice"] || !have["bob"] {
+		t.Fatalf("crew = %+v, want both alice and bob", roster.Crew)
+	}
+	participants := func() []model.CrewMember {
+		t.Helper()
+		resp, body := do(http.MethodGet, "/api/v1/projects/web/participants", "", cookie)
+		wantStatus(resp, body, http.StatusOK)
+		var pl model.ParticipantListResponse
+		if err := json.Unmarshal([]byte(body), &pl); err != nil {
+			t.Fatalf("decode participants: %v (body %s)", err, body)
+		}
+		return pl.Participants
+	}
+	resp, body = do(http.MethodPost, "/api/v1/projects/web/participants", `{"actor":"bob"}`, webWrite)
+	wantStatus(resp, body, http.StatusCreated)
+	if ps := participants(); len(ps) != 1 || ps[0].Actor != "bob" {
+		t.Errorf("participants after add = %+v, want just bob", ps)
+	}
+	resp, body = do(http.MethodDelete, "/api/v1/projects/web/participants/bob", "", webWrite)
+	wantStatus(resp, body, http.StatusNoContent)
+	if ps := participants(); len(ps) != 0 {
+		t.Errorf("participants after remove = %+v, want none", ps)
+	}
+
 	// 5. /static/ belongs to the SPA, /assets/ to the templ cockpit.
 	resp, body = do(http.MethodGet, "/static/nope.js", "", nil)
 	wantStatus(resp, body, http.StatusNotFound)
