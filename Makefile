@@ -1,7 +1,7 @@
 .PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean FORCE
 
 # WL-REQ-15: six executables from one module. The three user binaries are what
-# Homebrew and Scoop install; the other three ship in the container images.
+# Homebrew installs; the other three ship in the container images.
 USER_BINARIES := lode lode-hook lode-statusline
 ALL_BINARIES := $(USER_BINARIES) lode-server lode-watch lode-migrate
 
