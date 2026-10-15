@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { buildColumns } from "./build-columns"
+import { buildColumns, displayText } from "./build-columns"
 import type { DataTableColumn } from "./types"
 
 type Row = { id: string; name: string; due: string; status: string }
