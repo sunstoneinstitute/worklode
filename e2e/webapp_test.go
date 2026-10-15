@@ -109,6 +109,13 @@ func TestWebAppOneHost(t *testing.T) {
 		t.Error("/projects rendered the templ cockpit, want the SPA shell")
 	}
 
+	// 2b. A project's Crew page is the SPA shell too (WL-REQ-1802).
+	resp, body = do(http.MethodGet, "/projects/web/crew", "", cookie)
+	wantStatus(resp, body, http.StatusOK)
+	if strings.Contains(body, `<nav aria-label="Primary"`) {
+		t.Error("/projects/web/crew rendered the templ cockpit, want the SPA shell")
+	}
+
 	// 3. /work is still the templ cockpit, on the same session.
 	resp, body = do(http.MethodGet, "/work", "", cookie)
 	wantStatus(resp, body, http.StatusOK)

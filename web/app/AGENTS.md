@@ -126,8 +126,8 @@ any future page:
 
 `src/router.tsx` declares every route in code. URLs are real paths
 (browser history), and `<Link to="...">` is typed, so a link to a missing
-route fails the type check. The only page is `/projects`; anything else
-renders `NotFound`. `src/routes.json` lists the same paths for the Go
+route fails the type check. The pages are `/projects` and
+`/projects/$projectId/crew`; anything else renders `NotFound`. `src/routes.json` lists the same paths for the Go
 server (WL-REQ-1305), and `src/router.test.tsx` fails when the tree and
 the file disagree. Add a page to both, and to `spaRoutes` in
 `internal/api/spa_routes.go`, which routes it to the SPA shell on the same
@@ -152,13 +152,14 @@ Every read goes through `src/api/`:
   middleware adds `X-Requested-With: lode-web` and a JSON content type to
   every write, which the server requires of a cookie-authorized write
   (WL-REQ-1770); the browser adds `Sec-Fetch-Site`.
-- `queries.ts`: read hooks (`useMe`, `useProjects`). An error body is
+- `queries.ts`: read hooks (`useMe`, `useProjects`, `useProjectCrew`, ...).
+- `mutations.ts`: write hooks, each invalidating the queries it changes. An error body is
   `ErrorResponse` (`{ "error": string }`); a hook throws it as an
   `HttpError` carrying the status.
 - `query-client.ts`: a failed read is retried once, never on a 4xx.
 - `types.ts`: re-exports of the generated shapes.
 
-`queries.ts` covers only what `/projects` reads. Page
+`queries.ts` covers only what the ported pages read. Page
 code from the `worklode-design` prototype (ideas, intake, documents, crew,
 the project summary, its optimistic list helpers) comes in when its page is
 ported, written against `schema.d.ts`. That repo's `docs/API.md` describes

@@ -50,7 +50,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"action"})
 	s.crewChanges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_crew_changes_total",
-		Help: "Project Crew membership changes, by surface (api, web), action (add, remove), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
+		Help: "Project Crew membership changes, by surface (api), action (add, remove), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
 	}, []string{"surface", "action", "outcome"})
 	s.milestoneChanges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_milestone_changes_total",
@@ -158,7 +158,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
-		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove, milestone_reference) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
+		Help: "Web UI write-form submissions, by form (task, deliverable, milestone_reference) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission.",
 	}, []string{"form", "outcome"})
 	s.progressWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_progress_writes_total",
@@ -415,7 +415,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, outcome := range apiSessionRequestOutcomes {
 		s.apiSessionRequests.WithLabelValues(outcome)
 	}
-	for _, surface := range []string{"api", "web"} {
+	for _, surface := range []string{"api"} {
 		for _, action := range crewChangeActions {
 			for _, outcome := range crewChangeOutcomes {
 				s.crewChanges.WithLabelValues(surface, action, outcome)
@@ -455,7 +455,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, outcome := range inboxRenderOutcomes {
 		s.inboxRenders.WithLabelValues(outcome)
 	}
-	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove",
+	for _, form := range []string{"task", "deliverable",
 		formRestoreTask, formRestoreDoc, formMilestoneRef} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
@@ -758,8 +758,7 @@ func crewOutcome(err error) string {
 }
 
 // observeCrewChange records one attempted Crew membership change, called
-// exactly once per attempt from both the JSON API handler (surface="api")
-// and the roster page's form (surface="web").
+// exactly once per attempt from the JSON API handlers (surface="api").
 // Nil-safe: tests build a *server directly without initMetrics.
 func (s *server) observeCrewChange(surface, action, outcome string) {
 	if s.crewChanges == nil {

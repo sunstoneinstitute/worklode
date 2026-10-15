@@ -55,19 +55,27 @@ export function ProjectToolbar({
         AGENTS.md) — so lg gets the icon-only tier instead of overlapping.
       */}
       <nav className="hidden shrink-0 items-center gap-6 lg:flex xl:gap-16.25">
-        {PROJECT_NAV_ITEMS.map(({ label, Icon }, i) => (
-          // Every item is a plain link for now; a ported page (`spa: true`)
-          // gets a typed <Link> here when its route exists (WL-REQ-1801)
-          <a
-            key={label}
-            href={`/projects/${projectId}${PROJECT_NAV_ITEMS[i].path}`}
-            aria-label={label}
-            className="flex items-center gap-2 text-xs leading-none font-medium whitespace-nowrap text-text-light"
-          >
-            <Icon size={24} />
-            <span className="hidden xl:inline">{label}</span>
-          </a>
-        ))}
+        {PROJECT_NAV_ITEMS.map((item) => {
+          const { label, Icon } = item
+          const className = "flex items-center gap-2 text-xs leading-none font-medium whitespace-nowrap text-text-light"
+          const body = (
+            <>
+              <Icon size={24} />
+              <span className="hidden xl:inline">{label}</span>
+            </>
+          )
+          // A ported page gets a typed <Link>; the rest are plain links the
+          // templ cockpit serves (WL-REQ-1801)
+          return item.spa ? (
+            <Link key={label} to={item.to} params={{ projectId }} aria-label={label} className={className}>
+              {body}
+            </Link>
+          ) : (
+            <a key={label} href={`/projects/${projectId}${item.path}`} aria-label={label} className={className}>
+              {body}
+            </a>
+          )
+        })}
         <button type="button" aria-label={PROJECT_NAV_SETTINGS.label} className="text-text-light">
           <PROJECT_NAV_SETTINGS.Icon size={24} />
         </button>
