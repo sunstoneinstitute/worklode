@@ -18,6 +18,12 @@ function seed() {
   return { me, projects }
 }
 
+/** What GET /api/v1/projects/{id} answers, or undefined for an unknown id */
+export function projectDetail(id: string): Ok<"/api/v1/projects/{id}", "get"> | undefined {
+  const project = db.projects.find((p) => p.id === id)
+  return project && { ...project, focus: [], labels: {}, settings: {} }
+}
+
 export const db = seed()
 
 /** Puts the dummy data back the way it started */

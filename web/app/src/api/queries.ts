@@ -58,3 +58,25 @@ export function useProjects() {
     },
   })
 }
+
+export function useProject(id: string) {
+  return useQuery({
+    queryKey: ["projects", "detail", id],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/projects/{id}", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data
+    },
+  })
+}
+
+export function useCrew() {
+  return useQuery({
+    queryKey: ["crew"],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/crew")
+      if (error) throw failure(error, response)
+      return data.crew ?? []
+    },
+  })
+}
