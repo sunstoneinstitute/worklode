@@ -3,7 +3,7 @@ module github.com/sunstoneinstitute/worklode
 go 1.26.0
 
 require (
-	github.com/a-h/templ v0.3.1020
+	github.com/a-h/templ v0.3.1070
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
@@ -15,23 +15,23 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/pelletier/go-toml/v2 v2.4.3
-	github.com/prometheus/client_golang v1.24.1
+	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/swaggest/form/v5 v5.1.1
-	github.com/swaggest/jsonschema-go v0.3.78
+	github.com/swaggest/jsonschema-go v0.3.79
 	github.com/swaggest/openapi-go v0.2.61
 	github.com/yuin/goldmark v1.8.6
 	github.com/yuin/goldmark-emoji v1.0.6
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc
 	github.com/zalando/go-keyring v0.2.8
 	go.abhg.dev/goldmark/mermaid v0.6.0
-	golang.org/x/net v0.58.0
+	golang.org/x/net v0.61.0
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sync v0.23.0
-	golang.org/x/sys v0.47.0
-	golang.org/x/term v0.45.0
+	golang.org/x/sync v0.24.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.47.0
 	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.37.1
@@ -41,7 +41,7 @@ require (
 
 require (
 	github.com/a-h/parse v0.0.0-20250122154542-74294addb73e // indirect
-	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/andybalholm/brotli v1.2.6 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 // indirect
@@ -60,8 +60,8 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
-	github.com/fatih/color v1.16.0 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
+	github.com/fatih/color v1.19.0 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
@@ -88,22 +88,22 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-colorable v0.1.15 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/natefinch/atomic v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/common v0.70.1 // indirect
-	github.com/prometheus/procfs v0.21.1 // indirect
+	github.com/prometheus/common v0.72.0 // indirect
+	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/swaggest/refl v1.4.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/mod v0.38.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
-	golang.org/x/tools v0.48.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
