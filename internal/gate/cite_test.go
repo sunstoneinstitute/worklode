@@ -17,18 +17,23 @@ func texts(cs []Citation) []string {
 
 func TestCitationsMatches(t *testing.T) {
 	cases := map[string][]string{
-		"see WL-SPEC-77 §4 for this":            {"WL-SPEC-77 §4"},
-		"see WL-SPEC-77 sec-4.1d.":              {"WL-SPEC-77 sec-4.1d"},
-		"read WL-SPEC-80#sec-4.1d first":        {"WL-SPEC-80#sec-4.1d"},
-		"jump to #sec-3":                        {"#sec-3"},
-		"as §12 says":                           {"§12"},
-		"as § 3.2 says":                         {"§ 3.2"},
-		"WL-REQ-165 is the rule":                nil,
-		"WL-REQ-165 §2 is part of a rule ref":   nil,
-		"the sign § alone":                      nil,
-		"a link https://x.test/WL-SPEC-1#sec-2": nil,
-		"```\nWL-SPEC-77 §4\n```\nafter":        nil,
-		"one WL-SPEC-77 §4 and §9":              {"WL-SPEC-77 §4", "§9"},
+		"see WL-SPEC-77 §4 for this":             {"WL-SPEC-77 §4"},
+		"see WL-SPEC-77 sec-4.1d.":               {"WL-SPEC-77 sec-4.1d"},
+		"read WL-SPEC-80#sec-4.1d first":         {"WL-SPEC-80#sec-4.1d"},
+		"jump to #sec-3":                         {"#sec-3"},
+		"as §12 says":                            {"§12"},
+		"as § 3.2 says":                          {"§ 3.2"},
+		"WL-REQ-165 is the rule":                 nil,
+		"WL-REQ-165 §2 is part of a rule ref":    nil,
+		"the sign § alone":                       nil,
+		"a link https://x.test/WL-SPEC-1#sec-2":  nil,
+		"```\nWL-SPEC-77 §4\n```\nafter":         nil,
+		"one WL-SPEC-77 §4 and §9":               {"WL-SPEC-77 §4", "§9"},
+		"run `lode show WL-SPEC-1#sec-2` first":  nil,
+		`bodies cite "DP-SPEC-12 §12" by number`: nil,
+		"bodies cite “§12” by number":            nil,
+		"`§1` is fine but §2 is not":             {"§2"},
+		`an unclosed " quote §3`:                 {"§3"},
 	}
 	for in, want := range cases {
 		got := texts(Citations(in))
@@ -100,9 +105,9 @@ func TestAddedCitations(t *testing.T) {
 		"+++ b/b.go",
 		"@@ -1,1 +1,4 @@",
 		" // spec-gate:ignore (context line, covers the next)",
-		"+// links to \"#sec-4\" on the page",
-		"+// \"#sec-5\" here spec-gate:ignore",
-		"+// \"#sec-6\" is checked again",
+		"+// links to #sec-4 on the page",
+		"+// #sec-5 here spec-gate:ignore",
+		"+// #sec-6 is checked again",
 	}, "\n")
 	got, err := cfg.AddedCitations(diff, nil)
 	if err != nil {
