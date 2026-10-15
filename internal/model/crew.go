@@ -23,6 +23,12 @@ type ParticipantListResponse struct {
 	Participants []CrewMember `json:"participants"`
 }
 
+// CrewListResponse is the response body of GET /api/v1/crew: every human
+// actor on the instance (WL-REQ-1795). Lead, Roles and AddedAt are unset.
+type CrewListResponse struct {
+	Crew []CrewMember `json:"crew"`
+}
+
 // AddCrewMemberInput is the request body of POST
 // /api/v1/projects/{id}/participants. Actor is required; an empty Role
 // defaults to "member" server-side, so adding someone to the Crew without an

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -39,4 +41,29 @@ func (c *Client) RevokeToken(ctx context.Context, token string) ([]byte, error) 
 // two failures apart.
 func (c *Client) WhoAmI(ctx context.Context) (model.WhoAmI, []byte, error) {
 	return doJSON[model.WhoAmI](ctx, c, http.MethodGet, "/api/v1/whoami", nil, "whoami")
+}
+
+// ListInstanceCrew calls GET /api/v1/crew: every human actor on the instance
+// (WL-REQ-1795). An empty roster is an empty slice, not nil.
+func (c *Client) ListInstanceCrew(ctx context.Context) ([]model.CrewMember, []byte, error) {
+	resp, raw, err := doJSON[model.CrewListResponse](ctx, c, http.MethodGet, "/api/v1/crew", nil, "crew list")
+	if err != nil {
+		return nil, nil, err
+	}
+	return resp.Crew, raw, nil
+}
+
+// InstanceCrewTable renders the instance roster: actor id and name. A blank
+// display_name falls back to the actor id, as CrewTable does.
+func InstanceCrewTable(w io.Writer, members []model.CrewMember) {
+	tw := newTabwriter(w)
+	fmt.Fprintln(tw, "ACTOR\tNAME")
+	for _, m := range members {
+		name := m.DisplayName
+		if name == "" {
+			name = m.Actor
+		}
+		fmt.Fprintf(tw, "%s\t%s\n", m.Actor, name)
+	}
+	tw.Flush()
 }
