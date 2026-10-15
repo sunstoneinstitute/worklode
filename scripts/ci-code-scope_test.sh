@@ -50,6 +50,9 @@ deploy/overlays/hzdev/kustomization.yaml'
 check false "deploy plus docs"       'deploy/base/embeddings.yaml
 docs/github-advanced-setup.md'
 check false "docs only"              'docs/follow-ups.md'
+check false "release workflow"       '.github/workflows/release.yml'
+check false "other workflow"         '.github/workflows/number-migrations.yml'
+check false "release action"         '.github/actions/update-homebrew-tap/action.yml'
 
 # Runs the Go jobs.
 check true  "migration only"         'deploy/base/migrations/0067_x.up.sql'
@@ -59,6 +62,11 @@ check true  "go file"                'internal/indexer/indexer.go'
 check true  "go file beside deploy"  'deploy/base/embeddings.yaml
 internal/indexer/indexer.go'
 check true  "workflow change"        '.github/workflows/pr-checks.yml'
+check true  "reusable job workflow"  '.github/workflows/_test.yml'
+check true  "image workflow"         '.github/workflows/_build-image.yml'
+check true  "homebrew template"      '.github/homebrew/worklode.rb.template'
+check true  "workflow beside go"     '.github/workflows/release.yml
+internal/indexer/indexer.go'
 check true  "agent surface"          'CLAUDE.md'
 check true  "plugin skill"           'plugins/claude/lode/skills/done/SKILL.md'
 check true  "empty list fails open"  ''
