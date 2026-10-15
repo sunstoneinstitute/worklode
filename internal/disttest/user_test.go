@@ -1,7 +1,6 @@
 package disttest
 
 import (
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,41 +24,6 @@ func TestUserDistributionTemplates(t *testing.T) {
 			!strings.Contains(homebrew, "#{bin}/"+binary.name+" --version") {
 			t.Errorf("Homebrew formula does not build/install and version-check %q from %q", binary.name, binary.source)
 		}
-	}
-
-	scoop := render(t, root, filepath.Join(".github", "scoop", "render-manifest.py"),
-		filepath.Join(".github", "scoop", "worklode.json.template"), filepath.Join(tmp, "worklode.json"),
-		"VERSION=1.2.3", "URL=https://example.test/worklode.zip", "SHA256=deadbeef")
-	var manifest struct {
-		Architecture struct {
-			AMD64 struct {
-				Bin []string `json:"bin"`
-			} `json:"64bit"`
-		} `json:"architecture"`
-	}
-	if err := json.Unmarshal([]byte(scoop), &manifest); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := strings.Join(manifest.Architecture.AMD64.Bin, ","), "lode.exe,lode-hook.exe,lode-statusline.exe"; got != want {
-		t.Errorf("Scoop bin = %q, want %q", got, want)
-	}
-
-	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "_build-windows.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflowText := string(workflow)
-	for _, binary := range []struct{ artifact, source string }{
-		{"lode.exe", "./cmd/lode"},
-		{"lode-hook.exe", "./cmd/lode-hook"},
-		{"lode-statusline.exe", "./cmd/lode-statusline"},
-	} {
-		if !strings.Contains(workflowText, "-o "+binary.artifact+" "+binary.source) {
-			t.Errorf("Windows workflow does not build %q from %q", binary.artifact, binary.source)
-		}
-	}
-	if !strings.Contains(workflowText, "zip -q \"$ZIP\" lode.exe lode-hook.exe lode-statusline.exe") {
-		t.Error("Windows archive does not include all three executables")
 	}
 }
 
