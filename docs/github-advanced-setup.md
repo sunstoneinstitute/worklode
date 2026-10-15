@@ -63,10 +63,10 @@ gh api -X PATCH repos/sunstoneinstitute/worklode -F allow_auto_merge=true
 - `on.merge_group.types: [checks_requested]` next to `pull_request`.
 - The `concurrency.group` falls back to `github.ref` when there is no PR
   number, so queued entries do not cancel each other.
-- The `gate` job's first branch: on a `merge_group` event it sets
+- The `triage` job's first branch: on a `merge_group` event it sets
   `trusted=true`, `code=true`, `run=true` and exits. There is no PR
   payload to read file lists or author association from, and every PR in
-  the group already passed the gate on its own.
+  the group already passed these checks on its own.
 - The `checks` job at the end: `if: always()`, needs every other job, and
   is the one check the ruleset names.
 
