@@ -1862,8 +1862,14 @@ nav.local a .cnt {
 .prose > :last-child {
   margin-bottom: 0;
 }
+.prose {
+  line-height: 1.65;
+}
+.prose p,.prose ul,.prose ol,.prose blockquote,.prose h1,.prose h2,.prose h3,.prose h4 {
+  max-width: 72ch;
+}
 .prose p,.prose ul,.prose ol,.prose blockquote,.prose pre,.prose table {
-  margin: 0 0 12px;
+  margin: 0 0 1em;
 }
 .prose h1,.prose h2,.prose h3,.prose h4 {
   margin: 18px 0 8px;
@@ -1882,9 +1888,8 @@ nav.local a .cnt {
   font-family: "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   font-size: 0.9375rem;
   background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 1px 4px;
+  border-radius: 4px;
+  padding: 0 3px;
 }
 .prose pre {
   background: var(--surface-2);

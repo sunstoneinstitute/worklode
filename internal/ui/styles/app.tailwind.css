@@ -603,18 +603,22 @@ nav.local a .cnt{margin-left:auto;font-size:0.8125rem;font-weight:600;color:var(
 .prose{overflow-wrap:anywhere}
 .prose > :first-child{margin-top:0}
 .prose > :last-child{margin-bottom:0}
-.prose p,.prose ul,.prose ol,.prose blockquote,.prose pre,.prose table{margin:0 0 12px}
+.prose{line-height:1.65}
+/* Running text stops at 72 characters: on a wide card a full-width line
+ * loses the reader on the return sweep. Tables, code and diagrams keep the
+ * full width (WL-REQ-1808). */
+.prose p,.prose ul,.prose ol,.prose blockquote,.prose h1,.prose h2,.prose h3,.prose h4{max-width:72ch}
+.prose p,.prose ul,.prose ol,.prose blockquote,.prose pre,.prose table{margin:0 0 1em}
 .prose h1,.prose h2,.prose h3,.prose h4{margin:18px 0 8px;font-size:1.15625rem}
 .prose h1{font-size:1.4375rem}
 .prose h2{font-size:1.28125rem}
 .prose ul,.prose ol{padding-left:20px}
-.prose code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.9375rem;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 4px}
+.prose code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.9375rem;background:var(--surface-2);border-radius:4px;padding:0 3px}
 .prose pre{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;overflow-x:auto}
 .prose pre code{background:none;border:0;padding:0}
-/* Inline code is coloured, not just boxed: a body that names a flag, a table
- * and a type in one paragraph reads as one grey wall when the only difference
- * is the border. --imp is the same hue keywords get in a fenced block below,
- * so "code" means one colour throughout a document. */
+/* Inline code is marked by colour and a faint fill: a bordered chip every few
+ * words breaks the line into objects. --imp is the same hue keywords get in a
+ * fenced block below, so "code" means one colour throughout a document. */
 .prose code{color:var(--imp)}
 .prose pre code{color:var(--ink)}
 
