@@ -431,3 +431,24 @@ func TestGitHubUsernameIsUniqueAcrossActors(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestListHumanActors(t *testing.T) {
+	t.Parallel()
+	s := openTestStore(t)
+	ctx := t.Context()
+	for _, a := range []struct{ id, kind, name string }{
+		{"zed", "human", "Zed Zulu"}, {"ada", "human", "Ada Alpha"}, {"bot", "service", "A Bot"},
+	} {
+		if err := s.CreateActor(ctx, a.id, a.kind, a.name, false); err != nil {
+			t.Fatalf("CreateActor %s: %v", a.id, err)
+		}
+	}
+	got, err := s.ListHumanActors(ctx)
+	if err != nil {
+		t.Fatalf("ListHumanActors: %v", err)
+	}
+	want := []model.CrewMember{{Actor: "ada", DisplayName: "Ada Alpha"}, {Actor: "zed", DisplayName: "Zed Zulu"}}
+	if !slices.EqualFunc(got, want, func(a, b model.CrewMember) bool { return a.Actor == b.Actor && a.DisplayName == b.DisplayName }) {
+		t.Fatalf("ListHumanActors = %+v, want %+v", got, want)
+	}
+}

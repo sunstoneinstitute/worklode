@@ -135,6 +135,17 @@ func (s *server) listCrewMembers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.ParticipantListResponse{Participants: members})
 }
 
+// listCrew handles GET /api/v1/crew: the instance roster of human actors
+// (WL-REQ-1795). Never null when empty.
+func (s *server) listCrew(w http.ResponseWriter, r *http.Request) {
+	crew, err := s.st.ListHumanActors(r.Context())
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.CrewListResponse{Crew: crew})
+}
+
 // toCrewMember is the one conversion point from the store's aggregated
 // Participant to the wire shape (WL-RULE-1349).
 func toCrewMember(p store.Participant) model.CrewMember {
@@ -394,6 +405,10 @@ func crewRemovalMessage(err error) string {
 
 // crewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var crewRouteDocs = map[string]routeDoc{
+	"GET /api/v1/crew": {
+		summary:   "List the instance's human actors",
+		responses: map[int]any{http.StatusOK: model.CrewListResponse{}},
+	},
 	"GET /api/v1/projects/{id}/participants": {
 		summary:   "List a project's Crew roster",
 		responses: map[int]any{http.StatusOK: model.ParticipantListResponse{}},

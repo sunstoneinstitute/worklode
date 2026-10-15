@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Actor is a human, an autonomous agent, or a service account that can act
@@ -382,4 +384,27 @@ func tokenHashOf(plaintextOrHash string) string {
 		return sha256Hex(plaintextOrHash)
 	}
 	return plaintextOrHash
+}
+
+// ListHumanActors returns every human actor as a roster entry (WL-REQ-1795),
+// ordered by display name then id. Lead, Roles and AddedAt stay zero: the
+// instance roster carries no project membership.
+func (s *Store) ListHumanActors(ctx context.Context) ([]model.CrewMember, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, display_name FROM actors WHERE kind = 'human' ORDER BY display_name, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	members := []model.CrewMember{}
+	for rows.Next() {
+		var m model.CrewMember
+		var name sql.NullString
+		if err := rows.Scan(&m.Actor, &name); err != nil {
+			return nil, err
+		}
+		m.DisplayName = name.String
+		members = append(members, m)
+	}
+	return members, rows.Err()
 }
