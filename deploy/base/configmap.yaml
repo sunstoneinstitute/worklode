@@ -12,9 +12,6 @@ data:
   # decision records. Overlays for dev instances patch it to "dev".
   LODE_INSTANCE_ENV: "prod"
   LODE_BRANCH_TEMPLATE: ""
-  # The host the templ cockpit keeps serving from while pages move to the
-  # SPA (WL-REQ-1303). Empty means one host, the cockpit, no SPA.
-  LODE_LEGACY_URL: ""
   # Plan token budget, soft and hard (12 S19). Empty means the server
   # defaults (32000, 64000); set here so an operator can see and tune them
   # without a code change.
