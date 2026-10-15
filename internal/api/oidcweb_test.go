@@ -267,48 +267,9 @@ func cookieValue(rr *httptest.ResponseRecorder, name string) string {
 	return ""
 }
 
-// TestAuthLoginPerHost checks /auth/login redirects to the IdP with a
-// redirect_uri built from the host the request arrived on, not always
-// PublicURL (WL-REQ-1308).
-func TestAuthLoginPerHost(t *testing.T) {
-	t.Parallel()
-	st := newTestStore(t)
-	iss := oidctest.NewIssuer(t)
-	h, _, err := api.NewServer(st, api.Config{
-		OIDCIssuer:    iss.URL(),
-		OIDCClientID:  iss.ClientID,
-		PublicURL:     "https://worklode.test",
-		LegacyURL:     "https://worklold.test",
-		SessionSecret: "test-session-secret",
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	for _, host := range []string{"worklode.test", "worklold.test"} {
-		req := httptest.NewRequest("GET", "/auth/login?next=/tasks/WL-1", nil)
-		req.Host = host
-		rr := httptest.NewRecorder()
-		h.ServeHTTP(rr, req)
-		if rr.Code != http.StatusFound {
-			t.Fatalf("host %s: status = %d, want 302", host, rr.Code)
-		}
-		loc, err := url.Parse(rr.Header().Get("Location"))
-		if err != nil {
-			t.Fatalf("host %s: bad Location: %v", host, err)
-		}
-		want := "https://" + host + "/auth/callback"
-		if got := loc.Query().Get("redirect_uri"); got != want {
-			t.Errorf("host %s: redirect_uri = %q, want %q", host, got, want)
-		}
-	}
-}
-
-// TestAuthLoginUnknownHostMetric checks a request on neither configured host
-// still answers 404 (ServeMux itself refuses it in two-host mode, since every
-// route is registered host-qualified — see registerRoutes), and that the
-// worklode_web_navigation_requests_total metric now covers /auth/login
-// (WL-REQ-1308): before this task it emitted no metric at all.
-func TestAuthLoginUnknownHostMetric(t *testing.T) {
+// TestAuthLoginMetric checks /auth/login records a
+// worklode_web_navigation_requests_total observation (WL-REQ-1308).
+func TestAuthLoginMetric(t *testing.T) {
 	t.Parallel()
 	st := newTestStore(t)
 	iss := oidctest.NewIssuer(t)
@@ -316,28 +277,14 @@ func TestAuthLoginUnknownHostMetric(t *testing.T) {
 		OIDCIssuer:    iss.URL(),
 		OIDCClientID:  iss.ClientID,
 		PublicURL:     "https://worklode.test",
-		LegacyURL:     "https://worklold.test",
 		SessionSecret: "test-session-secret",
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-	req := httptest.NewRequest("GET", "/auth/login", nil)
-	req.Host = "evil.example"
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", rr.Code)
-	}
-
-	// A successful login on the public host, to get an "ok" series too and
-	// confirm the metric is additive across outcomes.
-	ok := httptest.NewRequest("GET", "/auth/login", nil)
-	ok.Host = "worklode.test"
-	okrr := httptest.NewRecorder()
-	h.ServeHTTP(okrr, ok)
-	if okrr.Code != http.StatusFound {
-		t.Fatalf("ok-host status = %d, want 302", okrr.Code)
+	rr := doReq(t, h, "GET", "/auth/login", "", nil)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rr.Code)
 	}
 
 	scrape := doReq(t, admin, "GET", "/metrics", "", nil)

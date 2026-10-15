@@ -1,10 +1,9 @@
-// spa.go serves the embedded SPA on the public host (WL-REQ-1304).
+// spa.go serves the embedded SPA (WL-REQ-1304).
 package api
 
 import (
 	"io/fs"
 	"net/http"
-	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/webapp"
 )
@@ -18,10 +17,13 @@ func (s *server) spaFS() fs.FS {
 	return webapp.FS()
 }
 
-// registerSPA registers the SPA's two routes on r, the public host's router.
+// registerSPA registers /static/ and every spaRoutes pattern to the SPA
+// shell (WL-REQ-1303). The templ cockpit registers no pattern listed here.
 func (s *server) registerSPA(r *router) {
 	r.public("GET /static/", s.spaAssetHandler())
-	r.web("GET /", s.spaShell)
+	for _, route := range spaRoutes {
+		r.web("GET "+muxPattern(route), s.spaShell)
+	}
 }
 
 // spaAssetHandler serves the content-hashed build output, immutable. A
@@ -44,24 +46,9 @@ func (s *server) spaAssetHandler() http.Handler {
 	})
 }
 
-// spaShell answers a path spaHandles with index.html. A path it does not
-// handle redirects to LODE_LEGACY_URL (WL-REQ-1305), kept as its own host so
-// the public host never serves the legacy one's content. Without a legacy
-// host it falls back to index.html, which the SPA renders as its own
-// not-found page; unreachable today, since registerSPA only registers while
-// a legacy host splits the two.
-func (s *server) spaShell(w http.ResponseWriter, r *http.Request) {
-	if spaHandles(r.URL.Path) {
-		s.serveSPAShell(w, spaPage)
-		return
-	}
-	if s.cfg.LegacyURL == "" {
-		s.serveSPAShell(w, spaNotFound)
-		return
-	}
-	target := strings.TrimRight(s.cfg.LegacyURL, "/") + r.URL.RequestURI()
-	http.Redirect(w, r, target, http.StatusFound)
-	s.observeSPA(spaRedirect)
+// spaShell answers a spaRoutes path with index.html.
+func (s *server) spaShell(w http.ResponseWriter, _ *http.Request) {
+	s.serveSPAShell(w, spaPage)
 }
 
 // serveSPAShell writes index.html and records outcome.

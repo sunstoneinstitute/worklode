@@ -1,11 +1,10 @@
 //go:build e2e
 
-// webapp_test.go drives the two-host web app over public surfaces only: the
-// SPA shell on the public host (WL-REQ-1304), the redirect of legacy paths
-// to the legacy host (WL-REQ-1305), the templ cockpit kept there
-// (WL-REQ-1303), cookie-less /api/v1 reads and the write checks on a
-// non-bearer write (WL-REQ-1307, WL-REQ-1770), and the OpenAPI document's
-// security schemes (WL-REQ-1309).
+// webapp_test.go drives the one-host web app over public surfaces only: a
+// spaRoutes path is the SPA shell (WL-REQ-1304), every other cockpit path is
+// templ (WL-REQ-1303), one login session covers both (WL-REQ-1308), /api/v1
+// reads and the write checks on a non-bearer write (WL-REQ-1307,
+// WL-REQ-1770), and the OpenAPI document's security schemes (WL-REQ-1309).
 package e2e
 
 import (
@@ -20,23 +19,21 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-const (
-	webPublicHost = "worklode.e2e.test"
-	webLegacyHost = "worklold.e2e.test"
-)
-
-func TestWebAppTwoHosts(t *testing.T) {
+func TestWebAppOneHost(t *testing.T) {
 	ctx := context.Background()
 
 	st := store.OpenTestStore(t)
+	iss := oidctest.NewIssuer(t)
 	handler, _, err := api.NewServer(st, api.Config{
 		BootstrapToken: bootstrapToken,
-		PublicURL:      "https://" + webPublicHost,
-		LegacyURL:      "https://" + webLegacyHost,
-		WebOpen:        true,
+		OIDCIssuer:     iss.URL(),
+		OIDCClientID:   iss.ClientID,
+		PublicURL:      "http://localhost:8080",
+		SessionSecret:  "e2e-session-secret",
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -44,25 +41,14 @@ func TestWebAppTwoHosts(t *testing.T) {
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
-	// The CLI client sends the listener's host, which neither named host
-	// matches, and it has no way to set Host itself. A second listener on the
-	// same handler stands in for the public host's DNS name.
-	cliSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Host = webPublicHost
-		handler.ServeHTTP(w, r)
-	}))
-	defer cliSrv.Close()
-	admin := cli.NewClient(cli.Config{ServerURL: cliSrv.URL, Token: bootstrapToken})
+	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
 	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "web", Name: "Web Project", Key: "WEB",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
-		return http.ErrUseLastResponse
-	}}
-	do := func(method, host, path, body string, hdr map[string]string) (*http.Response, string) {
+	do := func(method, path, body string, hdr map[string]string) (*http.Response, string) {
 		t.Helper()
 		var rd io.Reader
 		if body != "" {
@@ -72,31 +58,43 @@ func TestWebAppTwoHosts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("build %s %s: %v", method, path, err)
 		}
-		req.Host = host
 		for k, v := range hdr {
 			req.Header.Set(k, v)
 		}
-		resp, err := client.Do(req)
+		resp, err := noRedirect.Do(req)
 		if err != nil {
-			t.Fatalf("%s %s%s: %v", method, host, path, err)
+			t.Fatalf("%s %s: %v", method, path, err)
 		}
 		defer resp.Body.Close()
 		b, err := io.ReadAll(resp.Body)
 		if err != nil {
-			t.Fatalf("read %s %s%s: %v", method, host, path, err)
+			t.Fatalf("read %s %s: %v", method, path, err)
 		}
 		return resp, string(b)
 	}
 	wantStatus := func(resp *http.Response, body string, want int) {
 		t.Helper()
 		if resp.StatusCode != want {
-			t.Fatalf("%s %s%s = %d, want %d (body %s)", resp.Request.Method,
-				resp.Request.Host, resp.Request.URL.RequestURI(), resp.StatusCode, want, body)
+			t.Fatalf("%s %s = %d, want %d (body %s)", resp.Request.Method,
+				resp.Request.URL.RequestURI(), resp.StatusCode, want, body)
 		}
 	}
 
-	// 1. The SPA shell on the public host.
-	resp, body := do(http.MethodGet, webPublicHost, "/projects", "", nil)
+	// 1. Signed out, the SPA path and a templ page both send the browser to
+	// the one login.
+	for _, path := range []string{"/projects", "/work"} {
+		resp, body := do(http.MethodGet, path, "", nil)
+		wantStatus(resp, body, http.StatusFound)
+		if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/auth/login") {
+			t.Errorf("signed-out %s Location = %q, want /auth/login", path, loc)
+		}
+	}
+
+	session := webSession(t, srv.URL, iss, "alice")
+	cookie := map[string]string{"Cookie": "wl_session=" + session}
+
+	// 2. /projects is the SPA shell.
+	resp, body := do(http.MethodGet, "/projects", "", cookie)
 	wantStatus(resp, body, http.StatusOK)
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("/projects Content-Type = %q, want text/html", ct)
@@ -107,26 +105,20 @@ func TestWebAppTwoHosts(t *testing.T) {
 	if resp.Header.Get("Content-Security-Policy") == "" {
 		t.Error("/projects carries no Content-Security-Policy")
 	}
-
-	// 2. A legacy path on the public host redirects, query intact.
-	resp, body = do(http.MethodGet, webPublicHost, "/work?q=1", "", nil)
-	wantStatus(resp, body, http.StatusFound)
-	if loc := resp.Header.Get("Location"); loc != "https://"+webLegacyHost+"/work?q=1" {
-		t.Errorf("/work?q=1 Location = %q", loc)
+	if strings.Contains(body, `<nav aria-label="Primary"`) {
+		t.Error("/projects rendered the templ cockpit, want the SPA shell")
 	}
 
-	// 3. The legacy host serves the templ cockpit and no /api/v1.
-	resp, body = do(http.MethodGet, webLegacyHost, "/work", "", nil)
+	// 3. /work is still the templ cockpit, on the same session.
+	resp, body = do(http.MethodGet, "/work", "", cookie)
 	wantStatus(resp, body, http.StatusOK)
-	if !strings.Contains(body, "<html") {
-		t.Errorf("legacy /work is not an HTML page: %.200s", body)
+	if !strings.Contains(body, `<nav aria-label="Primary"`) {
+		t.Errorf("/work is not the templ cockpit: %.200s", body)
 	}
-	resp, body = do(http.MethodGet, webLegacyHost, "/api/v1/projects", "", nil)
-	wantStatus(resp, body, http.StatusNotFound)
 
-	// 4. /api/v1 on the public host: an open read, then a write without and
-	// with the session write checks, then with a bearer.
-	resp, body = do(http.MethodGet, webPublicHost, "/api/v1/projects", "", nil)
+	// 4. /api/v1: a session read, then a session write without and with the
+	// write checks, then a bearer write.
+	resp, body = do(http.MethodGet, "/api/v1/projects", "", cookie)
 	wantStatus(resp, body, http.StatusOK)
 	var list model.ProjectListResponse
 	if err := json.Unmarshal([]byte(body), &list); err != nil {
@@ -137,31 +129,31 @@ func TestWebAppTwoHosts(t *testing.T) {
 	}
 
 	task := `{"project":"web","title":"From the web app","priority":"medium","kind":"feature"}`
-	resp, body = do(http.MethodPost, webPublicHost, "/api/v1/tasks", task, nil)
+	resp, body = do(http.MethodPost, "/api/v1/tasks", task, cookie)
 	wantStatus(resp, body, http.StatusForbidden)
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
 		t.Errorf("refused write Content-Type = %q, want JSON", ct)
 	}
-	resp, body = do(http.MethodPost, webPublicHost, "/api/v1/tasks", task, map[string]string{
+	resp, body = do(http.MethodPost, "/api/v1/tasks", task, map[string]string{
+		"Cookie":           "wl_session=" + session,
 		"Sec-Fetch-Site":   "same-origin",
 		"X-Requested-With": "lode-web",
 		"Content-Type":     "application/json",
 	})
 	wantStatus(resp, body, http.StatusCreated)
-	resp, body = do(http.MethodPost, webPublicHost, "/api/v1/tasks", task, map[string]string{
+	resp, body = do(http.MethodPost, "/api/v1/tasks", task, map[string]string{
 		"Authorization": "Bearer " + bootstrapToken,
 	})
 	wantStatus(resp, body, http.StatusCreated)
 
-	// 5. /static/ belongs to the SPA on the public host, /assets/ to the
-	// templ cockpit on the legacy host.
-	resp, body = do(http.MethodGet, webPublicHost, "/static/nope.js", "", nil)
+	// 5. /static/ belongs to the SPA, /assets/ to the templ cockpit.
+	resp, body = do(http.MethodGet, "/static/nope.js", "", nil)
 	wantStatus(resp, body, http.StatusNotFound)
-	resp, body = do(http.MethodGet, webLegacyHost, "/assets/app.css", "", nil)
+	resp, body = do(http.MethodGet, "/assets/app.css", "", nil)
 	wantStatus(resp, body, http.StatusOK)
 
 	// 6. The OpenAPI document declares both ways in.
-	resp, body = do(http.MethodGet, webPublicHost, "/api/v1/openapi.json", "", nil)
+	resp, body = do(http.MethodGet, "/api/v1/openapi.json", "", nil)
 	wantStatus(resp, body, http.StatusOK)
 	var doc struct {
 		Components struct {

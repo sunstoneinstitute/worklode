@@ -174,7 +174,7 @@ func TestGlobalDestinations(t *testing.T) {
 
 	// Knowledge lands on /docs, the document corpus (WL-REQ-331's
 	// "documents and graph-backed expert views"); /knowledge redirects there.
-	for _, path := range []string{"/", "/ideas", "/intake", "/projects", "/work", "/reviews", "/deliveries", "/docs"} {
+	for _, path := range []string{"/", "/ideas", "/intake", "/work", "/reviews", "/deliveries", "/docs"} {
 		t.Run(path, func(t *testing.T) {
 			rr := doReq(t, h, "GET", path, "", nil)
 			if rr.Code != http.StatusOK {
@@ -461,7 +461,7 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		hasCurrent bool
 	}{
 		{"/", global, false}, {"/ideas", global, true}, {"/intake", global, true},
-		{"/projects", global, true}, {"/work", global, true},
+		{"/work", global, true},
 		{"/reviews", global, false}, {"/deliveries", global, false},
 		{"/docs", global, true},
 		{"/projects/proj", project, true}, {"/projects/proj/crew", project, true},
