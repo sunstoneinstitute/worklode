@@ -13,8 +13,11 @@ on:
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, dequeued]
-    # A PR without migration files has nothing to number, dequeued or not.
-    paths: ['deploy/base/migrations/**']
+    # A PR without migration files has nothing to number, dequeued or not;
+    # a change to this workflow runs it so the change is exercised.
+    paths:
+      - 'deploy/base/migrations/**'
+      - '.github/workflows/number-migrations.yml'
 
 permissions:
   contents: read
