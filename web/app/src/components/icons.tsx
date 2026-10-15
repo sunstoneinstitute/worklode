@@ -54,3 +54,4 @@ export const FactCheckIcon = (props: Omit<IconProps, "name">) => <Icon name="fac
 export const AddIcon = (props: Omit<IconProps, "name">) => <Icon name="add" {...props} />
 export const ImportantIcon = (props: Omit<IconProps, "name">) => <Icon name="error" {...props} />
 export const PendingIcon = (props: Omit<IconProps, "name">) => <Icon name="pending" {...props} />
+export const GroupIcon = (props: Omit<IconProps, "name">) => <Icon name="group" {...props} />

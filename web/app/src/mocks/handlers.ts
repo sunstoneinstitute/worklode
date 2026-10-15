@@ -1,5 +1,5 @@
 import { HttpResponse, delay, http } from "msw"
-import { db } from "./db"
+import { db, projectDetail } from "./db"
 import type { Ok } from "./typed"
 
 // Visible loading states in development; instant in tests
@@ -16,5 +16,12 @@ export const handlers = [
     await delay(LATENCY_MS)
     const projects: Ok<"/api/v1/projects", "get"> = { projects: db.projects }
     return HttpResponse.json(projects)
+  }),
+
+  http.get("/api/v1/projects/:id", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const project = projectDetail(String(params.id))
+    if (!project) return HttpResponse.json({ error: "project not found" }, { status: 404 })
+    return HttpResponse.json(project)
   }),
 ]

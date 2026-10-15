@@ -1,8 +1,8 @@
 @font-face {
     font-family: "wlicon";
-    src: url("./wlicon.woff2?eb8272597bf46d53c115e33d4d000dd6") format("woff2"),
-url("./wlicon.woff?eb8272597bf46d53c115e33d4d000dd6") format("woff"),
-url("./wlicon.ttf?eb8272597bf46d53c115e33d4d000dd6") format("truetype");
+    src: url("./wlicon.woff2?dc83ef032213e8531cd5fb0394fbe8ea") format("woff2"),
+url("./wlicon.woff?dc83ef032213e8531cd5fb0394fbe8ea") format("woff"),
+url("./wlicon.ttf?dc83ef032213e8531cd5fb0394fbe8ea") format("truetype");
 }
 
 i[class^="wlicon-"]:before, i[class*=" wlicon-"]:before {
@@ -61,57 +61,60 @@ i[class^="wlicon-"]:before, i[class*=" wlicon-"]:before {
 .wlicon-history:before {
     content: "\f10f";
 }
-.wlicon-forward:before {
+.wlicon-group:before {
     content: "\f110";
 }
-.wlicon-filter_list:before {
+.wlicon-forward:before {
     content: "\f111";
 }
-.wlicon-fact-check:before {
+.wlicon-filter_list:before {
     content: "\f112";
 }
-.wlicon-error:before {
+.wlicon-fact-check:before {
     content: "\f113";
 }
-.wlicon-edit:before {
+.wlicon-error:before {
     content: "\f114";
 }
-.wlicon-drag-indicator:before {
+.wlicon-edit:before {
     content: "\f115";
 }
-.wlicon-download:before {
+.wlicon-drag-indicator:before {
     content: "\f116";
 }
-.wlicon-description:before {
+.wlicon-download:before {
     content: "\f117";
 }
-.wlicon-delete:before {
+.wlicon-description:before {
     content: "\f118";
 }
-.wlicon-dashboard:before {
+.wlicon-delete:before {
     content: "\f119";
 }
-.wlicon-dark-mode:before {
+.wlicon-dashboard:before {
     content: "\f11a";
 }
-.wlicon-coffee:before {
+.wlicon-dark-mode:before {
     content: "\f11b";
 }
-.wlicon-close:before {
+.wlicon-coffee:before {
     content: "\f11c";
 }
-.wlicon-chevron-right:before {
+.wlicon-close:before {
     content: "\f11d";
 }
-.wlicon-checklist:before {
+.wlicon-chevron-right:before {
     content: "\f11e";
 }
-.wlicon-check:before {
+.wlicon-checklist:before {
     content: "\f11f";
 }
-.wlicon-arrow-forward:before {
+.wlicon-check:before {
     content: "\f120";
 }
-.wlicon-add:before {
+.wlicon-arrow-forward:before {
     content: "\f121";
+}
+.wlicon-add:before {
+    content: "\f122";
 }
