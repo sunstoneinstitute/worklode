@@ -332,7 +332,7 @@ func CrewTable(w io.Writer, members []model.CrewMember) {
 			lead = "lead"
 		}
 		// display_name is nullable; the web page falls back to the actor id
-		// (internal/ui/crew.templ), so the CLI table matches it rather than
+		// (web/app/src/pages/ProjectCrew.tsx), so the CLI table matches it rather than
 		// printing a blank NAME cell.
 		name := m.DisplayName
 		if name == "" {
