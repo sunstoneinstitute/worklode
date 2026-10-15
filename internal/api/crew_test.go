@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -178,135 +177,8 @@ func TestAddCrewMemberAPIRefusals(t *testing.T) {
 		t.Errorf("metrics missing the rejected counter:\n%s", metrics)
 	}
 	// Pre-initialised, so an instance nobody has used reads as a flat zero.
-	if !strings.Contains(metrics, `worklode_crew_changes_total{action="add",outcome="error",surface="web"} 0`) {
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="add",outcome="error",surface="api"} 0`) {
 		t.Errorf("crew counter is not pre-initialised to zero:\n%s", metrics)
-	}
-}
-
-// TestAddCrewMemberForm covers the roster page's own add affordance: a good
-// submit lands the member and 303s back to the roster, and the write is
-// recorded under the same event type from the "web" surface.
-func TestAddCrewMemberForm(t *testing.T) {
-	t.Parallel()
-	st, h, admin, _ := newTestServerWithAdmin(t)
-	createProject(t, st, "proj")
-	seedCrewActors(t, st, "ada")
-
-	rr := doForm(t, h, "/projects/proj/crew",
-		url.Values{"actor": {"ada"}, "role": {"editor"}, "lead": {"1"}}, nil)
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
-	}
-	if loc := rr.Header().Get("Location"); loc != "/projects/proj/crew" {
-		t.Fatalf("Location = %q, want /projects/proj/crew", loc)
-	}
-
-	page := doReq(t, h, "GET", "/projects/proj/crew", "", nil)
-	if page.Code != http.StatusOK {
-		t.Fatalf("roster status = %d, want 200", page.Code)
-	}
-	bodyContains(t, page.Body.String(), "Ada Person", "editor", "Lead")
-
-	events := crewEvents(t, st, 1)
-	if len(events) != 1 {
-		t.Fatalf("crew.member_added events = %d, want 1", len(events))
-	}
-	if events[0].Source != "web" {
-		t.Errorf("event source = %q, want web", events[0].Source)
-	}
-
-	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
-	if !strings.Contains(metrics, `worklode_crew_changes_total{action="add",outcome="ok",surface="web"} 1`) {
-		t.Errorf("metrics missing the web add counter:\n%s", metrics)
-	}
-	if !strings.Contains(metrics, `worklode_web_form_submissions_total{form="crew_add",outcome="created"} 1`) {
-		t.Errorf("metrics missing the crew_add form counter:\n%s", metrics)
-	}
-}
-
-// TestAddCrewMemberFormRejected checks a refused submit comes back as the
-// roster page with the message and everything that was typed — nothing
-// typed is lost, and the refusal is not dressed up as an error page.
-func TestAddCrewMemberFormRejected(t *testing.T) {
-	t.Parallel()
-	st, h, admin, _ := newTestServerWithAdmin(t)
-	createProject(t, st, "proj")
-	seedCrewActors(t, st, "ada")
-
-	if rr := doForm(t, h, "/projects/proj/crew",
-		url.Values{"actor": {"ada"}, "role": {"editor"}, "lead": {"1"}}, nil); rr.Code != http.StatusSeeOther {
-		t.Fatalf("seed add status = %d, want 303; body %s", rr.Code, rr.Body.String())
-	}
-
-	cases := []struct {
-		name string
-		form url.Values
-		want string
-	}{
-		{"unknown actor", url.Values{"actor": {"nosuch"}, "role": {"reporter"}}, "No actor with that id"},
-		{"duplicate role", url.Values{"actor": {"ada"}, "role": {"editor"}}, "already holds role"},
-		{"second lead", url.Values{"actor": {"ada"}, "role": {"science-lead"}, "lead": {"1"}}, "already has a lead"},
-		{"no actor", url.Values{"actor": {"  "}, "role": {"reporter"}}, "Actor is required."},
-		{"unknown role", url.Values{"actor": {"ada"}, "role": {"astronaut"}}, "Unknown role"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			rr := doForm(t, h, "/projects/proj/crew", tc.form, nil)
-			if rr.Code != http.StatusUnprocessableEntity {
-				t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
-			}
-			body := rr.Body.String()
-			bodyContains(t, body, tc.want)
-			// The typed values come back in the form — the actor input
-			// filled in, the submitted role's option selected where it is
-			// one the dropdown offers (WL-297) — and the roster is still
-			// rendered around it.
-			bodyContains(t, body, `value="`+strings.TrimSpace(tc.form.Get("actor"))+`"`, "Ada Person")
-			if role := tc.form.Get("role"); validCrewRole(role) &&
-				!strings.Contains(body, `<option value="`+role+`" selected`) {
-				t.Errorf("submitted role %q did not come back selected:\n%s", role, body)
-			}
-			if tc.form.Get("lead") != "" && !strings.Contains(body, `id="lead" name="lead" type="checkbox" value="1" checked`) {
-				t.Errorf("the lead checkbox did not come back checked:\n%s", body)
-			}
-		})
-	}
-
-	// Nothing was written by the five refusals: the roster still holds the
-	// one seeded row.
-	crew, err := st.ListParticipants(context.Background(), "proj")
-	if err != nil {
-		t.Fatalf("list participants: %v", err)
-	}
-	if len(crew) != 1 || len(crew[0].Roles) != 1 {
-		t.Fatalf("crew = %+v, want one member with one role", crew)
-	}
-
-	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
-	if !strings.Contains(metrics, `worklode_crew_changes_total{action="add",outcome="rejected",surface="web"} 5`) {
-		t.Errorf("metrics missing the web rejected counter:\n%s", metrics)
-	}
-}
-
-// TestAddCrewMemberFormCrossOrigin checks the write route is same-origin
-// only, like the cockpit's other forms.
-func TestAddCrewMemberFormCrossOrigin(t *testing.T) {
-	t.Parallel()
-	st, h, _ := newTestServer(t)
-	createProject(t, st, "proj")
-	seedCrewActors(t, st, "ada")
-
-	rr := doForm(t, h, "/projects/proj/crew", url.Values{"actor": {"ada"}},
-		map[string]string{"Sec-Fetch-Site": "cross-site"})
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403; body %s", rr.Code, rr.Body.String())
-	}
-	crew, err := st.ListParticipants(context.Background(), "proj")
-	if err != nil {
-		t.Fatalf("list participants: %v", err)
-	}
-	if len(crew) != 0 {
-		t.Fatalf("crew = %+v, want nothing written", crew)
 	}
 }
 
@@ -424,127 +296,8 @@ func TestRemoveCrewMemberAPI(t *testing.T) {
 	}
 	// Pre-initialised, so an instance where nobody has removed anyone reads
 	// as a flat zero rather than as no-data.
-	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="error",surface="web"} 0`) {
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="error",surface="api"} 0`) {
 		t.Errorf("the remove action is not pre-initialised to zero:\n%s", metrics)
-	}
-}
-
-// TestRemoveCrewMemberForm covers the roster page's per-row Remove button:
-// the button is there for every member but the lead, a good submit 303s back
-// to the roster, and the write is the same one the API makes, recorded from
-// the "web" surface.
-func TestRemoveCrewMemberForm(t *testing.T) {
-	t.Parallel()
-	st, h, admin, token := newTestServerWithAdmin(t)
-	createProject(t, st, "proj")
-	seedCrewActors(t, st, "ada", "bob")
-	for _, body := range []map[string]any{
-		{"actor": "ada", "role": "editor", "lead": true},
-		{"actor": "bob", "role": "reporter"},
-	} {
-		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
-			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
-		}
-	}
-
-	// The roster offers Remove for bob and not for the lead: exactly one
-	// hidden actor field, naming bob.
-	page := doReq(t, h, "GET", "/projects/proj/crew", "", nil).Body.String()
-	bodyContains(t, page, `action="/projects/proj/crew/remove"`, `value="bob"`, "Remove")
-	if strings.Contains(page, `<input type="hidden" name="actor" value="ada"/>`) {
-		t.Errorf("the lead was offered a Remove button:\n%s", page)
-	}
-
-	rr := doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"bob"}}, nil)
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
-	}
-	if loc := rr.Header().Get("Location"); loc != "/projects/proj/crew" {
-		t.Fatalf("Location = %q, want /projects/proj/crew", loc)
-	}
-	crew, err := st.ListParticipants(context.Background(), "proj")
-	if err != nil {
-		t.Fatalf("list participants: %v", err)
-	}
-	if len(crew) != 1 || crew[0].ActorID != "ada" {
-		t.Fatalf("crew = %+v, want only ada", crew)
-	}
-
-	events := storeEventsOfType(t, st, "crew.member_removed", 1)
-	if events[0].Source != "web" {
-		t.Errorf("event source = %q, want web", events[0].Source)
-	}
-
-	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
-	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="ok",surface="web"} 1`) {
-		t.Errorf("metrics missing the web remove counter:\n%s", metrics)
-	}
-	if !strings.Contains(metrics, `worklode_web_form_submissions_total{form="crew_remove",outcome="created"} 1`) {
-		t.Errorf("metrics missing the crew_remove form counter:\n%s", metrics)
-	}
-}
-
-// TestRemoveCrewMemberFormBlocked is the responsibility review (WL-REQ-343)
-// in its minimal honest form: a removal refused because the member still
-// owns open work comes back as the roster with that work listed and linked,
-// so the person can go and reassign or close it.
-func TestRemoveCrewMemberFormBlocked(t *testing.T) {
-	t.Parallel()
-	st, h, admin, token := newTestServerWithAdmin(t)
-	createProject(t, st, "proj")
-	seedCrewActors(t, st, "ada", "bob")
-	for _, body := range []map[string]any{
-		{"actor": "ada", "role": "editor", "lead": true},
-		{"actor": "bob", "role": "reporter"},
-	} {
-		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
-			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
-		}
-	}
-	taskID := seedCrewTask(t, h, token, "proj", "bob", "still bob's problem")
-
-	rr := doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"bob"}}, nil)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
-	}
-	body := rr.Body.String()
-	// The message names the member the way the roster does, the roster is
-	// still rendered around it, and every blocking item is there with a link
-	// to the task.
-	bodyContains(t, body,
-		"Bob Person still owns open work",
-		`<a href="/tasks/`+taskID+`">`+taskID+`</a>`,
-		"still bob&#39;s problem",
-		"(task, ready)",
-		"Ada Person")
-
-	// Nothing was written.
-	crew, err := st.ListParticipants(context.Background(), "proj")
-	if err != nil {
-		t.Fatalf("list participants: %v", err)
-	}
-	if len(crew) != 2 {
-		t.Fatalf("crew = %+v, want both members still on it", crew)
-	}
-
-	// The lead's refusal has no responsibility list to show, so it comes
-	// back as the store's own sentence.
-	rr = doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"ada"}}, nil)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("lead status = %d, want 422; body %s", rr.Code, rr.Body.String())
-	}
-	bodyContains(t, rr.Body.String(), "lead handoff is not implemented")
-
-	// An actor who is not on the Crew.
-	rr = doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"nosuch"}}, nil)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("unknown status = %d, want 422; body %s", rr.Code, rr.Body.String())
-	}
-	bodyContains(t, rr.Body.String(), "not on this project&#39;s Crew")
-
-	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
-	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="rejected",surface="web"} 3`) {
-		t.Errorf("metrics missing the web remove rejections:\n%s", metrics)
 	}
 }
 
@@ -614,32 +367,6 @@ func TestListCrewMembersAPI(t *testing.T) {
 	}
 }
 
-// TestRemoveCrewMemberFormCrossOrigin checks the removal route is same-origin
-// only, like every other cockpit form.
-func TestRemoveCrewMemberFormCrossOrigin(t *testing.T) {
-	t.Parallel()
-	st, h, token := newTestServer(t)
-	createProject(t, st, "proj")
-	seedCrewActors(t, st, "ada")
-	if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token,
-		map[string]any{"actor": "ada"}); rr.Code != http.StatusCreated {
-		t.Fatalf("seed add status = %d, body %s", rr.Code, rr.Body.String())
-	}
-
-	rr := doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"ada"}},
-		map[string]string{"Sec-Fetch-Site": "cross-site"})
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403; body %s", rr.Code, rr.Body.String())
-	}
-	crew, err := st.ListParticipants(context.Background(), "proj")
-	if err != nil {
-		t.Fatalf("list participants: %v", err)
-	}
-	if len(crew) != 1 {
-		t.Fatalf("crew = %+v, want the member untouched", crew)
-	}
-}
-
 // validCrewRole mirrors the store vocabulary for the selection assertion
 // above; an out-of-vocabulary submission has no option to re-select.
 func validCrewRole(role string) bool {
@@ -649,29 +376,6 @@ func validCrewRole(role string) bool {
 		}
 	}
 	return false
-}
-
-// WL-337: the roster form carries a deputy checkbox that threads through to
-// recordCrewAdd the same way lead does — a deputy added from the web shows
-// the acting-lead virtual role, and a refused submit keeps the checkbox
-// state.
-func TestAddCrewMemberFormDeputy(t *testing.T) {
-	t.Parallel()
-	st, h, _, _ := newTestServerWithAdmin(t)
-	createProject(t, st, "proj")
-	seedCrewActors(t, st, "ada")
-
-	rr := doForm(t, h, "/projects/proj/crew",
-		url.Values{"actor": {"ada"}, "role": {"editor"}, "deputy": {"1"}}, nil)
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
-	}
-
-	page := doReq(t, h, "GET", "/projects/proj/crew", "", nil)
-	bodyContains(t, page.Body.String(), "Ada Person", "acting-lead")
-	if !strings.Contains(page.Body.String(), `name="deputy" type="checkbox"`) {
-		t.Fatalf("crew form is missing the deputy checkbox:\n%s", page.Body.String())
-	}
 }
 
 // TestListInstanceCrewAPI covers GET /api/v1/crew (WL-REQ-1795): the humans,

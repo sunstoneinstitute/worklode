@@ -8,6 +8,7 @@ import "strings"
 // each one to the SPA shell; the templ cockpit serves every other path.
 var spaRoutes = []string{
 	"/projects",
+	"/projects/$projectId/crew",
 }
 
 // muxPattern turns a TanStack route ("/projects/$id") into its ServeMux path

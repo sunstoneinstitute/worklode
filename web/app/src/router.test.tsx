@@ -15,8 +15,7 @@ describe("route tree", () => {
   it("matches routes.json (WL-REQ-1305)", () => {
     // Full paths are computed when a router is built from the tree
     const router = createAppRouter({ queryClient: new QueryClient() })
-    // The project layout has no page of its own until its children are ported
-    const paths = leafPaths(router.routeTree).filter((path) => path !== "/projects/$projectId")
+    const paths = leafPaths(router.routeTree)
     expect(paths.sort()).toEqual([...routes].sort())
   })
 })

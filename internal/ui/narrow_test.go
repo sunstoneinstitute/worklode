@@ -279,17 +279,6 @@ func pages(t *testing.T) map[string]string {
 				ID: "WL-MILE-2", Title: "Publication and the editorial evaluation that gates it",
 			}},
 		}),
-		"crew": Crew(CrewView{
-			Page: PageProps{Title: "Crew"}, Project: proj,
-			AddAction: "/projects/worklode/crew", RemoveAction: "/projects/worklode/crew/remove",
-			Roles: []FormOption{{Value: "member", Label: "Member", Selected: true}, {Value: "reviewer", Label: "Reviewer"}},
-			Members: []CrewMember{
-				{ActorID: "stig@sunstoneinstitute.ai", DisplayName: "Stig Bakken", Roles: []string{"lead", "reviewer"}, IsLead: true},
-				{ActorID: "claude-worker-01", DisplayName: "claude-worker-01", Roles: []string{"member"}},
-			},
-			RemoveError:      "claude-worker-01 still owns open work; reassign or close it first",
-			Responsibilities: []CrewWorkItem{{Kind: "task", ID: "WL-234", Title: longTitle, State: "in_progress"}},
-		}),
 		// One tombstone with a justification and one without, so both
 		// branches of tombstoneNote are measured.
 		"deleted": Deleted(DeletedView{

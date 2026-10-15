@@ -844,69 +844,6 @@ func (m MilestoneSection) hasChildren() bool {
 	return len(m.Tasks) > 0 || len(m.Deliverables) > 0
 }
 
-// --- crew --------------------------------------------------------------------
-
-// CrewView is a project's Crew roster (WL-REQ-123), the project-local
-// Crew destination. An empty Members slice renders an honest "No Crew yet"
-// state, never a fabricated row.
-type CrewView struct {
-	Page         PageProps
-	CanonicalURL string
-	Project      CockpitProject
-	Members      []CrewMember
-
-	// AddAction is where the add-member form POSTs. Add is what the person
-	// typed, preserved so a rejected submit comes back with the form filled
-	// in, and AddError is the one message to fix ("" on first render).
-	// Roles is the fixed role vocabulary as the dropdown's options (WL-297),
-	// with the submitted (or default) role marked selected.
-	AddAction string
-	Add       CrewFormValues
-	AddError  string
-	Roles     []FormOption
-
-	// RemoveAction is where each non-lead member's Remove button POSTs; the
-	// member is named in a hidden field. RemoveError is the one message a
-	// refused removal shows ("" otherwise), and Responsibilities is that
-	// member's open work — WL-REQ-343's responsibility review: what has to
-	// be reassigned or closed before the removal can proceed (WL-REQ-123).
-	RemoveAction     string
-	RemoveError      string
-	Responsibilities []CrewWorkItem
-}
-
-// CrewWorkItem is one open item a Crew member owns, shown when their
-// removal is refused. Kind is "task" today (internal/store's OwnedWork);
-// the responsibility review does not yet count a member's open approvals.
-type CrewWorkItem struct {
-	Kind  string
-	ID    string
-	Title string
-	State string
-}
-
-// CrewFormValues are the add-member form's fields as submitted. Role is one
-// of the fixed project-role vocabulary (WL-297) — CrewView.Roles carries the
-// menu the page offers, and the store and migration 0046's CHECK enforce the
-// same set.
-type CrewFormValues struct {
-	Actor  string
-	Role   string
-	Lead   bool
-	Deputy bool
-}
-
-// CrewMember is one Crew member: an actor holding at least one role-labelled
-// project_participants row, folded to one row per actor (internal/store's
-// ListParticipants already aggregates this). Exactly one member on a project
-// may have IsLead set (WL-REQ-343's "accountable human").
-type CrewMember struct {
-	ActorID     string
-	DisplayName string
-	Roles       []string
-	IsLead      bool
-}
-
 // --- deleted -----------------------------------------------------------------
 
 // DeletedView is a project's tombstoned tasks and documents (WL-REQ-117),

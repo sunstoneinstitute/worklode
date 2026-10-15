@@ -13,6 +13,7 @@ import { LoadError } from "@/components/ui/load-state"
 import { ProjectLayout } from "@/layouts/ProjectLayout"
 import { RootLayout } from "@/layouts/RootLayout"
 import { NotFound } from "@/pages/NotFound"
+import { ProjectCrew } from "@/pages/ProjectCrew"
 import { Projects } from "@/pages/Projects"
 
 // Shown instead of TanStack Router's default "Something went wrong!" page
@@ -52,7 +53,13 @@ const projectRoute = createRoute({
   component: ProjectLayout,
 })
 
-export const routeTree = rootRoute.addChildren([projectsRoute, projectRoute])
+const projectCrewRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "crew",
+  component: ProjectCrew,
+})
+
+export const routeTree = rootRoute.addChildren([projectsRoute, projectRoute.addChildren([projectCrewRoute])])
 
 /**
  * The app's router. Browser history by default; tests pass a memory

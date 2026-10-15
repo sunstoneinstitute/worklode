@@ -25,7 +25,7 @@ export class LoginRedirect extends HttpError {
   }
 }
 
-function failure(error: ErrorResponse, response: Response) {
+export function failure(error: ErrorResponse, response: Response) {
   return new HttpError(response.status, error.error ?? `${response.status} ${response.statusText}`.trim())
 }
 
@@ -77,6 +77,22 @@ export function useCrew() {
       const { data, error, response } = await api.GET("/api/v1/crew")
       if (error) throw failure(error, response)
       return data.crew ?? []
+    },
+  })
+}
+
+export const projectCrewKey = (id: string) => ["projects", "crew", id]
+
+/** A project's Crew roster */
+export function useProjectCrew(id: string) {
+  return useQuery({
+    queryKey: projectCrewKey(id),
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/projects/{id}/participants", {
+        params: { path: { id } },
+      })
+      if (error) throw failure(error, response)
+      return data.participants ?? []
     },
   })
 }
