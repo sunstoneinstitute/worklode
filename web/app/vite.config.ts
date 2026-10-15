@@ -20,6 +20,8 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: '../../internal/webapp/dist',
       emptyOutDir: true,
+      // The cockpit owns /assets/ on the legacy host; the SPA's files are /static/
+      assetsDir: 'static',
       // No data: URIs: the server's CSP allows fonts and images from 'self' only
       assetsInlineLimit: 0,
     },
