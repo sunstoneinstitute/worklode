@@ -101,12 +101,9 @@ spec:
                 - ALL
           resources:
             requests:
-              # WL-REQ-859's "~200 MB resident" is the model quantised; the
-              # safetensors text-embeddings-inference actually loads are fp32,
-              # 1.21 GB on disk and about that resident. Still one small pod,
-              # not a node pool — but requesting 200 Mi would get it OOM-killed
-              # on the first pass. Quantised serving (llama.cpp) is what would earn the smaller number.
-              memory: "1536Mi"
+              # fp32 weights, 1.21 GB on disk; WL-REQ-1711 sets the 2 GiB floor.
+              # Observed ~1.7Gi working set on hzdev.
+              memory: "2Gi"
               # The pod embeds continuously until the corpus index converges,
               # so it is not the bursty workload a 500m request describes: it
               # held 2.0 cores for 47 hours straight and still fell behind.

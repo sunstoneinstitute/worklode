@@ -72,9 +72,9 @@ spec:
                 - ALL
           resources:
             requests:
-              # Same memory floor as embeddings.yaml: identical fp32 weights
-              # loaded off local disk, so this is not a smaller model.
-              memory: "1536Mi"
+              # Same fp32 weights as embeddings.yaml, loaded off local disk,
+              # so not a smaller model. Above its 2Gi: observed ~2.2Gi working set on hzdev vs ~1.7Gi.
+              memory: "2304Mi"
               # Query traffic is one short text per request, not a whole
               # chunked subject, so it needs far less sustained CPU than the
               # document sidecar's 1-core request.
