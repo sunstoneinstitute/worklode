@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -668,5 +671,45 @@ func TestAddCrewMemberFormDeputy(t *testing.T) {
 	bodyContains(t, page.Body.String(), "Ada Person", "acting-lead")
 	if !strings.Contains(page.Body.String(), `name="deputy" type="checkbox"`) {
 		t.Fatalf("crew form is missing the deputy checkbox:\n%s", page.Body.String())
+	}
+}
+
+// TestListInstanceCrewAPI covers GET /api/v1/crew (WL-REQ-1795): the humans,
+// in name order, over a bearer token and over a session cookie (WL-REQ-1307).
+func TestListInstanceCrewAPI(t *testing.T) {
+	t.Parallel()
+	st, h, _, token := newTestServerWithAdmin(t)
+	seedCrewActors(t, st, "bob", "ada")
+	if err := st.CreateActor(context.Background(), "svc", "service", "Aaa Service", false); err != nil {
+		t.Fatalf("create service actor: %v", err)
+	}
+
+	rr := doReq(t, h, "GET", "/api/v1/crew", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("bearer status = %d: %s", rr.Code, rr.Body)
+	}
+	var resp model.CrewListResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	var ids []string
+	for _, m := range resp.Crew {
+		if m.Actor == "svc" {
+			t.Fatalf("service actor listed: %+v", resp.Crew)
+		}
+		ids = append(ids, m.Actor)
+	}
+	ia, ib := slices.Index(ids, "ada"), slices.Index(ids, "bob")
+	if ia < 0 || ib < 0 || ia > ib {
+		t.Fatalf("want ada before bob, got %v", ids)
+	}
+
+	_, h2, iss := newOIDCServer(t, api.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/crew", nil)
+	req.AddCookie(loginSession(t, h2, iss, "alice"))
+	rec := httptest.NewRecorder()
+	h2.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"actor":"alice"`) {
+		t.Fatalf("session: %d %s", rec.Code, rec.Body)
 	}
 }

@@ -432,6 +432,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/crew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the instance's human actors */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CrewListResponse"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/critical-path": {
         parameters: {
             query?: never;
@@ -8044,6 +8089,9 @@ export interface components {
         CreateTokenInput: {
             description?: string;
             expires_at?: null | string;
+        };
+        CrewListResponse: {
+            crew?: components["schemas"]["CrewMember"][] | null;
         };
         CrewMember: {
             actor?: string;

@@ -421,6 +421,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/merges": guardedAny(permTaskWrite),
 
 	// --- projects, actors, tokens -------------------------------------------
+	"GET /api/v1/crew":                        guarded(permProjectRead),
 	"GET /api/v1/projects":                    guardedAny(permProjectRead),
 	"GET /api/v1/projects/resolve":            guardedAny(permProjectRead),
 	"GET /api/v1/repos/branch-rules":          guardedAny(permProjectRead),
