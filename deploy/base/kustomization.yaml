@@ -230,3 +230,5 @@ configMapGenerator:
       - migrations/0108_task-due.down.sql
       - migrations/0109_project-documents.up.sql
       - migrations/0109_project-documents.down.sql
+      - migrations/NEW-ideas.up.sql
+      - migrations/NEW-ideas.down.sql
