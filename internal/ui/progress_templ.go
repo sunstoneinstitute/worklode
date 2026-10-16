@@ -868,9 +868,9 @@ func progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnable
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var39 templ.SafeURL
-		templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinURLErrs("/docs/ref/" + s.Ref)
+		templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinURLErrs("/" + s.Ref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 182, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 182, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 		if templ_7745c5c3_Err != nil {
@@ -883,7 +883,7 @@ func progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnable
 		var templ_7745c5c3_Var40 string
 		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue(progressRefTip(s.Ref, s.Title))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 182, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 182, Col: 84}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 		if templ_7745c5c3_Err != nil {
@@ -896,7 +896,7 @@ func progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnable
 		var templ_7745c5c3_Var41 string
 		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(s.Ref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 182, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 182, Col: 94}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 		if templ_7745c5c3_Err != nil {
@@ -1358,9 +1358,9 @@ func progressPlanLine(specRef string, p model.ProgressPlan, viewer string, revie
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var66 templ.SafeURL
-		templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinURLErrs("/docs/ref/" + p.Ref)
+		templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinURLErrs("/" + p.Ref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 260, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 260, Col: 23}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
 		if templ_7745c5c3_Err != nil {
@@ -1373,7 +1373,7 @@ func progressPlanLine(specRef string, p model.ProgressPlan, viewer string, revie
 		var templ_7745c5c3_Var67 string
 		templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.ResolveAttributeValue(progressRefTip(p.Ref, p.Title))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 260, Col: 89}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 260, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
 		if templ_7745c5c3_Err != nil {
@@ -1386,7 +1386,7 @@ func progressPlanLine(specRef string, p model.ProgressPlan, viewer string, revie
 		var templ_7745c5c3_Var68 string
 		templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(p.Ref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 260, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 260, Col: 90}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 		if templ_7745c5c3_Err != nil {
