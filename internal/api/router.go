@@ -102,7 +102,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /projects/{projectId}/tasks": guarded(permWebRead),
 	"GET /tasks":                      guarded(permWebRead),
 	"GET /projects/{projectId}/crew":  guarded(permWebRead),
-	"GET /projects/{id}":              guarded(permWebRead),
+	"GET /projects/{projectId}":       guarded(permWebRead),
 	"GET /projects/{id}/progress":     guarded(permWebRead),
 	// The Progress page's live update stream (WL-REQ-1339): permWebRead like the
 	// page itself, not permEventStream — a frame carries nothing the page's

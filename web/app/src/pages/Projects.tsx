@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router"
 import { useProjects } from "@/api/queries"
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table"
 import { LoadError, LoadingBlock } from "@/components/ui/load-state"
@@ -12,15 +13,14 @@ const COLUMNS: DataTableColumn<Row>[] = [
     type: "text",
     width: "w-70",
     filterable: false,
-    // A plain link: the public host redirects /projects/{id} to the legacy
-    // page until that page is ported (WL-REQ-1305).
     render: (row) => (
-      <a
-        href={`/projects/${row.id}`}
+      <Link
+        to="/projects/$projectId"
+        params={{ projectId: row.id }}
         className="underline-offset-2 transition-colors hover:text-highlight hover:underline"
       >
         {row.name}
-      </a>
+      </Link>
     ),
   },
   { key: "key", label: "Key", type: "text", width: "w-30", filterable: false },

@@ -16,9 +16,7 @@ import (
 )
 
 // TestNoPageCarriesAnInlineStyle holds the markup half of `style-src 'self'`.
-// The cockpit's mode chip used to colour itself with a style attribute; it now
-// carries a .mode-name.ok class instead. Any page reintroducing an inline
-// style — attribute or element — is invisible under the policy, so fail here
+// Any page reintroducing an inline style — attribute or element — is invisible under the policy, so fail here
 // rather than in a browser.
 func TestNoPageCarriesAnInlineStyle(t *testing.T) {
 	for name, body := range pages(t) {

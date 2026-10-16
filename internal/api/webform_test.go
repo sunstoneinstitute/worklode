@@ -338,17 +338,6 @@ func TestDeliverableFormOffersNoStateControl(t *testing.T) {
 	}
 }
 
-// TestCockpitLinksToNewTask checks the project Overview links New task to the
-// SPA's task page, which holds the new-task form (WL-REQ-1803).
-func TestCockpitLinksToNewTask(t *testing.T) {
-	t.Parallel()
-	st, h, _ := newTestServer(t)
-	createProject(t, st, "proj")
-
-	body := doReq(t, h, "GET", "/projects/proj", "", nil).Body.String()
-	bodyContains(t, body, `href="/projects/proj/tasks"`, "New task")
-}
-
 // --- JSON API ---------------------------------------------------------------
 
 // TestDeliverablesAPI checks the JSON surface the web form shares its

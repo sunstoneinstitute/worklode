@@ -463,7 +463,6 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		{"/", global, false}, {"/ideas", global, true}, {"/intake", global, true},
 		{"/reviews", global, false}, {"/deliveries", global, false},
 		{"/docs", global, true},
-		{"/projects/proj", project, true},
 		{"/projects/proj/milestones", project, true},
 		{"/projects/proj/reviews", project, true}, {"/projects/proj/decisions", project, true},
 		{"/projects/proj/documents", project, true}, {"/projects/proj/activity", project, true},
@@ -582,23 +581,6 @@ func TestProjectDocsPage(t *testing.T) {
 
 	if rr := doReq(t, h, "GET", "/projects/nosuch/documents", "", nil); rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown project status = %d, want 404; body %s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestProjectPageVariantQueryParamIgnored(t *testing.T) {
-	t.Parallel()
-	st, h, _ := newTestServer(t)
-	createProject(t, st, "proj")
-
-	for _, path := range []string{"/projects/proj", "/projects/proj?variant=A", "/projects/proj?variant=B", "/projects/proj?variant=C"} {
-		rr := doReq(t, h, "GET", path, "", nil)
-		if rr.Code != http.StatusOK {
-			t.Fatalf("%s status = %d, want 200; body %s", path, rr.Code, rr.Body.String())
-		}
-		// The mode is a pure projection of declared facts: every ?variant
-		// still renders the Operations (mode B) canvas, never a mode the
-		// query asked for.
-		bodyContains(t, rr.Body.String(), `data-panel="B"`, "Operations")
 	}
 }
 
@@ -1629,102 +1611,6 @@ func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
 	bodyContains(t, rr.Body.String(), "edge removed: WL-1 blocks WL-2")
 }
 
-func TestProjectPage(t *testing.T) {
-	t.Parallel()
-	st, h, token := newTestServer(t)
-	createProject(t, st, "proj")
-	if err := st.AddRepo(context.Background(), "proj", "acme/widgets"); err != nil {
-		t.Fatalf("add repo: %v", err)
-	}
-	if err := st.SetProjectFocus(context.Background(), "proj", []string{"security", "usability"}); err != nil {
-		t.Fatalf("set project focus: %v", err)
-	}
-	createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "Scoped task", "priority": "low", "kind": "chore",
-	})
-
-	rr := doReq(t, h, "GET", "/projects/proj", "", nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
-	}
-	body := rr.Body.String()
-	assertShell(t, body)
-	assertOneAriaCurrent(t, body)
-	bodyContains(t, body,
-		"proj", "Scoped task",
-		`<link rel="canonical" href="/projects/proj">`, // cockpit projection's canonical url
-		`data-panel="B"`,      // the Operations (mode B) canvas
-		"Operations",          // the declared-evidence Operations mode banner
-		"Active work",         // the Operations work card renders the ready task
-		"Automation boundary", // the decision rail's honest automation-boundary card
-	)
-	// Mode B has neither a repositories panel nor a ranking-focus list (its
-	// Definition-of-done panel has no backing data and is omitted too), so
-	// neither a mapped repo nor the project's steering concerns may leak into
-	// the rendered canvas — both remain covered by the JSON cockpit contract,
-	// not this page (WL-164).
-	for _, absent := range []string{"acme/widgets", "security", "usability"} {
-		if strings.Contains(body, absent) {
-			t.Errorf("project page unexpectedly rendered %q:\n%s", absent, body)
-		}
-	}
-	// Project local nav, in WL-REQ-332's order, with
-	// Milestones inserted after Crew: a milestone contains both work and
-	// deliverables (WL-REQ-120), so it sits ahead of both lists.
-	assertOrder(t, body, ">Overview<", ">Crew<", ">Milestones<", ">Tasks<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
-	assertOrder(t, body, `class="backlink"`, "All projects", ">Overview<")
-	// The cockpit is a projection, never a stored workflow field: the page
-	// must not render any of the retired/forbidden concepts. "Crew" and
-	// "Deliverable(s)" are now legitimate project-local nav labels (checked
-	// above), so only the concepts that would still be fabricated data stay
-	// forbidden here. "completion" also catches "completion_percentage"; "%"
-	// catches any percentage-based health/progress readout.
-	for _, forbidden := range []string{"%", "completion", "project health", "Approval"} {
-		if strings.Contains(body, forbidden) {
-			t.Fatalf("project page unexpectedly renders %q:\n%s", forbidden, body)
-		}
-	}
-
-	rr = doReq(t, h, "GET", "/projects/nosuch", "", nil)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("unknown project page status = %d, want 404; body %s", rr.Code, rr.Body.String())
-	}
-}
-
-// TestProjectPageOwnerAndDelegateCopy asserts the rendered Overview page's
-// Active-work row shows real owner/delegate names, distinguishing the human
-// accountable owner (Dana) from the agent that holds the lease (Agent One)
-// via the "Agent One · on behalf of Dana" who-line — never the bare actor id,
-// never conflating the two roles.
-func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
-	t.Parallel()
-	st, h, token := newTestServer(t)
-	createProject(t, st, "proj")
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "dana", "human", "Dana", false); err != nil {
-		t.Fatalf("create actor dana: %v", err)
-	}
-	agentToken := seedActor(t, st, "agent-one", "agent", "Agent One", false)
-	store.SeedCrewForTests(t, st, "proj", "dana")
-	createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "Owned and delegated", "priority": "medium", "kind": "feature",
-	})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "dana"})
-	if rr.Code != http.StatusOK {
-		t.Fatalf("assign status = %d, body %s", rr.Code, rr.Body.String())
-	}
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", agentToken, map[string]any{"worktree": "host:/wt-agent-one"})
-	if rr.Code != http.StatusOK {
-		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
-	}
-
-	rr = doReq(t, h, "GET", "/projects/proj", "", nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
-	}
-	bodyContains(t, rr.Body.String(), "Agent One", "on behalf of Dana")
-}
-
 // TestDriftPageRendersWithoutGraph holds the drift board's two standing
 // properties on a deployment with no graph-server: the backbone-authoritative
 // half still renders (200), the graph-backed half says so honestly instead of
@@ -1793,34 +1679,6 @@ func TestTaskPageOmitsAgentSessionsWhenUnheld(t *testing.T) {
 	if strings.Contains(rr.Body.String(), "Agent sessions") {
 		t.Errorf("unheld task rendered an Agent sessions card:\n%s", rr.Body.String())
 	}
-}
-
-// The project page answers "what is running across this project right now",
-// which a per-task page cannot.
-func TestProjectPageShowsAgentSessions(t *testing.T) {
-	t.Parallel()
-	st, h, token := newTestServer(t)
-	createProject(t, st, "proj")
-	createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
-	})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
-	if rr.Code != http.StatusOK {
-		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
-	}
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/agent-session", token, map[string]any{
-		"agent": "codex", "session_id": "sess-1",
-	})
-	if rr.Code != http.StatusOK {
-		t.Fatalf("agent-session status = %d, body %s", rr.Code, rr.Body.String())
-	}
-
-	rr = doReq(t, h, "GET", "/projects/proj", "", nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
-	}
-	// The row has to name its task: the page lists work from every task.
-	bodyContains(t, rr.Body.String(), "Agent sessions", "Codex", `href="/tasks/WL-1"`)
 }
 
 // TestTaskPageTruncatesLongTimelineSummary pins summarizeEntry's cut: a body
