@@ -64,6 +64,12 @@ func TestDecideRoles(t *testing.T) {
 		{"anonymous may not read the web", Subject{Via: authNone}, permWebRead, false, "unauthenticated"},
 		{"open deployment may read the web", openSubject(), permWebRead, true, "allowed"},
 		{"open deployment may write through the cockpit", openSubject(), permWebWrite, true, "allowed"},
+		{"user may read ideas", userSubject(), permIdeaRead, true, "allowed"},
+		{"user may write ideas", userSubject(), permIdeaWrite, true, "allowed"},
+		{"admin may read ideas", adminSubject(), permIdeaRead, true, "allowed"},
+		{"admin may write ideas", adminSubject(), permIdeaWrite, true, "allowed"},
+		{"anonymous may not read ideas", Subject{Via: authNone}, permIdeaRead, false, "unauthenticated"},
+		{"open deployment may read ideas", openSubject(), permIdeaRead, true, "allowed"},
 		{"public needs nothing", Subject{Via: authNone}, permPublic, true, "public"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -130,8 +136,10 @@ func TestEveryGuardedPermissionIsGranted(t *testing.T) {
 		}
 		used[g.perm] = true
 	}
+	// Granted ahead of their routes, which WL-1177 adds; delete the entry then.
+	pending := map[Permission]bool{permIdeaRead: true, permIdeaWrite: true}
 	for perm := range grants {
-		if !used[perm] {
+		if !used[perm] && !pending[perm] {
 			t.Errorf("permission %q is granted to roles but guards no route", perm)
 		}
 	}
