@@ -1050,6 +1050,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("GET /api/v1/references", s.listReferences)
 	r.api("GET /api/v1/crew", s.listCrew)
 	r.api("GET /api/v1/projects/{id}/participants", s.listCrewMembers)
+	r.api("GET /api/v1/projects/{id}/summary", s.getProjectSummary)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
 	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
