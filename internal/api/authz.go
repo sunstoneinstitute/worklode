@@ -80,6 +80,8 @@ const (
 
 	permProjectRead  Permission = "project.read"
 	permProjectAdmin Permission = "project.admin"
+	// permProjectWrite covers a project's documents register (WL-REQ-1798).
+	permProjectWrite Permission = "project.write"
 	// permProjectReport covers reporting overhead usage (WL-REQ-40): tokens
 	// spent with no task to bill to, from a main-checkout orchestration
 	// session or a worktree whose lease the reporting actor no longer held.
@@ -284,6 +286,7 @@ var grants = map[Permission][]Role{
 	permProjectRead:   {RoleUser, RoleAdmin},
 	permProjectAdmin:  {RoleAdmin},
 	permProjectReport: {RoleUser, RoleAdmin},
+	permProjectWrite:  {RoleUser, RoleAdmin},
 
 	// Declaring what a project ships is its own capability, not a flavour of
 	// task.write: WL-RULE-121 makes a deliverable a different object, and a
