@@ -153,8 +153,8 @@ Every read goes through `src/api/`:
   middleware adds `X-Requested-With: lode-web` and a JSON content type to
   every write, which the server requires of a cookie-authorized write
   (WL-REQ-1770); the browser adds `Sec-Fetch-Site`.
-- `queries.ts`: read hooks (`useMe`, `useProjects`, `useProjectCrew`, ...).
-- `mutations.ts`: write hooks, each invalidating the queries it changes. An error body is
+- `queries.ts`: read hooks (`useMe`, `useProjects`, `useProjectCrew`, `useTasks`, ...).
+- `mutations.ts`: write hooks (crew add/remove, task create/update/delete), each invalidating the queries it changes. An error body is
   `ErrorResponse` (`{ "error": string }`); a hook throws it as an
   `HttpError` carrying the status.
 - `list-mutations.ts`: optimistic create/update/delete over a `ListResource`
@@ -164,7 +164,10 @@ Every read goes through `src/api/`:
 - `query-client.ts`: a failed read is retried once, never on a 4xx.
 - `types.ts`: re-exports of the generated shapes.
 
-`queries.ts` covers only what the ported pages read. Page
+`queries.ts` covers only what the ported pages read: Projects, Crew and
+the two Tasks pages (`/tasks` and a project's tasks, with a `due` date,
+WL-REQ-1796, WL-REQ-1803). The old `/work` routes are deleted, not
+redirected. Page
 code from the `worklode-design` prototype (ideas, intake, documents, crew,
 the project summary, its optimistic list helpers) comes in when its page is
 ported, written against `schema.d.ts`. That repo's `docs/API.md` describes

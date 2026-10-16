@@ -205,6 +205,40 @@ func TestWebAppOneHost(t *testing.T) {
 		t.Errorf("participants after remove = %+v, want none", ps)
 	}
 
+	// 4c. A task's due date: set on create, listed, cleared by PATCH ""
+	// (WL-REQ-1796, WL-REQ-1803).
+	dueOf := func(id string) string {
+		t.Helper()
+		resp, body := do(http.MethodGet, "/api/v1/tasks?project=web", "", cookie)
+		wantStatus(resp, body, http.StatusOK)
+		var tl model.TaskListResponse
+		if err := json.Unmarshal([]byte(body), &tl); err != nil {
+			t.Fatalf("decode tasks: %v (body %s)", err, body)
+		}
+		for _, tk := range tl.Tasks {
+			if tk.ID == id {
+				return tk.Due
+			}
+		}
+		t.Fatalf("task %s missing from GET /api/v1/tasks?project=web", id)
+		return ""
+	}
+	resp, body = do(http.MethodPost, "/api/v1/tasks",
+		`{"project":"web","title":"Due soon","priority":"medium","kind":"feature","due":"2026-12-31"}`, webWrite)
+	wantStatus(resp, body, http.StatusCreated)
+	var dueTask model.Task
+	if err := json.Unmarshal([]byte(body), &dueTask); err != nil {
+		t.Fatalf("decode created task: %v (body %s)", err, body)
+	}
+	if got := dueOf(dueTask.ID); got != "2026-12-31" {
+		t.Errorf("listed due = %q, want 2026-12-31", got)
+	}
+	resp, body = do(http.MethodPatch, "/api/v1/tasks/"+dueTask.ID, `{"due":""}`, webWrite)
+	wantStatus(resp, body, http.StatusOK)
+	if got := dueOf(dueTask.ID); got != "" {
+		t.Errorf("due after PATCH \"\" = %q, want cleared", got)
+	}
+
 	// 5. /static/ belongs to the SPA, /assets/ to the templ cockpit.
 	resp, body = do(http.MethodGet, "/static/nope.js", "", nil)
 	wantStatus(resp, body, http.StatusNotFound)
