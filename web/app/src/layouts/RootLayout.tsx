@@ -1,6 +1,7 @@
 import { Outlet, useRouterState } from "@tanstack/react-router"
 import { Header } from "@/components/Header"
 import { MobileMenu } from "@/components/MobileMenu"
+import { Toaster } from "@/components/ui/sonner"
 import { useHeaderScroll } from "@/hooks/use-header-scroll"
 import { useMobileMenu } from "@/hooks/use-mobile-menu"
 
@@ -15,6 +16,7 @@ export function RootLayout() {
       <Header menuOpen={menu.open} onToggleMenu={menu.toggle} />
       <MobileMenu onNavigate={menu.close} />
       <Outlet />
+      <Toaster />
     </>
   )
 }
