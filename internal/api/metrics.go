@@ -88,12 +88,6 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Home page renders, by mode (" + strings.Join(homeRenderModes, ", ") +
 			"). A rising \"empty\" share means people are landing on a Home with nothing on it, and a stuck \"open\" share on an instance that has a login provider means requests are arriving unauthenticated. Bounded by construction: no project or task id is a label here.",
 	}, []string{"mode"})
-	s.runBoardRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "worklode_web_run_board_renders_total",
-		Help: "Project run board page renders (GET /projects/{id}/work), by outcome (" +
-			strings.Join(runBoardRenderOutcomes, ", ") +
-			"). A rising \"empty\" share means projects are landing on a run board with no live work. Bounded by construction: no project or task id is a label here.",
-	}, []string{"outcome"})
 	s.spaRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_spa_requests_total",
 		Help: "Requests the SPA handler answered on the public host (WL-REQ-1304), by outcome (" +
@@ -158,7 +152,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
-		Help: "Web UI write-form submissions, by form (task, deliverable, milestone_reference) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission.",
+		Help: "Web UI write-form submissions, by form (deliverable, task_restore, doc_restore, milestone_reference) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission.",
 	}, []string{"form", "outcome"})
 	s.progressWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_progress_writes_total",
@@ -368,7 +362,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.runBoardRenders, s.spaRequests, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions, s.apiSessionRequests,
+		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.spaRequests, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions, s.apiSessionRequests,
 		s.approvalDecisions, s.approvalActs, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
@@ -444,9 +438,6 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	// Both run board outcomes, so an instance with no live work anywhere
 	// reads as a flat zero rather than as no-data.
-	for _, outcome := range runBoardRenderOutcomes {
-		s.runBoardRenders.WithLabelValues(outcome)
-	}
 	for _, outcome := range spaOutcomes {
 		s.spaRequests.WithLabelValues(outcome)
 	}
@@ -455,7 +446,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, outcome := range inboxRenderOutcomes {
 		s.inboxRenders.WithLabelValues(outcome)
 	}
-	for _, form := range []string{"task", "deliverable",
+	for _, form := range []string{"deliverable",
 		formRestoreTask, formRestoreDoc, formMilestoneRef} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
@@ -938,30 +929,11 @@ func (s *server) observeHomeRender(mode string) {
 	s.homeRenders.WithLabelValues(mode).Inc()
 }
 
-// The run board's two render outcomes (see runboard.go's runBoardPage),
-// which are also this metric's only label values: "empty" when
-// assembleRunBoard found nothing to group, "rendered" otherwise.
-const (
-	runBoardRenderEmpty    = "empty"
-	runBoardRenderRendered = "rendered"
-)
-
-var runBoardRenderOutcomes = []string{runBoardRenderEmpty, runBoardRenderRendered}
-
 // apiSessionRequestOutcomes are the bounded label values of
 // worklode_api_session_requests_total.
 var apiSessionRequestOutcomes = []string{
 	"allowed", "unauthenticated", "forbidden", "session_required",
 	"refused_origin", "refused_header", "refused_content_type",
-}
-
-// observeRunBoardRender records one project run board page render, by
-// outcome. Nil-safe: tests build a *server directly without initMetrics.
-func (s *server) observeRunBoardRender(outcome string) {
-	if s.runBoardRenders == nil {
-		return
-	}
-	s.runBoardRenders.WithLabelValues(outcome).Inc()
 }
 
 // The SPA handler's outcomes (spa.go): "page" for the shell, "asset"/

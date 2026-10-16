@@ -126,8 +126,9 @@ any future page:
 
 `src/router.tsx` declares every route in code. URLs are real paths
 (browser history), and `<Link to="...">` is typed, so a link to a missing
-route fails the type check. The pages are `/projects` and
-`/projects/$projectId/crew`; anything else renders `NotFound`. `src/routes.json` lists the same paths for the Go
+route fails the type check. The pages are `/projects`, `/tasks`,
+`/projects/$projectId/crew` and `/projects/$projectId/tasks`; anything else
+renders `NotFound`. `src/routes.json` lists the same paths for the Go
 server (WL-REQ-1305), and `src/router.test.tsx` fails when the tree and
 the file disagree. Add a page to both, and to `spaRoutes` in
 `internal/api/spa_routes.go`, which routes it to the SPA shell on the same

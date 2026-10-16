@@ -3,7 +3,6 @@ package api_test
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 )
@@ -69,36 +68,6 @@ func TestCreateTaskUnknownKindStays422(t *testing.T) {
 	// on.
 	if !strings.Contains(metrics, `worklode_task_kind_alias_uses_total{alias="spec",surface="create"} 0`) {
 		t.Errorf("alias counter is not pre-initialised to zero: %s", metrics)
-	}
-}
-
-// TestCreateTaskFromFormAliasesDeprecatedKind proves the web form normalizes
-// "spec" the same way the JSON API does, and counts the alias use on the
-// web_form surface.
-func TestCreateTaskFromFormAliasesDeprecatedKind(t *testing.T) {
-	t.Parallel()
-	st, h, admin, _ := newTestServerWithAdmin(t)
-	createProject(t, st, "proj")
-
-	rr := doForm(t, h, "/projects/proj/tasks", url.Values{
-		"title":    {"Old spelling via form"},
-		"priority": {"high"},
-		"kind":     {"spec"},
-	}, nil)
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
-	}
-	task, err := st.GetTask(context.Background(), "WL-1")
-	if err != nil {
-		t.Fatalf("get created task: %v", err)
-	}
-	if task.Kind != "design" {
-		t.Fatalf("kind = %q, want design", task.Kind)
-	}
-
-	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
-	if !strings.Contains(metrics, `worklode_task_kind_alias_uses_total{alias="spec",surface="web_form"} 1`) {
-		t.Errorf("metrics missing kind alias counter: %s", metrics)
 	}
 }
 

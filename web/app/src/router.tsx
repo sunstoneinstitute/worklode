@@ -14,7 +14,9 @@ import { ProjectLayout } from "@/layouts/ProjectLayout"
 import { RootLayout } from "@/layouts/RootLayout"
 import { NotFound } from "@/pages/NotFound"
 import { ProjectCrew } from "@/pages/ProjectCrew"
+import { ProjectTasks } from "@/pages/ProjectTasks"
 import { Projects } from "@/pages/Projects"
+import { Tasks } from "@/pages/Tasks"
 
 // Shown instead of TanStack Router's default "Something went wrong!" page
 // when the root loader (fetching whoami, below) fails. Retrying re-runs
@@ -46,6 +48,13 @@ const projectsRoute = createRoute({
   validateSearch: coerceSearch,
 })
 
+const tasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "tasks",
+  component: Tasks,
+  validateSearch: coerceSearch,
+})
+
 // Pages under a project hang off this route as they are ported
 const projectRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -59,7 +68,18 @@ const projectCrewRoute = createRoute({
   component: ProjectCrew,
 })
 
-export const routeTree = rootRoute.addChildren([projectsRoute, projectRoute.addChildren([projectCrewRoute])])
+const projectTasksRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "tasks",
+  component: ProjectTasks,
+  validateSearch: coerceSearch,
+})
+
+export const routeTree = rootRoute.addChildren([
+  projectsRoute,
+  tasksRoute,
+  projectRoute.addChildren([projectCrewRoute, projectTasksRoute]),
+])
 
 /**
  * The app's router. Browser history by default; tests pass a memory

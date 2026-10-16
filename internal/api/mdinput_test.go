@@ -56,12 +56,12 @@ func TestDictateUnconfigured(t *testing.T) {
 		t.Fatalf("unconfigured dictate status = %d, want 503; body %s", rr.Code, rr.Body.String())
 	}
 
-	page := doReq(t, h, "GET", "/projects/proj/tasks/new", "", nil).Body.String()
+	page := doReq(t, h, "GET", "/projects/proj/deliverables/new", "", nil).Body.String()
 	if strings.Contains(page, "data-md-dictate") {
 		t.Errorf("unconfigured instance renders the dictation button")
 	}
 	if !strings.Contains(page, "data-mdinput") || !strings.Contains(page, "data-md-preview") {
-		t.Errorf("task form is missing the MarkdownInput component:\n%s", page)
+		t.Errorf("deliverable form is missing the MarkdownInput component:\n%s", page)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestDictateProxiesToProvider(t *testing.T) {
 	}
 
 	// The configured instance renders the microphone.
-	page := doReq(t, h, "GET", "/projects/proj/tasks/new", "", nil).Body.String()
+	page := doReq(t, h, "GET", "/projects/proj/deliverables/new", "", nil).Body.String()
 	if !strings.Contains(page, "data-md-dictate") {
 		t.Errorf("configured instance renders no dictation button:\n%s", page)
 	}

@@ -10,7 +10,6 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -47,31 +46,6 @@ func TestEventPayloadTaskCreated(t *testing.T) {
 		t.Fatalf(`payload["task"] = %v, want %q`, payload["task"], id)
 	}
 	if payload["project"] != "proj" || payload["title"] != "First task" {
-		t.Fatalf("payload missing pre-existing fields: %v", payload)
-	}
-}
-
-// TestEventPayloadTaskCreatedFromWeb is TestEventPayloadTaskCreated's
-// counterpart for the "web" source (webform.go's recordFormTask), which also
-// merges "task" in via AttributeEventToTask after the id is minted.
-func TestEventPayloadTaskCreatedFromWeb(t *testing.T) {
-	t.Parallel()
-	st, h, _ := newTestServer(t)
-	createProject(t, st, "proj")
-
-	rr := doForm(t, h, "/projects/proj/tasks", url.Values{
-		"title": {"Wire the intake form"}, "priority": {"high"}, "kind": {"feature"},
-	}, nil)
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
-	}
-
-	events := storeEventsOfType(t, st, "task.created", 1)
-	payload := decodePayload(t, events[len(events)-1].Payload)
-	if payload["task"] != "WL-1" {
-		t.Fatalf(`payload["task"] = %v, want "WL-1"`, payload["task"])
-	}
-	if payload["title"] != "Wire the intake form" {
 		t.Fatalf("payload missing pre-existing fields: %v", payload)
 	}
 }

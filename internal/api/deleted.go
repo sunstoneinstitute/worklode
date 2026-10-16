@@ -165,7 +165,7 @@ func (s *server) renderRestoreRefusal(w http.ResponseWriter, r *http.Request,
 }
 
 // Form names for worklode_web_form_submissions_total. Bounded label values,
-// one per POST handler, matching the "task"/"deliverable" naming
+// one per POST handler, matching the "deliverable" naming
 // the other forms use.
 const (
 	formRestoreTask = "task_restore"

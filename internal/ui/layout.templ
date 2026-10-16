@@ -156,7 +156,7 @@ templ globalIcon(key string) {
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4"></path><path d="M12 3a6 6 0 0 0-3.2 11.1c.5.4.9 1 .9 1.7v.7h4.6v-.7c0-.7.4-1.3.9-1.7A6 6 0 0 0 12 3z"></path></svg>
 		case "intake":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M4 14h4l2 3h4l2-3h4"></path></svg>
-		case "work":
+		case "tasks":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"></path><path d="M4.5 6l1 1 2-2M4.5 12l1 1 2-2M4.5 18l1 1 2-2"></path></svg>
 		case "projects":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"></path></svg>
@@ -175,7 +175,7 @@ templ menuIcon() {
 // primaryNav is the Primary nav landmark carrying the five global
 // destinations in the exact order
 // WL-REQ-331 requires (Ideas,
-// Intake, Projects, Work, Knowledge), marking the one matching active as both
+// Intake, Projects, Tasks, Knowledge), marking the one matching active as both
 // aria-current="page" and .active. Home, Reviews and Deliveries left
 // WL-REQ-331's list, keeping their routes and pages. Page renders this
 // inside the top bar, so global navigation is reachable everywhere from one
@@ -194,7 +194,7 @@ templ primaryNav(active string) {
 		@globalLink("/ideas", "Ideas", "ideas", active, "primary")
 		@globalLink("/intake", "Intake", "intake", active, "secondary")
 		@globalLink("/projects", "Projects", "projects", active, "primary")
-		@globalLink("/work", "Work", "work", active, "primary")
+		@globalLink("/tasks", "Tasks", "tasks", active, "primary")
 		@globalLink("/docs", "Knowledge", "knowledge", active, "secondary")
 		<button type="button" class={ "tab-more", templ.KV("active", active == "intake" || active == "knowledge") } id="more-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="global-nav">
 			<span class="navicon" aria-hidden="true">
@@ -289,15 +289,15 @@ templ modePillIcon() {
 }
 
 // localNav renders the project-local destinations in WL-REQ-332's order
-// (Overview, Crew, Work, Deliverables, Reviews, Decisions,
+// (Overview, Crew, Tasks, Deliverables, Reviews, Decisions,
 // Documents, Activity), marking the item matching active as
 // aria-current="page".
 //
-// Progress sits after Work and only when the project has a spec, as
+// Progress sits after Tasks and only when the project has a spec, as
 // WL-REQ-332 lists it, and a project with no spec has no Progress page
 // (its route 404s), so linking to it would be a dead entry.
 //
-// Milestones sits between Crew and Work, ahead of that list: a milestone
+// Milestones sits between Crew and Tasks, ahead of that list: a milestone
 // contains both work and deliverables (WL-REQ-120), so it reads before both
 // lists. WL-REQ-331 is owed the same amendment Deleted is (docs/follow-ups.md).
 //
@@ -309,7 +309,7 @@ templ localNav(p CockpitProject, active string) {
 	@navLink("/projects/"+p.ID, "Overview", "overview", active)
 	@navLink("/projects/"+p.ID+"/crew", "Crew", "crew", active)
 	@navLink("/projects/"+p.ID+"/milestones", "Milestones", "milestones", active)
-	@navLink("/projects/"+p.ID+"/work", "Work", "work", active)
+	@navLink("/projects/"+p.ID+"/tasks", "Tasks", "tasks", active)
 	if p.HasSpecs {
 		@navLink("/projects/"+p.ID+"/progress", "Progress", "progress", active)
 	}

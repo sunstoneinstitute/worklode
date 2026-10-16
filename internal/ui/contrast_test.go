@@ -334,9 +334,9 @@ func TestControlsOutlineWithTheControlToken(t *testing.T) {
 	}
 }
 
-// --- the two creation forms -------------------------------------------------
+// --- the creation form ----------------------------------------------------
 
-// formPages renders both creation forms in both states — first render and
+// formPages renders the creation form in both states — first render and
 // rejected submit — because the accessible behaviour of a rejected submit is
 // the half that had nothing holding it.
 func formPages(t *testing.T) map[string]string {
@@ -345,10 +345,7 @@ func formPages(t *testing.T) map[string]string {
 	shell := func(errMsg string) FormShell {
 		return FormShell{Page: PageProps{Title: "t"}, Project: proj, Action: "/a", CancelURL: "/c", Error: errMsg}
 	}
-	opts := []FormOption{{Value: "high", Label: "High", Selected: true}}
 	comps := map[string]templ.Component{
-		"newtask":           NewTask(NewTaskView{Form: shell(""), Priorities: opts, Kinds: opts, Concerns: opts}),
-		"newtask/error":     NewTask(NewTaskView{Form: shell("A title is required."), Priorities: opts, Kinds: opts, Concerns: opts}),
 		"deliverable":       NewDeliverable(NewDeliverableView{Form: shell("")}),
 		"deliverable/error": NewDeliverable(NewDeliverableView{Form: shell("A name is required.")}),
 	}
@@ -463,7 +460,7 @@ func TestRejectedSubmitAnnouncesItself(t *testing.T) {
 	}
 	// The first field keeps its autofocus on a clean render — the message is
 	// only meant to take it away when there is a message.
-	if !strings.Contains(pages["newtask"], `id="title"`) || !strings.Contains(pages["newtask"], "autofocus") {
-		t.Error("newtask: the title field should still autofocus on a first render")
+	if !strings.Contains(pages["deliverable"], `id="name"`) || !strings.Contains(pages["deliverable"], "autofocus") {
+		t.Error("deliverable: the name field should still autofocus on a first render")
 	}
 }

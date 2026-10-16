@@ -154,21 +154,21 @@ func TestWebGuardAllowsLoggedInUser(t *testing.T) {
 	if rr := withSession(t, h, "GET", "/projects/proj", session, ""); rr.Code != http.StatusOK {
 		t.Fatalf("cockpit with session = %d, want 200; body %s", rr.Code, rr.Body.String())
 	}
-	if rr := withSession(t, h, "GET", "/projects/proj/tasks/new", session, ""); rr.Code != http.StatusOK {
-		t.Fatalf("new-task form with session = %d, want 200", rr.Code)
+	if rr := withSession(t, h, "GET", "/projects/proj/deliverables/new", session, ""); rr.Code != http.StatusOK {
+		t.Fatalf("deliverable form with session = %d, want 200", rr.Code)
 	}
 
-	form := url.Values{"title": {"Signed in"}, "priority": {"high"}, "kind": {"feature"}}
-	rr := withSession(t, h, "POST", "/projects/proj/tasks", session, form.Encode())
+	form := url.Values{"name": {"Signed in"}, "label": {"on"}}
+	rr := withSession(t, h, "POST", "/projects/proj/deliverables", session, form.Encode())
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("form submit with session = %d, want 303; body %s", rr.Code, rr.Body.String())
 	}
-	task, err := st.GetTask(ctx, "WL-1")
-	if err != nil {
-		t.Fatalf("get created task: %v", err)
+	items, err := st.ListDeliverables(ctx, "proj")
+	if err != nil || len(items) != 1 {
+		t.Fatalf("list deliverables = %v, %v; want the one created", items, err)
 	}
-	if task.CreatedBy != "dana" {
-		t.Errorf("created_by = %q, want dana — the session's actor", task.CreatedBy)
+	if items[0].CreatedBy != "dana" {
+		t.Errorf("created_by = %q, want dana — the session's actor", items[0].CreatedBy)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestWebGuardRedirectsAnonymous(t *testing.T) {
 	st, h, _ := newOIDCServer(t, api.Config{})
 	createProject(t, st, "proj")
 
-	for _, path := range []string{"/", "/projects/proj", "/projects/proj/tasks/new"} {
+	for _, path := range []string{"/", "/projects/proj", "/projects/proj/deliverables/new"} {
 		rr := withSession(t, h, "GET", path, "", "")
 		if rr.Code != http.StatusFound {
 			t.Errorf("GET %s anonymously = %d, want 302", path, rr.Code)
@@ -239,19 +239,19 @@ func TestOpenDeploymentRequiresOptIn(t *testing.T) {
 }
 
 // TestOpenDeploymentRefusesWrites: the creation forms sit behind the same
-// guard, so a closed instance must not accept an unattributable task either.
+// guard, so a closed instance must not accept an unattributable write either.
 func TestOpenDeploymentRefusesWrites(t *testing.T) {
 	t.Parallel()
 	st, h, _ := newTestServerWithConfig(t, api.Config{})
 	createProject(t, st, "proj")
 
-	form := url.Values{"title": {"Anonymous"}, "priority": {"low"}, "kind": {"chore"}}
-	rr := withSession(t, h, "POST", "/projects/proj/tasks", "", form.Encode())
+	form := url.Values{"name": {"Anonymous"}, "label": {"on"}}
+	rr := withSession(t, h, "POST", "/projects/proj/deliverables", "", form.Encode())
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("form submit with no provider and no opt-in = %d, want 503", rr.Code)
 	}
-	if _, err := st.GetTask(context.Background(), "WL-1"); err == nil {
-		t.Fatal("a task was created by an anonymous caller on a closed instance")
+	if items, _ := st.ListDeliverables(context.Background(), "proj"); len(items) != 0 {
+		t.Fatal("a deliverable was created by an anonymous caller on a closed instance")
 	}
 }
 
@@ -266,17 +266,17 @@ func TestOpenDeploymentOptedIn(t *testing.T) {
 	if rr := doReq(t, h, "GET", "/projects/proj", "", nil); rr.Code != http.StatusOK {
 		t.Fatalf("cockpit on an opted-in open deployment = %d, want 200", rr.Code)
 	}
-	form := url.Values{"title": {"Anonymous"}, "priority": {"low"}, "kind": {"chore"}}
-	rr := withSession(t, h, "POST", "/projects/proj/tasks", "", form.Encode())
+	form := url.Values{"name": {"Anonymous"}, "label": {"on"}}
+	rr := withSession(t, h, "POST", "/projects/proj/deliverables", "", form.Encode())
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("form submit = %d, want 303; body %s", rr.Code, rr.Body.String())
 	}
-	task, err := st.GetTask(context.Background(), "WL-1")
-	if err != nil {
-		t.Fatalf("get created task: %v", err)
+	items, err := st.ListDeliverables(context.Background(), "proj")
+	if err != nil || len(items) != 1 {
+		t.Fatalf("list deliverables = %v, %v; want the one created", items, err)
 	}
-	if task.CreatedBy != "" {
-		t.Errorf("created_by = %q, want empty — an open deployment has no actor to attribute to", task.CreatedBy)
+	if items[0].CreatedBy != "" {
+		t.Errorf("created_by = %q, want empty — an open deployment has no actor to attribute to", items[0].CreatedBy)
 	}
 }
 

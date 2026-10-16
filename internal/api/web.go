@@ -369,28 +369,6 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
-// workPage handles GET /work: task-oriented saved queries and the ready
-// frontier (WL-REQ-331). Part 1 renders the org-wide board, built from the
-// same assembleBoard used by GET /api/v1/board, plus a count of new
-// (untriaged) inbox issues.
-func (s *server) workPage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	board, err := s.assembleBoard(ctx, "")
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	newIssues, err := s.st.CountIssues(ctx, "new")
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-
-	view := boardView(board, newIssues, "worklode: work", "work")
-	s.renderWeb(w, r, http.StatusOK, "board page", ui.Board(view))
-}
-
 // driftPage handles GET /drift: WL-SPEC-82's read surface as a page — the ready
 // frontier and the critical path from the backbone, violations, stale intent
 // and gaps from the knowledge graph. It is read-only: the page offers no act,
