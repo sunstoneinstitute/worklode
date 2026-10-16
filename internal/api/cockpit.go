@@ -1,6 +1,5 @@
 // cockpit.go implements the project cockpit: GET /api/v1/projects/{id}/cockpit
-// and the assembler shared with the project web page (see projectPage in
-// web.go). The cockpit is a projection, never a stored workflow field —
+// and its assembler, which the project placeholder pages also use. The cockpit is a projection, never a stored workflow field —
 // selectMode is a pure function of declared facts, and assembleProjectCockpit
 // builds its output fresh from existing store readers on every call (WL-SPEC-82).
 // Work items, owner/delegate, evidence, blockers, repositories, and

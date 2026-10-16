@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest"
 import routes from "@/routes.json"
 import { createAppRouter } from "@/router"
 
-// Every leaf route's full path, the list the Go server keeps in spaRoutes
+// Every leaf route's full path, the list the Go server keeps in spaRoutes.
+// An index route's full path ends in "/", which the server's path does not.
 function leafPaths(route: AnyRoute): string[] {
   const children = (route.children ?? []) as AnyRoute[]
-  if (children.length === 0) return [route.fullPath]
+  if (children.length === 0) return [route.fullPath.replace(/(.)\/$/, "$1")]
   return children.flatMap(leafPaths)
 }
 

@@ -242,22 +242,6 @@ func agentSessionRow(a model.AgentSession, now time.Time) ui.AgentSessionRow {
 	}
 }
 
-// projectAgentSessionRows is agentSessionRows for the cockpit, where a session
-// has to name the task it is on — the project page lists work from every task,
-// so a row without one places nothing.
-func projectAgentSessionRows(sessions []store.ProjectAgentSession, now time.Time) []ui.AgentSessionRow {
-	out := make([]ui.AgentSessionRow, 0, len(sessions))
-	for _, p := range sessions {
-		row := agentSessionRow(p.AgentSession, now)
-		row.ActorID = p.ActorID
-		row.Task = p.TaskID
-		row.TaskTitle = p.TaskTitle
-		row.TaskURL = "/tasks/" + p.TaskID
-		out = append(out, row)
-	}
-	return out
-}
-
 // activityRows maps a task's activity log into rendered rows (WL-REQ-1237).
 // Everything a row shows is derived here: internal/ui takes pre-formatted
 // rows and reads no attribute of its own.
@@ -397,57 +381,6 @@ func placeholderProjectView(c *model.CockpitProjection, heading, message, sectio
 		Project:       &proj,
 		CanonicalURL:  c.CanonicalURL,
 		ActiveSection: section,
-	}
-}
-
-// cockpitView maps the project cockpit projection into the ui overview view.
-// It drops the projection's RankingFocus and Repositories: mode B renders no
-// ranking-focus list and no repositories panel, and mapping a fact no markup
-// reads only makes the view look richer than the page is (WL-164). Both stay
-// on the JSON cockpit, which is where they are contracted.
-func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
-	return ui.CockpitView{
-		Page:         ui.PageProps{Title: title},
-		CanonicalURL: c.CanonicalURL,
-		NewTaskURL:   "/projects/" + c.Project.ID + "/tasks",
-		Project:      cockpitProjectInMode(c.Project, c.Mode),
-		PinnedFocus:  cockpitFocus(c.PinnedFocus),
-		NextDecision: cockpitDecision(c.NextDecision),
-		Work: ui.CockpitWork{
-			InProgress: workRows(c.Work.InProgress),
-			InReview:   workRows(c.Work.InReview),
-			Ready:      workRows(c.Work.Ready),
-			Blocked:    workRows(c.Work.Blocked),
-		},
-		SecondaryConcerns: cockpitConcerns(c.SecondaryConcerns),
-		CostTotals:        cockpitCostTotals(c.Cost),
-	}
-}
-
-// rallyCardView maps an active rally task, its direct member count
-// (RallyMemberCount) and its open-blocker tree (BlockerTree) into the
-// cockpit's rally card (WL-667). tree's depth-1 nodes are exactly those same
-// members still open, so they become Members and Done falls out as total
-// minus len(Members). Two rules keep that subtraction non-negative, and both
-// are enforced: a rally never carries a plan_doc (planMintableKinds excludes
-// rally, and checkKindRetag refuses a retag of a task that has one), so
-// BlockerTree's plan-blocking branch contributes nothing; and both readers
-// skip tombstoned tasks.
-func rallyCardView(rally *model.Task, total int, tree model.BlockerTree) ui.CockpitRally {
-	var open []ui.CockpitRallyMember
-	for _, b := range tree.Blockers {
-		if b.Depth != 1 {
-			continue
-		}
-		open = append(open, ui.CockpitRallyMember{ID: b.ID, Title: b.Title, URL: "/tasks/" + b.ID})
-	}
-	return ui.CockpitRally{
-		ID:      rally.ID,
-		Title:   rally.Title,
-		URL:     "/tasks/" + rally.ID,
-		Done:    total - len(open),
-		Total:   total,
-		Members: open,
 	}
 }
 
@@ -756,99 +689,9 @@ func formOptionLabel(value string) string {
 	return strings.ToUpper(value[:1]) + value[1:]
 }
 
-// cockpitProject maps the project identity, reused by the cockpit and the
-// project placeholder sidebar. It leaves the mode empty, so those pages'
-// sidebars render no mode pill.
+// cockpitProject maps the project identity shown in the project sidebar.
 func cockpitProject(p model.CockpitProject) ui.CockpitProject {
 	return ui.CockpitProject{ID: p.ID, Name: p.Name, Key: p.Key}
-}
-
-// cockpitProjectInMode is cockpitProject plus the operating mode, which only
-// the cockpit knows and only its sidebar renders.
-func cockpitProjectInMode(p model.CockpitProject, m model.CockpitMode) ui.CockpitProject {
-	v := cockpitProject(p)
-	v.ModeName = m.Name
-	v.ModeBasis = m.Basis.Summary
-	return v
-}
-
-// cockpitFocus maps the pinned-focus note, preserving nil (nothing pinned).
-// The pinner's display name flattens to "" when the actor is unknown.
-func cockpitFocus(f *model.Focus) *ui.CockpitFocus {
-	if f == nil {
-		return nil
-	}
-	cf := &ui.CockpitFocus{Note: f.Note, PinnedAt: f.PinnedAt}
-	if f.PinnedBy != nil {
-		cf.PinnedBy = f.PinnedBy.Name
-	}
-	return cf
-}
-
-// cockpitDecision maps the next governed decision, preserving nil (no decision
-// ready).
-func cockpitDecision(d *model.CockpitDecision) *ui.CockpitDecision {
-	if d == nil {
-		return nil
-	}
-	return &ui.CockpitDecision{
-		Title:       d.Title,
-		Accountable: d.Accountable,
-		Readiness:   d.Readiness,
-	}
-}
-
-// workRows maps one cockpit work bucket, flattening owner/delegate to their
-// display names ("" when absent).
-func workRows(items []model.CockpitWorkItem) []ui.WorkRow {
-	out := make([]ui.WorkRow, 0, len(items))
-	for _, it := range items {
-		wr := ui.WorkRow{
-			ID:               it.ID,
-			Title:            it.Title,
-			State:            it.State,
-			Priority:         it.Priority,
-			URL:              it.URL,
-			EvidenceCategory: it.StatusEvidence.Category,
-			EvidenceSummary:  it.StatusEvidence.Summary,
-		}
-		if it.Owner != nil {
-			wr.Owner = it.Owner.Name
-		}
-		if it.Delegate != nil {
-			wr.Delegate = it.Delegate.Name
-		}
-		out = append(out, wr)
-	}
-	return out
-}
-
-// cockpitConcerns maps the secondary concerns (what holds a ready task).
-func cockpitConcerns(items []model.SecondaryConcern) []ui.CockpitConcern {
-	out := make([]ui.CockpitConcern, 0, len(items))
-	for _, c := range items {
-		out = append(out, ui.CockpitConcern{
-			Title:           c.Title,
-			URL:             c.URL,
-			EvidenceSummary: c.Evidence.Summary,
-		})
-	}
-	return out
-}
-
-// cockpitCostTotals maps the per-currency cost totals for the cockpit's cost
-// window.
-func cockpitCostTotals(c model.CostReport) []ui.CockpitCostTotal {
-	out := make([]ui.CockpitCostTotal, 0, len(c.Totals))
-	for _, t := range c.Totals {
-		out = append(out, ui.CockpitCostTotal{
-			Currency:           t.Currency,
-			CostAmount:         t.CostAmount,
-			UnpricedTokens:     t.UnpricedTokens,
-			OverheadCostAmount: t.Overhead.CostAmount,
-		})
-	}
-	return out
 }
 
 // taskView maps one task, its edges and its timeline into the task page's

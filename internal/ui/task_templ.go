@@ -1467,7 +1467,7 @@ func taskEdgeID(label, id string) templ.Component {
 // wrapper's aria-label the thing assistive tech announces instead of trying
 // to describe the SVG. The glyphs are hand-drawn to match this file's
 // existing 24x24, stroke=currentColor line-icon convention (see
-// internal/ui/cockpit.templ, internal/ui/layout.templ) rather than
+// internal/ui/layout.templ) rather than
 // vendoring Google's Material Symbols font/glyph set, which would introduce
 // a second icon convention and (for the font path) an external request this
 // self-contained, CSP-friendly UI does not otherwise make.
