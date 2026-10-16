@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS tasks_due_idx;
+ALTER TABLE tasks DROP COLUMN IF EXISTS due;

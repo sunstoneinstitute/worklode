@@ -226,3 +226,5 @@ configMapGenerator:
       - migrations/0106_spec-template-text.down.sql
       - migrations/0107_derived-section-numbers.up.sql
       - migrations/0107_derived-section-numbers.down.sql
+      - migrations/0108_task-due.up.sql
+      - migrations/0108_task-due.down.sql
