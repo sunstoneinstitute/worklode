@@ -76,6 +76,22 @@ func TestRuleRefAutolinkInPage(t *testing.T) {
 	}
 }
 
+// TestRuleRefAutolinkInOwnHeading: the ref in the heading of the section that
+// arranges it links to the rule, since an in-page link would point at itself.
+func TestRuleRefAutolinkInOwnHeading(t *testing.T) {
+	keys := ProjectKeys{}.InPage(map[string]string{"WL-REQ-13": "sec-4", "WL-REQ-14": "sec-5"})
+	got := string(DocBody(keys, "## WL-REQ-13: Title, see WL-REQ-14 {#sec-4}\n\nWL-REQ-13 again."))
+	for _, want := range []string{
+		`<a class="ref-link" href="/rules/WL-REQ-13" rel="nofollow">WL-REQ-13</a>: Title`,
+		`<a class="ref-link" href="#sec-5" rel="nofollow">WL-REQ-14</a>`,
+		`<a class="ref-link" href="#sec-4" rel="nofollow">WL-REQ-13</a> again`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
+	}
+}
+
 func TestDocRefAutolinkLeavesCodeAndLinks(t *testing.T) {
 	got := string(Body(NewProjectKeys([]string{"WL"}).For("WL"), "Keep `WL-SPEC-9` and [text](/docs/3) with spec 5 §1 inside: [spec 7 §2](/x).\n\n```\nspec 042 §10\n```"))
 	if strings.Contains(got, "/WL-SPEC-9") {
