@@ -96,14 +96,18 @@ jobs:
             ${{ runner.os }}-go-
       - name: go build
         run: make build
+      # PRs reuse cached test results (TESTCOUNT empty); the merge queue
+      # reruns everything against the current services. See the Makefile.
       - name: go test
         run: make test
         env:
           TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
+          TESTCOUNT: ${{ github.event_name != 'pull_request' && '-count=1' || '' }}
       - name: e2e smoke test
         run: make test-e2e
         env:
           TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
+          TESTCOUNT: ${{ github.event_name != 'pull_request' && '-count=1' || '' }}
       # Only main writes the cache, and only when go.sum changed (exact-key miss).
       - name: Save Go cache
         if: contains(inputs.runs-on, 'ubuntu-26.04') && github.ref == 'refs/heads/main' && steps.go-cache-restore.outputs.cache-hit != 'true'
