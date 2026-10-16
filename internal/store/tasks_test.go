@@ -477,7 +477,7 @@ func updateTaskFields(t *testing.T, s *Store, now time.Time, id string, title, b
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition, nil, nil, nil)
+			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition, nil, nil, nil, nil)
 		})
 	return err
 }
@@ -596,7 +596,7 @@ func TestUpdateTaskMilestone(t *testing.T) {
 	set := func(task, milestone string) error {
 		_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.updated", nil,
 			func(tx *sql.Tx, _ int64) error {
-				return UpdateTaskFields(tx, taskTestNow, task, nil, nil, nil, nil, nil, nil, nil, nil, &milestone)
+				return UpdateTaskFields(tx, taskTestNow, task, nil, nil, nil, nil, nil, nil, nil, nil, &milestone, nil)
 			})
 		return err
 	}
@@ -989,7 +989,7 @@ func TestTaskSecretsRoundTrip(t *testing.T) {
 	// Update replaces the whole list; empty clears.
 	next := []string{"GITHUB_TOKEN"}
 	err = s.Tx(ctx, func(tx *sql.Tx) error {
-		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil, nil, nil, nil)
+		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil, nil, nil, nil, nil)
 	})
 	if err != nil {
 		t.Fatalf("update secrets: %v", err)
@@ -1157,5 +1157,52 @@ func TestTasksOneActiveRallyPerProject(t *testing.T) {
 	second := createTask(t, s, taskTestNow, in)
 	if second.ID == first.ID {
 		t.Fatalf("second rally got the same id as the first: %s", second.ID)
+	}
+}
+
+// TestTaskDue covers WL-REQ-1796: create with a due date, edit clears it, and
+// anything but YYYY-MM-DD is ErrInvalidInput.
+func TestTaskDue(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	in := defaultTaskInput()
+	in.Due = "2026-11-03"
+	task := createTask(t, s, taskTestNow, in)
+	if task.Due != "2026-11-03" {
+		t.Fatalf("created Due = %q", task.Due)
+	}
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil || got.Due != "2026-11-03" {
+		t.Fatalf("GetTask Due = %q, err %v", got.Due, err)
+	}
+
+	edit := func(due string) error {
+		_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
+			func(tx *sql.Tx, _ int64) error {
+				return UpdateTaskFields(tx, taskTestNow, task.ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, &due)
+			})
+		return err
+	}
+	if err := edit(""); err != nil {
+		t.Fatalf("clear due: %v", err)
+	}
+	if got, _ = s.GetTask(t.Context(), task.ID); got.Due != "" {
+		t.Fatalf("Due after clear = %q", got.Due)
+	}
+	for _, bad := range []string{"2026-13-01", "2026-02-30", "11/03/2026", "2026-1-3"} {
+		if err := edit(bad); !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "due must be YYYY-MM-DD") {
+			t.Errorf("edit %q: err = %v", bad, err)
+		}
+	}
+	bad := defaultTaskInput()
+	bad.Due = "nope"
+	_, _, err = s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, taskTestNow, bad, eventID)
+			return err
+		})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("create with bad due: err = %v", err)
 	}
 }
