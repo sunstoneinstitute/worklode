@@ -68,9 +68,9 @@ func TestDocPageLinksAndStripsFrontmatter(t *testing.T) {
 	if strings.Contains(page, "status: draft") {
 		t.Errorf("frontmatter leaked into the rendered body:\n%s", page)
 	}
-	// The link carries ?p=WL: a bare corpus number is on the referring
-	// project's sequence, so the redirect resolves it there (WL-723).
-	if !strings.Contains(page, `href="/docs/ref/004?p=WL#sec-2"`) {
+	// A bare corpus number is on the referring project's sequence, so the
+	// link names that project's spec (WL-723).
+	if !strings.Contains(page, `href="/WL-SPEC-4#sec-2"`) {
 		t.Errorf("body reference not autolinked to its project:\n%s", page)
 	}
 	if !strings.Contains(page, `href="/projects/proj/spec/4#sec-2"`) {

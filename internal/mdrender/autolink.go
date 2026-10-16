@@ -1,16 +1,16 @@
 // Reference autolinking (WL-301, WL-305): plain-text mentions of a design
-// document become links to the cockpit's resolving redirect, /docs/ref/<ref>,
-// which sends the browser to /docs/<id> and lets it carry the #sec fragment
-// across the redirect. Three spellings are linked — the WL-REQ-168 shorthand
-// (WL-SPEC-74, with an optional #sec-10), the keyword form ("spec 042 §10",
-// "ADR 048"), and the bare corpus form ("WL-REQ-168") — because those are the
-// ways the corpus actually writes references.
+// document become links to the cockpit's root shortcut, /<KEY>-SPEC-<n>,
+// which redirects to the document's page and lets the browser carry the
+// section fragment across the redirect. Three spellings are linked — the
+// WL-REQ-168 shorthand (WL-SPEC-74, with an optional section fragment), the
+// keyword form ("spec 042", "ADR 048", each with an optional section), and the
+// bare corpus form (a number and a section sign) — because those are the ways
+// the corpus actually writes references. The last two carry no key and take
+// the home project's (see For).
 //
 // A bare task id (WL-129, COW-7) links straight to /tasks/<id>. There is no
-// /tasks/ref/ redirect to mirror /docs/ref/: a document reference needs one
-// because its several spellings all have to be resolved to a page path that
-// is a numeric row id, whereas a task id IS the path segment GET /tasks/{id}
-// takes, so a redirect would only add a hop.
+// redirect for it: a task id IS the path segment GET /tasks/{id} takes, so a
+// redirect would only add a hop.
 //
 // WHY THE KEY SET, NOT A DENYLIST (WL-305). The token shape
 // [A-Z][A-Z0-9]{1,9}-\d+ also spells UTF-8, SHA-256, ISO-8601 and every other
@@ -43,9 +43,9 @@ package mdrender
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	gast "github.com/yuin/goldmark/ast"
@@ -57,13 +57,9 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
-// docRefPrefix is where a linked reference points: the cockpit's resolving
-// redirect (internal/api's docRefRedirect).
-const docRefPrefix = "/docs/ref/"
-
 // ruleRefPrefix is where a linked rule ref points: the cockpit's
-// resolving redirect (internal/api's ruleRefRedirect), the counterpart of
-// docRefPrefix (S20).
+// resolving redirect (internal/api's ruleRefRedirect). Document refs link to
+// the root shortcut /<ref> (internal/api's refShortcut).
 const ruleRefPrefix = "/rules/"
 
 // HomeParam is the query parameter a number-form reference carries: the key
@@ -84,7 +80,7 @@ var (
 	// root shortcut /<ref>, which redirects to the entity's page.
 	entityRef = regexp.MustCompile(`\b` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Milestone, refkind.Deliverable) + `)-\d+\b`)
 	// WL-REQ-12, WL-RULE-12 or WL-CL-12 — the rule arm of the shorthand grammar
-	// (WL-REQ-165). It links to the resolving redirect /rules/<ref>, the counterpart of docRefPrefix.
+	// (WL-REQ-165). It links to the resolving redirect /rules/<ref>.
 	ruleRefRe = regexp.MustCompile(`\b` + designdoc.RuleRefText + `\b`)
 	// spec 042 §10, ADR 048 §2, Spec 25 — keyword, number, optional §.
 	keywordRef = regexp.MustCompile(`\b(?:[Ss]pec|ADR|[Aa]dr)\s(\d{1,4})(?:\s?§\s?([0-9][0-9A-Za-z.]*))?`)
@@ -138,8 +134,7 @@ func NewProjectKeys(keys []string) ProjectKeys {
 // For returns a copy scoped to home, the key of the project whose body is
 // being rendered. A bare corpus number ("WL-REQ-118") is a per-project sequence
 // (WL-REQ-118), so the same number names a different document in every project;
-// without a home key the redirect resolves org-wide and reports an ambiguity
-// (WL-723). The fingerprint is remixed so a body cached under one home is
+// without a home key it is left as text (WL-723). The fingerprint is remixed so a body cached under one home is
 // never served under another.
 func (k ProjectKeys) For(home string) ProjectKeys {
 	if home == k.home {
@@ -170,15 +165,10 @@ func (k ProjectKeys) InPage(anchors map[string]string) ProjectKeys {
 	return k
 }
 
-// HomeQuery is the "?p=WL" a number-form href carries, empty when no home
-// project is known. Exported for internal/api, which builds the same
-// number-form links for a document's edges.
-func (k ProjectKeys) HomeQuery() string {
-	if k.home == "" {
-		return ""
-	}
-	return "?" + HomeParam + "=" + url.QueryEscape(k.home)
-}
+// Home is the key bare corpus numbers are read against, "" when unknown.
+// Exported for internal/api, which links a document's number-form edges the
+// same way.
+func (k ProjectKeys) Home() string { return k.home }
 
 func (k ProjectKeys) has(key string) bool {
 	_, ok := k.set[key]
@@ -301,7 +291,7 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 	}
 	for _, loc := range shorthandRef.FindAllIndex(value, -1) {
 		end := trimDot(value, loc[1])
-		out = append(out, refMatch{loc[0], end, docRefPrefix + string(value[loc[0]:end])})
+		out = append(out, refMatch{loc[0], end, "/" + string(value[loc[0]:end])})
 	}
 	for _, loc := range ruleRefRe.FindAllIndex(value, -1) {
 		if taken(loc[0], loc[1]) {
@@ -320,9 +310,14 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 		}
 		out = append(out, refMatch{loc[0], loc[1], "/" + string(value[loc[0]:loc[1]])})
 	}
+	// A bare number names a spec on the home project's sequence (WL-723), so
+	// "spec 042" links to /<HOME>-SPEC-42, its section riding as the fragment.
+	// Without a home there is no sequence to read it on, and the number stays
+	// text.
 	section := func(loc []int, numStart, numEnd, secStart, secEnd int) refMatch {
 		end := loc[1]
-		href := docRefPrefix + string(value[numStart:numEnd]) + keys.HomeQuery()
+		n, _ := strconv.Atoi(string(value[numStart:numEnd]))
+		href := "/" + keys.home + "-SPEC-" + strconv.Itoa(n)
 		if secStart >= 0 {
 			end = trimDot(value, end)
 			href += "#sec-" + string(value[secStart:min(secEnd, end)])
@@ -330,13 +325,13 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 		return refMatch{loc[0], end, href}
 	}
 	for _, loc := range keywordRef.FindAllSubmatchIndex(value, -1) {
-		if taken(loc[0], loc[1]) {
+		if keys.home == "" || taken(loc[0], loc[1]) {
 			continue
 		}
 		out = append(out, section(loc, loc[2], loc[3], loc[4], loc[5]))
 	}
 	for _, loc := range bareRef.FindAllSubmatchIndex(value, -1) {
-		if taken(loc[0], loc[1]) {
+		if keys.home == "" || taken(loc[0], loc[1]) {
 			continue
 		}
 		out = append(out, section(loc, loc[2], loc[3], loc[4], loc[5]))
@@ -384,6 +379,8 @@ func linkifyRun(run []*gast.Text, source []byte, keys ProjectKeys) {
 		}
 		link := gast.NewLink()
 		link.Destination = []byte(m.href)
+		// ref-link keeps the ref on one line: a break at its hyphen splits it.
+		link.SetAttributeString("class", []byte("ref-link"))
 		link.AppendChild(link, gast.NewTextSegment(text.NewSegment(start+m.start, start+m.end)))
 		insert(link)
 		pos = m.end

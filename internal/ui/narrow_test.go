@@ -209,8 +209,8 @@ func pages(t *testing.T) map[string]string {
 			},
 			BodyHTML: template.HTML(`<p>Measured against ` + token + `.</p><pre><code>./scripts/narrow-check.sh</code></pre>`),
 			Arranged: []RuleArrangementRow{
-				{DocRef: "WL-SPEC-32", Anchor: "sec-10", Depth: 2, Href: "/docs/ref/WL-SPEC-32#sec-10"},
-				{DocRef: "WL-PLAN-41", Anchor: "sec-2", Depth: 3, Href: "/docs/ref/WL-PLAN-41#sec-2"},
+				{DocRef: "WL-SPEC-32", Anchor: "sec-10", Depth: 2, Href: "/WL-SPEC-32#sec-10"},
+				{DocRef: "WL-PLAN-41", Anchor: "sec-2", Depth: 3, Href: "/WL-PLAN-41#sec-2"},
 			},
 			Versions: []model.RuleVersion{
 				{Version: 3, Heading: "Accessibility and responsive behavior", CreatedAt: now},

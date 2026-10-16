@@ -1138,7 +1138,7 @@ type RuleArrangementRow struct {
 	DocRef string
 	Anchor string
 	Depth  int
-	Href   string // /docs/ref/<DocRef>#<Anchor>
+	Href   string // /<DocRef>#<Anchor>
 }
 
 // ruleVersionURL is one rule version's page path, built off the rule's

@@ -105,7 +105,7 @@ func TestProgressPage(t *testing.T) {
 
 	for _, want := range []string{
 		"WL-SPEC-66", // the spec's ref, the row's only link
-		"/docs/ref/WL-SPEC-66",
+		"/WL-SPEC-66",
 		">Active<",        // §1.3's first group
 		"No active rally", // §2.1's band with nothing to show
 	} {

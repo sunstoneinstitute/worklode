@@ -5,32 +5,36 @@ import (
 	"testing"
 )
 
-// TestDocRefAutolink covers WL-301: the three reference spellings become
-// links to the resolving redirect, references inside code spans and explicit
-// links are untouched, and the fragment rides the href.
+// TestDocRefAutolink covers WL-301: the three reference spellings link to
+// the root shortcut /<ref>, a bare number read as a spec on the home
+// project's sequence (WL-723), and the fragment rides the href.
 func TestDocRefAutolink(t *testing.T) {
-	got := string(Body(ProjectKeys{}, "See WL-SPEC-42#sec-10 and spec 042 §10 plus 025 §14.3.\nADR 048 too, and Spec 25."))
+	const body = "See WL-SPEC-42#sec-10 and spec 042 §10 plus 025 §14.3.\nADR 048 too, and Spec 25."
+	got := string(Body(NewProjectKeys([]string{"WL"}).For("WL"), body))
 	for _, want := range []string{
-		`<a href="/docs/ref/WL-SPEC-42#sec-10" rel="nofollow">WL-SPEC-42#sec-10</a>`,
-		`<a href="/docs/ref/042#sec-10" rel="nofollow">spec 042 §10</a>`,
-		`<a href="/docs/ref/025#sec-14.3" rel="nofollow">025 §14.3</a>`,
-		`<a href="/docs/ref/048" rel="nofollow">ADR 048</a>`,
-		`<a href="/docs/ref/25" rel="nofollow">Spec 25</a>`,
+		`<a class="ref-link" href="/WL-SPEC-42#sec-10" rel="nofollow">WL-SPEC-42#sec-10</a>`,
+		`<a class="ref-link" href="/WL-SPEC-42#sec-10" rel="nofollow">spec 042 §10</a>`,
+		`<a class="ref-link" href="/WL-SPEC-25#sec-14.3" rel="nofollow">025 §14.3</a>`,
+		`<a class="ref-link" href="/WL-SPEC-48" rel="nofollow">ADR 048</a>`,
+		`<a class="ref-link" href="/WL-SPEC-25" rel="nofollow">Spec 25</a>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
 		}
 	}
+	// Without a home project a bare number names no sequence: it stays text.
+	if got := string(Body(ProjectKeys{}, body)); strings.Count(got, "<a ") != 1 {
+		t.Errorf("want only the shorthand linked without a home:\n%s", got)
+	}
 }
 
 // TestRuleRefAutolink covers S20: a rule ref links to the resolving
-// redirect /rules/<ref>, the counterpart of the document shorthand's
-// /docs/ref/.
+// redirect /rules/<ref>.
 func TestRuleRefAutolink(t *testing.T) {
 	got := string(Body(ProjectKeys{}, "see WL-RULE-12 and WL-REQ-13."))
 	for _, want := range []string{
-		`<a href="/rules/WL-RULE-12" rel="nofollow">WL-RULE-12</a>`,
-		`<a href="/rules/WL-REQ-13" rel="nofollow">WL-REQ-13</a>`,
+		`<a class="ref-link" href="/rules/WL-RULE-12" rel="nofollow">WL-RULE-12</a>`,
+		`<a class="ref-link" href="/rules/WL-REQ-13" rel="nofollow">WL-REQ-13</a>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
@@ -43,8 +47,8 @@ func TestRuleRefAutolink(t *testing.T) {
 func TestEntityRefAutolink(t *testing.T) {
 	got := string(Body(ProjectKeys{}, "see WL-MILE-2 and WL-DEL-4."))
 	for _, want := range []string{
-		`<a href="/WL-MILE-2" rel="nofollow">WL-MILE-2</a>`,
-		`<a href="/WL-DEL-4" rel="nofollow">WL-DEL-4</a>`,
+		`<a class="ref-link" href="/WL-MILE-2" rel="nofollow">WL-MILE-2</a>`,
+		`<a class="ref-link" href="/WL-DEL-4" rel="nofollow">WL-DEL-4</a>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
@@ -60,8 +64,8 @@ func TestRuleRefAutolinkInPage(t *testing.T) {
 	keys := ProjectKeys{}.InPage(map[string]string{"WL-REQ-13": "sec-4"})
 	got := string(DocBody(keys, "see WL-REQ-13 and WL-RULE-12."))
 	for _, want := range []string{
-		`<a href="#sec-4" rel="nofollow">WL-REQ-13</a>`,
-		`<a href="/rules/WL-RULE-12" rel="nofollow">WL-RULE-12</a>`,
+		`<a class="ref-link" href="#sec-4" rel="nofollow">WL-REQ-13</a>`,
+		`<a class="ref-link" href="/rules/WL-RULE-12" rel="nofollow">WL-RULE-12</a>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
@@ -73,17 +77,17 @@ func TestRuleRefAutolinkInPage(t *testing.T) {
 }
 
 func TestDocRefAutolinkLeavesCodeAndLinks(t *testing.T) {
-	got := string(Body(ProjectKeys{}, "Keep `WL-SPEC-9` and [text](/docs/3) with spec 5 §1 inside: [spec 7 §2](/x).\n\n```\nspec 042 §10\n```"))
-	if strings.Contains(got, "/docs/ref/9") {
+	got := string(Body(NewProjectKeys([]string{"WL"}).For("WL"), "Keep `WL-SPEC-9` and [text](/docs/3) with spec 5 §1 inside: [spec 7 §2](/x).\n\n```\nspec 042 §10\n```"))
+	if strings.Contains(got, "/WL-SPEC-9") {
 		t.Errorf("linkified inside a code span:\n%s", got)
 	}
-	if strings.Contains(got, "/docs/ref/042") {
+	if strings.Contains(got, "/WL-SPEC-42") {
 		t.Errorf("linkified inside a code fence:\n%s", got)
 	}
-	if strings.Contains(got, `href="/docs/ref/7`) {
+	if strings.Contains(got, `href="/WL-SPEC-7`) {
 		t.Errorf("linkified inside an existing link's text:\n%s", got)
 	}
-	if !strings.Contains(got, `/docs/ref/5#sec-1`) {
+	if !strings.Contains(got, `/WL-SPEC-5#sec-1`) {
 		t.Errorf("plain-text ref before the link was not linkified:\n%s", got)
 	}
 }
@@ -97,9 +101,9 @@ var liveKeys = NewProjectKeys([]string{"WL", "COW"})
 func TestTaskRefAutolink(t *testing.T) {
 	got := string(Body(liveKeys, "Follows WL-129, blocked by COW-7 and WL-1."))
 	for _, want := range []string{
-		`<a href="/tasks/WL-129" rel="nofollow">WL-129</a>`,
-		`<a href="/tasks/COW-7" rel="nofollow">COW-7</a>`,
-		`<a href="/tasks/WL-1" rel="nofollow">WL-1</a>`,
+		`<a class="ref-link" href="/tasks/WL-129" rel="nofollow">WL-129</a>`,
+		`<a class="ref-link" href="/tasks/COW-7" rel="nofollow">COW-7</a>`,
+		`<a class="ref-link" href="/tasks/WL-1" rel="nofollow">WL-1</a>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
@@ -143,11 +147,11 @@ func TestTaskRefAutolinkSkipContexts(t *testing.T) {
 			t.Errorf("linked %s, which is in a skip context:\n%s", unwanted, got)
 		}
 	}
-	if !strings.Contains(got, `<a href="/tasks/WL-16" rel="nofollow">WL-16</a>`) {
+	if !strings.Contains(got, `<a class="ref-link" href="/tasks/WL-16" rel="nofollow">WL-16</a>`) {
 		t.Errorf("plain-text task id was not linked:\n%s", got)
 	}
 	// The document shorthand still wins its own span.
-	if !strings.Contains(got, `href="/docs/ref/WL-SPEC-14"`) {
+	if !strings.Contains(got, `href="/WL-SPEC-14"`) {
 		t.Errorf("document shorthand lost its link:\n%s", got)
 	}
 }
