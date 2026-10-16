@@ -127,6 +127,11 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		governing = append(governing, ruleKey{cr.Key, cr.Number})
 	}
 
+	if err := store.ValidDue(req.Due); err != nil {
+		writeErr(w, http.StatusBadRequest, "due must be YYYY-MM-DD")
+		return
+	}
+
 	actorID := actorIDFrom(r)
 	now := s.st.Now()
 
@@ -144,6 +149,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				Draft:     req.Draft,
 				Skills:    req.Skills,
 				Secrets:   req.Secrets,
+				Due:       req.Due,
 			}, eventID)
 			if err != nil {
 				return err
@@ -536,9 +542,15 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
 		req.NeedsDecomposition == nil && req.HumanOnly == nil && req.State == nil &&
 		req.Secrets == nil && req.Artifacts == nil && req.Kind == nil && req.Milestone == nil &&
-		req.Plan == nil {
+		req.Plan == nil && req.Due == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
+	}
+	if req.Due != nil {
+		if err := store.ValidDue(*req.Due); err != nil {
+			writeErr(w, http.StatusBadRequest, "due must be YYYY-MM-DD")
+			return
+		}
 	}
 	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "title must not be blank")
@@ -606,7 +618,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	err := s.recordTaskEvent(r.Context(), "cli", "task.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.HumanOnly, req.Kind, req.Milestone); err != nil {
+			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.HumanOnly, req.Kind, req.Milestone, req.Due); err != nil {
 				return err
 			}
 			if req.Plan != nil {
@@ -616,7 +628,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			}
 			for field, val := range map[string]*string{
 				"title": req.Title, "body": req.Body, "priority": req.Priority, "concern": req.Concern,
-				"kind": req.Kind, "milestone": req.Milestone,
+				"kind": req.Kind, "milestone": req.Milestone, "due": req.Due,
 			} {
 				if val == nil {
 					continue
@@ -881,7 +893,7 @@ func (s *server) publishTasksFromPage(w http.ResponseWriter, r *http.Request) {
 // taskRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var taskRouteDocs = map[string]routeDoc{
 	"POST /api/v1/tasks": {
-		summary:   "Create a task",
+		summary:   "Create a task; due, when set, is YYYY-MM-DD",
 		request:   model.CreateTaskInput{},
 		responses: map[int]any{http.StatusCreated: model.Task{}},
 	},
@@ -903,7 +915,7 @@ var taskRouteDocs = map[string]routeDoc{
 		params:    model.TaskCostParams{},
 	},
 	"PATCH /api/v1/tasks/{id}": {
-		summary:   "Update a task's fields",
+		summary:   "Update a task's fields; due is YYYY-MM-DD, and \"\" clears it",
 		request:   model.EditTaskInput{},
 		responses: map[int]any{http.StatusOK: model.Task{}},
 	},

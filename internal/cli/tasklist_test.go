@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
@@ -74,5 +75,20 @@ func TestTaskTreeURI(t *testing.T) {
 	}
 	if *uri != "/api/v1/tasks?project=wl&root=WL-1&tree=true" {
 		t.Fatalf("TaskTree root URI = %q", *uri)
+	}
+}
+
+// TestTaskTableDueColumn pins D7 of WL-PLAN-153: DUE appears only when a
+// listed task has a due date.
+func TestTaskTableDueColumn(t *testing.T) {
+	var none, some strings.Builder
+	tasks := []model.Task{{ID: "A-1", Title: "one"}, {ID: "A-2", Title: "two", Due: "2026-11-03"}}
+	cli.TaskTable(&none, tasks[:1])
+	cli.TaskTable(&some, tasks)
+	if strings.Contains(none.String(), "DUE") {
+		t.Errorf("DUE shown with no due dates:\n%s", none.String())
+	}
+	if !strings.Contains(some.String(), "DUE") || !strings.Contains(some.String(), "2026-11-03") {
+		t.Errorf("DUE column missing:\n%s", some.String())
 	}
 }
