@@ -43,3 +43,14 @@ repos:
         language: script
         pass_filenames: false
         files: ^(\.claude-plugin/|\.agents/|plugins/)
+      # CI's spec gate, before a push: commit messages exist by then, so the
+      # Spec: trailer check runs alongside the citation check. Install once
+      # with `pre-commit install -t pre-push`; `lode install` manages the
+      # pre-commit hook, not this one.
+      - id: spec-gate
+        name: spec gate
+        entry: scripts/spec-gate.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
