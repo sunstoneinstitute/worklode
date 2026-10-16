@@ -431,13 +431,14 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		aboutDoc = *p.AboutDoc
 	}
 	tasks, err := s.st.ListTasks(r.Context(), store.TaskFilter{
-		Project:  p.Project,
-		States:   states,
-		Priority: p.Priority,
-		Kind:     kind,
-		Parent:   p.Parent,
-		Assignee: p.Assignee,
-		Repo:     repo,
+		Project:   p.Project,
+		States:    states,
+		Priority:  p.Priority,
+		Kind:      kind,
+		Parent:    p.Parent,
+		Milestone: p.Milestone,
+		Assignee:  p.Assignee,
+		Repo:      repo,
 
 		HasChildren:  p.HasChildren,
 		UpdatedSince: updatedSince,

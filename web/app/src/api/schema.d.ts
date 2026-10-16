@@ -5361,6 +5361,7 @@ export interface paths {
                     kind?: string;
                     state?: string[];
                     parent?: string;
+                    milestone?: string;
                     assignee?: string;
                     has_children?: boolean;
                     repo?: string;

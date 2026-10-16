@@ -347,3 +347,45 @@ func TestListTasksByRepo(t *testing.T) {
 		t.Fatalf("unmapped repo returned %+v, want none", got)
 	}
 }
+
+// TestListTasksFilterByMilestone: the milestone filter returns the tasks
+// attached to it and every child_of descendant of those, which carry no
+// milestone of their own, and nothing outside it.
+func TestListTasksFilterByMilestone(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	const milestone = "HDB-MILE-1"
+	if _, err := s.DBForTests().Exec(
+		`INSERT INTO milestones (id, project_id, title, position, created_by, created_at, updated_at)
+		 VALUES ($1, 'horndb', 'first', 1, 'stig', $2, $2)`, milestone, taskTestNow); err != nil {
+		t.Fatalf("create milestone: %v", err)
+	}
+	attached := createTask(t, s, taskTestNow, containerInput())
+	child := createTask(t, s, taskTestNow, containerInput())
+	grandchild := createTask(t, s, taskTestNow, defaultTaskInput())
+	createTask(t, s, taskTestNow, defaultTaskInput()) // outside the milestone
+	if _, err := s.DBForTests().Exec(`UPDATE tasks SET milestone_id = $1 WHERE id = $2`, milestone, attached.ID); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+	for _, e := range [][2]string{{child.ID, attached.ID}, {grandchild.ID, child.ID}} {
+		if _, err := s.DBForTests().Exec(
+			`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
+			e[0], e[1], taskTestNow); err != nil {
+			t.Fatalf("child_of edge: %v", err)
+		}
+	}
+
+	got, err := s.ListTasks(ctx, TaskFilter{Milestone: milestone})
+	if err != nil {
+		t.Fatalf("ListTasks milestone: %v", err)
+	}
+	var ids []string
+	for _, task := range got {
+		ids = append(ids, task.ID)
+	}
+	if want := []string{attached.ID, child.ID, grandchild.ID}; !reflect.DeepEqual(ids, want) {
+		t.Fatalf("ListTasks milestone=%s: got %v, want %v", milestone, ids, want)
+	}
+}

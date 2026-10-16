@@ -285,7 +285,7 @@ Flags: --closure, --deliverable, --inline, --kind, --milestone, --pager, --plan,
   Flags: --by, --pin
 - `lode task instruct` — Queue a steering instruction for whichever actor next holds the task's lease
 - `lode task list` — List tasks (delivered and abandoned are hidden unless requested with --status)
-  Flags: --about, --assignee, --deleted, --kind, --parent, --plan, --priority, --project, --repo, --status
+  Flags: --about, --assignee, --deleted, --kind, --milestone, --parent, --plan, --priority, --project, --repo, --status
 - `lode task parent` — File a task under a parent task
   Flags: --under
 - `lode task publish` — Publish a draft task (draft -> ready)

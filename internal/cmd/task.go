@@ -375,7 +375,7 @@ var taskStatusValues = append(slices.Clone(model.TaskStates), "all")
 
 func newTaskListCmd() *cobra.Command {
 	var scope scopeFlags
-	var priority, kind, parent, assignee, plan, about string
+	var priority, kind, parent, milestone, assignee, plan, about string
 	var statuses []string
 	var deleted bool
 	cmd := &cobra.Command{
@@ -409,7 +409,7 @@ func newTaskListCmd() *cobra.Command {
 			}
 			resp, raw, err := c.ListTasks(cmd.Context(), model.TaskListParams{
 				Project: sc.Project, States: states, Priority: priority, Kind: kind, Parent: parent,
-				Assignee: assignee, PlanDoc: planDoc, AboutDoc: aboutDoc, Deleted: deleted,
+				Milestone: milestone, Assignee: assignee, PlanDoc: planDoc, AboutDoc: aboutDoc, Deleted: deleted,
 			})
 			if err != nil {
 				return err
@@ -425,6 +425,7 @@ func newTaskListCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
 	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this task")
+	cmd.Flags().StringVar(&milestone, "milestone", "", "list only the tasks in this milestone, including the children of tasks attached to it")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: feature, bug, chore, design, review, spike, decision, rally")
 	completeFlagValues(cmd, "status", taskStatusValues)
