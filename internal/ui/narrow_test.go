@@ -44,25 +44,6 @@ func pages(t *testing.T) map[string]string {
 	// to survive, and the identifier is the half a browser cannot break.
 	tokenTitle := "Reconcile " + token + " against the source extract"
 	comps := map[string]templ.Component{
-		"board": Board(BoardView{
-			Page:       PageProps{Title: "Work", ActiveGlobal: "work"},
-			InboxCount: 7,
-			Projects: []BoardProject{{
-				ID: "worklode", Name: "Worklode backbone",
-				InProgress: []model.BoardTask{{
-					Task:   model.Task{ID: "WL-234", Title: longTitle, Priority: "low", State: "in_progress", Assignee: "stig@sunstoneinstitute.ai"},
-					Holder: &model.Holder{ActorID: "claude-worker-01", ExpiresAt: now},
-				}},
-				InReview: []model.BoardTask{{Task: model.Task{ID: "WL-233", Title: "Cover the WCAG criteria the narrow-width audit left out", Priority: "medium", State: "in_review"}}},
-				Ready:    []model.BoardTask{{Task: model.Task{ID: "WL-140", Title: "Fix what the narrow-width WCAG audit found", Priority: "high", State: "ready"}}},
-				Blocked:  []model.BoardTask{{Task: model.Task{ID: "WL-141", Title: tokenTitle, Priority: "high", State: "blocked"}}},
-			}},
-			RecentFailures: []BoardFailure{{
-				OccurredAt: now, Cluster: "admin-hel01", Kind: "CrashLoopBackOff",
-				Workload: "deployment/worklode-server",
-				Message:  "back-off 5m0s restarting failed container=lode pod=worklode-server-7d9f8c6b4d-x2ktp",
-			}},
-		}),
 		"cockpit": Cockpit(CockpitView{
 			Page: PageProps{Title: "Worklode backbone"}, Project: CockpitProject{
 				ID: proj.ID, Name: proj.Name, Key: proj.Key,
@@ -344,14 +325,6 @@ func pages(t *testing.T) map[string]string {
 				{Kind: "doc", ID: "doc:44", Revision: "7"},
 				{Kind: "deliverable", ID: "WL-DEL-3", Revision: ""},
 			},
-		}),
-		"newtask": NewTask(NewTaskView{
-			Form:  FormShell{Page: PageProps{Title: "New task"}, Project: proj, Action: "/projects/worklode/tasks/new", CancelURL: "/projects/worklode", Error: "A task needs a title before it can be created"},
-			Title: longTitle, Body: "The audit measured " + token + " and reported nothing.",
-			Priorities: []FormOption{{Value: "high", Label: "High"}, {Value: "low", Label: "Low", Selected: true}},
-			Kinds:      []FormOption{{Value: "chore", Label: "Chore", Selected: true}, {Value: "feature", Label: "Feature"}},
-			Concerns:   []FormOption{{Value: "usability", Label: "Usability", Selected: true}},
-			Draft:      true,
 		}),
 		"newdeliverable": NewDeliverable(NewDeliverableView{
 			Form: FormShell{Page: PageProps{Title: "Declare a deliverable"}, Project: proj, Action: "/projects/worklode/deliverables/new", CancelURL: "/projects/worklode/deliverables"},

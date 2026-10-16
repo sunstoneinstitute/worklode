@@ -6,7 +6,7 @@ import { DashboardIcon, DescriptionIcon, GroupIcon, SettingsIcon, TasksIcon } fr
 // page flips its flag and names its typed route in `to`.
 export const PROJECT_NAV_ITEMS = [
   { label: "Overview", Icon: DashboardIcon, path: "", spa: false },
-  { label: "Tasks", Icon: TasksIcon, path: "/tasks", spa: false },
+  { label: "Tasks", Icon: TasksIcon, path: "/tasks", spa: true, to: "/projects/$projectId/tasks" },
   { label: "Documents", Icon: DescriptionIcon, path: "/documents", spa: false },
   { label: "Crew", Icon: GroupIcon, path: "/crew", spa: true, to: "/projects/$projectId/crew" },
 ] as const

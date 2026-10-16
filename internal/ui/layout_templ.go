@@ -568,7 +568,7 @@ func globalIcon(key string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-		case "work":
+		case "tasks":
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 6h11M9 12h11M9 18h11\"></path><path d=\"M4.5 6l1 1 2-2M4.5 12l1 1 2-2M4.5 18l1 1 2-2\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -626,7 +626,7 @@ func menuIcon() templ.Component {
 // primaryNav is the Primary nav landmark carrying the five global
 // destinations in the exact order
 // WL-REQ-331 requires (Ideas,
-// Intake, Projects, Work, Knowledge), marking the one matching active as both
+// Intake, Projects, Tasks, Knowledge), marking the one matching active as both
 // aria-current="page" and .active. Home, Reviews and Deliveries left
 // WL-REQ-331's list, keeping their routes and pages. Page renders this
 // inside the top bar, so global navigation is reachable everywhere from one
@@ -677,7 +677,7 @@ func primaryNav(active string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = globalLink("/work", "Work", "work", active, "primary").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = globalLink("/tasks", "Tasks", "tasks", active, "primary").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1042,15 +1042,15 @@ func modePillIcon() templ.Component {
 }
 
 // localNav renders the project-local destinations in WL-REQ-332's order
-// (Overview, Crew, Work, Deliverables, Reviews, Decisions,
+// (Overview, Crew, Tasks, Deliverables, Reviews, Decisions,
 // Documents, Activity), marking the item matching active as
 // aria-current="page".
 //
-// Progress sits after Work and only when the project has a spec, as
+// Progress sits after Tasks and only when the project has a spec, as
 // WL-REQ-332 lists it, and a project with no spec has no Progress page
 // (its route 404s), so linking to it would be a dead entry.
 //
-// Milestones sits between Crew and Work, ahead of that list: a milestone
+// Milestones sits between Crew and Tasks, ahead of that list: a milestone
 // contains both work and deliverables (WL-REQ-120), so it reads before both
 // lists. WL-REQ-331 is owed the same amendment Deleted is (docs/follow-ups.md).
 //
@@ -1091,7 +1091,7 @@ func localNav(p CockpitProject, active string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/work", "Work", "work", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/tasks", "Tasks", "tasks", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

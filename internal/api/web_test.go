@@ -154,13 +154,13 @@ func TestGlobalNavLivesInTheTopbar(t *testing.T) {
 
 // TestGlobalNavOrder checks the primary nav renders the five destinations in
 // the exact order WL-REQ-331
-// requires — Ideas, Intake, Projects, Work, Knowledge — and that Home,
+// requires — Ideas, Intake, Projects, Tasks, Knowledge — and that Home,
 // Reviews and Deliveries left the list (§1 amends WL-REQ-331's eight).
 func TestGlobalNavOrder(t *testing.T) {
 	t.Parallel()
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
-	assertOrder(t, body, ">Ideas<", ">Intake<", ">Projects<", ">Work<", ">Knowledge<")
+	assertOrder(t, body, ">Ideas<", ">Intake<", ">Projects<", ">Tasks<", ">Knowledge<")
 	for _, gone := range []string{">Home<", ">Reviews<", ">Deliveries<"} {
 		if strings.Contains(topbarRegion(t, body), gone) {
 			t.Errorf("global nav still carries the retired destination %s", gone)
@@ -174,7 +174,7 @@ func TestGlobalDestinations(t *testing.T) {
 
 	// Knowledge lands on /docs, the document corpus (WL-REQ-331's
 	// "documents and graph-backed expert views"); /knowledge redirects there.
-	for _, path := range []string{"/", "/ideas", "/intake", "/work", "/reviews", "/deliveries", "/docs"} {
+	for _, path := range []string{"/", "/ideas", "/intake", "/reviews", "/deliveries", "/docs"} {
 		t.Run(path, func(t *testing.T) {
 			rr := doReq(t, h, "GET", path, "", nil)
 			if rr.Code != http.StatusOK {
@@ -461,7 +461,6 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		hasCurrent bool
 	}{
 		{"/", global, false}, {"/ideas", global, true}, {"/intake", global, true},
-		{"/work", global, true},
 		{"/reviews", global, false}, {"/deliveries", global, false},
 		{"/docs", global, true},
 		{"/projects/proj", project, true},
@@ -470,7 +469,6 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		{"/projects/proj/documents", project, true}, {"/projects/proj/activity", project, true},
 		{"/projects/proj/deliverables", project, true},
 		{"/projects/proj/deliverables/new", project, true},
-		{"/projects/proj/tasks/new", project, false},
 		{"/projects/proj/chore/1", project, false},
 	}
 	for _, page := range pages {
@@ -1280,88 +1278,6 @@ func TestMorningBriefJourney(t *testing.T) {
 	bodyContains(t, reviewed, "Assigned to you: "+mine)
 }
 
-func TestWorkPageOrgBoard(t *testing.T) {
-	t.Parallel()
-	st, h, token := newTestServer(t)
-	createProject(t, st, "proj1")
-	createProject(t, st, "proj2")
-
-	createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj1", "title": "Leased task", "priority": "high", "kind": "feature",
-	})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
-	if rr.Code != http.StatusOK {
-		t.Fatalf("claim WL-1 status = %d, body %s", rr.Code, rr.Body.String())
-	}
-
-	createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj1", "title": "Blocker task", "priority": "high", "kind": "feature",
-	})
-	createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj1", "title": "Blocked task", "priority": "medium", "kind": "bug",
-	})
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-3", "type": "blocks"})
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("add blocking edge status = %d, body %s", rr.Code, rr.Body.String())
-	}
-
-	// A human-owned in-progress task: assigned to and started by "dana", an
-	// actor distinct from "alice" (the leased task's holder) so the rendered
-	// Assignee column can't be mistaken for the Holder column's value.
-	createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj1", "title": "Human-owned task", "priority": "medium", "kind": "feature",
-	})
-	if err := st.CreateActor(context.Background(), "dana", "human", "Dana", false); err != nil {
-		t.Fatalf("create actor dana: %v", err)
-	}
-	danaToken, err := st.CreateToken(context.Background(), "dana", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token for dana: %v", err)
-	}
-	store.SeedCrewForTests(t, st, "proj1", "dana")
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-4/start", danaToken, nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("start WL-4 status = %d, body %s", rr.Code, rr.Body.String())
-	}
-
-	// A runtime failure, recorded directly through the store (as the
-	// watcher would via POST /api/v1/runtime-events).
-	seedEvent(t, st, "runtime-1", func(tx *sql.Tx, _ int64) error {
-		_, err := store.InsertRuntimeEvent(tx, store.RuntimeEvent{
-			Cluster: "prod-1", Kind: "crashloop", Workload: "app",
-			Message: "CrashLoopBackOff on app", OccurredAt: st.Now(),
-		})
-		return err
-	})
-
-	// A fresh inbox issue.
-	if err := st.AddRepo(context.Background(), "proj1", "acme/widgets"); err != nil {
-		t.Fatalf("add repo: %v", err)
-	}
-	seedIssue(t, st, "acme/widgets", 1, "An untriaged issue")
-
-	rr = doReq(t, h, "GET", "/work", "", nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("work page status = %d, body %s", rr.Code, rr.Body.String())
-	}
-	ct := rr.Header().Get("Content-Type")
-	if !strings.HasPrefix(ct, "text/html") {
-		t.Fatalf("content-type = %q, want text/html", ct)
-	}
-	body := rr.Body.String()
-	assertShell(t, body)
-	assertOneAriaCurrent(t, body)
-	bodyContains(t, body,
-		"proj1", "proj2", // project names
-		"Leased task", "alice", // in_progress task + holder actor
-		"Blocked", "Blocked task", // the blocked bucket + the blocked task's title
-		"CrashLoopBackOff on app", // recent-failures message
-		"Inbox: 1 new issue",      // inbox count
-		"Human-owned task",        // the human-owned in_progress task's title
-		"Assignee dana",           // its assignee, rendered on the row — proves the value renders, distinct from the holder
-	)
-}
-
 func TestTaskPage(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -1755,7 +1671,7 @@ func TestProjectPage(t *testing.T) {
 	// Project local nav, in WL-REQ-332's order, with
 	// Milestones inserted after Crew: a milestone contains both work and
 	// deliverables (WL-REQ-120), so it sits ahead of both lists.
-	assertOrder(t, body, ">Overview<", ">Crew<", ">Milestones<", ">Work<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
+	assertOrder(t, body, ">Overview<", ">Crew<", ">Milestones<", ">Tasks<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
 	assertOrder(t, body, `class="backlink"`, "All projects", ">Overview<")
 	// The cockpit is a projection, never a stored workflow field: the page
 	// must not render any of the retired/forbidden concepts. "Crew" and

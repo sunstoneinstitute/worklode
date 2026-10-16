@@ -462,13 +462,6 @@ type server struct {
 	// Home the viewer got.
 	homeRenders *prometheus.CounterVec
 
-	// runBoardRenders counts project run board page renders (GET
-	// /projects/{id}/work), by outcome (empty, rendered); see
-	// runboard.go's runBoardPage and metrics.go's observeRunBoardRender.
-	// navWrap already counts the "work" destination by outcome — this one
-	// says whether the viewer landed on a board with any live work on it.
-	runBoardRenders *prometheus.CounterVec
-
 	// spaRequests counts requests the SPA handler answered on the public host
 	// (WL-REQ-1304), by outcome; see spaOutcomes.
 	spaRequests *prometheus.CounterVec
@@ -480,8 +473,8 @@ type server struct {
 	// waiting on them.
 	inboxRenders *prometheus.CounterVec
 
-	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
-	// deliverable, ...) and outcome; see webform.go and
+	// formSubmissions counts the web UI's form POSTs, by form (deliverable,
+	// task_restore, ...) and outcome; see webform.go and
 	// observeFormSubmission.
 	// These are the cockpit's form writes; the Progress page's script writes
 	// are counted by progressWrites.
@@ -775,7 +768,6 @@ func (s *server) registerCockpit(r *router) {
 	// honest placeholder.
 	r.web("GET /projects/{id}/milestones", s.navWrap("milestones", s.milestonesPage))
 	r.web("POST /projects/{id}/milestones/{mid}/references", s.navWrap("milestones", s.addMilestoneReferenceFromForm))
-	r.web("GET /projects/{id}/work", s.navWrap("work", s.runBoardPage))
 	r.web("GET /projects/{id}/progress", s.navWrap("progress", s.progressPage))
 	r.web("GET /projects/{id}/progress/events", s.progressEvents)
 	// Not navWrapped: fragments are fetched by the page script, never
@@ -795,8 +787,6 @@ func (s *server) registerCockpit(r *router) {
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
 	r.web("POST /deliverables/{id}/report", s.navWrap("deliverables", s.reportDeliverableFromForm))
-	r.web("GET /projects/{id}/tasks/new", s.navWrap("task_new", s.newTaskPage))
-	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
 	r.web("GET /projects/{id}/documents", s.navWrap("documents", s.projectDocsPage))
 	r.web("GET /projects/{id}/deleted", s.navWrap("deleted", s.deletedPage))
 	r.web("POST /projects/{id}/deleted/tasks/restore", s.navWrap("deleted", s.restoreTaskFromForm))
@@ -807,7 +797,6 @@ func (s *server) registerCockpit(r *router) {
 	r.web("POST /preview", s.previewMarkdown)
 	r.web("POST /dictate", s.dictate)
 	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
-	r.web("GET /work", s.navWrap("work", s.workPage))
 	r.web("GET /inbox", s.navWrap("inbox", s.inboxPage))
 	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))
 	r.web("GET /approvals/{id}", s.navWrap("reviews", s.approvalPage))

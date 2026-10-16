@@ -11,7 +11,7 @@ import (
 // label and lets initMetrics pre-initialise every series to zero, which is
 // what makes "nothing has sent the alias" readable as a flat zero rather than
 // as no-data.
-var kindAliasSurfaces = []string{"create", "list", "claim_next", "promote", "web_form", "edit"}
+var kindAliasSurfaces = []string{"create", "list", "claim_next", "promote", "edit"}
 
 // normalizeTaskKind applies ns.DeprecatedTaskKinds to a caller-supplied kind
 // and counts the alias use. Normalising in the handler rather than the CLI is

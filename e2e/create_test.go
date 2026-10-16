@@ -1,10 +1,11 @@
 //go:build e2e
 
-// create_test.go proves the cockpit's two creation surfaces end to end,
-// through public surfaces only: a person opens the project Overview in a
-// browser, follows the affordances to the new-task and new-deliverable forms,
-// submits them as a browser submits a form, and finds the created objects on
-// the pages that read them back. Nothing here writes to the store directly.
+// create_test.go proves the cockpit's creation surface end to end, through
+// public surfaces only: a person opens the project Overview in a browser,
+// follows the affordance to the new-deliverable form, submits it as a browser
+// submits a form, and finds the created object on the page that reads it
+// back. Creating a task is the SPA's task page (WL-REQ-1803). Nothing here
+// writes to the store directly.
 package e2e
 
 import (
@@ -52,8 +53,8 @@ func postForm(t *testing.T, base, path string, form url.Values) (int, string) {
 	return resp.StatusCode, resp.Header.Get("Location")
 }
 
-// TestCreateFromCockpitPublicSurface follows one person through both
-// creation flows and back out through the pages that read the results.
+// TestCreateFromCockpitPublicSurface follows one person through the
+// deliverable flow and back out through the page that reads the result.
 func TestCreateFromCockpitPublicSurface(t *testing.T) {
 	ctx := context.Background()
 
@@ -78,57 +79,13 @@ func TestCreateFromCockpitPublicSurface(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("GET /projects/proj: status = %d, want 200", code)
 	}
-	for _, want := range []string{`href="/projects/proj/tasks/new"`, `href="/projects/proj/deliverables"`} {
+	for _, want := range []string{`href="/projects/proj/tasks"`, `href="/projects/proj/deliverables"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("the Overview does not link to %s:\n%s", want, body)
 		}
 	}
 
-	// --- Step 2: create a task through the form ------------------------------
-
-	code, body = getPage(t, srv.URL+"/projects/proj/tasks/new")
-	if code != http.StatusOK {
-		t.Fatalf("GET the new-task form: status = %d, want 200", code)
-	}
-	if !strings.Contains(body, `action="/projects/proj/tasks"`) {
-		t.Fatalf("the new-task form does not post to the project's task route:\n%s", body)
-	}
-
-	code, location := postForm(t, srv.URL, "/projects/proj/tasks", url.Values{
-		"title":    {"Count the casualties"},
-		"body":     {"Every record needs two independent sources."},
-		"priority": {"high"},
-		"kind":     {"feature"},
-	})
-	if code != http.StatusSeeOther || location != "/tasks/WL-1" {
-		t.Fatalf("task submit = %d %q, want 303 /tasks/WL-1", code, location)
-	}
-
-	// The created task reads back on its own page and on the board, through
-	// the ordinary read paths.
-	code, body = getPage(t, srv.URL+location)
-	if code != http.StatusOK || !strings.Contains(body, "Count the casualties") {
-		t.Fatalf("GET %s: status = %d, body does not show the created task:\n%s", location, code, body)
-	}
-	if !strings.Contains(body, "Every record needs two independent sources.") {
-		t.Fatalf("the task page does not show the submitted body:\n%s", body)
-	}
-	code, body = getPage(t, srv.URL+"/work")
-	if code != http.StatusOK || !strings.Contains(body, "Count the casualties") {
-		t.Fatalf("GET /work: status = %d, board does not carry the new task:\n%s", code, body)
-	}
-
-	// The API — a different surface entirely — sees the same task, which is
-	// what makes this one backbone rather than a browser-only record.
-	task, _, err := admin.GetTask(ctx, "WL-1")
-	if err != nil {
-		t.Fatalf("get the created task over the API: %v", err)
-	}
-	if task.Title != "Count the casualties" || task.State != "ready" {
-		t.Fatalf("API view of the created task = %+v, want the submitted title and state ready", task)
-	}
-
-	// --- Step 3: declare a deliverable through the form ----------------------
+	// --- Step 2: declare a deliverable through the form ----------------------
 
 	code, body = getPage(t, srv.URL+"/projects/proj/deliverables")
 	if code != http.StatusOK {
@@ -138,7 +95,7 @@ func TestCreateFromCockpitPublicSurface(t *testing.T) {
 		t.Fatalf("the empty deliverables page is not honest about being empty:\n%s", body)
 	}
 
-	code, location = postForm(t, srv.URL, "/projects/proj/deliverables", url.Values{
+	code, location := postForm(t, srv.URL, "/projects/proj/deliverables", url.Values{
 		"name":        {"Casualty datapackage"},
 		"description": {"Frictionless datapackage of verified records."},
 		"url":         {"https://example.org/data/casualties"},
@@ -160,7 +117,7 @@ func TestCreateFromCockpitPublicSurface(t *testing.T) {
 		}
 	}
 
-	// --- Step 4: a rejected submit keeps what was typed and writes nothing ---
+	// --- Step 3: a rejected submit keeps what was typed and writes nothing ---
 
 	rejected := url.Values{"name": {""}, "description": {"a description worth keeping"}}
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/projects/proj/deliverables",
@@ -183,10 +140,10 @@ func TestCreateFromCockpitPublicSurface(t *testing.T) {
 		t.Fatalf("the re-rendered form lost what was typed:\n%s", rejectedBody)
 	}
 
-	// --- Step 5: a cross-site submit is refused ------------------------------
+	// --- Step 4: a cross-site submit is refused ------------------------------
 
-	crossReq, err := http.NewRequest(http.MethodPost, srv.URL+"/projects/proj/tasks",
-		strings.NewReader(url.Values{"title": {"forged"}, "priority": {"low"}, "kind": {"chore"}}.Encode()))
+	crossReq, err := http.NewRequest(http.MethodPost, srv.URL+"/projects/proj/deliverables",
+		strings.NewReader(url.Values{"name": {"forged"}, "label": {"on"}}.Encode()))
 	if err != nil {
 		t.Fatalf("build cross-site request: %v", err)
 	}
@@ -203,14 +160,7 @@ func TestCreateFromCockpitPublicSurface(t *testing.T) {
 		t.Fatalf("cross-site submit status = %d, want 403", crossResp.StatusCode)
 	}
 
-	// Exactly the one task and the one deliverable that were meant to land.
-	list, _, err := admin.ListTasks(ctx, model.TaskListParams{Project: "proj"})
-	if err != nil {
-		t.Fatalf("list tasks: %v", err)
-	}
-	if len(list.Tasks) != 1 {
-		t.Fatalf("project holds %d tasks, want exactly the one created through the form", len(list.Tasks))
-	}
+	// Exactly the one deliverable that was meant to land.
 	code, body = getPage(t, srv.URL+"/projects/proj/deliverables")
 	if code != http.StatusOK || strings.Count(body, `class="dodrow"`) != 1 {
 		t.Fatalf("project holds %d deliverables, want exactly one:\n%s", strings.Count(body, `class="dodrow"`), body)

@@ -38,11 +38,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/a-h/templ"
 
-	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
@@ -51,31 +49,6 @@ import (
 // typed by a person, small enough that an unauthenticated open deployment
 // cannot be made to buffer megabytes per request.
 const maxWebForm = 256 << 10
-
-// webTaskKinds are the kinds the new-task form offers, in menu order. It
-// mirrors validKinds exactly; a test holds the two together.
-var webTaskKinds = []string{"feature", "bug", "chore", "design", "review", "spike", "decision", "rally"}
-
-// webTaskPriorities are the priorities the new-task form offers, in
-// model.TaskPriorities' most-urgent-first order, which is also what
-// validPriorities gates on.
-var webTaskPriorities = model.TaskPriorities
-
-// webTaskConcerns are the optional concerns the new-task form offers, in
-// model.TaskConcerns' order, which is also what validConcerns gates on. The
-// empty value is rendered as "None".
-var webTaskConcerns = model.TaskConcerns
-
-// taskFormValues are the new-task form's fields as submitted, kept whole so a
-// rejected submit re-renders exactly what the person typed.
-type taskFormValues struct {
-	Title    string
-	Body     string
-	Priority string
-	Kind     string
-	Concern  string
-	Draft    bool
-}
 
 // deliverableFormValues are the deliverable form's fields as submitted.
 type deliverableFormValues struct {
@@ -210,129 +183,6 @@ func (s *server) renderWeb(w http.ResponseWriter, r *http.Request, status int, p
 	if err := c.Render(ctx, w); err != nil {
 		s.log.Error("render "+page, "err", err)
 	}
-}
-
-// --- new task ---------------------------------------------------------------
-
-// newTaskPage handles GET /projects/{id}/tasks/new: the empty form, with the
-// defaults a task gets when nothing is chosen.
-func (s *server) newTaskPage(w http.ResponseWriter, r *http.Request) {
-	project, err := s.projectHeader(r.Context(), r.PathValue("id"))
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	values := taskFormValues{Priority: "medium", Kind: "feature"}
-	s.renderWeb(w, r, http.StatusOK, "new task page", ui.NewTask(newTaskView(project, values, "", s.dictationEnabled())))
-}
-
-// createTaskFromForm handles POST /projects/{id}/tasks: create the task and
-// 303 to it, or re-render the form at 422 with the one thing to fix.
-func (s *server) createTaskFromForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	project, ok := s.beginFormPost(w, r, "task")
-	if !ok {
-		return
-	}
-
-	values := taskFormValues{
-		Title:    strings.TrimSpace(r.PostFormValue("title")),
-		Body:     strings.TrimSpace(r.PostFormValue("body")),
-		Priority: r.PostFormValue("priority"),
-		Kind:     r.PostFormValue("kind"),
-		Concern:  r.PostFormValue("concern"),
-		Draft:    r.PostFormValue("draft") != "",
-	}
-	values.Kind = s.normalizeTaskKind(values.Kind, "web_form")
-	if msg := validateTaskForm(&values); msg != "" {
-		s.observeFormSubmission("task", "invalid")
-		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new task page",
-			ui.NewTask(newTaskView(project, values, msg, s.dictationEnabled())))
-		return
-	}
-
-	created, err := s.recordFormTask(ctx, project.ID, values, actorIDFrom(r))
-	if err != nil {
-		s.observeFormSubmission("task", formOutcome(err))
-		s.webStoreErr(w, err)
-		return
-	}
-	s.observeFormSubmission("task", "created")
-	http.Redirect(w, r, "/tasks/"+created.ID, http.StatusSeeOther)
-}
-
-// validateTaskForm checks the submitted task fields, normalizing the two
-// choices to their defaults when a browser sent nothing for them. It returns
-// the one message to show, or "" when the form is good.
-func validateTaskForm(v *taskFormValues) string {
-	if v.Priority == "" {
-		v.Priority = "medium"
-	}
-	if v.Kind == "" {
-		v.Kind = "feature"
-	}
-	// The title is counted in runes, so the check and the field's HTML
-	// maxlength agree about a title written in a non-Latin script; the body
-	// bound is a byte budget on what lands in the database, not a writing
-	// limit, so bytes are the right unit there.
-	switch {
-	case v.Title == "":
-		return "A title is required."
-	case utf8.RuneCountInString(v.Title) > maxTaskTitle:
-		return "The title is too long (200 characters at most)."
-	case len(v.Body) > maxTaskBody:
-		return "The body is too long."
-	case !validPriorities[v.Priority]:
-		return "Choose a priority of critical, high, medium, or low."
-	case !validKinds[v.Kind]:
-		return "Choose one of the offered kinds."
-	case v.Concern != "" && !store.ValidConcern(v.Concern):
-		return "Choose a concern of completeness, performance, usability, or security — or none."
-	}
-	return ""
-}
-
-// maxTaskTitle matches the title field's HTML maxlength; maxTaskBody caps a
-// form-submitted body. Bodies carry design work (WL-SPEC-78), so the limit is
-// generous — it exists to keep a runaway paste out of the database, not to
-// shape what people write.
-const (
-	maxTaskTitle = 200
-	maxTaskBody  = 64 << 10
-)
-
-// recordFormTask writes the task through the same RecordEvent + CreateTask
-// path POST /api/v1/tasks uses, under the "web" event source.
-func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFormValues, actorID string) (*model.Task, error) {
-	now := s.st.Now()
-
-	var created *model.Task
-	if err := s.recordEvent(ctx, "web", "task.created", map[string]any{
-		"project": projectID, "title": v.Title, "body": v.Body,
-		"priority": v.Priority, "kind": v.Kind, "concern": v.Concern,
-		"draft": v.Draft, "created_by": actorID,
-	}, func(tx *sql.Tx, eventID int64) error {
-		t, err := store.CreateTask(tx, now, store.TaskInput{
-			ProjectID: projectID,
-			Title:     v.Title,
-			Body:      v.Body,
-			Priority:  v.Priority,
-			Kind:      v.Kind,
-			Concern:   v.Concern,
-			CreatedBy: actorID,
-			Draft:     v.Draft,
-		}, eventID)
-		if err != nil {
-			return err
-		}
-		created = t
-		// Same reason as POST /api/v1/tasks': the id is minted inside this
-		// transaction, after the payload was marshalled (WL-RULE-179).
-		return store.AttributeEventToTask(tx, eventID, t.ID)
-	}); err != nil {
-		return nil, err
-	}
-	return created, nil
 }
 
 // --- deliverables -----------------------------------------------------------

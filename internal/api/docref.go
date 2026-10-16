@@ -153,7 +153,7 @@ func scopeDocsToProject(docs []model.Doc, project string) []model.Doc {
 
 // refShortcut handles GET /{ref}: a bare reference at the root, so a task id
 // or a document reference pasted into the address bar lands on its page.
-// Every literal route (/docs, /work, /reviews, …) is more specific than this
+// Every literal route (/docs, /reviews, …) is more specific than this
 // wildcard and still wins, so the shortcut only sees paths nothing else
 // claims.
 //

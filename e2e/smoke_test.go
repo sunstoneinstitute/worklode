@@ -626,10 +626,7 @@ func primaryNavRegion(t *testing.T, body string) string {
 
 // assertWebPages checks the read-only web UI renders: Home shows the shared
 // shell, its own heading, and the seeded project (open-mode degradation,
-// since the e2e server runs without a session — no board framing), Work
-// carries the project name and the crashloop failure (the org-wide board,
-// now the task-oriented destination — see docs/specs/032-project-cockpit.md
-// §2), the project's own run board (WL-REQ-1343) loads at its route, and the
+// since the e2e server runs without a session — no board framing), and the
 // task page loads. Home's Morning Brief is the same degradation seen from
 // the other side: no session means no brief and a refused POST
 // /home/reviewed. It also proves spec 056 end to end: the shared shell's
@@ -675,7 +672,7 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 	}
 
 	nav := primaryNavRegion(t, body)
-	for _, want := range []string{">Ideas<", ">Intake<", ">Projects<", ">Work<", ">Knowledge<"} {
+	for _, want := range []string{">Ideas<", ">Intake<", ">Projects<", ">Tasks<", ">Knowledge<"} {
 		if !strings.Contains(nav, want) {
 			t.Fatalf("primary nav missing destination %q:\n%s", want, nav)
 		}
@@ -699,25 +696,6 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 		if code != http.StatusOK {
 			t.Fatalf("GET %s: status = %d, want 200 (056 §1: routes unchanged)", path, code)
 		}
-	}
-
-	code, body = getPage(t, baseURL+"/work")
-	if code != http.StatusOK {
-		t.Fatalf("GET /work: status = %d, want 200", code)
-	}
-	if !strings.Contains(body, "Demo") {
-		t.Fatalf("work page does not mention project Demo:\n%s", body)
-	}
-	if !strings.Contains(body, "CrashLoopBackOff") {
-		t.Fatalf("work page does not show the crashloop failure:\n%s", body)
-	}
-
-	code, body = getPage(t, baseURL+"/projects/demo/work")
-	if code != http.StatusOK {
-		t.Fatalf("GET /projects/demo/work: status = %d, want 200", code)
-	}
-	if !strings.Contains(body, "Work") {
-		t.Fatalf("project run board missing the Work heading:\n%s", body)
 	}
 
 	code, body = getPage(t, fmt.Sprintf("%s/tasks/%s", baseURL, taskID))
