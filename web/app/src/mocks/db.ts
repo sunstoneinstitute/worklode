@@ -55,8 +55,30 @@ function seed() {
     },
     p2: { past_due: [], awaiting_review: [], workloads: [] },
   }
-  return { me, projects, crew, participants, tasks, summaries }
+  // Backbone documents and rules (GET /api/v1/docs, /api/v1/rules)
+  const docs: Doc[] = [
+    { id: 1, ref: "WL-SPEC-3", project: "p1", kind: "spec", title: "Launch plan", status: "draft", updated_at: "2026-10-01T09:00:00Z" },
+    { id: 2, ref: "WL-SPEC-4", project: "p1", kind: "spec", title: "Icon set", status: "accepted", updated_at: "2026-10-02T09:00:00Z" },
+    { id: 3, ref: "WL-PLAN-5", project: "p1", kind: "plan", title: "Launch rollout", status: "accepted", updated_at: "2026-10-03T09:00:00Z" },
+    { id: 4, ref: "DP-SPEC-1", project: "p2", kind: "spec", title: "Glacier schema", status: "draft", updated_at: "2026-10-04T09:00:00Z" },
+  ]
+  const rules: Rule[] = [
+    { id: 10, ref: "WL-REQ-10", project: "p1", heading: "Launch copy is reviewed", kind: "requirement", status: "accepted" },
+    { id: 11, ref: "WL-RULE-11", project: "p1", heading: "One icon font", kind: "invariant", status: "draft" },
+    { id: 12, ref: "DP-REQ-1", project: "p2", heading: "Glacier ids are stable", kind: "requirement", status: "draft" },
+  ]
+  // The documents register (WL-REQ-1798)
+  const documents: ProjectDocument[] = [
+    { id: "doc_000000000001", project: "p1", name: "Launch brief", category: "spec", type: "document", status: "draft", url: "https://docs.example.com/brief", source: "", milestone: "", due: "", date: "", participants: [] },
+    { id: "doc_000000000002", project: "p1", name: "Kickoff notes", category: "meeting-notes", type: "document", status: "final", url: "", source: "", milestone: "", due: "", date: "2026-10-05", participants: ["stig", "ada"] },
+    { id: "doc_000000000003", project: "p2", name: "Glacier dataset", category: "sources", type: "dataset", status: "final", url: "", source: "NSIDC", milestone: "", due: "", date: "", participants: [] },
+  ]
+  return { me, projects, crew, participants, tasks, summaries, docs, rules, documents }
 }
+
+export type Doc = NonNullable<Ok<"/api/v1/docs", "get">["docs"]>[number]
+export type Rule = Ok<"/api/v1/rules", "get">[number]
+export type ProjectDocument = NonNullable<Ok<"/api/v1/projects/{id}/documents", "get">["documents"]>[number]
 
 export type Task = NonNullable<Ok<"/api/v1/tasks", "get">["tasks"]>[number]
 export type CrewMember = NonNullable<Ok<"/api/v1/projects/{id}/participants", "get">["participants"]>[number]
