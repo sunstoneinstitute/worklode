@@ -132,6 +132,12 @@ const (
 
 	permActorAdmin Permission = "actor.admin"
 
+	// permIdeaRead and permIdeaWrite cover ideas (WL-REQ-1799). They gate
+	// reaching an ideas route only: which ideas a caller sees is the store's
+	// visibility predicate, since a private idea is its author's alone.
+	permIdeaRead  Permission = "idea.read"
+	permIdeaWrite Permission = "idea.write"
+
 	// permTaskToken covers minting a task-scoped token (WL-REQ-48, WL-306):
 	// POST /api/v1/tasks/{id}/tokens. Not actor.admin, deliberately — the
 	// minted credential is strictly narrower than the minter's own (bound to
@@ -322,6 +328,10 @@ var grants = map[Permission][]Role{
 	// Admin-only for a reason worth keeping written down: any bearer token
 	// could otherwise mint further tokens, which is privilege escalation.
 	permActorAdmin: {RoleAdmin},
+
+	// Every authenticated actor may file and read ideas (WL-REQ-1799).
+	permIdeaRead:  {RoleUser, RoleAdmin},
+	permIdeaWrite: {RoleUser, RoleAdmin},
 
 	// See the permission's comment: minting a task-scoped token narrows
 	// privilege, so it is every authenticated actor's.

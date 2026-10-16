@@ -475,3 +475,18 @@ func TestMetricsEndpointSurvivesCollectorFailure(t *testing.T) {
 		t.Fatalf("failing collector's family should be absent:\n%s", body)
 	}
 }
+
+// TestNewServerValidatesIntakeProject: a LODE_INTAKE_PROJECT naming no project
+// fails the boot with a message naming the variable (WL-REQ-1799).
+func TestNewServerValidatesIntakeProject(t *testing.T) {
+	t.Parallel()
+	st := newTestStore(t)
+	_, _, err := api.NewServer(st, api.Config{IntakeProject: "nope"})
+	if err == nil || !strings.Contains(err.Error(), "LODE_INTAKE_PROJECT") {
+		t.Fatalf("NewServer with an unknown intake project: err = %v, want one naming LODE_INTAKE_PROJECT", err)
+	}
+	createProject(t, st, "intake")
+	if _, _, err := api.NewServer(st, api.Config{IntakeProject: "intake"}); err != nil {
+		t.Fatalf("NewServer with an existing intake project: %v", err)
+	}
+}
