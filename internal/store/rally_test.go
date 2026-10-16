@@ -481,7 +481,7 @@ func retag(t *testing.T, s *Store, id, kind string) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return UpdateTaskFields(tx, taskTestNow, id, nil, nil, nil, nil, nil, nil, nil, &kind, nil)
+			return UpdateTaskFields(tx, taskTestNow, id, nil, nil, nil, nil, nil, nil, nil, &kind, nil, nil)
 		})
 	return err
 }

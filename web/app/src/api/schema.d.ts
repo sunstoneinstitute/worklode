@@ -5352,7 +5352,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a task */
+        /** Create a task; due, when set, is YYYY-MM-DD */
         post: {
             parameters: {
                 query?: never;
@@ -5520,7 +5520,7 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Update a task's fields */
+        /** Update a task's fields; due is YYYY-MM-DD, and "" clears it */
         patch: {
             parameters: {
                 query?: never;
@@ -7833,6 +7833,7 @@ export interface components {
             /** Format: date-time */
             created_at?: string;
             created_by?: string;
+            due?: string;
             holder?: components["schemas"]["Holder"];
             human_only?: boolean;
             id?: string;
@@ -8076,6 +8077,7 @@ export interface components {
             concern?: string;
             decisions?: components["schemas"]["Decision"][];
             draft?: boolean;
+            due?: string;
             follow_up_to?: string;
             governed_by?: string[];
             kind?: string;
@@ -8471,6 +8473,7 @@ export interface components {
             artifacts?: null | string[];
             body?: null | string;
             concern?: null | string;
+            due?: null | string;
             human_only?: null | boolean;
             kind?: null | string;
             milestone?: null | string;
@@ -9327,6 +9330,7 @@ export interface components {
             /** Format: date-time */
             created_at?: string;
             created_by?: string;
+            due?: string;
             human_only?: boolean;
             id?: string;
             kind?: string;
@@ -9379,6 +9383,7 @@ export interface components {
             created_at?: string;
             created_by?: string;
             decisions?: components["schemas"]["Decision"][];
+            due?: string;
             edges?: {
                 in?: components["schemas"]["TaskEdgeIn"][] | null;
                 out?: components["schemas"]["TaskEdgeOut"][] | null;
