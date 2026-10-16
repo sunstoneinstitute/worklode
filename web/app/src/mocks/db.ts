@@ -30,8 +30,8 @@ function seed() {
   }
   const tasks: Task[] = [
     { id: "WL-1", project: "p1", title: "Draft launch copy", state: "in_progress", priority: "high", assignee: "stig", due: "2026-10-30" },
-    { id: "WL-2", project: "p1", title: "Audit icon set", state: "todo", priority: "medium", assignee: "", due: "" },
-    { id: "DP-1", project: "p2", title: "Load the glacier data", state: "todo", priority: "low", assignee: "ada", due: "2026-11-02" },
+    { id: "WL-2", project: "p1", title: "Audit icon set", state: "ready", priority: "medium", assignee: "", due: "" },
+    { id: "DP-1", project: "p2", title: "Load the glacier data", state: "ready", priority: "low", assignee: "ada", due: "2026-11-02" },
   ]
   return { me, projects, crew, participants, tasks }
 }

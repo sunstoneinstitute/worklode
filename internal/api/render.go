@@ -21,36 +21,6 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
-// boardView maps the org-wide board (shared with GET /api/v1/board) plus the
-// untriaged-inbox count into the ui board view. active/title drive the shell.
-func boardView(b *model.BoardResponse, inboxCount int, title, active string) ui.BoardView {
-	v := ui.BoardView{
-		Page:       ui.PageProps{Title: title, ActiveGlobal: active},
-		InboxCount: inboxCount,
-		Projects:   make([]ui.BoardProject, 0, len(b.Projects)),
-	}
-	for _, p := range b.Projects {
-		v.Projects = append(v.Projects, ui.BoardProject{
-			ID:         p.ID,
-			Name:       p.Name,
-			InProgress: p.InProgress,
-			InReview:   p.InReview,
-			Ready:      p.Ready,
-			Blocked:    p.Blocked,
-		})
-	}
-	for _, f := range b.RecentFailures {
-		v.RecentFailures = append(v.RecentFailures, ui.BoardFailure{
-			OccurredAt: f.OccurredAt,
-			Cluster:    f.Cluster,
-			Kind:       f.Kind,
-			Workload:   f.Workload,
-			Message:    f.Message,
-		})
-	}
-	return v
-}
-
 // driftView maps WL-SPEC-82's four read surfaces into the drift board's view.
 // drift and gaps are nil when no graph-server is configured; graphEnabled is
 // what tells the page the difference between "no findings" and "nothing
@@ -439,7 +409,7 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 	return ui.CockpitView{
 		Page:         ui.PageProps{Title: title},
 		CanonicalURL: c.CanonicalURL,
-		NewTaskURL:   "/projects/" + c.Project.ID + "/tasks/new",
+		NewTaskURL:   "/projects/" + c.Project.ID + "/tasks",
 		Project:      cockpitProjectInMode(c.Project, c.Mode),
 		PinnedFocus:  cockpitFocus(c.PinnedFocus),
 		NextDecision: cockpitDecision(c.NextDecision),
@@ -723,27 +693,6 @@ func formTitle(base, errMsg string) string {
 	return "Error: " + base
 }
 
-// newTaskView builds the new-task form, with the submitted values selected in
-// the menus and errMsg shown ("" on first render).
-func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string, dictation bool) ui.NewTaskView {
-	return ui.NewTaskView{
-		Form: ui.FormShell{
-			Page:      ui.PageProps{Title: formTitle("worklode: "+project.Name+": new task", errMsg)},
-			Project:   project,
-			Action:    "/projects/" + project.ID + "/tasks",
-			CancelURL: "/projects/" + project.ID,
-			Error:     errMsg,
-			Dictation: dictation,
-		},
-		Title:      v.Title,
-		Body:       v.Body,
-		Priorities: formOptions(webTaskPriorities, v.Priority, ""),
-		Kinds:      formOptions(webTaskKinds, v.Kind, ""),
-		Concerns:   formOptions(webTaskConcerns, v.Concern, "None"),
-		Draft:      v.Draft,
-	}
-}
-
 // newDeliverableView builds the deliverable form the same way, offering the
 // project's milestones as the optional attach-at-declaration choice
 // (WL-REQ-120), default "No milestone".
@@ -976,6 +925,40 @@ func taskPRRows(prs []store.PullRequest, ci map[store.RepoSHA][]store.CIRun) []u
 		})
 	}
 	return rows
+}
+
+// prCIState rolls up every CI run recorded for a PR's head SHA into one
+// state for the task page header dot (WL-933): take the newest run per
+// workflow name, then any not yet "completed" makes the PR "running";
+// otherwise any conclusion outside "success", "skipped" and "neutral" makes
+// it "failed"; otherwise "passed". "" when no run is recorded.
+func prCIState(runs []store.CIRun) string {
+	newest := make(map[string]store.CIRun, len(runs))
+	for _, r := range runs {
+		if cur, ok := newest[r.Workflow]; !ok || r.StartedAt.After(cur.StartedAt) {
+			newest[r.Workflow] = r
+		}
+	}
+	if len(newest) == 0 {
+		return ""
+	}
+	failed := false
+	for _, r := range newest {
+		if r.Status != "completed" {
+			return "running"
+		}
+		conclusion := ""
+		if r.Conclusion != nil {
+			conclusion = *r.Conclusion
+		}
+		if conclusion != "success" && conclusion != "skipped" && conclusion != "neutral" {
+			failed = true
+		}
+	}
+	if failed {
+		return "failed"
+	}
+	return "passed"
 }
 
 // ruleView maps one rule into its cockpit page (S20). projectID is the

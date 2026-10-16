@@ -25,7 +25,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
 
-// progressPage handles GET /projects/{id}/progress, runBoardPage-shaped: the
+// progressPage handles GET /projects/{id}/progress: the
 // project header first (so an unknown project 404s like every other project
 // route), then the one progress read.
 //

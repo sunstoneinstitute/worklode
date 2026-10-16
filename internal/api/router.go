@@ -98,11 +98,12 @@ var routeGuards = map[string]routeGuard{
 	"GET /ideas":          guarded(permWebRead),
 	"GET /intake":         guarded(permWebRead),
 	// The SPA shell (WL-REQ-1303): registerSPA registers each spaRoutes path.
-	"GET /projects":                  guarded(permWebRead),
-	"GET /projects/{projectId}/crew": guarded(permWebRead),
-	"GET /projects/{id}":             guarded(permWebRead),
-	"GET /projects/{id}/work":        guarded(permWebRead),
-	"GET /projects/{id}/progress":    guarded(permWebRead),
+	"GET /projects":                   guarded(permWebRead),
+	"GET /projects/{projectId}/tasks": guarded(permWebRead),
+	"GET /tasks":                      guarded(permWebRead),
+	"GET /projects/{projectId}/crew":  guarded(permWebRead),
+	"GET /projects/{id}":              guarded(permWebRead),
+	"GET /projects/{id}/progress":     guarded(permWebRead),
 	// The Progress page's live update stream (WL-REQ-1339): permWebRead like the
 	// page itself, not permEventStream — a frame carries nothing the page's
 	// own reader could not already see (WL-REQ-1786).
@@ -142,8 +143,6 @@ var routeGuards = map[string]routeGuard{
 	// deliverable ids are globally unique, and the handler reads the project
 	// off the deliverable for the redirect.
 	"POST /deliverables/{id}/report": guarded(permWebWrite),
-	"GET /projects/{id}/tasks/new":   guarded(permWebWrite),
-	"POST /projects/{id}/tasks":      guarded(permWebWrite),
 	// The cockpit's tombstone review (WL-REQ-117) and its two Restore buttons.
 	// Reading the page is an ordinary web read; restoring carries the
 	// permission the JSON API's undelete carries — permTaskWrite for a task,
@@ -156,7 +155,6 @@ var routeGuards = map[string]routeGuard{
 	"POST /dictate":                             guarded(permWebWrite),
 	"GET /projects/{id}/documents":              guarded(permWebRead),
 	"GET /projects/{id}/{section}":              guarded(permWebRead),
-	"GET /work":                                 guarded(permWebRead),
 	"GET /inbox":                                guarded(permWebRead),
 	"GET /reviews":                              guarded(permWebRead),
 	"GET /approvals/{id}":                       guarded(permWebRead),

@@ -6,7 +6,10 @@ import { initials } from "@/lib/initials"
 import { ColorModeToggle } from "@/components/ColorModeToggle"
 import { CloseIcon, MenuIcon, NotificationsIcon } from "@/components/icons"
 
-const NAV_ITEMS = [{ label: "Projects", to: "/projects" }] as const
+const NAV_ITEMS = [
+  { label: "Projects", to: "/projects" },
+  { label: "Tasks", to: "/tasks" },
+] as const
 
 export function Header({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: () => void }) {
   const me = useMe()

@@ -24,7 +24,7 @@ import (
 // PageProps carries the fields the Page shell needs on every page: the
 // document title and which primary-nav destination to mark aria-current.
 // ActiveGlobal drives the top bar's navigation marking: one of "ideas",
-// "intake", "projects", "work", "knowledge" — WL-REQ-331's five
+// "intake", "projects", "tasks", "knowledge" — WL-REQ-331's five
 // destinations. It is left empty on project-scoped pages, whose project-local
 // nav carries the current-page marker instead, and on pages that name no
 // destination: the task page, Home, Reviews and Deliveries, which kept their
@@ -36,35 +36,6 @@ type PageProps struct {
 }
 
 // --- board (Work) ------------------------------------------------------------
-
-// BoardView is the org-wide board rendered at Work ("/work").
-type BoardView struct {
-	Page           PageProps
-	InboxCount     int
-	Projects       []BoardProject
-	RecentFailures []BoardFailure
-}
-
-// BoardProject is one project's four state buckets on the board. Each row
-// embeds model.BoardTask directly; the template reads its Task fields
-// (ID/Title/Priority/State/Assignee) plus Holder.
-type BoardProject struct {
-	ID         string
-	Name       string
-	InProgress []model.BoardTask
-	InReview   []model.BoardTask
-	Ready      []model.BoardTask
-	Blocked    []model.BoardTask
-}
-
-// BoardFailure is one recent runtime failure on the org-wide board.
-type BoardFailure struct {
-	OccurredAt time.Time
-	Cluster    string
-	Kind       string
-	Workload   string
-	Message    string
-}
 
 // --- drift board (WL-REQ-1362) --------------------------------------------------
 
@@ -97,42 +68,6 @@ func gapSubject(g model.Gap) string {
 }
 
 // --- run board ------------------------------------------------------
-
-// RunBoardView is a project's run board: its live work grouped
-// into six fixed groups, rendered inside the project sidebar
-// frame like the other project-local destinations.
-type RunBoardView struct {
-	Page         PageProps
-	CanonicalURL string
-	Project      CockpitProject
-	Groups       []RunGroupView
-}
-
-// RunGroupView is one group in the spec's pinned order: its heading, the
-// rows in it, and how many more rows exist beyond the bound (always 0 for
-// Ready/Running/Waiting/Needs judgment, which are never bounded).
-type RunGroupView struct {
-	Label string
-	Rows  []RunRowView
-	More  int
-}
-
-// RunRowView is one task's row on the run board, every field pre-formatted
-// so the templ component stays dumb (see internal/api/runboard.go's
-// assembleRunBoard). Ready and terminal (Failed/Completed) rows carry only
-// TaskID/Title/TaskURL/Owner; Waiting rows also set Holds; Running and
-// Needs-judgment rows carry the full fact list — Delegate, LeaseAge,
-// LastEvent, Costs, and the PR/check labels — left empty/nil rather than
-// invented when the underlying fact is absent.
-type RunRowView struct {
-	TaskID, Title, TaskURL string
-	Owner, Delegate        string
-	LeaseAge, LastEvent    string
-	Holds                  string
-	PRLabel, PRURL         string
-	CheckLabel             string
-	Costs                  []string
-}
 
 // --- reviews (WL-REQ-344) -------------------------------------------------
 
@@ -1182,20 +1117,6 @@ type MarkdownInputView struct {
 	Placeholder string
 	Value       string
 	Dictation   bool
-}
-
-// NewTaskView is the "New task" form (POST to Form.Action), rendering the
-// same fields POST /api/v1/tasks takes: the two required choices (priority,
-// kind), the optional concern, and the draft switch that decides whether the
-// task lands claimable.
-type NewTaskView struct {
-	Form       FormShell
-	Title      string
-	Body       string
-	Priorities []FormOption
-	Kinds      []FormOption
-	Concerns   []FormOption
-	Draft      bool
 }
 
 // NewDeliverableView is the "Declare a deliverable" form: exactly the
