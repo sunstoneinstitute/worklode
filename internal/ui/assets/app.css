@@ -1863,7 +1863,7 @@ nav.local a .cnt {
   margin-bottom: 0;
 }
 .prose {
-  line-height: 1.65;
+  line-height: 1.5;
 }
 .prose p,.prose ul,.prose ol,.prose blockquote,.prose h1,.prose h2,.prose h3,.prose h4 {
   max-width: 72ch;
