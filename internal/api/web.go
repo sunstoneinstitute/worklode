@@ -530,9 +530,8 @@ var projectSections = map[string]struct{ Title, Message string }{
 
 // projectSectionPage handles GET /projects/{id}/{section}: an honest
 // placeholder for a not-yet-implemented project-local destination. It loads
-// the project cockpit first (so an unknown project 404s the same way
-// projectPage does) and renders the same project header/navigation as the
-// Overview page, naming the missing capability. It has no form, button,
+// the project cockpit first (so an unknown project 404s) and renders the
+// project header/navigation, naming the missing capability. It has no form, button,
 // count, or fake record — see the global constraints in the plan.
 func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 	section := r.PathValue("section")
@@ -1023,59 +1022,6 @@ func (s *server) renderDocVersion(w http.ResponseWriter, r *http.Request, d mode
 	d = s.withProjectKey(r.Context(), d)
 	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys).For(keyByID[d.Project]), d, v)
 	s.renderWeb(w, r, http.StatusOK, "doc version page", ui.DocVersion(view))
-}
-
-// projectPage handles GET /projects/{id}: the project cockpit, via the same
-// assembleProjectCockpit used by GET /api/v1/projects/{id}/cockpit — it must
-// not call its own HTTP API. Deployments are not project-scoped in the
-// schema (they reference an artifact, not a project), so nothing
-// deployment-specific is shown here.
-func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := r.PathValue("id")
-
-	cockpit, err := s.assembleProjectCockpit(ctx, id)
-	s.observeCockpitProjection("web", err)
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-
-	// Read off the store rather than the projection: the cockpit's JSON shape
-	// is contracted by WL-SPEC-82, and this is a page affordance, not a change
-	// to that contract.
-	sessions, err := s.st.OpenAgentSessionsForProject(ctx, id)
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-
-	view := cockpitView(cockpit, "worklode: "+cockpit.Project.Name)
-	view.Project.HasSpecs = s.hasSpecs(ctx, id)
-	view.AgentSessions = projectAgentSessionRows(sessions, s.now())
-
-	// Also read off the store rather than the projection (WL-667), for the
-	// same reason as the agent sessions above: not contracted on the JSON
-	// cockpit.
-	if rally, err := s.st.ActiveRally(ctx, id); err == nil {
-		total, err := s.st.RallyMemberCount(ctx, rally.ID)
-		if err != nil {
-			s.webStoreErr(w, err)
-			return
-		}
-		tree, err := s.st.BlockerTree(ctx, rally.ID)
-		if err != nil {
-			s.webStoreErr(w, err)
-			return
-		}
-		card := rallyCardView(rally, total, tree)
-		view.Rally = &card
-	} else if !errors.Is(err, store.ErrNotFound) {
-		s.webStoreErr(w, err)
-		return
-	}
-
-	s.renderWeb(w, r, http.StatusOK, "project page", ui.Cockpit(view))
 }
 
 // summarizeEntry renders one timeline entry as a human-readable row: a type

@@ -17,15 +17,6 @@ func renderTask(t *testing.T, v TaskView) string {
 	return b.String()
 }
 
-func renderCockpit(t *testing.T, v CockpitView) string {
-	t.Helper()
-	var b strings.Builder
-	if err := Cockpit(v).Render(context.Background(), &b); err != nil {
-		t.Fatalf("render Cockpit: %v", err)
-	}
-	return b.String()
-}
-
 func TestTaskPageShowsAgentSessions(t *testing.T) {
 	body := renderTask(t, TaskView{
 		Page: PageProps{Title: "WL-7"},
@@ -46,27 +37,6 @@ func TestTaskPageShowsAgentSessions(t *testing.T) {
 func TestPagesOmitAgentSessionsCardWhenThereAreNone(t *testing.T) {
 	if body := renderTask(t, TaskView{Page: PageProps{Title: "WL-7"}}); strings.Contains(body, "Agent sessions") {
 		t.Errorf("task page rendered an empty Agent sessions card:\n%s", body)
-	}
-	if body := renderCockpit(t, CockpitView{Page: PageProps{Title: "p"}}); strings.Contains(body, "Agent sessions") {
-		t.Errorf("cockpit rendered an empty Agent sessions card:\n%s", body)
-	}
-}
-
-// On the project page a session has to name its task: the page lists work
-// from every task, so a row without one places nothing.
-func TestCockpitAgentSessionNamesItsTask(t *testing.T) {
-	body := renderCockpit(t, CockpitView{
-		Page: PageProps{Title: "p"},
-		AgentSessions: []AgentSessionRow{
-			{Agent: "codex", ActorID: "stig", Task: "WL-9", TaskURL: "/tasks/WL-9",
-				Started: "1d ago", LastSeen: "5m ago", Running: true},
-		},
-	})
-	if !strings.Contains(body, `href="/tasks/WL-9"`) {
-		t.Errorf("cockpit session row does not link its task:\n%s", body)
-	}
-	if !strings.Contains(body, "Codex") {
-		t.Errorf("cockpit session row missing the agent label:\n%s", body)
 	}
 }
 

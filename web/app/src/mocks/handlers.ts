@@ -40,6 +40,13 @@ export const handlers = [
     return HttpResponse.json(body)
   }),
 
+  http.get("/api/v1/projects/:id/summary", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const summary = db.summaries[String(params.id)]
+    if (!summary) return HttpResponse.json({ error: "project not found" }, { status: 404 })
+    return HttpResponse.json(summary)
+  }),
+
   http.post("/api/v1/projects/:id/participants", async ({ params, request }) => {
     await delay(LATENCY_MS)
     const members = db.participants[String(params.id)]

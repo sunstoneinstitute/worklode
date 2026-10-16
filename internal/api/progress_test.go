@@ -145,7 +145,7 @@ func TestProgressPageNeedsASpec(t *testing.T) {
 		t.Fatalf("GET /projects/bare/progress = %d, want 404", rec.Code)
 	}
 
-	overview := getPage(t, h, "/projects/bare").Body.String()
+	overview := getPage(t, h, "/projects/bare/milestones").Body.String()
 	if strings.Contains(overview, "/projects/bare/progress") {
 		t.Error("a project with no spec still links to Progress from its sidebar")
 	}
@@ -161,7 +161,7 @@ func TestProgressSidebarEntry(t *testing.T) {
 	createProject(t, st, "proj")
 	seedProgressProject(t, h, token, "proj")
 
-	for _, page := range []string{"/projects/proj", "/projects/proj/milestones", "/projects/proj/progress"} {
+	for _, page := range []string{"/projects/proj/milestones", "/projects/proj/progress"} {
 		if !strings.Contains(getPage(t, h, page).Body.String(), "/projects/proj/progress") {
 			t.Errorf("%s has no Progress entry in its sidebar", page)
 		}

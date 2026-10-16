@@ -129,3 +129,15 @@ export function useTasks({ project }: { project?: string } = {}) {
     },
   })
 }
+
+/** What is late, what awaits review and each Crew member's load (WL-REQ-1797) */
+export function useProjectSummary(id: string) {
+  return useQuery({
+    queryKey: queryKeys.projects.summary(id),
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/projects/{id}/summary", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data
+    },
+  })
+}

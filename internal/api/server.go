@@ -762,7 +762,6 @@ func (s *server) registerCockpit(r *router) {
 		"Low-friction idea capture, looser than and promotable into Intake, arrives with WL-REQ-342.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
 		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with WL-REQ-342 and WL-REQ-125.")))
-	r.web("GET /projects/{id}", s.navWrap("projects", s.projectPage))
 	// The literal-segment patterns win over the {section} wildcard below for
 	// the destinations that are built; everything else still lands on the
 	// honest placeholder.

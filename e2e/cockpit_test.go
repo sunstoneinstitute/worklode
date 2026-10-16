@@ -111,8 +111,8 @@ func findWorkItem(t *testing.T, items []cockpitWorkItemJSON, id string) cockpitW
 // TestProjectCockpitPublicSurface is Part 1's durable acceptance test: it
 // builds a project's whole cockpit-relevant state through public writes only
 // (HTTP API calls plus one signed GitHub webhook delivery — never a direct
-// store write), then asserts the JSON cockpit contract and the rendered
-// Overview/placeholder/asset surfaces the web UI serves from it.
+// store write), then asserts the JSON cockpit contract and the
+// placeholder/asset surfaces the web UI serves.
 func TestProjectCockpitPublicSurface(t *testing.T) {
 	ctx := context.Background()
 
@@ -265,26 +265,24 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		t.Fatalf("repositories = %+v, want exactly [%s]", got.Repositories, cockpitRepo)
 	}
 
-	// --- Step 3: the browser-style Overview, canonical across ?variant= -----
+	// The Overview's owner/delegate copy and its exception card, which the
+	// templ page used to render, rest on these JSON facts (WL-REQ-1804).
+	if item.Owner.Name != "Dana" || item.Delegate.Name != "Agent One" {
+		t.Fatalf("owner/delegate names = %q/%q, want Dana/Agent One", item.Owner.Name, item.Delegate.Name)
+	}
+	if ev := got.SecondaryConcerns[0].Evidence.Summary; !strings.Contains(ev, blocker.ID+" (ready, unclaimed) has held 1 task for") ||
+		!strings.Contains(ev, "— "+dependent.ID+" (medium).") {
+		t.Fatalf("highest-signal concern evidence = %q, want %s holding %s", ev, blocker.ID, dependent.ID)
+	}
+
+	// --- Step 3: the Overview is the SPA's page (WL-REQ-1804) ----------------
 
 	code, body := getPage(t, srv.URL+"/projects/proj")
 	if code != http.StatusOK {
 		t.Fatalf("GET /projects/proj: status = %d, want 200", code)
 	}
-	assertOverviewSurface(t, body, blocker.ID, dependent.ID)
-
-	for _, variant := range []string{"A", "B", "C"} {
-		code, body := getPage(t, srv.URL+"/projects/proj?variant="+variant)
-		if code != http.StatusOK {
-			t.Fatalf("GET /projects/proj?variant=%s: status = %d, want 200", variant, code)
-		}
-		if !strings.Contains(body, `data-panel="B"`) {
-			t.Fatalf("variant=%s body does not render the Operations (mode B) canvas:\n%s", variant, body)
-		}
-		if !strings.Contains(body, `<link rel="canonical" href="/projects/proj">`) {
-			t.Fatalf("variant=%s body missing the canonical /projects/proj link:\n%s", variant, body)
-		}
-		assertNoFabrication(t, variant, body)
+	if strings.Contains(body, `<nav aria-label="Primary"`) {
+		t.Fatalf("GET /projects/proj rendered the templ cockpit, want the SPA shell:\n%s", body)
 	}
 
 	// --- Step 4: honest destinations and embedded assets ---------------------
@@ -330,92 +328,6 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		code, _ := getPage(t, srv.URL+path)
 		if code != http.StatusOK {
 			t.Fatalf("GET %s: status = %d, want 200 (no auth redirect)", path, code)
-		}
-	}
-}
-
-// assertOverviewSurface checks the rendered /projects/proj page in Operations
-// mode: two navigation landmarks (the project sidebar carries the Primary nav
-// above its own Project nav, so global destinations stay reachable from a
-// project page), one main landmark,
-// the labelled decision-rail aside, the mode-B canvas, an Active-work row
-// distinguishing Dana (owner) from Agent One (delegate), Observed status
-// evidence, and the highest-signal exception that links back to the blocking
-// task with the evidence it rests on (the "source" the blocked-state
-// evidence traces to).
-func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
-	t.Helper()
-
-	if !strings.Contains(body, "All projects") {
-		t.Fatalf("missing the All-projects back-link:\n%s", body)
-	}
-	if got := strings.Count(body, "<nav aria-label="); got != 2 {
-		t.Fatalf("nav landmark count = %d, want 2 (Primary, Project):\n%s", got, body)
-	}
-	if !strings.Contains(body, `<nav aria-label="Primary"`) {
-		t.Fatalf("missing the global nav landmark:\n%s", body)
-	}
-	if !strings.Contains(body, `<nav aria-label="Project"`) {
-		t.Fatalf("missing the project-local nav landmark:\n%s", body)
-	}
-	if got := strings.Count(body, `<main id="main-content"`); got != 1 {
-		t.Fatalf("main landmark count = %d, want 1:\n%s", got, body)
-	}
-	if !strings.Contains(body, `<aside class="rail" aria-label="Decisions and exceptions">`) {
-		t.Fatalf("missing the decision-rail landmark:\n%s", body)
-	}
-	if !strings.Contains(body, `data-panel="B"`) {
-		t.Fatalf("missing the Operations (mode B) canvas:\n%s", body)
-	}
-
-	// The Active-work row surfaces the accountable human owner and the agent
-	// that holds the lease distinctly, via the "Agent One · on behalf of
-	// Dana" who-line — never the bare id, never conflating the two roles.
-	if !strings.Contains(body, "Agent One") {
-		t.Fatalf("missing the agent delegate \"Agent One\":\n%s", body)
-	}
-	if !strings.Contains(body, "on behalf of Dana") {
-		t.Fatalf("missing owner attribution \"on behalf of Dana\":\n%s", body)
-	}
-	if !strings.Contains(body, "Observed") {
-		t.Fatalf("missing Observed status evidence:\n%s", body)
-	}
-
-	// The highest-signal exception names the root blocker, its det-v1 evidence
-	// (docs/research/cockpit-exception-ranking.md §6) naming what it holds —
-	// here just the one dependent task, at its own priority — and links back
-	// to the blocking task.
-	if !strings.Contains(body, "Highest-signal exception") {
-		t.Fatalf("missing the highest-signal exception card:\n%s", body)
-	}
-	if !strings.Contains(body, blockerID+" (ready, unclaimed) has held 1 task for") {
-		t.Fatalf("missing root evidence header %q (ready, unclaimed) has held 1 task for ...:\n%s", blockerID, body)
-	}
-	if !strings.Contains(body, "— "+dependentID+" (medium).") {
-		t.Fatalf("missing the held-task chain naming %s (medium):\n%s", dependentID, body)
-	}
-	if !strings.Contains(body, `<a href="/tasks/`+blockerID+`">`) {
-		t.Fatalf("missing the source link back to the blocking task /tasks/%s:\n%s", blockerID, body)
-	}
-}
-
-// assertNoFabrication checks a rendered Overview variant carries none of the
-// forbidden, non-existent-in-Part-1 concepts: a bare percentage or a
-// project-health readout anywhere, or a fabricated form/button control in the
-// page content. The form/button check scopes to the main-content region: the
-// shared shell legitimately carries a theme-toggle <button>, which is chrome,
-// not fabricated workflow state.
-func assertNoFabrication(t *testing.T, variant, body string) {
-	t.Helper()
-	for _, forbidden := range []string{"%", "project health"} {
-		if strings.Contains(body, forbidden) {
-			t.Fatalf("variant=%s unexpectedly renders %q:\n%s", variant, forbidden, body)
-		}
-	}
-	main := mainContent(t, body)
-	for _, forbidden := range []string{"<form", "<button"} {
-		if strings.Contains(main, forbidden) {
-			t.Fatalf("variant=%s unexpectedly renders %q in its main content:\n%s", variant, forbidden, body)
 		}
 	}
 }
