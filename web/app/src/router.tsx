@@ -12,8 +12,10 @@ import { coerceSearch } from "@/components/ui/data-table/url-state"
 import { LoadError } from "@/components/ui/load-state"
 import { ProjectLayout } from "@/layouts/ProjectLayout"
 import { RootLayout } from "@/layouts/RootLayout"
+import { isDocumentTab } from "@/lib/content-types"
 import { NotFound } from "@/pages/NotFound"
 import { ProjectCrew } from "@/pages/ProjectCrew"
+import { ProjectDocuments } from "@/pages/ProjectDocuments"
 import { ProjectOverview } from "@/pages/ProjectOverview"
 import { ProjectTasks } from "@/pages/ProjectTasks"
 import { Projects } from "@/pages/Projects"
@@ -75,6 +77,17 @@ const projectCrewRoute = createRoute({
   component: ProjectCrew,
 })
 
+const projectDocumentsRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "documents",
+  component: ProjectDocuments,
+  // The Files & links table keeps its sort and filters beside the tab
+  validateSearch: (raw: Record<string, unknown>) => {
+    const search = coerceSearch(raw)
+    return { ...search, tab: isDocumentTab(search.tab) ? search.tab : "specs" }
+  },
+})
+
 const projectTasksRoute = createRoute({
   getParentRoute: () => projectRoute,
   path: "tasks",
@@ -85,7 +98,7 @@ const projectTasksRoute = createRoute({
 export const routeTree = rootRoute.addChildren([
   projectsRoute,
   tasksRoute,
-  projectRoute.addChildren([projectOverviewRoute, projectCrewRoute, projectTasksRoute]),
+  projectRoute.addChildren([projectOverviewRoute, projectCrewRoute, projectDocumentsRoute, projectTasksRoute]),
 ])
 
 /**

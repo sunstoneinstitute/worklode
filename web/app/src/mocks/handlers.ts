@@ -1,6 +1,6 @@
 import { HttpResponse, delay, http } from "msw"
 import type { components } from "@/api/schema"
-import { type CrewMember, type Task, db, projectDetail } from "./db"
+import { type CrewMember, type ProjectDocument, type Task, db, projectDetail } from "./db"
 import type { Ok } from "./typed"
 
 // Visible loading states in development; instant in tests
@@ -145,5 +145,71 @@ export const handlers = [
     if (!task) return HttpResponse.json({ error: "task not found" }, { status: 404 })
     task.assignee = ""
     return HttpResponse.json(task)
+  }),
+
+  http.get("/api/v1/docs", async ({ request }) => {
+    await delay(LATENCY_MS)
+    const query = new URL(request.url).searchParams
+    const project = query.get("project")
+    const kind = query.get("kind")
+    const body: Ok<"/api/v1/docs", "get"> = {
+      docs: db.docs.filter((d) => (!project || d.project === project) && (!kind || d.kind === kind)),
+    }
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/rules", async ({ request }) => {
+    await delay(LATENCY_MS)
+    const project = new URL(request.url).searchParams.get("project")
+    const body: Ok<"/api/v1/rules", "get"> = db.rules.filter((r) => !project || r.project === project)
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/projects/:id/documents", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const id = String(params.id)
+    if (!projectDetail(id)) return HttpResponse.json({ error: "project not found" }, { status: 404 })
+    const body: Ok<"/api/v1/projects/{id}/documents", "get"> = { documents: db.documents.filter((d) => d.project === id) }
+    return HttpResponse.json(body)
+  }),
+
+  http.post("/api/v1/projects/:id/documents", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const id = String(params.id)
+    if (!projectDetail(id)) return HttpResponse.json({ error: "project not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["CreateProjectDocumentInput"]
+    const document: ProjectDocument = {
+      source: "",
+      milestone: "",
+      due: "",
+      date: "",
+      url: "",
+      participants: [],
+      ...input,
+      id: `doc_${String(db.documents.length + 1).padStart(12, "0")}`,
+      project: id,
+    }
+    db.documents.push(document)
+    return HttpResponse.json(document, { status: 201 })
+  }),
+
+  http.patch("/api/v1/documents/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const document = db.documents.find((d) => d.id === params.id)
+    if (!document) return HttpResponse.json({ error: "document not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["PatchProjectDocumentInput"]
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== null && value !== undefined) Object.assign(document, { [key]: value })
+    }
+    const body: Ok<"/api/v1/documents/{id}", "patch"> = document
+    return HttpResponse.json(body)
+  }),
+
+  http.delete("/api/v1/documents/:id", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const i = db.documents.findIndex((d) => d.id === params.id)
+    if (i < 0) return HttpResponse.json({ error: "document not found" }, { status: 404 })
+    db.documents.splice(i, 1)
+    return new HttpResponse(null, { status: 204 })
   }),
 ]

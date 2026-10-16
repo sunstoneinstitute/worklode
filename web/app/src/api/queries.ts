@@ -48,6 +48,12 @@ export const queryKeys = {
     all: ["tasks"] as const,
     list: (project?: string) => ["tasks", { project: project ?? null }] as const,
   },
+  documents: {
+    all: ["documents"] as const,
+    list: (project: string) => ["documents", { project }] as const,
+  },
+  docs: (project: string, kind: string) => ["docs", { project, kind }] as const,
+  rules: (project: string) => ["rules", { project }] as const,
 }
 
 export const meQueryOptions = queryOptions({
@@ -138,6 +144,42 @@ export function useProjectSummary(id: string) {
       const { data, error, response } = await api.GET("/api/v1/projects/{id}/summary", { params: { path: { id } } })
       if (error) throw failure(error, response)
       return data
+    },
+  })
+}
+
+/** A project's documents register: its files, datasets and links (WL-REQ-1798) */
+export function useProjectDocuments(id: string) {
+  return useQuery({
+    queryKey: queryKeys.documents.list(id),
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/projects/{id}/documents", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data.documents ?? []
+    },
+  })
+}
+
+/** A project's backbone documents of one kind, "spec" or "plan" (WL-REQ-1805) */
+export function useProjectDocs(id: string, kind: "spec" | "plan") {
+  return useQuery({
+    queryKey: queryKeys.docs(id, kind),
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/docs", { params: { query: { project: id, kind } } })
+      if (error) throw failure(error, response)
+      return data.docs ?? []
+    },
+  })
+}
+
+/** A project's rules (WL-REQ-1805) */
+export function useProjectRules(id: string) {
+  return useQuery({
+    queryKey: queryKeys.rules(id),
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/rules", { params: { query: { project: id } } })
+      if (error) throw failure(error, response)
+      return data ?? []
     },
   })
 }

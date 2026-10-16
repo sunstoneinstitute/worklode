@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
-	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -465,7 +464,7 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		{"/docs", global, true},
 		{"/projects/proj/milestones", project, true},
 		{"/projects/proj/reviews", project, true}, {"/projects/proj/decisions", project, true},
-		{"/projects/proj/documents", project, true}, {"/projects/proj/activity", project, true},
+		{"/projects/proj/activity", project, true},
 		{"/projects/proj/deliverables", project, true},
 		{"/projects/proj/deliverables/new", project, true},
 		{"/projects/proj/chore/1", project, false},
@@ -509,9 +508,8 @@ func TestProjectSections(t *testing.T) {
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
-	// Deliverables, Crew and Documents are absent on purpose: they are built
-	// destinations now, with their own pages (see webform_test.go,
-	// TestCrewPage and TestProjectDocsPage below).
+	// Deliverables, Crew and Documents are absent on purpose: they have their
+	// own pages (webform_test.go; the SPA serves Crew and Documents).
 	sections := map[string]string{
 		"reviews":   "WL-REQ-124",
 		"decisions": "specs 025 and 029",
@@ -544,43 +542,6 @@ func TestProjectSections(t *testing.T) {
 	rr = doReq(t, h, "GET", "/projects/nosuch/reviews", "", nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown project section status = %d, want 404; body %s", rr.Code, rr.Body.String())
-	}
-}
-
-// TestProjectDocsPage checks the Documents destination lists the project's
-// corpus rather than naming the specs it waits for: a document in the project
-// renders with a link to its page, one in another project does not, and the
-// page sits in the project-local shell.
-func TestProjectDocsPage(t *testing.T) {
-	t.Parallel()
-	st, h, token := newTestServer(t)
-	createProject(t, st, "proj")
-	createProject(t, st, "other")
-	createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "proj", Kind: "spec", Number: 25, Slug: "025-mine", Body: docSpecBody,
-	})
-	createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "other", Kind: "spec", Number: 26, Slug: "026-theirs", Body: docSpecBody,
-	})
-
-	rr := doReq(t, h, "GET", "/projects/proj/documents", "", nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
-	}
-	body := rr.Body.String()
-	assertShell(t, body)
-	assertOneAriaCurrent(t, body)
-	main := mainContent(t, body)
-	bodyContains(t, main, "WL-SPEC-25")
-	if strings.Contains(main, "SPEC-26") {
-		t.Error("the project Documents page lists another project's document")
-	}
-	if strings.Contains(body, "Backbone documents arrive with") {
-		t.Error("the documents destination still renders its old placeholder message")
-	}
-
-	if rr := doReq(t, h, "GET", "/projects/nosuch/documents", "", nil); rr.Code != http.StatusNotFound {
-		t.Fatalf("unknown project status = %d, want 404; body %s", rr.Code, rr.Body.String())
 	}
 }
 

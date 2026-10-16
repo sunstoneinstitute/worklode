@@ -10,6 +10,7 @@ var spaRoutes = []string{
 	"/projects",
 	"/projects/$projectId",
 	"/projects/$projectId/crew",
+	"/projects/$projectId/documents",
 	"/projects/$projectId/tasks",
 	"/tasks",
 }

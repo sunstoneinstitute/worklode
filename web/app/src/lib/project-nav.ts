@@ -7,7 +7,7 @@ import { DashboardIcon, DescriptionIcon, GroupIcon, SettingsIcon, TasksIcon } fr
 export const PROJECT_NAV_ITEMS = [
   { label: "Overview", Icon: DashboardIcon, path: "", spa: true, to: "/projects/$projectId" },
   { label: "Tasks", Icon: TasksIcon, path: "/tasks", spa: true, to: "/projects/$projectId/tasks" },
-  { label: "Documents", Icon: DescriptionIcon, path: "/documents", spa: false },
+  { label: "Documents", Icon: DescriptionIcon, path: "/documents", spa: true, to: "/projects/$projectId/documents" },
   { label: "Crew", Icon: GroupIcon, path: "/crew", spa: true, to: "/projects/$projectId/crew" },
 ] as const
 
