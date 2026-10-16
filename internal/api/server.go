@@ -675,6 +675,9 @@ type server struct {
 	// by source (cli, web) and outcome (reported, invalid, not_found, error);
 	// see deliverables.go and observeDeliverableReport.
 	deliverableReports *prometheus.CounterVec
+	// projectDocumentWrites counts documents register writes (WL-REQ-1798)
+	// by op; see projectdocuments.go.
+	projectDocumentWrites *prometheus.CounterVec
 
 	// planBudgetChecks counts createDoc/updateDocBody's plan token budget
 	// check (S6, S19), by outcome (ok, warn, refused); see planbudget.go and
@@ -1050,6 +1053,10 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("GET /api/v1/crew", s.listCrew)
 	r.api("GET /api/v1/projects/{id}/participants", s.listCrewMembers)
 	r.api("GET /api/v1/projects/{id}/summary", s.getProjectSummary)
+	r.api("GET /api/v1/projects/{id}/documents", s.listProjectDocuments)
+	r.api("POST /api/v1/projects/{id}/documents", s.createProjectDocument)
+	r.api("PATCH /api/v1/documents/{id}", s.patchProjectDocument)
+	r.api("DELETE /api/v1/documents/{id}", s.deleteProjectDocument)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
 	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)

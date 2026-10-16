@@ -63,7 +63,7 @@ var routeDocs = mergeRouteDocs(
 	ruleedgeRouteDocs, rulesupersedeRouteDocs, runtimeRouteDocs,
 	searchRouteDocs, secretRouteDocs, skillRouteDocs, softdeleteRouteDocs,
 	taskRouteDocs, termRouteDocs, taskblockerRouteDocs, tasktokenRouteDocs,
-	timelineRouteDocs, summaryRouteDocs,
+	timelineRouteDocs, summaryRouteDocs, projectDocumentRouteDocs,
 )
 
 // openapiRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.

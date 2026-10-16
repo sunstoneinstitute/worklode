@@ -21,7 +21,7 @@ func TestProjectDocumentsCRUD(t *testing.T) {
 		}
 	}
 
-	d, err := s.CreateProjectDocument(ctx, docOwner{project: "p1"}, model.CreateProjectDocumentInput{
+	d, err := s.CreateProjectDocument(ctx, DocOwner{project: "p1"}, model.CreateProjectDocumentInput{
 		Name: "Kickoff", Category: "meeting-notes", Type: "document", Status: "draft",
 		Date: "2026-10-01", Participants: []string{"ada", "bob"},
 	}, "ada")
@@ -59,17 +59,17 @@ func TestProjectDocumentsCRUD(t *testing.T) {
 	if _, err := s.PatchProjectDocument(ctx, d.ID, model.PatchProjectDocumentInput{Participants: &ghost}, "bob"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("unknown participant on patch: %v", err)
 	}
-	if _, err := s.CreateProjectDocument(ctx, docOwner{project: "p1"}, model.CreateProjectDocumentInput{
+	if _, err := s.CreateProjectDocument(ctx, DocOwner{project: "p1"}, model.CreateProjectDocumentInput{
 		Name: "x", Category: "sources", Type: "link", Status: "draft", Participants: []string{"ghost"},
 	}, "ada"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("unknown participant on create: %v", err)
 	}
-	if _, err := s.CreateProjectDocument(ctx, docOwner{project: "p1"}, model.CreateProjectDocumentInput{
+	if _, err := s.CreateProjectDocument(ctx, DocOwner{project: "p1"}, model.CreateProjectDocumentInput{
 		Name: "x", Category: "sources", Type: "link", Status: "draft", Due: "10/01",
 	}, "ada"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("bad due: %v", err)
 	}
-	if _, err := s.CreateProjectDocument(ctx, docOwner{}, model.CreateProjectDocumentInput{
+	if _, err := s.CreateProjectDocument(ctx, DocOwner{}, model.CreateProjectDocumentInput{
 		Name: "x", Category: "sources", Type: "link", Status: "draft",
 	}, "ada"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("no owner: %v", err)
