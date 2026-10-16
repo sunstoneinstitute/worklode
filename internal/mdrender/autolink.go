@@ -278,8 +278,10 @@ func hyphenAdjacent(value []byte, start, end int) bool {
 
 // findRefs locates every reference in value, earlier patterns winning where
 // matches overlap, returned in document order. keys decides which bare
-// <KEY>-<n> tokens are task ids; an empty set links none.
-func findRefs(value []byte, keys ProjectKeys) []refMatch {
+// <KEY>-<n> tokens are task ids; an empty set links none. self is the id of
+// the heading value sits in, "" outside one: a rule ref in the heading of its
+// own section links to the rule, since an in-page link would point at itself.
+func findRefs(value []byte, keys ProjectKeys, self string) []refMatch {
 	var out []refMatch
 	taken := func(s, e int) bool {
 		for _, m := range out {
@@ -299,7 +301,7 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 		}
 		ref := string(value[loc[0]:loc[1]])
 		href := ruleRefPrefix + ref
-		if anchor, ok := keys.inPage[ref]; ok {
+		if anchor, ok := keys.inPage[ref]; ok && anchor != self {
 			href = "#" + anchor
 		}
 		out = append(out, refMatch{loc[0], loc[1], href})
@@ -366,7 +368,14 @@ func linkifyRun(run []*gast.Text, source []byte, keys ProjectKeys) {
 		return
 	}
 	start, stop := first.Segment.Start, last.Segment.Stop
-	refs := findRefs(source[start:stop], keys)
+	var self string
+	if parent.Kind() == gast.KindHeading {
+		if id, ok := parent.AttributeString("id"); ok {
+			b, _ := id.([]byte)
+			self = string(b)
+		}
+	}
+	refs := findRefs(source[start:stop], keys, self)
 	if len(refs) == 0 {
 		return
 	}
