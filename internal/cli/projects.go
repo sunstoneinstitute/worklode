@@ -154,6 +154,12 @@ func (c *Client) ListCrew(ctx context.Context, project string) ([]model.CrewMemb
 	return resp.Participants, raw, nil
 }
 
+// ProjectSummary calls GET /api/v1/projects/{id}/summary (WL-REQ-1797).
+func (c *Client) ProjectSummary(ctx context.Context, project string) (model.ProjectSummary, []byte, error) {
+	return doJSON[model.ProjectSummary](ctx, c, http.MethodGet,
+		"/api/v1/projects/"+url.PathEscape(project)+"/summary", nil, "project summary")
+}
+
 // RemoveCrewMember calls DELETE /api/v1/projects/{id}/participants/{actor},
 // removing every role that actor holds on the project in one act (WL-REQ-1605).
 // The server answers 204 with no body, so the returned raw bytes are
