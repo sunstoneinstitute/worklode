@@ -442,6 +442,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/references":                           guarded(permReferenceWrite),
 	"GET /api/v1/references":                            guarded(permReferenceRead),
 	"GET /api/v1/projects/{id}/participants":            guarded(permProjectRead),
+	"GET /api/v1/projects/{id}/summary":                 guarded(permProjectRead),
 	"POST /api/v1/projects/{id}/participants":           guarded(permCrewWrite),
 	"DELETE /api/v1/projects/{id}/participants/{actor}": guarded(permCrewWrite),
 	// Reporting overhead usage (WL-REQ-40) is not a claim on any one task,

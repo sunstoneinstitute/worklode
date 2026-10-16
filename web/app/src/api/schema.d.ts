@@ -4081,6 +4081,53 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/projects/{id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Summarise a project's past-due, awaiting-review and per-member work */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectSummary"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/terms": {
         parameters: {
             query?: never;
@@ -8935,6 +8982,11 @@ export interface components {
         ProjectSettingsInput: {
             [key: string]: unknown;
         };
+        ProjectSummary: {
+            awaiting_review?: components["schemas"]["SummaryItem"][] | null;
+            past_due?: components["schemas"]["SummaryItem"][] | null;
+            workloads?: components["schemas"]["Workload"][] | null;
+        };
         ProjectionFailure: {
             attempts?: number;
             /** Format: date-time */
@@ -9298,6 +9350,12 @@ export interface components {
         SkillsListResponse: {
             skills?: components["schemas"]["Skill"][] | null;
         };
+        SummaryItem: {
+            due?: string;
+            id?: string;
+            label?: string;
+            url?: string;
+        };
         SupersedeEntry: {
             new?: string[] | null;
             old?: string;
@@ -9548,6 +9606,15 @@ export interface components {
         };
         WithdrawDocInput: {
             justification?: string;
+        };
+        Workload: {
+            actor?: string;
+            availability?: string;
+            awaiting_review?: components["schemas"]["SummaryItem"][] | null;
+            done?: number;
+            past_due?: components["schemas"]["SummaryItem"][] | null;
+            total?: number;
+            upcoming?: components["schemas"]["SummaryItem"][] | null;
         };
     };
     responses: never;
