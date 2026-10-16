@@ -29,8 +29,29 @@ export function failure(error: ErrorResponse, response: Response) {
   return new HttpError(response.status, error.error ?? `${response.status} ${response.statusText}`.trim())
 }
 
+/**
+ * Query keys follow the URL path, so everything under /api/v1/tasks is
+ * `["tasks", ...]` and one invalidateQueries({ queryKey: ["tasks"] })
+ * refreshes every task list, whatever its filter.
+ */
+export const queryKeys = {
+  me: ["whoami"] as const,
+  crew: ["crew"] as const,
+  projects: {
+    all: ["projects"] as const,
+    list: ["projects"] as const,
+    detail: (id: string) => ["projects", "detail", id] as const,
+    crew: (id: string) => ["projects", "crew", id] as const,
+    summary: (id: string) => ["projects", "summary", id] as const,
+  },
+  tasks: {
+    all: ["tasks"] as const,
+    list: (project?: string) => ["tasks", { project: project ?? null }] as const,
+  },
+}
+
 export const meQueryOptions = queryOptions({
-  queryKey: ["whoami"],
+  queryKey: queryKeys.me,
   queryFn: async () => {
     const { data, error, response } = await api.GET("/api/v1/whoami")
     if (response.status === 401) {
@@ -50,7 +71,7 @@ export function useMe() {
 
 export function useProjects() {
   return useQuery({
-    queryKey: ["projects"],
+    queryKey: queryKeys.projects.list,
     queryFn: async () => {
       const { data, error, response } = await api.GET("/api/v1/projects")
       if (error) throw failure(error, response)
@@ -61,7 +82,7 @@ export function useProjects() {
 
 export function useProject(id: string) {
   return useQuery({
-    queryKey: ["projects", "detail", id],
+    queryKey: queryKeys.projects.detail(id),
     queryFn: async () => {
       const { data, error, response } = await api.GET("/api/v1/projects/{id}", { params: { path: { id } } })
       if (error) throw failure(error, response)
@@ -72,7 +93,7 @@ export function useProject(id: string) {
 
 export function useCrew() {
   return useQuery({
-    queryKey: ["crew"],
+    queryKey: queryKeys.crew,
     queryFn: async () => {
       const { data, error, response } = await api.GET("/api/v1/crew")
       if (error) throw failure(error, response)
@@ -81,7 +102,7 @@ export function useCrew() {
   })
 }
 
-export const projectCrewKey = (id: string) => ["projects", "crew", id]
+export const projectCrewKey = queryKeys.projects.crew
 
 /** A project's Crew roster */
 export function useProjectCrew(id: string) {
@@ -93,6 +114,18 @@ export function useProjectCrew(id: string) {
       })
       if (error) throw failure(error, response)
       return data.participants ?? []
+    },
+  })
+}
+
+/** Tasks, optionally those of one project (`GET /api/v1/tasks?project=`) */
+export function useTasks({ project }: { project?: string } = {}) {
+  return useQuery({
+    queryKey: queryKeys.tasks.list(project),
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/tasks", { params: { query: { project } } })
+      if (error) throw failure(error, response)
+      return data.tasks ?? []
     },
   })
 }

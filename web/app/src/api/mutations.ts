@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "./client"
-import { failure, projectCrewKey } from "./queries"
+import { type ListResource, useCreateInList, useRemoveFromList, useUpdateInList } from "./list-mutations"
+import { failure, projectCrewKey, queryKeys } from "./queries"
 import type { components } from "./schema"
+import type { Task } from "./types"
 
 type AddCrewMemberInput = components["schemas"]["AddCrewMemberInput"]
 
@@ -37,4 +39,66 @@ export function useRemoveCrewMember(projectId: string) {
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: projectCrewKey(projectId) }),
   })
+}
+
+// Task and project writes. The optimistic behavior lives in
+// list-mutations.ts; each resource only says where its data lives.
+
+const TASKS: ListResource = {
+  rootKey: queryKeys.tasks.all,
+  listKey: queryKeys.tasks.all,
+  noun: "task",
+  // A task's state and due date feed the project summary
+  alsoInvalidate: [["projects", "summary"]],
+}
+
+export function useCreateTask() {
+  return useCreateInList(TASKS, async (input: components["schemas"]["CreateTaskInput"]) => {
+    const { data, error, response } = await api.POST("/api/v1/tasks", { body: input })
+    if (error) throw failure(error, response)
+    return data
+  })
+}
+
+/**
+ * Edits a task. The assignee does not go through EditTaskInput: it calls
+ * /assign or /unassign, which record the assignment event (an empty
+ * assignee clears it).
+ */
+export function useUpdateTask() {
+  return useUpdateInList<Task>(TASKS, async (id, patch) => {
+    const { assignee, ...fields } = patch
+    const path = { id }
+    if (Object.keys(fields).length > 0) {
+      const { error, response } = await api.PATCH("/api/v1/tasks/{id}", { params: { path }, body: fields })
+      if (error) throw failure(error, response)
+    }
+    if (assignee !== undefined) {
+      const { error, response } = assignee
+        ? await api.POST("/api/v1/tasks/{id}/assign", { params: { path }, body: { assignee } })
+        : await api.POST("/api/v1/tasks/{id}/unassign", { params: { path } })
+      if (error) throw failure(error, response)
+    }
+  })
+}
+
+export function useDeleteTask() {
+  return useRemoveFromList<Task>(TASKS, async (id) => {
+    const { error, response } = await api.DELETE("/api/v1/tasks/{id}", {
+      params: { path: { id } },
+      body: { justification: "deleted from the task list" },
+    })
+    if (error) throw failure(error, response)
+  })
+}
+
+// The API has no project delete yet. A delete mutation built on this
+// resource refetches tasks and documents too, whatever the server did
+// with them.
+export const PROJECTS: ListResource = {
+  rootKey: queryKeys.projects.all,
+  listKey: queryKeys.projects.list,
+  detailKey: queryKeys.projects.detail,
+  noun: "project",
+  alsoInvalidate: [["tasks"], ["documents"]],
 }

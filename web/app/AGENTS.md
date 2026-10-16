@@ -156,6 +156,10 @@ Every read goes through `src/api/`:
 - `mutations.ts`: write hooks, each invalidating the queries it changes. An error body is
   `ErrorResponse` (`{ "error": string }`); a hook throws it as an
   `HttpError` carrying the status.
+- `list-mutations.ts`: optimistic create/update/delete over a `ListResource`
+  (edit shows at once, rolls back on error with a `sonner` toast, refetch
+  after the last overlapping write). Each resource in `mutations.ts` passes
+  its own `send`/`remove` callbacks.
 - `query-client.ts`: a failed read is retried once, never on a 4xx.
 - `types.ts`: re-exports of the generated shapes.
 
