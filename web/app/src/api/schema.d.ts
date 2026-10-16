@@ -2160,6 +2160,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a register document */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update a register document */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchProjectDocumentInput"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDocument"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/api/v1/drift": {
         parameters: {
             query?: never;
@@ -3462,6 +3542,88 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Deliverable"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a project's documents register */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDocumentListResponse"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Register a document on a project */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateProjectDocumentInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDocument"];
                     };
                 };
                 /** @description Any non-2xx answer */
@@ -8111,6 +8273,18 @@ export interface components {
             position?: number;
             title?: string;
         };
+        CreateProjectDocumentInput: {
+            category?: string;
+            date?: string;
+            due?: string;
+            milestone?: string;
+            name?: string;
+            participants?: string[] | null;
+            source?: string;
+            status?: string;
+            type?: string;
+            url?: string;
+        };
         CreateProjectInput: {
             horizon?: string;
             id?: string;
@@ -8827,6 +9001,18 @@ export interface components {
             substantive?: boolean;
             task?: string;
         };
+        PatchProjectDocumentInput: {
+            category?: null | string;
+            date?: null | string;
+            due?: null | string;
+            milestone?: null | string;
+            name?: null | string;
+            participants?: null | string[];
+            source?: null | string;
+            status?: null | string;
+            type?: null | string;
+            url?: null | string;
+        };
         PatchProjectInput: {
             decision_accountable?: null | string;
             decision_readiness?: null | string;
@@ -8952,6 +9138,29 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             } | null;
+        };
+        ProjectDocument: {
+            category?: string;
+            /** Format: date-time */
+            created_at?: string;
+            created_by?: string;
+            date?: string;
+            due?: string;
+            id?: string;
+            idea?: string;
+            milestone?: string;
+            name?: string;
+            participants?: string[] | null;
+            project?: string;
+            source?: string;
+            status?: string;
+            type?: string;
+            /** Format: date-time */
+            updated_at?: string;
+            url?: string;
+        };
+        ProjectDocumentListResponse: {
+            documents?: components["schemas"]["ProjectDocument"][] | null;
         };
         ProjectGraph: {
             covers?: components["schemas"]["GraphCover"][] | null;

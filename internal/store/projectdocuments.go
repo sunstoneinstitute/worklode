@@ -16,8 +16,11 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// docOwner is the project or idea a register row belongs to; exactly one is set.
-type docOwner struct{ project, idea string }
+// DocOwner is the project or idea a register row belongs to; exactly one is set.
+type DocOwner struct{ project, idea string }
+
+// ProjectOwner is the DocOwner for a project's register.
+func ProjectOwner(projectID string) DocOwner { return DocOwner{project: projectID} }
 
 const (
 	// Participants are read as JSON so database/sql needs no text[] codec.
@@ -170,7 +173,7 @@ func insertProjectDocument(tx *sql.Tx, d *model.ProjectDocument) error {
 // CreateProjectDocument registers a row under owner and records
 // document.registered in the same transaction. Validation failures are
 // ErrInvalidInput naming the field.
-func (s *Store) CreateProjectDocument(ctx context.Context, owner docOwner, in model.CreateProjectDocumentInput, actor string) (*model.ProjectDocument, error) {
+func (s *Store) CreateProjectDocument(ctx context.Context, owner DocOwner, in model.CreateProjectDocumentInput, actor string) (*model.ProjectDocument, error) {
 	if (owner.project == "") == (owner.idea == "") {
 		return nil, fmt.Errorf("document needs exactly one of project and idea: %w", ErrInvalidInput)
 	}
