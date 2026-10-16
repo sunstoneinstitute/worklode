@@ -76,6 +76,11 @@ type Config struct {
 	// store.DefaultBranchTemplate. An invalid template fails NewServer.
 	BranchTemplate string `env:"LODE_BRANCH_TEMPLATE"`
 
+	// IntakeProject (LODE_INTAKE_PROJECT) is the project sharing an idea mints
+	// its intake task in (WL-REQ-1799). Empty means no intake project. A set
+	// id naming no project fails NewServer.
+	IntakeProject string `env:"LODE_INTAKE_PROJECT"`
+
 	// OIDC/SSO. The feature is off unless OIDCIssuer and OIDCClientID are both
 	// set; unset behaves exactly as before. SessionSecret is required when OIDC
 	// is enabled (Plan 2's web sessions sign cookies with it). PublicURL is the
@@ -686,6 +691,12 @@ type server struct {
 	planBudgetChecks *prometheus.CounterVec
 }
 
+// intakeProject returns the project shared ideas go to (WL-REQ-1799), and
+// false when LODE_INTAKE_PROJECT is unset.
+func (s *server) intakeProject() (id string, ok bool) {
+	return s.cfg.IntakeProject, s.cfg.IntakeProject != ""
+}
+
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
 // so the derived web callback redirect URIs are well-formed.
 func validatePublicURL(publicURL string) error {
@@ -1174,6 +1185,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 
 	if err := store.SetBranchTemplate(cfg.BranchTemplate); err != nil {
 		return nil, nil, err
+	}
+
+	if cfg.IntakeProject != "" {
+		if _, err := st.GetProject(context.Background(), cfg.IntakeProject); err != nil {
+			return nil, nil, fmt.Errorf("LODE_INTAKE_PROJECT: project %q: %w", cfg.IntakeProject, err)
+		}
 	}
 
 	// Instance configuration, read before anything serves: a flow decides
