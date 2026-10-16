@@ -16,6 +16,11 @@ bin/%: FORCE
 
 FORCE:
 
+# -count=1 bypasses Go's test result cache. PR CI clears it to reuse cached
+# results; the merge queue and local runs keep it, since a cached pass cannot
+# see changes in Postgres or other external services.
+TESTCOUNT ?= -count=1
+
 build: bin/lode ## Build the lode binary into bin/lode
 
 build-user: $(addprefix bin/,$(USER_BINARIES)) ## Build the three end-user binaries
@@ -28,7 +33,7 @@ install: ## Build and install the three end-user binaries to $(PREFIX)/bin
 	done
 
 test: ## Run the unit test suite
-	go test -trimpath -race -count=1 ./...
+	go test -trimpath -race $(TESTCOUNT) ./...
 
 # The tests scripts/ keeps for its own tooling. Stdlib python and plain
 # shell, so there is nothing to install and no Go build. _lint.yml runs this;
@@ -38,7 +43,7 @@ test-scripts: ## Run the tests for scripts/ (python + shell)
 	@set -e; for t in scripts/*_test.sh; do echo "==> $$t"; "$$t"; done
 
 test-e2e: ## Run the e2e suite (requires TEST_POSTGRES_DSN reachable)
-	go test -trimpath -race -count=1 -tags e2e ./e2e/
+	go test -trimpath -race $(TESTCOUNT) -tags e2e ./e2e/
 
 vet: ## Run go vet
 	go vet ./...
