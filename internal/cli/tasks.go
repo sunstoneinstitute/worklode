@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -392,17 +393,23 @@ func sessionCost(sess model.AgentSession) string {
 // TaskTable prints one row per task: id, priority, kind, state, project,
 // assignee (- when unassigned), title.
 func TaskTable(w io.Writer, tasks []model.Task) {
-	tbl := newTable(
-		column{header: "ID"},
-		column{header: "PRIORITY"},
-		column{header: "KIND"},
-		column{header: "STATE"},
-		column{header: "PROJECT"},
-		column{header: "ASSIGNEE"},
-		titleColumn("TITLE"),
-	)
+	// DUE shows only when a listed task has one, so output is unchanged for
+	// projects that never set a due date (WL-REQ-1796).
+	hasDue := slices.ContainsFunc(tasks, func(t model.Task) bool { return t.Due != "" })
+	cols := []column{
+		{header: "ID"}, {header: "PRIORITY"}, {header: "KIND"}, {header: "STATE"},
+		{header: "PROJECT"}, {header: "ASSIGNEE"},
+	}
+	if hasDue {
+		cols = append(cols, column{header: "DUE"})
+	}
+	tbl := newTable(append(cols, titleColumn("TITLE"))...)
 	for _, t := range tasks {
-		tbl.add(t.ID, t.Priority, t.Kind, t.State, t.Project, dash(t.Assignee), t.Title)
+		row := []string{t.ID, t.Priority, t.Kind, t.State, t.Project, dash(t.Assignee)}
+		if hasDue {
+			row = append(row, dash(t.Due))
+		}
+		tbl.add(append(row, t.Title)...)
 	}
 	tbl.flush(w)
 }

@@ -33,6 +33,8 @@ type TaskInput struct {
 	CreatedBy string
 	Draft     bool
 	Skills    []string
+	// Due is YYYY-MM-DD, or "" for none (WL-REQ-1796).
+	Due string
 	// PlanDoc is the plan document this task was minted from (0 = none).
 	// Written only by AcceptDoc's plan branch (WL-REQ-172) — no other caller
 	// sets it.
@@ -160,6 +162,24 @@ var containerForbiddenStates = map[string]bool{
 	"in_review": true, "deployed_dev": true, "deployed_prod": true, "released": true,
 }
 
+// ValidDue reports whether s is empty or a real YYYY-MM-DD date (WL-REQ-1796).
+func ValidDue(s string) error {
+	if s == "" {
+		return nil
+	}
+	if d, err := time.Parse("2006-01-02", s); err != nil || d.Format("2006-01-02") != s {
+		return fmt.Errorf("due must be YYYY-MM-DD: %w", ErrInvalidInput)
+	}
+	return nil
+}
+
+func dueArg(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
 // CreateTask allocates the next <KEY>-<n> id from the project's counter and
 // inserts the task inside the given transaction. It is meant to be called
 // from a RecordEvent apply callback with the store's clock as now, and
@@ -169,6 +189,9 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		return nil, fmt.Errorf("unknown concern %q: %w", in.Concern, ErrInvalidInput)
 	}
 	if err := lintUsabilityAlt(in.Concern, in.Body); err != nil {
+		return nil, err
+	}
+	if err := ValidDue(in.Due); err != nil {
 		return nil, err
 	}
 	// Before the id is allocated: a rejected input must not burn a task number.
@@ -217,11 +240,11 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		secretNames = []string{}
 	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, plan_task_key, about_doc, about_anchor)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17)`,
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, plan_task_key, about_doc, about_anchor, due)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18)`,
 		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
 		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
-		nullText(in.AboutAnchor),
+		nullText(in.AboutAnchor), dueArg(in.Due),
 	)
 	if err != nil {
 		if mapped := rallyUniqueConflict(err, id); mapped != err {
@@ -250,6 +273,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		PlanDoc:     in.PlanDoc,
 		AboutDoc:    in.AboutDoc,
 		AboutAnchor: in.AboutAnchor,
+		Due:         in.Due,
 	}
 	created.Branch = BranchFor(created)
 	return created, nil
@@ -481,7 +505,12 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 // other value must name a milestone in the task's own project (WL-REQ-120) — a
 // cross-project attach and an unknown milestone are both ErrInvalidInput,
 // checked inside this transaction against the task's current project.
-func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind, milestone *string) error {
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind, milestone, due *string) error {
+	if due != nil {
+		if err := ValidDue(*due); err != nil {
+			return err
+		}
+	}
 	if title != nil && strings.TrimSpace(*title) == "" {
 		return fmt.Errorf("title must not be blank: %w", ErrInvalidInput)
 	}
@@ -577,6 +606,9 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	if humanOnly != nil {
 		set("human_only", *humanOnly)
 	}
+	if due != nil {
+		set("due", dueArg(*due))
+	}
 	if kind != nil {
 		set("kind", *kind)
 	}
@@ -610,10 +642,10 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // coalesce needed; plan_doc and about_doc are nullable bigints (migrations
 // 0027 and 0028), scanned into sql.NullInt64. The three tombstone columns
 // (migration 0034) are all-null or all-set together, human_only (migration
-// 0060), milestone_id (migration 0062) and about_anchor (migration 0078) are
+// 0060), milestone_id (migration 0062) and about_anchor (migration 0078) and due (migration 0108) are
 // last for the same append-only reason.
 // prefixedTaskColumns below requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only, milestone_id, about_anchor`
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only, milestone_id, about_anchor, due::text`
 
 // taskColumnsT is taskColumns under the `t` alias, for the queries that join
 // tasks against another table.
@@ -630,16 +662,17 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var planDoc, aboutDoc sql.NullInt64
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
-	var milestone, aboutAnchor sql.NullString
+	var milestone, aboutAnchor, due sql.NullString
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
-		&deletedAt, &deletedBy, &justification, &t.HumanOnly, &milestone, &aboutAnchor); err != nil {
+		&deletedAt, &deletedBy, &justification, &t.HumanOnly, &milestone, &aboutAnchor, &due); err != nil {
 		return nil, err
 	}
 	t.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
 	t.PlanDoc = planDoc.Int64
 	t.AboutDoc = aboutDoc.Int64
 	t.AboutAnchor = aboutAnchor.String
+	t.Due = due.String
 	t.Body = body.String
 	t.Concern = concern.String
 	t.Assignee = assignee.String

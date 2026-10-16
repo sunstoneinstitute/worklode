@@ -49,6 +49,8 @@ type Task struct {
 	State              string `json:"state"`
 	Concern            string `json:"concern"`
 	NeedsDecomposition bool   `json:"needs_decomposition"`
+	// Due is the task's due date, YYYY-MM-DD, or "" when it has none (WL-REQ-1796).
+	Due string `json:"due"`
 	// HumanOnly marks a task no unattended worker may pick up: ready to work,
 	// but only by a person (console-only steps like minting a cloud
 	// credential). It keeps the task out of the ranked ready set that
@@ -130,14 +132,16 @@ var SettableTaskStates = []string{"merged", "deployed_dev", "deployed_prod", "re
 
 // CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).
 type CreateTaskInput struct {
-	Project  string   `json:"project"`
-	Title    string   `json:"title"`
-	Body     string   `json:"body"`
-	Priority string   `json:"priority"`
-	Kind     string   `json:"kind"`
-	Concern  string   `json:"concern,omitempty"`
-	Draft    bool     `json:"draft"`
-	Skills   []string `json:"skills,omitempty"`
+	Project  string `json:"project"`
+	Title    string `json:"title"`
+	Body     string `json:"body"`
+	Priority string `json:"priority"`
+	Kind     string `json:"kind"`
+	Concern  string `json:"concern,omitempty"`
+	Draft    bool   `json:"draft"`
+	// Due is YYYY-MM-DD, or "" for no due date (WL-REQ-1796).
+	Due    string   `json:"due,omitempty"`
+	Skills []string `json:"skills,omitempty"`
 	// Parent, when set, files the new task under this parent in the same
 	// request instead of a separate edge call.
 	Parent string `json:"parent,omitempty"`
@@ -166,6 +170,8 @@ type EditTaskInput struct {
 	Priority           *string `json:"priority"`
 	Concern            *string `json:"concern"`
 	NeedsDecomposition *bool   `json:"needs_decomposition"`
+	// Due, when non-nil, sets the due date (YYYY-MM-DD); "" clears it (WL-REQ-1796).
+	Due *string `json:"due"`
 	// HumanOnly, when non-nil, sets or clears the no-unattended-pickup flag.
 	HumanOnly *bool   `json:"human_only"`
 	State     *string `json:"state"`
