@@ -167,12 +167,14 @@ Every read goes through `src/api/`:
 
 `queries.ts` covers only what the ported pages read: Projects, Crew, the
 two Tasks pages (`/tasks` and a project's tasks, with a `due` date,
-WL-REQ-1796, WL-REQ-1803) and the Overview, whose `ProjectSummary` card
+WL-REQ-1796, WL-REQ-1803), the Documents page (`src/pages/ProjectDocuments.tsx`:
+`useProjectDocuments`, `useProjectDocs`, `useProjectRules` and the document
+mutations, WL-REQ-1805) and the Overview, whose `ProjectSummary` card
 (`src/components/ProjectSummary.tsx`, page in `src/pages/ProjectOverview.tsx`)
 reads `GET /api/v1/projects/{id}/summary` through `useProjectSummary`
 (WL-REQ-1797, WL-REQ-1804). The old `/work` routes are deleted, not
 redirected. Page
-code from the `worklode-design` prototype (ideas, intake, documents, crew,
+code from the `worklode-design` prototype (ideas, intake, crew,
 its optimistic list helpers) comes in when its page is
 ported, written against `schema.d.ts`. That repo's `docs/API.md` describes
 its mock API; the server's contract is `GET /api/v1/openapi.json`.
