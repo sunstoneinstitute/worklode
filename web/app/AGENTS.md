@@ -127,7 +127,7 @@ any future page:
 `src/router.tsx` declares every route in code. URLs are real paths
 (browser history), and `<Link to="...">` is typed, so a link to a missing
 route fails the type check. The pages are `/projects`, `/tasks`,
-`/projects/$projectId` (the Overview), `/projects/$projectId/crew` and
+`/projects/$projectId` (the Overview), `/projects/$projectId/crew`, `/projects/$projectId/documents` and
 `/projects/$projectId/tasks`; anything else
 renders `NotFound`. `src/routes.json` lists the same paths for the Go
 server (WL-REQ-1305), and `src/router.test.tsx` fails when the tree and

@@ -789,7 +789,6 @@ func (s *server) registerCockpit(r *router) {
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
 	r.web("POST /deliverables/{id}/report", s.navWrap("deliverables", s.reportDeliverableFromForm))
-	r.web("GET /projects/{id}/documents", s.navWrap("documents", s.projectDocsPage))
 	r.web("GET /projects/{id}/deleted", s.navWrap("deleted", s.deletedPage))
 	r.web("POST /projects/{id}/deleted/tasks/restore", s.navWrap("deleted", s.restoreTaskFromForm))
 	r.web("POST /projects/{id}/deleted/docs/restore", s.navWrap("deleted", s.restoreDocFromForm))

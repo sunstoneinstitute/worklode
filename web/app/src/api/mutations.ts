@@ -3,7 +3,7 @@ import { api } from "./client"
 import { type ListResource, useCreateInList, useRemoveFromList, useUpdateInList } from "./list-mutations"
 import { failure, projectCrewKey, queryKeys } from "./queries"
 import type { components } from "./schema"
-import type { Task } from "./types"
+import type { ProjectDocument, Task } from "./types"
 
 type AddCrewMemberInput = components["schemas"]["AddCrewMemberInput"]
 
@@ -88,6 +88,39 @@ export function useDeleteTask() {
       params: { path: { id } },
       body: { justification: "deleted from the task list" },
     })
+    if (error) throw failure(error, response)
+  })
+}
+
+// The documents register (WL-REQ-1798)
+const DOCUMENTS: ListResource = {
+  rootKey: queryKeys.documents.all,
+  listKey: queryKeys.documents.all,
+  noun: "document",
+  alsoInvalidate: [["projects", "summary"]],
+}
+
+export function useCreateProjectDocument(projectId: string) {
+  return useCreateInList(DOCUMENTS, async (input: components["schemas"]["CreateProjectDocumentInput"]) => {
+    const { data, error, response } = await api.POST("/api/v1/projects/{id}/documents", {
+      params: { path: { id: projectId } },
+      body: input,
+    })
+    if (error) throw failure(error, response)
+    return data
+  })
+}
+
+export function useUpdateDocument() {
+  return useUpdateInList<ProjectDocument>(DOCUMENTS, async (id, patch) => {
+    const { error, response } = await api.PATCH("/api/v1/documents/{id}", { params: { path: { id } }, body: patch })
+    if (error) throw failure(error, response)
+  })
+}
+
+export function useDeleteDocument() {
+  return useRemoveFromList<ProjectDocument>(DOCUMENTS, async (id) => {
+    const { error, response } = await api.DELETE("/api/v1/documents/{id}", { params: { path: { id } } })
     if (error) throw failure(error, response)
   })
 }
