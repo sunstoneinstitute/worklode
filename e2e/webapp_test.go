@@ -4,7 +4,8 @@
 // spaRoutes path is the SPA shell (WL-REQ-1304), every other cockpit path is
 // templ (WL-REQ-1303), one login session covers both (WL-REQ-1308), /api/v1
 // reads and the write checks on a non-bearer write (WL-REQ-1307,
-// WL-REQ-1770), the project summary and Overview shell (WL-REQ-1797), and the OpenAPI document's security schemes (WL-REQ-1309).
+// WL-REQ-1770), the project summary and Overview shell (WL-REQ-1797), the Documents register
+// (WL-REQ-1805), and the OpenAPI document's security schemes (WL-REQ-1309).
 package e2e
 
 import (
@@ -269,6 +270,42 @@ func TestWebAppOneHost(t *testing.T) {
 	wantStatus(resp, body, http.StatusOK)
 	if strings.Contains(body, `<nav aria-label="Primary"`) {
 		t.Error("/projects/web rendered the templ cockpit, want the SPA shell")
+	}
+
+	// 4e. The Documents register on the session: register, list, patch and
+	// delete a link; the spec and rule reads answer; the page is the SPA shell
+	// (WL-REQ-1805).
+	resp, body = do(http.MethodPost, "/api/v1/projects/web/documents",
+		`{"name":"Interview notes","category":"meeting-notes","type":"document","status":"draft","url":"https://example.com/notes","date":"2026-10-01"}`, webWrite)
+	wantStatus(resp, body, http.StatusCreated)
+	var regDoc model.ProjectDocument
+	if err := json.Unmarshal([]byte(body), &regDoc); err != nil || regDoc.ID == "" {
+		t.Fatalf("decode created document: %v (body %s)", err, body)
+	}
+	resp, body = do(http.MethodGet, "/api/v1/projects/web/documents", "", cookie)
+	wantStatus(resp, body, http.StatusOK)
+	var regList model.ProjectDocumentListResponse
+	if err := json.Unmarshal([]byte(body), &regList); err != nil {
+		t.Fatalf("decode documents: %v (body %s)", err, body)
+	}
+	if len(regList.Documents) != 1 || regList.Documents[0].ID != regDoc.ID {
+		t.Errorf("documents = %+v, want just %s", regList.Documents, regDoc.ID)
+	}
+	resp, body = do(http.MethodPatch, "/api/v1/documents/"+regDoc.ID, `{"status":"final"}`, webWrite)
+	wantStatus(resp, body, http.StatusOK)
+	if !strings.Contains(body, `"final"`) {
+		t.Errorf("patched document = %s, want status final", body)
+	}
+	resp, body = do(http.MethodDelete, "/api/v1/documents/"+regDoc.ID, "", webWrite)
+	wantStatus(resp, body, http.StatusNoContent)
+	resp, body = do(http.MethodGet, "/api/v1/docs?project=web&kind=spec", "", cookie)
+	wantStatus(resp, body, http.StatusOK)
+	resp, body = do(http.MethodGet, "/api/v1/rules?project=web", "", cookie)
+	wantStatus(resp, body, http.StatusOK)
+	resp, body = do(http.MethodGet, "/projects/web/documents", "", cookie)
+	wantStatus(resp, body, http.StatusOK)
+	if strings.Contains(body, `<nav aria-label="Primary"`) {
+		t.Error("/projects/web/documents rendered the templ cockpit, want the SPA shell")
 	}
 
 	// 5. /static/ belongs to the SPA, /assets/ to the templ cockpit.
