@@ -1,7 +1,7 @@
 ---
 description: Start a coding subagent that claims tasks via Worklode and executes them, in a loop
 model: sonnet
-argument-hint: "[task-id | spec-ref | bugs | unblock] [--project P] [--kind K] [--strict-focus] [--max N]"
+argument-hint: "[task-id | spec-ref | milestone-ref | bugs | unblock] [--project P] [--kind K] [--strict-focus] [--max N]"
 allowed-tools: Bash(lode *) Bash(git *)
 disable-model-invocation: true
 ---
@@ -25,6 +25,7 @@ unbounded.
 | `--kind <k>`, `--strict-focus` | narrowed frontier | the same, with those flags |
 | bugs, bugfixes, chores, "clean up" | maintenance | `lode task list --status ready --kind bug --json`, then `--kind chore` once bugs run dry |
 | a spec (`032`, `WL-SPEC-32`), a plan ref (`WL-PLAN-7`), or "finish <feature>" | one spec through to done | see **Spec focus** |
+| a milestone (`WL-MILE-2`) | one milestone's tasks | `lode task list --milestone <ref> --status ready --json`; the first task is the pick |
 | unblock, unblocking, "get things moving" | clear blockers | see **Unblock focus** |
 | a bare task id (`WL-429`) | that task, then stop | `lode work next WL-429 --json` |
 
