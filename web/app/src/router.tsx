@@ -14,6 +14,7 @@ import { ProjectLayout } from "@/layouts/ProjectLayout"
 import { RootLayout } from "@/layouts/RootLayout"
 import { NotFound } from "@/pages/NotFound"
 import { ProjectCrew } from "@/pages/ProjectCrew"
+import { ProjectOverview } from "@/pages/ProjectOverview"
 import { ProjectTasks } from "@/pages/ProjectTasks"
 import { Projects } from "@/pages/Projects"
 import { Tasks } from "@/pages/Tasks"
@@ -62,6 +63,12 @@ const projectRoute = createRoute({
   component: ProjectLayout,
 })
 
+const projectOverviewRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "/",
+  component: ProjectOverview,
+})
+
 const projectCrewRoute = createRoute({
   getParentRoute: () => projectRoute,
   path: "crew",
@@ -78,7 +85,7 @@ const projectTasksRoute = createRoute({
 export const routeTree = rootRoute.addChildren([
   projectsRoute,
   tasksRoute,
-  projectRoute.addChildren([projectCrewRoute, projectTasksRoute]),
+  projectRoute.addChildren([projectOverviewRoute, projectCrewRoute, projectTasksRoute]),
 ])
 
 /**

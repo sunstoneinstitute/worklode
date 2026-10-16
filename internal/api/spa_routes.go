@@ -8,6 +8,7 @@ import "strings"
 // each one to the SPA shell; the templ cockpit serves every other path.
 var spaRoutes = []string{
 	"/projects",
+	"/projects/$projectId",
 	"/projects/$projectId/crew",
 	"/projects/$projectId/tasks",
 	"/tasks",

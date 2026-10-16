@@ -153,8 +153,7 @@ func (s *server) progressSummaryFragment(w http.ResponseWriter, r *http.Request)
 // hasSpecs is the sidebar's Progress-entry bit. It is read here rather than
 // carried on model.CockpitProject because the JSON cockpit's shape is
 // contracted by WL-SPEC-82 and this is a page affordance, not a change to that
-// contract — the same reason projectPage reads its agent sessions and rally
-// off the store. A failed read logs and hides the entry: the page it leads to
+// contract. A failed read logs and hides the entry: the page it leads to
 // would fail the same way.
 func (s *server) hasSpecs(ctx context.Context, projectID string) bool {
 	has, err := s.st.ProjectHasSpecs(ctx, projectID)

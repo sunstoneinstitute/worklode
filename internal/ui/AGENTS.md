@@ -35,10 +35,8 @@ dependency line above.
 **Honest empty states** — the rule the cockpit is built on, and the
 easiest to break by being helpful. A panel whose data is absent is
 omitted, not filled with a placeholder value. Never fabricate a count,
-status or record; where the backbone stores no fact the page says so
-(`cockpit.templ`'s `automationBoundary` renders "not configured" for the
-policy/budget the backbone doesn't have yet, and "none recorded" for no
-spend). An empty list gets an explicit line ("No active work.", "None"),
+status or record; where the backbone stores no fact the page says so.
+An empty list gets an explicit line ("No active work.", "None"),
 never a silently empty container. If a design asks for something the store
 cannot answer, the answer is a `ui.PlaceholderView` naming the owning spec
 section (built in `render.go`), not an invented value.

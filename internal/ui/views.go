@@ -433,151 +433,16 @@ type PlaceholderView struct {
 
 // --- project cockpit --------------------------------------------------------
 
-// CockpitView is the project cockpit page (project overview), rendered in the
-// prototype's Operations mode (docs/mockups/cockpit/index.html, mode B). It is
-// the subset of model.CockpitProjection mode B shows, flattened for rendering
-// — not the whole projection: the projection's ranking focus and mapped
-// repositories have no panel in mode B, so they are absent here rather than
-// carried unrendered (WL-164); the JSON cockpit still serves both.
-// Rally, PinnedFocus and NextDecision are optional facts, and each panel is
-// omitted honestly when its data is absent rather than rendering an invented
-// placeholder.
-type CockpitView struct {
-	Page         PageProps
-	CanonicalURL string
-	NewTaskURL   string
-	Project      CockpitProject
-	// Rally is the project's active rally (WL-667), shown above PinnedFocus.
-	// Nil when the project has none active — a project may hold any number of
-	// draft rallies, which are inert and never rendered here, and at most one
-	// active, per the tasks_one_active_rally index.
-	Rally             *CockpitRally
-	PinnedFocus       *CockpitFocus
-	NextDecision      *CockpitDecision
-	Work              CockpitWork
-	SecondaryConcerns []CockpitConcern
-	CostTotals        []CockpitCostTotal
-	// AgentSessions is the agent sessions running on this project's tasks
-	// right now, liveliest first. It is carried on the view rather than added
-	// to model.CockpitProjection: the JSON projection's shape is contracted
-	// by WL-SPEC-82, and this is a page affordance, not a change to that
-	// contract.
-	AgentSessions []AgentSessionRow
-}
-
-// CockpitRally is the project's active rally: a hand-assembled goal that
-// carries no work of its own, its blocks edges naming the tasks to finish
-// now (WL-667). Done/Total count its live direct members regardless of state;
-// Members lists only the ones still open. Pickup ranking boosts more than
-// this card shows — the whole transitive blocker closure, not just depth 1.
-type CockpitRally struct {
-	ID      string
-	Title   string
-	URL     string
-	Done    int
-	Total   int
-	Members []CockpitRallyMember
-}
-
-// CockpitRallyMember is one of a rally's still-open members.
-type CockpitRallyMember struct {
-	ID    string
-	Title string
-	URL   string
-}
-
-// CockpitFocus is the project's pinned focus note shown at the top of the
-// Operations canvas: a short human-authored steer, who pinned it, and when.
-// PinnedBy is the pinner's display name ("" when unknown).
-type CockpitFocus struct {
-	Note     string
-	PinnedBy string
-	PinnedAt time.Time
-}
-
-// CockpitProject is the project identity shown in the cockpit and the
-// project-scoped sidebar.
-//
-// ModeName/ModeBasis carry the cockpit's operating mode, which the sidebar
-// renders as a pill under the project key. Only the cockpit sets them; the
-// other project pages leave them empty and the sidebar renders no pill, so the
-// mode fact has one home rather than one per page that shows it.
+// CockpitProject is the project identity shown in the project-scoped sidebar.
 type CockpitProject struct {
-	ID        string
-	Name      string
-	Key       string
-	ModeName  string
-	ModeBasis string
+	ID   string
+	Name string
+	Key  string
 
 	// HasSpecs says whether the project has at least one spec. The sidebar's
 	// Progress entry is conditional on it (WL-REQ-1341, extending WL-REQ-332):
 	// a project with no spec has no Progress page to link to.
 	HasSpecs bool
-}
-
-// CockpitWork holds the cockpit's four work buckets.
-type CockpitWork struct {
-	InProgress []WorkRow
-	InReview   []WorkRow
-	Ready      []WorkRow
-	Blocked    []WorkRow
-}
-
-// count is the total number of active work items across all four buckets — the
-// Active-work list renders an honest "no active work" line when it is zero.
-func (w CockpitWork) count() int {
-	return len(w.InProgress) + len(w.InReview) + len(w.Ready) + len(w.Blocked)
-}
-
-// Rows is every active work item in the order the Active-work list renders
-// them: in progress, in review, ready, blocked. The bucket order is a fact of
-// the view, not of the markup, so the template walks one sequence.
-func (w CockpitWork) Rows() []WorkRow {
-	rows := make([]WorkRow, 0, w.count())
-	for _, bucket := range [][]WorkRow{w.InProgress, w.InReview, w.Ready, w.Blocked} {
-		rows = append(rows, bucket...)
-	}
-	return rows
-}
-
-// WorkRow is one cockpit work item: the task link, its state, the evidence
-// behind that state, and the resolved owner/delegate display names ("" when
-// none).
-type WorkRow struct {
-	ID               string
-	Title            string
-	State            string
-	Priority         string
-	URL              string
-	Owner            string
-	Delegate         string
-	EvidenceCategory string
-	EvidenceSummary  string
-}
-
-// CockpitConcern is one secondary concern on the cockpit: what holds a ready
-// task — an open blocker task or an unfinished blocking plan.
-type CockpitConcern struct {
-	Title           string
-	URL             string
-	EvidenceSummary string
-}
-
-// CockpitCostTotal is a per-currency cost total for the cockpit's cost window.
-type CockpitCostTotal struct {
-	Currency       string
-	CostAmount     string
-	UnpricedTokens int64
-	// OverheadCostAmount is the share of CostAmount that had no task to bill
-	// to — orchestration run from the main checkout.
-	OverheadCostAmount string
-}
-
-// CockpitDecision is the next governed decision shown in the decision aside.
-type CockpitDecision struct {
-	Title       string
-	Accountable string
-	Readiness   string
 }
 
 // --- deliverables -----------------------------------------------------------
@@ -1183,37 +1048,6 @@ func approvalStateChip(state string) string {
 	}
 }
 
-// evidenceChip maps an evidence category ("declared", "user_reported",
-// "observed", "recommended") to its .chip evidence variant class. The
-// user_reported category uses the "user" chip class.
-func evidenceChip(category string) string {
-	switch category {
-	case "user_reported":
-		return "user"
-	case "declared", "observed", "recommended":
-		return category
-	default:
-		return "plain"
-	}
-}
-
-// evidenceLabel returns the human display text for an evidence category,
-// hyphenating user_reported ("User-reported", never "User reported").
-func evidenceLabel(category string) string {
-	switch category {
-	case "declared":
-		return "Declared"
-	case "user_reported":
-		return "User-reported"
-	case "observed":
-		return "Observed"
-	case "recommended":
-		return "Recommended"
-	default:
-		return category
-	}
-}
-
 // stateLabel returns the human display text for a task state.
 func stateLabel(state string) string {
 	switch state {
@@ -1230,24 +1064,7 @@ func stateLabel(state string) string {
 	}
 }
 
-// modeLabel returns the human display text for a cockpit lifecycle mode. Only
-// Operations is wired today; the other labels are ready for when their modes
-// are stored.
-func modeLabel(mode string) string {
-	switch mode {
-	case "operations":
-		return "Operations"
-	case "approved_launch":
-		return "Approved launch"
-	case "editorial_decision":
-		return "Editorial decision"
-	default:
-		return mode
-	}
-}
-
-// Initials returns up to two uppercase initials for a display name, for the
-// avatar badges in the Active-work list and decision rail, and for
+// Initials returns up to two uppercase initials for a display name, for
 // internal/api's Home card crew mapping (assembled facts carry full names,
 // never truncated ones). An empty name yields "" (a blank avatar), never a
 // fabricated placeholder.
@@ -1262,44 +1079,6 @@ func Initials(name string) string {
 		}
 	}
 	return string(out)
-}
-
-// avatarClass returns the .who avatar wrapper class for an owner/delegate
-// pair: an agent delegate holding the lease renders as ".who agent" (the AI
-// badge styling), everything else as a plain ".who". Shared by
-// cockpit.templ's workRow and runboard.templ's runRow.
-func avatarClass(owner, delegate string) string {
-	if delegate != "" {
-		return "who agent"
-	}
-	return "who"
-}
-
-// avatarInitials returns the avatar initials for an owner/delegate pair: the
-// delegated agent's when one holds the lease, otherwise the human owner's,
-// otherwise "" (unassigned — a blank avatar, never invented).
-func avatarInitials(owner, delegate string) string {
-	if delegate != "" {
-		return Initials(delegate)
-	}
-	return Initials(owner)
-}
-
-// actorsLine renders an owner/delegate pair's who-line: the delegated agent
-// acting on behalf of the accountable owner, an agent with no recorded
-// owner, a lone human owner, or an honest "Unassigned" when neither is
-// known.
-func actorsLine(owner, delegate string) string {
-	switch {
-	case delegate != "" && owner != "":
-		return delegate + " · on behalf of " + owner
-	case delegate != "":
-		return delegate + " · delegated agent"
-	case owner != "":
-		return owner + " · owner"
-	default:
-		return "Unassigned"
-	}
 }
 
 // pluralSuffix returns "s" unless n == 1 — the inbox-count pluralization.

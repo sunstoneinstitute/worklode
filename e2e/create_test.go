@@ -73,15 +73,15 @@ func TestCreateFromCockpitPublicSurface(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	// --- Step 1: the Overview offers the way in ------------------------------
+	// --- Step 1: the project sidebar offers the way in ----------------------
 
-	code, body := getPage(t, srv.URL+"/projects/proj")
+	code, body := getPage(t, srv.URL+"/projects/proj/milestones")
 	if code != http.StatusOK {
-		t.Fatalf("GET /projects/proj: status = %d, want 200", code)
+		t.Fatalf("GET /projects/proj/milestones: status = %d, want 200", code)
 	}
 	for _, want := range []string{`href="/projects/proj/tasks"`, `href="/projects/proj/deliverables"`} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("the Overview does not link to %s:\n%s", want, body)
+			t.Fatalf("the project sidebar does not link to %s:\n%s", want, body)
 		}
 	}
 
