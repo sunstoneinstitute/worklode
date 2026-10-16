@@ -72,6 +72,9 @@ type TaskFilter struct {
 	// child. Container-ness is inferred from the edges, so this is the only
 	// selector for it; no kind declares one (WL-REQ-88).
 	HasChildren bool
+	// Milestone narrows to the tasks attached to this milestone and their
+	// child_of descendants, which carry no milestone of their own.
+	Milestone string
 	// Repo narrows to the tasks of the project that owns this "owner/name"
 	// repo. A repo maps to at most one project (project_repos.repo is
 	// UNIQUE), so this is Project by another key — the one a client running
@@ -912,6 +915,13 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	if f.Parent != "" {
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges e
 		          WHERE e.from_task = tasks.id AND e.to_task = `+args.next(f.Parent)+` AND e.type = 'child_of')`)
+	}
+	if f.Milestone != "" {
+		conds = append(conds, `id IN (WITH RECURSIVE m(id) AS (
+		              SELECT id FROM tasks WHERE milestone_id = `+args.next(f.Milestone)+`
+		            UNION
+		              SELECT e.from_task FROM task_edges e JOIN m ON e.to_task = m.id AND e.type = 'child_of'
+		          ) SELECT id FROM m)`)
 	}
 	if f.HasChildren {
 		// Only live children make a container, exactly as hasChildren reads

@@ -268,6 +268,9 @@ type TaskListParams struct {
 	States []string `query:"state,omitempty"`
 	// Parent narrows to the direct children of this task id.
 	Parent string `query:"parent,omitempty"`
+	// Milestone narrows to the tasks attached to this milestone and every
+	// task under them in the child_of hierarchy.
+	Milestone string `query:"milestone,omitempty"`
 	// Assignee narrows to tasks assigned to this actor id.
 	Assignee string `query:"assignee,omitempty"`
 	// HasChildren narrows to containers — tasks with at least one child.
