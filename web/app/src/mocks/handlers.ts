@@ -1,6 +1,6 @@
 import { HttpResponse, delay, http } from "msw"
 import type { components } from "@/api/schema"
-import { type CrewMember, db, projectDetail } from "./db"
+import { type CrewMember, type Task, db, projectDetail } from "./db"
 import type { Ok } from "./typed"
 
 // Visible loading states in development; instant in tests
@@ -70,5 +70,73 @@ export const handlers = [
     }
     members.splice(i, 1)
     return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get("/api/v1/tasks", async ({ request }) => {
+    await delay(LATENCY_MS)
+    const project = new URL(request.url).searchParams.get("project")
+    const body: Ok<"/api/v1/tasks", "get"> = {
+      tasks: db.tasks.filter((t) => !project || t.project === project),
+    }
+    return HttpResponse.json(body)
+  }),
+
+  http.post("/api/v1/tasks", async ({ request }) => {
+    await delay(LATENCY_MS)
+    const input = (await request.json()) as components["schemas"]["CreateTaskInput"]
+    const project = db.projects.find((p) => p.id === input.project)
+    if (!project) return HttpResponse.json({ error: "project not found" }, { status: 404 })
+    const n = db.tasks.filter((t) => t.project === project.id).length + 1
+    const task: Task = {
+      id: `${project.key}-${n}`,
+      project: project.id,
+      title: input.title ?? "",
+      state: "todo",
+      priority: input.priority ?? "medium",
+      assignee: "",
+      due: input.due ?? "",
+    }
+    db.tasks.push(task)
+    return HttpResponse.json(task, { status: 201 })
+  }),
+
+  http.patch("/api/v1/tasks/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const task = db.tasks.find((t) => t.id === params.id)
+    if (!task) return HttpResponse.json({ error: "task not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["EditTaskInput"]
+    const states = ["todo", "in_progress", "in_review", "done"]
+    if (input.state && !states.includes(input.state)) {
+      return HttpResponse.json({ error: `unknown state ${input.state}` }, { status: 400 })
+    }
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== null && value !== undefined && key in task) Object.assign(task, { [key]: value })
+    }
+    return HttpResponse.json(task)
+  }),
+
+  http.delete("/api/v1/tasks/:id", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const i = db.tasks.findIndex((t) => t.id === params.id)
+    if (i < 0) return HttpResponse.json({ error: "task not found" }, { status: 404 })
+    const [task] = db.tasks.splice(i, 1)
+    return HttpResponse.json(task)
+  }),
+
+  http.post("/api/v1/tasks/:id/assign", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const task = db.tasks.find((t) => t.id === params.id)
+    if (!task) return HttpResponse.json({ error: "task not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["AssignInput"]
+    task.assignee = input.assignee ?? ""
+    return HttpResponse.json(task)
+  }),
+
+  http.post("/api/v1/tasks/:id/unassign", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const task = db.tasks.find((t) => t.id === params.id)
+    if (!task) return HttpResponse.json({ error: "task not found" }, { status: 404 })
+    task.assignee = ""
+    return HttpResponse.json(task)
   }),
 ]
