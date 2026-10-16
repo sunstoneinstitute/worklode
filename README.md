@@ -39,6 +39,10 @@ glossary spec (slug `glossary`) is the instance glossary (WL-REQ-1368). A
 term a project does not define resolves there. Unset, the instance has no
 glossary.
 
+`LODE_INTAKE_PROJECT` names the project where sharing an idea creates its
+intake task (WL-REQ-1799). An id that names no project fails the boot.
+Unset, ideas can be filed but sharing one is refused.
+
 Install the end-user binaries: the `lode` CLI plus `lode-hook` and
 `lode-statusline`, which agent harnesses invoke on every lifecycle event.
 
