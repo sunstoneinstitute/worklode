@@ -15,10 +15,10 @@ const upcomingMax = 5
 
 // Derive builds the summary. Task Due is a YYYY-MM-DD string or empty, which
 // compares correctly as text; an empty Due is neither past due nor upcoming.
-func Derive(f *store.SummaryFacts, today time.Time, taskURL func(id string) string) model.ProjectSummary {
+func Derive(f *store.SummaryFacts, today time.Time, taskURL func(store.SummaryTask) string) model.ProjectSummary {
 	day := today.Format("2006-01-02")
 	item := func(t store.SummaryTask) model.SummaryItem {
-		return model.SummaryItem{ID: t.ID, Label: t.Title, Due: t.Due, URL: taskURL(t.ID)}
+		return model.SummaryItem{ID: t.ID, Label: t.Title, Due: t.Due, URL: taskURL(t)}
 	}
 	byDue := func(a, b store.SummaryTask) int { return cmp.Or(cmp.Compare(a.Due, b.Due), cmp.Compare(a.ID, b.ID)) }
 	pastDue := func(t store.SummaryTask) bool { return !t.Closed && t.Due != "" && t.Due < day }

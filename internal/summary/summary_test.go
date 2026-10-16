@@ -11,7 +11,7 @@ import (
 
 var today = time.Date(2026, 10, 16, 15, 0, 0, 0, time.UTC)
 
-func url(id string) string { return "/t/" + id }
+func url(t store.SummaryTask) string { return "/t/" + t.ID }
 
 func ids(items []model.SummaryItem) []string {
 	out := []string{}
