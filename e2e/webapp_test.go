@@ -82,7 +82,7 @@ func TestWebAppOneHost(t *testing.T) {
 
 	// 1. Signed out, the SPA path and a templ page both send the browser to
 	// the one login.
-	for _, path := range []string{"/projects", "/work"} {
+	for _, path := range []string{"/projects", "/reviews"} {
 		resp, body := do(http.MethodGet, path, "", nil)
 		wantStatus(resp, body, http.StatusFound)
 		if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/auth/login") {
@@ -116,11 +116,20 @@ func TestWebAppOneHost(t *testing.T) {
 		t.Error("/projects/web/crew rendered the templ cockpit, want the SPA shell")
 	}
 
-	// 3. /work is still the templ cockpit, on the same session.
-	resp, body = do(http.MethodGet, "/work", "", cookie)
+	// 2c. Both task pages are the SPA shell (WL-REQ-1803).
+	for _, path := range []string{"/tasks", "/projects/web/tasks"} {
+		resp, body = do(http.MethodGet, path, "", cookie)
+		wantStatus(resp, body, http.StatusOK)
+		if strings.Contains(body, `<nav aria-label="Primary"`) {
+			t.Errorf("%s rendered the templ cockpit, want the SPA shell", path)
+		}
+	}
+
+	// 3. /reviews is still the templ cockpit, on the same session.
+	resp, body = do(http.MethodGet, "/reviews", "", cookie)
 	wantStatus(resp, body, http.StatusOK)
 	if !strings.Contains(body, `<nav aria-label="Primary"`) {
-		t.Errorf("/work is not the templ cockpit: %.200s", body)
+		t.Errorf("/reviews is not the templ cockpit: %.200s", body)
 	}
 
 	// 4. /api/v1: a session read, then a session write without and with the

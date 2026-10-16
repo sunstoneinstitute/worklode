@@ -22,11 +22,11 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// TestInboxDotOnWorkPage pins the indicator on a page that knows nothing
-// about inboxes: /work shows the dot for a signed-in actor with one
+// TestInboxDotOnReviewsPage pins the indicator on a page that knows nothing
+// about inboxes: /reviews shows the dot for a signed-in actor with one
 // review awaiting them directly (WL-REQ-347 bucket 1), and loses it once
 // that review is decided.
-func TestInboxDotOnWorkPage(t *testing.T) {
+func TestInboxDotOnReviewsPage(t *testing.T) {
 	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 
@@ -61,12 +61,12 @@ func TestInboxDotOnWorkPage(t *testing.T) {
 		t.Fatalf("seeded approval not found in the awaiting queue")
 	}
 
-	rr := withSession(t, h, "GET", "/work", session, "")
+	rr := withSession(t, h, "GET", "/reviews", session, "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("/work status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	if body := rr.Body.String(); !strings.Contains(body, `class="dot dot-alert"`) {
-		t.Errorf("/work: no inbox dot for an actor with one review awaiting\n%s", body)
+		t.Errorf("/reviews: no inbox dot for an actor with one review awaiting\n%s", body)
 	}
 
 	decidePath := "/approvals/" + strconv.FormatInt(approvalID, 10) + "/decide"
@@ -75,9 +75,9 @@ func TestInboxDotOnWorkPage(t *testing.T) {
 		t.Fatalf("decide approval status = %d, body %s", decideRR.Code, decideRR.Body.String())
 	}
 
-	rr2 := withSession(t, h, "GET", "/work", session, "")
+	rr2 := withSession(t, h, "GET", "/reviews", session, "")
 	if body := rr2.Body.String(); strings.Contains(body, "dot-alert") {
-		t.Errorf("/work: inbox dot still shown after the review was decided\n%s", body)
+		t.Errorf("/reviews: inbox dot still shown after the review was decided\n%s", body)
 	}
 }
 
@@ -88,12 +88,12 @@ func TestInboxDotAbsentSignedOut(t *testing.T) {
 	t.Parallel()
 	_, h, _ := newTestServer(t)
 
-	body := doReq(t, h, "GET", "/work", "", nil).Body.String()
+	body := doReq(t, h, "GET", "/reviews", "", nil).Body.String()
 	if !strings.Contains(body, `aria-label="Inbox"`) {
-		t.Errorf("/work: missing the inbox icon\n%s", body)
+		t.Errorf("/reviews: missing the inbox icon\n%s", body)
 	}
 	if strings.Contains(body, "dot-alert") {
-		t.Errorf("/work: signed-out request rendered an inbox dot\n%s", body)
+		t.Errorf("/reviews: signed-out request rendered an inbox dot\n%s", body)
 	}
 }
 

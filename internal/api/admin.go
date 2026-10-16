@@ -838,7 +838,7 @@ func lastActivity(facts []store.ProjectWorkFact) time.Time {
 // UI-neutral bulk reader (parent/lease/blocker facts in one read), rather
 // than a dedicated Store.Board method — there is no additional query
 // complexity to hide behind a store API. Shared by the JSON /api/v1/board
-// handler and the GET /work web page; Home's card counts share only the
+// handler; Home's card counts share only the
 // bucketing (bucketWorkFacts), not this assembly.
 //
 // recent_failures is simplified from the full deployments->artifacts join

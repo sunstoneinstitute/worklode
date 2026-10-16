@@ -55,35 +55,6 @@ templ selectField(id, label string, options []FormOption) {
 	</p>
 }
 
-// NewTask renders the new-task form (GET /projects/{id}/tasks/new).
-templ NewTask(v NewTaskView) {
-	@Page(v.Form.Page) {
-		@formCard(v.Form, "New task in "+v.Form.Project.Name,
-			"The task is created in this project and gets its id from the project's own counter.",
-			"Create task", "") {
-			<p class="fieldrow">
-				<label for="title">Title</label>
-				<input id="title" name="title" type="text" required maxlength="200" autofocus?={ v.Form.Error == "" } value={ v.Title }/>
-			</p>
-			<p class="fieldrow">
-				<label for="body">Body</label>
-				@MarkdownInput(MarkdownInputView{
-					ID: "body", Name: "body", Rows: 8,
-					Placeholder: "What has to be true when this is done?",
-					Value:       v.Body, Dictation: v.Form.Dictation,
-				})
-			</p>
-			@selectField("priority", "Priority", v.Priorities)
-			@selectField("kind", "Kind", v.Kinds)
-			@selectField("concern", "Concern", v.Concerns)
-			<p class="fieldrow check">
-				<input id="draft" name="draft" type="checkbox" value="1" checked?={ v.Draft }/>
-				<label for="draft">Create as a draft &mdash; not yet claimable by anyone</label>
-			</p>
-		}
-	}
-}
-
 // NewDeliverable renders the deliverable form (GET
 // /projects/{id}/deliverables/new). It offers no state control on purpose:
 // WL-RULE-121 makes deliverable state reported, never declared by the

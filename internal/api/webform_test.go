@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
-	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -28,169 +28,7 @@ func doForm(t *testing.T, h http.Handler, path string, form url.Values, headers 
 	return rr
 }
 
-// kindSelect returns the markup of the new-task form's `kind` <select>, so an
-// assertion about the kinds on offer cannot be satisfied by an option in some
-// other menu on the page.
-func kindSelect(t *testing.T, main string) string {
-	t.Helper()
-	const open = `<select id="kind" name="kind">`
-	i := strings.Index(main, open)
-	if i < 0 {
-		t.Fatal("no kind <select> in the new-task form")
-	}
-	rest := main[i+len(open):]
-	j := strings.Index(rest, "</select>")
-	if j < 0 {
-		t.Fatal("unterminated kind <select> in the new-task form")
-	}
-	return rest[:j]
-}
-
-// --- new task ---------------------------------------------------------------
-
-// TestNewTaskFormRenders checks the form offers every field the task needs,
-// and that every kind it offers is one the API would accept — the form and
-// validKinds cannot drift apart (WL-REQ-176).
-func TestNewTaskFormRenders(t *testing.T) {
-	t.Parallel()
-	st, h, _ := newTestServer(t)
-	createProject(t, st, "proj")
-
-	rr := doReq(t, h, "GET", "/projects/proj/tasks/new", "", nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
-	}
-	body := rr.Body.String()
-	assertShell(t, body)
-	bodyContains(t, body,
-		`<form method="post" action="/projects/proj/tasks"`,
-		`name="title"`, `name="body"`, `name="priority"`, `name="kind"`,
-		`name="concern"`, `name="draft"`,
-	)
-	main := mainContent(t, body)
-	// webTaskKinds keeps its own menu order, so it stays a literal rather than
-	// deriving from ns.TaskKinds — but the menu must offer that set and no
-	// more, or the API rejects on submit what the form offered. The option
-	// count catches the "more" half that a presence loop alone would miss.
-	kindMenu := kindSelect(t, main)
-	for _, kind := range ns.TaskKinds {
-		if !strings.Contains(kindMenu, `value="`+kind+`"`) {
-			t.Errorf("the new-task form is missing kind %q", kind)
-		}
-	}
-	if got, want := strings.Count(kindMenu, "<option value="), len(ns.TaskKinds); got != want {
-		t.Errorf("kind options = %d, want %d (%v) — the form offers a kind the API would reject",
-			got, want, ns.TaskKinds)
-	}
-	if got := strings.Count(main, `name="kind"`); got != 1 {
-		t.Errorf("kind inputs = %d, want 1", got)
-	}
-
-	if rr := doReq(t, h, "GET", "/projects/nosuch/tasks/new", "", nil); rr.Code != http.StatusNotFound {
-		t.Errorf("unknown project form status = %d, want 404", rr.Code)
-	}
-}
-
-// TestCreateTaskFromFormCreatesAndRedirects checks the happy path end to end:
-// the task lands with the submitted fields, and the response is a 303 to the
-// created task so a reload cannot create a second one.
-func TestCreateTaskFromFormCreatesAndRedirects(t *testing.T) {
-	t.Parallel()
-	st, h, _ := newTestServer(t)
-	createProject(t, st, "proj")
-
-	rr := doForm(t, h, "/projects/proj/tasks", url.Values{
-		"title":    {"Wire the intake form"},
-		"body":     {"The editor needs a title and a description."},
-		"priority": {"high"},
-		"kind":     {"feature"},
-		"concern":  {"usability"},
-	}, nil)
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
-	}
-	if got := rr.Header().Get("Location"); got != "/tasks/WL-1" {
-		t.Fatalf("Location = %q, want /tasks/WL-1", got)
-	}
-
-	task, err := st.GetTask(context.Background(), "WL-1")
-	if err != nil {
-		t.Fatalf("get created task: %v", err)
-	}
-	if task.Title != "Wire the intake form" || task.Priority != "high" ||
-		task.Kind != "feature" || task.Concern != "usability" {
-		t.Errorf("created task = %+v, want the submitted fields", task)
-	}
-	if task.State != "ready" {
-		t.Errorf("state = %q, want ready (the draft box was not ticked)", task.State)
-	}
-	if task.Body != "The editor needs a title and a description." {
-		t.Errorf("body = %q, want the submitted body", task.Body)
-	}
-}
-
-// TestCreateTaskFromFormDraft checks the draft checkbox lands the task
-// unclaimable rather than ready.
-func TestCreateTaskFromFormDraft(t *testing.T) {
-	t.Parallel()
-	st, h, _ := newTestServer(t)
-	createProject(t, st, "proj")
-
-	rr := doForm(t, h, "/projects/proj/tasks", url.Values{
-		"title": {"Half-formed idea"}, "priority": {"low"}, "kind": {"spike"}, "draft": {"1"},
-	}, nil)
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
-	}
-	task, err := st.GetTask(context.Background(), "WL-1")
-	if err != nil {
-		t.Fatalf("get created task: %v", err)
-	}
-	if task.State != "draft" {
-		t.Errorf("state = %q, want draft", task.State)
-	}
-}
-
-// TestCreateTaskFromFormRejectsBadInput checks a rejected submit re-renders
-// the form at 422 with the message and everything typed, and writes nothing.
-func TestCreateTaskFromFormRejectsBadInput(t *testing.T) {
-	t.Parallel()
-	st, h, _ := newTestServer(t)
-	createProject(t, st, "proj")
-
-	for _, tt := range []struct {
-		name string
-		form url.Values
-		want string
-	}{
-		{"no title", url.Values{"title": {"  "}, "priority": {"high"}, "kind": {"bug"}}, "A title is required."},
-		{"bad priority", url.Values{"title": {"x"}, "priority": {"urgent"}, "kind": {"bug"}}, "Choose a priority"},
-		{"bad kind", url.Values{"title": {"x"}, "priority": {"high"}, "kind": {"saga"}}, "Choose one of the offered kinds."},
-		{"bad concern", url.Values{"title": {"x"}, "priority": {"high"}, "kind": {"bug"}, "concern": {"vibes"}}, "Choose a concern"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			rr := doForm(t, h, "/projects/proj/tasks", tt.form, nil)
-			if rr.Code != http.StatusUnprocessableEntity {
-				t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
-			}
-			bodyContains(t, rr.Body.String(), tt.want, `<form method="post"`)
-		})
-	}
-
-	// The rejected values come back so nothing typed is lost.
-	rr := doForm(t, h, "/projects/proj/tasks", url.Values{
-		"title": {""}, "body": {"a body worth keeping"}, "priority": {"critical"}, "kind": {"bug"},
-	}, nil)
-	bodyContains(t, rr.Body.String(), "a body worth keeping", `value="critical" selected`)
-
-	tasks, err := st.ListTasks(context.Background(), store.TaskFilter{})
-	if err != nil {
-		t.Fatalf("list tasks: %v", err)
-	}
-	if len(tasks) != 0 {
-		t.Errorf("rejected submits created %d task(s), want 0", len(tasks))
-	}
-}
+// --- form guards ------------------------------------------------------------
 
 // TestRejectedSubmitTitlesThePageAsAnError holds the half of a rejected
 // submit's announcement that lives on the server. A browser reads the new
@@ -207,7 +45,6 @@ func TestRejectedSubmitTitlesThePageAsAnError(t *testing.T) {
 		name, path string
 		bad        url.Values
 	}{
-		{"task", "/projects/proj/tasks", url.Values{"title": {""}, "priority": {"high"}, "kind": {"bug"}}},
 		{"deliverable", "/projects/proj/deliverables", url.Values{"name": {""}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -234,8 +71,8 @@ func TestRejectedSubmitTitlesThePageAsAnError(t *testing.T) {
 	}
 }
 
-// TestCreateFormRefusesCrossOrigin checks both creation forms refuse a
-// submission a browser marks as cross-site, and that nothing is written.
+// TestCreateFormRefusesCrossOrigin checks the creation form refuses a
+// submission a browser marks as cross-site or sends from another origin, and that nothing is written.
 func TestCreateFormRefusesCrossOrigin(t *testing.T) {
 	t.Parallel()
 	st, h, _ := newTestServer(t)
@@ -246,7 +83,7 @@ func TestCreateFormRefusesCrossOrigin(t *testing.T) {
 		form    url.Values
 		headers map[string]string
 	}{
-		{"/projects/proj/tasks", url.Values{"title": {"x"}, "priority": {"high"}, "kind": {"bug"}},
+		{"/projects/proj/deliverables", url.Values{"name": {"x"}, "label": {"on"}},
 			map[string]string{"Sec-Fetch-Site": "cross-site"}},
 		{"/projects/proj/deliverables", url.Values{"name": {"x"}},
 			map[string]string{"Origin": "https://evil.example"}},
@@ -282,8 +119,8 @@ func TestCreateFormAcceptsSameOrigin(t *testing.T) {
 		{"Sec-Fetch-Site": "same-origin", "Origin": "https://evil.example"},
 		{"Origin": "http://example.com"}, // httptest.NewRequest's host
 	} {
-		rr := doForm(t, h, "/projects/proj/tasks",
-			url.Values{"title": {"same origin"}, "priority": {"low"}, "kind": {"chore"}}, headers)
+		rr := doForm(t, h, "/projects/proj/deliverables",
+			url.Values{"name": {fmt.Sprintf("same origin %d", i)}, "label": {"on"}}, headers)
 		if rr.Code != http.StatusSeeOther {
 			t.Errorf("same-origin submit %d status = %d, want 303; body %s", i, rr.Code, rr.Body.String())
 		}
@@ -501,15 +338,15 @@ func TestDeliverableFormOffersNoStateControl(t *testing.T) {
 	}
 }
 
-// TestCockpitLinksToNewTask checks the project Overview carries the
-// affordance that makes the cockpit writable at all.
+// TestCockpitLinksToNewTask checks the project Overview links New task to the
+// SPA's task page, which holds the new-task form (WL-REQ-1803).
 func TestCockpitLinksToNewTask(t *testing.T) {
 	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
 	body := doReq(t, h, "GET", "/projects/proj", "", nil).Body.String()
-	bodyContains(t, body, `href="/projects/proj/tasks/new"`, "New task")
+	bodyContains(t, body, `href="/projects/proj/tasks"`, "New task")
 }
 
 // --- JSON API ---------------------------------------------------------------

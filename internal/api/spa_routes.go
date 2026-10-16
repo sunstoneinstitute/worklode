@@ -9,6 +9,8 @@ import "strings"
 var spaRoutes = []string{
 	"/projects",
 	"/projects/$projectId/crew",
+	"/projects/$projectId/tasks",
+	"/tasks",
 }
 
 // muxPattern turns a TanStack route ("/projects/$id") into its ServeMux path
