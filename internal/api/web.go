@@ -521,7 +521,7 @@ func (s *server) globalPlaceholder(destination, heading, message string) http.Ha
 // spec section. Unknown keys 404 (see projectSectionPage).
 // Deliverables is absent: it is a built destination now (see webform.go's
 // deliverablesPage), routed ahead of this wildcard. Crew and Documents are
-// absent for the same reason (crew.go's crewPage, projectDocsPage below).
+// absent because the SPA serves them (WL-REQ-1802, WL-REQ-1805).
 var projectSections = map[string]struct{ Title, Message string }{
 	"reviews":   {"Reviews", "Governed approval reviews arrive with WL-REQ-124."},
 	"decisions": {"Decisions", "Research decisions arrive with specs 025 and 029."},
@@ -757,28 +757,6 @@ func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
 	view.Status = r.URL.Query().Get("status")
 	view.Statuses = ns.DesignDocStatuses
 	s.renderWeb(w, r, http.StatusOK, "docs page", ui.Docs(view))
-}
-
-// projectDocsPage handles GET /projects/{id}/documents: the same corpus index
-// docsPage renders, narrowed to one project and in the project-local shell.
-// WL-SPEC-77 and WL-SPEC-78 are implemented — the documents are in the backbone — so
-// this destination lists them rather than naming the specs it waits for.
-func (s *server) projectDocsPage(w http.ResponseWriter, r *http.Request) {
-	project, err := s.projectHeader(r.Context(), r.PathValue("id"))
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	docs, err := s.st.ListDocs(r.Context(), store.DocFilter{Project: project.ID})
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	view := docsView(docs, s.projectKeyByID(r.Context()))
-	view.Page = ui.PageProps{Title: "worklode: " + project.Name + ": Documents"}
-	view.Project = &project
-	view.CanonicalURL = "/projects/" + project.ID + "/documents"
-	s.renderWeb(w, r, http.StatusOK, "project documents page", ui.Docs(view))
 }
 
 // docPage handles GET /docs/{ref}. A numbered document's shorthand redirects

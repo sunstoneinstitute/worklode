@@ -696,19 +696,12 @@ func tombstone(t *model.Tombstone) model.Tombstone {
 // DocsView is the document corpus index (GET /docs): every spec, ADR and plan
 // the backbone holds (WL-REQ-164). Read-only — a document's body is an artifact
 // authored in a file and submitted through the API, not typed into a page.
-//
-// Project is nil for the global index and set for one project's Documents
-// destination (GET /projects/{id}/documents), which lists the same rows
-// narrowed to that project inside the project-local shell.
 type DocsView struct {
-	Page         PageProps
-	Docs         []DocRow
-	Project      *CockpitProject
-	CanonicalURL string
+	Page PageProps
+	Docs []DocRow
 	// Status is the ?status= the global index was filtered by ("" for the
 	// default, which hides terminal documents), and Statuses the values its
-	// filter control offers. The project flavour takes no filter and leaves
-	// both empty.
+	// filter control offers.
 	Status   string
 	Statuses []string
 }
