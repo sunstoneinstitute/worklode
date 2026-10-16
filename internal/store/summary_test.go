@@ -50,7 +50,7 @@ func TestProjectSummaryFacts(t *testing.T) {
 	for _, tk := range f.Tasks {
 		byID[tk.ID] = tk
 	}
-	if g := byID[late.ID]; g.Due != "2020-01-01" || g.Closed || g.Title != "late one" {
+	if g := byID[late.ID]; g.Due != "2020-01-01" || g.Kind == "" || g.Closed || g.Title != "late one" {
 		t.Errorf("late = %+v", g)
 	}
 	if g := byID[inReview.ID]; g.State != "in_review" || g.Assignee != "ada" || g.Closed {

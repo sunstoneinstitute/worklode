@@ -7,13 +7,9 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/summary"
 )
-
-// summaryTaskKind is the kind segment of a summary task link. The facts carry
-// no task kind, and projectEntityPage redirects a task named under another
-// kind to its own, so any valid kind resolves.
-const summaryTaskKind = "feature"
 
 // getProjectSummary handles GET /api/v1/projects/{id}/summary. "Today" is the
 // server's local date.
@@ -28,8 +24,8 @@ func (s *server) getProjectSummary(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	taskURL := func(id string) string {
-		return taskCanonicalURL(&model.Task{ID: id, Project: p.ID, Kind: summaryTaskKind}, p.Key)
+	taskURL := func(t store.SummaryTask) string {
+		return taskCanonicalURL(&model.Task{ID: t.ID, Project: p.ID, Kind: t.Kind}, p.Key)
 	}
 	writeJSON(w, http.StatusOK, summary.Derive(facts, time.Now(), taskURL))
 }

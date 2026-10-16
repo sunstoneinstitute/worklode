@@ -9,8 +9,8 @@ import (
 
 // SummaryTask is one live task as the project summary reads it.
 type SummaryTask struct {
-	ID, Title, State, Assignee, Due string
-	Closed                          bool // taskClosed verdict (WL-REQ-87)
+	ID, Title, State, Assignee, Due, Kind string
+	Closed                                bool // taskClosed verdict (WL-REQ-87)
 }
 
 // SummaryDoc is a document whose current version still owes a review.
@@ -45,7 +45,7 @@ func (s *Store) ProjectSummaryFacts(ctx context.Context, projectID string) (*Sum
 	}
 	f := &SummaryFacts{Roster: roster}
 	for _, t := range tasks {
-		f.Tasks = append(f.Tasks, SummaryTask{t.ID, t.Title, t.State, t.Assignee, t.Due, closed[t.ID]})
+		f.Tasks = append(f.Tasks, SummaryTask{t.ID, t.Title, t.State, t.Assignee, t.Due, t.Kind, closed[t.ID]})
 	}
 
 	rows, err := s.db.QueryContext(ctx,
