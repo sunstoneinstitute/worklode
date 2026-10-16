@@ -4,7 +4,7 @@
 // spaRoutes path is the SPA shell (WL-REQ-1304), every other cockpit path is
 // templ (WL-REQ-1303), one login session covers both (WL-REQ-1308), /api/v1
 // reads and the write checks on a non-bearer write (WL-REQ-1307,
-// WL-REQ-1770), and the OpenAPI document's security schemes (WL-REQ-1309).
+// WL-REQ-1770), the project summary and Overview shell (WL-REQ-1797), and the OpenAPI document's security schemes (WL-REQ-1309).
 package e2e
 
 import (
@@ -237,6 +237,38 @@ func TestWebAppOneHost(t *testing.T) {
 	wantStatus(resp, body, http.StatusOK)
 	if got := dueOf(dueTask.ID); got != "" {
 		t.Errorf("due after PATCH \"\" = %q, want cleared", got)
+	}
+
+	// 4d. The project summary lists a assigned past-due task, and its
+	// assignee reads overbooked; the Overview page is the SPA shell
+	// (WL-REQ-1797, WL-REQ-1804).
+	resp, body = do(http.MethodPost, "/api/v1/tasks",
+		`{"project":"web","title":"Overdue","priority":"medium","kind":"feature","due":"2020-01-01"}`, webWrite)
+	wantStatus(resp, body, http.StatusCreated)
+	var lateTask model.Task
+	if err := json.Unmarshal([]byte(body), &lateTask); err != nil {
+		t.Fatalf("decode created task: %v (body %s)", err, body)
+	}
+	resp, body = do(http.MethodPost, "/api/v1/projects/web/participants", `{"actor":"alice"}`, webWrite)
+	wantStatus(resp, body, http.StatusCreated)
+	resp, body = do(http.MethodPost, "/api/v1/tasks/"+lateTask.ID+"/assign", `{"assignee":"alice"}`, webWrite)
+	wantStatus(resp, body, http.StatusOK)
+	resp, body = do(http.MethodGet, "/api/v1/projects/web/summary", "", cookie)
+	wantStatus(resp, body, http.StatusOK)
+	var sum model.ProjectSummary
+	if err := json.Unmarshal([]byte(body), &sum); err != nil {
+		t.Fatalf("decode summary: %v (body %s)", err, body)
+	}
+	if len(sum.PastDue) != 1 || sum.PastDue[0].ID != lateTask.ID {
+		t.Errorf("summary past_due = %+v, want just %s", sum.PastDue, lateTask.ID)
+	}
+	if len(sum.Workloads) != 1 || sum.Workloads[0].Actor != "alice" || sum.Workloads[0].Availability != "overbooked" {
+		t.Errorf("summary workloads = %+v, want alice overbooked", sum.Workloads)
+	}
+	resp, body = do(http.MethodGet, "/projects/web", "", cookie)
+	wantStatus(resp, body, http.StatusOK)
+	if strings.Contains(body, `<nav aria-label="Primary"`) {
+		t.Error("/projects/web rendered the templ cockpit, want the SPA shell")
 	}
 
 	// 5. /static/ belongs to the SPA, /assets/ to the templ cockpit.
