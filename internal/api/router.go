@@ -439,10 +439,15 @@ var routeGuards = map[string]routeGuard{
 	// entity_edges (WL-REQ-122): typed references between entities of
 	// different kinds. Any crew member may declare a dependency, matching
 	// deliverable creation.
-	"POST /api/v1/references":                           guarded(permReferenceWrite),
-	"GET /api/v1/references":                            guarded(permReferenceRead),
-	"GET /api/v1/projects/{id}/participants":            guarded(permProjectRead),
-	"GET /api/v1/projects/{id}/summary":                 guarded(permProjectRead),
+	"POST /api/v1/references":                guarded(permReferenceWrite),
+	"GET /api/v1/references":                 guarded(permReferenceRead),
+	"GET /api/v1/projects/{id}/participants": guarded(permProjectRead),
+	"GET /api/v1/projects/{id}/summary":      guarded(permProjectRead),
+	// The documents register (WL-REQ-1798).
+	"GET /api/v1/projects/{id}/documents":               guarded(permProjectRead),
+	"POST /api/v1/projects/{id}/documents":              guarded(permProjectWrite),
+	"PATCH /api/v1/documents/{id}":                      guarded(permProjectWrite),
+	"DELETE /api/v1/documents/{id}":                     guarded(permProjectWrite),
 	"POST /api/v1/projects/{id}/participants":           guarded(permCrewWrite),
 	"DELETE /api/v1/projects/{id}/participants/{actor}": guarded(permCrewWrite),
 	// Reporting overhead usage (WL-REQ-40) is not a claim on any one task,

@@ -351,6 +351,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(deliverableReportOutcomes, ", ") +
 			"). These are claims, not observations: read them against worklode_probe_reports_total, which counts the states emitters and the prober report. Labels are bounded: the deliverable, the state and the reporter are deliberately not among them.",
 	}, []string{"source", "outcome"})
+	s.projectDocumentWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_project_documents_writes_total",
+		Help: "Successful documents register writes (WL-REQ-1798), by op (" +
+			strings.Join(projectDocumentWriteOps, ", ") + ").",
+	}, []string{"op"})
 	s.planBudgetChecks = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_plan_budget_checks_total",
 		Help: "createDoc/updateDocBody's plan token budget check (S6, S19), by outcome (" +
@@ -377,7 +382,8 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.kindAliasUses, s.deletes,
 		s.overviewReads, s.deriveRuns,
 		s.morningBriefRenders, s.briefReviews,
-		s.githubCalls, s.probeReports, s.deliverableReports, s.planBudgetChecks)
+		s.githubCalls, s.probeReports, s.deliverableReports, s.planBudgetChecks,
+		s.projectDocumentWrites)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -595,6 +601,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// reads as a flat zero rather than as no-data.
 	for _, outcome := range planBudgetCheckOutcomes {
 		s.planBudgetChecks.WithLabelValues(outcome)
+	}
+	for _, op := range projectDocumentWriteOps {
+		s.projectDocumentWrites.WithLabelValues(op)
 	}
 }
 
@@ -1281,6 +1290,18 @@ func (s *server) observeDeliverableReport(source, outcome string) {
 		return
 	}
 	s.deliverableReports.WithLabelValues(source, outcome).Inc()
+}
+
+// projectDocumentWriteOps bounds worklode_project_documents_writes_total's
+// one label.
+var projectDocumentWriteOps = []string{"create", "update", "delete"}
+
+// observeProjectDocumentWrite counts one successful register write. Nil-safe.
+func (s *server) observeProjectDocumentWrite(op string) {
+	if s.projectDocumentWrites == nil {
+		return
+	}
+	s.projectDocumentWrites.WithLabelValues(op).Inc()
 }
 
 // planBudgetCheckOutcomes bounds worklode_plan_budget_checks_total's one
