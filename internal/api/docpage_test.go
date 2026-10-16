@@ -346,7 +346,7 @@ func TestDocPageNamesMintedTasks(t *testing.T) {
 	}
 	body := page.Body.String()
 	for _, task := range accepted.Tasks {
-		bodyContains(t, body, fmt.Sprintf(`(<a href="/tasks/%s" rel="nofollow">%s</a>)`, task.ID, task.ID))
+		bodyContains(t, body, fmt.Sprintf(`(<a class="ref-link" href="/tasks/%s" rel="nofollow">%s</a>)`, task.ID, task.ID))
 	}
 
 	src := getCanonical(t, h, ref+"?body=source")

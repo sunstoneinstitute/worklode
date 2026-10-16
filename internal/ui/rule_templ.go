@@ -341,9 +341,9 @@ func Rule(v RuleView) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var20 templ.SafeURL
-						templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/docs/ref/" + p.DocRef))
+						templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/" + p.DocRef))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/rule.templ`, Line: 65, Col: 57}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/rule.templ`, Line: 65, Col: 48}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 						if templ_7745c5c3_Err != nil {
@@ -356,7 +356,7 @@ func Rule(v RuleView) templ.Component {
 						var templ_7745c5c3_Var21 string
 						templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(p.DocRef)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/rule.templ`, Line: 65, Col: 70}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/rule.templ`, Line: 65, Col: 61}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 						if templ_7745c5c3_Err != nil {

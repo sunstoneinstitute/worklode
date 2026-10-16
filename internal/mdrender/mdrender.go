@@ -64,6 +64,10 @@ var (
 	// also match.
 	calloutClass      = regexp.MustCompile(`\Acallout callout-(note|tip|important|warning|caution)\z`)
 	calloutTitleClass = regexp.MustCompile(`\Acallout-title\z`)
+
+	// refLinkClass marks an autolinked ref (autolink.go) so the stylesheet
+	// keeps it on one line.
+	refLinkClass = regexp.MustCompile(`\Aref-link\z`)
 )
 
 // linkHref is the only shape an a[href] may take: WL-SPEC-78 section 8.1's three
@@ -213,6 +217,7 @@ func buildPolicy() *bluemonday.Policy {
 	// body can choose its own value for."
 	p.AllowAttrs("class").Matching(calloutClass).OnElements("aside")
 	p.AllowAttrs("class").Matching(calloutTitleClass).OnElements("p")
+	p.AllowAttrs("class").Matching(refLinkClass).OnElements("a")
 
 	// Media, pinned to blobs served by this server.
 	p.AllowAttrs("src").Matching(blobSrc).OnElements("img", "video", "source")

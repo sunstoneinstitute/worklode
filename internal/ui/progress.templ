@@ -179,7 +179,7 @@ templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled, mergeEn
 // same.
 templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) {
 	<div class="prog-row" data-doc={ strconv.FormatInt(s.Doc, 10) } data-group={ s.Group } tabindex="0" aria-expanded="false" aria-controls={ progressDetailID(s.Ref) }>
-		<div class="ref"><a href={ "/docs/ref/" + s.Ref } data-tip={ progressRefTip(s.Ref, s.Title) }>{ s.Ref }</a></div>
+		<div class="ref"><a href={ "/" + s.Ref } data-tip={ progressRefTip(s.Ref, s.Title) }>{ s.Ref }</a></div>
 		<div class="t">{ s.Title }</div>
 		<div class="strip">
 			for _, sec := range s.Sections {
@@ -257,7 +257,7 @@ templ progressPill(state string) {
 // says so rather than drawing an empty strip (WL-REQ-1335's no_record).
 templ progressPlanLine(specRef string, p model.ProgressPlan, viewer string, reviewEnabled, mergeEnabled bool) {
 	<div class="plan" id={ progressPlanAnchorID(specRef, p.Ref) }>
-		<a href={ "/docs/ref/" + p.Ref } class="mono" data-tip={ progressRefTip(p.Ref, p.Title) }>{ p.Ref }</a>
+		<a href={ "/" + p.Ref } class="mono" data-tip={ progressRefTip(p.Ref, p.Title) }>{ p.Ref }</a>
 		<span class="t">{ p.Title }</span>
 		if len(p.Requires) > 0 {
 			<span class="muted small">after { strings.Join(p.Requires, ", ") }</span>

@@ -213,7 +213,7 @@ func (r *docTodoRefs) ref(p string) string {
 	if r.server == "" {
 		return ref
 	}
-	return cli.Hyperlink(r.server+"/docs/ref/"+url.PathEscape(ref), ref)
+	return cli.Hyperlink(r.server+"/"+url.PathEscape(ref), ref)
 }
 
 // rewrite replaces every corpus path inside a produced line with its
