@@ -69,6 +69,51 @@ func (c *Client) GetDoc(ctx context.Context, id int64) (model.DocDetail, []byte,
 	return doJSON[model.DocDetail](ctx, c, http.MethodGet, docPath(id, ""), nil, "doc")
 }
 
+// NormalizeSection turns a section argument into a canonical anchor. It drops
+// an optional leading '#' and expands the shortcut form — a bare section
+// number like "3" or "4.1a" becomes "sec-3" / "sec-4.1a". A value already in
+// "sec-..." form, or empty, is returned unchanged.
+func NormalizeSection(s string) string {
+	s = strings.TrimPrefix(s, "#")
+	if s == "" || strings.HasPrefix(s, "sec-") {
+		return s
+	}
+	return "sec-" + s
+}
+
+// DocShowText is the markdown `lode show <doc>` prints for detail: the
+// whole document, or with section the subtree under that anchor, with its
+// anchored notes folded in. inline folds every in-force amendment into the
+// section it acts on, transitively (WL-84), reading the amending rules
+// through c. section must already be normalized (NormalizeSection).
+func (c *Client) DocShowText(ctx context.Context, detail *model.DocDetail, section string, inline bool) (string, error) {
+	if inline {
+		out, err := designdoc.NewInliner(c.RuleFetcher(ctx)).Consolidate(detail, section)
+		if err != nil {
+			return "", err
+		}
+		return InlineDocNotes(out, detail.Notes, detail.Sections), nil
+	}
+	// Notes are folded in before the section is cut, so a section and a
+	// whole-document render show the same note under the same heading
+	// (WL-REQ-171).
+	data := InlineDocNotes(detail.Body, detail.Notes, detail.Sections)
+	if section == "" {
+		return data, nil
+	}
+	name := cmp.Or(detail.Ref, detail.Slug)
+	parsed, err := designdoc.Parse([]byte(data))
+	if err != nil {
+		return "", fmt.Errorf("parse %s: %w", name, err)
+	}
+	// WL-REQ-192: a section is always its whole subtree.
+	text, ok := parsed.Subtree(section)
+	if !ok {
+		return "", fmt.Errorf("no section %s in %s", section, name)
+	}
+	return text, nil
+}
+
 // ListDocVersions calls GET /api/v1/docs/{id}/versions: every version of a
 // document, newest first (WL-REQ-164).
 func (c *Client) ListDocVersions(ctx context.Context, id int64) ([]model.DocVersionSummary, []byte, error) {

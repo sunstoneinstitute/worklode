@@ -223,6 +223,19 @@ var routeGuards = map[string]routeGuard{
 	"GET /.well-known/oauth-authorization-server": open("OAuth server discovery for MCP clients, by definition pre-login"),
 	"GET /oauth/authorize":                        open("starts an MCP client's login flow"),
 	"POST /oauth/token":                           open("redeems a one-time MCP authorization code and its PKCE verifier"),
+	// The MCP server (mcp.go). Open in this table because the handler
+	// authenticates its own bearer token: a missing or unknown one gets 401
+	// with the RFC 9728 resource_metadata challenge an MCP client needs to
+	// find the login, which apiGuard's plain 401 does not carry. Each tool
+	// then calls the /api/v1 routes in-process with the caller's token, so
+	// every permission below still applies to it.
+	"POST /mcp":   open("authenticates its own bearer token, then every tool goes through the /api/v1 guards"),
+	"GET /mcp":    open("authenticates its own bearer token, then every tool goes through the /api/v1 guards"),
+	"DELETE /mcp": open("authenticates its own bearer token; ends the caller's own MCP session"),
+	// RFC 9728 protected-resource metadata: discovery an MCP client reads
+	// before it has a token, naming only this server's own URLs.
+	"GET /.well-known/oauth-protected-resource":     open("OAuth protected-resource discovery, by definition pre-login"),
+	"GET /.well-known/oauth-protected-resource/mcp": open("OAuth protected-resource discovery, by definition pre-login"),
 
 	// --- tasks ---------------------------------------------------------------
 	"POST /api/v1/tasks":              guardedAny(permTaskWrite),
