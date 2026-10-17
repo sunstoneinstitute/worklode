@@ -98,27 +98,55 @@ func authorizeQuery(redirect, verifier string, extra url.Values) string {
 	return "/oauth/authorize?" + q.Encode()
 }
 
-// login drives /oauth/authorize, the web login and the fake Keycloak's
-// callback, and returns the callback's response: the redirect to the client.
-func (m *mcpServer) login(t *testing.T, query string) *httptest.ResponseRecorder {
+// consentPage drives /oauth/authorize, the web login and the fake Keycloak's
+// callback, and returns the callback's response: the consent page.
+func (m *mcpServer) consentPage(t *testing.T, query string) *httptest.ResponseRecorder {
 	t.Helper()
 	auth := m.get(mcpPublicHost, query)
-	if auth.Code != http.StatusFound || auth.Header().Get("Location") != "/auth/login?next=%2F" {
-		t.Fatalf("authorize = %d %q; want 302 to /auth/login", auth.Code, auth.Header().Get("Location"))
+	loginURL := auth.Header().Get("Location")
+	if auth.Code != http.StatusFound || !strings.HasPrefix(loginURL, "/auth/login?next=%2F&intent=") {
+		t.Fatalf("authorize = %d %q; want 302 to /auth/login with an intent", auth.Code, loginURL)
 	}
 	intent := cookieValue(auth, "wl_mcp")
 	if intent == "" {
 		t.Fatal("authorize set no wl_mcp cookie")
 	}
-	login := m.get(mcpPublicHost, "/auth/login?next=%2F")
+	login := m.get(mcpPublicHost, loginURL)
 	loc, _ := url.Parse(login.Header().Get("Location"))
 	cb := m.get(mcpPublicHost, "/auth/callback?code=fake-code&state="+url.QueryEscape(loc.Query().Get("state")),
 		&http.Cookie{Name: "wl_oauth", Value: cookieValue(login, "wl_oauth")},
 		&http.Cookie{Name: "wl_mcp", Value: intent})
-	if cb.Code != http.StatusFound {
-		t.Fatalf("callback = %d body %s; want 302", cb.Code, cb.Body.String())
+	if cb.Code != http.StatusOK || cookieValue(cb, "wl_mcp_consent") == "" {
+		t.Fatalf("callback = %d body %s; want 200 and the consent page", cb.Code, cb.Body.String())
 	}
 	return cb
+}
+
+// consent POSTs an answer to the consent page, as the page's own form does.
+func (m *mcpServer) consent(id, decision string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	form := url.Values{"consent": {id}, "decision": {decision}}
+	req := httptest.NewRequest(http.MethodPost, "http://"+mcpPublicHost+"/oauth/consent", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rr := httptest.NewRecorder()
+	m.h.ServeHTTP(rr, req)
+	return rr
+}
+
+// login drives the whole browser leg and answers Allow, returning the
+// consent POST's response: the redirect to the client.
+func (m *mcpServer) login(t *testing.T, query string) *httptest.ResponseRecorder {
+	t.Helper()
+	page := m.consentPage(t, query)
+	id := cookieValue(page, "wl_mcp_consent")
+	rr := m.consent(id, "allow", &http.Cookie{Name: "wl_mcp_consent", Value: id})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("consent = %d body %s; want 303", rr.Code, rr.Body.String())
+	}
+	return rr
 }
 
 // codeFrom returns the code a callback redirect hands the client.
@@ -320,6 +348,16 @@ func TestMCPAuthorizeRedirectsRequestErrors(t *testing.T) {
 		{"two resources", url.Values{"resource": {mcpPublic + "/mcp", mcpSecond + "/mcp"}}, "invalid_target"},
 	}
 	for _, tc := range cases {
+		// A request naming this server's resource names its issuer; one that
+		// names none, or a foreign one, leaves the issuer unknown on this
+		// two-origin server, so the refusal carries no iss rather than a guess.
+		wantIss := ""
+		if _, ok := tc.extra["resource"]; !ok {
+			tc.extra["resource"] = []string{mcpSecond + "/mcp"}
+			wantIss = mcpSecond
+		} else if tc.extra["resource"][0] == mcpPublic+"/mcp" {
+			wantIss = mcpPublic
+		}
 		rr := m.get(mcpPublicHost, authorizeQuery(mcpClaudeAI, v, tc.extra))
 		if rr.Code != http.StatusFound {
 			t.Fatalf("%s: status %d; want 302", tc.name, rr.Code)
@@ -329,8 +367,8 @@ func TestMCPAuthorizeRedirectsRequestErrors(t *testing.T) {
 			t.Fatalf("%s: redirected to %q; want the client", tc.name, got)
 		}
 		q := u.Query()
-		if q.Get("error") != tc.code || q.Get("state") != "client-state" || q.Get("iss") == "" {
-			t.Fatalf("%s: redirect query %v; want error=%s with state and iss", tc.name, q, tc.code)
+		if q.Get("error") != tc.code || q.Get("state") != "client-state" || q.Get("iss") != wantIss {
+			t.Fatalf("%s: redirect query %v; want error=%s with state and iss %q", tc.name, q, tc.code, wantIss)
 		}
 		if hasCookie(rr, "wl_mcp") {
 			t.Fatalf("%s: set an intent cookie", tc.name)
@@ -405,19 +443,19 @@ func TestMCPLoginHappyPath(t *testing.T) {
 		t.Fatalf("token description = %q", desc)
 	}
 
-	for _, ep := range []string{"authorize", "callback", "token"} {
+	for _, ep := range []string{"authorize", "callback", "consent", "token"} {
 		if got := m.counter(t, ep, "ok"); got != 1 {
 			t.Fatalf("%s ok = %v; want 1", ep, got)
 		}
 	}
 }
 
-// Claude Code's path: a loopback redirect and no resource. The issuer is then
-// LODE_PUBLIC_URL, and a resource named only at the token request must still
-// be one of this server's.
+// Claude Code's path on a single-origin instance: a loopback redirect and no
+// resource. The issuer is then the one origin, and a resource named only at
+// the token request must still be one of this server's.
 func TestMCPLoginLoopbackWithoutResource(t *testing.T) {
 	t.Parallel()
-	m := newMCPServer(t, mcpSecond)
+	m := newMCPServer(t, "")
 	v := oauth2.GenerateVerifier()
 	cb := m.login(t, authorizeQuery(mcpClaudeCode, v, url.Values{"state": {""}}))
 	u, _ := url.Parse(cb.Header().Get("Location"))
@@ -438,6 +476,159 @@ func TestMCPLoginLoopbackWithoutResource(t *testing.T) {
 	form = tokenForm(codeFrom(t, cb), mcpClaudeCode, v)
 	form.Set("resource", "https://evil.example/mcp")
 	oauthErr(t, m.token(mcpPublicHost, form), http.StatusBadRequest, "invalid_target")
+}
+
+// With two MCP origins the issuer the client discovered could be either, so
+// authorize refuses a request with no resource rather than answer with a
+// guessed iss, and the refusal itself carries no iss.
+func TestMCPAuthorizeRequiresResourceWithTwoOrigins(t *testing.T) {
+	t.Parallel()
+	m := newMCPServer(t, mcpSecond)
+	rr := m.get(mcpPublicHost, authorizeQuery(mcpClaudeCode, oauth2.GenerateVerifier(), nil))
+	u, _ := url.Parse(rr.Header().Get("Location"))
+	q := u.Query()
+	if rr.Code != http.StatusFound || u.Host != "localhost:33418" || q.Get("error") != "invalid_request" {
+		t.Fatalf("authorize = %d %q; want invalid_request to the client", rr.Code, rr.Header().Get("Location"))
+	}
+	if _, ok := q["iss"]; ok {
+		t.Fatalf("refusal carries iss %q, which could be the wrong issuer", q.Get("iss"))
+	}
+	if hasCookie(rr, "wl_mcp") {
+		t.Fatal("a refused authorize set the MCP intent")
+	}
+	// The same request naming its resource goes on to the login.
+	rr = m.get(mcpPublicHost, authorizeQuery(mcpClaudeCode, oauth2.GenerateVerifier(),
+		url.Values{"resource": {mcpPublic + "/mcp"}}))
+	if rr.Code != http.StatusFound || !strings.HasPrefix(rr.Header().Get("Location"), "/auth/login") {
+		t.Fatalf("authorize with resource = %d %q", rr.Code, rr.Header().Get("Location"))
+	}
+}
+
+// The consent page names who is signing in and where the token goes, and
+// no code exists until the user answers Allow.
+func TestMCPConsentPage(t *testing.T) {
+	t.Parallel()
+	m := newMCPServer(t, "")
+	page := m.consentPage(t, authorizeQuery(mcpClaudeCode, oauth2.GenerateVerifier(), nil))
+	body := page.Body.String()
+	for _, want := range []string{mcpTestSubject, "an app on this computer (localhost:33418)",
+		`action="/oauth/consent"`, `value="allow"`, `value="deny"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("consent page lacks %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "code=") || hasCookie(page, "wl_session") {
+		t.Fatal("the consent page must carry no code and set no session")
+	}
+	csp := page.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "frame-ancestors 'none'") || !strings.Contains(csp, "form-action 'self' http://localhost:33418") {
+		t.Fatalf("CSP = %q; want no framing and a form-action naming the client", csp)
+	}
+	if cc := page.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("Cache-Control = %q; want no-store", cc)
+	}
+
+	page = m.consentPage(t, authorizeQuery(mcpClaudeAI, oauth2.GenerateVerifier(), nil))
+	if !strings.Contains(page.Body.String(), "claude.ai") {
+		t.Errorf("claude.ai consent page does not name claude.ai:\n%s", page.Body.String())
+	}
+}
+
+// Deny sends the client access_denied with its state and mints no code.
+func TestMCPConsentDeny(t *testing.T) {
+	t.Parallel()
+	m := newMCPServer(t, "")
+	page := m.consentPage(t, authorizeQuery(mcpClaudeAI, oauth2.GenerateVerifier(), nil))
+	id := cookieValue(page, "wl_mcp_consent")
+	rr := m.consent(id, "deny", &http.Cookie{Name: "wl_mcp_consent", Value: id})
+	u, _ := url.Parse(rr.Header().Get("Location"))
+	q := u.Query()
+	if rr.Code != http.StatusSeeOther || u.Scheme+"://"+u.Host+u.Path != mcpClaudeAI ||
+		q.Get("error") != "access_denied" || q.Get("state") != "client-state" || q.Get("iss") != mcpPublic || q.Get("code") != "" {
+		t.Fatalf("deny = %d %q", rr.Code, rr.Header().Get("Location"))
+	}
+	if got := m.counter(t, "consent", "denied"); got != 1 {
+		t.Fatalf("consent denied = %v; want 1", got)
+	}
+	// The denied consent is spent: Allow on it afterwards finds nothing.
+	if rr := m.consent(id, "allow", &http.Cookie{Name: "wl_mcp_consent", Value: id}); rr.Code != http.StatusBadRequest {
+		t.Fatalf("allow after deny = %d; want 400", rr.Code)
+	}
+}
+
+// A consent answer is single use, works only in the browser the page was
+// shown in, and only from this origin's own page.
+func TestMCPConsentReplayAndForgery(t *testing.T) {
+	t.Parallel()
+	m := newMCPServer(t, "")
+	page := m.consentPage(t, authorizeQuery(mcpClaudeCode, oauth2.GenerateVerifier(), nil))
+	id := cookieValue(page, "wl_mcp_consent")
+	cookie := &http.Cookie{Name: "wl_mcp_consent", Value: id}
+
+	// No cookie, or another browser's: refused, and the consent survives.
+	if rr := m.consent(id, "allow"); rr.Code != http.StatusForbidden {
+		t.Fatalf("allow without the cookie = %d; want 403", rr.Code)
+	}
+	if rr := m.consent(id, "allow", &http.Cookie{Name: "wl_mcp_consent", Value: strings.Repeat("0", 64)}); rr.Code != http.StatusForbidden {
+		t.Fatalf("allow with another cookie = %d; want 403", rr.Code)
+	}
+	// A forged id, with a matching cookie: there is no such consent.
+	forged := strings.Repeat("ab", 32)
+	if rr := m.consent(forged, "allow", &http.Cookie{Name: "wl_mcp_consent", Value: forged}); rr.Code != http.StatusBadRequest {
+		t.Fatalf("allow on a forged id = %d; want 400", rr.Code)
+	}
+	// A cross-site POST is refused before anything is read.
+	form := url.Values{"consent": {id}, "decision": {"allow"}}
+	req := httptest.NewRequest(http.MethodPost, "http://"+mcpPublicHost+"/oauth/consent", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.AddCookie(cookie)
+	cross := httptest.NewRecorder()
+	m.h.ServeHTTP(cross, req)
+	if cross.Code != http.StatusForbidden {
+		t.Fatalf("cross-site allow = %d; want 403", cross.Code)
+	}
+
+	if rr := m.consent(id, "allow", cookie); rr.Code != http.StatusSeeOther {
+		t.Fatalf("allow = %d body %s; want 303", rr.Code, rr.Body.String())
+	}
+	if rr := m.consent(id, "allow", cookie); rr.Code != http.StatusBadRequest {
+		t.Fatalf("replayed allow = %d; want 400", rr.Code)
+	}
+}
+
+// An MCP authorize the user abandons leaves its intent cookie behind; a
+// later ordinary web login must still end as a web session, never as a
+// redirect to the MCP client.
+func TestAbandonedMCPIntentDoesNotHijackWebLogin(t *testing.T) {
+	t.Parallel()
+	m := newMCPServer(t, "")
+	auth := m.get(mcpPublicHost, authorizeQuery(mcpClaudeAI, oauth2.GenerateVerifier(), nil))
+	intent := &http.Cookie{Name: "wl_mcp", Value: cookieValue(auth, "wl_mcp")}
+	if intent.Value == "" {
+		t.Fatal("authorize set no wl_mcp cookie")
+	}
+
+	// A plain login drops the stale intent...
+	login := m.get(mcpPublicHost, "/auth/login?next=%2Fprojects", intent)
+	var clears bool
+	for _, c := range login.Result().Cookies() {
+		clears = clears || (c.Name == "wl_mcp" && c.MaxAge < 0)
+	}
+	if !clears {
+		t.Error("a plain /auth/login does not clear a pending MCP intent")
+	}
+	// ...and even a browser that kept it finishes as a web session, because
+	// the login's state names no intent.
+	loc, _ := url.Parse(login.Header().Get("Location"))
+	cb := m.get(mcpPublicHost, "/auth/callback?code=fake-code&state="+url.QueryEscape(loc.Query().Get("state")),
+		&http.Cookie{Name: "wl_oauth", Value: cookieValue(login, "wl_oauth")}, intent)
+	if cb.Code != http.StatusFound || cb.Header().Get("Location") != "/projects" || !hasCookie(cb, "wl_session") {
+		t.Fatalf("callback = %d %q; want a web session and /projects", cb.Code, cb.Header().Get("Location"))
+	}
+	if hasCookie(cb, "wl_mcp_consent") {
+		t.Fatal("a plain web login reached the MCP consent step")
+	}
 }
 
 func TestMCPTokenCodeIsSingleUse(t *testing.T) {
@@ -533,7 +724,7 @@ func TestCLILoginFlowStillWorks(t *testing.T) {
 	if !clearsMCP {
 		t.Fatal("cli login does not clear a pending MCP intent")
 	}
-	login := m.get(mcpPublicHost, "/auth/login?next=%2F")
+	login := m.get(mcpPublicHost, start.Header().Get("Location"))
 	loc, _ := url.Parse(login.Header().Get("Location"))
 	cb := m.get(mcpPublicHost, "/auth/callback?code=fake-code&state="+url.QueryEscape(loc.Query().Get("state")),
 		&http.Cookie{Name: "wl_oauth", Value: cookieValue(login, "wl_oauth")},

@@ -1144,6 +1144,18 @@ type CLICodeView struct {
 	ExpiresIn string
 }
 
+// MCPConsentView is the consent page an MCP client's login stops at
+// (internal/api/mcpauth.go): who is signing in, where the token goes, and the
+// pending consent's id for the form to post back. Destination is phrased for
+// prose ("an app on this computer (localhost:33418), such as Claude Code").
+type MCPConsentView struct {
+	Title       string
+	ActorID     string
+	Destination string
+	ConsentID   string
+	ExpiresIn   string
+}
+
 // --- morning brief (WL-REQ-346; NOT the task brief in internal/api/brief.go) --
 
 // MorningBriefView is the assembled Morning Brief: WL-REQ-346's four tiers,

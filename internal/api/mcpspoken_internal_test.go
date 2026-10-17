@@ -40,8 +40,20 @@ func TestSpokenRef(t *testing.T) {
 		{"spec banana", "WL", "spec banana"},
 		{"task five section two", "WL", "task five section two"},
 		{"", "WL", ""},
+		// A kind word leads, so a hyphen does not turn it into a task id.
+		{"spec-77", "WL", "WL-SPEC-77"},
+		{"Plan-3", "WL", "WL-PLAN-3"},
+		{"req-9", "DP", "DP-REQ-9"},
+		{"task-12", "WL", "WL-12"},
+		// <PREFIX>-<n> is a task only when PREFIX is a project key; a slug
+		// passes through as it was written.
+		{"rollout-2", "WL", "rollout-2"},
+		{"Rollout-Plan-2", "WL", "Rollout-Plan-2"},
+		{"dp-7", "WL", "DP-7"},
+		{"ops-7", "OPS", "OPS-7"},
+		{"zz spec nine", "WL", "zz spec nine"},
 	} {
-		if got := spokenRef(c.in, c.key); got != c.want {
+		if got := spokenRef(c.in, c.key, []string{"WL", "DP"}); got != c.want {
 			t.Errorf("spokenRef(%q, %q) = %q, want %q", c.in, c.key, got, c.want)
 		}
 	}

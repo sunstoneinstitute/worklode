@@ -1,9 +1,9 @@
 // mcpspoken.go turns spoken refs into the ref grammar the API reads:
 // "spec seventy-seven" becomes WL-SPEC-77, "task five twelve" WL-512,
 // "requirement 1300" WL-REQ-1300, against the project key the call works
-// in. A ref already in the grammar passes through, upper-cased; anything
-// this cannot read passes through untouched, for the API's own resolver
-// (a slug, a path) to answer.
+// in. A ref already in the grammar passes through, upper-cased, when its key
+// is a project's; anything this cannot read passes through untouched, for
+// the API's own resolver (a slug, a path) to answer.
 package api
 
 import (
@@ -16,8 +16,9 @@ var (
 	// spokenTypedRef is the <KEY>-<TYPE>-<n> grammar, any case, with an
 	// optional section fragment.
 	spokenTypedRef = regexp.MustCompile(`(?i)^([A-Z][A-Z0-9]{1,9})-(SPEC|PLAN|ADR|REQ|RULE|CL|MILE|DEL)-(\d+)(#sec-[\w.\-]+)?$`)
-	// spokenTaskRef is a task id, any case.
-	spokenTaskRef = regexp.MustCompile(`(?i)^[A-Z][A-Z0-9]{1,9}-\d+$`)
+	// spokenTaskRef is a task id, any case; the prefix must still be a
+	// project key.
+	spokenTaskRef = regexp.MustCompile(`(?i)^([A-Z][A-Z0-9]{1,9})-\d+$`)
 	spokenDigits  = regexp.MustCompile(`^\d+$`)
 	// spokenSection is a section number written out: 3, 4.1, 4.1a.
 	spokenSection = regexp.MustCompile(`^\d+(\.\d+)*[a-z]?$`)
@@ -38,37 +39,54 @@ var spokenKinds = map[string]string{
 // spokenDropped are words that carry nothing in a spoken ref.
 var spokenDropped = map[string]bool{"number": true, "no": true, "the": true, "a": true, "num": true}
 
-// spokenRef reads raw as a ref in the project whose key is key.
-func spokenRef(raw, key string) string {
+// spokenRef reads raw as a ref in the project whose key is key. keys are
+// every project key the caller can see: a <PREFIX>-<n> or
+// <PREFIX>-<TYPE>-<n> is a ref only when PREFIX is one of them or key, so a
+// slug like "rollout-2" is never read as a task id.
+func spokenRef(raw, key string, keys []string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return s
 	}
 	key = strings.ToUpper(key)
-	if m := spokenTypedRef.FindStringSubmatch(s); m != nil {
-		return strings.ToUpper(m[1]) + "-" + strings.ToUpper(m[2]) + "-" + m[3] + strings.ToLower(m[4])
-	}
-	if spokenTaskRef.MatchString(s) {
-		return strings.ToUpper(s)
-	}
-	if spokenDigits.MatchString(s) {
-		if key == "" {
-			return s
+	known := func(k string) bool {
+		k = strings.ToUpper(k)
+		if k == key {
+			return true
 		}
-		return key + "-" + s
+		for _, kk := range keys {
+			if strings.EqualFold(kk, k) {
+				return true
+			}
+		}
+		return false
+	}
+	if m := spokenTypedRef.FindStringSubmatch(s); m != nil && known(m[1]) {
+		return strings.ToUpper(m[1]) + "-" + strings.ToUpper(m[2]) + "-" + m[3] + strings.ToLower(m[4])
 	}
 	tokens := spokenTokens(s)
 	if len(tokens) == 0 {
 		return s
 	}
-	// An optional leading project key: "wl spec 77".
-	if len(tokens) > 2 && spokenKey.MatchString(tokens[0]) {
-		if _, isKind := spokenKinds[tokens[1]]; isKind {
-			if _, isNum := spokenNumberWords[tokens[0]]; !isNum {
-				if _, isKindToo := spokenKinds[tokens[0]]; !isKindToo {
-					key, tokens = strings.ToUpper(tokens[0]), tokens[1:]
-				}
+	// A kind word leads: "spec-77" is a spec, never the task SPEC-77.
+	if _, isKind := spokenKinds[tokens[0]]; !isKind {
+		if m := spokenTaskRef.FindStringSubmatch(s); m != nil {
+			if known(m[1]) {
+				return strings.ToUpper(s)
 			}
+			return s
+		}
+		if spokenDigits.MatchString(s) {
+			if key == "" {
+				return s
+			}
+			return key + "-" + s
+		}
+	}
+	// An optional leading project key: "wl spec 77".
+	if len(tokens) > 2 && spokenKey.MatchString(tokens[0]) && known(tokens[0]) {
+		if _, isKind := spokenKinds[tokens[1]]; isKind {
+			key, tokens = strings.ToUpper(tokens[0]), tokens[1:]
 		}
 	}
 	typ, isTask := "", true

@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -140,38 +141,81 @@ func (call *mcpCall) project(arg string) (model.Project, error) {
 		"call project_use. The projects are: " + mcpProjectNames(projects) + "."}
 }
 
-// lookupProject finds the project arg names: its id, key or name exactly
-// (ignoring case and spacing), else a clear spoken match.
+// lookupProject finds the project arg names exactly: its id, key or name,
+// ignoring case. There is no spoken-name fallback here: a near miss fails
+// not_found with the closest candidates, so Claude asks rather than writes
+// into the wrong project. Fuzzy matching is project_resolve's alone.
 func (call *mcpCall) lookupProject(arg string) (model.Project, error) {
 	projects, err := call.listProjects()
 	if err != nil {
 		return model.Project{}, err
 	}
-	want := spokenNorm(arg)
+	want := strings.TrimSpace(arg)
 	for _, p := range projects {
-		if strings.EqualFold(p.ID, arg) || strings.EqualFold(p.Key, arg) || (want != "" && spokenNorm(p.Name) == want) {
+		if strings.EqualFold(p.ID, want) || strings.EqualFold(p.Key, want) || strings.EqualFold(p.Name, want) {
 			return p, nil
 		}
 	}
-	cands, clear := matchProjects(arg, projects)
-	if clear && cands[0].Confidence >= 0.9 {
-		for _, p := range projects {
-			if p.ID == cands[0].ID {
-				return p, nil
-			}
-		}
-	}
+	cands, _ := matchProjects(arg, projects)
 	msg := fmt.Sprintf("No Worklode project is called %q.", arg)
 	if len(cands) > 0 {
 		var names []string
 		for _, c := range cands[:min(3, len(cands))] {
 			names = append(names, fmt.Sprintf("%s (%s)", c.Name, c.Key))
 		}
-		msg += " It could be " + orList(names) + "; ask the user which one they meant."
+		msg += " It could be " + orList(names) + "; ask the user which one they meant, then pass its key."
 	} else {
 		msg += " The projects are: " + mcpProjectNames(projects) + "."
 	}
 	return model.Project{}, &mcpToolError{outcome: "not_found", text: msg}
+}
+
+// projectFor resolves the project for a tool given refs: arg when passed,
+// else the project the first full ref names by its key (WL-12, WL-SPEC-3),
+// else the session's default. A full ref needs no project argument.
+func (call *mcpCall) projectFor(arg string, refs ...string) (model.Project, error) {
+	if strings.TrimSpace(arg) == "" {
+		if p, ok := call.refProject(refs...); ok {
+			return p, nil
+		}
+	}
+	return call.project(arg)
+}
+
+// refProject is the project whose key leads the first of refs written as a
+// full ref.
+func (call *mcpCall) refProject(refs ...string) (model.Project, bool) {
+	for _, ref := range refs {
+		m := mcpRefKey.FindStringSubmatch(strings.TrimSpace(ref))
+		if m == nil {
+			continue
+		}
+		projects, err := call.listProjects()
+		if err != nil {
+			return model.Project{}, false
+		}
+		for _, p := range projects {
+			if p.Key != "" && strings.EqualFold(p.Key, m[1]) {
+				return p, true
+			}
+		}
+	}
+	return model.Project{}, false
+}
+
+// mcpRefKey is a full task, document or rule ref, capturing its key.
+var mcpRefKey = regexp.MustCompile(`(?i)^([A-Z][A-Z0-9]{1,9})-(?:(?:SPEC|PLAN|ADR|REQ|RULE|CL|MILE|DEL)-)?\d+(?:#sec-[\w.\-]+)?$`)
+
+// ref reads a ref argument in p through spokenRef, against every project
+// key the caller can see.
+func (call *mcpCall) ref(raw string, p model.Project) string {
+	var keys []string
+	if projects, err := call.listProjects(); err == nil {
+		for _, q := range projects {
+			keys = append(keys, q.Key)
+		}
+	}
+	return spokenRef(raw, p.Key, keys)
 }
 
 func mcpProjectItem(p model.Project) model.MCPProject {

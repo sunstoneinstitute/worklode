@@ -26,7 +26,7 @@ func (s *server) addMCPDocTools(srv *mcp.Server) {
 		"Show one task, spec, plan, rule or project by its ref: WL-12, WL-SPEC-77, WL-PLAN-3, "+
 			"WL-REQ-1300, a project key, or a spoken form like \"spec seventy-seven\" or \"task five twelve\". "+
 			"A document or rule is shown with its in-force amendments folded in unless inline is false; "+
-			"section narrows a document to one section."+mcpProjectHint,
+			"section narrows a document to one section."+mcpRefProjectHint,
 		true, mcpShow)
 	addMCPTool(s, srv, "doc_list", "List documents",
 		"List specs and plans, ten at a time; withdrawn, superseded and spent ones are hidden unless "+
@@ -38,11 +38,11 @@ func (s *server) addMCPDocTools(srv *mcp.Server) {
 	addMCPTool(s, srv, "doc_edit", "Edit a document",
 		"Replace a document's body or set its title. A draft or a plan is rewritten in place; an accepted "+
 			"spec is amended, which needs a note (or substantive). Pass if_version, the version show "+
-			"reported, so a concurrent edit is refused instead of overwritten."+mcpProjectHint,
+			"reported, so a concurrent edit is refused instead of overwritten."+mcpRefProjectHint,
 		false, mcpDocEdit)
 	addMCPTool(s, srv, "doc_transition", "Move a document",
 		"Move a document through its lifecycle: submit it for review, accept it, revise an accepted spec "+
-			"(opens a candidate revision), or withdraw it with a reason."+mcpProjectHint,
+			"(opens a candidate revision), or withdraw it with a reason."+mcpRefProjectHint,
 		false, mcpDocTransition)
 }
 
@@ -103,11 +103,11 @@ func mcpShow(call *mcpCall, in model.MCPShowInput) (string, model.MCPShowOutput,
 			}
 		}
 	}
-	p, err := call.project(in.Project)
+	p, err := call.projectFor(in.Project, in.Ref)
 	if err != nil {
 		return "", out, err
 	}
-	ref := spokenRef(in.Ref, p.Key)
+	ref := call.ref(in.Ref, p)
 	if _, ok := designdoc.ParseRuleRef(ref); ok {
 		if in.Section != "" {
 			return "", out, mcpInvalid("section applies to documents, and %s is a rule.", ref)
@@ -158,7 +158,7 @@ func mcpShow(call *mcpCall, in model.MCPShowInput) (string, model.MCPShowOutput,
 	}
 	text, err := call.c.DocShowText(call.ctx, &detail, section, inline)
 	if err != nil {
-		return "", out, mcpInvalid("%s", err.Error())
+		return "", out, showTextErr(err)
 	}
 	out = model.MCPShowOutput{Kind: detail.Kind, Ref: cli.DocRef(detail.Doc), Title: detail.Title}
 	where := ""
@@ -167,6 +167,18 @@ func mcpShow(call *mcpCall, in model.MCPShowInput) (string, model.MCPShowOutput,
 	}
 	return fmt.Sprintf("Here is%s %s %s, %q (%s, version %d).\n\n", where, detail.Kind, out.Ref, detail.Title,
 		detail.Status, detail.Version) + text, out, nil
+}
+
+// showTextErr classifies a DocShowText failure. A rule the inliner fetched
+// can be refused or missing; that is the API's answer, classified as any
+// other (refused, not_found). The rest is the document or the section asked
+// for, which the arguments can fix.
+func showTextErr(err error) error {
+	var ce *cli.ClientError
+	if errors.As(err, &ce) {
+		return err
+	}
+	return mcpInvalid("%s", err.Error())
 }
 
 // resolveDoc finds the document ref names in p: the ref grammar against p's
@@ -263,7 +275,7 @@ func (call *mcpCall) addDoc(p model.Project, in model.MCPDocAddInput) (model.Doc
 	if len(in.Covers) > 0 {
 		b.WriteString("---\ncovers:\n")
 		for _, c := range in.Covers {
-			fmt.Fprintf(&b, "  - %s\n", spokenRef(c, p.Key))
+			fmt.Fprintf(&b, "  - %s\n", call.ref(c, p))
 		}
 		b.WriteString("---\n")
 	}
@@ -313,11 +325,11 @@ func mcpDocEdit(call *mcpCall, in model.MCPDocEditInput) (string, model.MCPDocOu
 	if strings.HasPrefix(strings.TrimSpace(in.Body), "---") {
 		return "", out, mcpInvalid("Pass the body without frontmatter; set the title with title.")
 	}
-	p, err := call.project(in.Project)
+	p, err := call.projectFor(in.Project, in.ID)
 	if err != nil {
 		return "", out, err
 	}
-	doc, _, err := call.resolveDoc(p, spokenRef(in.ID, p.Key))
+	doc, _, err := call.resolveDoc(p, call.ref(in.ID, p))
 	if err != nil {
 		return "", out, err
 	}
@@ -370,11 +382,11 @@ func mcpDocEdit(call *mcpCall, in model.MCPDocEditInput) (string, model.MCPDocOu
 
 func mcpDocTransition(call *mcpCall, in model.MCPDocTransitionInput) (string, model.MCPDocOutput, error) {
 	var out model.MCPDocOutput
-	p, err := call.project(in.Project)
+	p, err := call.projectFor(in.Project, in.ID)
 	if err != nil {
 		return "", out, err
 	}
-	doc, _, err := call.resolveDoc(p, spokenRef(in.ID, p.Key))
+	doc, _, err := call.resolveDoc(p, call.ref(in.ID, p))
 	if err != nil {
 		return "", out, err
 	}

@@ -31,12 +31,12 @@ func (s *server) addMCPTaskTools(srv *mcp.Server) {
 			"optionally under a parent, blocked by other tasks, or governed by rules."+mcpProjectHint,
 		false, mcpTaskAdd)
 	addMCPTool(s, srv, "task_update", "Update a task",
-		"Change a task's title, body or priority. Fields left out are unchanged."+mcpProjectHint,
+		"Change a task's title, body or priority. Fields left out are unchanged."+mcpRefProjectHint,
 		false, mcpTaskUpdate)
 	addMCPTool(s, srv, "task_set_state", "Move a task",
 		"Move a task to another state: ready (publish a draft, or reopen a delivered or abandoned task), "+
 			"in_progress, in_review, merged, deployed_dev, deployed_prod, released, or abandoned. Whether "+
-			"the move is allowed from where the task stands is Worklode's call."+mcpProjectHint,
+			"the move is allowed from where the task stands is Worklode's call."+mcpRefProjectHint,
 		false, mcpTaskSetState)
 }
 
@@ -118,7 +118,7 @@ func (call *mcpCall) addTask(p model.Project, in model.MCPTaskAddInput) (model.T
 	}
 	govern := make([]string, len(in.GovernedBy))
 	for i, g := range in.GovernedBy {
-		govern[i] = spokenRef(g, p.Key)
+		govern[i] = call.ref(g, p)
 	}
 	t, _, err := call.c.CreateTask(call.ctx, model.CreateTaskInput{
 		Project: p.ID, Title: strings.TrimSpace(in.Title), Body: in.Body, Priority: priority,
@@ -148,7 +148,7 @@ func mcpTaskUpdate(call *mcpCall, in model.MCPTaskUpdateInput) (string, model.MC
 	if in.Title == nil && in.Body == nil && in.Priority == nil {
 		return "", out, mcpInvalid("Nothing to change: pass title, body or priority.")
 	}
-	p, err := call.project(in.Project)
+	p, err := call.projectFor(in.Project, in.ID)
 	if err != nil {
 		return "", out, err
 	}
@@ -164,7 +164,7 @@ func mcpTaskUpdate(call *mcpCall, in model.MCPTaskUpdateInput) (string, model.MC
 
 func mcpTaskSetState(call *mcpCall, in model.MCPTaskSetStateInput) (string, model.MCPTaskOutput, error) {
 	var out model.MCPTaskOutput
-	p, err := call.project(in.Project)
+	p, err := call.projectFor(in.Project, in.ID)
 	if err != nil {
 		return "", out, err
 	}
@@ -318,7 +318,7 @@ func (call *mcpCall) taskRef(arg string, p model.Project) string {
 	if strings.TrimSpace(arg) == "" {
 		return ""
 	}
-	return spokenRef(arg, p.Key)
+	return call.ref(arg, p)
 }
 
 func mcpTaskItem(t model.Task) model.MCPTaskItem {

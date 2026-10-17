@@ -22,7 +22,7 @@ var mcpRuleRels = []string{"refines", "needs", "references"}
 func (s *server) addMCPRuleTools(srv *mcp.Server) {
 	addMCPTool(s, srv, "rule_list", "List rules",
 		"List rules, ten at a time: a spec's rules in arrangement order when doc is given, else the "+
-			"project's rules by number."+mcpProjectHint,
+			"project's rules by number."+mcpRefProjectHint,
 		true, mcpRuleList)
 	addMCPTool(s, srv, "rule_add", "Add a rule",
 		"Add a draft rule with a heading and text: a requirement unless kind says catalogue, invariant, "+
@@ -30,20 +30,20 @@ func (s *server) addMCPRuleTools(srv *mcp.Server) {
 		false, mcpRuleAdd)
 	addMCPTool(s, srv, "rule_edit", "Edit a rule",
 		"Write a rule's next draft version: new text, and a new heading if given. Specs arranging it show "+
-			"the draft once its owner accepts it."+mcpProjectHint,
+			"the draft once its owner accepts it."+mcpRefProjectHint,
 		false, mcpRuleEdit)
 	addMCPTool(s, srv, "rule_link", "Relate two rules",
-		"Record that one rule refines, needs or references another; remove takes the edge away."+mcpProjectHint,
+		"Record that one rule refines, needs or references another; remove takes the edge away."+mcpRefProjectHint,
 		false, mcpRuleLink)
 	addMCPTool(s, srv, "rule_supersede", "Supersede rules",
 		"Withdraw old rules and link each to the rules that replace it, in one change. dry_run reports "+
-			"what would change without writing."+mcpProjectHint,
+			"what would change without writing."+mcpRefProjectHint,
 		false, mcpRuleSupersede)
 }
 
 func mcpRuleList(call *mcpCall, in model.MCPRuleListInput) (string, model.MCPRuleListOutput, error) {
 	var out model.MCPRuleListOutput
-	p, err := call.project(in.Project)
+	p, err := call.projectFor(in.Project, in.Doc)
 	if err != nil {
 		return "", out, err
 	}
@@ -51,7 +51,7 @@ func mcpRuleList(call *mcpCall, in model.MCPRuleListInput) (string, model.MCPRul
 	if in.Doc != "" {
 		// A document names its own project, so the scope would only hide
 		// one from another project, as in `lode rule list --doc`.
-		params.Project, params.Doc = "", spokenRef(in.Doc, p.Key)
+		params.Project, params.Doc = "", call.ref(in.Doc, p)
 	}
 	rules, _, err := call.c.ListRules(call.ctx, params)
 	if err != nil {
@@ -110,9 +110,14 @@ func (call *mcpCall) addRule(p model.Project, in model.MCPRuleAddInput) (model.R
 	}
 	text := fmt.Sprintf("Added draft %s %s, %q, in %s.", r.Kind, r.Ref, r.Heading, p.Name)
 	if in.Doc != "" {
-		doc, _, err := call.resolveDoc(p, spokenRef(in.Doc, p.Key))
+		// The arranged rule replaces r only on success: a failed arrange
+		// answers a zero rule, and the error must still name the one added.
+		doc, _, err := call.resolveDoc(p, call.ref(in.Doc, p))
 		if err == nil {
-			r, _, err = call.c.ArrangeRule(call.ctx, doc.ID, model.ArrangeRuleInput{Rule: r.Ref})
+			var arranged model.Rule
+			if arranged, _, err = call.c.ArrangeRule(call.ctx, doc.ID, model.ArrangeRuleInput{Rule: r.Ref}); err == nil {
+				r = arranged
+			}
 		}
 		if err != nil {
 			_, msg := mcpErrorText(err)
@@ -129,11 +134,11 @@ func mcpRuleEdit(call *mcpCall, in model.MCPRuleEditInput) (string, model.MCPRul
 	if strings.TrimSpace(in.Body) == "" {
 		return "", out, mcpInvalid("Pass body: the rule's new text.")
 	}
-	p, err := call.project(in.Project)
+	p, err := call.projectFor(in.Project, in.Ref)
 	if err != nil {
 		return "", out, err
 	}
-	ref := spokenRef(in.Ref, p.Key)
+	ref := call.ref(in.Ref, p)
 	heading := strings.TrimSpace(in.Heading)
 	if heading == "" {
 		cur, _, err := call.c.GetRule(call.ctx, ref)
@@ -160,11 +165,11 @@ func mcpRuleLink(call *mcpCall, in model.MCPRuleLinkInput) (string, model.MCPRul
 	if !valid {
 		return "", out, mcpInvalid("rel must be one of %s.", orList(mcpRuleRels))
 	}
-	p, err := call.project(in.Project)
+	p, err := call.projectFor(in.Project, in.Ref, in.Target)
 	if err != nil {
 		return "", out, err
 	}
-	from, to := spokenRef(in.Ref, p.Key), spokenRef(in.Target, p.Key)
+	from, to := call.ref(in.Ref, p), call.ref(in.Target, p)
 	edge := model.RuleEdgeInput{Type: rel, To: to}
 	if in.Remove {
 		_, err = call.c.UnlinkRules(call.ctx, from, edge)
@@ -186,15 +191,19 @@ func mcpRuleSupersede(call *mcpCall, in model.MCPRuleSupersedeInput) (string, mo
 	if len(in.Entries) == 0 {
 		return "", out, mcpInvalid("Pass entries: each old rule and the rules that replace it.")
 	}
-	p, err := call.project(in.Project)
+	var olds []string
+	for _, e := range in.Entries {
+		olds = append(olds, e.Old)
+	}
+	p, err := call.projectFor(in.Project, olds...)
 	if err != nil {
 		return "", out, err
 	}
 	entries := make([]model.SupersedeEntry, len(in.Entries))
 	for i, e := range in.Entries {
-		entries[i].Old = spokenRef(e.Old, p.Key)
+		entries[i].Old = call.ref(e.Old, p)
 		for _, n := range e.New {
-			entries[i].New = append(entries[i].New, spokenRef(n, p.Key))
+			entries[i].New = append(entries[i].New, call.ref(n, p))
 		}
 	}
 	res, _, err := call.c.SupersedeRules(call.ctx, p.ID, model.SupersedeInput{Entries: entries, DryRun: in.DryRun})

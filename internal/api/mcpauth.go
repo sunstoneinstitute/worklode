@@ -7,9 +7,16 @@
 //     server on whichever MCP origin the client asked on.
 //   - GET /oauth/authorize checks the client, its redirect URI and its PKCE
 //     challenge, stamps them into a signed cookie, and starts the web login.
-//   - finishLogin (cliauth.go) sees that cookie, mints a single-use code bound
-//     to the actor and the challenge, and redirects to the client.
+//   - finishLogin (cliauth.go) sees that cookie and shows the consent page:
+//     who is signing in, and where the token will go.
+//   - POST /oauth/consent answers it. Allow mints a single-use code bound to
+//     the actor and the challenge and redirects to the client; Deny sends
+//     the client access_denied.
 //   - POST /oauth/token redeems the code and the PKCE verifier for a wl_ token.
+//
+// The consent step is what stops a crafted authorize link: Keycloak signs a
+// logged-in user in silently and the client is public, so without it a link
+// sent to that user would hand their token to whoever chose the redirect.
 //
 // The one client is mcpClientID, a public client with no secret and no
 // dynamic registration (mcpbase.go).
@@ -32,6 +39,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
 // mcpCookieName carries the MCP-intent cookie across the web login, on the
@@ -56,6 +64,8 @@ type mcpIntent struct {
 	Challenge string `json:"c"`
 	Resource  string `json:"res,omitempty"`
 	Exp       int64  `json:"e"`
+	// Nonce ties the intent to the login it started (oauthState.Intent).
+	Nonce string `json:"n"`
 }
 
 func signMCPIntent(secret string, mi mcpIntent) string {
@@ -86,6 +96,66 @@ func (s *server) mcpIntentFrom(r *http.Request) (mcpIntent, bool) {
 		return mcpIntent{}, false
 	}
 	return verifyMCPIntent(s.cfg.SessionSecret, c.Value, s.now())
+}
+
+// mcpConsentCookieName carries a pending consent's id from the consent page
+// to POST /oauth/consent, so the id in the form only works in the browser
+// that was shown the page.
+const mcpConsentCookieName = "wl_mcp_consent"
+
+// mcpConsentTTL bounds how long the consent page can be answered.
+const mcpConsentTTL = 5 * time.Minute
+
+// mcpConsent is a login waiting on the user's Allow or Deny.
+type mcpConsent struct {
+	actorID string
+	intent  mcpIntent
+	expires time.Time
+}
+
+// mcpConsentStore holds pending consents in memory, keyed on a random id the
+// consent page posts back. take consumes an id, so an answer cannot be
+// replayed.
+type mcpConsentStore struct {
+	mu      sync.Mutex
+	pending map[string]mcpConsent
+	now     func() time.Time
+}
+
+func newMCPConsentStore(now func() time.Time) *mcpConsentStore {
+	return &mcpConsentStore{pending: map[string]mcpConsent{}, now: now}
+}
+
+// add stores c under a fresh id, dropping expired entries as it goes.
+func (s *mcpConsentStore) add(c mcpConsent) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	id := hex.EncodeToString(b)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	for k, p := range s.pending {
+		if now.After(p.expires) {
+			delete(s.pending, k)
+		}
+	}
+	c.expires = now.Add(mcpConsentTTL)
+	s.pending[id] = c
+	return id, nil
+}
+
+// take consumes id and returns the consent it named, if live.
+func (s *mcpConsentStore) take(id string) (mcpConsent, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.pending[id]
+	delete(s.pending, id)
+	if !ok || s.now().After(c.expires) {
+		return mcpConsent{}, false
+	}
+	return c, true
 }
 
 // mcpCode is what a pending authorization code is bound to.
@@ -140,11 +210,13 @@ func (s *mcpCodeStore) take(code string) (mcpCode, bool) {
 }
 
 // The endpoint label values of worklode_mcp_oauth_requests_total, each with
-// the outcomes it can report. callback is finishLogin's MCP branch.
+// the outcomes it can report. callback is finishLogin's MCP branch, which
+// shows the consent page; consent is the user's answer to it.
 var mcpOAuthOutcomes = map[string][]string{
 	"metadata":  {"ok", "not_found"},
 	"authorize": {"ok", "not_found", "invalid_client", "invalid_redirect", "invalid_request", "unsupported_response_type", "invalid_target"},
 	"callback":  {"ok", "error"},
+	"consent":   {"ok", "denied", "not_found", "forbidden", "invalid", "error"},
 	"token":     {"ok", "not_found", "invalid_request", "invalid_client", "unsupported_grant_type", "invalid_grant", "invalid_target", "error"},
 }
 
@@ -156,7 +228,7 @@ type mcpOAuthMetrics struct {
 func newMCPOAuthMetrics(reg prometheus.Registerer) *mcpOAuthMetrics {
 	m := &mcpOAuthMetrics{requests: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_mcp_oauth_requests_total",
-		Help: "MCP OAuth requests, by endpoint (metadata, authorize, callback, token) and outcome (ok, not_found, or the OAuth error code). " +
+		Help: "MCP OAuth requests, by endpoint (metadata, authorize, callback, consent, token) and outcome (ok, not_found, or the OAuth error code). " +
 			"Labels are bounded: the client, the redirect URI and the actor are deliberately not among them.",
 	}, []string{"endpoint", "outcome"})}
 	for endpoint, outcomes := range mcpOAuthOutcomes {
@@ -174,13 +246,15 @@ func (m *mcpOAuthMetrics) observe(endpoint, outcome string) {
 	}
 }
 
-// registerMCPAuth registers the three MCP OAuth routes and the state they
+// registerMCPAuth registers the four MCP OAuth routes and the state they
 // share.
 func (s *server) registerMCPAuth(r *router, reg prometheus.Registerer) {
 	s.mcpCodes = newMCPCodeStore(s.st.Now)
+	s.mcpConsents = newMCPConsentStore(s.st.Now)
 	s.mcpOAuth = newMCPOAuthMetrics(reg)
 	r.publicFunc("GET /.well-known/oauth-authorization-server", s.mcpServerMetadata)
 	r.publicFunc("GET /oauth/authorize", s.mcpAuthorize)
+	r.publicFunc("POST /oauth/consent", s.mcpConsentAnswer)
 	r.publicFunc("POST /oauth/token", s.mcpToken)
 }
 
@@ -215,16 +289,27 @@ func (s *server) onPublicHost(r *http.Request) bool {
 }
 
 // mcpIssuer is the issuer a response for resource names: the origin resource
-// sits on, or LODE_PUBLIC_URL when the client named no resource.
-func (s *server) mcpIssuer(resource string) string {
+// sits on, or the only MCP origin when the client named no resource. ok is
+// false when no resource was named and two origins are configured, since the
+// issuer the client discovered could be either; mcpAuthorize refuses that
+// request (see there), so no code is ever sent with a guessed iss.
+func (s *server) mcpIssuer(resource string) (string, bool) {
 	origins := s.mcpOrigins()
 	resource = strings.TrimRight(resource, "/")
 	for _, o := range origins {
 		if resource == mcpResource(o) {
-			return o
+			return o, true
 		}
 	}
-	return strings.TrimRight(s.cfg.PublicURL, "/")
+	if len(origins) == 0 {
+		return strings.TrimRight(s.cfg.PublicURL, "/"), true
+	}
+	for _, o := range origins[1:] {
+		if o != origins[0] {
+			return "", false
+		}
+	}
+	return origins[0], true
 }
 
 // validS256Challenge reports whether c has the shape of an S256 code
@@ -262,7 +347,10 @@ func (s *server) mcpAuthorize(w http.ResponseWriter, r *http.Request) {
 	fail := func(code, desc string) {
 		s.mcpOAuth.observe("authorize", code)
 		u, _ := url.Parse(redirect)
-		v := url.Values{"error": {code}, "error_description": {desc}, "iss": {s.mcpIssuer(resource)}}
+		v := url.Values{"error": {code}, "error_description": {desc}}
+		if iss, ok := s.mcpIssuer(resource); ok {
+			v.Set("iss", iss)
+		}
 		if state != "" {
 			v.Set("state", state)
 		}
@@ -282,9 +370,25 @@ func (s *server) mcpAuthorize(w http.ResponseWriter, r *http.Request) {
 		fail("invalid_target", "resource must name this server's /mcp endpoint")
 		return
 	}
+	// With two MCP origins the metadata the client read names one of two
+	// issuers, and only resource says which. RFC 9207 section 2 requires iss
+	// on every response once the metadata advertises it, so rather than send
+	// a guess (or drop iss and break that promise) the request must say. The
+	// MCP authorization spec already requires clients to send resource
+	// (RFC 8707); with one origin the issuer is unambiguous without it.
+	if _, ok := s.mcpIssuer(resource); !ok {
+		fail("invalid_request", "resource is required: name the /mcp endpoint the token is for")
+		return
+	}
+	nonce, err := randToken()
+	if err != nil {
+		s.log.Error("generate mcp login nonce", "err", err)
+		webErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	setAuthCookie(w, mcpCookieName, "/auth/",
 		signMCPIntent(s.cfg.SessionSecret, mcpIntent{
-			Redirect: redirect, State: state, Challenge: challenge, Resource: resource,
+			Redirect: redirect, State: state, Challenge: challenge, Resource: resource, Nonce: nonce,
 			Exp: s.now().Add(oauthStateMaxAge).Unix(),
 		}),
 		oauthStateMaxAge)
@@ -292,39 +396,142 @@ func (s *server) mcpAuthorize(w http.ResponseWriter, r *http.Request) {
 	// would otherwise win in finishLogin.
 	clearAuthCookie(w, cliCookieName)
 	s.mcpOAuth.observe("authorize", "ok")
-	http.Redirect(w, r, s.loginTarget("/"), http.StatusFound)
+	http.Redirect(w, r, intentLoginTarget(nonce), http.StatusFound)
 }
 
-// finishLoginMCP ends a web login that /oauth/authorize started: it mints the
-// authorization code and sends the browser back to the client with it.
+// finishLoginMCP ends a web login that /oauth/authorize started: it records
+// the pending consent and shows the user who is signing in and where the
+// token will go. No code exists until they answer Allow.
 func (s *server) finishLoginMCP(w http.ResponseWriter, r *http.Request, actorID string, mi mcpIntent) {
-	code, err := s.mcpCodes.mint(mcpCode{
-		actorID: actorID, redirect: mi.Redirect, challenge: mi.Challenge, resource: mi.Resource,
-	})
+	id, err := s.mcpConsents.add(mcpConsent{actorID: actorID, intent: mi})
 	if err != nil {
 		s.mcpOAuth.observe("callback", "error")
-		s.log.Error("mint mcp code", "err", err)
+		s.log.Error("record mcp consent", "err", err)
 		webErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	clearAuthCookie(w, mcpCookieName)
 	clearAuthCookie(w, oauthCookieName)
+	setAuthCookie(w, mcpConsentCookieName, "/oauth/", id, mcpConsentTTL)
+	// The page holds a live consent id: never cache it. Its form-action
+	// names the client's origin too, because a browser applies form-action to
+	// the redirect that follows the POST.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; font-src 'self'; "+
+		"base-uri 'none'; frame-ancestors 'none'; form-action 'self' "+mcpRedirectOrigin(mi.Redirect))
+	view := ui.MCPConsentView{
+		Title:       "worklode: allow access",
+		ActorID:     actorID,
+		Destination: mcpDestination(mi.Redirect),
+		ConsentID:   id,
+		ExpiresIn:   humanizeDuration(mcpConsentTTL),
+	}
+	s.mcpOAuth.observe("callback", "ok")
+	if err := ui.MCPConsent(view).Render(r.Context(), w); err != nil {
+		s.log.Error("render mcp consent page", "err", err)
+	}
+}
+
+// mcpRedirectOrigin is the scheme and host of a redirect URI mcpRedirectAllowed
+// accepted.
+func mcpRedirectOrigin(redirect string) string {
+	u, err := url.Parse(redirect)
+	if err != nil {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// mcpDestination says, for the consent page, where a token for redirect goes.
+func mcpDestination(redirect string) string {
+	u, err := url.Parse(redirect)
+	if err == nil && isLoopbackRedirect(redirect) {
+		return "an app on this computer (" + u.Host + "), such as Claude Code"
+	}
+	if err == nil && u.Hostname() == "claude.ai" {
+		return "the Worklode connector in claude.ai (Claude on the web and in Cowork)"
+	}
+	return redirect
+}
+
+// mcpConsentAnswer handles POST /oauth/consent, the consent page's Allow or
+// Deny. The answer must come from this origin's own page (sameOriginForm),
+// name a live pending consent, and carry the cookie the page was shown with;
+// the consent is consumed either way, so a replayed answer finds nothing.
+func (s *server) mcpConsentAnswer(w http.ResponseWriter, r *http.Request) {
+	if s.oidc == nil || !s.onPublicHost(r) {
+		s.mcpOAuth.observe("consent", "not_found")
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	if !s.sameOriginForm(r) {
+		s.mcpOAuth.observe("consent", "forbidden")
+		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
+		return
+	}
+	if !parseWebForm(w, r) {
+		s.mcpOAuth.observe("consent", "invalid")
+		return
+	}
+	decision := r.PostForm.Get("decision")
+	if decision != "allow" && decision != "deny" {
+		s.mcpOAuth.observe("consent", "invalid")
+		webErr(w, http.StatusBadRequest, "answer allow or deny")
+		return
+	}
+	id := r.PostForm.Get("consent")
+	c, err := r.Cookie(mcpConsentCookieName)
+	if id == "" || err != nil || subtle.ConstantTimeCompare([]byte(c.Value), []byte(id)) != 1 {
+		s.mcpOAuth.observe("consent", "forbidden")
+		webErr(w, http.StatusForbidden, "this sign-in request was not started in this browser")
+		return
+	}
+	pending, ok := s.mcpConsents.take(id)
+	http.SetCookie(w, &http.Cookie{Name: mcpConsentCookieName, Path: "/oauth/", MaxAge: -1})
+	if !ok {
+		s.mcpOAuth.observe("consent", "invalid")
+		webErr(w, http.StatusBadRequest, "this sign-in request has expired or was already answered; start again from your app")
+		return
+	}
+	mi := pending.intent
 	// Redirect was checked by mcpRedirectAllowed at /oauth/authorize and has
 	// no query of its own.
 	u, err := url.Parse(mi.Redirect)
 	if err != nil {
-		s.mcpOAuth.observe("callback", "error")
+		s.mcpOAuth.observe("consent", "error")
 		s.log.Error("parse mcp redirect", "err", err)
 		webErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	v := url.Values{"code": {code}, "iss": {s.mcpIssuer(mi.Resource)}}
+	v := url.Values{}
+	if iss, ok := s.mcpIssuer(mi.Resource); ok {
+		v.Set("iss", iss)
+	}
 	if mi.State != "" {
 		v.Set("state", mi.State)
 	}
+	if decision == "deny" {
+		v.Set("error", "access_denied")
+		v.Set("error_description", "the user denied access")
+		u.RawQuery = v.Encode()
+		s.mcpOAuth.observe("consent", "denied")
+		http.Redirect(w, r, u.String(), http.StatusSeeOther)
+		return
+	}
+	code, err := s.mcpCodes.mint(mcpCode{
+		actorID: pending.actorID, redirect: mi.Redirect, challenge: mi.Challenge, resource: mi.Resource,
+	})
+	if err != nil {
+		s.mcpOAuth.observe("consent", "error")
+		s.log.Error("mint mcp code", "err", err)
+		webErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	v.Set("code", code)
 	u.RawQuery = v.Encode()
-	s.mcpOAuth.observe("callback", "ok")
-	http.Redirect(w, r, u.String(), http.StatusFound)
+	s.mcpOAuth.observe("consent", "ok")
+	http.Redirect(w, r, u.String(), http.StatusSeeOther)
 }
 
 // pkceMatches reports whether verifier hashes to the S256 challenge. The

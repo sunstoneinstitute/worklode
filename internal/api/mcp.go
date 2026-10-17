@@ -17,7 +17,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,9 +52,14 @@ const mcpMaxSessions = 10000
 const mcpPageSize = 10
 
 // mcpProjectHint ends the description of every project-scoped tool.
-const mcpProjectHint = " Every call works in one Worklode project: pass project when the user's " +
-	"project instructions name one (look for a line 'Worklode project: <key>'), or omit it to use " +
-	"the session's project set with project_use."
+const mcpProjectHint = " Every call works in one Worklode project: pass project (its key, id or exact " +
+	"name) when the user's project instructions name one (look for a line 'Worklode project: <key>'), " +
+	"or omit it to use the session's project set with project_use."
+
+// mcpRefProjectHint ends the description of a tool that takes a ref: a full
+// ref carries its project's key.
+const mcpRefProjectHint = mcpProjectHint + " A full ref (WL-12, WL-SPEC-3, WL-REQ-9) names its own " +
+	"project, so project can then be omitted."
 
 // mcpInstructions is what an MCP client is told about this server at
 // initialize.
@@ -145,8 +152,8 @@ func (s *server) registerMCP(r *router, reg prometheus.Registerer) {
 // actor id, which the SDK holds every later request on the session to: a
 // session id presented with another actor's token is refused.
 func (s *server) serveMCP(w http.ResponseWriter, r *http.Request) {
-	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !ok || token == "" {
+	token, ok := bearerToken(r.Header)
+	if !ok {
 		s.mcpUnauthorized(w, r)
 		return
 	}
@@ -165,6 +172,17 @@ func (s *server) serveMCP(w http.ResponseWriter, r *http.Request) {
 		// Expiry was checked by Authenticate; a wl_ token need not carry one.
 		AllowMissingExpiration: true,
 	})(s.mcp.handler).ServeHTTP(w, r)
+}
+
+// bearerToken is the token in h's Authorization header. The scheme is
+// matched without regard to case (RFC 7235 section 2.1).
+func bearerToken(h http.Header) (string, bool) {
+	scheme, token, ok := strings.Cut(h.Get("Authorization"), " ")
+	token = strings.TrimSpace(token)
+	if !ok || !strings.EqualFold(scheme, "Bearer") || token == "" {
+		return "", false
+	}
+	return token, true
 }
 
 // mcpUnauthorized answers 401 with the RFC 9728 pointer to this origin's
@@ -203,14 +221,17 @@ func (s *server) serveMCPResourceMetadata(w http.ResponseWriter, r *http.Request
 // mcpLoopback is the http.RoundTripper a tool's cli.Client sends through: it
 // serves each request with the server's own handler and records the answer,
 // so nothing leaves the process.
-type mcpLoopback struct{ h http.Handler }
+type mcpLoopback struct {
+	h   http.Handler
+	log *slog.Logger
+}
 
 func (l mcpLoopback) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.RemoteAddr = "mcp-loopback"
 	req.RequestURI = req.URL.RequestURI()
 	rec := &mcpRecorder{header: http.Header{}, code: http.StatusOK}
-	l.h.ServeHTTP(rec, req)
+	l.serve(rec, req)
 	return &http.Response{
 		Status:        strconv.Itoa(rec.code) + " " + http.StatusText(rec.code),
 		StatusCode:    rec.code,
@@ -222,6 +243,26 @@ func (l mcpLoopback) RoundTrip(req *http.Request) (*http.Response, error) {
 		ContentLength: int64(rec.body.Len()),
 		Request:       req,
 	}, nil
+}
+
+// serve runs the handler on the tool's goroutine, which the SDK starts with
+// no recover of its own. net/http recovers a handler panic for a network
+// request; here nothing would, and lode-server would die, so a panic is
+// logged and answered 500 as net/http would answer it.
+func (l mcpLoopback) serve(rec *mcpRecorder, req *http.Request) {
+	defer func() {
+		if v := recover(); v != nil {
+			if l.log != nil {
+				l.log.Error("panic serving mcp loopback request", "method", req.Method, "path", req.URL.Path,
+					"panic", v, "stack", string(debug.Stack()))
+			}
+			rec.header = http.Header{"Content-Type": {"application/json"}}
+			rec.body.Reset()
+			rec.code, rec.wroteHeader = http.StatusInternalServerError, true
+			rec.body.WriteString(`{"error":"internal error"}` + "\n")
+		}
+	}()
+	l.h.ServeHTTP(rec, req)
 }
 
 // mcpRecorder is the minimal http.ResponseWriter mcpLoopback records into.
@@ -342,7 +383,19 @@ func addMCPTool[In, Out any](s *server, srv *mcp.Server, name, title, desc strin
 		Name: name, Title: title, Description: desc,
 		Annotations: &mcp.ToolAnnotations{Title: title, ReadOnlyHint: readOnly, OpenWorldHint: new(bool)},
 	}
-	mcp.AddTool(srv, tool, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
+	mcp.AddTool(srv, tool, func(ctx context.Context, req *mcp.CallToolRequest, in In) (res *mcp.CallToolResult, out Out, err error) {
+		// The SDK runs each call on a goroutine of its own with no recover,
+		// so a panic here would take lode-server down with it.
+		defer func() {
+			if v := recover(); v != nil {
+				s.log.Error("panic in mcp tool", "tool", name, "panic", v, "stack", string(debug.Stack()))
+				s.mcp.metrics.call(name, "error")
+				var zero Out
+				res, out, err = &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{
+					Text: "Worklode failed while running " + name + ". Try again later, or tell the user.",
+				}}}, zero, nil
+			}
+		}()
 		call := s.newMCPCall(ctx, req)
 		text, out, err := h(call, in)
 		if err != nil {
@@ -363,7 +416,7 @@ func (s *server) newMCPCall(ctx context.Context, req *mcp.CallToolRequest) *mcpC
 	call := &mcpCall{s: s, ctx: ctx}
 	var token string
 	if req.Extra != nil {
-		token, _ = strings.CutPrefix(req.Extra.Header.Get("Authorization"), "Bearer ")
+		token, _ = bearerToken(req.Extra.Header)
 		if req.Extra.TokenInfo != nil {
 			call.actor = req.Extra.TokenInfo.UserID
 		}
@@ -371,7 +424,7 @@ func (s *server) newMCPCall(ctx context.Context, req *mcp.CallToolRequest) *mcpC
 	if req.Session != nil {
 		call.session = req.Session.ID()
 	}
-	call.c = cli.NewClientTransport(mcpLoopbackURL, token, mcpLoopback{h: s.mcp.api})
+	call.c = cli.NewClientTransport(mcpLoopbackURL, token, mcpLoopback{h: s.mcp.api, log: s.log})
 	return call
 }
 

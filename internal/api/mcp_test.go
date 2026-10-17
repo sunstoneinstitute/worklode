@@ -451,3 +451,81 @@ func TestMCPPermissionRefused(t *testing.T) {
 		}
 	}
 }
+
+// An explicit project argument must name a project exactly; a near miss is
+// not_found with the closest candidates, never a guess.
+func TestMCPProjectArgumentIsExact(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	sess := f.connect(t, f.token)
+	mustCall(t, sess, "task_list", map[string]any{"project": "DATA PLATFORM"})
+	for _, arg := range []string{"data platfrm", "work load", "the data platform project"} {
+		text, _, isErr := callTool(t, sess, "task_list", map[string]any{"project": arg})
+		if !isErr || !strings.HasPrefix(text, "No Worklode project is called") {
+			t.Errorf("task_list(project %q) = %q (error %v); want not_found", arg, text, isErr)
+		}
+	}
+	text, _, _ := callTool(t, sess, "task_list", map[string]any{"project": "data platfrm"})
+	if !strings.Contains(text, "Data Platform (DP)") || !strings.Contains(text, "ask the user") {
+		t.Errorf("near miss lists no candidate: %q", text)
+	}
+}
+
+// A full ref names its own project, so a tool given one needs no project.
+func TestMCPFullRefNeedsNoProject(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	setup := f.connect(t, f.token)
+	_, out := mustCall(t, setup, "task_add", map[string]any{"project": "DP", "kind": "chore", "title": "Tidy"})
+	task := out["task"].(map[string]any)["id"].(string)
+	_, out = mustCall(t, setup, "doc_add", map[string]any{"project": "DP", "kind": "spec", "title": "Ingest"})
+	doc := out["doc"].(map[string]any)["ref"].(string)
+	_, out = mustCall(t, setup, "rule_add", map[string]any{"project": "DP", "heading": "One", "body": "First."})
+	r1 := out["rule"].(map[string]any)["ref"].(string)
+	_, out = mustCall(t, setup, "rule_add", map[string]any{"project": "DP", "heading": "Two", "body": "Second."})
+	r2 := out["rule"].(map[string]any)["ref"].(string)
+
+	sess := f.connect(t, f.token) // no project_use
+	mustCall(t, sess, "task_update", map[string]any{"id": strings.ToLower(task), "title": "Tidy up"})
+	mustCall(t, sess, "task_set_state", map[string]any{"id": task, "state": "abandoned"})
+	mustCall(t, sess, "doc_edit", map[string]any{"id": doc, "title": "Ingest flow"})
+	mustCall(t, sess, "show", map[string]any{"ref": doc})
+	mustCall(t, sess, "rule_link", map[string]any{"ref": r2, "rel": "refines", "target": r1})
+	mustCall(t, sess, "rule_edit", map[string]any{"ref": r1, "body": "First, again."})
+	// A spoken ref still needs the project.
+	if text, _, isErr := callTool(t, sess, "show", map[string]any{"ref": "spec one"}); !isErr || !strings.Contains(text, "project_required") {
+		t.Errorf("show(spec one) without a project = %q", text)
+	}
+}
+
+// A rule added but not arranged says which rule exists.
+func TestMCPRuleAddArrangeFailureNamesTheRule(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	sess := f.connect(t, f.token)
+	text, _, isErr := callTool(t, sess, "rule_add", map[string]any{
+		"project": "WL", "heading": "Orphan", "body": "Text.", "doc": "WL-SPEC-99",
+	})
+	if !isErr || !strings.HasPrefix(text, `Added WL-REQ-1, "Orphan", but could not arrange it in WL-SPEC-99`) {
+		t.Errorf("rule_add into a missing spec = %q", text)
+	}
+}
+
+// The bearer scheme is matched without regard to case (RFC 7235).
+func TestMCPBearerSchemeAnyCase(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`))
+	req.Header.Set("Authorization", "bearer "+f.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("initialize with a lower-case scheme = %d; want 200", resp.StatusCode)
+	}
+}

@@ -419,11 +419,13 @@ type server struct {
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
 
-	// mcpCodes holds pending authorization codes for the MCP OAuth login, and
-	// mcpOAuth counts its requests (mcpauth.go). Both are set by
-	// registerMCPAuth; nil in a bare test server.
-	mcpCodes *mcpCodeStore
-	mcpOAuth *mcpOAuthMetrics
+	// mcpCodes holds pending authorization codes for the MCP OAuth login,
+	// mcpConsents the logins waiting on the consent page, and mcpOAuth counts
+	// its requests (mcpauth.go). All are set by registerMCPAuth; nil in a bare
+	// test server.
+	mcpCodes    *mcpCodeStore
+	mcpConsents *mcpConsentStore
+	mcpOAuth    *mcpOAuthMetrics
 	// mcp is the MCP server at /mcp (mcp.go), set by registerMCP.
 	mcp *mcpState
 

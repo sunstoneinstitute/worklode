@@ -175,6 +175,7 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 		"POST /hooks/github",
 		"POST /hooks/pipeline",
 		"POST /mcp",
+		"POST /oauth/consent",
 		"POST /oauth/token",
 	}
 
@@ -212,6 +213,7 @@ func TestNoWriteRouteIsPublic(t *testing.T) {
 		"POST /auth/oidc/token": true, // verifies a Keycloak ID token
 		"POST /auth/cli/token":  true, // redeems a one-time code
 		"POST /oauth/token":     true, // redeems a one-time code and its PKCE verifier
+		"POST /oauth/consent":   true, // consumes a pending consent bound to a cookie, same-origin only
 		// The MCP server checks its own bearer token (serveMCP), and each
 		// tool's write goes through the /api/v1 guards in-process.
 		"POST /mcp":   true,

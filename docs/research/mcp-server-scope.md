@@ -27,9 +27,28 @@ No realm change.
   answers 401 with `WWW-Authenticate: Bearer resource_metadata=...`.
 - `GET /.well-known/oauth-authorization-server` (RFC 8414). PKCE S256 only.
 - `GET /oauth/authorize`: checks `client_id`, `redirect_uri`,
-  `code_challenge`, `resource`. Sets a signed MCP-intent cookie, then runs the
-  normal Keycloak login. `finishLogin` gets a third branch next to the CLI
-  one: mint a single-use 5-minute code bound to the challenge and redirect.
+  `code_challenge`, `resource`. Sets a signed MCP-intent cookie carrying a
+  nonce, then runs the normal Keycloak login with that nonce in its signed
+  oauth state. `finishLogin` gets a third branch next to the CLI one, taken
+  only when the intent's nonce is the login's: an intent cookie left by an
+  abandoned connector or `lode login` cannot turn a later plain web login
+  into theirs, and a plain `/auth/login` clears it.
+- `resource` is required when two MCP origins are configured (prod), because
+  only it says which issuer the client discovered, and RFC 9207 requires a
+  correct `iss` on every response once the metadata advertises it. With one
+  origin it may be left out. The MCP authorization spec already requires
+  clients to send it.
+- Consent: after the login, before any code exists, the browser shows a
+  consent page naming who is signing in and where the token goes ("the
+  Worklode connector in claude.ai", or "an app on this computer
+  (localhost:PORT)"), with Allow and Deny. Keycloak signs a logged-in user in
+  silently and the client is public, so without this a crafted authorize link
+  would hand that user's token to whoever chose the redirect. The pending
+  consent lives server-side for 5 minutes, single use, keyed on a random id
+  that the page posts back together with a cookie of the same value.
+  `POST /oauth/consent` accepts same-origin submissions only. Allow mints a
+  single-use 5-minute code bound to the challenge and redirects; Deny
+  redirects with `error=access_denied`.
 - `POST /oauth/token` (form-encoded): checks the PKCE verifier and that
   `resource` is one of this server's MCP URLs. Returns a 30-day `wl_` token
   (`ssoTokenTTL`), described as `mcp: <client>`. No refresh token.
@@ -114,9 +133,14 @@ Not done yet, outside this overlay:
 
 ## Project scope
 
-- Every tool takes an optional `project`.
-- Order: explicit argument, then the MCP session default (set by
-  `project_use`, keyed on `Mcp-Session-Id`, never per user), then fail.
+- Every tool takes an optional `project`. It must name a project exactly:
+  its key, id or full name, ignoring case. A near miss fails `not_found` with
+  the closest candidates for Claude to ask about; fuzzy matching belongs to
+  `project_resolve` alone.
+- Order: explicit argument, then the project a full ref names (`WL-12`,
+  `WL-SPEC-3`, `WL-REQ-9` carry their key, so a tool given one needs no
+  project), then the MCP session default (set by `project_use`, keyed on
+  `Mcp-Session-Id`, never per user), then fail.
 - On failure the tool returns `project_required` with the project list and
   the text "Ask the user which Worklode project to use for this session, then
   call project_use."
@@ -129,8 +153,11 @@ Not done yet, outside this overlay:
 - `project_resolve(spoken)`: fuzzy and phonetic match over projects only;
   ranked candidates with confidence. One clear winner: use it. Otherwise read
   back the top two or three.
-- `ref` arguments accept spoken forms ("spec seventy-seven", "task 512")
-  resolved against the session project.
+- `ref` arguments accept spoken forms ("spec seventy-seven", "task 512",
+  "spec-77") resolved against the session project. A leading kind word wins
+  over the task-id shape, and `<PREFIX>-<n>` is read as a task id only when
+  PREFIX is a project key; anything else (a slug like `rollout-2`) reaches
+  the API's resolver as written.
 - Every result starts with one speakable sentence, then detail. Lists cap at
   10 with a cursor.
 

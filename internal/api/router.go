@@ -222,6 +222,7 @@ var routeGuards = map[string]routeGuard{
 	// authenticates the client by its PKCE verifier, not by an actor.
 	"GET /.well-known/oauth-authorization-server": open("OAuth server discovery for MCP clients, by definition pre-login"),
 	"GET /oauth/authorize":                        open("starts an MCP client's login flow"),
+	"POST /oauth/consent":                         open("answers the MCP consent page; needs a pending consent id and the cookie it was shown with"),
 	"POST /oauth/token":                           open("redeems a one-time MCP authorization code and its PKCE verifier"),
 	// The MCP server (mcp.go). Open in this table because the handler
 	// authenticates its own bearer token: a missing or unknown one gets 401
