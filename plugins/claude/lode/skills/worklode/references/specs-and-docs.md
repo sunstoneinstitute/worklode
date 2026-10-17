@@ -16,20 +16,20 @@ names a place in that spec's arrangement.
 
 A rule's kind is one of five, and sets the infix its ref prints with:
 
-- **requirement** (`WL-REQ-12`): a plan builds it once. A planning gap until
+- **requirement** (`WL-REQ-<n>`): a plan builds it once. A planning gap until
   an accepted plan covers it. New rules are requirements.
-- **catalogue** (`WL-REQ-12`): a set of entries with one shape, such as a
+- **catalogue** (`WL-REQ-<n>`): a set of entries with one shape, such as a
   command tree or error table. A plan builds its entries. Same planning
   status as a requirement.
-- **invariant** (`WL-RULE-12`): holds in every state and binds every task in
+- **invariant** (`WL-RULE-<n>`): holds in every state and binds every task in
   its project. Never covered, never a gap.
-- **definition** (`WL-RULE-12`): one term, one meaning, in one scope. Never
+- **definition** (`WL-RULE-<n>`): one term, one meaning, in one scope. Never
   covered, never a gap.
-- **principle** (`WL-RULE-12`): a stance other rules `refine`. Never covered,
+- **principle** (`WL-RULE-<n>`): a stance other rules `refine`. Never covered,
   never a gap.
 
-The number alone identifies a rule: `WL-REQ-12`, `WL-RULE-12` and the old
-`WL-CL-12` resolve to the same rule wherever a ref is read. Change a kind
+The number alone identifies a rule: `WL-REQ-<n>`, `WL-RULE-<n>` and the old
+`WL-CL-<n>` resolve to the same rule wherever a ref is read. Change a kind
 with `lode rule set <ref> --kind <kind>`. A rule
 that both builds something and binds later work holds two obligations:
 split it into a requirement and an invariant.
@@ -70,7 +70,7 @@ it is a draft, and into its candidate revision when it is accepted.
 
 A spec write through `lode doc` also writes rules. `lode doc show <ref>
 --editable` prints each anchored heading with its rule ref (`{#sec-3
-rule=WL-REQ-12}`); written back, that heading arranges the named rule and
+rule=WL-REQ-<n>}`); written back, that heading arranges the named rule and
 changed text under it is a rule edit. A heading with no `rule=` matches the
 spec's own rules by anchor and heading, then heading alone, then anchor alone,
 and an unmatched one creates a rule. A rule the write leaves out is
