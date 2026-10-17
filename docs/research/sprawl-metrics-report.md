@@ -1,6 +1,6 @@
 # Spec sprawl metrics: old corpus, new corpus, clause graph
 
-Computed by `sprawl3.py` over three corpora. OLD is the 47 inline-exported WL-SPEC documents, unit a leaf section. NEW is the 11 documents of `docs/specs2/`, same unit. GRAPH is those same 11 documents read through `docs/specs2/ttl/`, unit a clause: 325 `wl:Clause` nodes plus 61 `wl:OpenQuestion` nodes, 386 retrieval nodes in all. Every GRAPH number below covers all 386 nodes unless a row says clauses only. OLD and NEW are computed exactly as `sprawl.py` computes them in `sprawl-metrics.md`, so the two reports agree. Tokens are words times 1.3 everywhere, taken from `wl:tokenCount` for GRAPH.
+Computed by `sprawl3.py` over three corpora. OLD is the 47 inline-exported WL-SPEC documents, unit a leaf section. NEW is the 11 documents of `docs/specs2/`, same unit. GRAPH is those same 11 documents read through `docs/specs2/ttl/`, unit a clause: 325 `wl:Rule` nodes plus 61 `wl:OpenQuestion` nodes, 386 retrieval nodes in all. Every GRAPH number below covers all 386 nodes unless a row says clauses only. OLD and NEW are computed exactly as `sprawl.py` computes them in `sprawl-metrics.md`, so the two reports agree. Tokens are words times 1.3 everywhere, taken from `wl:tokenCount` for GRAPH.
 
 ## Summary
 
@@ -25,7 +25,7 @@ Computed by `sprawl3.py` over three corpora. OLD is the 47 inline-exported WL-SP
 | GRAPH | 11 arrangements | 386 nodes | 85,474 | 10 | 188 | 449 | 949 | 76.2% |
 | GRAPH, clauses only | 11 arrangements | 325 clauses | 84,100 | 22 | 213 | 474 | 949 | 90.5% |
 
-GRAPH nodes are 325 `wl:Clause` plus 61 `wl:OpenQuestion`. Open questions are one bullet each, so they pull the distribution down; the clauses-only row shows the split rule's own result. The token size rule the split targets is 100 to 800.
+GRAPH nodes are 325 `wl:Rule` plus 61 `wl:OpenQuestion`. Open questions are one bullet each, so they pull the distribution down; the clauses-only row shows the split rule's own result. The token size rule the split targets is 100 to 800.
 
 ## M1 Amendment load and supersession coverage
 

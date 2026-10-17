@@ -16,7 +16,7 @@
 
 The user was not available for brainstorming, so these are decided here. Each names what it costs if wrong.
 
-- **R1 Spec 07 §2 owns the vocabulary; `ns/clause.ttl` already holds the terms.** 07 §2 is the table of every `wl:` term and where it comes from, and `ns/clause.ttl`'s own header says the clause terms move into `ontology.ttl` once a spec carries them. So Task 1 adds the rows to 07 §2, then moves `wl:Clause`, `wl:refines`, `wl:constrains`, `wl:conflictsWith` and `wl:references` from `clause.ttl` into `ontology.ttl` without the `vs:term_status "unstable"` marker. The arrangement terms (`wl:Arrangement`, `wl:arranges`, `wl:clauseList`, `wl:position`, `wl:OpenQuestion`) stay in `clause.ttl` for increment 3. Costs a second move later; nothing else.
+- **R1 Spec 07 §2 owns the vocabulary; `ns/clause.ttl` already holds the terms.** 07 §2 is the table of every `wl:` term and where it comes from, and `ns/clause.ttl`'s own header says the clause terms move into `ontology.ttl` once a spec carries them. So Task 1 adds the rows to 07 §2, then moves `wl:Rule`, `wl:refines`, `wl:constrains`, `wl:conflictsWith` and `wl:references` from `clause.ttl` into `ontology.ttl` without the `vs:term_status "unstable"` marker. The arrangement terms (`wl:Arrangement`, `wl:arranges`, `wl:clauseList`, `wl:position`, `wl:OpenQuestion`) stay in `clause.ttl` for increment 3. Costs a second move later; nothing else.
 - **R2 One table for every clause edge, hand-made or derived.** `clause_edges (from_clause, to_clause, type, source)` with the primary key on all of the first three. `source` is `manual` or `derived`. A derived edge is only ever `references`; a manual edge may be any of the four types. A manual `references` edge is allowed (an author can point at a clause the text does not name) and survives re-derivation because derivation deletes only `source = 'derived'` rows and inserts with `ON CONFLICT DO NOTHING`. Costs nothing S12 or S26 promised.
 - **R3 No separate `GET .../edges` route.** `model.Clause` gains `Edges []ClauseEdge` holding both directions, filled by `GetClause`, so the clause detail is the listing. A route that returns a subset of the detail would be a second shape for the same rows. Costs one route later if a client wants edges without the body.
 - **R4 Derivation resolves what it can and drops the rest, silently.** `syncClauses` scans the heading and body of every inserted or revised clause for `<KEY>-CL-<n>` refs and `<KEY>-(SPEC|ADR|PLAN)-<n>#<anchor>` refs. A clause ref resolves to the clause row; a section ref resolves through `resolveDocRef` to the document and then to the clause arranged at that anchor. A ref to a whole document (no anchor), to a section with no clause, to a clause in no project, or to the clause itself yields no edge. Costs one derived edge per unresolvable ref that a later increment may want as a dangling pointer; spec 026's dangling-ref lint covers documents, and clauses can join it then.
@@ -61,7 +61,7 @@ Deferred to later increments, stated so no reviewer reports them missing: named 
 After the row `| Document section | \`wl:Section\`, \`wl:lastRevisedIn\` | mint |` insert:
 
 ```markdown
-| Design clause | `wl:Clause`, subclass of `wl:Section`: the lowest heading unit of a spec or ADR, with its own identity, status and versions (12-spec-refactoring-design-tree.md S8 to S11) | mint |
+| Design clause | `wl:Rule`, subclass of `wl:Section`: the lowest heading unit of a spec or ADR, with its own identity, status and versions (12-spec-refactoring-design-tree.md S8 to S11) | mint |
 | Clause to clause | `wl:refines`, `wl:constrains`, `wl:conflictsWith` (symmetric), written by an architect; `wl:references`, derived from the clause text on every version (S12, S26) | mint |
 ```
 
@@ -72,33 +72,33 @@ Append after the `wl:coverageLevel` block:
 ```turtle
 # --- Clauses (docs/specs2/12-spec-refactoring-design-tree.md S8 to S12, S26; 07 §2) ---
 
-wl:Clause a owl:Class ;
+wl:Rule a owl:Class ;
     wl:layer wlc:intent ;
     rdfs:subClassOf wl:Section ;
     rdfs:comment "The lowest heading unit of a spec or ADR: the thing that carries an identity (WL-RULE-<n>), a status, versions and edges (S8 to S11)." .
 
 wl:refines a owl:ObjectProperty ;
     wl:layer wlc:intent ;
-    rdfs:domain wl:Clause ;
-    rdfs:range wl:Clause ;
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
     rdfs:comment "Subject narrows or details the object (S12)." .
 
 wl:constrains a owl:ObjectProperty ;
     wl:layer wlc:intent ;
-    rdfs:domain wl:Clause ;
-    rdfs:range wl:Clause ;
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
     rdfs:comment "Subject must hold whenever the object does; a task implementing the object must also satisfy the subject (S12)." .
 
 wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ;
     wl:layer wlc:intent ;
-    rdfs:domain wl:Clause ;
-    rdfs:range wl:Clause ;
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
     rdfs:comment "A recorded tension an architect chose to leave in place (S12)." .
 
 wl:references a owl:ObjectProperty ;
     wl:layer wlc:intent ;
-    rdfs:domain wl:Clause ;
-    rdfs:range wl:Clause ;
+    rdfs:domain wl:Rule ;
+    rdfs:range wl:Rule ;
     rdfs:comment "A textual pointer from the clause to another clause, derived from the clause text on every version and replaced with it (S26)." .
 ```
 
@@ -106,7 +106,7 @@ Check that `wlc:intent` is a `wl:layer` value already used in the file (`grep -n
 
 - [ ] **Step 3: Remove the moved terms from `ns/clause.ttl`**
 
-Delete the `wl:Clause`, `wl:refines`, `wl:constrains`, `wl:conflictsWith` and `wl:references` blocks. Change `wl:OpenQuestion`'s `rdfs:subClassOf wl:Clause` to stay as is (the class now lives in `ontology.ttl`, same namespace). Replace the header's last two sentences with: "The clause class and its four edge properties moved to ontology.ttl with 07 §2 (clause model increment 2); the arrangement terms below wait for increment 3."
+Delete the `wl:Rule`, `wl:refines`, `wl:constrains`, `wl:conflictsWith` and `wl:references` blocks. Change `wl:OpenQuestion`'s `rdfs:subClassOf wl:Rule` to stay as is (the class now lives in `ontology.ttl`, same namespace). Replace the header's last two sentences with: "The clause class and its four edge properties moved to ontology.ttl with 07 §2 (clause model increment 2); the arrangement terms below wait for increment 3."
 
 - [ ] **Step 4: Validate and commit**
 
