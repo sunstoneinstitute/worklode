@@ -100,7 +100,7 @@ accepted text is preserved in version history.
 
 A spec write (`lode doc add`, `lode doc edit`, `lode doc revise --file`) is an
 editing convenience that writes rules. `lode doc show <ref> --editable` prints
-each anchored heading with its rule ref, `## 3. Leases {#sec-3 rule=WL-REQ-12}`,
+each anchored heading with its rule ref, `## 3. Leases {#sec-3 rule=WL-REQ-<n>}`,
 and the write accepts that form back: the heading arranges that rule there,
 and changed text under it is a rule edit. A heading with no `rule=` matches the
 spec's own rules by anchor and heading, then heading alone, then anchor alone;
@@ -130,7 +130,7 @@ New rules are requirements. Set another kind with
 A rule an accepted plan covers stays a requirement or catalogue. Rationale is
 not a kind: it ends the body of the rule it explains. Background nothing
 refines is template text of the spec, not a rule. The number alone names the
-rule: `WL-REQ-12`, `WL-RULE-12` and `WL-CL-12` all resolve, and output prints
+rule: `WL-REQ-<n>`, `WL-RULE-<n>` and `WL-CL-<n>` all resolve, and output prints
 the current kind's infix. A rule that both builds something and binds later
 work is two rules: split it into a requirement and an invariant.
 
