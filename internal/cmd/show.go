@@ -64,8 +64,7 @@ type showTarget struct {
 // is checked as a task first, so `lode show 45` stays task 45 — spec 45 is
 // `--spec 45` or `WL-SPEC-45` (the grammar collision WL-129 records).
 func classify(arg string) showTarget {
-	// A rule ref reads through designdoc's grammar: WL-REQ-<n>, WL-RULE-<n>
-	// or the legacy WL-CL-<n>.
+	// A rule ref reads through designdoc's grammar: WL-REQ-<n> or WL-RULE-<n>.
 	if _, ok := designdoc.ParseRuleRef(arg); ok {
 		return showTarget{Kind: targetRule}
 	}

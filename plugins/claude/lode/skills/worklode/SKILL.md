@@ -175,8 +175,8 @@ Every rule has one kind (`lode rule set <ref> --kind <kind>`):
 | `definition` | `WL-RULE-<n>` | one term, one meaning, in one scope |
 | `principle` | `WL-RULE-<n>` | a stance other rules `refine` |
 
-All kinds share one counter, so `WL-REQ-<n>`, `WL-RULE-<n>` and the old
-`WL-CL-<n>` name the same rule. Output prints the infix of the rule's current
+All kinds share one counter, so `WL-REQ-<n>` and `WL-RULE-<n>` with one
+number name the same rule. Output prints the infix of the rule's current
 kind. A task is governed by its `governedBy` links plus every accepted
 invariant in its project.
 

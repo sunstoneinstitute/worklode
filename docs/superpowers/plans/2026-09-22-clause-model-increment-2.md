@@ -20,7 +20,7 @@ The user was not available for brainstorming, so these are decided here. Each na
 - **R2 One table for every clause edge, hand-made or derived.** `clause_edges (from_clause, to_clause, type, source)` with the primary key on all of the first three. `source` is `manual` or `derived`. A derived edge is only ever `references`; a manual edge may be any of the four types. A manual `references` edge is allowed (an author can point at a clause the text does not name) and survives re-derivation because derivation deletes only `source = 'derived'` rows and inserts with `ON CONFLICT DO NOTHING`. Costs nothing S12 or S26 promised.
 - **R3 No separate `GET .../edges` route.** `model.Clause` gains `Edges []ClauseEdge` holding both directions, filled by `GetClause`, so the clause detail is the listing. A route that returns a subset of the detail would be a second shape for the same rows. Costs one route later if a client wants edges without the body.
 - **R4 Derivation resolves what it can and drops the rest, silently.** `syncClauses` scans the heading and body of every inserted or revised clause for `<KEY>-CL-<n>` refs and `<KEY>-(SPEC|ADR|PLAN)-<n>#<anchor>` refs. A clause ref resolves to the clause row; a section ref resolves through `resolveDocRef` to the document and then to the clause arranged at that anchor. A ref to a whole document (no anchor), to a section with no clause, to a clause in no project, or to the clause itself yields no edge. Costs one derived edge per unresolvable ref that a later increment may want as a dangling pointer; spec 026's dangling-ref lint covers documents, and clauses can join it then.
-- **R5 Pinning rides on `Govern`.** `Govern(tx, taskID, clauseID, source, pin bool)`: with `pin` the link records `pinned_version = clauses.version`; without it `pinned_version` is NULL. Re-governing an already governed clause updates the pin either way (`ON CONFLICT DO UPDATE`), so a second `lode task govern --by X --pin` pins and a plain `lode task govern --by X` unpins. There is no separate unpin verb. `POST /tasks/{id}/governed-by` accepts `{"clause": "WL-CL-3", "pin": true}`; a version number is not accepted, because S10 says a link pins the version current when the link is made, and `lode show WL-CL-3 --version N` already reads old text. Costs one verb later if pinning an older version turns out wanted.
+- **R5 Pinning rides on `Govern`.** `Govern(tx, taskID, clauseID, source, pin bool)`: with `pin` the link records `pinned_version = clauses.version`; without it `pinned_version` is NULL. Re-governing an already governed clause updates the pin either way (`ON CONFLICT DO UPDATE`), so a second `lode task govern --by X --pin` pins and a plain `lode task govern --by X` unpins. There is no separate unpin verb. `POST /tasks/{id}/governed-by` accepts `{"clause": "WL-RULE-3", "pin": true}`; a version number is not accepted, because S10 says a link pins the version current when the link is made, and `lode show WL-RULE-3 --version N` already reads old text. Costs one verb later if pinning an older version turns out wanted.
 - **R6 A pinned link reports its versioned URL.** `model.TaskGovernance` gains `Pinned int` (0 when unpinned) and `URL string`, the canonical page from 1b: `/projects/<proj>/clause/<n>` and `/<ver>` when pinned. S10 asks for the versioned IRI form; that is the versioned URL scheme S20 chose. Costs nothing.
 - **R7 Owner is free text, like `docs.owner`.** `clauses.owner text NULL` with no FK, matching `docs.owner` (migration 0058), which is also an actor id stored without a constraint. `clauses.tags text[] NOT NULL DEFAULT '{}'`. Both set over `PATCH /api/v1/clauses/{id}` with `model.ClauseMetaInput{Owner *string, Tags *[]string}`, pointer fields so an omitted key leaves the column alone and a present key replaces it (an empty string clears the owner, an empty list clears the tags). 1b's `PUT` stays the text write; PATCH is the metadata write, the same split `docs` has between body and owner. Costs a backfill migration if owner gains an FK later.
 - **R8 The CLI verbs are `lode clause link`, `lode clause unlink`, `lode clause set owner`, `lode clause set tags`, `lode task govern --pin`.** `link` is already in `l3DomainActions` (used by `lode doc link`), `un` prefixes are stripped by the naming test, `set` is L3 canonical. No new verb, so `namerule_test.go` and spec 09's allowlist need no addition beyond the `clause` row. The edge type is a flag, one of `--refines`, `--constrains`, `--conflicts-with`, `--references`, exactly one required. Costs nothing.
@@ -75,7 +75,7 @@ Append after the `wl:coverageLevel` block:
 wl:Clause a owl:Class ;
     wl:layer wlc:intent ;
     rdfs:subClassOf wl:Section ;
-    rdfs:comment "The lowest heading unit of a spec or ADR: the thing that carries an identity (WL-CL-<n>), a status, versions and edges (S8 to S11)." .
+    rdfs:comment "The lowest heading unit of a spec or ADR: the thing that carries an identity (WL-RULE-<n>), a status, versions and edges (S8 to S11)." .
 
 wl:refines a owl:ObjectProperty ;
     wl:layer wlc:intent ;
@@ -221,7 +221,7 @@ import "time"
 
 // ClauseEdge is one typed edge between two clauses
 // (docs/specs2/12-spec-refactoring-design-tree.md S12, S26). From and To are
-// clause refs ("WL-CL-12"). Source is "manual" for an edge an architect
+// clause refs ("WL-RULE-12"). Source is "manual" for an edge an architect
 // wrote and "derived" for a references edge the store read out of the
 // clause text.
 type ClauseEdge struct {
@@ -238,7 +238,7 @@ type ClauseEdge struct {
 // the edge type and the clause at the other end.
 type ClauseEdgeInput struct {
 	Type string `json:"type"`
-	To   string `json:"to"` // "WL-CL-12"
+	To   string `json:"to"` // "WL-RULE-12"
 }
 ```
 
@@ -483,7 +483,7 @@ Append to `internal/designdoc/designdoc_test.go`:
 
 ```go
 func TestFindRefs(t *testing.T) {
-	text := "See WL-CL-12 and WL-CL-12 again, then P1-SPEC-4#sec-2.1 and WL-ADR-7 (no anchor) and wl-cl-3."
+	text := "See WL-RULE-12 and WL-RULE-12 again, then P1-SPEC-4#sec-2.1 and WL-ADR-7 (no anchor) and wl-rule-3."
 	cs := FindClauseRefs(text)
 	if len(cs) != 1 || cs[0].Key != "WL" || cs[0].Number != 12 {
 		t.Errorf("clause refs: %+v", cs)
@@ -621,7 +621,7 @@ Append to `internal/store/clauseedges.go`:
 
 ```go
 // deriveReferences replaces a clause's derived references edges with the
-// clauses its text names (S26): every WL-CL-<n> ref, and every
+// clauses its text names (S26): every WL-RULE-<n> ref, and every
 // WL-SPEC-<n>#sec-<a> ref resolved to the clause arranged at that anchor. A
 // ref to the clause itself, to a whole document, or to nothing contributes
 // no edge. Manual edges are untouched; a derived edge that would duplicate a
@@ -739,42 +739,42 @@ import (
 func TestClauseEdgesAPI(t *testing.T) {
 	st, h, token := newTestServer(t)
 	project := seedProjectWithKey(t, st, "WL")
-	createDocViaAPI(t, h, token, project, "t", clauseDocV1) // WL-CL-1..3
+	createDocViaAPI(t, h, token, project, "t", clauseDocV1) // WL-RULE-1..3
 
-	body := `{"type":"constrains","to":"WL-CL-3"}`
-	rr := doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-CL-1/edges", token, strings.NewReader(body))
+	body := `{"type":"constrains","to":"WL-RULE-3"}`
+	rr := doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-RULE-1/edges", token, strings.NewReader(body))
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("link: %d %s", rr.Code, rr.Body)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-CL-1/edges", token, strings.NewReader(body))
+	rr = doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-RULE-1/edges", token, strings.NewReader(body))
 	if rr.Code != http.StatusConflict {
 		t.Errorf("repeat link: %d", rr.Code)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-CL-1/edges", token, strings.NewReader(`{"type":"amends","to":"WL-CL-3"}`))
+	rr = doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-RULE-1/edges", token, strings.NewReader(`{"type":"amends","to":"WL-RULE-3"}`))
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Errorf("bad type: %d", rr.Code)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-CL-1/edges", token, strings.NewReader(`{"type":"refines","to":"WL-CL-999"}`))
+	rr = doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-RULE-1/edges", token, strings.NewReader(`{"type":"refines","to":"WL-RULE-999"}`))
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("unknown target: %d", rr.Code)
 	}
-	rr = doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-CL-1/edges", token, strings.NewReader(`{"type":"refines","to":"nope"}`))
+	rr = doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-RULE-1/edges", token, strings.NewReader(`{"type":"refines","to":"nope"}`))
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("malformed target: %d", rr.Code)
 	}
 
 	var c model.Clause
-	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-3", token, nil)
+	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-RULE-3", token, nil)
 	decodeInto(t, rr, &c)
-	if len(c.Edges) != 1 || c.Edges[0].From != "WL-CL-1" || c.Edges[0].Type != "constrains" {
+	if len(c.Edges) != 1 || c.Edges[0].From != "WL-RULE-1" || c.Edges[0].Type != "constrains" {
 		t.Errorf("edges on target: %+v", c.Edges)
 	}
 
-	rr = doReq(t, h, http.MethodDelete, "/api/v1/clauses/WL-CL-1/edges", token, strings.NewReader(body))
+	rr = doReq(t, h, http.MethodDelete, "/api/v1/clauses/WL-RULE-1/edges", token, strings.NewReader(body))
 	if rr.Code != http.StatusNoContent {
 		t.Errorf("unlink: %d %s", rr.Code, rr.Body)
 	}
-	rr = doReq(t, h, http.MethodDelete, "/api/v1/clauses/WL-CL-1/edges", token, strings.NewReader(body))
+	rr = doReq(t, h, http.MethodDelete, "/api/v1/clauses/WL-RULE-1/edges", token, strings.NewReader(body))
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("unlink absent: %d", rr.Code)
 	}
@@ -814,7 +814,7 @@ func (s *server) clauseEdgeReq(w http.ResponseWriter, r *http.Request) (from des
 	}
 	to, ok = designdoc.ParseClauseRef(req.To)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "to must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "to must look like WL-RULE-12")
 		return from, to, req, false
 	}
 	return from, to, req, true
@@ -1190,7 +1190,7 @@ func (s *server) patchClause(w http.ResponseWriter, r *http.Request) {
 
 Route: `"PATCH /api/v1/clauses/{id}": guardedAny(permDocWrite)` and `r.api("PATCH /api/v1/clauses/{id}", s.patchClause)`.
 
-Test `TestClauseMetaAPI` in `internal/api/clauses_test.go`: PATCH `{"owner":"stig","tags":["a","b"]}` is 200 with those fields; PATCH `{}` is 422; PATCH on `WL-CL-999` is 404.
+Test `TestClauseMetaAPI` in `internal/api/clauses_test.go`: PATCH `{"owner":"stig","tags":["a","b"]}` is 200 with those fields; PATCH `{}` is 422; PATCH on `WL-RULE-999` is 404.
 
 - [ ] **Step 5: CLI**
 
@@ -1327,7 +1327,7 @@ Expected: PASS.
 
 - [ ] **Step 3: API test, CLI, cmd**
 
-In `internal/api/governedby_test.go` add a case: POST `{"clause":"WL-CL-1","pin":true}` then GET the task, assert `governed_by[0].pinned == 1` and `url` ends in `/1`.
+In `internal/api/governedby_test.go` add a case: POST `{"clause":"WL-RULE-1","pin":true}` then GET the task, assert `governed_by[0].pinned == 1` and `url` ends in `/1`.
 
 `internal/cli/governedby.go`: `Govern(ctx, id, clause string, pin bool)` sends `model.GovernInput{Clause: clause, Pin: pin}`. `TaskDetailRender`'s governed-by line gains `, pinned vN` when `Pinned > 0`; extend the render test in `internal/cli/governedby_test.go` with a pinned row.
 
@@ -1398,7 +1398,7 @@ New card after "Governs":
 
 - [ ] **Step 2: Test and commit**
 
-In `internal/api/clausepage_test.go`, in the existing page test (or a sibling), link `WL-CL-1 constrains WL-CL-3` through the store, set an owner, fetch the page for `WL-CL-3`, and assert the body contains `constrains`, `WL-CL-1` and `owner stig`.
+In `internal/api/clausepage_test.go`, in the existing page test (or a sibling), link `WL-RULE-1 constrains WL-RULE-3` through the store, set an owner, fetch the page for `WL-RULE-3`, and assert the body contains `constrains`, `WL-RULE-1` and `owner stig`.
 
 Run: `go test -trimpath ./internal/api -run 'TestClausePage' -v && go test -trimpath ./internal/ui`
 Expected: PASS / ok.
@@ -1432,7 +1432,7 @@ Table: after the `task_governed_by` row change its description to end with ", `p
 | `clause_edges` | `(from_clause, to_clause, type)` primary key, `source` (`manual` or `derived`): the typed edges between clauses, `refines`, `constrains`, `conflictsWith` and `references` (12-spec-refactoring-design-tree.md S12, S26) |
 ```
 
-§4, append to the clause paragraph: "A clause relates to other clauses through typed edges written by an architect (`refines`, `constrains`, `conflictsWith`, `references`; 07-knowledge-graph-and-search.md §2) and through `references` edges the store derives from the clause text on every version: each `WL-CL-<n>` ref and each `WL-SPEC-<n>#sec-<a>` ref that resolves to a clause becomes an edge, the derived set replaces the previous one, and a ref to the clause itself, to a whole document or to nothing contributes no edge. A clause carries an owner (an actor id) and tags; dates stay on tasks and milestones (S15)."
+§4, append to the clause paragraph: "A clause relates to other clauses through typed edges written by an architect (`refines`, `constrains`, `conflictsWith`, `references`; 07-knowledge-graph-and-search.md §2) and through `references` edges the store derives from the clause text on every version: each `WL-RULE-<n>` ref and each `WL-SPEC-<n>#sec-<a>` ref that resolves to a clause becomes an edge, the derived set replaces the previous one, and a ref to the clause itself, to a whole document or to nothing contributes no edge. A clause carries an owner (an actor id) and tags; dates stay on tasks and milestones (S15)."
 
 - [ ] **Step 3: 09**
 
@@ -1444,7 +1444,7 @@ Append to "Recorded from increment 1" (rename the heading to "Recorded from incr
 
 ```markdown
 - S37 (S12, S26 applied): one table holds every clause edge with its type and its source, `manual` or `derived`. A derived edge is always `references` and is rewritten from the clause text on every version; a manual `references` edge survives that rewrite. `conflictsWith` is stored in the direction written and read from both ends. Named clusters are tags for now.
-- S38 (S26 applied): derivation resolves `WL-CL-<n>` refs and anchored document refs to clauses and drops everything else without a record: a whole-document ref, a section with no clause, a clause in no project, the clause itself.
+- S38 (S26 applied): derivation resolves `WL-RULE-<n>` refs and anchored document refs to clauses and drops everything else without a record: a whole-document ref, a section with no clause, a clause in no project, the clause itself.
 - S39 (S10 applied): a link is pinned at the version current when it is made or not at all; governing the same clause again sets or clears the pin. A pinned link reports the versioned page URL.
 - S40 (S15 applied): owner is an actor id stored as text with no constraint, as `docs.owner` is; tags are free text. Set over `PATCH /api/v1/clauses/{id}`.
 - S41 (S17 checked): the clause code keys nothing on project size. One counter per project, one table per fact, no per-project thresholds.

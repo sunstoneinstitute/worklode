@@ -130,7 +130,7 @@ New rules are requirements. Set another kind with
 A rule an accepted plan covers stays a requirement or catalogue. Rationale is
 not a kind: it ends the body of the rule it explains. Background nothing
 refines is template text of the spec, not a rule. The number alone names the
-rule: `WL-REQ-<n>`, `WL-RULE-<n>` and `WL-CL-<n>` all resolve, and output prints
+rule: `WL-REQ-<n>` and `WL-RULE-<n>` both resolve, and output prints
 the current kind's infix. A rule that both builds something and binds later
 work is two rules: split it into a requirement and an invariant.
 

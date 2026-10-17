@@ -21,7 +21,7 @@ The user was not available for brainstorming, so these are decided here and the 
 - **R3 A clause arranged in more than one document refuses the edit.** Today the store never produces that (one arrangement per document body, each section its own clause); the shared-clause case arrives with plans as arrangements in increment 3. The refusal is `ErrInvalidInput` naming the documents. A clause arranged in no document also refuses: editing is document-first in this stage (S14). Costs one refusal message that increment 3 replaces with a rule.
 - **R4 Governed tasks ride on the clause detail.** `model.Clause` gains `GovernedTasks []ClauseTask`, filled by `GetClause`, instead of a fourth route. Costs one extra query per clause read.
 - **R5 The URL scheme ships for clauses and documents only.** `GET /projects/{proj}/clause/{n}` and `/{n}/{ver}` are the canonical clause page. `GET /projects/{proj}/{kind}/{n}` for `spec`, `adr`, `plan` redirects to the existing `/docs/<KEY>-<KIND>-<n>` page, which stays canonical for documents in this increment. An uppercase `{proj}` is a project key typed by habit and redirects to the lowercase id form. Task kinds, `/<ver>` on documents, and turning `/tasks/WL-456` and `/docs/WL-SPEC-4` into redirects are deferred and noted in 07 §10.2 (A3). `GET /clauses/{ref}` is a resolving redirect to the canonical clause page, the counterpart of `/docs/ref/{ref...}`, and is what the autolinker targets. Costs a second pass on the redirect layer later; nothing shipped here has to change for it.
-- **R6 The CLI group is `lode clause` with `edit` and the `versions` view.** `edit` is L3's body-replacing verb; `versions` is an L6 noun view already used by `doc`. `lode show WL-CL-<n> --version N` reads one version, mirroring `lode show WL-SPEC-4 --version N` if that flag exists on show for documents, and otherwise introducing it for clauses only. Reading one clause stays `lode show`, so there is no `lode clause show`. Costs nothing.
+- **R6 The CLI group is `lode clause` with `edit` and the `versions` view.** `edit` is L3's body-replacing verb; `versions` is an L6 noun view already used by `doc`. `lode show WL-RULE-<n> --version N` reads one version, mirroring `lode show WL-SPEC-4 --version N` if that flag exists on show for documents, and otherwise introducing it for clauses only. Reading one clause stays `lode show`, so there is no `lode clause show`. Costs nothing.
 - **R7 `parseClauseRef` moves into `internal/designdoc` as `ParseClauseRef`.** This retires the increment 1 deferred minor (the CL grammar written twice). `internal/api` and `internal/cmd/show.go`'s classifier both call it.
 
 Deferred to later increments, stated so no reviewer reports them missing: the BlockNote editor saving to `PUT /api/v1/clauses/{id}` (the read-only spike behind `?editor=1` on the document page stays as it is), typed edges (S12, S26), plans as arrangements (S16, S25), the reconciler and gate trailer (S4, S18, S29, S30), split and merge lineage (S22), the migration of the old specs (A2), owner and tags (S15), version pinning on links (S10).
@@ -68,12 +68,12 @@ func TestParseClauseRef(t *testing.T) {
 		n    int64
 		ok   bool
 	}{
-		{"WL-CL-12", "WL", 12, true},
+		{"WL-RULE-12", "WL", 12, true},
 		{"P1-CL-3", "P1", 3, true},
 		{"WL-SPEC-12", "", 0, false},
-		{"wl-cl-12", "", 0, false},
-		{"WL-CL-", "", 0, false},
-		{"WL-CL-12#sec-1", "", 0, false},
+		{"wl-rule-12", "", 0, false},
+		{"WL-RULE-", "", 0, false},
+		{"WL-RULE-12#sec-1", "", 0, false},
 	}
 	for _, c := range cases {
 		got, ok := ParseClauseRef(c.in)
@@ -119,7 +119,7 @@ Append to `internal/designdoc/resolve.go`:
 // (12-spec-refactoring-design-tree.md S20): a design clause's citable ref.
 var clauseRefPattern = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-CL-(\d+)$`)
 
-// ClauseRef is a parsed clause ref, e.g. "WL-CL-12".
+// ClauseRef is a parsed clause ref, e.g. "WL-RULE-12".
 type ClauseRef struct {
 	Key    string
 	Number int64
@@ -168,7 +168,7 @@ ref, ok := designdoc.ParseClauseRef(r.PathValue("id"))
 // ... ref.Key, ref.Number
 ```
 
-`grep -n "parseClauseRef(" internal/api/*.go` lists the call sites (clauses.go, governedby.go, tasks.go). Keep the `400 "clause id must look like WL-CL-12"` messages as they are.
+`grep -n "parseClauseRef(" internal/api/*.go` lists the call sites (clauses.go, governedby.go, tasks.go). Keep the `400 "clause id must look like WL-RULE-12"` messages as they are.
 
 - [ ] **Step 4: Run the tests**
 
@@ -615,7 +615,7 @@ func TestClauseEditAndVersionsAPI(t *testing.T) {
 	seedProjectWithKey(t, st, "WL")
 	doc := createDocViaAPI(t, h, token, model.CreateDocInput{Project: "worklode", Kind: "spec", Slug: "t", Body: clauseDocBody, CreatedBy: "stig"})
 
-	rr := doReq(t, h, http.MethodPut, "/api/v1/clauses/WL-CL-2", token, model.EditClauseInput{Heading: "Subsection", Body: "\nB changed.\n\n"})
+	rr := doReq(t, h, http.MethodPut, "/api/v1/clauses/WL-RULE-2", token, model.EditClauseInput{Heading: "Subsection", Body: "\nB changed.\n\n"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("PUT = %d %s", rr.Code, rr.Body)
 	}
@@ -632,7 +632,7 @@ func TestClauseEditAndVersionsAPI(t *testing.T) {
 	}
 
 	acceptDocViaAPI(t, h, token, doc.ID)
-	rr = doReq(t, h, http.MethodPut, "/api/v1/clauses/WL-CL-2", token, model.EditClauseInput{Heading: "Subsection", Body: "\nB again.\n\n"})
+	rr = doReq(t, h, http.MethodPut, "/api/v1/clauses/WL-RULE-2", token, model.EditClauseInput{Heading: "Subsection", Body: "\nB again.\n\n"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("PUT on accepted = %d %s", rr.Code, rr.Body)
 	}
@@ -645,13 +645,13 @@ func TestClauseEditAndVersionsAPI(t *testing.T) {
 		t.Fatalf("accept revision = %d %s", rr.Code, rr.Body)
 	}
 
-	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-2/versions", token, nil)
+	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-RULE-2/versions", token, nil)
 	var vs []model.ClauseVersion
 	decodeInto(t, rr, &vs)
 	if rr.Code != http.StatusOK || len(vs) != 2 || vs[0].Version != 2 {
 		t.Errorf("versions = %d %+v", rr.Code, vs)
 	}
-	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-2/versions/1", token, nil)
+	rr = doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-RULE-2/versions/1", token, nil)
 	decodeInto(t, rr, &c)
 	if rr.Code != http.StatusOK || c.Version != 1 || c.Body != "\nB changed.\n\n" {
 		t.Errorf("v1 = %d %+v", rr.Code, c)
@@ -662,12 +662,12 @@ func TestClauseEditAndVersionsAPI(t *testing.T) {
 		body         any
 		want         int
 	}{
-		{http.MethodPut, "/api/v1/clauses/WL-CL-99", model.EditClauseInput{Heading: "x", Body: "y"}, http.StatusNotFound},
+		{http.MethodPut, "/api/v1/clauses/WL-RULE-99", model.EditClauseInput{Heading: "x", Body: "y"}, http.StatusNotFound},
 		{http.MethodPut, "/api/v1/clauses/nope", model.EditClauseInput{Heading: "x", Body: "y"}, http.StatusBadRequest},
-		{http.MethodPut, "/api/v1/clauses/WL-CL-2", model.EditClauseInput{Heading: "", Body: "y"}, http.StatusUnprocessableEntity},
-		{http.MethodGet, "/api/v1/clauses/WL-CL-2/versions/9", nil, http.StatusNotFound},
-		{http.MethodGet, "/api/v1/clauses/WL-CL-2/versions/x", nil, http.StatusBadRequest},
-		{http.MethodGet, "/api/v1/clauses/WL-CL-99/versions", nil, http.StatusNotFound},
+		{http.MethodPut, "/api/v1/clauses/WL-RULE-2", model.EditClauseInput{Heading: "", Body: "y"}, http.StatusUnprocessableEntity},
+		{http.MethodGet, "/api/v1/clauses/WL-RULE-2/versions/9", nil, http.StatusNotFound},
+		{http.MethodGet, "/api/v1/clauses/WL-RULE-2/versions/x", nil, http.StatusBadRequest},
+		{http.MethodGet, "/api/v1/clauses/WL-RULE-99/versions", nil, http.StatusNotFound},
 	} {
 		rr := doReq(t, h, tc.method, tc.path, token, tc.body)
 		if rr.Code != tc.want {
@@ -696,7 +696,7 @@ Append to `internal/api/clauses.go`:
 func (s *server) editClause(w http.ResponseWriter, r *http.Request) {
 	ref, ok := designdoc.ParseClauseRef(r.PathValue("id"))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause id must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "clause id must look like WL-RULE-12")
 		return
 	}
 	var req model.EditClauseInput
@@ -734,7 +734,7 @@ func (s *server) editClause(w http.ResponseWriter, r *http.Request) {
 func (s *server) listClauseVersions(w http.ResponseWriter, r *http.Request) {
 	ref, ok := designdoc.ParseClauseRef(r.PathValue("id"))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause id must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "clause id must look like WL-RULE-12")
 		return
 	}
 	vs, err := s.st.ListClauseVersions(r.Context(), ref.Key, ref.Number)
@@ -749,7 +749,7 @@ func (s *server) listClauseVersions(w http.ResponseWriter, r *http.Request) {
 func (s *server) getClauseVersion(w http.ResponseWriter, r *http.Request) {
 	ref, ok := designdoc.ParseClauseRef(r.PathValue("id"))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause id must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "clause id must look like WL-RULE-12")
 		return
 	}
 	n, err := strconv.Atoi(r.PathValue("n"))
@@ -820,7 +820,7 @@ Append to `internal/cli/clauses_test.go`:
 ```go
 func TestClauseRenderGovernedTasks(t *testing.T) {
 	var b strings.Builder
-	ClauseRender(&b, model.Clause{Ref: "WL-CL-2", Heading: "Sub", Status: "accepted", Version: 2,
+	ClauseRender(&b, model.Clause{Ref: "WL-RULE-2", Heading: "Sub", Status: "accepted", Version: 2,
 		GovernedTasks: []model.ClauseTask{{ID: "WL-7", Title: "Do it", State: "ready", Source: "plan", ClauseVersion: 1}}})
 	if !strings.Contains(b.String(), "  governs:  WL-7 Do it (ready, plan, v1)\n") {
 		t.Errorf("render:\n%s", b.String())
@@ -904,7 +904,7 @@ import (
 )
 
 // newClauseCmd is the design-clause entity group (12-spec-refactoring-design-tree.md
-// S14, S35). Reading one clause is `lode show WL-CL-<n>`.
+// S14, S35). Reading one clause is `lode show WL-RULE-<n>`.
 func newClauseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clause",
@@ -983,7 +983,7 @@ func newClauseVersionsCmd() *cobra.Command {
 
 Register `newClauseCmd()` where `newDocCmd()` is registered. Match the file's existing `Use`/`Short` conventions (read `internal/cmd/doc.go`'s `versions` subcommand for the exact shape, including how it resolves a ref and whether it has `ValidArgsFunction`).
 
-In `internal/cmd/show.go` add a `--version` int flag. If a `--version` flag already exists for documents, reuse it: when the target classifies as `targetClause` and the flag is set, call `c.GetClauseVersion` instead of `c.GetClause` inside `runClauseShow` (add a `version int` parameter). If the flag does not exist, add `cmd.Flags().IntVar(&version, "version", 0, "show one version of a clause (WL-CL-<n>)")`, refuse it for other targets with `errors.New("--version applies only to clauses")`, and thread it through `dispatchShowPositional`.
+In `internal/cmd/show.go` add a `--version` int flag. If a `--version` flag already exists for documents, reuse it: when the target classifies as `targetClause` and the flag is set, call `c.GetClauseVersion` instead of `c.GetClause` inside `runClauseShow` (add a `version int` parameter). If the flag does not exist, add `cmd.Flags().IntVar(&version, "version", 0, "show one version of a clause (WL-RULE-<n>)")`, refuse it for other targets with `errors.New("--version applies only to clauses")`, and thread it through `dispatchShowPositional`.
 
 Naming test: read `internal/cmd/namerule_test.go` and add `clause` to the L1 entity list and, if the L6 table is per entity, `versions` under `clause`. `edit` is an L3 canonical verb and needs no entry.
 
@@ -1026,7 +1026,7 @@ Append to `internal/mdrender/autolink_test.go`, following the file's existing ta
 
 ```go
 	// A clause ref links to the resolving redirect, like a document shorthand.
-	{"clause ref", "see WL-CL-12.", `see <a href="/clauses/WL-CL-12">WL-CL-12</a>.`},
+	{"clause ref", "see WL-RULE-12.", `see <a href="/clauses/WL-RULE-12">WL-RULE-12</a>.`},
 ```
 
 (the exact expected HTML shape follows how the file's other shorthand cases are written; copy one and change the ref and href).
@@ -1042,7 +1042,7 @@ func TestClausePageAndRedirects(t *testing.T) {
 	createDocViaAPI(t, h, token, model.CreateDocInput{Project: "worklode", Kind: "spec", Slug: "t", Body: clauseDocBody, CreatedBy: "stig"})
 
 	rr := doReq(t, h, http.MethodGet, "/projects/worklode/clause/2", token, nil)
-	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "WL-CL-2") || !strings.Contains(rr.Body.String(), "Sub") {
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "WL-RULE-2") || !strings.Contains(rr.Body.String(), "Sub") {
 		t.Errorf("clause page = %d\n%s", rr.Code, rr.Body.String()[:min(400, rr.Body.Len())])
 	}
 	rr = doReq(t, h, http.MethodGet, "/projects/worklode/clause/2/1", token, nil)
@@ -1050,7 +1050,7 @@ func TestClausePageAndRedirects(t *testing.T) {
 		t.Errorf("clause version page = %d", rr.Code)
 	}
 	for path, want := range map[string]string{
-		"/clauses/WL-CL-2":         "/projects/worklode/clause/2",
+		"/clauses/WL-RULE-2":         "/projects/worklode/clause/2",
 		"/projects/WL/clause/2":    "/projects/worklode/clause/2",
 		"/projects/worklode/spec/1": "/docs/WL-SPEC-1",
 	} {
@@ -1095,7 +1095,7 @@ and in `findRefs`, after the document shorthand loop and before the keyword loop
 	}
 ```
 
-with `const clauseRefPrefix = "/clauses/"` next to `docRefPrefix`. The task-id pass runs last already, so `WL-CL-12` is claimed before `taskRef` can read `WL-12` out of it; confirm with the test.
+with `const clauseRefPrefix = "/clauses/"` next to `docRefPrefix`. The task-id pass runs last already, so `WL-RULE-12` is claimed before `taskRef` can read `WL-12` out of it; confirm with the test.
 
 - [ ] **Step 4: View and template**
 
@@ -1350,7 +1350,7 @@ git commit -m "Give a clause a cockpit page, a canonical URL and an autolink"
 Append to the end of the paragraph that begins `**Every anchored section is a design clause**`, replacing its last sentence (`The document body stays the authored source in this stage; clause-first edits, typed edges between clauses and the migration of the old specs are later work.`) with:
 
 ```markdown
-A clause can also be edited directly: `PUT /api/v1/clauses/WL-CL-<n>` and `lode clause edit WL-CL-<n> --file <body> [--heading <text>]` take the new heading and body, regenerate the arranging document's body with that one section changed, and write it through the document's own path, so the body stays an exact reassembly of its clauses. On a draft document the clause's draft version is rewritten in place. On an accepted document the write goes to the candidate revision, opened if none is open, and the clause's next version appears when the revision lands with `lode doc revise --accept`. A clause arranged in no document, or in more than one, refuses the edit in this stage. `GET /api/v1/clauses/WL-CL-<n>/versions`, `/versions/<v>`, `lode clause versions` and `lode show WL-CL-<n> --version <v>` read the history. Typed edges between clauses, shared clauses across documents and the migration of the old specs are later work.
+A clause can also be edited directly: `PUT /api/v1/clauses/WL-RULE-<n>` and `lode clause edit WL-RULE-<n> --file <body> [--heading <text>]` take the new heading and body, regenerate the arranging document's body with that one section changed, and write it through the document's own path, so the body stays an exact reassembly of its clauses. On a draft document the clause's draft version is rewritten in place. On an accepted document the write goes to the candidate revision, opened if none is open, and the clause's next version appears when the revision lands with `lode doc revise --accept`. A clause arranged in no document, or in more than one, refuses the edit in this stage. `GET /api/v1/clauses/WL-RULE-<n>/versions`, `/versions/<v>`, `lode clause versions` and `lode show WL-RULE-<n> --version <v>` read the history. Typed edges between clauses, shared clauses across documents and the migration of the old specs are later work.
 ```
 
 - [ ] **Step 2: 07 §10.2**
@@ -1366,7 +1366,7 @@ After the paragraph in §10.2 that gives documents the IRI `/docs/<KEY>-<TYPE>-<
 In the entity table, add a row after `| `clause`... ` does not exist yet, so insert alphabetically near `doc`:
 
 ```markdown
-| `clause` | L1 | `edit`; view `versions`. Reading one is `lode show WL-CL-<n> [--version <v>]` |
+| `clause` | L1 | `edit`; view `versions`. Reading one is `lode show WL-RULE-<n> [--version <v>]` |
 ```
 
 If the L6 noun table in the same document is closed per entity, add `clause versions` to it as well (read the section; spec 09 §1 L6 names the table).
@@ -1376,7 +1376,7 @@ If the L6 noun table in the same document is closed per entity, add `clause vers
 In the section describing the document page (find it: `grep -n "document page\|Document page\|/docs/" docs/specs2/10-cockpit.md | head`), append a paragraph:
 
 ```markdown
-**Clause page.** `/projects/<proj>/clause/<n>` shows one design clause: ref and heading, status and version chips, the rendered body, the documents arranging it with a link to each section, the tasks it governs, and its version list, each version at `/<n>/<ver>`. Every `WL-CL-<n>` in rendered prose links there through `/clauses/<ref>`. The page is read-only; the clause editor that saves through `PUT /api/v1/clauses/<ref>` is later work.
+**Clause page.** `/projects/<proj>/clause/<n>` shows one design clause: ref and heading, status and version chips, the rendered body, the documents arranging it with a link to each section, the tasks it governs, and its version list, each version at `/<n>/<ver>`. Every `WL-RULE-<n>` in rendered prose links there through `/clauses/<ref>`. The page is read-only; the clause editor that saves through `PUT /api/v1/clauses/<ref>` is later work.
 ```
 
 - [ ] **Step 5: 12**
