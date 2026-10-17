@@ -17,6 +17,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
+// testNonce is the intent nonce the white-box finishLogin tests share: the
+// one the oauth state and the intent cookie both carry.
+const testNonce = "0123456789abcdef0123456789abcdef"
+
 func TestCLICodeStoreMintRedeem(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1000, 0)
@@ -70,11 +74,11 @@ func TestFinishLoginCLIBranch(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=x&state=y", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  cliCookieName,
-		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "clistate", Exp: time.Unix(1000, 0).Add(cliCodeTTL).Unix()}),
+		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "clistate", Nonce: testNonce, Exp: time.Unix(1000, 0).Add(cliCodeTTL).Unix()}),
 	})
 	rr := httptest.NewRecorder()
 
-	s.finishLogin(rr, req, "github:42", "/")
+	s.finishLogin(rr, req, "github:42", "/", testNonce)
 
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d; want 302", rr.Code)
@@ -195,12 +199,12 @@ func TestFinishLoginManualRendersRedeemableCode(t *testing.T) {
 	req.AddCookie(&http.Cookie{
 		Name: cliCookieName,
 		Value: signCLIIntent("sek", cliIntent{
-			Mode: cliModeManual, State: "clistate", Exp: now.Add(cliCodeTTL).Unix(),
+			Mode: cliModeManual, State: "clistate", Nonce: testNonce, Exp: now.Add(cliCodeTTL).Unix(),
 		}),
 	})
 	rr := httptest.NewRecorder()
 
-	s.finishLogin(rr, req, "stig", "/")
+	s.finishLogin(rr, req, "stig", "/", testNonce)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d; want 200 (a page, not a redirect)", rr.Code)
@@ -245,11 +249,11 @@ func TestFinishLoginEmptyModeIsLoopback(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=x&state=y", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  cliCookieName,
-		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "s", Exp: now.Add(cliCodeTTL).Unix()}),
+		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "s", Nonce: testNonce, Exp: now.Add(cliCodeTTL).Unix()}),
 	})
 	rr := httptest.NewRecorder()
 
-	s.finishLogin(rr, req, "stig", "/")
+	s.finishLogin(rr, req, "stig", "/", testNonce)
 
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d; want 302 to the loopback", rr.Code)

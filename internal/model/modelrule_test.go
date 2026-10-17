@@ -44,6 +44,9 @@ var scanned = map[string]mode{
 	// internal/cli decodes — both ends are ours, so §2 applies here too.
 	"../overview": modeWire,
 	"../hooks":    modeBodies,
+	// internal/mcp is a client of /api/v1 like internal/cli, and its tool
+	// results are the structured shapes MCP clients read: both are ours.
+	"../mcp": modeWire,
 }
 
 // allowed lists the json-tagged structs that legitimately stay outside
@@ -57,6 +60,7 @@ var scanned = map[string]mode{
 var allowed = map[string]string{
 	"api.oauthState":  "internal/api/session.go — signed into the oauth-state cookie",
 	"api.cliIntent":   "internal/api/session.go — signed into the CLI-intent cookie",
+	"api.mcpIntent":   "internal/api/mcpauth.go — signed into the MCP-intent cookie",
 	"api.stateChange": "internal/api/web.go — decoded from a stored state_log row",
 	// internal/cli/remotecache.go — the four shapes of the on-disk cache at
 	// ~/.cache/worklode/remotes.json. Nothing sends or receives them.

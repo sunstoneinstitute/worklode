@@ -19,6 +19,18 @@ func (c *Client) GetRule(ctx context.Context, ref string) (model.Rule, []byte, e
 	return doJSON[model.Rule](ctx, c, http.MethodGet, "/api/v1/rules/"+url.PathEscape(ref), nil, "rule")
 }
 
+// RuleFetcher reads one rule by ref for designdoc's Inliner: the fetch
+// `lode show --inline` and the MCP server's show tool fold amendments with.
+func (c *Client) RuleFetcher(ctx context.Context) func(string) (*model.Rule, error) {
+	return func(ref string) (*model.Rule, error) {
+		r, _, err := c.GetRule(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		return &r, nil
+	}
+}
+
 // ListRules calls GET /api/v1/rules: rules without their text, in
 // arrangement order when Doc is set, by number otherwise.
 func (c *Client) ListRules(ctx context.Context, p model.RuleListParams) ([]model.Rule, []byte, error) {

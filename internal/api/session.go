@@ -117,6 +117,12 @@ type oauthState struct {
 	Verifier string `json:"v"`
 	Next     string `json:"n"`
 	Exp      int64  `json:"e"`
+	// Intent is the nonce of the CLI or MCP intent cookie that started this
+	// login (/auth/cli/login, /oauth/authorize), or empty for a plain web
+	// login. finishLogin honors an intent cookie only when its nonce is this
+	// one, so an intent left by an abandoned login cannot take over a later
+	// one.
+	Intent string `json:"i,omitempty"`
 }
 
 // signOAuthState signs an oauth-state cookie value.
@@ -149,9 +155,10 @@ type cliIntent struct {
 	Redirect string `json:"r"`
 	State    string `json:"s"`
 	Exp      int64  `json:"e"`
-	// Mode is cliModeLoopback or cliModeManual. Empty means loopback, so a
-	// cookie signed before manual mode existed still completes.
+	// Mode is cliModeLoopback or cliModeManual. Empty means loopback.
 	Mode string `json:"m,omitempty"`
+	// Nonce ties the intent to the login it started (oauthState.Intent).
+	Nonce string `json:"n"`
 }
 
 func signCLIIntent(secret string, ci cliIntent) string {

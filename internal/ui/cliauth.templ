@@ -38,3 +38,45 @@ templ CLICode(v CLICodeView) {
 		</body>
 	</html>
 }
+
+// MCPConsent asks the user to allow an MCP client's login before any code is
+// minted: it names who is signing in and where the 30-day token will go,
+// because a crafted authorize link otherwise completes silently for a user
+// already signed in to Keycloak. Like CLICode it is reached mid-login, so it
+// renders outside the Page shell. It loads no script: the answer is a plain
+// form POST.
+templ MCPConsent(v MCPConsentView) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ v.Title }</title>
+			<link rel="stylesheet" href={ assetURL("app.css") }/>
+		</head>
+		<body>
+			<main id="main-content">
+				<div class="canvas narrow">
+					<section class="card pad" aria-labelledby="consent-heading">
+						<h1 id="consent-heading">Allow access to Worklode?</h1>
+						<p>
+							You are signed in as <strong>{ v.ActorID }</strong>. Allowing gives
+							{ v.Destination } a token that acts as you in Worklode for 30 days.
+						</p>
+						<p class="muted">
+							Only allow this if you just connected Worklode yourself. If you did not
+							start this, choose Deny. This request expires in { v.ExpiresIn }.
+						</p>
+						<form method="post" action="/oauth/consent">
+							<input type="hidden" name="consent" value={ v.ConsentID }/>
+							<div class="btnrow">
+								<button type="submit" class="btn primary" name="decision" value="allow">Allow</button>
+								<button type="submit" class="btn" name="decision" value="deny">Deny</button>
+							</div>
+						</form>
+					</section>
+				</div>
+			</main>
+		</body>
+	</html>
+}

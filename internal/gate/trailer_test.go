@@ -15,6 +15,7 @@ func TestParseLineForms(t *testing.T) {
 		"Spec: WL-RULE-456 fix":     func(d Declaration) bool { return d.Rule != nil && d.Qualifier == "fix" },
 		"Spec: WL-REQ-456":          func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 456 },
 		"Spec: none refactor":       func(d Declaration) bool { return d.None == "refactor" && d.Rule == nil },
+		"Spec: none coming":         func(d Declaration) bool { return d.None == "coming" && d.Rule == nil },
 		"Spec:   none   tests  ":    func(d Declaration) bool { return d.None == "tests" },
 		"spec : WL-REQ-1":           func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 1 },
 		"Rule: WL-REQ-2":            func(d Declaration) bool { return d.Rule != nil && d.Rule.Number == 2 },
@@ -33,6 +34,7 @@ func TestParseLineForms(t *testing.T) {
 	}
 	bad := []string{
 		"Spec: none fix",        // WL-REQ-7: a fix with nothing to cite is refused
+		"Spec: WL-REQ-1 coming", // coming stands in for a ref, so it never qualifies one
 		"Spec: none",            // no reason
 		"Spec: none later",      // not in the closed list
 		"Spec: WL-SPEC-4",       // a document is not a rule

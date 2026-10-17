@@ -6,6 +6,7 @@ resources:
   - ../../base
   - externalsecret-worklode-secrets.yaml
   - externalsecret-worklode-secrets-catalog.yaml
+  - mcp-public-ingress.yaml
 patches:
   - patch: |-
       apiVersion: v1
@@ -30,6 +31,16 @@ patches:
       - op: add
         path: /data/LODE_OIDC_CLIENT_ID
         value: "worklode-prod"
+      # The mesh host stays the login host: the MCP authorization endpoint
+      # and /auth/callback are served on it.
+      - op: add
+        path: /data/LODE_PUBLIC_URL
+        value: "https://worklode.sunstone.internal"
+      # Public host for claude.ai and Cowork (mcp-public-ingress.yaml). Both
+      # this and LODE_PUBLIC_URL are accepted as an MCP token's resource.
+      - op: add
+        path: /data/LODE_MCP_PUBLIC_URL
+        value: "https://worklode.prod.sunstoneinstitute.ai"
   - target:
       kind: Ingress
       name: worklode-ingress

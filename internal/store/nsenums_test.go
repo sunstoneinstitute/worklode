@@ -24,6 +24,7 @@ var schemeChecks = map[string]struct {
 	"TaskKind":         {table: "tasks", column: "kind"},
 	"RuleKind":         {table: "rules", column: "kind"},
 	"DesignDocStatus":  {table: "docs", column: "status"},
+	"DocKind":          {table: "docs", column: "kind"},
 	"ArtifactKind":     {table: "artifacts", column: "kind"},
 	"DeploymentStatus": {table: "deployments", column: "status"},
 	"RuntimeEventKind": {table: "runtime_events", column: "kind"},

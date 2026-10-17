@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -18,14 +16,9 @@ import (
 // an optional leading '#' and expands the shortcut form — a bare section
 // number like "3" or "4.1a" becomes "sec-3" / "sec-4.1a", so `--section 3` is
 // an alias for `--section sec-3`. A value already in "sec-..." form, or empty,
-// is returned unchanged.
-func normalizeSection(s string) string {
-	s = strings.TrimPrefix(s, "#")
-	if s == "" || strings.HasPrefix(s, "sec-") {
-		return s
-	}
-	return "sec-" + s
-}
+// is returned unchanged. The rule itself is cli.NormalizeSection, which the
+// MCP server's show tool shares.
+func normalizeSection(s string) string { return cli.NormalizeSection(s) }
 
 // runDocShow renders a SPEC or ADR document, or one of its sections,
 // cat-style (WL-REQ-192). It backs every SPEC/ADR path through `lode show`
@@ -93,48 +86,17 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 		return err
 	}
 
-	if inline {
-		// The consolidated view (WL-84): every in-force amendment folded into
-		// the section it acts on, transitively; --section narrows to one
-		// subtree with its folds intact.
-		out, err := designdoc.NewInliner(ruleFetcher(ctx, c)).Consolidate(&detail, section)
-		if err != nil {
-			return err
-		}
-		return writeDocShow(cmd, doc, section, []byte(cli.InlineDocNotes(out, detail.Notes, detail.Sections)))
+	// The consolidated view (WL-84) when inline: every in-force amendment
+	// folded into the section it acts on, transitively; --section narrows to
+	// one subtree with its folds intact. Notes are folded in either way.
+	if detail.Ref == "" {
+		detail.Ref = doc.Ref
 	}
-
-	// Notes are folded in before the section is cut, so `--section` and a
-	// whole-document render show the same note under the same heading
-	// (WL-REQ-171).
-	data := []byte(cli.InlineDocNotes(detail.Body, detail.Notes, detail.Sections))
-
-	if section == "" {
-		return writeDocShow(cmd, doc, "", data)
-	}
-
-	parsed, err := designdoc.Parse(data)
+	text, err := c.DocShowText(ctx, &detail, section, inline)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", cmp.Or(doc.Ref, doc.Slug), err)
-	}
-	// WL-REQ-192: a section is always its whole subtree. designdoc cuts it from
-	// the spans Parse already found, so nothing here re-scans the source.
-	text, ok := parsed.Subtree(section)
-	if !ok {
-		return fmt.Errorf("no section %s in %s", section, cmp.Or(doc.Ref, doc.Slug))
+		return err
 	}
 	return writeDocShow(cmd, doc, section, []byte(text))
-}
-
-// ruleFetcher reads one rule by ref for the inliner.
-func ruleFetcher(ctx context.Context, c *cli.Client) func(string) (*model.Rule, error) {
-	return func(ref string) (*model.Rule, error) {
-		r, _, err := c.GetRule(ctx, ref)
-		if err != nil {
-			return nil, err
-		}
-		return &r, nil
-	}
 }
 
 // resolveDocRefTiers resolves ref through WL-REQ-199's tiers 1 and 2: the pure

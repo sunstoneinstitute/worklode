@@ -152,13 +152,19 @@ func TestEveryGuardedPermissionIsGranted(t *testing.T) {
 func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 	t.Parallel()
 	want := []string{
+		"DELETE /mcp",
 		"GET /.well-known/lode-login",
+		"GET /.well-known/oauth-authorization-server",
+		"GET /.well-known/oauth-protected-resource",
+		"GET /.well-known/oauth-protected-resource/mcp",
 		"GET /api/v1/openapi.json",
 		"GET /assets/",
 		"GET /auth/callback",
 		"GET /auth/cli/login",
 		"GET /auth/login",
 		"GET /auth/oidc/config",
+		"GET /mcp",
+		"GET /oauth/authorize",
 		"GET /static/",
 		"POST /auth/cli/token",
 		"POST /auth/oidc/token",
@@ -168,6 +174,9 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 		"POST /hooks/flux",
 		"POST /hooks/github",
 		"POST /hooks/pipeline",
+		"POST /mcp",
+		"POST /oauth/consent",
+		"POST /oauth/token",
 	}
 
 	var got []string
@@ -190,7 +199,7 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 
 // TestNoWriteRouteIsPublic is a blunter cross-check on the same surface: a
 // route that mutates state must never be reachable without either an actor or
-// a signature. The signed webhooks and the two login-flow POSTs are the
+// a signature. The signed webhooks and the three login-flow POSTs are the
 // enumerated exceptions, each of which authenticates by other means.
 func TestNoWriteRouteIsPublic(t *testing.T) {
 	t.Parallel()
@@ -203,6 +212,12 @@ func TestNoWriteRouteIsPublic(t *testing.T) {
 		"POST /hooks/pipeline":  true, // HMAC
 		"POST /auth/oidc/token": true, // verifies a Keycloak ID token
 		"POST /auth/cli/token":  true, // redeems a one-time code
+		"POST /oauth/token":     true, // redeems a one-time code and its PKCE verifier
+		"POST /oauth/consent":   true, // consumes a pending consent bound to a cookie, same-origin only
+		// The MCP server checks its own bearer token (serveMCP), and each
+		// tool's write goes through the /api/v1 guards in-process.
+		"POST /mcp":   true,
+		"DELETE /mcp": true,
 	}
 	for pattern, g := range routeGuards {
 		if g.perm != permPublic || signedOrLogin[pattern] {

@@ -17,6 +17,7 @@ var Schemes = map[string][]string{
 	"DeployTargetKind": {"flux_kustomization", "manual", "pypi_target"},
 	"DeploymentStatus": {"deployed", "failed", "pending", "reconciling"},
 	"DesignDocStatus":  {"accepted", "draft", "spent", "stale", "superseded", "withdrawn"},
+	"DocKind":          {"plan", "spec"},
 	"EdgeOrigin":       {"declared", "inferred"},
 	"ModelLayer":       {"execution", "intent", "runtime"},
 	"RuleKind":         {"catalogue", "definition", "informative", "invariant", "principle", "requirement"},
@@ -76,4 +77,52 @@ var TaskKindDescriptors = map[string]TaskKindDescriptor{
 	"rally":    {Claimable: false, AllowsChildren: false, PlanMintable: false, AllowsDecisions: false, CanBlock: false, KindMutable: true, ClosesOnAnswers: false},
 	"review":   {Claimable: true, AllowsChildren: true, PlanMintable: false, AllowsDecisions: true, CanBlock: true, KindMutable: true, ClosesOnAnswers: false},
 	"spike":    {Claimable: true, AllowsChildren: true, PlanMintable: false, AllowsDecisions: true, CanBlock: true, KindMutable: true, ClosesOnAnswers: false},
+}
+
+// KindAlias is what a spoken kind word names: the entity it files ("task", "doc" or "rule") and the kind within it.
+type KindAlias struct {
+	Entity string
+	Kind   string
+}
+
+// KindAliases maps every lower-cased prefLabel and altLabel of the TaskKind, DocKind and RuleKind schemes to the kind it names.
+// A retired kind (owl:deprecated) has no words, and "design" is left out: said alone it may mean a spec or a design task.
+var KindAliases = map[string]KindAlias{
+	"adr":                 {Entity: "doc", Kind: "spec"},
+	"broken":              {Entity: "task", Kind: "bug"},
+	"bug":                 {Entity: "task", Kind: "bug"},
+	"capability":          {Entity: "task", Kind: "feature"},
+	"catalogue":           {Entity: "rule", Kind: "catalogue"},
+	"choice":              {Entity: "task", Kind: "decision"},
+	"chore":               {Entity: "task", Kind: "chore"},
+	"cleanup":             {Entity: "task", Kind: "chore"},
+	"decision":            {Entity: "task", Kind: "decision"},
+	"defect":              {Entity: "task", Kind: "bug"},
+	"definition":          {Entity: "rule", Kind: "definition"},
+	"design doc":          {Entity: "doc", Kind: "spec"},
+	"design document":     {Entity: "doc", Kind: "spec"},
+	"design task":         {Entity: "task", Kind: "design"},
+	"enhancement":         {Entity: "task", Kind: "feature"},
+	"experiment":          {Entity: "task", Kind: "spike"},
+	"feature":             {Entity: "task", Kind: "feature"},
+	"housekeeping":        {Entity: "task", Kind: "chore"},
+	"implementation plan": {Entity: "doc", Kind: "plan"},
+	"invariant":           {Entity: "rule", Kind: "invariant"},
+	"investigation":       {Entity: "task", Kind: "spike"},
+	"issue":               {Entity: "task", Kind: "bug"},
+	"maintenance":         {Entity: "task", Kind: "chore"},
+	"plan":                {Entity: "doc", Kind: "plan"},
+	"principle":           {Entity: "rule", Kind: "principle"},
+	"problem":             {Entity: "task", Kind: "bug"},
+	"prototype":           {Entity: "task", Kind: "spike"},
+	"question":            {Entity: "task", Kind: "decision"},
+	"rally":               {Entity: "task", Kind: "rally"},
+	"requirement":         {Entity: "rule", Kind: "requirement"},
+	"review":              {Entity: "task", Kind: "review"},
+	"rule":                {Entity: "rule", Kind: "requirement"},
+	"spec":                {Entity: "doc", Kind: "spec"},
+	"specification":       {Entity: "doc", Kind: "spec"},
+	"spike":               {Entity: "task", Kind: "spike"},
+	"story":               {Entity: "task", Kind: "feature"},
+	"upgrade":             {Entity: "task", Kind: "chore"},
 }

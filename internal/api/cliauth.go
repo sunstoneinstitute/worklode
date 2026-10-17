@@ -112,13 +112,22 @@ func (s *server) cliIntentFrom(r *http.Request) (cliIntent, bool) {
 	return verifyCLIIntent(s.cfg.SessionSecret, c.Value, s.now())
 }
 
-// finishLogin ends a successful web login for actorID. When the CLI-intent
-// cookie is present (a server-mediated `lode login`), it mints a one-time code
-// and redirects to the loopback redirect_uri instead of establishing a browser
-// session. Otherwise it delegates to finishLoginWeb.
-func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next string) {
+// finishLogin ends a successful web login for actorID. intent is the nonce
+// the login's oauth state carries. When the CLI-intent cookie carries the same
+// nonce (a server-mediated `lode login`), it mints a one-time code and
+// redirects to the loopback redirect_uri instead of establishing a browser
+// session. When the MCP-intent cookie does (an MCP client's
+// /oauth/authorize), finishLoginMCP asks the user to consent. Otherwise it
+// delegates to finishLoginWeb.
+func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next, intent string) {
 	ci, ok := s.cliIntentFrom(r)
-	if !ok {
+	if !ok || intent == "" || ci.Nonce != intent {
+		if mi, ok := s.mcpIntentFrom(r); ok && intent != "" && mi.Nonce == intent {
+			s.finishLoginMCP(w, r, actorID, mi)
+			return
+		}
+		clearAuthCookie(w, cliCookieName)
+		clearAuthCookie(w, mcpCookieName)
 		s.finishLoginWeb(w, r, actorID, next)
 		return
 	}
@@ -242,10 +251,19 @@ func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid redirect_uri or state")
 		return
 	}
+	nonce, err := randToken()
+	if err != nil {
+		s.log.Error("generate cli login nonce", "err", err)
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	// One login at a time: an MCP intent left from an abandoned connector
+	// login would otherwise survive to the next web login.
+	clearAuthCookie(w, mcpCookieName)
 	setAuthCookie(w, cliCookieName, "/auth/",
-		signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Mode: mode, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
+		signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Mode: mode, Nonce: nonce, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
 		oauthStateMaxAge)
-	http.Redirect(w, r, s.loginTarget("/"), http.StatusFound)
+	http.Redirect(w, r, intentLoginTarget(nonce), http.StatusFound)
 }
 
 // cliToken handles POST /auth/cli/token: redeem a one-time code (proof the

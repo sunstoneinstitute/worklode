@@ -90,6 +90,14 @@ type Config struct {
 	PublicURL     string `env:"LODE_PUBLIC_URL"`
 	SessionSecret string `env:"LODE_SESSION_SECRET"`
 
+	// MCPPublicURL (LODE_MCP_PUBLIC_URL) is a second base URL the MCP server
+	// answers on, for an instance whose PublicURL is mesh-only: claude.ai and
+	// Cowork reach /mcp from Anthropic's cloud, so prod exposes /mcp,
+	// /oauth/token and /.well-known/oauth-* on a public host while the
+	// browser leg of the login stays on PublicURL. Empty means MCP clients
+	// use PublicURL alone.
+	MCPPublicURL string `env:"LODE_MCP_PUBLIC_URL"`
+
 	// WebOpen (LODE_WEB_OPEN) permits the web UI to serve anonymous callers on
 	// an instance with *no* login provider configured — the local stack and
 	// CI. It is ignored when OIDC is configured: the opt-in is about the
@@ -411,6 +419,14 @@ type server struct {
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
 
+	// mcpCodes holds pending authorization codes for the MCP OAuth login,
+	// mcpConsents the logins waiting on the consent page, and mcpOAuth counts
+	// its requests (mcpauth.go). All are set by registerMCPAuth; nil in a bare
+	// test server.
+	mcpCodes    *mcpCodeStore
+	mcpConsents *mcpConsentStore
+	mcpOAuth    *mcpOAuthMetrics
+
 	// blobs is the object-storage backend for WL-SPEC-78's content-addressed
 	// blobs, or nil when no bucket is configured — the blob endpoints then
 	// answer 501 and nothing else changes.
@@ -700,9 +716,15 @@ func (s *server) intakeProject() (id string, ok bool) {
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
 // so the derived web callback redirect URIs are well-formed.
 func validatePublicURL(publicURL string) error {
-	u, err := url.Parse(publicURL)
+	return validateBaseURL("LODE_PUBLIC_URL", publicURL)
+}
+
+// validateBaseURL ensures the setting named env is an absolute http(s) URL
+// with a host.
+func validateBaseURL(env, raw string) error {
+	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("LODE_PUBLIC_URL must be an absolute http(s) URL (e.g. https://lode.example.com)")
+		return fmt.Errorf("%s must be an absolute http(s) URL (e.g. https://lode.example.com)", env)
 	}
 	return nil
 }
@@ -735,6 +757,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 
 	s.registerCockpit(r)
 	s.registerAPI(r, reg)
+	if err := s.registerMCP(r, reg); err != nil {
+		return nil, err
+	}
 	s.registerShared(r)
 	s.registerSPA(r)
 
@@ -905,6 +930,8 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
 	r.publicFunc("GET /auth/cli/login", s.cliLogin)
 	r.publicFunc("POST /auth/cli/token", s.cliToken)
+	// The OAuth authorization server MCP clients log in to (see mcpauth.go).
+	s.registerMCPAuth(r, reg)
 	// Agent telemetry ingest (WL-REQ-1234). Not under /api/v1: the path is
 	// the OTLP convention, so a stock exporter reaches it with
 	// OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=<server>/otlp/v1/logs. Bearer auth
@@ -1213,6 +1240,15 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			return nil, nil, fmt.Errorf("configure oidc: %w", err)
 		}
 		s.oidc = v
+	}
+
+	if cfg.MCPPublicURL != "" {
+		if s.oidc == nil {
+			return nil, nil, fmt.Errorf("LODE_MCP_PUBLIC_URL needs OIDC: the MCP login runs through it")
+		}
+		if err := validateBaseURL("LODE_MCP_PUBLIC_URL", cfg.MCPPublicURL); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {

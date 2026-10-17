@@ -564,6 +564,19 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
+// NewClientTransport builds a Client that sends every request through rt
+// instead of the network. The MCP server uses it to reach its own /api/v1
+// handlers in-process with the caller's token, so a tool call meets the same
+// route guards, validation and metrics a CLI call does. serverURL only forms
+// the request URLs rt receives.
+func NewClientTransport(serverURL, token string, rt http.RoundTripper) *Client {
+	return &Client{
+		baseURL: strings.TrimRight(serverURL, "/"),
+		token:   token,
+		http:    &http.Client{Transport: rt, Timeout: 30 * time.Second},
+	}
+}
+
 // ServerURL returns the base URL this client talks to. Callers key
 // server-specific local state (such as the remote cache) by it.
 func (c *Client) ServerURL() string { return c.baseURL }

@@ -58,6 +58,21 @@ func (s *server) loginTarget(next string) string {
 	return "/auth/login?next=" + url.QueryEscape(next)
 }
 
+// intentLoginTarget is where /auth/cli/login and /oauth/authorize send the
+// browser: the web login, carrying the nonce of the intent cookie they set.
+func intentLoginTarget(nonce string) string {
+	return "/auth/login?next=%2F&intent=" + url.QueryEscape(nonce)
+}
+
+// loginNonce matches an intent nonce: randToken's 32 hex digits.
+func loginNonce(v string) bool {
+	if len(v) != 32 {
+		return false
+	}
+	_, err := hex.DecodeString(v)
+	return err == nil
+}
+
 // authLogin handles GET /auth/login: begin the auth-code + PKCE flow.
 func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 	if s.oidc == nil {
@@ -65,6 +80,15 @@ func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := safeNext(r.URL.Query().Get("next"))
+	// Only a login a CLI or MCP starter sent here carries an intent. Any
+	// other login drops a pending intent cookie, so one left by an abandoned
+	// `lode login` or connector login cannot turn this one into theirs.
+	intent := r.URL.Query().Get("intent")
+	if !loginNonce(intent) {
+		intent = ""
+		clearAuthCookie(w, cliCookieName)
+		clearAuthCookie(w, mcpCookieName)
+	}
 
 	state, err := randToken()
 	if err != nil {
@@ -76,7 +100,7 @@ func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 	now := s.st.Now()
 
 	setAuthCookie(w, oauthCookieName, "/auth/",
-		signOAuthState(s.cfg.SessionSecret, oauthState{State: state, Verifier: verifier, Next: next, Exp: now.Add(oauthStateMaxAge).Unix()}),
+		signOAuthState(s.cfg.SessionSecret, oauthState{State: state, Verifier: verifier, Next: next, Intent: intent, Exp: now.Add(oauthStateMaxAge).Unix()}),
 		oauthStateMaxAge)
 
 	cfg := s.oidc.OAuth2Config(s.callbackURL(), oidcScopes)
@@ -143,5 +167,5 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.finishLogin(w, r, username, st.Next)
+	s.finishLogin(w, r, username, st.Next, st.Intent)
 }
