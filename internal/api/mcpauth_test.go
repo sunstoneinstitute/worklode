@@ -141,7 +141,7 @@ func tokenForm(code, redirect, verifier string) url.Values {
 	}
 }
 
-// oauthErr decodes an RFC 6749 §5.2 body and checks its status and code.
+// oauthErr decodes an RFC 6749 section 5.2 body and checks its status and code.
 func oauthErr(t *testing.T, rr *httptest.ResponseRecorder, status int, code string) {
 	t.Helper()
 	var e model.OAuthError
@@ -300,7 +300,7 @@ func TestMCPAuthorizeRendersClientAndRedirectErrors(t *testing.T) {
 }
 
 // Once the redirect URI is trusted, the remaining errors go back to the
-// client (RFC 6749 §4.1.2.1) carrying its state and the issuer.
+// client (RFC 6749 section 4.1.2.1) carrying its state and the issuer.
 func TestMCPAuthorizeRedirectsRequestErrors(t *testing.T) {
 	t.Parallel()
 	m := newMCPServer(t, mcpSecond)

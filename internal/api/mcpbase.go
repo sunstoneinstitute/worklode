@@ -20,7 +20,7 @@ const mcpClientID = "worklode-mcp"
 var mcpRemoteRedirects = []string{"https://claude.ai/api/mcp/auth_callback"}
 
 // mcpLoopbackPath is the path a loopback redirect URI must carry. Any port is
-// accepted (RFC 8252 §7.3); Claude Code uses 33418 when told to.
+// accepted (RFC 8252 section 7.3); Claude Code uses 33418 when told to.
 const mcpLoopbackPath = "/callback"
 
 // mcpRedirectAllowed reports whether raw is a redirect URI mcpClientID may

@@ -238,7 +238,7 @@ func validS256Challenge(c string) bool {
 // LODE_PUBLIC_URL's host, where the web login and its Keycloak callback live.
 // A bad client_id or redirect_uri is shown to the user, never redirected to:
 // until both are checked, the redirect URI is the attacker's. Every later
-// error goes back to the client as RFC 6749 §4.1.2.1 describes.
+// error goes back to the client as RFC 6749 section 4.1.2.1 describes.
 func (s *server) mcpAuthorize(w http.ResponseWriter, r *http.Request) {
 	if s.oidc == nil || !s.onPublicHost(r) {
 		s.mcpOAuth.observe("authorize", "not_found")
@@ -328,7 +328,7 @@ func (s *server) finishLoginMCP(w http.ResponseWriter, r *http.Request, actorID 
 }
 
 // pkceMatches reports whether verifier hashes to the S256 challenge. The
-// verifier's shape is RFC 7636 §4.1's: 43 to 128 unreserved characters.
+// verifier's shape is RFC 7636 section 4.1's: 43 to 128 unreserved characters.
 func pkceMatches(verifier, challenge string) bool {
 	if len(verifier) < 43 || len(verifier) > 128 {
 		return false
