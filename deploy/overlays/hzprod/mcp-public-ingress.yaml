@@ -34,6 +34,11 @@ metadata:
     # Same body limit as worklode-ingress (deploy/base/ingress.yaml), so the
     # server's maxAPIBody stays the authority.
     nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+    # Streamable HTTP can answer with an SSE stream: pass events through as
+    # they are written and keep an idle stream open past nginx's 60s default
+    # (same settings as radar's MCP ingress).
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
