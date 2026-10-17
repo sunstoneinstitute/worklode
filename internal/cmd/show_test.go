@@ -33,7 +33,6 @@ func TestClassify(t *testing.T) {
 		{"WL-MILE-2", targetMilestone, ""},
 		{"WL-DEL-3", targetDeliverable, ""},
 		{"WL-RULE-12", targetRule, ""},
-		{"WL-CL-12", targetRule, ""}, // pre-S64 alias
 		{"XX-FOO-3", targetUnknownType, "FOO"},
 		{"WL-SPEC-0", targetDoc, ""},
 		// Doc-ref shapes: slugs, number forms, paths — resolveDocRef owns

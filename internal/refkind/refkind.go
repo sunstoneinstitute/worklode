@@ -20,8 +20,8 @@ const (
 // Targets lists every Target, for tests that must cover each one.
 var Targets = []Target{Doc, Rule, Milestone, Deliverable}
 
-// The infixes. Rules share one counter, so REQ, RULE and the legacy CL all
-// resolve a rule by its number (WL-REQ-165). The store keys a project's
+// The infixes. Rules share one counter, so REQ and RULE both resolve a rule
+// by its number (WL-REQ-1642). The store keys a project's
 // rule, milestone and deliverable counters by RULE, MILE and DEL.
 const (
 	SPEC = "SPEC"
@@ -29,7 +29,6 @@ const (
 	PLAN = "PLAN"
 	REQ  = "REQ"
 	RULE = "RULE"
-	CL   = "CL"
 	MILE = "MILE"
 	DEL  = "DEL"
 )
@@ -43,7 +42,7 @@ type Kind struct {
 // All is the registry.
 var All = []Kind{
 	{SPEC, Doc}, {ADR, Doc}, {PLAN, Doc},
-	{REQ, Rule}, {RULE, Rule}, {CL, Rule},
+	{REQ, Rule}, {RULE, Rule},
 	{MILE, Milestone}, {DEL, Deliverable},
 }
 

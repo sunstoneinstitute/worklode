@@ -345,9 +345,9 @@ import (
 
 func TestParseLineForms(t *testing.T) {
 	ok := map[string]func(Declaration) bool{
-		"Spec: WL-CL-456":                func(d Declaration) bool { return d.Clause != nil && d.Clause.Number == 456 && d.Qualifier == "" },
-		"Spec: WL-CL-456 amended":        func(d Declaration) bool { return d.Clause != nil && d.Qualifier == "amended" },
-		"Spec: WL-CL-456 fix":            func(d Declaration) bool { return d.Clause != nil && d.Qualifier == "fix" },
+		"Spec: WL-RULE-456":                func(d Declaration) bool { return d.Clause != nil && d.Clause.Number == 456 && d.Qualifier == "" },
+		"Spec: WL-RULE-456 amended":        func(d Declaration) bool { return d.Clause != nil && d.Qualifier == "amended" },
+		"Spec: WL-RULE-456 fix":            func(d Declaration) bool { return d.Clause != nil && d.Qualifier == "fix" },
 		"Spec: WL-SPEC-4 sec-5":          func(d Declaration) bool { return d.Section != nil && d.Section.Anchor == "sec-5" && d.Section.Shorthand.Number == 4 },
 		"Spec: WL-SPEC-4#sec-5 amended":  func(d Declaration) bool { return d.Section != nil && d.Section.Anchor == "sec-5" && d.Qualifier == "amended" },
 		"Spec: none refactor":            func(d Declaration) bool { return d.None == "refactor" && d.Clause == nil },
@@ -368,7 +368,7 @@ func TestParseLineForms(t *testing.T) {
 		"Spec: none",              // no reason
 		"Spec: none later",        // not in the closed list
 		"Spec: WL-SPEC-4",         // a section ref needs an anchor
-		"Spec: WL-CL-456 sometime", // unknown qualifier
+		"Spec: WL-RULE-456 sometime", // unknown qualifier
 		"Spec: 456",
 		"Spec:",
 	}
@@ -377,13 +377,13 @@ func TestParseLineForms(t *testing.T) {
 			t.Errorf("ParseLine(%q) should match the key and fail, got matched=%v err=%v", line, matched, err)
 		}
 	}
-	if _, matched, _ := ParseLine("Spec:", "Specification: WL-CL-1"); matched {
+	if _, matched, _ := ParseLine("Spec:", "Specification: WL-RULE-1"); matched {
 		t.Error("a longer word starting with the key is not the trailer")
 	}
 }
 
 func TestFindTakesTheFirstTrailer(t *testing.T) {
-	text := "Adds a thing.\n\nSpec: WL-CL-12\nWorklode-Task: WL-99\nSpec: WL-CL-13\n"
+	text := "Adds a thing.\n\nSpec: WL-RULE-12\nWorklode-Task: WL-99\nSpec: WL-RULE-13\n"
 	d, err := Find("Spec:", text)
 	if err != nil || d.Clause == nil || d.Clause.Number != 12 {
 		t.Fatalf("Find = %+v, %v", d, err)
@@ -406,7 +406,7 @@ func TestCheck(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "internal/cmd/gate.go") || !strings.Contains(err.Error(), "Spec:") {
 		t.Fatalf("guarded path without trailer must name the path and the key: %v", err)
 	}
-	v, err = Check(cfg, Input{Changed: []string{"internal/cmd/gate.go"}, Texts: []string{"body\n", "Feat\n\nSpec: WL-CL-3\n"}})
+	v, err = Check(cfg, Input{Changed: []string{"internal/cmd/gate.go"}, Texts: []string{"body\n", "Feat\n\nSpec: WL-RULE-3\n"}})
 	if err != nil || v.Declaration == nil || v.Declaration.Clause == nil {
 		t.Fatalf("trailer in a commit passes: %+v %v", v, err)
 	}
@@ -446,7 +446,7 @@ var ErrNoTrailer = errors.New("no trailer")
 // Declaration is one parsed trailer line (11 §4). Exactly one of Clause,
 // Section and None is set.
 type Declaration struct {
-	Clause    *designdoc.ClauseRef  // Spec: WL-CL-456
+	Clause    *designdoc.ClauseRef  // Spec: WL-RULE-456
 	Section   *designdoc.SectionRef // Spec: WL-SPEC-4 sec-5 (transitional, S52)
 	None      string                // Spec: none <reason>: the reason
 	Qualifier string                // "", "amended", or a NoneReasons word on a cited ref
@@ -663,12 +663,12 @@ func TestGateCheckRefusesWithoutTrailer(t *testing.T) {
 }
 
 func TestGateCheckPassesWithTrailerInCommit(t *testing.T) {
-	dir, base, head := gateRepo(t, gateTable, "change a command\n\nSpec: WL-CL-7\n")
+	dir, base, head := gateRepo(t, gateTable, "change a command\n\nSpec: WL-RULE-7\n")
 	out, err := runGateCheck(dir, base, head, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "WL-CL-7") || !strings.Contains(out, "internal/cmd/x.go") {
+	if !strings.Contains(out, "WL-RULE-7") || !strings.Contains(out, "internal/cmd/x.go") {
 		t.Errorf("verdict should name the declaration and the guarded file: %q", out)
 	}
 }
@@ -1120,22 +1120,22 @@ func prEvent(t *testing.T, id int64, headRef, body string) store.Event {
 func TestSpecReconcilerGovernsAPlanlessTask(t *testing.T) {
 	st, h, token := newTestServer(t)
 	seedProjectWithKey(t, st, "WL")
-	// A spec with anchored sections, so WL-CL-1 and sec-1.1 exist.
+	// A spec with anchored sections, so WL-RULE-1 and sec-1.1 exist.
 	createDocViaAPI(t, h, token, "spec", "s", clauseDocV1)
 	task := createTaskViaAPI(t, h, token, `{"project":"WL","title":"planless","kind":"feature","priority":"medium"}`)
 	srv := serverOf(h) // however docwatch_test.go reaches the *server behind h
 
-	out, err := srv.handleSpecReconcile(context.Background(), prEvent(t, 1001, task.Branch, "Adds it.\n\nSpec: WL-CL-1\n"))
+	out, err := srv.handleSpecReconcile(context.Background(), prEvent(t, 1001, task.Branch, "Adds it.\n\nSpec: WL-RULE-1\n"))
 	if err != nil || out != eventbus.OutcomeApplied {
 		t.Fatalf("first delivery: %v %v", out, err)
 	}
 	gov, err := st.GovernedBy(context.Background(), task.ID)
-	if err != nil || len(gov) != 1 || gov[0].Clause != "WL-CL-1" || gov[0].Source != "gate" {
+	if err != nil || len(gov) != 1 || gov[0].Clause != "WL-RULE-1" || gov[0].Source != "gate" {
 		t.Fatalf("governed_by = %+v, %v", gov, err)
 	}
 
 	// Redelivery of the same event is absorbed.
-	out, err = srv.handleSpecReconcile(context.Background(), prEvent(t, 1001, task.Branch, "Spec: WL-CL-1\n"))
+	out, err = srv.handleSpecReconcile(context.Background(), prEvent(t, 1001, task.Branch, "Spec: WL-RULE-1\n"))
 	if err != nil || out != eventbus.OutcomeSuppressed {
 		t.Fatalf("redelivery: %v %v", out, err)
 	}
@@ -1166,11 +1166,11 @@ func TestSpecReconcilerLeavesPlannedAndNoneAlone(t *testing.T) {
 	if out != eventbus.OutcomeSuppressed {
 		t.Errorf("no trailer: %v", out)
 	}
-	out, _ = srv.handleSpecReconcile(context.Background(), prEvent(t, 2003, "feature/no-task", "Spec: WL-CL-1\n"))
+	out, _ = srv.handleSpecReconcile(context.Background(), prEvent(t, 2003, "feature/no-task", "Spec: WL-RULE-1\n"))
 	if out != eventbus.OutcomeSuppressed {
 		t.Errorf("no task: %v", out)
 	}
-	out, _ = srv.handleSpecReconcile(context.Background(), prEvent(t, 2004, task.Branch, "Spec: WL-CL-999\n"))
+	out, _ = srv.handleSpecReconcile(context.Background(), prEvent(t, 2004, task.Branch, "Spec: WL-RULE-999\n"))
 	if out != eventbus.OutcomeSuppressed {
 		t.Errorf("unknown clause: %v", out)
 	}
@@ -1188,7 +1188,7 @@ func TestSpecReconcilerLeavesPlannedAndNoneAlone(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	out, _ = srv.handleSpecReconcile(context.Background(), prEvent(t, 2005, task.Branch, "Spec: WL-CL-2\n"))
+	out, _ = srv.handleSpecReconcile(context.Background(), prEvent(t, 2005, task.Branch, "Spec: WL-RULE-2\n"))
 	if out != eventbus.OutcomeSuppressed {
 		t.Errorf("planned task: %v", out)
 	}
@@ -1206,8 +1206,8 @@ func TestSpecReconcilerReadsPushCommits(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{
 		"ref": "refs/heads/" + task.Branch,
 		"commits": []map[string]any{
-			{"id": "a", "message": "first\n\nSpec: WL-CL-1\n"},
-			{"id": "b", "message": "second\n\nSpec: WL-CL-2\n"},
+			{"id": "a", "message": "first\n\nSpec: WL-RULE-1\n"},
+			{"id": "b", "message": "second\n\nSpec: WL-RULE-2\n"},
 		},
 	})
 	out, err := srv.handleSpecReconcile(context.Background(), store.Event{ID: 3001, Source: "github", Type: "push", Payload: payload})
@@ -1215,7 +1215,7 @@ func TestSpecReconcilerReadsPushCommits(t *testing.T) {
 		t.Fatalf("push: %v %v", out, err)
 	}
 	gov, _ := st.GovernedBy(context.Background(), task.ID)
-	if len(gov) != 1 || gov[0].Clause != "WL-CL-2" {
+	if len(gov) != 1 || gov[0].Clause != "WL-RULE-2" {
 		t.Fatalf("the final commit's trailer wins: %+v", gov)
 	}
 }
@@ -1507,7 +1507,7 @@ After §9.6, add a sibling subsection (numbered so §9.7 Metrics keeps its numbe
 ```markdown
 ### 9.6a The `spec-reconciler` subscriber
 
-One rule. On a GitHub `pull_request.*` or `push` event for a task branch, read the `Spec:` trailer from the pull request body or the pushed commits, newest first. When it names a clause (`WL-CL-<n>`) or a section (`WL-SPEC-4 sec-5`, resolved to the clause arranged at that anchor) and the task carries no `source = 'plan'` link, write a `governedBy` link with `source = 'gate'`. `none`, a missing or malformed trailer, an unknown task, an unknown target and an already governed task are counted and change nothing. Redelivery is absorbed by the `task.governed` event's external id, `spec-reconciler-<event id>`. The subscriber runs behind `SubscriberLock` beside `doc-lifecycle` and starts with it.
+One rule. On a GitHub `pull_request.*` or `push` event for a task branch, read the `Spec:` trailer from the pull request body or the pushed commits, newest first. When it names a clause (`WL-RULE-<n>`) or a section (`WL-SPEC-4 sec-5`, resolved to the clause arranged at that anchor) and the task carries no `source = 'plan'` link, write a `governedBy` link with `source = 'gate'`. `none`, a missing or malformed trailer, an unknown task, an unknown target and an already governed task are counted and change nothing. Redelivery is absorbed by the `task.governed` event's external id, `spec-reconciler-<event id>`. The subscriber runs behind `SubscriberLock` beside `doc-lifecycle` and starts with it.
 ```
 
 In §9.7's table add a row:

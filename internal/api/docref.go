@@ -157,7 +157,7 @@ func scopeDocsToProject(docs []model.Doc, project string) []model.Doc {
 // wildcard and still wins, so the shortcut only sees paths nothing else
 // claims.
 //
-// A rule ref (WL-REQ-<n>, WL-RULE-<n> or WL-CL-<n>) goes to the same redirect
+// A rule ref (WL-REQ-<n> or WL-RULE-<n>) goes to the same redirect
 // /rules/{ref} serves. A milestone or deliverable id goes to its entry on
 // its project's page (entityRefPage), after the task lookup. Task ids resolve next because the lookup is one indexed
 // row, and because <KEY>-<n> and <KEY>-<TYPE>-<n> are not distinguishable by

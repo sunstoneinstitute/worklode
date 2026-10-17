@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Every anchored section of a spec or ADR becomes a design clause with its own `WL-CL-<n>` identity and version history, documents store their arrangement of clauses, tasks carry direct `governedBy` links to clauses, and the chunk budget derives from the embedding model's declared context window.
+**Goal:** Every anchored section of a spec or ADR becomes a design clause with its own `WL-RULE-<n>` identity and version history, documents store their arrangement of clauses, tasks carry direct `governedBy` links to clauses, and the chunk budget derives from the embedding model's declared context window.
 
-**Architecture:** A clause is what `designdoc.Parse` already returns as a `Section`, so there is no new splitter: the store mints and versions clauses in the same transaction that rebuilds `doc_sections`, matching identity across writes by anchor and then by heading. Four new tables hold clauses, their immutable versions, each document's arrangement, and each task's governing clauses. Accepting a plan materialises `governedBy` links on the tasks it mints from the plan's `covers` edges; an architect adds or removes links by hand through `lode task govern`. Two read paths (`GET /api/v1/clauses/{id}` with `lode show WL-CL-<n>`, and `governed_by` on the task detail) make the result visible. Document bodies stay the authored source of truth in this increment.
+**Architecture:** A clause is what `designdoc.Parse` already returns as a `Section`, so there is no new splitter: the store mints and versions clauses in the same transaction that rebuilds `doc_sections`, matching identity across writes by anchor and then by heading. Four new tables hold clauses, their immutable versions, each document's arrangement, and each task's governing clauses. Accepting a plan materialises `governedBy` links on the tasks it mints from the plan's `covers` edges; an architect adds or removes links by hand through `lode task govern`. Two read paths (`GET /api/v1/clauses/{id}` with `lode show WL-RULE-<n>`, and `governed_by` on the task detail) make the result visible. Document bodies stay the authored source of truth in this increment.
 
 **Tech Stack:** Go, Postgres via `database/sql`, golang-migrate SQL files, cobra CLI, the existing `internal/designdoc` parser.
 
@@ -376,7 +376,7 @@ git commit -m "Derive the chunk budget from LODE_EMBEDDING_CONTEXT_TOKENS (S7)"
 ```sql
 -- Design clauses (docs/specs2/12-spec-refactoring-design-tree.md S8 to S11,
 -- S20): every anchored section of a spec or ADR is a clause with a project
--- counter number (WL-CL-<n>, drawn from project_entity_seq kind 'CL'), a
+-- counter number (WL-RULE-<n>, drawn from project_entity_seq kind 'CL'), a
 -- status of its own and immutable versions. A document arranges clauses in
 -- order; the arrangement is rebuilt on every body write.
 CREATE TABLE clauses (
@@ -823,7 +823,7 @@ git commit -m "Mint and version design clauses on every document write (S8-S11, 
 
 **Interfaces:**
 - Consumes: tables from Task 3, `ErrNotFound`, `s.mapStoreErr`, `writeJSON`, `writeErr`, `guardedAny(permDocRead)`, `r.api(pattern, handler)`.
-- Produces: `model.Clause`, `model.ClauseArrangement`, `(*Store).GetClause(ctx, projectKey string, number int64) (*model.Clause, error)`, `parseClauseRef(ref string) (key string, number int64, ok bool)` in `internal/api` (Task 8 reuses it), `GET /api/v1/clauses/{id}` where `{id}` is `WL-CL-12`.
+- Produces: `model.Clause`, `model.ClauseArrangement`, `(*Store).GetClause(ctx, projectKey string, number int64) (*model.Clause, error)`, `parseClauseRef(ref string) (key string, number int64, ok bool)` in `internal/api` (Task 8 reuses it), `GET /api/v1/clauses/{id}` where `{id}` is `WL-RULE-12`.
 
 - [ ] **Step 1: Declare the wire shape**
 
@@ -842,7 +842,7 @@ type Clause struct {
 	ID         int64  `json:"id"`
 	Project    string `json:"project"`
 	ProjectKey string `json:"project_key"`
-	// Ref is the citable id, "WL-CL-12" (025 §14.3 grammar, type CL).
+	// Ref is the citable id, "WL-RULE-12" (025 §14.3 grammar, type CL).
 	Ref     string `json:"ref"`
 	Number  int64  `json:"number"`
 	Status  string `json:"status"` // draft | accepted | superseded | withdrawn
@@ -978,19 +978,19 @@ Expected: PASS.
 Create `internal/api/clauses_test.go`. Build the server with `newTestServer(t)` (server_test.go:64, returns store, handler, admin token), seed a project with `seedProjectWithKey(t, st, "WL")` (probe_test.go:17, returns the project id), create a spec with `doReq(t, h, http.MethodPost, "/api/v1/docs", token, map[string]any{"project": <id>, "kind": "spec", "slug": "t", "body": <the clauseDocV1 text from Task 4>})` (check the request body field names against `model.CreateDocInput` or whatever `POST /api/v1/docs` decodes into, `grep -n 'func (s \*server) createDoc' -A 12 internal/api/docs.go`), then:
 
 ```go
-	rr := doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-1", token, nil)
+	rr := doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-RULE-1", token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	var c model.Clause
 	decodeInto(t, rr, &c)
-	if c.Ref != "WL-CL-1" || c.Heading != "One" {
+	if c.Ref != "WL-RULE-1" || c.Heading != "One" {
 		t.Errorf("clause = %+v", c)
 	}
 	if rr := doReq(t, h, http.MethodGet, "/api/v1/clauses/nonsense", token, nil); rr.Code != http.StatusBadRequest {
 		t.Errorf("malformed ref: status = %d", rr.Code)
 	}
-	if rr := doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-CL-999", token, nil); rr.Code != http.StatusNotFound {
+	if rr := doReq(t, h, http.MethodGet, "/api/v1/clauses/WL-RULE-999", token, nil); rr.Code != http.StatusNotFound {
 		t.Errorf("missing clause: status = %d", rr.Code)
 	}
 ```
@@ -1014,7 +1014,7 @@ import (
 // clauseRef is the CL arm of 025 §14.3's <KEY>-<TYPE>-<n> grammar.
 var clauseRef = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-CL-(\d+)$`)
 
-// parseClauseRef splits "WL-CL-12" into its project key and number.
+// parseClauseRef splits "WL-RULE-12" into its project key and number.
 func parseClauseRef(ref string) (key string, number int64, ok bool) {
 	m := clauseRef.FindStringSubmatch(ref)
 	if m == nil {
@@ -1028,11 +1028,11 @@ func parseClauseRef(ref string) (key string, number int64, ok bool) {
 }
 
 // getClause handles GET /api/v1/clauses/{id}, where {id} is a clause ref
-// such as WL-CL-12.
+// such as WL-RULE-12.
 func (s *server) getClause(w http.ResponseWriter, r *http.Request) {
 	key, number, ok := parseClauseRef(r.PathValue("id"))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause id must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "clause id must look like WL-RULE-12")
 		return
 	}
 	c, err := s.st.GetClause(r.Context(), key, number)
@@ -1070,7 +1070,7 @@ git commit -m "Read a clause by ref over GET /api/v1/clauses/{id}"
 
 ---
 
-### Task 6: `lode show WL-CL-<n>`
+### Task 6: `lode show WL-RULE-<n>`
 
 **Files:**
 - Create: `internal/cli/clauses.go`
@@ -1099,7 +1099,7 @@ import (
 
 func TestClauseRender(t *testing.T) {
 	c := model.Clause{
-		Ref: "WL-CL-12", Status: "accepted", Version: 3, Heading: "Lease lifecycle",
+		Ref: "WL-RULE-12", Status: "accepted", Version: 3, Heading: "Lease lifecycle",
 		Body: "\nA lease is renewed every minute.\n",
 		ArrangedIn: []model.ClauseArrangement{{DocRef: "WL-SPEC-4", Anchor: "sec-2", Depth: 2, ClauseVersion: 3}},
 		UpdatedAt:  time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC),
@@ -1107,7 +1107,7 @@ func TestClauseRender(t *testing.T) {
 	var b bytes.Buffer
 	ClauseRender(&b, c)
 	out := b.String()
-	for _, want := range []string{"WL-CL-12", "Lease lifecycle", "accepted", "version:  3", "WL-SPEC-4#sec-2", "renewed every minute"} {
+	for _, want := range []string{"WL-RULE-12", "Lease lifecycle", "accepted", "version:  3", "WL-SPEC-4#sec-2", "renewed every minute"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render lacks %q:\n%s", want, out)
 		}
@@ -1182,7 +1182,7 @@ In `classify`, add a case to the `switch typ`:
 Add the runner next to `runDeliverableShow`:
 
 ```go
-// runClauseShow renders one design clause by its ref (WL-CL-12).
+// runClauseShow renders one design clause by its ref (WL-RULE-12).
 func runClauseShow(cmd *cobra.Command, ref string) error {
 	c, err := newAPIClient()
 	if err != nil {
@@ -1210,18 +1210,18 @@ In `dispatchShowPositional`, the `switch t.Kind` has `case targetDeliverable: re
 
 The `--section` and `--inline` flags stay doc-only; the existing check `if sectionSet && t.Kind != targetDoc` already refuses them for a clause.
 
-In `internal/cmd/show_test.go` `TestClassify`, add the row `{"WL-CL-12", targetClause, ""},` after the `WL-DEL-3` row.
+In `internal/cmd/show_test.go` `TestClassify`, add the row `{"WL-RULE-12", targetClause, ""},` after the `WL-DEL-3` row.
 
 - [ ] **Step 4: Run the cmd tests and try the binary**
 
 Run: `go test -trimpath ./internal/cmd -run 'TestClassify|TestShow' && make build && ./bin/lode show --help | head -5`
-Expected: PASS, builds. If a `lode show` help text or `showKinds` test enumerates every accepted id shape, add `WL-CL-<n>` to it; do not add a `--clause` kind flag in this increment.
+Expected: PASS, builds. If a `lode show` help text or `showKinds` test enumerates every accepted id shape, add `WL-RULE-<n>` to it; do not add a `--clause` kind flag in this increment.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add internal/cli/clauses.go internal/cli/clauses_test.go internal/cmd/show.go internal/cmd/show_test.go
-git commit -m "Show a design clause with lode show WL-CL-<n>"
+git commit -m "Show a design clause with lode show WL-RULE-<n>"
 ```
 
 ---
@@ -1250,7 +1250,7 @@ package model
 // version the link was made against, and the clause's current version so a
 // reader can see when the governing text has moved on.
 type TaskGovernance struct {
-	Clause        string `json:"clause"`         // "WL-CL-12"
+	Clause        string `json:"clause"`         // "WL-RULE-12"
 	ClauseVersion int    `json:"clause_version"` // version current when the link was made
 	Current       int    `json:"current"`        // the clause's current version
 	Heading       string `json:"heading"`
@@ -1261,7 +1261,7 @@ type TaskGovernance struct {
 // GovernInput names a clause to add to, or remove from, a task's governing
 // set: the body of POST and DELETE /api/v1/tasks/{id}/governed-by.
 type GovernInput struct {
-	Clause string `json:"clause"` // "WL-CL-12"
+	Clause string `json:"clause"` // "WL-RULE-12"
 }
 ```
 
@@ -1699,7 +1699,7 @@ In `internal/model/taskdetail.go`, add to `TaskDetail` after `Decisions`:
 In `internal/model/task.go`, add to `CreateTaskInput` after `FollowUpTo`:
 
 ```go
-	// GovernedBy names clauses ("WL-CL-12") that govern the task from
+	// GovernedBy names clauses ("WL-RULE-12") that govern the task from
 	// creation. Optional: a planless task may acquire its clause later (S4).
 	GovernedBy []string `json:"governed_by,omitempty"`
 ```
@@ -1709,7 +1709,7 @@ Expected: PASS.
 
 - [ ] **Step 2: Write the failing API test**
 
-Create `internal/api/governedby_test.go`. Reuse the setup from Task 5's `clauses_test.go` (server, project `WL`, a spec created from `clauseDocV1`'s text so `WL-CL-1` to `WL-CL-3` exist), then create a task with `createTaskViaAPI(t, h, token, map[string]any{"project": <id>, "title": "t", "kind": "bug", "governed_by": []string{"WL-CL-3"}})` and assert:
+Create `internal/api/governedby_test.go`. Reuse the setup from Task 5's `clauses_test.go` (server, project `WL`, a spec created from `clauseDocV1`'s text so `WL-RULE-1` to `WL-RULE-3` exist), then create a task with `createTaskViaAPI(t, h, token, map[string]any{"project": <id>, "title": "t", "kind": "bug", "governed_by": []string{"WL-RULE-3"}})` and assert:
 
 ```go
 	id := created["id"].(string)
@@ -1722,31 +1722,31 @@ Create `internal/api/governedby_test.go`. Reuse the setup from Task 5's `clauses
 		decodeInto(t, rr, &d)
 		return d
 	}
-	if d := detail(); len(d.GovernedBy) != 1 || d.GovernedBy[0].Clause != "WL-CL-3" || d.GovernedBy[0].Source != "manual" {
+	if d := detail(); len(d.GovernedBy) != 1 || d.GovernedBy[0].Clause != "WL-RULE-3" || d.GovernedBy[0].Source != "manual" {
 		t.Fatalf("governed_by after create = %+v", d.GovernedBy)
 	}
 
-	rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-CL-1"})
+	rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-RULE-1"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("govern: %d %s", rr.Code, rr.Body.String())
 	}
-	if d := detail(); len(d.GovernedBy) != 2 || d.GovernedBy[0].Clause != "WL-CL-1" {
+	if d := detail(); len(d.GovernedBy) != 2 || d.GovernedBy[0].Clause != "WL-RULE-1" {
 		t.Errorf("governed_by after govern = %+v", d.GovernedBy)
 	}
-	if rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-CL-999"}); rr.Code != http.StatusNotFound {
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-RULE-999"}); rr.Code != http.StatusNotFound {
 		t.Errorf("unknown clause: %d", rr.Code)
 	}
 	if rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "junk"}); rr.Code != http.StatusBadRequest {
 		t.Errorf("malformed clause: %d", rr.Code)
 	}
-	rr = doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-CL-3"})
+	rr = doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-RULE-3"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("ungovern: %d %s", rr.Code, rr.Body.String())
 	}
-	if d := detail(); len(d.GovernedBy) != 1 || d.GovernedBy[0].Clause != "WL-CL-1" {
+	if d := detail(); len(d.GovernedBy) != 1 || d.GovernedBy[0].Clause != "WL-RULE-1" {
 		t.Errorf("governed_by after ungovern = %+v", d.GovernedBy)
 	}
-	if rr := doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-CL-3"}); rr.Code != http.StatusNotFound {
+	if rr := doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-RULE-3"}); rr.Code != http.StatusNotFound {
 		t.Errorf("ungovern absent link: %d", rr.Code)
 	}
 ```
@@ -1781,7 +1781,7 @@ func (s *server) govern(w http.ResponseWriter, r *http.Request) {
 	}
 	key, number, ok := parseClauseRef(req.Clause)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "clause must look like WL-RULE-12")
 		return
 	}
 	err := s.recordTaskEvent(r.Context(), "cli", "task.governed", id, req,
@@ -1809,7 +1809,7 @@ func (s *server) ungovern(w http.ResponseWriter, r *http.Request) {
 	}
 	key, number, ok := parseClauseRef(req.Clause)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "clause must look like WL-CL-12")
+		writeErr(w, http.StatusBadRequest, "clause must look like WL-RULE-12")
 		return
 	}
 	err := s.recordTaskEvent(r.Context(), "cli", "task.ungoverned", id, req,
@@ -1851,7 +1851,7 @@ In `createTask`, before the transaction (next to the `req.Parent` / `req.FollowU
 	for _, ref := range req.GovernedBy {
 		key, number, ok := parseClauseRef(ref)
 		if !ok {
-			writeErr(w, http.StatusBadRequest, "governed_by entries must look like WL-CL-12, got "+ref)
+			writeErr(w, http.StatusBadRequest, "governed_by entries must look like WL-RULE-12, got "+ref)
 			return
 		}
 		governing = append(governing, clauseKey{key, number})
@@ -1909,16 +1909,16 @@ import (
 func TestTaskDetailRenderGovernedBy(t *testing.T) {
 	d := model.TaskDetail{Task: model.Task{ID: "WL-12", Title: "T", Project: "worklode", Priority: "medium", Kind: "bug", State: "ready"}}
 	d.GovernedBy = []model.TaskGovernance{
-		{Clause: "WL-CL-3", Heading: "Two", ClauseVersion: 1, Current: 1, Source: "plan"},
-		{Clause: "WL-CL-7", Heading: "Seven", ClauseVersion: 2, Current: 4, Source: "manual"},
+		{Clause: "WL-RULE-3", Heading: "Two", ClauseVersion: 1, Current: 1, Source: "plan"},
+		{Clause: "WL-RULE-7", Heading: "Seven", ClauseVersion: 2, Current: 4, Source: "manual"},
 	}
 	var b bytes.Buffer
 	TaskDetailRender(&b, d, "")
 	out := b.String()
-	if !strings.Contains(out, "governed by: WL-CL-3  Two (v1)") {
+	if !strings.Contains(out, "governed by: WL-RULE-3  Two (v1)") {
 		t.Errorf("missing current link line:\n%s", out)
 	}
-	if !strings.Contains(out, "governed by: WL-CL-7  Seven (v2, clause now v4)") {
+	if !strings.Contains(out, "governed by: WL-RULE-7  Seven (v2, clause now v4)") {
 		t.Errorf("missing moved-on link line:\n%s", out)
 	}
 }
@@ -1976,7 +1976,7 @@ In `internal/cmd/task.go`, add next to `newTaskUnblockCmd` (line 1310):
 ```go
 // newTaskClauseCmd builds a `lode task <verb> <id> --by <clause-ref>`
 // command: the subject resolves as a task id, the clause ref is passed
-// through as written (WL-CL-12) and the server validates it.
+// through as written (WL-RULE-12) and the server validates it.
 func newTaskClauseCmd(use, short, msg string, call taskEdge) *cobra.Command {
 	var by string
 	cmd := &cobra.Command{
@@ -1996,7 +1996,7 @@ func newTaskClauseCmd(use, short, msg string, call taskEdge) *cobra.Command {
 			return runTaskEdge(cmd, c, id, by, msg, call)
 		},
 	}
-	cmd.Flags().StringVar(&by, "by", "", "clause ref, e.g. WL-CL-12 (required)")
+	cmd.Flags().StringVar(&by, "by", "", "clause ref, e.g. WL-RULE-12 (required)")
 	cmd.MarkFlagRequired("by")
 	return cmd
 }
@@ -2024,7 +2024,7 @@ Register both in `newTaskCmd`'s `AddCommand` list after `newTaskUnblockCmd(),` (
 In `newTaskAddCmd` (line 298), declare `var governedBy []string`, add the flag next to `--follow-up-to`:
 
 ```go
-	cmd.Flags().StringArrayVar(&governedBy, "governed-by", nil, "clause that governs the task, e.g. WL-CL-12 (repeatable)")
+	cmd.Flags().StringArrayVar(&governedBy, "governed-by", nil, "clause that governs the task, e.g. WL-RULE-12 (repeatable)")
 ```
 
 and set `GovernedBy: governedBy` in the `model.CreateTaskInput{...}` literal the command builds (line 331).
@@ -2063,11 +2063,11 @@ Append to the end of §4 (before `## 5. Hierarchy and decomposition`):
 
 | Surface | Effect |
 |---|---|
-| `POST /api/v1/tasks` with `governed_by: [WL-CL-12]` | create with links |
-| `POST` / `DELETE /api/v1/tasks/{id}/governed-by` with `{"clause": "WL-CL-12"}` | add or remove one link |
+| `POST /api/v1/tasks` with `governed_by: [WL-RULE-12]` | create with links |
+| `POST` / `DELETE /api/v1/tasks/{id}/governed-by` with `{"clause": "WL-RULE-12"}` | add or remove one link |
 | `GET /api/v1/tasks/{id}` field `governed_by` | the links with each clause's current version |
-| `lode task add --governed-by WL-CL-12` | create with a link, repeatable |
-| `lode task govern <id> --by WL-CL-12` / `ungovern` | add or remove one link |
+| `lode task add --governed-by WL-RULE-12` | create with a link, repeatable |
+| `lode task govern <id> --by WL-RULE-12` / `ungovern` | add or remove one link |
 | `lode show <id>` | one `governed by` line per link, noting when the clause has a newer version |
 ```
 
@@ -2076,7 +2076,7 @@ Append to the end of §4 (before `## 5. Hierarchy and decomposition`):
 In the §3 table, after the `doc_sections` row, add four rows:
 
 ```markdown
-| `clauses` | one design clause per anchored section of a spec or ADR: project, `number` (the `WL-CL-<n>` ref, from `project_entity_seq` kind `CL`), status, current version |
+| `clauses` | one design clause per anchored section of a spec or ADR: project, `number` (the `WL-RULE-<n>` ref, from `project_entity_seq` kind `CL`), status, current version |
 | `clause_versions` | `(clause_id, version)` primary key, `heading`, `body`. Append-only; a version's text never changes |
 | `doc_clauses` | the document's current arrangement: `(doc_id, position)`, `clause_id`, `clause_version`, `depth`, `anchor`. Rewritten with `doc_sections` on every body write |
 | `task_governed_by` | `(task_id, clause_id)`, `clause_version`, `source` (`plan` or `manual`): the clauses governing a task (03-tasks-and-execution.md §4) |
@@ -2087,7 +2087,7 @@ In the §3 table, after the `doc_sections` row, add four rows:
 Append to the end of §4 (before `## 5. Versioning`):
 
 ```markdown
-**Every anchored section is a design clause** (12-spec-refactoring-design-tree.md S8 to S11, S20). The store mints a clause the first time a section appears, numbered from the project's `CL` counter as `WL-CL-<n>`, and records the section's heading and body as version 1. On each later write, a section keeps its clause when its anchor matches, or failing that when its heading matches a clause the document already arranged; changed text becomes the clause's next version, and a section matching nothing becomes a new clause. Accepting a document accepts every draft clause it arranges and writes nothing else. `lode show WL-CL-<n>` and `GET /api/v1/clauses/WL-CL-<n>` read a clause with its current text and the documents arranging it. Tasks link to clauses through `governedBy` (03-tasks-and-execution.md §4). The document body stays the authored source in this stage; clause-first edits, typed edges between clauses and the migration of the old specs are later work.
+**Every anchored section is a design clause** (12-spec-refactoring-design-tree.md S8 to S11, S20). The store mints a clause the first time a section appears, numbered from the project's `CL` counter as `WL-RULE-<n>`, and records the section's heading and body as version 1. On each later write, a section keeps its clause when its anchor matches, or failing that when its heading matches a clause the document already arranged; changed text becomes the clause's next version, and a section matching nothing becomes a new clause. Accepting a document accepts every draft clause it arranges and writes nothing else. `lode show WL-RULE-<n>` and `GET /api/v1/clauses/WL-RULE-<n>` read a clause with its current text and the documents arranging it. Tasks link to clauses through `governedBy` (03-tasks-and-execution.md §4). The document body stays the authored source in this stage; clause-first edits, typed edges between clauses and the migration of the old specs are later work.
 ```
 
 - [ ] **Step 4: The verb in 09**
@@ -2108,6 +2108,6 @@ git commit -m "Record clauses and governing links in specs 03, 05 and 09"
 
 ## Self-review
 
-Spec coverage against the settled decisions this increment claims: S7 is Task 2; S8, S9, S10 and S20 are Tasks 3 and 4 (lowest heading unit, immutable versions, stable `WL-CL-<n>` from the project counter); S11 is `publishDocSections` in Task 4; S21 is Task 1; S1 and S2 are `planClauses` and the minting hook in Task 7 (a whole-document `covers` reaches all clauses, and the link is materialised on the task); S3 is `Govern`/`Ungovern` with `task.governed`/`task.ungoverned` events in Tasks 7 and 8; S4's create-time half is `CreateTaskInput.GovernedBy` in Task 8, its gate-and-reconciler half is deferred; S27 needs nothing yet because old clauses are not minted in this increment and the same counter will serve them. Everything else the design tree settled is listed as deferred at the top.
+Spec coverage against the settled decisions this increment claims: S7 is Task 2; S8, S9, S10 and S20 are Tasks 3 and 4 (lowest heading unit, immutable versions, stable `WL-RULE-<n>` from the project counter); S11 is `publishDocSections` in Task 4; S21 is Task 1; S1 and S2 are `planClauses` and the minting hook in Task 7 (a whole-document `covers` reaches all clauses, and the link is materialised on the task); S3 is `Govern`/`Ungovern` with `task.governed`/`task.ungoverned` events in Tasks 7 and 8; S4's create-time half is `CreateTaskInput.GovernedBy` in Task 8, its gate-and-reconciler half is deferred; S27 needs nothing yet because old clauses are not minted in this increment and the same counter will serve them. Everything else the design tree settled is listed as deferred at the top.
 
 Type consistency: `syncClauses(tx, docID, doc)`, `publishDocSections(tx, docID)`, `arrangedClauses(tx, docID) ([]clauseRow, error)` with `clauseRow{id, version, heading, body, anchor, depth}` are the same in Tasks 4 and 7; `ClauseIDByRef(tx, key, number)` from Task 5 is what Tasks 7 and 8 call; `Govern(tx, taskID, clauseID, source)` and `Ungovern(tx, taskID, clauseID)` match between Task 7's tests, Task 7's code and Task 8's handlers; `parseClauseRef(ref) (key, number, ok)` from Task 5 is what Task 8 uses; `GetClause(ctx, projectKey string, number int64)` in Task 5's store matches the handler's call; `cli.GetClause(ctx, ref string)`, `cli.ClauseRender(w, c)` match `runClauseShow`; `cli.Govern`/`cli.Ungovern` have the `taskEdge` shape `func(*cli.Client, context.Context, string, string) ([]byte, error)` that `runTaskEdge` takes; `corpusindex.Budget`, `BudgetFor`, `DefaultBudget` and the `b Budget` first parameter are used consistently across Task 2's corpusindex, indexer and server steps.
