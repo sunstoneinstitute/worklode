@@ -11,7 +11,10 @@ import (
 
 // NoneReasons is WL-REQ-7's closed list of "how" changes a Spec: none trailer
 // may cite. "fix" is in the list but is refused without a cited ref.
-var NoneReasons = []string{"fix", "refactor", "perf", "copy", "tests", "build", "config"}
+// "coming" is a feature whose rules can only be written after it ships, such
+// as one that gives authors their first way to reach the backbone; the rule
+// is cited by a later change. It is never a qualifier on a cited ref.
+var NoneReasons = []string{"fix", "refactor", "perf", "copy", "tests", "build", "config", "coming"}
 
 // ErrNoTrailer is returned by Find when no line starts with the key.
 var ErrNoTrailer = errors.New("no trailer")
@@ -134,11 +137,12 @@ func qualified(d Declaration, fields []string) (Declaration, bool, error) {
 	switch {
 	case len(fields) == 0:
 		return d, true, nil
-	case len(fields) == 1 && (fields[0] == "amended" || slices.Contains(NoneReasons, fields[0])):
+	case len(fields) == 1 && (fields[0] == "amended" || (fields[0] != "coming" && slices.Contains(NoneReasons, fields[0]))):
 		d.Qualifier = fields[0]
 		return d, true, nil
 	}
-	return d, true, fmt.Errorf("%q: after the ref only amended or one of %s may follow", d.Line, strings.Join(NoneReasons, ", "))
+	qualifiers := slices.DeleteFunc(slices.Clone(NoneReasons), func(r string) bool { return r == "coming" })
+	return d, true, fmt.Errorf("%q: after the ref only amended or one of %s may follow", d.Line, strings.Join(qualifiers, ", "))
 }
 
 // Input is what the gate decides on: the repo-relative paths a change

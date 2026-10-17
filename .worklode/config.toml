@@ -24,6 +24,7 @@ regex = [
 #   Spec: WL-REQ-456            satisfies this rule as written
 #   Spec: WL-REQ-456 amended    this rule was amended for this change
 #   Spec: none refactor         fix needs a rule; refactor, perf, copy, tests, build, config
+#   Spec: none coming           a feature whose rules are written after it ships
 # A section value (WL-SPEC-72 sec-4) is refused; `lode show <doc>#sec-N`
 # names the rule at that section.
 trailer = "Spec:"
