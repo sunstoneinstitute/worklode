@@ -152,6 +152,13 @@ complies. Apply the five sizing tests (WL-REQ-1367) before submitting:
    "above"); needed context is a `refines` or `needs` edge. Every term it uses
    is a `definition` in its closure or defined in the rule. A fact lives in one
    rule, its owner, and rules that need it `needs` the owner.
+   **No island rules.** A rule's heading and spec position are not context, so
+   a rule with no `refines` or `needs` edge must make sense read alone. If it
+   only makes sense under its spec heading ("Tool results", "The token
+   endpoint"), it is missing its parent: write the wider rule (often a
+   `principle` naming the feature's subject) and `refines` it, or merge the
+   rule into a rule it already needs. Read it with `lode show <rule>
+   --closure` to see what a reader gets.
 3. **It is not too big.** One subject and one check. Storage, API and CLI of one
    feature are three rules, each needing the model rule.
 4. **It is not too small.** If it cannot be applied without restating its
