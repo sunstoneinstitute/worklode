@@ -678,8 +678,9 @@ nav.local a .cnt{margin-left:auto;font-size:0.8125rem;font-weight:600;color:var(
 .prose table{border-collapse:collapse;display:block;width:max-content;max-width:100%;overflow-x:auto}
 /* A table scrolls inside itself, so its cells drop .prose's anywhere: that
  * shrinks each column's min-content width and splits short identifiers. */
-/* An autolinked ref (mdrender's ref-link) never splits at its hyphen. */
-.prose a.ref-link{white-space:nowrap}
+/* An autolinked ref (mdrender's ref-link) never splits at its hyphen, and
+ * neither does inline code in a cell: it is an identifier (`WL-REQ-<n>`). */
+.prose a.ref-link,.prose td code,.prose th code{white-space:nowrap}
 .prose th,.prose td{border:1px solid var(--line);padding:5px 9px;text-align:left;overflow-wrap:normal}
 .prose th{background:var(--surface-2);font-weight:600}
 

@@ -2015,7 +2015,7 @@ nav.local a .cnt {
   max-width: 100%;
   overflow-x: auto;
 }
-.prose a.ref-link {
+.prose a.ref-link,.prose td code,.prose th code {
   white-space: nowrap;
 }
 .prose th,.prose td {
