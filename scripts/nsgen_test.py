@@ -311,6 +311,98 @@ wlc:bug wl:claimable true ; wl:allowsChildren true ;
                 nsgen.extract_task_kinds(self.PREFIXES + body, ["bug"])
 
 
+ALIAS_TTL = """\
+@prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+wlc:TaskKind a skos:ConceptScheme .
+wlc:DocKind a skos:ConceptScheme .
+wlc:RuleKind a skos:ConceptScheme .
+
+wlc:bug a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "bug" ;
+    skos:altLabel "defect" , "Issue" .
+wlc:design a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "design" ;
+    skos:altLabel "design task" .
+wlc:spec a skos:Concept ; skos:inScheme wlc:DocKind ; skos:prefLabel "spec"@en ;
+    skos:altLabel "ADR" .
+wlc:requirement a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "requirement" .
+wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "informative" ;
+    owl:deprecated true .
+"""
+
+
+class TestKindAliases(unittest.TestCase):
+    def test_extracts_lower_cased_labels(self):
+        self.assertEqual(nsgen.extract_kind_aliases(ALIAS_TTL), {
+            "bug": ("task", "bug"),
+            "defect": ("task", "bug"),
+            "issue": ("task", "bug"),
+            "design task": ("task", "design"),
+            "spec": ("doc", "spec"),
+            "adr": ("doc", "spec"),
+            "requirement": ("rule", "requirement"),
+        })
+
+    def test_real_corpus(self):
+        aliases = nsgen.extract_kind_aliases(CONCEPT_TTL.read_text(encoding="utf-8"))
+        self.assertEqual(aliases["decision"], ("task", "decision"))
+        self.assertEqual(aliases["rule"], ("rule", "requirement"))
+        self.assertNotIn("design", aliases)
+        self.assertNotIn("informative", aliases)
+
+    def assertRaisesTurtle(self, body, needle):
+        with self.assertRaises(nsgen.TurtleError) as cm:
+            nsgen.extract_kind_aliases(body)
+        self.assertIn(needle, str(cm.exception))
+
+    def test_one_word_two_kinds(self):
+        # "Defect" lower-cases onto the bug's "defect".
+        self.assertRaisesTurtle(
+            ALIAS_TTL.replace('skos:altLabel "ADR"', 'skos:altLabel "ADR" , "Defect"'),
+            "names both task/bug and doc/spec",
+        )
+
+    def test_missing_kind_scheme(self):
+        # Moving spec into TaskKind leaves DocKind empty: an error, not a
+        # map with no doc words.
+        self.assertRaisesTurtle(
+            ALIAS_TTL.replace("skos:inScheme wlc:DocKind", "skos:inScheme wlc:TaskKind"),
+            "DocKind has no members",
+        )
+
+    def test_label_that_is_not_a_literal(self):
+        self.assertRaisesTurtle(
+            ALIAS_TTL.replace('skos:altLabel "design task"', "skos:altLabel wlc:spec"),
+            "expected a string literal",
+        )
+
+    def test_escape_in_label(self):
+        self.assertRaisesTurtle(
+            ALIAS_TTL.replace('"design task"', r'"design\ttask"'), "escape sequences")
+
+    def test_stray_spaces(self):
+        self.assertRaisesTurtle(
+            ALIAS_TTL.replace('"design task"', '"design  task"'), "stray spaces")
+
+    def test_two_pref_labels(self):
+        self.assertRaisesTurtle(
+            ALIAS_TTL.replace('skos:prefLabel "requirement"',
+                              'skos:prefLabel "requirement" , "req"'),
+            "exactly one skos:prefLabel",
+        )
+
+    def test_quoted_deprecated(self):
+        self.assertRaisesTurtle(
+            ALIAS_TTL.replace("owl:deprecated true", 'owl:deprecated "true"'), "bare boolean")
+
+    def test_stale_ambiguous_word(self):
+        self.assertRaisesTurtle(
+            ALIAS_TTL.replace('skos:prefLabel "design"', 'skos:prefLabel "design work"'),
+            "AMBIGUOUS_KIND_WORDS",
+        )
+
+
 class TestCli(unittest.TestCase):
     def run_nsgen(self, *args):
         return subprocess.run(
@@ -330,6 +422,7 @@ class TestCli(unittest.TestCase):
                 nsgen.TASK_KINDS_TTL.read_text(encoding="utf-8"),
                 nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8"))[0]["TaskKind"],
             ),
+            nsgen.extract_kind_aliases(CONCEPT_TTL.read_text(encoding="utf-8")),
         )
         self.assertEqual((ROOT / "internal" / "ns" / "gen.go").read_text(encoding="utf-8"), want)
 

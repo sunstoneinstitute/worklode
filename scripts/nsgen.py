@@ -356,6 +356,83 @@ def extract(ttl: str) -> tuple[dict[str, list[str]], list[str]]:
     return schemes, statuses
 
 
+# The schemes whose labels are spoken kind words, and the entity each files.
+ALIAS_SCHEMES = {"TaskKind": "task", "DocKind": "doc", "RuleKind": "rule"}
+
+# Words that are a label of one kind but, said alone, as likely mean another,
+# so ns.KindAliases leaves them out and the caller asks. "design" is the task
+# kind's prefLabel, but a person saying it may want a spec.
+AMBIGUOUS_KIND_WORDS = ("design",)
+
+
+def literal_text(term, where: str) -> str:
+    """The text of a plain string literal; raise on anything else.
+
+    Escapes are refused rather than decoded: no label needs one, and a
+    half-decoded escape would be a key nobody can say.
+    """
+    if not isinstance(term, str) or not term.startswith('"'):
+        raise TurtleError(f"{where}: expected a string literal, got {term!r}")
+    quote = '"""' if term.startswith('"""') else '"'
+    text = term[len(quote):-len(quote)]
+    if "\\" in text:
+        raise TurtleError(f"{where}: escape sequences in labels are not supported: {term}")
+    return text
+
+
+def extract_kind_aliases(ttl: str) -> dict[str, tuple[str, str]]:
+    """Every lower-cased prefLabel and altLabel of the kind schemes → (entity, kind).
+
+    A concept marked `owl:deprecated true` is a retired kind and gets no
+    words. One word naming two kinds is an error: a silent last-one-wins
+    would file "issue" as whichever concept happened to come later.
+    """
+    parser = Parser(ttl)
+    triples = parser.parse()
+    if "wlc" not in parser.prefixes:
+        raise TurtleError("no `@prefix wlc:` declared")
+    wlc = parser.prefixes["wlc"]
+    deprecated: set[str] = set()
+    for s, p, o in triples:
+        if p != OWL + "deprecated":
+            continue
+        if not isinstance(o, bool):
+            raise TurtleError(f"{s}: owl:deprecated must be a bare boolean, got {o!r}")
+        if o:
+            deprecated.add(s)
+
+    aliases: dict[str, tuple[str, str]] = {}
+    for scheme, entity in ALIAS_SCHEMES.items():
+        for member in sorted(scheme_members(triples, wlc + scheme)):
+            if member in deprecated:
+                continue
+            kind = local_name(member, wlc)
+            prefs = [o for s, p, o in triples if s == member and p == SKOS + "prefLabel"]
+            if len(prefs) != 1:
+                raise TurtleError(f"{member}: needs exactly one skos:prefLabel, got {len(prefs)}")
+            alts = [o for s, p, o in triples if s == member and p == SKOS + "altLabel"]
+            for label in prefs + alts:
+                text = literal_text(label, member)
+                word = text.lower()
+                if not word or word != word.strip() or "  " in word:
+                    raise TurtleError(f"{member}: label {label} is empty or has stray spaces")
+                if word in aliases and aliases[word] != (entity, kind):
+                    have = "/".join(aliases[word])
+                    raise TurtleError(
+                        f"label {word!r} names both {have} and {entity}/{kind}; "
+                        "a spoken word must name one kind"
+                    )
+                aliases[word] = (entity, kind)
+
+    for word in AMBIGUOUS_KIND_WORDS:
+        if word not in aliases:
+            raise TurtleError(
+                f"AMBIGUOUS_KIND_WORDS lists {word!r}, which no kind is labelled; drop it from nsgen.py"
+            )
+        del aliases[word]
+    return aliases
+
+
 EDGE_TABLES = ("doc_edges", "rule_edges", "task_edges")
 _STORED_AS_RE = re.compile(r"^(doc_edges|rule_edges|task_edges)\.[A-Za-z_]+$")
 
@@ -477,7 +554,7 @@ var EdgeTerms = []EdgeTerm{
 '''
 
 
-def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds) -> str:
+def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds, aliases) -> str:
     def lit(values: list[str]) -> str:
         return ", ".join(f'"{v}"' for v in values)
 
@@ -508,7 +585,18 @@ def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds
         )
         descriptors += f"\t{key.ljust(width)} {{{settings}}},\n"
     descriptors += "}\n"
-    return TEMPLATE % (table, lit(statuses), terms) + descriptors
+
+    spoken = "\n// KindAlias is what a spoken kind word names: the entity it files (\"task\", \"doc\" or \"rule\") and the kind within it.\n"
+    spoken += "type KindAlias struct {\n\tEntity string\n\tKind   string\n}\n\n"
+    spoken += "// KindAliases maps every lower-cased prefLabel and altLabel of the TaskKind, DocKind and RuleKind schemes to the kind it names.\n"
+    spoken += "// A retired kind (owl:deprecated) has no words, and \"design\" is left out: said alone it may mean a spec or a design task.\n"
+    spoken += "var KindAliases = map[string]KindAlias{\n"
+    width = max((len(word) for word in aliases), default=0) + 4
+    for word, (entity, kind) in sorted(aliases.items()):
+        key = f'"{word}":'
+        spoken += f'\t{key.ljust(width)}{{Entity: "{entity}", Kind: "{kind}"}},\n'
+    spoken += "}\n"
+    return TEMPLATE % (table, lit(statuses), terms) + descriptors + spoken
 
 
 def main() -> int:
@@ -521,7 +609,9 @@ def main() -> int:
     args = ap.parse_args()
 
     try:
-        schemes, statuses = extract(CONCEPT_TTL.read_text(encoding="utf-8"))
+        concept = CONCEPT_TTL.read_text(encoding="utf-8")
+        schemes, statuses = extract(concept)
+        aliases = extract_kind_aliases(concept)
     except (TurtleError, OSError) as exc:
         print(f"{CONCEPT_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
@@ -535,7 +625,7 @@ def main() -> int:
     except (TurtleError, OSError) as exc:
         print(f"{TASK_KINDS_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
-    want = render(schemes, statuses, edges, task_kinds)
+    want = render(schemes, statuses, edges, task_kinds, aliases)
 
     if not args.check:
         GEN_GO.parent.mkdir(parents=True, exist_ok=True)

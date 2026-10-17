@@ -1,8 +1,9 @@
 # Worklode concept schemes — the `wlc:` SKOS vocabularies.
 #
 # Companion to ontology.ttl, split by purpose per ADR-0007. Every scheme is a
-# fixed enum, and every scheme is the range of one `wl:` object property in
-# ontology.ttl — that is what earns a scheme, not being CHECK-backed. See
+# fixed enum, and every scheme but wlc:DocKind is the range of one `wl:` object
+# property in ontology.ttl — that is what earns a scheme, not being
+# CHECK-backed (wlc:DocKind says why it is the exception). See
 # "Enums with no scheme" at the foot of this file. All but wlc:ModelLayer do
 # also mirror a CHECK constraint in the schema, and internal/store's
 # TestConceptSchemesMatchCheckConstraints holds each one to its column.
@@ -12,6 +13,7 @@
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
 @prefix dct:  <http://purl.org/dc/terms/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
 <https://worklode.io/ns/concept/>
@@ -57,6 +59,7 @@ wlc:DesignDocStatusOrder a skos:OrderedCollection ;
 wlc:RuleKind a skos:ConceptScheme ; skos:prefLabel "Rule kind" .
 
 wlc:requirement a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "requirement" ;
+    skos:altLabel "rule" ;
     skos:definition "A plan builds it once; a gap until an accepted plan covers it." .
 wlc:invariant a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "invariant" ;
     skos:definition "Binds every task in its project and is never finished; never covered, never a gap." .
@@ -67,7 +70,26 @@ wlc:definition a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "def
 wlc:principle a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "principle" ;
     skos:definition "A design stance other rules refine; checkable only through its refiners, never covered, never a gap." .
 wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "informative" ;
+    owl:deprecated true ;
     skos:definition "Retired (WL-REQ-165): reads as a principle until the WL-REQ-1301 migration reclassifies it; stays in the CHECK until then." .
+
+
+# ---------------------------------------------------------------------------
+# Doc kind — the docs.kind CHECK (migration 0101 retired `adr` into `spec`).
+# The one scheme here that is the range of no `wl:` property: in the graph a
+# document's kind is its class, wl:DesignDoc or wl:Plan. It is a scheme so
+# that the words people say for a document sit beside the task and rule kind
+# words, in one place (docs/research/mcp-server-scope.md, "Kind aliases").
+# ---------------------------------------------------------------------------
+
+wlc:DocKind a skos:ConceptScheme ; skos:prefLabel "Doc kind" .
+
+wlc:spec a skos:Concept ; skos:inScheme wlc:DocKind ; skos:prefLabel "spec" ;
+    skos:altLabel "specification" , "design doc" , "design document" , "ADR" ;
+    skos:definition "A design document: the rules it arranges say what should be true." .
+wlc:plan a skos:Concept ; skos:inScheme wlc:DocKind ; skos:prefLabel "plan" ;
+    skos:altLabel "implementation plan" ;
+    skos:definition "Says how to build the rules it covers, and mints the tasks that do it." .
 
 
 # ---------------------------------------------------------------------------
@@ -76,23 +98,35 @@ wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "in
 # role: container-ness is inferred from child_of edges (WL-SPEC-75), never
 # declared here. wlc:rally is the one exception — it carries no work of its
 # own, only the blocks edges naming what to finish now.
+#
+# The skos:altLabel values on the task, doc and rule kinds are the words
+# people say for a kind ("file this as a bug"); scripts/nsgen.py turns them,
+# with the prefLabels, into ns.KindAliases. One word must name one kind, or
+# generation fails. "design" alone is left out on purpose: it is as likely to
+# mean a spec as a design task, so nsgen.py drops it and the caller asks.
 # ---------------------------------------------------------------------------
 
 wlc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
 
 wlc:feature a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "feature" ;
+    skos:altLabel "enhancement" , "story" , "capability" ;
     skos:definition "New capability or behaviour." .
 wlc:bug a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "bug" ;
+    skos:altLabel "defect" , "problem" , "issue" , "broken" ;
     skos:definition "Fix incorrect existing behaviour." .
 wlc:chore a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "chore" ;
+    skos:altLabel "cleanup" , "maintenance" , "housekeeping" , "upgrade" ;
     skos:definition "Maintenance with no behaviour change (deps, tooling, cleanup)." .
 wlc:design a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "design" ;
+    skos:altLabel "design task" ;
     skos:definition "Write or revise a design document; the document it produced is reachable by prov:wasGeneratedBy." .
 wlc:review a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review" ;
     skos:definition "Review/evaluate someone else's work." .
 wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
+    skos:altLabel "experiment" , "investigation" , "prototype" ;
     skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
 wlc:decision a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "decision" ;
+    skos:altLabel "question" , "choice" ;
     skos:definition "Answer a posed question and record the answer on the task; the deliverable is the recorded answer in task_decisions, never a document or a diff." .
 wlc:rally a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "rally" ;
     skos:definition "A hand-assembled goal that carries no work of its own; its blocks edges name the tasks to finish now, and it ranks them first in pickup. Drafts are unlimited and inert; at most one is active per project." .
