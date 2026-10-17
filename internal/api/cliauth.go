@@ -115,10 +115,16 @@ func (s *server) cliIntentFrom(r *http.Request) (cliIntent, bool) {
 // finishLogin ends a successful web login for actorID. When the CLI-intent
 // cookie is present (a server-mediated `lode login`), it mints a one-time code
 // and redirects to the loopback redirect_uri instead of establishing a browser
-// session. Otherwise it delegates to finishLoginWeb.
+// session. When the MCP-intent cookie is present (an MCP client's
+// /oauth/authorize), finishLoginMCP hands an authorization code to the client.
+// Otherwise it delegates to finishLoginWeb.
 func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next string) {
 	ci, ok := s.cliIntentFrom(r)
 	if !ok {
+		if mi, ok := s.mcpIntentFrom(r); ok {
+			s.finishLoginMCP(w, r, actorID, mi)
+			return
+		}
 		s.finishLoginWeb(w, r, actorID, next)
 		return
 	}
@@ -242,6 +248,9 @@ func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid redirect_uri or state")
 		return
 	}
+	// One login at a time: an MCP intent left from an abandoned connector
+	// login would otherwise survive to the next web login.
+	clearAuthCookie(w, mcpCookieName)
 	setAuthCookie(w, cliCookieName, "/auth/",
 		signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Mode: mode, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
 		oauthStateMaxAge)

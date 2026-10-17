@@ -57,6 +57,7 @@ var scanned = map[string]mode{
 var allowed = map[string]string{
 	"api.oauthState":  "internal/api/session.go — signed into the oauth-state cookie",
 	"api.cliIntent":   "internal/api/session.go — signed into the CLI-intent cookie",
+	"api.mcpIntent":   "internal/api/mcpauth.go — signed into the MCP-intent cookie",
 	"api.stateChange": "internal/api/web.go — decoded from a stored state_log row",
 	// internal/cli/remotecache.go — the four shapes of the on-disk cache at
 	// ~/.cache/worklode/remotes.json. Nothing sends or receives them.

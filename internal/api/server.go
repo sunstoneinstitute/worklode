@@ -419,6 +419,12 @@ type server struct {
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
 
+	// mcpCodes holds pending authorization codes for the MCP OAuth login, and
+	// mcpOAuth counts its requests (mcpauth.go). Both are set by
+	// registerMCPAuth; nil in a bare test server.
+	mcpCodes *mcpCodeStore
+	mcpOAuth *mcpOAuthMetrics
+
 	// blobs is the object-storage backend for WL-SPEC-78's content-addressed
 	// blobs, or nil when no bucket is configured — the blob endpoints then
 	// answer 501 and nothing else changes.
@@ -919,6 +925,8 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
 	r.publicFunc("GET /auth/cli/login", s.cliLogin)
 	r.publicFunc("POST /auth/cli/token", s.cliToken)
+	// The OAuth authorization server MCP clients log in to (see mcpauth.go).
+	s.registerMCPAuth(r, reg)
 	// Agent telemetry ingest (WL-REQ-1234). Not under /api/v1: the path is
 	// the OTLP convention, so a stock exporter reaches it with
 	// OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=<server>/otlp/v1/logs. Bearer auth

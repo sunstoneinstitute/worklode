@@ -218,6 +218,11 @@ var routeGuards = map[string]routeGuard{
 	"GET /auth/cli/login":         open("starts the server-mediated CLI login flow"),
 	"POST /auth/cli/token":        open("redeems a one-time CLI login code"),
 	"GET /api/v1/openapi.json":    open("the API's own description; carries no project data"),
+	// The MCP clients' OAuth login (mcpauth.go). The token endpoint
+	// authenticates the client by its PKCE verifier, not by an actor.
+	"GET /.well-known/oauth-authorization-server": open("OAuth server discovery for MCP clients, by definition pre-login"),
+	"GET /oauth/authorize":                        open("starts an MCP client's login flow"),
+	"POST /oauth/token":                           open("redeems a one-time MCP authorization code and its PKCE verifier"),
 
 	// --- tasks ---------------------------------------------------------------
 	"POST /api/v1/tasks":              guardedAny(permTaskWrite),
