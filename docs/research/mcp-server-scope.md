@@ -1,7 +1,9 @@
 # Worklode MCP server: scope
 
-Draft. Moves into the backbone as a spec (`lode doc add`) before the
-implementation lands; this file is the working copy until then.
+Working copy. Moves into the backbone as a spec and rules once the
+implementation is deployed, since the MCP server is how authors without the
+CLI reach the backbone; the follow-up change that writes them removes this
+file.
 
 Goal: manage Worklode tasks and documents from Claude Code, claude.ai and
 Cowork without the `lode` CLI.
