@@ -52,9 +52,9 @@ const mcpMaxSessions = 10000
 const mcpPageSize = 10
 
 // mcpProjectHint ends the description of every project-scoped tool.
-const mcpProjectHint = " Every call works in one Worklode project: pass project (its key, id or exact " +
-	"name) when the user's project instructions name one (look for a line 'Worklode project: <key>'), " +
-	"or omit it to use the session's project set with project_use."
+const mcpProjectHint = " Every call works in the session's Worklode project, set with project_use; omit " +
+	"project to use it. A project argument naming any other project answers confirm_project and does " +
+	"nothing. " + mcpProjectRule
 
 // mcpRefProjectHint ends the description of a tool that takes a ref: a full
 // ref carries its project's key.
@@ -64,11 +64,14 @@ const mcpRefProjectHint = mcpProjectHint + " A full ref (WL-12, WL-SPEC-3, WL-RE
 // mcpInstructions is what an MCP client is told about this server at
 // initialize.
 const mcpInstructions = "Worklode is the work tracker: tasks, design documents (specs and plans) " +
-	"and the rules specs arrange. Each call works in one Worklode project. If the user's project " +
-	"instructions contain a line 'Worklode project: <key>', pass that key as project. Otherwise call " +
-	"project_use once per session; when a tool answers project_required, ask the user which Worklode " +
-	"project to use, then call project_use. Refs can be given as spoken (\"spec seventy-seven\", " +
-	"\"task five twelve\"). Every result starts with one sentence you can read out as it stands."
+	"and the rules specs arrange. Each call works in one Worklode project, which is never picked " +
+	"silently. If the user's Claude project instructions contain 'Worklode project: <name>', call " +
+	"project_use with that name and from_instructions=true at the start, without asking. Otherwise " +
+	"confirm the project with the user first (your question tool in text or a GUI; in voice, read back " +
+	"the full project name and wait for a yes), then call project_use with confirmed=true. A tool that " +
+	"answers project_required or confirm_project needs that confirmation. Refs can be given as spoken " +
+	"(\"spec seventy-seven\", \"task five twelve\"). Every result starts with one sentence you can read " +
+	"out as it stands."
 
 // mcpToolNames are the tools the server registers, and the only values the
 // tool metric label takes.
@@ -81,7 +84,7 @@ var mcpToolNames = []string{
 }
 
 // mcpOutcomes are the outcome label's values: ok, or why the call failed.
-var mcpOutcomes = []string{"ok", "invalid", "project_required", "not_found", "refused", "conflict", "error"}
+var mcpOutcomes = []string{"ok", "invalid", "project_required", "confirm_project", "not_found", "refused", "conflict", "error"}
 
 // mcpMetrics counts tool calls. Nil-safe, so a server built without it
 // (none is, today) still serves.
@@ -355,6 +358,7 @@ type mcpCall struct {
 	c       *cli.Client
 	actor   string
 	session string
+	ss      *mcp.ServerSession // for elicitation; nil outside a session
 
 	projects []model.Project // ListProjects, read once per call
 }
@@ -423,6 +427,7 @@ func (s *server) newMCPCall(ctx context.Context, req *mcp.CallToolRequest) *mcpC
 	}
 	if req.Session != nil {
 		call.session = req.Session.ID()
+		call.ss = req.Session
 	}
 	call.c = cli.NewClientTransport(mcpLoopbackURL, token, mcpLoopback{h: s.mcp.api, log: s.log})
 	return call

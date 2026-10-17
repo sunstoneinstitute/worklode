@@ -133,26 +133,45 @@ Not done yet, outside this overlay:
 
 ## Project scope
 
-- Every tool takes an optional `project`. It must name a project exactly:
-  its key, id or full name, ignoring case. A near miss fails `not_found` with
-  the closest candidates for Claude to ask about; fuzzy matching belongs to
-  `project_resolve` alone.
-- Order: explicit argument, then the project a full ref names (`WL-12`,
-  `WL-SPEC-3`, `WL-REQ-9` carry their key, so a tool given one needs no
-  project), then the MCP session default (set by `project_use`, keyed on
-  `Mcp-Session-Id`, never per user), then fail.
-- On failure the tool returns `project_required` with the project list and
-  the text "Ask the user which Worklode project to use for this session, then
-  call project_use."
-- Tool descriptions tell Claude to look for `Worklode project: <key>` in the
-  claude.ai or Cowork project instructions and pass it.
+A session's project is never picked silently: not from an exact match, and
+not from an argument alone.
+
+- The session's project is set only by `project_use(project, confirmed?,
+  from_instructions?)`, keyed on `Mcp-Session-Id`, never per user. `project`
+  must name a project exactly: its key, id or full name, ignoring case.
+  - `from_instructions=true`: the user's Claude project instructions contain
+    `Worklode project: <name>`. Claude calls this at the start without
+    asking. It needs an exact match; anything else answers `confirm_project`.
+  - `confirmed=true`: only after the user explicitly confirmed this exact
+    project.
+  - Neither: when the client supports form elicitation, the server asks the
+    user directly ("Use the Worklode project Worklode (WL) for this
+    conversation?") and an accept counts as confirmed. Otherwise, or on a
+    near-miss name, it answers `confirm_project` and sets nothing.
+- Every other tool takes an optional `project`, which may only name the
+  session's confirmed project; any other value answers `confirm_project` and
+  the tool does nothing. A full ref (`WL-12`, `WL-SPEC-3`, `WL-REQ-9`) carries
+  its key, so a tool given one acts on that item without a session project;
+  it names one item and sets nothing.
+- No project at all: `project_required` with the project list.
+- `confirm_project`, `project_required` and `project_resolve` carry the
+  candidates (key and full name) and this instruction: "Confirm the project
+  with the user before calling project_use. In a text or graphical
+  interface, ask with your question tool (e.g. AskUserQuestion) offering
+  these projects as options. In a voice conversation, read back the full
+  project name and wait for the user to say yes." It also names the
+  `from_instructions` shortcut.
+- Tool descriptions say the same: use `Worklode project: <name>` from the
+  project instructions with `from_instructions=true`, otherwise always
+  confirm with the user first.
 
 ## Voice
 
-- `project_list`: key, name, one-line description, spoken aliases.
+- `project_list`: key and name.
 - `project_resolve(spoken)`: fuzzy and phonetic match over projects only;
-  ranked candidates with confidence. One clear winner: use it. Otherwise read
-  back the top two or three.
+  ranked candidates with confidence. It never selects one, not even a single
+  perfect match: Claude reads back the full name (or the top two or three)
+  and waits for a yes before `project_use(confirmed=true)`.
 - `ref` arguments accept spoken forms ("spec seventy-seven", "task 512",
   "spec-77") resolved against the session project. A leading kind word wins
   over the task-id shape, and `<PREFIX>-<n>` is read as a task id only when
@@ -206,7 +225,7 @@ bugs").
 |---|---|---|
 | project | `project_list` | `GET /projects` |
 | | `project_resolve(spoken)` | `GET /projects` + matcher |
-| | `project_use(project)` | session state |
+| | `project_use(project, confirmed?, from_instructions?)` | session state |
 | find | `search(query, kinds?)` | `GET /search` |
 | | `show(ref, inline=true, section?)` | docs, rules, tasks, projects |
 | file | `file(what, title, body?, parent?, doc?)` | resolves `what` via `KindAliases`, then one of the three add routes |

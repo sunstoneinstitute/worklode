@@ -25,16 +25,33 @@ func (s *server) addMCPProjectTools(srv *mcp.Server) {
 		true, mcpProjectList)
 	addMCPTool(s, srv, "project_resolve", "Match a spoken project name",
 		"Match a project name the user said or typed (\"work load\", \"the data platform\") against "+
-			"Worklode's projects, by spelling and by sound. Answers ranked candidates with a confidence. "+
-			"When clear is true, use the first candidate; otherwise read the top two or three back to the "+
-			"user and ask which they meant. Matches projects only, never tasks or documents.",
+			"Worklode's projects, by spelling and by sound. Answers ranked candidates with a confidence and "+
+			"never picks one: confirm the right one with the user, then call project_use. Matches projects "+
+			"only, never tasks or documents.",
 		true, mcpProjectResolve)
 	addMCPTool(s, srv, "project_use", "Set the session's project",
-		"Set the Worklode project this session works in, so later calls can omit project. Call it once "+
-			"the user has said which project, or with the key from a 'Worklode project: <key>' line in "+
-			"their project instructions.",
+		"Set the Worklode project this session works in, so later calls can omit project. "+mcpProjectRule+
+			" Pass confirmed=true only after the user explicitly confirmed this exact project. Without "+
+			"confirmed or from_instructions it answers confirm_project and sets nothing.",
 		false, mcpProjectUse)
 }
+
+// mcpProjectRule is how a session's project is chosen, said in every tool
+// description that touches it: never silently, except from the user's own
+// project instructions.
+const mcpProjectRule = "If the user's Claude project instructions contain 'Worklode project: <name>', " +
+	"call project_use with that name and from_instructions=true at the start, without asking. " +
+	"Otherwise always confirm with the user first (question tool in text/GUI; read back the full " +
+	"project name in voice)."
+
+// mcpConfirmInstruction is what a confirm_project, project_required or
+// project_resolve result tells Claude to do with its candidates.
+const mcpConfirmInstruction = "Confirm the project with the user before calling project_use. In a text " +
+	"or graphical interface, ask with your question tool (e.g. AskUserQuestion) offering these projects as " +
+	"options. In a voice conversation, read back the full project name and wait for the user to say yes. " +
+	"Then call project_use with confirmed=true. If the user's Claude project instructions contain " +
+	"'Worklode project: <name>', call project_use with that name and from_instructions=true instead, " +
+	"without asking."
 
 func mcpProjectList(call *mcpCall, in model.MCPProjectListInput) (string, model.MCPProjectListOutput, error) {
 	var out model.MCPProjectListOutput
@@ -55,8 +72,10 @@ func mcpProjectList(call *mcpCall, in model.MCPProjectListInput) (string, model.
 	return text, out, nil
 }
 
+// mcpProjectResolve ranks candidates and never picks one, even a single
+// perfect match: choosing the project is the user's to confirm.
 func mcpProjectResolve(call *mcpCall, in model.MCPProjectResolveInput) (string, model.MCPProjectResolveOutput, error) {
-	var out model.MCPProjectResolveOutput
+	out := model.MCPProjectResolveOutput{Instruction: mcpConfirmInstruction}
 	if strings.TrimSpace(in.Spoken) == "" {
 		return "", out, mcpInvalid("Pass spoken: the project name as the user said it.")
 	}
@@ -64,39 +83,113 @@ func mcpProjectResolve(call *mcpCall, in model.MCPProjectResolveInput) (string, 
 	if err != nil {
 		return "", out, err
 	}
-	out.Candidates, out.Clear = matchProjects(in.Spoken, projects)
+	out.Candidates, _ = matchProjects(in.Spoken, projects)
 	if out.Candidates == nil {
 		out.Candidates = []model.MCPProjectCandidate{}
 	}
-	switch {
-	case len(out.Candidates) == 0:
-		return fmt.Sprintf("No Worklode project sounds like %q. The projects are: %s.",
-			in.Spoken, mcpProjectNames(projects)), out, nil
-	case out.Clear:
-		c := out.Candidates[0]
-		return fmt.Sprintf("%q is the Worklode project %s (%s).", in.Spoken, c.Name, c.Key), out, nil
-	default:
-		var names []string
-		for _, c := range out.Candidates[:min(3, len(out.Candidates))] {
-			names = append(names, fmt.Sprintf("%s (%s)", c.Name, c.Key))
-		}
-		return fmt.Sprintf("%q could be %s. Ask the user which one they meant.",
-			in.Spoken, orList(names)), out, nil
+	if len(out.Candidates) == 0 {
+		return fmt.Sprintf("No Worklode project sounds like %q. The projects are: %s. %s",
+			in.Spoken, mcpProjectNames(projects), mcpConfirmInstruction), out, nil
 	}
+	var names []string
+	for _, c := range out.Candidates[:min(3, len(out.Candidates))] {
+		names = append(names, fmt.Sprintf("%s (%s)", c.Name, c.Key))
+	}
+	lead := fmt.Sprintf("%q could be %s.", in.Spoken, orList(names))
+	if len(names) == 1 {
+		lead = fmt.Sprintf("%q sounds like the Worklode project %s.", in.Spoken, names[0])
+	}
+	return lead + " " + mcpConfirmInstruction, out, nil
 }
 
+// mcpProjectUse sets the session's project, but only one the user
+// confirmed: confirmed=true, a name from their project instructions, or a
+// yes to an elicitation when the client can ask the user itself.
 func mcpProjectUse(call *mcpCall, in model.MCPProjectUseInput) (string, model.MCPProjectUseOutput, error) {
 	var out model.MCPProjectUseOutput
 	if call.session == "" {
 		return "", out, mcpInvalid("This connection has no MCP session to remember a project on; pass project on each call instead.")
 	}
-	p, err := call.lookupProject(in.Project)
+	p, ok, err := call.exactProject(in.Project)
 	if err != nil {
 		return "", out, err
 	}
+	if !ok {
+		return "", out, call.confirmProject(in.Project, nil)
+	}
+	how := ""
+	switch {
+	case in.Confirmed:
+	case in.FromInstructions:
+		how = ", as the user's project instructions name it"
+	default:
+		accepted, asked := call.elicitProject(p)
+		if !accepted {
+			if asked {
+				return "", out, &mcpToolError{outcome: "confirm_project", text: fmt.Sprintf("confirm_project: the user "+
+					"did not confirm %s (%s) as this session's project. Ask which Worklode project they meant.", p.Name, p.Key)}
+			}
+			return "", out, call.confirmProject(in.Project, []model.Project{p})
+		}
+	}
 	call.s.mcp.sessions.set(call.session, call.actor, p.ID)
 	out.Project = mcpProjectItem(p)
-	return fmt.Sprintf("This session now works in the Worklode project %s (%s).", p.Name, p.Key), out, nil
+	return fmt.Sprintf("This session now works in the Worklode project %s (%s)%s.", p.Name, p.Key, how), out, nil
+}
+
+// elicitProject asks the user directly, when the client supports form
+// elicitation, whether p is the project to use. asked is false when the
+// client cannot be asked, and the caller falls back to confirm_project.
+func (call *mcpCall) elicitProject(p model.Project) (accepted, asked bool) {
+	ss := call.ss
+	if ss == nil {
+		return false, false
+	}
+	ip := ss.InitializeParams()
+	if ip == nil || ip.Capabilities == nil || ip.Capabilities.Elicitation == nil {
+		return false, false
+	}
+	if e := ip.Capabilities.Elicitation; e.Form == nil && e.URL != nil {
+		return false, false
+	}
+	res, err := ss.Elicit(call.ctx, &mcp.ElicitParams{
+		Mode:            "form",
+		Message:         fmt.Sprintf("Use the Worklode project %s (%s) for this conversation?", p.Name, p.Key),
+		RequestedSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+	})
+	if err != nil {
+		return false, false
+	}
+	return res.Action == "accept", true
+}
+
+// confirmProject is the confirm_project failure for arg: the candidates
+// (cands, else the closest spoken matches, else every project) and how to
+// confirm one with the user.
+func (call *mcpCall) confirmProject(arg string, cands []model.Project) error {
+	projects, err := call.listProjects()
+	if err != nil {
+		return err
+	}
+	if len(cands) == 0 {
+		matches, _ := matchProjects(arg, projects)
+		for _, m := range matches[:min(3, len(matches))] {
+			for _, p := range projects {
+				if p.ID == m.ID {
+					cands = append(cands, p)
+				}
+			}
+		}
+	}
+	lead := fmt.Sprintf("confirm_project: %q is not this session's confirmed Worklode project, so nothing was done.", arg)
+	if strings.TrimSpace(arg) == "" {
+		lead = "confirm_project: this session has no confirmed Worklode project, so nothing was done."
+	}
+	if len(cands) == 0 {
+		cands = projects
+	}
+	return &mcpToolError{outcome: "confirm_project", text: lead + " Candidates: " + mcpProjectNames(cands) + ". " +
+		mcpConfirmInstruction}
 }
 
 // listProjects reads the projects the caller may see, once per call.
@@ -115,69 +208,73 @@ func (call *mcpCall) listProjects() ([]model.Project, error) {
 	return call.projects, nil
 }
 
-// project resolves the project a scoped tool works in: arg, else the
-// session's default, else a project_required failure listing the choices.
+// project resolves the project a scoped tool works in: the session's
+// confirmed project, which arg may name; else project_required. An arg that
+// is not the session's project fails confirm_project: a project is never
+// picked from an argument alone.
 func (call *mcpCall) project(arg string) (model.Project, error) {
-	if strings.TrimSpace(arg) != "" {
-		return call.lookupProject(arg)
+	projects, err := call.listProjects()
+	if err != nil {
+		return model.Project{}, err
 	}
+	var cur model.Project
 	if id := call.s.mcp.sessions.get(call.session, call.actor); id != "" {
-		projects, err := call.listProjects()
-		if err != nil {
-			return model.Project{}, err
-		}
 		for _, p := range projects {
 			if p.ID == id {
-				return p, nil
+				cur = p
 			}
 		}
 	}
-	projects, err := call.listProjects()
-	if err != nil {
-		return model.Project{}, err
+	if strings.TrimSpace(arg) != "" {
+		if cur.ID != "" && projectNamed(cur, arg) {
+			return cur, nil
+		}
+		p, ok, err := call.exactProject(arg)
+		if err != nil {
+			return model.Project{}, err
+		}
+		if ok {
+			return model.Project{}, call.confirmProject(arg, []model.Project{p})
+		}
+		return model.Project{}, call.confirmProject(arg, nil)
+	}
+	if cur.ID != "" {
+		return cur, nil
 	}
 	return model.Project{}, &mcpToolError{outcome: "project_required", text: "project_required: no Worklode " +
 		"project is set for this session. Ask the user which Worklode project to use for this session, then " +
-		"call project_use. The projects are: " + mcpProjectNames(projects) + "."}
+		"call project_use. The projects are: " + mcpProjectNames(projects) + ". " + mcpConfirmInstruction}
 }
 
-// lookupProject finds the project arg names exactly: its id, key or name,
-// ignoring case. There is no spoken-name fallback here: a near miss fails
-// not_found with the closest candidates, so Claude asks rather than writes
-// into the wrong project. Fuzzy matching is project_resolve's alone.
-func (call *mcpCall) lookupProject(arg string) (model.Project, error) {
+// projectNamed reports whether arg names p exactly: its id, key or full
+// name, ignoring case.
+func projectNamed(p model.Project, arg string) bool {
+	want := strings.TrimSpace(arg)
+	return strings.EqualFold(p.ID, want) || strings.EqualFold(p.Key, want) || strings.EqualFold(p.Name, want)
+}
+
+// exactProject finds the project arg names exactly. There is no spoken-name
+// fallback: fuzzy matching is project_resolve's alone.
+func (call *mcpCall) exactProject(arg string) (model.Project, bool, error) {
 	projects, err := call.listProjects()
 	if err != nil {
-		return model.Project{}, err
+		return model.Project{}, false, err
 	}
-	want := strings.TrimSpace(arg)
 	for _, p := range projects {
-		if strings.EqualFold(p.ID, want) || strings.EqualFold(p.Key, want) || strings.EqualFold(p.Name, want) {
-			return p, nil
+		if projectNamed(p, arg) {
+			return p, true, nil
 		}
 	}
-	cands, _ := matchProjects(arg, projects)
-	msg := fmt.Sprintf("No Worklode project is called %q.", arg)
-	if len(cands) > 0 {
-		var names []string
-		for _, c := range cands[:min(3, len(cands))] {
-			names = append(names, fmt.Sprintf("%s (%s)", c.Name, c.Key))
-		}
-		msg += " It could be " + orList(names) + "; ask the user which one they meant, then pass its key."
-	} else {
-		msg += " The projects are: " + mcpProjectNames(projects) + "."
-	}
-	return model.Project{}, &mcpToolError{outcome: "not_found", text: msg}
+	return model.Project{}, false, nil
 }
 
-// projectFor resolves the project for a tool given refs: arg when passed,
-// else the project the first full ref names by its key (WL-12, WL-SPEC-3),
-// else the session's default. A full ref needs no project argument.
+// projectFor resolves the project for a tool given refs: the project the
+// first full ref names by its key (WL-12, WL-SPEC-3), when arg is empty or
+// names that same project; else project(arg). A full ref names one item, not
+// the session's project, so it needs no confirmed project and sets none.
 func (call *mcpCall) projectFor(arg string, refs ...string) (model.Project, error) {
-	if strings.TrimSpace(arg) == "" {
-		if p, ok := call.refProject(refs...); ok {
-			return p, nil
-		}
+	if p, ok := call.refProject(refs...); ok && (strings.TrimSpace(arg) == "" || projectNamed(p, arg)) {
+		return p, nil
 	}
 	return call.project(arg)
 }

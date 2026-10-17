@@ -228,7 +228,16 @@ func TestMCPProjectRequiredThenUse(t *testing.T) {
 		}
 	}
 
-	text, out := mustCall(t, sess, "project_use", map[string]any{"project": "wl"})
+	// Without confirmation project_use sets nothing.
+	text, _, isErr = callTool(t, sess, "project_use", map[string]any{"project": "wl"})
+	if !isErr || !strings.HasPrefix(text, "confirm_project:") || !strings.Contains(text, "Worklode (WL)") ||
+		!strings.Contains(text, "AskUserQuestion") || !strings.Contains(text, "from_instructions=true") {
+		t.Errorf("unconfirmed project_use = %q", text)
+	}
+	if _, _, isErr := callTool(t, sess, "task_list", nil); !isErr {
+		t.Error("an unconfirmed project_use set the session's project")
+	}
+	text, out := mustCall(t, sess, "project_use", map[string]any{"project": "wl", "confirmed": true})
 	if !strings.HasPrefix(text, "This session now works in the Worklode project Worklode (WL).") {
 		t.Errorf("project_use text = %q", text)
 	}
@@ -245,8 +254,20 @@ func TestMCPProjectRequiredThenUse(t *testing.T) {
 	if _, _, isErr := callTool(t, other, "task_list", nil); !isErr {
 		t.Error("a new session inherited another session's project")
 	}
-	// An explicit argument wins, by key or spoken name.
+	// An explicit argument is never a selection: it must be the session's
+	// confirmed project, by key, id or full name.
+	text, _, isErr = callTool(t, other, "task_list", map[string]any{"project": "data platform"})
+	if !isErr || !strings.HasPrefix(text, `confirm_project: "data platform" is not this session's confirmed`) ||
+		!strings.Contains(text, "Data Platform (DP)") {
+		t.Errorf("task_list(project data platform) unconfirmed = %q", text)
+	}
+	mustCall(t, other, "project_use", map[string]any{"project": "Data Platform", "confirmed": true})
 	mustCall(t, other, "task_list", map[string]any{"project": "data platform"})
+	mustCall(t, other, "task_list", map[string]any{"project": "DP"})
+	if text, _, isErr := callTool(t, other, "task_list", map[string]any{"project": "WL"}); !isErr ||
+		!strings.HasPrefix(text, "confirm_project:") {
+		t.Errorf("task_list(project WL) in a DP session = %q", text)
+	}
 }
 
 func TestMCPProjectResolve(t *testing.T) {
@@ -255,14 +276,22 @@ func TestMCPProjectResolve(t *testing.T) {
 	sess := f.connect(t, f.token)
 	text, out := mustCall(t, sess, "project_resolve", map[string]any{"spoken": "work load"})
 	cands, _ := out["candidates"].([]any)
-	if len(cands) == 0 || out["clear"] != true {
+	if len(cands) == 0 {
 		t.Fatalf("project_resolve(work load) = %v", out)
 	}
-	if first, _ := cands[0].(map[string]any); first["key"] != "WL" {
+	if first, _ := cands[0].(map[string]any); first["key"] != "WL" || first["name"] != "Worklode" {
 		t.Errorf("first candidate = %v, want WL", first)
 	}
-	if !strings.HasPrefix(text, `"work load" is the Worklode project Worklode (WL).`) {
+	if !strings.HasPrefix(text, `"work load" sounds like the Worklode project Worklode (WL). Confirm the project with the user`) {
 		t.Errorf("text = %q", text)
+	}
+	// Even a perfect match is only a candidate: nothing is selected.
+	_, out = mustCall(t, sess, "project_resolve", map[string]any{"spoken": "Worklode"})
+	if ins, _ := out["instruction"].(string); !strings.Contains(ins, "Confirm the project with the user") {
+		t.Errorf("project_resolve(Worklode) instruction = %v", out)
+	}
+	if _, _, isErr := callTool(t, sess, "task_list", nil); !isErr {
+		t.Error("project_resolve selected a project")
 	}
 	_, out = mustCall(t, sess, "project_resolve", map[string]any{"spoken": "the data platform project"})
 	if first, _ := out["candidates"].([]any)[0].(map[string]any); first["key"] != "DP" {
@@ -278,7 +307,7 @@ func TestMCPFileBug(t *testing.T) {
 	t.Parallel()
 	f := newMCPFixture(t)
 	sess := f.connect(t, f.token)
-	mustCall(t, sess, "project_use", map[string]any{"project": "WL"})
+	mustCall(t, sess, "project_use", map[string]any{"project": "WL", "confirmed": true})
 
 	text, out := mustCall(t, sess, "file", map[string]any{"what": "Bug", "title": "Fix login redirect", "body": "It loops."})
 	if out["entity"] != "task" || out["kind"] != "bug" {
@@ -326,6 +355,7 @@ func TestMCPDocRoundTrip(t *testing.T) {
 	t.Parallel()
 	f := newMCPFixture(t)
 	sess := f.connect(t, f.token)
+	mustCall(t, sess, "project_use", map[string]any{"project": "WL", "confirmed": true})
 	scope := func(m map[string]any) map[string]any { m["project"] = "WL"; return m }
 
 	text, out := mustCall(t, sess, "doc_add", scope(map[string]any{
@@ -383,7 +413,7 @@ func TestMCPRuleAddLink(t *testing.T) {
 	t.Parallel()
 	f := newMCPFixture(t)
 	sess := f.connect(t, f.token)
-	mustCall(t, sess, "project_use", map[string]any{"project": "worklode"})
+	mustCall(t, sess, "project_use", map[string]any{"project": "worklode", "confirmed": true})
 
 	_, out := mustCall(t, sess, "rule_add", map[string]any{"heading": "Logins expire", "body": "A login lasts a day."})
 	first, _ := out["rule"].(map[string]any)["ref"].(string)
@@ -423,6 +453,7 @@ func TestMCPPermissionRefused(t *testing.T) {
 	t.Parallel()
 	f := newMCPFixture(t)
 	admin := f.connect(t, f.token)
+	mustCall(t, admin, "project_use", map[string]any{"project": "WL", "confirmed": true})
 	_, out := mustCall(t, admin, "doc_add", map[string]any{"project": "WL", "kind": "spec", "title": "Guarded"})
 	ref := out["doc"].(map[string]any)["ref"].(string)
 	_, out = mustCall(t, admin, "task_add", map[string]any{"project": "WL", "kind": "chore", "title": "Bound"})
@@ -432,6 +463,7 @@ func TestMCPPermissionRefused(t *testing.T) {
 	// is not on its route grant: the normal guard refuses it.
 	bound := mintTaskToken(t, f.h, f.token, taskID, nil)
 	sess := f.connect(t, bound.Token)
+	mustCall(t, sess, "project_use", map[string]any{"project": "WL", "confirmed": true})
 	mustCall(t, sess, "doc_list", map[string]any{"project": "WL"})
 	text, _, isErr := callTool(t, sess, "doc_transition", map[string]any{"project": "WL", "id": ref, "action": "accept"})
 	if !isErr || !strings.HasPrefix(text, "Worklode refused this:") {
@@ -452,22 +484,80 @@ func TestMCPPermissionRefused(t *testing.T) {
 	}
 }
 
-// An explicit project argument must name a project exactly; a near miss is
-// not_found with the closest candidates, never a guess.
-func TestMCPProjectArgumentIsExact(t *testing.T) {
+// project_use sets a project only on an exact name: a near miss is
+// confirm_project with the closest candidates, even when confirmed.
+func TestMCPProjectUseIsExact(t *testing.T) {
 	t.Parallel()
 	f := newMCPFixture(t)
 	sess := f.connect(t, f.token)
-	mustCall(t, sess, "task_list", map[string]any{"project": "DATA PLATFORM"})
 	for _, arg := range []string{"data platfrm", "work load", "the data platform project"} {
-		text, _, isErr := callTool(t, sess, "task_list", map[string]any{"project": arg})
-		if !isErr || !strings.HasPrefix(text, "No Worklode project is called") {
-			t.Errorf("task_list(project %q) = %q (error %v); want not_found", arg, text, isErr)
+		text, _, isErr := callTool(t, sess, "project_use", map[string]any{"project": arg, "confirmed": true})
+		if !isErr || !strings.HasPrefix(text, "confirm_project:") {
+			t.Errorf("project_use(%q, confirmed) = %q (error %v); want confirm_project", arg, text, isErr)
 		}
 	}
-	text, _, _ := callTool(t, sess, "task_list", map[string]any{"project": "data platfrm"})
-	if !strings.Contains(text, "Data Platform (DP)") || !strings.Contains(text, "ask the user") {
+	text, _, _ := callTool(t, sess, "project_use", map[string]any{"project": "data platfrm", "confirmed": true})
+	if !strings.Contains(text, "Data Platform (DP)") {
 		t.Errorf("near miss lists no candidate: %q", text)
+	}
+	mustCall(t, sess, "project_use", map[string]any{"project": "DATA PLATFORM", "confirmed": true})
+}
+
+// A name from the user's project instructions sets the project without a
+// confirmation, but only when it names one exactly.
+func TestMCPProjectUseFromInstructions(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	sess := f.connect(t, f.token)
+	text, _ := mustCall(t, sess, "project_use", map[string]any{"project": "Data Platform", "from_instructions": true})
+	if !strings.HasPrefix(text, "This session now works in the Worklode project Data Platform (DP), as the user's project instructions name it.") {
+		t.Errorf("project_use from instructions = %q", text)
+	}
+	mustCall(t, sess, "task_list", nil)
+
+	other := f.connect(t, f.token)
+	text, _, isErr := callTool(t, other, "project_use", map[string]any{"project": "data platfrom", "from_instructions": true})
+	if !isErr || !strings.HasPrefix(text, "confirm_project:") || !strings.Contains(text, "Data Platform (DP)") {
+		t.Errorf("project_use from instructions, near miss = %q", text)
+	}
+	if _, _, isErr := callTool(t, other, "task_list", nil); !isErr {
+		t.Error("a near-miss name from instructions set the project")
+	}
+}
+
+// A client that supports elicitation is asked directly; accept confirms the
+// project and decline sets nothing.
+func TestMCPProjectUseElicits(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	for _, c := range []struct {
+		action string
+		set    bool
+	}{{"accept", true}, {"decline", false}} {
+		var asked string
+		client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, &mcp.ClientOptions{
+			ElicitationHandler: func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+				asked = req.Params.Message
+				return &mcp.ElicitResult{Action: c.action}, nil
+			},
+		})
+		sess, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{
+			Endpoint: f.srv.URL + "/mcp", HTTPClient: &http.Client{Transport: bearerRT{f.token}},
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text, _, isErr := callTool(t, sess, "project_use", map[string]any{"project": "WL"})
+		if !strings.Contains(asked, "Worklode (WL)") {
+			t.Errorf("%s: elicitation message = %q", c.action, asked)
+		}
+		if isErr == c.set {
+			t.Errorf("%s: project_use = %q (error %v)", c.action, text, isErr)
+		}
+		if _, _, isErr := callTool(t, sess, "task_list", nil); isErr == c.set {
+			t.Errorf("%s: session project set = %v; want %v", c.action, !isErr, c.set)
+		}
+		sess.Close()
 	}
 }
 
@@ -476,6 +566,7 @@ func TestMCPFullRefNeedsNoProject(t *testing.T) {
 	t.Parallel()
 	f := newMCPFixture(t)
 	setup := f.connect(t, f.token)
+	mustCall(t, setup, "project_use", map[string]any{"project": "DP", "confirmed": true})
 	_, out := mustCall(t, setup, "task_add", map[string]any{"project": "DP", "kind": "chore", "title": "Tidy"})
 	task := out["task"].(map[string]any)["id"].(string)
 	_, out = mustCall(t, setup, "doc_add", map[string]any{"project": "DP", "kind": "spec", "title": "Ingest"})
@@ -503,6 +594,7 @@ func TestMCPRuleAddArrangeFailureNamesTheRule(t *testing.T) {
 	t.Parallel()
 	f := newMCPFixture(t)
 	sess := f.connect(t, f.token)
+	mustCall(t, sess, "project_use", map[string]any{"project": "WL", "confirmed": true})
 	text, _, isErr := callTool(t, sess, "rule_add", map[string]any{
 		"project": "WL", "heading": "Orphan", "body": "Text.", "doc": "WL-SPEC-99",
 	})
