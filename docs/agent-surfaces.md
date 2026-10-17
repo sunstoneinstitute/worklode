@@ -160,7 +160,7 @@ plan builds it), an `invariant` (it binds every task in its project), a
 ref prints with its kind's infix: `WL-REQ-<n>` for a requirement or catalogue,
 `WL-RULE-<n>` otherwise (WL-REQ-165). Agent-facing examples
 show `WL-REQ-<n>` where the rule is a requirement. Stored text keeps
-`WL-RULE-<n>` and `WL-CL-<n>`, which still resolve by number. The kinds are
+`WL-RULE-<n>`, which resolves by number. The kinds are
 explained in the `lode:writing-docs` skill.
 
 An invocation that is deliberately unresolvable — documenting a command before

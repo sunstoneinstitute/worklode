@@ -79,7 +79,7 @@ var (
 	// WL-MILE-2, WL-DEL-4 — every other registered infix. It links to the
 	// root shortcut /<ref>, which redirects to the entity's page.
 	entityRef = regexp.MustCompile(`\b` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Milestone, refkind.Deliverable) + `)-\d+\b`)
-	// WL-REQ-12, WL-RULE-12 or WL-CL-12 — the rule arm of the shorthand grammar
+	// WL-REQ-<n> or WL-RULE-<n> — the rule arm of the shorthand grammar
 	// (WL-REQ-165). It links to the resolving redirect /rules/<ref>.
 	ruleRefRe = regexp.MustCompile(`\b` + designdoc.RuleRefText + `\b`)
 	// spec 042 §10, ADR 048 §2, Spec 25 — keyword, number, optional §.

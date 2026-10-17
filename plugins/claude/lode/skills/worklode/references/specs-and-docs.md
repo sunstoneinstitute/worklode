@@ -28,8 +28,8 @@ A rule's kind is one of five, and sets the infix its ref prints with:
 - **principle** (`WL-RULE-<n>`): a stance other rules `refine`. Never covered,
   never a gap.
 
-The number alone identifies a rule: `WL-REQ-<n>`, `WL-RULE-<n>` and the old
-`WL-CL-<n>` resolve to the same rule wherever a ref is read. Change a kind
+The number alone identifies a rule: `WL-REQ-<n>` and `WL-RULE-<n>` resolve
+to the same rule wherever a ref is read. Change a kind
 with `lode rule set <ref> --kind <kind>`. A rule
 that both builds something and binds later work holds two obligations:
 split it into a requirement and an invariant.
