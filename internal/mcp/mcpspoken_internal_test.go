@@ -1,4 +1,4 @@
-package api
+package mcp
 
 import (
 	"strings"
@@ -147,9 +147,14 @@ func TestMCPMetrics(t *testing.T) {
 	t.Parallel()
 	var nilMetrics *mcpMetrics
 	nilMetrics.call("show", "ok") // nil-safe
+	if m, err := newMCPMetrics(nil); m != nil || err != nil {
+		t.Errorf("newMCPMetrics(nil) = %v, %v; want nil, nil", m, err)
+	}
 
-	reg := prometheus.NewRegistry()
-	m := newMCPMetrics(reg)
+	m, err := newMCPMetrics(prometheus.NewRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
 	m.call("show", "not_found")
 	if got := testutil.ToFloat64(m.calls.WithLabelValues("show", "not_found")); got != 1 {
 		t.Errorf("show/not_found = %v, want 1", got)

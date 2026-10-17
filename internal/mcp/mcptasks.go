@@ -1,7 +1,7 @@
 // mcptasks.go holds the MCP task tools — task_list, task_add, task_update,
 // task_set_state — and file, which turns the word the user said ("file this
 // as a bug") into a task, a document or a rule through ns.KindAliases.
-package api
+package mcp
 
 import (
 	"fmt"
@@ -9,14 +9,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
-func (s *server) addMCPTaskTools(srv *mcp.Server) {
+func (s *server) addMCPTaskTools(srv *sdk.Server) {
 	addMCPTool(s, srv, "file", "File something",
 		"File a new item from the user's own word for it: \"file this as a bug\" is what=bug. The word "+
 			"decides whether a task, a spec or plan, or a rule is created (bug, feature, chore, decision, "+

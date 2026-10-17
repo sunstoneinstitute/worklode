@@ -10,9 +10,19 @@ Cowork without the `lode` CLI.
 
 - Streamable HTTP at `/mcp` on lode-server, built on `modelcontextprotocol/go-sdk`.
 - Tools only in v1. No resources, no prompts.
-- Each tool calls the existing `/api/v1` handler in-process with the caller's
+- The tool server is its own package, `internal/mcp`: `mcp.New(mcp.Config)`
+  returns the `http.Handler` that `internal/api` mounts on `POST`, `GET` and
+  `DELETE /mcp`. `Config` hands it the `/api/v1` mux as an `http.Handler`,
+  plus callbacks to authenticate a `wl_` token and to write the 401
+  challenge. `internal/api` keeps the OAuth side: the login
+  (`mcpauth.go`), the protected-resource metadata and the challenge
+  (`mcpbase.go`), and the `routeGuards` rows.
+- Each tool calls that `/api/v1` handler in-process with the caller's
   `wl_` token, through `cli.Client`. Route guards, `Decide`, validation and
   metrics apply unchanged. Text output reuses `cli.*Render`.
+  `internal/mcp` is a client of `/api/v1` like `internal/cli`: it may not
+  import `internal/api`, `internal/store` or `internal/cmd`, and
+  `internal/disttest` fails the build if it does.
 - `show` with inline folding runs `internal/designdoc` on the server.
 - New `routeGuards` rows: `/mcp`, `/oauth/*`, `/.well-known/oauth-*`.
 - Metric: `worklode_mcp_tool_calls_total{tool,outcome}`.

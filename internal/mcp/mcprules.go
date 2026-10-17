@@ -1,6 +1,6 @@
 // mcprules.go holds the MCP rule tools: rule_list, rule_add, rule_edit,
 // rule_link and rule_supersede.
-package api
+package mcp
 
 import (
 	"cmp"
@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
@@ -19,7 +19,7 @@ import (
 // (amends, constrains, ...) stay with `lode rule link`.
 var mcpRuleRels = []string{"refines", "needs", "references"}
 
-func (s *server) addMCPRuleTools(srv *mcp.Server) {
+func (s *server) addMCPRuleTools(srv *sdk.Server) {
 	addMCPTool(s, srv, "rule_list", "List rules",
 		"List rules, ten at a time: a spec's rules in arrangement order when doc is given, else the "+
 			"project's rules by number."+mcpRefProjectHint,

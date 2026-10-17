@@ -1,6 +1,6 @@
 package model
 
-// mcp.go holds the shapes the MCP server at /mcp (internal/api/mcp.go)
+// mcp.go holds the shapes the MCP server at /mcp (internal/mcp)
 // exchanges with its clients: the RFC 9728 protected-resource metadata, and
 // each tool's arguments and structured result. Tool arguments carry a
 // `jsonschema` tag, which the go-sdk turns into the description of that

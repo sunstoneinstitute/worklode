@@ -1,6 +1,6 @@
 // mcpdocs.go holds the MCP document tools — doc_list, doc_add, doc_edit,
 // doc_transition — and the two cross-entity readers, search and show.
-package api
+package mcp
 
 import (
 	"cmp"
@@ -10,14 +10,14 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-func (s *server) addMCPDocTools(srv *mcp.Server) {
+func (s *server) addMCPDocTools(srv *sdk.Server) {
 	addMCPTool(s, srv, "search", "Search Worklode",
 		"Search documents, tasks and skills by meaning and by words, best first, ten at a time. Use it "+
 			"when you know what you are looking for but not its ref."+mcpProjectHint,

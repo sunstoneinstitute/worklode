@@ -426,8 +426,6 @@ type server struct {
 	mcpCodes    *mcpCodeStore
 	mcpConsents *mcpConsentStore
 	mcpOAuth    *mcpOAuthMetrics
-	// mcp is the MCP server at /mcp (mcp.go), set by registerMCP.
-	mcp *mcpState
 
 	// blobs is the object-storage backend for WL-SPEC-78's content-addressed
 	// blobs, or nil when no bucket is configured — the blob endpoints then
@@ -759,7 +757,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 
 	s.registerCockpit(r)
 	s.registerAPI(r, reg)
-	s.registerMCP(r, reg)
+	if err := s.registerMCP(r, reg); err != nil {
+		return nil, err
+	}
 	s.registerShared(r)
 	s.registerSPA(r)
 

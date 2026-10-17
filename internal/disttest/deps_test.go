@@ -107,3 +107,44 @@ func TestCLIDependencyBoundaries(t *testing.T) {
 		t.Fatalf("go list -deps %s did not report the target itself; is the entry point still there?", target)
 	}
 }
+
+// internal/mcp is the MCP tool server lode-server mounts at /mcp. Its tools
+// reach worklode only through /api/v1, in-process, carrying the caller's
+// token, so the route guards, Decide, validation, events and metrics apply
+// to a tool call exactly as they do to a CLI call. Importing internal/api
+// would let a tool call a handler or helper around those guards, and
+// internal/store would let it skip the API altogether; internal/cmd is the
+// CLI's command tree, which a server-side package has no use for. internal/api
+// imports internal/mcp, never the reverse.
+func mcpForbidden(dep string) string {
+	switch dep {
+	case modulePath + "/internal/api":
+		return "the HTTP server: tools must reach worklode through /api/v1 so its route guards apply"
+	case modulePath + "/internal/store":
+		return "the store: tools must reach worklode through /api/v1 so its route guards apply"
+	case modulePath + "/internal/cmd":
+		return "the CLI command tree"
+	}
+	return ""
+}
+
+func TestMCPDependencyBoundaries(t *testing.T) {
+	target := modulePath + "/internal/mcp"
+	out, err := exec.Command("go", "list", "-deps", target).Output()
+	if err != nil {
+		t.Fatalf("go list -deps %s: %v", target, err)
+	}
+	deps := strings.Fields(string(out))
+	var found bool
+	for _, dep := range deps {
+		if dep == target {
+			found = true
+		}
+		if why := mcpForbidden(dep); why != "" {
+			t.Errorf("%s must not depend on %s (%s)", target, dep, why)
+		}
+	}
+	if !found {
+		t.Fatalf("go list -deps %s did not report the target itself; did the package move?", target)
+	}
+}

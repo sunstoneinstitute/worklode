@@ -1,4 +1,4 @@
-package api
+package mcp
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
@@ -23,31 +23,33 @@ import (
 // the process and this test with it.
 func TestMCPToolPanicIsAnErrorResult(t *testing.T) {
 	t.Parallel()
-	reg := prometheus.NewRegistry()
-	s := &server{log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		mcp: &mcpState{api: http.NotFoundHandler(), metrics: newMCPMetrics(reg)}}
-	srv := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "1"}, nil)
+	metrics, err := newMCPMetrics(prometheus.NewRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &server{log: slog.New(slog.NewTextHandler(io.Discard, nil)), api: http.NotFoundHandler(), metrics: metrics}
+	srv := sdk.NewServer(&sdk.Implementation{Name: "t", Version: "1"}, nil)
 	addMCPTool(s, srv, "show", "Show", "Panics.", true,
 		func(*mcpCall, model.MCPShowInput) (string, model.MCPShowOutput, error) { panic("boom") })
 
-	ct, st := mcp.NewInMemoryTransports()
+	ct, st := sdk.NewInMemoryTransports()
 	ctx := context.Background()
 	if _, err := srv.Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "1"}, nil).Connect(ctx, ct, nil)
+	sess, err := sdk.NewClient(&sdk.Implementation{Name: "c", Version: "1"}, nil).Connect(ctx, ct, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sess.Close()
-	res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: "show", Arguments: map[string]any{"ref": "x"}})
+	res, err := sess.CallTool(ctx, &sdk.CallToolParams{Name: "show", Arguments: map[string]any{"ref": "x"}})
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
 	if !res.IsError {
 		t.Fatal("a panicking tool did not answer an error result")
 	}
-	if got := testutil.ToFloat64(s.mcp.metrics.calls.WithLabelValues("show", "error")); got != 1 {
+	if got := testutil.ToFloat64(s.metrics.calls.WithLabelValues("show", "error")); got != 1 {
 		t.Fatalf("show error calls = %v; want 1", got)
 	}
 }

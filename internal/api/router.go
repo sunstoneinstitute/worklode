@@ -224,9 +224,9 @@ var routeGuards = map[string]routeGuard{
 	"GET /oauth/authorize":                        open("starts an MCP client's login flow"),
 	"POST /oauth/consent":                         open("answers the MCP consent page; needs a pending consent id and the cookie it was shown with"),
 	"POST /oauth/token":                           open("redeems a one-time MCP authorization code and its PKCE verifier"),
-	// The MCP server (mcp.go). Open in this table because the handler
-	// authenticates its own bearer token: a missing or unknown one gets 401
-	// with the RFC 9728 resource_metadata challenge an MCP client needs to
+	// The MCP tool server (internal/mcp, mounted by mcpbase.go). Open in
+	// this table because the handler authenticates its own bearer token: a
+	// missing or unknown one gets 401 with the RFC 9728 resource_metadata challenge an MCP client needs to
 	// find the login, which apiGuard's plain 401 does not carry. Each tool
 	// then calls the /api/v1 routes in-process with the caller's token, so
 	// every permission below still applies to it.

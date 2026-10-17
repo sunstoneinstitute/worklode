@@ -4,7 +4,7 @@
 // in. A ref already in the grammar passes through, upper-cased, when its key
 // is a project's; anything this cannot read passes through untouched, for
 // the API's own resolver (a slug, a path) to answer.
-package api
+package mcp
 
 import (
 	"regexp"

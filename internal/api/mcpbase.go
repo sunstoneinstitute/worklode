@@ -1,13 +1,95 @@
-// mcpbase.go holds what the MCP server (mcp.go) and its OAuth endpoints
-// (mcpauth.go) share: the base URLs MCP clients reach this server on, and the
-// one client they log in as.
+// mcpbase.go mounts the MCP tool server (internal/mcp) at /mcp and holds
+// what it and its OAuth endpoints (mcpauth.go) share: the base URLs MCP
+// clients reach this server on, the one client they log in as, the RFC 9728
+// protected-resource metadata, and the 401 challenge that points at it.
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/sunstoneinstitute/worklode/internal/mcp"
+	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
+
+// registerMCP registers /mcp and the protected-resource metadata. The MCP
+// tool server's tools call back into r's mux.
+func (s *server) registerMCP(r *router, reg prometheus.Registerer) error {
+	h, err := mcp.New(mcp.Config{
+		// The mux is the one every route is registered on, including those
+		// registered after this call; observe gives a loopback call the same
+		// request log and metrics a network call gets.
+		API:          s.observe(r.mux),
+		Authenticate: s.mcpAuthenticate,
+		Unauthorized: s.mcpUnauthorized,
+		PublicURL:    s.cfg.PublicURL,
+		Log:          s.log,
+		Registerer:   reg,
+	})
+	if err != nil {
+		return err
+	}
+	for _, p := range []string{"POST /mcp", "GET /mcp", "DELETE /mcp"} {
+		r.public(p, h)
+	}
+	r.publicFunc("GET /.well-known/oauth-protected-resource", s.serveMCPResourceMetadata)
+	r.publicFunc("GET /.well-known/oauth-protected-resource/mcp", s.serveMCPResourceMetadata)
+	return nil
+}
+
+// mcpAuthenticate resolves an MCP request's wl_ token to its actor, for
+// mcp.Config.Authenticate. An unknown token answers the 401 challenge.
+func (s *server) mcpAuthenticate(w http.ResponseWriter, r *http.Request, token string) (string, bool) {
+	actor, _, err := s.st.Authenticate(r.Context(), token)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			s.mcpUnauthorized(w, r)
+			return "", false
+		}
+		s.mapStoreErr(w, err)
+		return "", false
+	}
+	return actor.ID, true
+}
+
+// mcpUnauthorized answers 401 with the RFC 9728 pointer to this origin's
+// protected-resource metadata, which is how an MCP client finds the login.
+// An instance with no MCP origin (OIDC unconfigured) has no login to point
+// at, so the challenge is bare.
+func (s *server) mcpUnauthorized(w http.ResponseWriter, r *http.Request) {
+	challenge := "Bearer"
+	if origin, ok := s.mcpOrigin(r); ok {
+		challenge += fmt.Sprintf(` resource_metadata=%q`, origin+"/.well-known/oauth-protected-resource/mcp")
+	}
+	w.Header().Set("WWW-Authenticate", challenge)
+	writeErr(w, http.StatusUnauthorized, "unauthorized")
+}
+
+// serveMCPResourceMetadata answers GET /.well-known/oauth-protected-resource
+// and its /mcp suffixed form (RFC 9728 section 3.1) for the origin the request
+// arrived on. 404 when the host is not one of mcpOrigins, which includes
+// every request to an instance with OIDC unconfigured.
+func (s *server) serveMCPResourceMetadata(w http.ResponseWriter, r *http.Request) {
+	origin, ok := s.mcpOrigin(r)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "no MCP login on this host")
+		return
+	}
+	// Public discovery data, read by clients on other origins.
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	writeJSON(w, http.StatusOK, model.ProtectedResourceMetadata{
+		Resource:               mcpResource(origin),
+		AuthorizationServers:   []string{origin},
+		BearerMethodsSupported: []string{"header"},
+		ResourceName:           "Worklode",
+	})
+}
 
 // mcpClientID is the one OAuth client MCP clients use. It is registered here,
 // not in Keycloak, and there is no dynamic client registration: Claude Code

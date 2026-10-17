@@ -2,7 +2,7 @@
 // project_resolve, project_use — and the project scope every other tool
 // resolves through: the explicit argument, then the session default, then
 // project_required.
-package api
+package mcp
 
 import (
 	"cmp"
@@ -13,13 +13,13 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-func (s *server) addMCPProjectTools(srv *mcp.Server) {
+func (s *server) addMCPProjectTools(srv *sdk.Server) {
 	addMCPTool(s, srv, "project_list", "List projects",
 		"List the Worklode projects: key, name and id. Use it to tell the user what projects exist.",
 		true, mcpProjectList)
@@ -132,7 +132,7 @@ func mcpProjectUse(call *mcpCall, in model.MCPProjectUseInput) (string, model.MC
 			return "", out, call.confirmProject(in.Project, []model.Project{p})
 		}
 	}
-	call.s.mcp.sessions.set(call.session, call.actor, p.ID)
+	call.s.sessions.set(call.session, call.actor, p.ID)
 	out.Project = mcpProjectItem(p)
 	return fmt.Sprintf("This session now works in the Worklode project %s (%s)%s.", p.Name, p.Key, how), out, nil
 }
@@ -152,7 +152,7 @@ func (call *mcpCall) elicitProject(p model.Project) (accepted, asked bool) {
 	if e := ip.Capabilities.Elicitation; e.Form == nil && e.URL != nil {
 		return false, false
 	}
-	res, err := ss.Elicit(call.ctx, &mcp.ElicitParams{
+	res, err := ss.Elicit(call.ctx, &sdk.ElicitParams{
 		Mode:            "form",
 		Message:         fmt.Sprintf("Use the Worklode project %s (%s) for this conversation?", p.Name, p.Key),
 		RequestedSchema: map[string]any{"type": "object", "properties": map[string]any{}},
@@ -218,7 +218,7 @@ func (call *mcpCall) project(arg string) (model.Project, error) {
 		return model.Project{}, err
 	}
 	var cur model.Project
-	if id := call.s.mcp.sessions.get(call.session, call.actor); id != "" {
+	if id := call.s.sessions.get(call.session, call.actor); id != "" {
 		for _, p := range projects {
 			if p.ID == id {
 				cur = p

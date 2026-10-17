@@ -1,15 +1,21 @@
-// mcp.go is the MCP server at /mcp (docs/research/mcp-server-scope.md): a
-// Streamable HTTP endpoint whose tools manage tasks, documents and rules from
-// Claude Code, claude.ai and Cowork without the lode CLI, plus the RFC 9728
-// protected-resource metadata that points an MCP client at the login.
+// Package mcp is the MCP tool server lode-server mounts at /mcp
+// (docs/research/mcp-server-scope.md): a Streamable HTTP endpoint whose
+// tools manage tasks, documents and rules from Claude Code, claude.ai and
+// Cowork without the lode CLI.
 //
-// A tool never reaches the store. It calls the server's own /api/v1 handlers
+// A tool never reaches the store. It is a client of /api/v1, like
+// internal/cli: it calls the server's own /api/v1 handler (Config.API)
 // in-process through a cli.Client carrying the caller's wl_ token
 // (mcpLoopback), so route guards, Decide, validation, events and metrics
-// apply exactly as they do to a CLI call. The tools themselves live in the
-// feature-named siblings: mcpprojects.go, mcptasks.go, mcpdocs.go,
-// mcprules.go; spoken-form parsing is mcpspoken.go.
-package api
+// apply exactly as they do to a CLI call. internal/disttest holds this
+// package to that: it may not import internal/api, internal/store or
+// internal/cmd. The OAuth login that issues the token, the RFC 9728
+// protected-resource metadata and the 401 challenge belong to the server
+// and live in internal/api (mcpauth.go, mcpbase.go).
+//
+// The tools themselves live in the feature-named siblings: mcpprojects.go,
+// mcptasks.go, mcpdocs.go, mcprules.go; spoken-form parsing is mcpspoken.go.
+package mcp
 
 import (
 	"bytes"
@@ -26,12 +32,11 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // mcpLoopbackURL is the base URL the in-process client forms its request
@@ -83,98 +88,94 @@ var mcpToolNames = []string{
 	"rule_list", "rule_add", "rule_edit", "rule_link", "rule_supersede",
 }
 
-// mcpOutcomes are the outcome label's values: ok, or why the call failed.
-var mcpOutcomes = []string{"ok", "invalid", "project_required", "confirm_project", "not_found", "refused", "conflict", "error"}
-
-// mcpMetrics counts tool calls. Nil-safe, so a server built without it
-// (none is, today) still serves.
-type mcpMetrics struct {
-	calls *prometheus.CounterVec
+// Config is what the MCP tool server needs from the server that mounts it.
+type Config struct {
+	// API is the /api/v1 handler every tool calls in-process (mcpLoopback),
+	// so route guards, Decide, validation, events and metrics apply to a
+	// tool call exactly as they do to a CLI call.
+	API http.Handler
+	// Authenticate resolves a request's bearer token to the actor it
+	// belongs to. On false it has already answered w: the Unauthorized
+	// challenge for a token it does not know, or the error the lookup
+	// failed with.
+	Authenticate func(w http.ResponseWriter, r *http.Request, token string) (actorID string, ok bool)
+	// Unauthorized answers a request that carries no bearer token: a 401
+	// with the challenge that points an MCP client at the login.
+	Unauthorized func(w http.ResponseWriter, r *http.Request)
+	// PublicURL is the base URL a task's web link is formed from.
+	PublicURL string
+	// Log receives tool and loopback panics and the SDK's own log. Nil
+	// discards.
+	Log *slog.Logger
+	// Registerer receives worklode_mcp_tool_calls_total. Nil registers
+	// nothing, and the calls go uncounted.
+	Registerer prometheus.Registerer
 }
 
-func newMCPMetrics(reg prometheus.Registerer) *mcpMetrics {
-	m := &mcpMetrics{calls: prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "worklode_mcp_tool_calls_total",
-		Help: "MCP tool calls at /mcp, by tool and outcome (" + strings.Join(mcpOutcomes, ", ") +
-			"). Labels are bounded: the project, the actor and the arguments are deliberately not among them.",
-	}, []string{"tool", "outcome"})}
-	for _, t := range mcpToolNames {
-		for _, o := range mcpOutcomes {
-			m.calls.WithLabelValues(t, o)
-		}
-	}
-	reg.MustRegister(m.calls)
-	return m
-}
-
-func (m *mcpMetrics) call(tool, outcome string) {
-	if m != nil {
-		m.calls.WithLabelValues(tool, outcome).Inc()
-	}
-}
-
-// mcpState is the MCP server's share of *server.
-type mcpState struct {
-	// api is the server's own public handler, the one the loopback
-	// transport dispatches tool calls into.
+// server is the MCP tool server New builds: the SDK's Streamable HTTP
+// handler behind serveHTTP's authentication.
+type server struct {
+	cfg Config
+	log *slog.Logger
+	// api is the handler the loopback transport dispatches tool calls into.
 	api      http.Handler
 	handler  http.Handler
 	metrics  *mcpMetrics
 	sessions *mcpSessions
 }
 
-// registerMCP registers /mcp and the protected-resource metadata, and builds
-// the MCP server whose tools call back into r's mux.
-func (s *server) registerMCP(r *router, reg prometheus.Registerer) {
-	s.mcp = &mcpState{
-		// The mux is the one every route is registered on, including those
-		// registered after this call; observe gives a loopback call the same
-		// request log and metrics a network call gets.
-		api:      s.observe(r.mux),
-		metrics:  newMCPMetrics(reg),
+// New builds the MCP tool server. The returned handler serves POST, GET and
+// DELETE on the MCP endpoint; the caller mounts it.
+func New(cfg Config) (http.Handler, error) {
+	if cfg.API == nil || cfg.Authenticate == nil || cfg.Unauthorized == nil {
+		return nil, errors.New("mcp: Config needs API, Authenticate and Unauthorized")
+	}
+	log := cfg.Log
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	metrics, err := newMCPMetrics(cfg.Registerer)
+	if err != nil {
+		return nil, err
+	}
+	s := &server{
+		cfg:      cfg,
+		log:      log,
+		api:      cfg.API,
+		metrics:  metrics,
 		sessions: newMCPSessions(mcpSessionTTL, mcpMaxSessions),
 	}
-	srv := mcp.NewServer(&mcp.Implementation{Name: "worklode", Title: "Worklode", Version: "1"},
-		&mcp.ServerOptions{Instructions: mcpInstructions})
+	srv := sdk.NewServer(&sdk.Implementation{Name: "worklode", Title: "Worklode", Version: "1"},
+		&sdk.ServerOptions{Instructions: mcpInstructions})
 	s.addMCPProjectTools(srv)
 	s.addMCPTaskTools(srv)
 	s.addMCPDocTools(srv)
 	s.addMCPRuleTools(srv)
-	s.mcp.handler = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
-		&mcp.StreamableHTTPOptions{SessionTimeout: mcpSessionTTL, Logger: s.log})
-
-	for _, p := range []string{"POST /mcp", "GET /mcp", "DELETE /mcp"} {
-		r.publicFunc(p, s.serveMCP)
-	}
-	r.publicFunc("GET /.well-known/oauth-protected-resource", s.serveMCPResourceMetadata)
-	r.publicFunc("GET /.well-known/oauth-protected-resource/mcp", s.serveMCPResourceMetadata)
+	s.handler = sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return srv },
+		&sdk.StreamableHTTPOptions{SessionTimeout: mcpSessionTTL, Logger: log})
+	return http.HandlerFunc(s.serveHTTP), nil
 }
 
-// serveMCP authenticates the bearer token itself, then hands the request to
-// the SDK's Streamable HTTP handler. The TokenInfo it attaches carries the
-// actor id, which the SDK holds every later request on the session to: a
-// session id presented with another actor's token is refused.
-func (s *server) serveMCP(w http.ResponseWriter, r *http.Request) {
+// serveHTTP authenticates the bearer token itself, then hands the request
+// to the SDK's Streamable HTTP handler. The TokenInfo it attaches carries
+// the actor id, which the SDK holds every later request on the session to:
+// a session id presented with another actor's token is refused.
+func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	token, ok := bearerToken(r.Header)
 	if !ok {
-		s.mcpUnauthorized(w, r)
+		s.cfg.Unauthorized(w, r)
 		return
 	}
-	actor, _, err := s.st.Authenticate(r.Context(), token)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			s.mcpUnauthorized(w, r)
-			return
-		}
-		s.mapStoreErr(w, err)
+	actor, ok := s.cfg.Authenticate(w, r, token)
+	if !ok {
 		return
 	}
-	info := &auth.TokenInfo{UserID: actor.ID}
+	info := &auth.TokenInfo{UserID: actor}
 	verified := func(context.Context, string, *http.Request) (*auth.TokenInfo, error) { return info, nil }
 	auth.RequireBearerToken(verified, &auth.RequireBearerTokenOptions{
 		// Expiry was checked by Authenticate; a wl_ token need not carry one.
 		AllowMissingExpiration: true,
-	})(s.mcp.handler).ServeHTTP(w, r)
+	})(s.handler).ServeHTTP(w, r)
 }
 
 // bearerToken is the token in h's Authorization header. The scheme is
@@ -186,39 +187,6 @@ func bearerToken(h http.Header) (string, bool) {
 		return "", false
 	}
 	return token, true
-}
-
-// mcpUnauthorized answers 401 with the RFC 9728 pointer to this origin's
-// protected-resource metadata, which is how an MCP client finds the login.
-// An instance with no MCP origin (OIDC unconfigured) has no login to point
-// at, so the challenge is bare.
-func (s *server) mcpUnauthorized(w http.ResponseWriter, r *http.Request) {
-	challenge := "Bearer"
-	if origin, ok := s.mcpOrigin(r); ok {
-		challenge += fmt.Sprintf(` resource_metadata=%q`, origin+"/.well-known/oauth-protected-resource/mcp")
-	}
-	w.Header().Set("WWW-Authenticate", challenge)
-	writeErr(w, http.StatusUnauthorized, "unauthorized")
-}
-
-// serveMCPResourceMetadata answers GET /.well-known/oauth-protected-resource
-// and its /mcp suffixed form (RFC 9728 section 3.1) for the origin the request
-// arrived on. 404 when the host is not one of mcpOrigins, which includes
-// every request to an instance with OIDC unconfigured.
-func (s *server) serveMCPResourceMetadata(w http.ResponseWriter, r *http.Request) {
-	origin, ok := s.mcpOrigin(r)
-	if !ok {
-		writeErr(w, http.StatusNotFound, "no MCP login on this host")
-		return
-	}
-	// Public discovery data, read by clients on other origins.
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	writeJSON(w, http.StatusOK, model.ProtectedResourceMetadata{
-		Resource:               mcpResource(origin),
-		AuthorizationServers:   []string{origin},
-		BearerMethodsSupported: []string{"header"},
-		ResourceName:           "Worklode",
-	})
 }
 
 // mcpLoopback is the http.RoundTripper a tool's cli.Client sends through: it
@@ -358,7 +326,7 @@ type mcpCall struct {
 	c       *cli.Client
 	actor   string
 	session string
-	ss      *mcp.ServerSession // for elicitation; nil outside a session
+	ss      *sdk.ServerSession // for elicitation; nil outside a session
 
 	projects []model.Project // ListProjects, read once per call
 }
@@ -382,20 +350,20 @@ type mcpHandler[In, Out any] func(call *mcpCall, in In) (string, Out, error)
 
 // addMCPTool registers one tool, wrapping h with the per-call client, the
 // error phrasing and the metric.
-func addMCPTool[In, Out any](s *server, srv *mcp.Server, name, title, desc string, readOnly bool, h mcpHandler[In, Out]) {
-	tool := &mcp.Tool{
+func addMCPTool[In, Out any](s *server, srv *sdk.Server, name, title, desc string, readOnly bool, h mcpHandler[In, Out]) {
+	tool := &sdk.Tool{
 		Name: name, Title: title, Description: desc,
-		Annotations: &mcp.ToolAnnotations{Title: title, ReadOnlyHint: readOnly, OpenWorldHint: new(bool)},
+		Annotations: &sdk.ToolAnnotations{Title: title, ReadOnlyHint: readOnly, OpenWorldHint: new(bool)},
 	}
-	mcp.AddTool(srv, tool, func(ctx context.Context, req *mcp.CallToolRequest, in In) (res *mcp.CallToolResult, out Out, err error) {
+	sdk.AddTool(srv, tool, func(ctx context.Context, req *sdk.CallToolRequest, in In) (res *sdk.CallToolResult, out Out, err error) {
 		// The SDK runs each call on a goroutine of its own with no recover,
 		// so a panic here would take lode-server down with it.
 		defer func() {
 			if v := recover(); v != nil {
 				s.log.Error("panic in mcp tool", "tool", name, "panic", v, "stack", string(debug.Stack()))
-				s.mcp.metrics.call(name, "error")
+				s.metrics.call(name, "error")
 				var zero Out
-				res, out, err = &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{
+				res, out, err = &sdk.CallToolResult{IsError: true, Content: []sdk.Content{&sdk.TextContent{
 					Text: "Worklode failed while running " + name + ". Try again later, or tell the user.",
 				}}}, zero, nil
 			}
@@ -404,19 +372,19 @@ func addMCPTool[In, Out any](s *server, srv *mcp.Server, name, title, desc strin
 		text, out, err := h(call, in)
 		if err != nil {
 			outcome, msg := mcpErrorText(err)
-			s.mcp.metrics.call(name, outcome)
+			s.metrics.call(name, outcome)
 			var zero Out
-			return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: msg}}}, zero, nil
+			return &sdk.CallToolResult{IsError: true, Content: []sdk.Content{&sdk.TextContent{Text: msg}}}, zero, nil
 		}
-		s.mcp.metrics.call(name, "ok")
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, out, nil
+		s.metrics.call(name, "ok")
+		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: text}}}, out, nil
 	})
 }
 
 // newMCPCall builds the call context: the bearer token this very request
 // carried (the SDK hands each request's headers to the tool), and the actor
 // serveMCP verified it as.
-func (s *server) newMCPCall(ctx context.Context, req *mcp.CallToolRequest) *mcpCall {
+func (s *server) newMCPCall(ctx context.Context, req *sdk.CallToolRequest) *mcpCall {
 	call := &mcpCall{s: s, ctx: ctx}
 	var token string
 	if req.Extra != nil {
@@ -429,7 +397,7 @@ func (s *server) newMCPCall(ctx context.Context, req *mcp.CallToolRequest) *mcpC
 		call.session = req.Session.ID()
 		call.ss = req.Session
 	}
-	call.c = cli.NewClientTransport(mcpLoopbackURL, token, mcpLoopback{h: s.mcp.api, log: s.log})
+	call.c = cli.NewClientTransport(mcpLoopbackURL, token, mcpLoopback{h: s.api, log: s.log})
 	return call
 }
 

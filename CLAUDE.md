@@ -223,6 +223,12 @@ when it drifts (`scripts/check-openapi-client.sh`, WL-REQ-1309). The MSW
 mocks are typed from it, so a mock shaped unlike the Go type fails
 `pnpm typecheck`. `e2e/webapp_test.go` drives both surfaces end to end.
 
+**The MCP server is a client too.** `internal/mcp` is the MCP tool server
+`lode-server` mounts at `/mcp`: its tools call `/api/v1` in-process with the
+caller's token, like `internal/cli` does over the network, so route guards
+apply. It may not import `internal/api` or `internal/store` (`deps_test.go`).
+Its OAuth login lives in `internal/api/mcpauth.go`.
+
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks — including `merge_group` and `repository_ruleset` for the merge
 queue — and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer
