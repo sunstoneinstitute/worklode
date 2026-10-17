@@ -89,7 +89,46 @@ matches the LB address. That lives in `provisioning`.
 - Every result starts with one speakable sentence, then detail. Lists cap at
   10 with a cursor.
 
-## Tools (18)
+## Kind aliases
+
+The kinds already have one registry: `ns/concept.ttl` (SKOS schemes),
+generated into `internal/ns/gen.go` by `scripts/nsgen.py`.
+
+- `wlc:TaskKind`: feature, bug, chore, design, review, spike, decision, rally.
+- `wlc:RuleKind`: requirement, catalogue, invariant, definition, principle.
+- Document kinds (spec, plan) are not in it yet; only the `docs.kind` CHECK
+  holds them. Add a `wlc:DocKind` scheme so all three live in one place.
+
+Add `skos:altLabel` to each concept for the words people say, and have
+`nsgen.py` emit a `KindAliases` map: spoken word → (entity, kind). A
+generated-code test fails when one alias maps to two kinds. Proposed
+aliases, to edit before building:
+
+| Says | Files as |
+|---|---|
+| bug, defect, problem, issue, broken | task / bug |
+| feature, enhancement, story, capability | task / feature |
+| chore, cleanup, maintenance, housekeeping, upgrade | task / chore |
+| spike, experiment, investigation, prototype | task / spike |
+| decision, question, choice | task / decision |
+| review | task / review |
+| design task | task / design |
+| spec, specification, design doc, design document, ADR | doc / spec |
+| plan, implementation plan | doc / plan |
+| requirement, rule | rule / requirement |
+| invariant, definition, principle, catalogue | rule / that kind |
+
+"design" alone is ambiguous (task kind vs. spec), so it resolves to neither
+and the tool asks.
+
+One write tool takes the spoken word: `file(what, title, body?, ...)`.
+"File this as a bug" becomes `file(what: "bug", ...)` and creates a task of
+kind bug. A word with no alias returns the closest kinds for Claude to read
+back. `task_add`, `doc_add` and `rule_add` stay as the typed paths behind it;
+`task_list`/`doc_list` accept the same words as a kind filter ("show me open
+bugs").
+
+## Tools (19)
 
 | Area | Tool | Backing route |
 |---|---|---|
@@ -98,8 +137,9 @@ matches the LB address. That lives in `provisioning`.
 | | `project_use(project)` | session state |
 | find | `search(query, kinds?)` | `GET /search` |
 | | `show(ref, inline=true, section?)` | docs, rules, tasks, projects |
-| tasks | `task_list(state?, assignee?)` | `GET /tasks` |
-| | `task_add(title, body, parent?, blocked_by?, governed_by?)` | `POST /tasks` (+ edges, governed-by) |
+| file | `file(what, title, body?, parent?, doc?)` | resolves `what` via `KindAliases`, then one of the three add routes |
+| tasks | `task_list(kind?, state?, assignee?)` | `GET /tasks` |
+| | `task_add(kind, title, body, parent?, blocked_by?, governed_by?)` | `POST /tasks` (+ edges, governed-by) |
 | | `task_update(id, title?, body?, priority?)` | `PATCH /tasks/{id}` |
 | | `task_set_state(id, state, reason?)` | `/state`, `/abandon`, `/reopen` |
 | docs | `doc_list(kind?, status?)` | `GET /docs` |
