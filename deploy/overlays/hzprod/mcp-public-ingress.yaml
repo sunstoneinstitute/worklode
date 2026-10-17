@@ -1,0 +1,77 @@
+# Public host for the MCP server (docs/research/mcp-server-scope.md,
+# "Reachability"). Prod is otherwise mesh-only, but claude.ai and Cowork call
+# /mcp from Anthropic's cloud, which cannot reach worklode.sunstone.internal.
+#
+# Only the paths those servers call are routed; every other path on this host
+# is a 404 from nginx, and every request from outside Anthropic's published
+# outbound range (https://platform.claude.com/docs/en/api/ip-addresses; IPv4
+# only, no outbound IPv6 is listed) is a 403. The allowlist works because the
+# hzprod public controller takes the client IP from PROXY protocol on the
+# Hetzner LB and ignores X-Forwarded-For (provisioning:
+# clusters/hzprod/ingress-nginx/kustomization.yaml), and external-dns
+# publishes this host unproxied, so Cloudflare does not replace the source IP.
+#
+# - /mcp: the Streamable HTTP endpoint; it answers 401 with the
+#   resource_metadata URL until the client has a token.
+# - /oauth/token: the client trades its PKCE verifier and code for a wl_ token.
+# - /.well-known/oauth-authorization-server: RFC 8414 metadata.
+# - /.well-known/oauth-protected-resource: RFC 9728 metadata. Prefix, so the
+#   /.well-known/oauth-protected-resource/mcp form a client builds from the
+#   /mcp URL is covered too.
+#
+# /oauth/authorize and /auth/callback are not here. They are the browser leg of
+# the login: the authorization-server metadata names
+# https://worklode.sunstone.internal/oauth/authorize, so the user's own browser
+# does the Keycloak login over the mesh and the already-registered internal
+# callback is reused. Anthropic's servers never call either path.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: worklode-mcp-public-ingress
+  namespace: worklode
+  annotations:
+    nginx.ingress.kubernetes.io/whitelist-source-range: "160.79.104.0/21"
+    # Same body limit as worklode-ingress (deploy/base/ingress.yaml), so the
+    # server's maxAPIBody stays the authority.
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - worklode.prod.sunstoneinstitute.ai
+      secretName: worklode-mcp-public-tls
+  rules:
+    - host: worklode.prod.sunstoneinstitute.ai
+      http:
+        paths:
+          - path: /mcp
+            pathType: Exact
+            backend:
+              service:
+                name: worklode
+                port:
+                  number: 80
+          - path: /oauth/token
+            pathType: Exact
+            backend:
+              service:
+                name: worklode
+                port:
+                  number: 80
+          - path: /.well-known/oauth-authorization-server
+            pathType: Exact
+            backend:
+              service:
+                name: worklode
+                port:
+                  number: 80
+          - path: /.well-known/oauth-protected-resource
+            pathType: Prefix
+            backend:
+              service:
+                name: worklode
+                port:
+                  number: 80

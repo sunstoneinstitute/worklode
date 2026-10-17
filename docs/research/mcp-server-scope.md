@@ -45,7 +45,7 @@ No realm change.
 | Env | Host for /mcp | Who uses it |
 |---|---|---|
 | dev | `worklode.dev.sunstoneinstitute.ai` (already public) | all clients |
-| prod | new public host, e.g. `worklode.sunstoneinstitute.ai` | claude.ai, Cowork |
+| prod | `worklode.prod.sunstoneinstitute.ai` (public, MCP paths only) | claude.ai, Cowork |
 | prod | `worklode.sunstone.internal` (mesh) | Claude Code |
 
 Prod public ingress (`nginx`, not `nginx-internal`):
@@ -63,9 +63,54 @@ Prod public ingress (`nginx`, not `nginx-internal`):
   `LODE_MCP_PUBLIC_URL` names the public MCP URL, and both are accepted as
   `resource`.
 
-To check before building: the ingress sees the real client IP (Hetzner LB
-proxy protocol or `externalTrafficPolicy: Local`); otherwise the allowlist
-matches the LB address. That lives in `provisioning`.
+### Deploy notes
+
+The ingress is `deploy/overlays/hzprod/mcp-public-ingress.yaml`; the overlay
+sets `LODE_PUBLIC_URL=https://worklode.sunstone.internal` and
+`LODE_MCP_PUBLIC_URL=https://worklode.prod.sunstoneinstitute.ai`. What the
+other repos say, read on 2026-10-17 (provisioning at `fb08ddc`):
+
+- **Hostname.** hzprod's public names are `<name>.prod.sunstoneinstitute.ai`:
+  `otel.prod.sunstoneinstitute.ai`
+  (`provisioning:clusters/hzprod/observability/otel-gateway-ingress.yaml`) and
+  `flux-webhook.prod.sunstoneinstitute.ai`
+  (`provisioning:clusters/hzprod/flux-system/kustomization.yaml`). Bare
+  `<name>.sunstoneinstitute.ai` names (`auth`, `headscale`, `fleetdm`) are
+  admin-cluster hosts written in OpenTofu. So prod is
+  `worklode.prod.sunstoneinstitute.ai`, the twin of hzdev's
+  `worklode.dev.sunstoneinstitute.ai`.
+- **DNS.** external-dns on hzprod makes the record from the Ingress; no
+  annotation and no change in another repo. It watches Ingresses
+  (`provisioning:infrastructure/base/external-dns/release.yaml`, `sources:
+  [ingress]`) and owns all of `sunstoneinstitute.ai` except `admin.*`,
+  `dev.*`, `hzdev.*` (`provisioning:clusters/hzprod/external-dns/kustomization.yaml`).
+  Nothing in provisioning sets `--cloudflare-proxied` or the
+  `cloudflare-proxied` annotation, so the record is DNS-only and the client
+  IP reaches the LB unchanged. The zone's tofu file
+  (`provisioning:opentofu/live/prod/cloudflare/domain-sunstoneinstitute-ai.tf`)
+  has no wildcard and no `prod` NS delegation, and its redirect ruleset only
+  matches the apex and `www`. The TLS certificate comes from `letsencrypt-prod`,
+  a DNS-01 Cloudflare solver
+  (`provisioning:clusters/hzprod/cert-manager-issuers/clusterissuer.yaml`), so
+  the allowlist does not block issuance.
+- **Client IP.** The public controller (class `nginx`) sees the real source
+  address. `provisioning:clusters/hzprod/ingress-nginx/kustomization.yaml` sets
+  `load-balancer.hetzner.cloud/uses-proxyprotocol: "true"` on the LB Service
+  and `use-proxy-protocol: "true"`, `use-forwarded-headers: "false"` in the
+  controller config, with the comment that this is for source-range
+  allowlists and that nothing sits in front of the LB. So
+  `whitelist-source-range` matches the caller, and an `X-Forwarded-For` header
+  cannot spoof it.
+
+Not done yet, outside this overlay:
+
+- provisioning has no Flux `Kustomization` for worklode on hzprod
+  (`clusters/hzprod/flux-system/` has none; hzdev has `worklode.yaml` and
+  `gotk-worklode-repo.yaml`). Until one exists, nothing applies this overlay.
+- The hzprod overlay turns OIDC on but its ExternalSecret has no
+  `LODE_SESSION_SECRET`, so `lode-server` refuses to boot, and
+  `LODE_MCP_PUBLIC_URL` needs OIDC. The 1Password item needs the field before
+  it is wired in, because ExternalSecret reconciliation is all or nothing.
 
 ## Project scope
 
@@ -161,5 +206,8 @@ token minting, event tail, `rule arrange`/`unarrange`.
 
 - Claude Code `.mcp.json`: `type: http`, URL, `oauth.clientId: worklode-mcp`,
   `oauth.callbackPort: 33418`. `lode install` could write this later.
-- claude.ai / Cowork: org custom connector with the public URL and client id
-  `worklode-mcp` in advanced settings.
+- claude.ai / Cowork: org custom connector with URL
+  `https://worklode.prod.sunstoneinstitute.ai/mcp` (prod) or
+  `https://worklode.dev.sunstoneinstitute.ai/mcp` (dev), and client id
+  `worklode-mcp` in advanced settings. The user connecting must be on the mesh
+  for prod, since the login page is on `worklode.sunstone.internal`.
