@@ -37,3 +37,20 @@ export type DocumentTab = (typeof DOCUMENT_TABS)[number]["value"]
 export function isDocumentTab(value: unknown): value is DocumentTab {
   return DOCUMENT_TABS.some((tab) => tab.value === value)
 }
+
+// Ideas (WL-REQ-1799). The server refuses any type or story type outside these.
+export const IDEA_TYPE_OPTIONS = [
+  { value: "general", label: "General Idea" },
+  { value: "story-pitch", label: "Story Pitch" },
+]
+
+export const STORY_TYPE_OPTIONS = [
+  { value: "data-story", label: "Data Story" },
+  { value: "short-story", label: "Short Story" },
+]
+
+// Read-only: an idea leaves private only by being shared
+export const IDEA_STATUS_OPTIONS = [
+  { value: "private", label: "Private" },
+  { value: "intake", label: "Shared · Intake", colorVar: "--color-accent" },
+]

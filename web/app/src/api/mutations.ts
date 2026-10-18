@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import { api } from "./client"
 import { type ListResource, useCreateInList, useRemoveFromList, useUpdateInList } from "./list-mutations"
-import { failure, projectCrewKey, queryKeys } from "./queries"
+import { HttpError, failure, projectCrewKey, queryKeys } from "./queries"
 import type { components } from "./schema"
-import type { ProjectDocument, Task } from "./types"
+import type { Idea, ProjectDocument, Task } from "./types"
 
 type AddCrewMemberInput = components["schemas"]["AddCrewMemberInput"]
 
@@ -134,4 +135,62 @@ export const PROJECTS: ListResource = {
   detailKey: queryKeys.projects.detail,
   noun: "project",
   alsoInvalidate: [["tasks"], ["documents"]],
+}
+
+// Ideas (WL-REQ-1799). The form reports its own errors (WL-REQ-1811), so
+// create and update are plain mutations that refetch the ideas after.
+const IDEAS: ListResource = {
+  rootKey: queryKeys.ideas.all,
+  listKey: queryKeys.ideas.list,
+  detailKey: queryKeys.ideas.detail,
+  noun: "idea",
+}
+
+export function useCreateIdea() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: IDEAS.rootKey,
+    mutationFn: async (input: components["schemas"]["CreateIdeaInput"]) => {
+      const { data, error, response } = await api.POST("/api/v1/ideas", { body: input })
+      if (error) throw failure(error, response)
+      return data
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: IDEAS.listKey }),
+  })
+}
+
+export function useUpdateIdea() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: IDEAS.rootKey,
+    mutationFn: async ({ id, patch }: { id: string; patch: components["schemas"]["PatchIdeaInput"] }) => {
+      const { data, error, response } = await api.PATCH("/api/v1/ideas/{id}", { params: { path: { id } }, body: patch })
+      if (error) throw failure(error, response)
+      return data
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: IDEAS.listKey }),
+  })
+}
+
+export function useDeleteIdea() {
+  return useRemoveFromList<Idea>(IDEAS, async (id) => {
+    const { error, response } = await api.DELETE("/api/v1/ideas/{id}", { params: { path: { id } } })
+    if (error) throw failure(error, response)
+  })
+}
+
+/** Shares an idea into intake. A 409 (not configured) shows the server's message. */
+export function useShareIdea() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: IDEAS.rootKey,
+    mutationFn: async (id: string) => {
+      const { data, error, response } = await api.POST("/api/v1/ideas/{id}/share", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data
+    },
+    onError: (error) =>
+      toast.error(error instanceof HttpError && error.status === 409 ? error.message : "Couldn't share the idea"),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: IDEAS.rootKey }),
+  })
 }

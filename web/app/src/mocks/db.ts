@@ -73,7 +73,40 @@ function seed() {
     { id: "doc_000000000002", project: "p1", name: "Kickoff notes", category: "meeting-notes", type: "document", status: "final", url: "", source: "", milestone: "", due: "", date: "2026-10-05", participants: ["stig", "ada"] },
     { id: "doc_000000000003", project: "p2", name: "Glacier dataset", category: "sources", type: "dataset", status: "final", url: "", source: "NSIDC", milestone: "", due: "", date: "", participants: [] },
   ]
-  return { me, projects, crew, participants, tasks, summaries, docs, rules, documents }
+  // Ideas (WL-REQ-1799): private to their author until shared
+  const ideas: Idea[] = [
+    idea({ id: "idea_000000000001", author: "actor-1", title: "Glacier retreat explainer", type: "story-pitch", story_type: "data-story", submitted: "2026-10-10" }),
+    idea({ id: "idea_000000000002", author: "ada", title: "Map every weather station", submitted: "2026-10-08", shared: "2026-10-09", task: "WL-3" }),
+    // Another actor's private idea: the list never shows it
+    idea({ id: "idea_000000000003", author: "bob", title: "Bob's secret", submitted: "2026-10-07" }),
+  ]
+  // LODE_INTAKE_PROJECT is set; false makes share answer 409
+  const intakeConfigured: boolean = true
+  return { me, projects, crew, participants, tasks, summaries, docs, rules, documents, ideas, intakeConfigured }
+}
+
+export type Idea = Ok<"/api/v1/ideas/{id}", "get">
+
+/** An idea with the server's defaults; status follows `shared` */
+export function idea(fields: Partial<Idea> & { id: string; author: string }): Idea {
+  return {
+    title: "",
+    body: "",
+    type: "general",
+    story_type: "",
+    litmus_test_id: "",
+    shared: "",
+    task: "",
+    submitted: "",
+    intake: { pre_research_authorized: false, decision: "" },
+    ...fields,
+    status: fields.shared ? "intake" : "private",
+  }
+}
+
+/** What the store's visibility predicate lets the caller see: author = caller OR shared */
+export function visibleIdea(id: string) {
+  return db.ideas.find((i) => i.id === id && (i.author === db.me.id || i.shared))
 }
 
 export type Doc = NonNullable<Ok<"/api/v1/docs", "get">["docs"]>[number]
@@ -90,6 +123,7 @@ export function projectDetail(id: string): Ok<"/api/v1/projects/{id}", "get"> | 
 }
 
 export const db = seed()
+
 
 /** Puts the dummy data back the way it started */
 export function resetDb() {
