@@ -10,11 +10,14 @@ export const browser = {
 /** A non-2xx answer, carrying its status so the query client can decide on a retry. */
 export class HttpError extends Error {
   status: number
+  /** A 422's per-field messages, keyed by wire name (WL-REQ-1811) */
+  fields?: Record<string, string>
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, fields?: Record<string, string>) {
     super(message)
     this.name = "HttpError"
     this.status = status
+    this.fields = fields
   }
 }
 
@@ -26,7 +29,7 @@ export class LoginRedirect extends HttpError {
 }
 
 export function failure(error: ErrorResponse, response: Response) {
-  return new HttpError(response.status, error.error ?? `${response.status} ${response.statusText}`.trim())
+  return new HttpError(response.status, error.error ?? `${response.status} ${response.statusText}`.trim(), error.fields)
 }
 
 /**
@@ -51,6 +54,11 @@ export const queryKeys = {
   documents: {
     all: ["documents"] as const,
     list: (project: string) => ["documents", { project }] as const,
+  },
+  ideas: {
+    all: ["ideas"] as const,
+    list: ["ideas", "list"] as const,
+    detail: (id: string) => ["ideas", "detail", id] as const,
   },
   docs: (project: string, kind: string) => ["docs", { project, kind }] as const,
   rules: (project: string) => ["rules", { project }] as const,
@@ -181,5 +189,34 @@ export function useProjectRules(id: string) {
       if (error) throw failure(error, response)
       return data ?? []
     },
+  })
+}
+
+/** The caller's private ideas and every shared idea (WL-REQ-1799) */
+export function useIdeas() {
+  return useQuery({
+    queryKey: queryKeys.ideas.list,
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/ideas")
+      if (error) throw failure(error, response)
+      return data.ideas ?? []
+    },
+  })
+}
+
+/**
+ * One idea, for its edit form. Never cached past the form, so the form opens
+ * with a fresh read each time (WL-REQ-1810).
+ */
+export function useIdea(id: string) {
+  return useQuery({
+    queryKey: queryKeys.ideas.detail(id),
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/ideas/{id}", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data
+    },
+    gcTime: 0,
+    refetchOnWindowFocus: false,
   })
 }

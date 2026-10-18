@@ -775,8 +775,6 @@ func (s *server) registerCockpit(r *router) {
 	// theirs the same way.
 	r.web("GET /{$}", s.navWrap("home", s.homePage))
 	r.web("POST /home/reviewed", s.navWrap("brief_review", s.requireSession(permWebWrite, s.reviewedThroughNow)))
-	r.web("GET /ideas", s.navWrap("ideas", s.globalPlaceholder("ideas", "Ideas",
-		"Low-friction idea capture, looser than and promotable into Intake, arrives with WL-REQ-342.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
 		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with WL-REQ-342 and WL-REQ-125.")))
 	// The literal-segment patterns win over the {section} wildcard below for

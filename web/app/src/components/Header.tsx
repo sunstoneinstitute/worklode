@@ -7,6 +7,7 @@ import { ColorModeToggle } from "@/components/ColorModeToggle"
 import { CloseIcon, MenuIcon, NotificationsIcon } from "@/components/icons"
 
 const NAV_ITEMS = [
+  { label: "Ideas", to: "/ideas" },
   { label: "Projects", to: "/projects" },
   { label: "Tasks", to: "/tasks" },
 ] as const

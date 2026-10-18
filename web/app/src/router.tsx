@@ -13,6 +13,9 @@ import { LoadError } from "@/components/ui/load-state"
 import { ProjectLayout } from "@/layouts/ProjectLayout"
 import { RootLayout } from "@/layouts/RootLayout"
 import { isDocumentTab } from "@/lib/content-types"
+import { EditIdea } from "@/pages/EditIdea"
+import { Ideas } from "@/pages/Ideas"
+import { NewIdea } from "@/pages/NewIdea"
 import { NotFound } from "@/pages/NotFound"
 import { ProjectCrew } from "@/pages/ProjectCrew"
 import { ProjectDocuments } from "@/pages/ProjectDocuments"
@@ -58,6 +61,25 @@ const tasksRoute = createRoute({
   validateSearch: coerceSearch,
 })
 
+const ideasRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "ideas",
+  component: Ideas,
+  validateSearch: coerceSearch,
+})
+
+const newIdeaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "ideas/new",
+  component: NewIdea,
+})
+
+const editIdeaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "ideas/$ideaId/edit",
+  component: EditIdea,
+})
+
 // Pages under a project hang off this route as they are ported
 const projectRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -98,6 +120,9 @@ const projectTasksRoute = createRoute({
 export const routeTree = rootRoute.addChildren([
   projectsRoute,
   tasksRoute,
+  ideasRoute,
+  newIdeaRoute,
+  editIdeaRoute,
   projectRoute.addChildren([projectOverviewRoute, projectCrewRoute, projectDocumentsRoute, projectTasksRoute]),
 ])
 

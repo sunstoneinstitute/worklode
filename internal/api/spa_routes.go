@@ -7,6 +7,9 @@ import "strings"
 // TestSPARoutesMatchRouter fails when the two disagree. registerSPA routes
 // each one to the SPA shell; the templ cockpit serves every other path.
 var spaRoutes = []string{
+	"/ideas",
+	"/ideas/$ideaId/edit",
+	"/ideas/new",
 	"/projects",
 	"/projects/$projectId",
 	"/projects/$projectId/crew",
