@@ -5,7 +5,7 @@
 // templ (WL-REQ-1303), one login session covers both (WL-REQ-1308), /api/v1
 // reads and the write checks on a non-bearer write (WL-REQ-1307,
 // WL-REQ-1770), the project summary and Overview shell (WL-REQ-1797), the Documents register
-// (WL-REQ-1805), and the OpenAPI document's security schemes (WL-REQ-1309).
+// (WL-REQ-1805), the Ideas API and pages (WL-REQ-1799, WL-REQ-1806), and the OpenAPI document's security schemes (WL-REQ-1309).
 package e2e
 
 import (
@@ -330,4 +330,187 @@ func TestWebAppOneHost(t *testing.T) {
 			t.Errorf("openapi.json securitySchemes lacks %q", name)
 		}
 	}
+}
+
+// TestWebAppIdeas proves ideas are private to their author until shared, that
+// sharing mints a design task in the intake project, and that an instance
+// without LODE_INTAKE_PROJECT refuses the share but still captures
+// (WL-REQ-1799, WL-REQ-1806).
+func TestWebAppIdeas(t *testing.T) {
+	ctx := context.Background()
+	st := store.OpenTestStore(t)
+	iss := oidctest.NewIssuer(t)
+	newServer := func(intake string) *httptest.Server {
+		t.Helper()
+		h, _, err := api.NewServer(st, api.Config{
+			BootstrapToken: bootstrapToken,
+			OIDCIssuer:     iss.URL(),
+			OIDCClientID:   iss.ClientID,
+			PublicURL:      "http://localhost:8080",
+			SessionSecret:  "e2e-session-secret",
+			IntakeProject:  intake,
+		})
+		if err != nil {
+			t.Fatalf("new server (intake %q): %v", intake, err)
+		}
+		srv := httptest.NewServer(h)
+		t.Cleanup(srv.Close)
+		return srv
+	}
+
+	// The intake project must exist before a server boots with it set.
+	bare := newServer("")
+	admin := cli.NewClient(cli.Config{ServerURL: bare.URL, Token: bootstrapToken})
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
+		ID: "intake", Name: "Intake", Key: "INT",
+	}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	srv := newServer("intake")
+
+	call := func(base, method, path, body string, hdr map[string]string) (*http.Response, string) {
+		t.Helper()
+		var rd io.Reader
+		if body != "" {
+			rd = strings.NewReader(body)
+		}
+		req, err := http.NewRequest(method, base+path, rd)
+		if err != nil {
+			t.Fatalf("build %s %s: %v", method, path, err)
+		}
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp, string(b)
+	}
+	want := func(resp *http.Response, body string, status int) {
+		t.Helper()
+		if resp.StatusCode != status {
+			t.Fatalf("%s %s = %d, want %d (body %s)", resp.Request.Method,
+				resp.Request.URL.RequestURI(), resp.StatusCode, status, body)
+		}
+	}
+	writer := func(session string) map[string]string {
+		return map[string]string{
+			"Cookie":           "wl_session=" + session,
+			"Sec-Fetch-Site":   "same-origin",
+			"X-Requested-With": "lode-web",
+			"Content-Type":     "application/json",
+		}
+	}
+	listIDs := func(base string, hdr map[string]string) []string {
+		t.Helper()
+		resp, body := call(base, http.MethodGet, "/api/v1/ideas", "", hdr)
+		want(resp, body, http.StatusOK)
+		var l model.IdeaListResponse
+		if err := json.Unmarshal([]byte(body), &l); err != nil {
+			t.Fatalf("decode ideas: %v (body %s)", err, body)
+		}
+		var ids []string
+		for _, i := range l.Ideas {
+			ids = append(ids, i.ID)
+		}
+		return ids
+	}
+	contains := func(ids []string, id string) bool {
+		for _, x := range ids {
+			if x == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	a := writer(webSession(t, srv.URL, iss, "alice"))
+	b := writer(webSession(t, srv.URL, iss, "bob"))
+	adm := map[string]string{"Authorization": "Bearer " + bootstrapToken, "Content-Type": "application/json"}
+
+	// 1. Alice captures a private idea. Bob and the admin cannot list or read it.
+	resp, body := call(srv.URL, http.MethodPost, "/api/v1/ideas",
+		`{"title":"Coastal wind subsidies","body":"Who profits?","type":"general"}`, a)
+	want(resp, body, http.StatusCreated)
+	var idea model.Idea
+	if err := json.Unmarshal([]byte(body), &idea); err != nil || idea.ID == "" {
+		t.Fatalf("decode created idea: %v (body %s)", err, body)
+	}
+	if idea.Status != "private" {
+		t.Errorf("new idea status = %q, want private", idea.Status)
+	}
+	path := "/api/v1/ideas/" + idea.ID
+	for name, hdr := range map[string]map[string]string{"bob": b, "admin": adm} {
+		if contains(listIDs(srv.URL, hdr), idea.ID) {
+			t.Errorf("%s lists alice's private idea", name)
+		}
+		resp, body = call(srv.URL, http.MethodGet, path, "", hdr)
+		want(resp, body, http.StatusNotFound)
+	}
+	if !contains(listIDs(srv.URL, a), idea.ID) {
+		t.Error("alice does not list her own idea")
+	}
+
+	// 2. Alice shares. The idea reaches the intake project as a design task.
+	resp, body = call(srv.URL, http.MethodPost, path+"/share", "", a)
+	want(resp, body, http.StatusOK)
+	if err := json.Unmarshal([]byte(body), &idea); err != nil || idea.Task == "" || idea.Status != "intake" {
+		t.Fatalf("shared idea = %s (err %v), want status intake with a task", body, err)
+	}
+	resp, body = call(srv.URL, http.MethodGet, "/api/v1/tasks?project=intake", "", b)
+	want(resp, body, http.StatusOK)
+	var tasks model.TaskListResponse
+	if err := json.Unmarshal([]byte(body), &tasks); err != nil {
+		t.Fatalf("decode tasks: %v (body %s)", err, body)
+	}
+	found := false
+	for _, tk := range tasks.Tasks {
+		if tk.ID == idea.Task && tk.Kind == "design" && tk.Title == idea.Title {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("intake tasks = %s, want design task %s titled %q", body, idea.Task, idea.Title)
+	}
+
+	// 3. Bob now sees it, and cannot edit it.
+	if !contains(listIDs(srv.URL, b), idea.ID) {
+		t.Error("bob does not list the shared idea")
+	}
+	resp, body = call(srv.URL, http.MethodGet, path, "", b)
+	want(resp, body, http.StatusOK)
+	resp, body = call(srv.URL, http.MethodPatch, path, `{"title":"Hijacked"}`, b)
+	want(resp, body, http.StatusForbidden)
+
+	// 4. Deleting the shared idea tombstones its task.
+	resp, body = call(srv.URL, http.MethodDelete, path, "", a)
+	want(resp, body, http.StatusNoContent)
+	resp, body = call(srv.URL, http.MethodGet, "/api/v1/tasks?project=intake&deleted=true", "", b)
+	want(resp, body, http.StatusOK)
+	if !strings.Contains(body, idea.Task) {
+		t.Errorf("tombstoned intake tasks = %s, want %s", body, idea.Task)
+	}
+
+	// 5. The pages are the SPA shell.
+	for _, p := range []string{"/ideas", "/ideas/new", "/ideas/" + idea.ID + "/edit"} {
+		resp, body = call(srv.URL, http.MethodGet, p, "", map[string]string{"Cookie": b["Cookie"]})
+		want(resp, body, http.StatusOK)
+		if strings.Contains(body, `<nav aria-label="Primary"`) {
+			t.Errorf("%s rendered the templ cockpit, want the SPA shell", p)
+		}
+	}
+
+	// 6. With no intake project, capture works and share is 409.
+	resp, body = call(bare.URL, http.MethodPost, "/api/v1/ideas",
+		`{"title":"Unshared","body":"x","type":"general"}`, a)
+	want(resp, body, http.StatusCreated)
+	var loose model.Idea
+	if err := json.Unmarshal([]byte(body), &loose); err != nil {
+		t.Fatalf("decode idea: %v", err)
+	}
+	resp, body = call(bare.URL, http.MethodPost, "/api/v1/ideas/"+loose.ID+"/share", "", a)
+	want(resp, body, http.StatusConflict)
 }
