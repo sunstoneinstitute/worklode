@@ -96,6 +96,10 @@ var (
 	// cannot leave the requirement kind (WL-REQ-165). No constraint backs
 	// it; SetRuleMeta checks covered_rules.
 	ErrRuleCovered = errors.New("rule is covered by an accepted plan")
+	// ErrNotShared means an intake-side act named an idea its author has not
+	// shared yet (WL-REQ-1799). Only the author sees it: anyone else gets
+	// ErrNotFound for a private idea.
+	ErrNotShared = errors.New("idea not shared")
 )
 
 // pgViolation reports whether err is a Postgres error with the given
