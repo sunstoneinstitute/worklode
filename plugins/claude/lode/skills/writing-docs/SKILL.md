@@ -68,10 +68,16 @@ number. `lode doc list` is the authority.
 
 ## Author rules, arrange them into specs
 
-Write each rule so it can be read on its own: state the requirement and keep
-its rationale and exceptions beside it. Reference other rules by ref when they
-constrain it. The arranging spec gives context and reading order; a plan
-carries the implementation steps.
+**A rule is found and applied on its own.** Search returns rules with no spec
+around them, for example the top matches for a proposed task, and the reader
+must be able to tell from the rule and its ancestors what it governs. So state
+the requirement, keep its rationale and exceptions beside it, and reference
+other rules by ref when they constrain it. A spec only gives reading order; a
+plan carries the implementation steps.
+
+**Search before you write.** Run `lode search <what the task changes>` and read
+the top rules. If one already governs the change, edit or refine it instead of
+adding a rule beside it: duplicate rules are where spec churn starts.
 
 ```bash
 lode search <query>                          # find the spec sections a change touches
@@ -94,7 +100,7 @@ accepted text is preserved in version history.
 
 A spec write (`lode doc add`, `lode doc edit`, `lode doc revise --file`) is an
 editing convenience that writes rules. `lode doc show <ref> --editable` prints
-each anchored heading with its rule ref, `## 3. Leases {#sec-3 rule=WL-REQ-12}`,
+each anchored heading with its rule ref, `## 3. Leases {#sec-3 rule=WL-REQ-<n>}`,
 and the write accepts that form back: the heading arranges that rule there,
 and changed text under it is a rule edit. A heading with no `rule=` matches the
 spec's own rules by anchor and heading, then heading alone, then anchor alone;
@@ -103,7 +109,7 @@ unarranged, not withdrawn. Copying text into a new spec without `rule=` does
 not establish shared identity.
 
 Every rule has exactly one kind, and each kind states one obligation
-(WL-REQ-165). The kind sets its ref's infix:
+(WL-REQ-1642). The kind sets its ref's infix:
 
 | Kind | Ref | Obligation | A reviewer checks it | Planning |
 |---|---|---|---|---|
@@ -112,13 +118,19 @@ Every rule has exactly one kind, and each kind states one obligation
 | `invariant` | `WL-RULE-<n>` | a property that holds in every state, with the checks that enforce it; binds every task in its project | against the state, not the change | never covered, never a gap |
 | `definition` | `WL-RULE-<n>` | one term, one meaning, in one scope | whether the term is used as defined | never covered, never a gap |
 | `principle` | `WL-RULE-<n>` | a design stance other rules `refine`; not checkable on its own | through its refiners only | never covered, never a gap |
+| `capability` | `WL-RULE-<n>` | something people can do with the system; the rules refining it build it | through its refiners only | covered when every requirement and catalogue under it is covered |
+
+`capability` is drafted in WL-REQ-1642 and not yet accepted or built: until
+`lode rule set --kind` accepts it, write a capability root as a `principle`. A capability names what people can do ("manage Worklode from an
+MCP client"); a principle names a stance on how ("never pick a project
+silently").
 
 New rules are requirements. Set another kind with
 `lode rule set <rule-ref> --kind <kind>`.
 A rule an accepted plan covers stays a requirement or catalogue. Rationale is
 not a kind: it ends the body of the rule it explains. Background nothing
 refines is template text of the spec, not a rule. The number alone names the
-rule: `WL-REQ-12`, `WL-RULE-12` and `WL-CL-12` all resolve, and output prints
+rule: `WL-REQ-<n>` and `WL-RULE-<n>` both resolve, and output prints
 the current kind's infix. A rule that both builds something and binds later
 work is two rules: split it into a requirement and an invariant.
 
@@ -141,10 +153,28 @@ A rule's **context closure** is the rule plus everything reachable over
 arranges rules, never closures: arrange the context rules too if the spec
 should show them.
 
+### Every rule has an ancestor chain
+
+A rule is shown and indexed with its **ancestor context** (WL-REQ-1814): the
+lead sentence of every rule it reaches over `refines`, nearest first. That
+chain is what tells a search hit which feature it belongs to, so:
+
+- Every rule except a definition `refines` a wider rule or a root. Definitions
+  are leaves and need no parent.
+- A **root** is a `capability` or `principle` that refines nothing. Its lead
+  sentence names the subject concretely and reads correctly alone, because it
+  is printed above every rule below it: "lode-server runs an MCP server that
+  lets people manage Worklode tasks, documents and rules from Claude Code,
+  claude.ai and Cowork without the `lode` CLI."
+- A spec heading is not a parent. When rules sit under a heading with no rule
+  of its own, write the root that heading stands for and `refines` it.
+- Editing a root's lead sentence changes how every rule below it reads and
+  re-embeds them all. Keep it stable and factual.
+
 ### Checklist for a new rule
 
 A rule is sized so a reader with it and its closure can decide whether a change
-complies. Apply the five sizing tests (WL-REQ-1367) before submitting:
+complies. Apply the six sizing tests (WL-REQ-1367) before submitting:
 
 1. **It decides something.** It is one of the five kinds. Overviews,
    motivation, non-goals, plan indexes and open questions are template text.
@@ -152,19 +182,33 @@ complies. Apply the five sizing tests (WL-REQ-1367) before submitting:
    "above"); needed context is a `refines` or `needs` edge. Every term it uses
    is a `definition` in its closure or defined in the rule. A fact lives in one
    rule, its owner, and rules that need it `needs` the owner.
-   **No island rules.** A rule's heading and spec position are not context, so
-   a rule with no `refines` or `needs` edge must make sense read alone. If it
-   only makes sense under its spec heading ("Tool results", "The token
-   endpoint"), it is missing its parent: write the wider rule (often a
-   `principle` naming the feature's subject) and `refines` it, or merge the
-   rule into a rule it already needs. Read it with `lode show <rule>
-   --closure` to see what a reader gets.
+   **No island rules.** A rule's heading and spec position are not context.
+   A rule that only makes sense under its spec heading ("Tool results", "The
+   token endpoint") is missing its parent: `refines` the wider rule or root,
+   or merge it into a rule it already needs.
 3. **It is not too big.** One subject and one check. Storage, API and CLI of one
    feature are three rules, each needing the model rule.
 4. **It is not too small.** If it cannot be applied without restating its
    parent and is the parent's only refiner, merge it into the parent.
 5. **Arrangement does not pull context.** A rendered spec shows the rules it
    arranges and nothing else.
+6. **Its lead sentence names its subject.** The first sentence says which
+   Worklode feature, surface or term the rule governs and reads correctly
+   alone: "An MCP tool reaches data only through `/api/v1`", never "A tool
+   reaches data…". A body never opens with a table or list; one sentence first
+   says what the entries are.
+
+Then read the rule the way search finds it, with `lode show <rule> --inline`
+and nothing else open. It fails if any of these hold:
+
+- the subject is "the server", "a tool", "the page", "it" with no feature named;
+- a table or list opens the body;
+- it points by position: "§N", "above", "this spec", "see Designed, not built"
+  (`lode rule lint` reports these as `positional-reference`);
+- the body is a pointer ("Deferred; see …") with nothing to decide.
+
+Write example refs in rule text as placeholders (`<rule ref>`), never as a real
+ref: every real ref in a body becomes a derived `references` edge.
 
 Two rules stating one fact with different values get a `conflictsWith` edge
 until the non-owner is fixed.
@@ -276,7 +320,7 @@ supersede`; unarranging from an accepted spec mints a review task.
 ## Amendment and supersession
 
 Change a requirement with `lode rule edit`. Documents do not amend or replace
-each other: rules do (WL-REQ-165). A header carrying `amends`, `amendedBy`, `replaces` or
+each other: rules do (WL-REQ-1644). A header carrying `amends`, `amendedBy`, `replaces` or
 `isReplacedBy` is refused.
 
 **Amending** changes how a rule is read without replacing its text.

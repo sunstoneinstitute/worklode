@@ -129,7 +129,7 @@ Each paragraph is one question. Recommendation first.
 
 **Answer:** agreed.
 
-**K6 Delete `docs/specs2/ttl/` (proposal graph) and `12-spec-refactoring-design-tree.md`?** Recommend: yes, after B3's 13 undescribed decisions are written into T5/T15. The ttl files use retired `wl:Clause` terms and nothing in Go or `ns/` reads them; `ns/rule.ttl` stays (it is in `ns/`, status unstable, separate question).
+**K6 Delete `docs/specs2/ttl/` (proposal graph) and `12-spec-refactoring-design-tree.md`?** Recommend: yes, after B3's 13 undescribed decisions are written into T5/T15. The ttl files use retired `wl:Rule` terms and nothing in Go or `ns/` reads them; `ns/rule.ttl` stays (it is in `ns/`, status unstable, separate question).
 
 **Answer:** agreed.
 

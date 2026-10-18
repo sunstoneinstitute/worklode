@@ -17,7 +17,7 @@ those on demand, not up front.
 | Entity | Id | For |
 |---|---|---|
 | Task | `WL-217` | Claimable work |
-| Rule | `WL-REQ-12` (requirement), `WL-RULE-12` (invariant, informative) | A design rule with its own identity, kind, status and version history |
+| Rule | `WL-REQ-<n>` (requirement), `WL-RULE-<n>` (invariant, informative) | A design rule with its own identity, kind, status and version history |
 | Doc | `WL-SPEC-25`, `WL-PLAN-7`, or slug | A spec arranges rules for reading; a plan is governed by the rules its work undertakes |
 | Project | slug | Umbrella over 1..n repos |
 | Deliverable | `WL-DEL-3` | A shipped thing — state derived from reported facts, never a status a human sets |
@@ -169,14 +169,14 @@ Every rule has one kind (`lode rule set <ref> --kind <kind>`):
 
 | Kind | Ref | Means |
 |---|---|---|
-| `requirement` | `WL-REQ-12` | a plan builds it once; a planning gap until an accepted plan covers it |
-| `catalogue` | `WL-REQ-12` | a set of entries with one shape; a plan builds its entries |
-| `invariant` | `WL-RULE-12` | binds every task in its project and is never finished |
-| `definition` | `WL-RULE-12` | one term, one meaning, in one scope |
-| `principle` | `WL-RULE-12` | a stance other rules `refine` |
+| `requirement` | `WL-REQ-<n>` | a plan builds it once; a planning gap until an accepted plan covers it |
+| `catalogue` | `WL-REQ-<n>` | a set of entries with one shape; a plan builds its entries |
+| `invariant` | `WL-RULE-<n>` | binds every task in its project and is never finished |
+| `definition` | `WL-RULE-<n>` | one term, one meaning, in one scope |
+| `principle` | `WL-RULE-<n>` | a stance other rules `refine` |
 
-All kinds share one counter, so `WL-REQ-12`, `WL-RULE-12` and the old
-`WL-CL-12` name the same rule. Output prints the infix of the rule's current
+All kinds share one counter, so `WL-REQ-<n>` and `WL-RULE-<n>` with one
+number name the same rule. Output prints the infix of the rule's current
 kind. A task is governed by its `governedBy` links plus every accepted
 invariant in its project.
 

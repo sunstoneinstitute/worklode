@@ -32,8 +32,8 @@ func TestPatchRuleKindCovered(t *testing.T) {
 }
 
 // TestGetRule reads a rule over the API by its ref, and answers 400 for
-// a malformed ref and 404 for one that doesn't resolve. WL-REQ-1, WL-RULE-1
-// and WL-CL-1 name the same rule, and the ref printed carries the infix of
+// a malformed ref and 404 for one that doesn't resolve. WL-REQ-1 and
+// WL-RULE-1 name the same rule, and the ref printed carries the infix of
 // the rule's current kind, which PATCH sets (WL-REQ-165).
 func TestGetRule(t *testing.T) {
 	t.Parallel()
@@ -43,7 +43,7 @@ func TestGetRule(t *testing.T) {
 		Project: projID, Kind: "spec", Slug: "t", Body: ruleDocV1,
 	})
 
-	for _, ref := range []string{"WL-REQ-1", "WL-RULE-1", "WL-CL-1"} {
+	for _, ref := range []string{"WL-REQ-1", "WL-RULE-1"} {
 		rr := doReq(t, h, http.MethodGet, "/api/v1/rules/"+ref, token, nil)
 		var c model.Rule
 		decodeInto(t, rr, &c)

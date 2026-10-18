@@ -80,12 +80,6 @@ func TestCoversResolveToRules(t *testing.T) {
 		t.Errorf("unresolved covers = %v, want the unknown rule and the missing anchor verbatim", got)
 	}
 
-	legacy := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "legacy", CreatedBy: "stig",
-		Body: coversPlanBody("P1-CL-2")})
-	if got := coveredRuleNumbers(t, s, legacy.ID); !slices.Equal(got, []int64{2}) {
-		t.Errorf("WL-CL spelling covers %v, want [2]", got)
-	}
-
 	whole := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "whole", CreatedBy: "stig",
 		Body: coversPlanBody("P1-SPEC-1")})
 	if got := coveredRuleNumbers(t, s, whole.ID); !slices.Equal(got, []int64{1, 2, 3}) {
