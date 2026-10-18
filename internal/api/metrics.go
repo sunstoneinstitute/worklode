@@ -356,6 +356,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Successful documents register writes (WL-REQ-1798), by op (" +
 			strings.Join(projectDocumentWriteOps, ", ") + ").",
 	}, []string{"op"})
+	s.ideaWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_ideas_writes_total",
+		Help: "Successful ideas writes (WL-REQ-1799), by op (" +
+			strings.Join(ideaWriteOps, ", ") + ").",
+	}, []string{"op"})
 	s.planBudgetChecks = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_plan_budget_checks_total",
 		Help: "createDoc/updateDocBody's plan token budget check (S6, S19), by outcome (" +
@@ -383,7 +388,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.overviewReads, s.deriveRuns,
 		s.morningBriefRenders, s.briefReviews,
 		s.githubCalls, s.probeReports, s.deliverableReports, s.planBudgetChecks,
-		s.projectDocumentWrites)
+		s.projectDocumentWrites, s.ideaWrites)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -604,6 +609,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, op := range projectDocumentWriteOps {
 		s.projectDocumentWrites.WithLabelValues(op)
+	}
+	for _, op := range ideaWriteOps {
+		s.ideaWrites.WithLabelValues(op)
 	}
 }
 
@@ -1302,6 +1310,17 @@ func (s *server) observeProjectDocumentWrite(op string) {
 		return
 	}
 	s.projectDocumentWrites.WithLabelValues(op).Inc()
+}
+
+// ideaWriteOps bounds worklode_ideas_writes_total's one label.
+var ideaWriteOps = []string{"create", "update", "share", "intake", "delete"}
+
+// observeIdeaWrite counts one successful ideas write. Nil-safe.
+func (s *server) observeIdeaWrite(op string) {
+	if s.ideaWrites == nil {
+		return
+	}
+	s.ideaWrites.WithLabelValues(op).Inc()
 }
 
 // planBudgetCheckOutcomes bounds worklode_plan_budget_checks_total's one

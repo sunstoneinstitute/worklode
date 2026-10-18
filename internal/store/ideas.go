@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -81,15 +82,23 @@ func scanIdea(row rowScanner) (*model.Idea, error) {
 func normalizeIdea(i *model.Idea) error {
 	i.Title = strings.TrimSpace(i.Title)
 	if i.Title == "" {
-		return fmt.Errorf("title is empty: %w", ErrInvalidInput)
+		return &FieldError{Field: "title", Msg: "Give your idea a title."}
 	}
-	if err := validDocEnum("type", i.Type, ideaTypes); err != nil {
+	if err := validIdeaEnum("type", i.Type, ideaTypes); err != nil {
 		return err
 	}
 	if i.Type != "story-pitch" {
 		i.StoryType, i.LitmusTestID = "", ""
 	}
-	return validDocEnum("story_type", i.StoryType, ideaStoryTypes)
+	return validIdeaEnum("story_type", i.StoryType, ideaStoryTypes)
+}
+
+// validIdeaEnum is a FieldError when v is not one of allowed.
+func validIdeaEnum(field, v string, allowed []string) error {
+	if slices.Contains(allowed, v) {
+		return nil
+	}
+	return &FieldError{Field: field, Msg: fmt.Sprintf("%q must be one of %s", v, strings.Join(allowed, ", "))}
 }
 
 // ListIdeas returns the caller's private ideas and every shared idea, newest first.
@@ -313,7 +322,7 @@ func (s *Store) DeleteIdea(ctx context.Context, caller, id, justification string
 // SetIdeaIntake replaces a shared idea's intake fields and records
 // idea.intake_updated. A private idea is ErrNotShared to its author.
 func (s *Store) SetIdeaIntake(ctx context.Context, caller, id string, in model.PatchIdeaIntakeInput) (*model.Idea, error) {
-	if err := validDocEnum("decision", in.Decision, ideaDecisions); err != nil {
+	if err := validIdeaEnum("decision", in.Decision, ideaDecisions); err != nil {
 		return nil, err
 	}
 	if err := s.recordIdeaEvent(ctx, "idea.intake_updated", caller, id, func(tx *sql.Tx, now time.Time, _ int64) error {
