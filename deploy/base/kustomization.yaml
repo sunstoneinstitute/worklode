@@ -232,5 +232,5 @@ configMapGenerator:
       - migrations/0109_project-documents.down.sql
       - migrations/0110_ideas.up.sql
       - migrations/0110_ideas.down.sql
-      - migrations/NEW-capability-rule-kind.up.sql
-      - migrations/NEW-capability-rule-kind.down.sql
+      - migrations/0111_capability-rule-kind.up.sql
+      - migrations/0111_capability-rule-kind.down.sql
