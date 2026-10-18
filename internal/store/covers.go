@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -254,4 +255,31 @@ func replaceExternalCover(tx *sql.Tx, edgeID, fromDoc int64, rules []int64) erro
 		return fmt.Errorf("drop re-pointed covers edge %d of doc %d: %w", edgeID, fromDoc, err)
 	}
 	return nil
+}
+
+// CapabilityCovered reports whether a capability rule is covered
+// (WL-REQ-1642): every live requirement and catalogue that refines it,
+// directly or through other refiners, is covered by an accepted, superseded
+// or spent plan. A capability nothing builds refines is covered vacuously.
+func (s *Store) CapabilityCovered(ctx context.Context, ruleID int64) (bool, error) {
+	var covered bool
+	err := s.db.QueryRowContext(ctx,
+		`WITH RECURSIVE refiner (rule_id) AS (
+		     SELECT from_rule FROM rule_edges WHERE type = 'refines' AND to_rule = $1
+		   UNION
+		     SELECT e.from_rule FROM rule_edges e JOIN refiner f ON e.to_rule = f.rule_id
+		      WHERE e.type = 'refines'
+		 )
+		 SELECT NOT EXISTS (
+		     SELECT 1 FROM refiner f JOIN rules r ON r.id = f.rule_id
+		      WHERE r.kind IN ('`+designdoc.RuleKindRequirement+`', '`+designdoc.RuleKindCatalogue+`')
+		        AND r.status <> 'withdrawn'
+		        AND NOT EXISTS (SELECT 1 FROM covered_rules c JOIN docs d ON d.id = c.plan_id
+		                         WHERE c.rule_id = r.id AND d.deleted_at IS NULL
+		                           AND d.status IN ('accepted', 'superseded', 'spent')))`,
+		ruleID).Scan(&covered)
+	if err != nil {
+		return false, fmt.Errorf("coverage of capability %d: %w", ruleID, err)
+	}
+	return covered, nil
 }
