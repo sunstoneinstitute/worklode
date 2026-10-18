@@ -29,6 +29,10 @@ func TestPatchRuleKindCovered(t *testing.T) {
 	if rr := doReq(t, h, http.MethodPatch, "/api/v1/rules/WL-REQ-1", token, model.RuleMetaInput{Kind: &kind}); rr.Code != http.StatusConflict {
 		t.Errorf("covered rule to informative: status %d, want 409", rr.Code)
 	}
+	kind = "capability"
+	if rr := doReq(t, h, http.MethodPatch, "/api/v1/rules/WL-REQ-1", token, model.RuleMetaInput{Kind: &kind}); rr.Code != http.StatusConflict {
+		t.Errorf("covered rule to capability: status %d, want 409", rr.Code)
+	}
 }
 
 // TestGetRule reads a rule over the API by its ref, and answers 400 for
