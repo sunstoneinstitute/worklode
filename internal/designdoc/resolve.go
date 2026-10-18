@@ -143,8 +143,7 @@ func kindArticle(kind string) string {
 // RuleRefText is the rule arm of WL-REQ-168's <KEY>-<TYPE>-<n> grammar
 // (12-spec-refactoring-design-tree.md S20, S64; WL-REQ-165): a design
 // rule's citable ref. Every kind shares one counter, so any infix resolves
-// any rule by its number: REQ, RULE, and CL, the pre-S64 spelling that
-// accepted document text still carries. FormatRuleRef writes the kind's own.
+// any rule by its number: REQ and RULE. FormatRuleRef writes the kind's own.
 var RuleRefText = `(` + refkind.KeyPattern + `)-(?:` + refkind.Alternation(refkind.Rule) + `)-(\d+)`
 
 // The rule kinds (WL-REQ-165), ns.Schemes["RuleKind"]. The store mints a
@@ -220,7 +219,7 @@ type SectionRef struct {
 }
 
 // FindRuleRefs returns every distinct rule ref in text, in order of
-// first appearance. WL-REQ-12, WL-RULE-12 and WL-CL-12 are the same rule.
+// first appearance. WL-REQ-<n> and WL-RULE-<n> with one number are the same rule.
 func FindRuleRefs(text string) []RuleRef {
 	var out []RuleRef
 	seen := map[RuleRef]bool{}

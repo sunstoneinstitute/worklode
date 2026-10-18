@@ -332,23 +332,6 @@ func TestDerivedReferences(t *testing.T) {
 	}
 }
 
-// TestDerivedReferencesFromOldRefSpelling: rule text citing the pre-S64
-// spelling P1-CL-<n>, which accepted document bodies still carry, derives
-// the same references edge as P1-RULE-<n> (S64).
-func TestDerivedReferencesFromOldRefSpelling(t *testing.T) {
-	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"}) // P1-REQ-1..3
-	body := "---\nstatus: draft\n---\n# U\n\n## 1. Uno {#sec-1}\n\nSee P1-CL-1.\n"
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "u", Body: body, CreatedBy: "stig"})
-	got, err := s.GetRule(context.Background(), "P1", 4)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Edges) != 1 || got.Edges[0].Type != "references" || got.Edges[0].Source != "derived" || got.Edges[0].To != "P1-REQ-1" {
-		t.Errorf("edges: %+v, want one derived references edge to P1-REQ-1", got.Edges)
-	}
-}
-
 // TestDerivedReferencesSameDocument: a section citing another section of
 // its own document derives the edge too. deriveReferences must run only
 // after every doc_rules row for the write is in place, or the anchor it
