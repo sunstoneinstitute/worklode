@@ -62,6 +62,20 @@ func TestAddRuleStandalone(t *testing.T) {
 	}
 }
 
+// TestAddRuleCapability: a capability is added with a WL-RULE ref
+// (WL-REQ-1642).
+func TestAddRuleCapability(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	r, err := s.AddRule(context.Background(), model.AddRuleInput{Project: "p1", Heading: "Do things", Body: "B.", Kind: "capability"}, "stig")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Ref != "P1-RULE-4" || r.Kind != "capability" {
+		t.Errorf("added rule = %s %s, want P1-RULE-4 capability", r.Ref, r.Kind)
+	}
+}
+
 func TestAddRuleRefusals(t *testing.T) {
 	s := openDocStore(t)
 	s.metrics = newStoreMetrics(prometheus.NewRegistry())

@@ -66,6 +66,8 @@ wlc:definition a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "def
     skos:definition "One term, one meaning, in one scope; read through a context closure, never covered, never a gap." .
 wlc:principle a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "principle" ;
     skos:definition "A design stance other rules refine; checkable only through its refiners, never covered, never a gap." .
+wlc:capability a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "capability" ;
+    skos:definition "Something people can do with the system, which the rules refining it build; covered when every requirement and catalogue refining it is covered, never a gap itself." .
 wlc:informative a skos:Concept ; skos:inScheme wlc:RuleKind ; skos:prefLabel "informative" ;
     skos:definition "Retired (WL-REQ-165): reads as a principle until the WL-REQ-1301 migration reclassifies it; stays in the CHECK until then." .
 
