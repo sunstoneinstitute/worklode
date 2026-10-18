@@ -95,9 +95,11 @@ var routeGuards = map[string]routeGuard{
 	// route below, because a forged cutoff needs a live session's identity
 	// to attribute the advance to.
 	"POST /home/reviewed": guarded(permWebWrite),
-	"GET /ideas":          guarded(permWebRead),
 	"GET /intake":         guarded(permWebRead),
 	// The SPA shell (WL-REQ-1303): registerSPA registers each spaRoutes path.
+	"GET /ideas":                          guarded(permWebRead),
+	"GET /ideas/new":                      guarded(permWebRead),
+	"GET /ideas/{ideaId}/edit":            guarded(permWebRead),
 	"GET /projects":                       guarded(permWebRead),
 	"GET /projects/{projectId}/tasks":     guarded(permWebRead),
 	"GET /tasks":                          guarded(permWebRead),

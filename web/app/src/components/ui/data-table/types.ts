@@ -102,7 +102,7 @@ export interface DataTableColumn<T> {
   sortable?: boolean
   /** Defaults to true, except "actions" which is always false. */
   filterable?: boolean
-  /** Required for type "custom"; an optional override for any other type. */
+  /** Required for type "custom". For any other type it replaces the cell only; the type's sorting and filtering stay. */
   /** Gets the same helpers as row actions, so a custom cell can edit its row */
   render?: (row: T, helpers: RowActionHelpers<T>) => ReactNode
 }

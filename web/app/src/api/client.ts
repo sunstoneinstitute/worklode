@@ -1,4 +1,5 @@
 import createClient, { type Middleware } from "openapi-fetch"
+import { clearDrafts } from "@/hooks/use-draft"
 import type { paths } from "./schema"
 
 /** WL-REQ-1770: a session-authorized write carries the page header and a JSON body. */
@@ -12,6 +13,14 @@ const writeHeaders: Middleware = {
   },
 }
 
+/** WL-REQ-1813: drafts can hold unpublished work, so they end with the session. */
+const dropDraftsOn401: Middleware = {
+  onResponse({ response }) {
+    if (response.status === 401) clearDrafts()
+    return response
+  },
+}
+
 export const api = createClient<paths>({
   baseUrl: window.location.origin,
   credentials: "same-origin",
@@ -20,4 +29,4 @@ export const api = createClient<paths>({
   // This indirection reads globalThis.fetch at call time instead.
   fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
 })
-api.use(writeHeaders)
+api.use(writeHeaders, dropDraftsOn401)
