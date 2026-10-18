@@ -127,8 +127,8 @@ any future page:
 `src/router.tsx` declares every route in code. URLs are real paths
 (browser history), and `<Link to="...">` is typed, so a link to a missing
 route fails the type check. The pages are `/projects`, `/tasks`,
-`/projects/$projectId` (the Overview), `/projects/$projectId/crew`, `/projects/$projectId/documents` and
-`/projects/$projectId/tasks`; anything else
+`/projects/$projectId` (the Overview), `/projects/$projectId/crew`, `/projects/$projectId/documents`,
+`/projects/$projectId/tasks`, `/ideas`, `/ideas/new` and `/ideas/$ideaId/edit`; anything else
 renders `NotFound`. `src/routes.json` lists the same paths for the Go
 server (WL-REQ-1305), and `src/router.test.tsx` fails when the tree and
 the file disagree. Add a page to both, and to `spaRoutes` in
@@ -172,9 +172,10 @@ WL-REQ-1796, WL-REQ-1803), the Documents page (`src/pages/ProjectDocuments.tsx`:
 mutations, WL-REQ-1805) and the Overview, whose `ProjectSummary` card
 (`src/components/ProjectSummary.tsx`, page in `src/pages/ProjectOverview.tsx`)
 reads `GET /api/v1/projects/{id}/summary` through `useProjectSummary`
-(WL-REQ-1797, WL-REQ-1804). The old `/work` routes are deleted, not
+(WL-REQ-1797, WL-REQ-1804), and the Ideas pages (`useIdeas`, `useIdea` and
+the idea mutations, WL-REQ-1806). The old `/work` routes are deleted, not
 redirected. Page
-code from the `worklode-design` prototype (ideas, intake, crew,
+code from the `worklode-design` prototype (intake,
 its optimistic list helpers) comes in when its page is
 ported, written against `schema.d.ts`. That repo's `docs/API.md` describes
 its mock API; the server's contract is `GET /api/v1/openapi.json`.
@@ -185,6 +186,17 @@ MSW answers `/api/v1/*` with dummy data in `pnpm dev`
 `Ok<path, method>` from `src/mocks/typed.ts`, so a mock shaped unlike the
 Go type fails `pnpm typecheck` (WL-REQ-1309). `VITE_API_MOCKS=off` turns
 MSW off and proxies `/api` to the Go server (see `.env.example`).
+
+## Forms
+
+A form keeps its values and field errors in React state (WL-REQ-1810);
+`src/components/IdeaForm.tsx` is the example. A 422's `fields` arrive on
+`HttpError.fields` and show under their fields (WL-REQ-1811).
+`useLeaveGuard` (`src/hooks/use-leave-guard.ts`) and
+`UnsavedChangesDialog` ask before leaving with unsaved changes
+(WL-REQ-1812). `useDraft` (`src/hooks/use-draft.ts`) keeps the unsent
+values in `localStorage` under `worklode:v1:draft:<actor>:<form>[:<id>]`;
+`src/api/client.ts` deletes every draft on any 401 (WL-REQ-1813).
 
 ## DataTable: generic, schema-driven table component
 

@@ -1,1 +1,1 @@
-["/projects", "/projects/$projectId", "/projects/$projectId/crew", "/projects/$projectId/documents", "/projects/$projectId/tasks", "/tasks"]
+["/ideas", "/ideas/$ideaId/edit", "/ideas/new", "/projects", "/projects/$projectId", "/projects/$projectId/crew", "/projects/$projectId/documents", "/projects/$projectId/tasks", "/tasks"]

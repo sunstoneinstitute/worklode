@@ -1,6 +1,6 @@
 import { HttpResponse, delay, http } from "msw"
 import type { components } from "@/api/schema"
-import { type CrewMember, type ProjectDocument, type Task, db, projectDetail } from "./db"
+import { type CrewMember, type ProjectDocument, type Task, db, idea, projectDetail, visibleIdea } from "./db"
 import type { Ok } from "./typed"
 
 // Visible loading states in development; instant in tests
@@ -210,6 +210,73 @@ export const handlers = [
     const i = db.documents.findIndex((d) => d.id === params.id)
     if (i < 0) return HttpResponse.json({ error: "document not found" }, { status: 404 })
     db.documents.splice(i, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get("/api/v1/ideas", async () => {
+    await delay(LATENCY_MS)
+    const body: Ok<"/api/v1/ideas", "get"> = { ideas: db.ideas.filter((i) => visibleIdea(i.id ?? "")) }
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/ideas/:id", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const found = visibleIdea(String(params.id))
+    if (!found) return HttpResponse.json({ error: "idea not found" }, { status: 404 })
+    return HttpResponse.json(found)
+  }),
+
+  http.post("/api/v1/ideas", async ({ request }) => {
+    await delay(LATENCY_MS)
+    const input = (await request.json()) as components["schemas"]["CreateIdeaInput"]
+    if (!input.title?.trim()) {
+      return HttpResponse.json({ error: "invalid idea", fields: { title: "Give your idea a title." } }, { status: 422 })
+    }
+    const created = idea({
+      ...input,
+      id: `idea_${String(db.ideas.length + 1).padStart(12, "0")}`,
+      author: db.me.id ?? "",
+      submitted: "2026-10-18",
+    })
+    db.ideas.unshift(created)
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.patch("/api/v1/ideas/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const found = visibleIdea(String(params.id))
+    if (!found) return HttpResponse.json({ error: "idea not found" }, { status: 404 })
+    if (found.author !== db.me.id) return HttpResponse.json({ error: "forbidden" }, { status: 403 })
+    const input = (await request.json()) as components["schemas"]["PatchIdeaInput"]
+    if (input.title !== undefined && !input.title?.trim()) {
+      return HttpResponse.json({ error: "invalid idea", fields: { title: "Give your idea a title." } }, { status: 422 })
+    }
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== null && value !== undefined) Object.assign(found, { [key]: value })
+    }
+    const body: Ok<"/api/v1/ideas/{id}", "patch"> = found
+    return HttpResponse.json(body)
+  }),
+
+  http.post("/api/v1/ideas/:id/share", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const found = visibleIdea(String(params.id))
+    if (!found) return HttpResponse.json({ error: "idea not found" }, { status: 404 })
+    if (found.author !== db.me.id) return HttpResponse.json({ error: "forbidden" }, { status: 403 })
+    if (!db.intakeConfigured) {
+      return HttpResponse.json({ error: "intake project not configured" }, { status: 409 })
+    }
+    if (!found.shared) Object.assign(found, { shared: "2026-10-18", status: "intake", task: "WL-99" })
+    const body: Ok<"/api/v1/ideas/{id}/share", "post"> = found
+    return HttpResponse.json(body)
+  }),
+
+  http.delete("/api/v1/ideas/:id", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const found = visibleIdea(String(params.id))
+    if (!found) return HttpResponse.json({ error: "idea not found" }, { status: 404 })
+    if (!found.shared && found.author !== db.me.id) return HttpResponse.json({ error: "forbidden" }, { status: 403 })
+    db.ideas.splice(db.ideas.indexOf(found), 1)
     return new HttpResponse(null, { status: 204 })
   }),
 ]

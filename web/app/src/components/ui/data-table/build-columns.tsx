@@ -212,164 +212,168 @@ export function buildColumns<T>(
       meta: { column },
     } satisfies Partial<ColumnDef<T>> & Record<string, unknown>
 
-    if (column.render) {
-      return {
-        ...base,
-        cell: ({ row }) => {
-          const rowId = ctx.getRowId(row.original)
-          return column.render?.(row.original, {
-            addRow: ctx.addRow,
-            removeRow: () => ctx.removeRow(rowId),
-            updateRow: (patch) => ctx.updateRow(rowId, patch),
-          })
-        },
-      } as ColumnDef<T>
-    }
+    // A render replaces the cell only, so the column keeps its type's
+    // sorting and filtering
+    const typed = typedColumn()
+    if (!column.render) return typed
+    return {
+      ...typed,
+      cell: ({ row }) => {
+        const rowId = ctx.getRowId(row.original)
+        return column.render?.(row.original, {
+          addRow: ctx.addRow,
+          removeRow: () => ctx.removeRow(rowId),
+          updateRow: (patch) => ctx.updateRow(rowId, patch),
+        })
+      },
+    } as ColumnDef<T>
 
-    switch (column.type) {
-      case "select":
-        return {
-          ...base,
-          // The schema's `options` array is the authoritative order (e.g.
-          // Priority: Low/Medium/High) — sort by that, not alphabetically.
-          sortingFn: (a, b, columnId) => {
-            const options = column.options ?? []
-            return optionRank(options, a.getValue(columnId)) - optionRank(options, b.getValue(columnId))
-          },
-          // Membership, not substring — a row matches if its value is one of
-          // the currently checked options (OR semantics). The toolbar's
-          // multiselect filter UI normalizes an empty selection to
-          // `undefined` rather than `[]`, so an empty array is never
-          // expected to reach here.
-          filterFn: (row, columnId, filterValue: string[]) =>
-            filterValue.includes(row.getValue(columnId)),
-          cell: ({ row }) => (
-            <SelectCell
-              value={row.getValue<string>(column.key) ?? ""}
-              options={column.options ?? []}
-              unknownLabel={column.unknownLabel}
-              onChange={(next) =>
-                ctx.updateRow(ctx.getRowId(row.original), {
-                  [column.key]: next,
-                } as Partial<T>)
-              }
-            />
-          ),
-        } as ColumnDef<T>
-
-      case "date":
-        return {
-          ...base,
-          sortingFn: compareIsoDates,
-          // Range filter: ISO strings compare correctly lexicographically,
-          // same principle as compareIsoDates above.
-          filterFn: (row, columnId, filterValue: { from?: string; to?: string }) => {
-            const value = row.getValue<string>(columnId)
-            if (!value) return false // no due date can't fall within a range
-            if (filterValue.from && value < filterValue.from) return false
-            if (filterValue.to && value > filterValue.to) return false
-            return true
-          },
-          cell: ({ row }) => (
-            <DateCell
-              value={row.getValue<string>(column.key) ?? ""}
-              onChange={(next) =>
-                ctx.updateRow(ctx.getRowId(row.original), {
-                  [column.key]: next,
-                } as Partial<T>)
-              }
-            />
-          ),
-        } as ColumnDef<T>
-
-      case "user":
-        return {
-          ...base,
-          // Sort and filter by the person's handle as displayed, never
-          // their opaque id.
-          sortingFn: (a, b, columnId) => {
-            const name = (id: string) => {
-              const user = ctx.users.find((u) => u.id === id)
-              return user ? userHandle(user) : ""
-            }
-            return name(a.getValue(columnId)).localeCompare(name(b.getValue(columnId)))
-          },
-          // The multiselect filter UI picks specific people (by id) from the
-          // roster rather than typing a name, so this is a direct id
-          // membership check — unlike sortingFn above, which still needs to
-          // resolve to the person's handle.
-          filterFn: (row, columnId, filterValue: string[]) =>
-            filterValue.includes(row.getValue(columnId)),
-          cell: ({ row }) => (
-            <UserCell
-              value={row.getValue<string>(column.key) ?? ""}
-              users={ctx.users}
-              options={ctx.pickableUsers(row.original)}
-              onChange={(next) =>
-                ctx.updateRow(ctx.getRowId(row.original), {
-                  [column.key]: next,
-                } as Partial<T>)
-              }
-            />
-          ),
-        } as ColumnDef<T>
-
-      case "users":
-        return {
-          ...base,
-          // By headcount, then by the handles themselves
-          sortingFn: (a, b, columnId) => {
-            const left = a.getValue<string[]>(columnId) ?? []
-            const right = b.getValue<string[]>(columnId) ?? []
-            if (left.length !== right.length) return left.length - right.length
-            return displayText(left, column, ctx.users).localeCompare(
-              displayText(right, column, ctx.users),
-            )
-          },
-          // Same people-picker filter as "user": a row matches if any of the
-          // checked people is among its participants
-          filterFn: (row, columnId, filterValue: string[]) =>
-            (row.getValue<string[]>(columnId) ?? []).some((id) => filterValue.includes(id)),
-          cell: ({ row }) => (
-            <UsersCell
-              value={row.getValue<string[]>(column.key) ?? []}
-              users={ctx.users}
-              options={ctx.pickableUsers(row.original)}
-              onChange={(next) =>
-                ctx.updateRow(ctx.getRowId(row.original), {
-                  [column.key]: next,
-                } as Partial<T>)
-              }
-            />
-          ),
-        } as ColumnDef<T>
-
-      case "actions":
-        return {
-          ...base,
-          accessorFn: undefined,
-          cell: ({ row }) => {
-            const rowId = ctx.getRowId(row.original)
-            return (
-              <ActionsCell
-                row={row.original}
-                actions={column.actions ?? []}
-                helpers={{
-                  addRow: ctx.addRow,
-                  removeRow: () => ctx.removeRow(rowId),
-                  updateRow: (patch) => ctx.updateRow(rowId, patch),
-                }}
-                preview={<RowPreview row={row.original} columns={columns} users={ctx.users} />}
+    function typedColumn(): ColumnDef<T> {
+      switch (column.type) {
+        case "select":
+          return {
+            ...base,
+            // The schema's `options` array is the authoritative order (e.g.
+            // Priority: Low/Medium/High) — sort by that, not alphabetically.
+            sortingFn: (a, b, columnId) => {
+              const options = column.options ?? []
+              return optionRank(options, a.getValue(columnId)) - optionRank(options, b.getValue(columnId))
+            },
+            // Membership, not substring — a row matches if its value is one of
+            // the currently checked options (OR semantics). The toolbar's
+            // multiselect filter UI normalizes an empty selection to
+            // `undefined` rather than `[]`, so an empty array is never
+            // expected to reach here.
+            filterFn: (row, columnId, filterValue: string[]) =>
+              filterValue.includes(row.getValue(columnId)),
+            cell: ({ row }) => (
+              <SelectCell
+                value={row.getValue<string>(column.key) ?? ""}
+                options={column.options ?? []}
+                unknownLabel={column.unknownLabel}
+                onChange={(next) =>
+                  ctx.updateRow(ctx.getRowId(row.original), {
+                    [column.key]: next,
+                  } as Partial<T>)
+                }
               />
-            )
-          },
-        } as ColumnDef<T>
+            ),
+          } as ColumnDef<T>
 
-      default:
-        return {
-          ...base,
-          cell: ({ row }) => <TextCell value={row.getValue(column.key)} />,
-        } as ColumnDef<T>
+        case "date":
+          return {
+            ...base,
+            sortingFn: compareIsoDates,
+            // Range filter: ISO strings compare correctly lexicographically,
+            // same principle as compareIsoDates above.
+            filterFn: (row, columnId, filterValue: { from?: string; to?: string }) => {
+              const value = row.getValue<string>(columnId)
+              if (!value) return false // no due date can't fall within a range
+              if (filterValue.from && value < filterValue.from) return false
+              if (filterValue.to && value > filterValue.to) return false
+              return true
+            },
+            cell: ({ row }) => (
+              <DateCell
+                value={row.getValue<string>(column.key) ?? ""}
+                onChange={(next) =>
+                  ctx.updateRow(ctx.getRowId(row.original), {
+                    [column.key]: next,
+                  } as Partial<T>)
+                }
+              />
+            ),
+          } as ColumnDef<T>
+
+        case "user":
+          return {
+            ...base,
+            // Sort and filter by the person's handle as displayed, never
+            // their opaque id.
+            sortingFn: (a, b, columnId) => {
+              const name = (id: string) => {
+                const user = ctx.users.find((u) => u.id === id)
+                return user ? userHandle(user) : ""
+              }
+              return name(a.getValue(columnId)).localeCompare(name(b.getValue(columnId)))
+            },
+            // The multiselect filter UI picks specific people (by id) from the
+            // roster rather than typing a name, so this is a direct id
+            // membership check — unlike sortingFn above, which still needs to
+            // resolve to the person's handle.
+            filterFn: (row, columnId, filterValue: string[]) =>
+              filterValue.includes(row.getValue(columnId)),
+            cell: ({ row }) => (
+              <UserCell
+                value={row.getValue<string>(column.key) ?? ""}
+                users={ctx.users}
+                options={ctx.pickableUsers(row.original)}
+                onChange={(next) =>
+                  ctx.updateRow(ctx.getRowId(row.original), {
+                    [column.key]: next,
+                  } as Partial<T>)
+                }
+              />
+            ),
+          } as ColumnDef<T>
+
+        case "users":
+          return {
+            ...base,
+            // By headcount, then by the handles themselves
+            sortingFn: (a, b, columnId) => {
+              const left = a.getValue<string[]>(columnId) ?? []
+              const right = b.getValue<string[]>(columnId) ?? []
+              if (left.length !== right.length) return left.length - right.length
+              return displayText(left, column, ctx.users).localeCompare(
+                displayText(right, column, ctx.users),
+              )
+            },
+            // Same people-picker filter as "user": a row matches if any of the
+            // checked people is among its participants
+            filterFn: (row, columnId, filterValue: string[]) =>
+              (row.getValue<string[]>(columnId) ?? []).some((id) => filterValue.includes(id)),
+            cell: ({ row }) => (
+              <UsersCell
+                value={row.getValue<string[]>(column.key) ?? []}
+                users={ctx.users}
+                options={ctx.pickableUsers(row.original)}
+                onChange={(next) =>
+                  ctx.updateRow(ctx.getRowId(row.original), {
+                    [column.key]: next,
+                  } as Partial<T>)
+                }
+              />
+            ),
+          } as ColumnDef<T>
+
+        case "actions":
+          return {
+            ...base,
+            accessorFn: undefined,
+            cell: ({ row }) => {
+              const rowId = ctx.getRowId(row.original)
+              return (
+                <ActionsCell
+                  row={row.original}
+                  actions={column.actions ?? []}
+                  helpers={{
+                    addRow: ctx.addRow,
+                    removeRow: () => ctx.removeRow(rowId),
+                    updateRow: (patch) => ctx.updateRow(rowId, patch),
+                  }}
+                  preview={<RowPreview row={row.original} columns={columns} users={ctx.users} />}
+                />
+              )
+            },
+          } as ColumnDef<T>
+
+        default:
+          return {
+            ...base,
+            cell: ({ row }) => <TextCell value={row.getValue(column.key)} />,
+          } as ColumnDef<T>
+      }
     }
   })
 }
