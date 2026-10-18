@@ -125,7 +125,6 @@ func TestRefShortcut(t *testing.T) {
 		{"45", "/projects/proj/spec/45"},
 		{"WL-REQ-1", "/projects/proj/rule/1"},
 		{"WL-RULE-1", "/projects/proj/rule/1"},
-		{"WL-CL-1", "/projects/proj/rule/1"},
 		{milestoneID, "/projects/proj/milestones#" + milestoneID},
 		{deliverableID, "/projects/proj/deliverables#" + deliverableID},
 		{"WL-MILE-99", ""},

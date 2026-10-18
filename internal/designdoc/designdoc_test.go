@@ -314,10 +314,9 @@ func TestParseRuleRef(t *testing.T) {
 	}{
 		{"WL-RULE-12", "WL", 12, true},
 		{"P1-RULE-3", "P1", 3, true},
-		{"WL-CL-12", "WL", 12, true}, // pre-S64 spelling, same rule as WL-RULE-12
-		{"P1-CL-3", "P1", 3, true},
+		{"WL-REQ-12", "WL", 12, true},
 		{"WL-SPEC-12", "", 0, false},
-		{"wl-cl-12", "", 0, false},
+		{"wl-rule-12", "", 0, false},
 		{"WL-RULE-", "", 0, false},
 		{"WL-RULE-12#sec-1", "", 0, false},
 	}
@@ -350,10 +349,10 @@ func TestSectionByAnchorEditRerendersHeading(t *testing.T) {
 	}
 }
 
-// TestFindRuleRefsAlias: WL-CL-12 in prose is the rule WL-RULE-12, and the
-// two spellings dedupe to one ref (S64).
+// TestFindRuleRefsAlias: WL-REQ-12 and WL-RULE-12 in prose are one rule, and
+// the two spellings dedupe to one ref.
 func TestFindRuleRefsAlias(t *testing.T) {
-	cs := FindRuleRefs("Old text cites WL-CL-12, new text WL-RULE-12, and P1-CL-3.")
+	cs := FindRuleRefs("One text cites WL-REQ-12, another WL-RULE-12, and P1-REQ-3.")
 	want := []RuleRef{{Key: "WL", Number: 12}, {Key: "P1", Number: 3}}
 	if !reflect.DeepEqual(cs, want) {
 		t.Errorf("FindRuleRefs = %+v, want %+v", cs, want)
@@ -364,7 +363,7 @@ func TestFindRuleRefsAlias(t *testing.T) {
 // non-matching ref forms (a lowercased rule ref, an unanchored document
 // ref) (S26).
 func TestFindRefs(t *testing.T) {
-	text := "See WL-RULE-12 and WL-RULE-12 again, then P1-SPEC-4#sec-2.1 and WL-ADR-7 (no anchor) and wl-cl-3."
+	text := "See WL-RULE-12 and WL-RULE-12 again, then P1-SPEC-4#sec-2.1 and WL-ADR-7 (no anchor) and wl-rule-3."
 	cs := FindRuleRefs(text)
 	if len(cs) != 1 || cs[0].Key != "WL" || cs[0].Number != 12 {
 		t.Errorf("rule refs: %+v", cs)
