@@ -2,9 +2,12 @@ package model
 
 // ErrorResponse is the body every non-2xx API response carries: the server's
 // own message for the failure. internal/cli reads the Error field back out to
-// turn a status code into a sentence a human asked for.
+// turn a status code into a sentence a human asked for. Fields, on a 422
+// that refuses specific fields, maps each field's wire name to its message
+// (WL-REQ-1811).
 type ErrorResponse struct {
-	Error string `json:"error"`
+	Error  string            `json:"error"`
+	Fields map[string]string `json:"fields,omitempty"`
 }
 
 // HealthResponse is the body of GET /healthz.

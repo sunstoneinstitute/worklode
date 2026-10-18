@@ -683,6 +683,9 @@ type server struct {
 	// projectDocumentWrites counts documents register writes (WL-REQ-1798)
 	// by op; see projectdocuments.go.
 	projectDocumentWrites *prometheus.CounterVec
+	// ideaWrites counts successful ideas writes (WL-REQ-1799) by op; see
+	// ideas.go.
+	ideaWrites *prometheus.CounterVec
 
 	// planBudgetChecks counts createDoc/updateDocBody's plan token budget
 	// check (S6, S19), by outcome (ok, warn, refused); see planbudget.go and
@@ -1067,6 +1070,13 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("POST /api/v1/projects/{id}/documents", s.createProjectDocument)
 	r.api("PATCH /api/v1/documents/{id}", s.patchProjectDocument)
 	r.api("DELETE /api/v1/documents/{id}", s.deleteProjectDocument)
+	r.api("GET /api/v1/ideas", s.listIdeas)
+	r.api("POST /api/v1/ideas", s.createIdea)
+	r.api("GET /api/v1/ideas/{id}", s.getIdea)
+	r.api("PATCH /api/v1/ideas/{id}", s.patchIdea)
+	r.api("POST /api/v1/ideas/{id}/share", s.shareIdea)
+	r.api("DELETE /api/v1/ideas/{id}", s.deleteIdea)
+	r.api("PATCH /api/v1/ideas/{id}/intake", s.setIdeaIntake)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
 	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
@@ -1705,7 +1715,8 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrReferenceExists),
 		errors.Is(err, store.ErrActorExists),
 		errors.Is(err, store.ErrProjectExists),
-		errors.Is(err, store.ErrRuleCovered):
+		errors.Is(err, store.ErrRuleCovered),
+		errors.Is(err, store.ErrNotShared):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		s.log.Error("internal error", "err", err)
