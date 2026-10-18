@@ -444,10 +444,19 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/projects/{id}/participants": guarded(permProjectRead),
 	"GET /api/v1/projects/{id}/summary":      guarded(permProjectRead),
 	// The documents register (WL-REQ-1798).
-	"GET /api/v1/projects/{id}/documents":               guarded(permProjectRead),
-	"POST /api/v1/projects/{id}/documents":              guarded(permProjectWrite),
-	"PATCH /api/v1/documents/{id}":                      guarded(permProjectWrite),
-	"DELETE /api/v1/documents/{id}":                     guarded(permProjectWrite),
+	"GET /api/v1/projects/{id}/documents":  guarded(permProjectRead),
+	"POST /api/v1/projects/{id}/documents": guarded(permProjectWrite),
+	"PATCH /api/v1/documents/{id}":         guarded(permProjectWrite),
+	"DELETE /api/v1/documents/{id}":        guarded(permProjectWrite),
+	// Ideas (WL-REQ-1799). Who may see or change one idea is the store's
+	// visibility predicate; these only say who may use the routes.
+	"GET /api/v1/ideas":                                 guardedAny(permIdeaRead),
+	"POST /api/v1/ideas":                                guardedAny(permIdeaWrite),
+	"GET /api/v1/ideas/{id}":                            guardedAny(permIdeaRead),
+	"PATCH /api/v1/ideas/{id}":                          guardedAny(permIdeaWrite),
+	"POST /api/v1/ideas/{id}/share":                     guardedAny(permIdeaWrite),
+	"DELETE /api/v1/ideas/{id}":                         guardedAny(permIdeaWrite),
+	"PATCH /api/v1/ideas/{id}/intake":                   guardedAny(permIdeaWrite),
 	"POST /api/v1/projects/{id}/participants":           guarded(permCrewWrite),
 	"DELETE /api/v1/projects/{id}/participants/{actor}": guarded(permCrewWrite),
 	// Reporting overhead usage (WL-REQ-40) is not a claim on any one task,
