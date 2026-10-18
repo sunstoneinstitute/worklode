@@ -173,7 +173,9 @@ mutations, WL-REQ-1805) and the Overview, whose `ProjectSummary` card
 (`src/components/ProjectSummary.tsx`, page in `src/pages/ProjectOverview.tsx`)
 reads `GET /api/v1/projects/{id}/summary` through `useProjectSummary`
 (WL-REQ-1797, WL-REQ-1804), and the Ideas pages (`useIdeas`, `useIdea` and
-the idea mutations, WL-REQ-1806). The old `/work` routes are deleted, not
+the idea mutations, WL-REQ-1806). An idea is private to its author until
+`POST /api/v1/ideas/{id}/share` mints its design task in the
+`LODE_INTAKE_PROJECT` project (WL-REQ-1799). The old `/work` routes are deleted, not
 redirected. Page
 code from the `worklode-design` prototype (intake,
 its optimistic list helpers) comes in when its page is
