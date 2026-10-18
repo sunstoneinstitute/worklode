@@ -102,6 +102,16 @@ var (
 	ErrNotShared = errors.New("idea not shared")
 )
 
+// FieldError is an ErrInvalidInput that names the one request field at
+// fault by its wire name, so a handler can answer 422 with
+// model.ErrorResponse.Fields (WL-REQ-1811).
+type FieldError struct {
+	Field, Msg string
+}
+
+func (e *FieldError) Error() string { return e.Field + ": " + e.Msg }
+func (e *FieldError) Unwrap() error { return ErrInvalidInput }
+
 // pgViolation reports whether err is a Postgres error with the given
 // SQLSTATE, optionally narrowed to one named constraint (an empty constraint
 // matches any).
