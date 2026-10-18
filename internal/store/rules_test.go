@@ -530,11 +530,63 @@ func TestSetRuleMetaKindRefusedWhenCovered(t *testing.T) {
 	if err := set(1, "principle"); !errors.Is(err, ErrRuleCovered) {
 		t.Errorf("covered rule to principle: %v, want ErrRuleCovered", err)
 	}
+	if err := set(1, "capability"); !errors.Is(err, ErrRuleCovered) {
+		t.Errorf("covered rule to capability: %v, want ErrRuleCovered", err)
+	}
 	if err := set(1, "catalogue"); err != nil {
 		t.Errorf("covered rule to catalogue: %v", err)
 	}
 	if err := set(3, "informative"); err != nil {
 		t.Errorf("uncovered rule to informative: %v", err)
+	}
+}
+
+// TestCapabilityCoveredRollsUp: a capability is covered when every
+// requirement and catalogue refining it, directly or through a principle, is
+// covered, and it is never a planning gap itself (WL-REQ-1642).
+func TestCapabilityCoveredRollsUp(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "cap", Body: closureDoc, CreatedBy: "stig"})
+	c, a, p, d := ruleID(t, s, "P1", 1), ruleID(t, s, "P1", 2), ruleID(t, s, "P1", 3), ruleID(t, s, "P1", 4)
+	capability, principle := "capability", "principle"
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		if err := SetRuleMeta(tx, c, model.RuleMetaInput{Kind: &capability}); err != nil {
+			return err
+		}
+		if err := SetRuleMeta(tx, p, model.RuleMetaInput{Kind: &principle}); err != nil {
+			return err
+		}
+		for _, e := range [][2]int64{{a, c}, {p, c}, {d, p}} {
+			if err := LinkRules(tx, e[0], e[1], "refines"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	covered := func() bool {
+		t.Helper()
+		ok, err := s.CapabilityCovered(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	coveringPlan(t, s, "plan-a", true, "P1-REQ-2")
+	if covered() {
+		t.Error("covered with P1-REQ-4 (refines through a principle) uncovered")
+	}
+	coveringPlan(t, s, "plan-d", true, "P1-REQ-4")
+	if !covered() {
+		t.Error("not covered with every refining requirement covered")
+	}
+	if _, _, err := acceptDoc(t, s, spec.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if slugs, gaps := needsPlanningSlugs(t, s, "p1"); len(slugs) != 0 {
+		t.Errorf("needs planning = %v / %v, want the capability and principle never a gap", slugs, gaps)
 	}
 }
 

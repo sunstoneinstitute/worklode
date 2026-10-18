@@ -13,8 +13,8 @@ type Rule struct {
 	// requirement, "WL-RULE-12" otherwise (WL-REQ-165).
 	Ref    string `json:"ref"`
 	Number int64  `json:"number"`
-	// Kind is requirement, catalogue, invariant, definition or principle
-	// (WL-REQ-165). informative is retired and reads as a principle.
+	// Kind is requirement, catalogue, invariant, definition, principle or
+	// capability (WL-REQ-1642). informative is retired and reads as a principle.
 	Kind    string `json:"kind"`
 	Status  string `json:"status"` // draft | accepted | superseded | withdrawn
 	Version int    `json:"version"`
@@ -96,7 +96,7 @@ type AcceptRuleInput struct {
 type RuleMetaInput struct {
 	Owner *string   `json:"owner,omitempty"`
 	Tags  *[]string `json:"tags,omitempty"`
-	Kind  *string   `json:"kind,omitempty"` // requirement | catalogue | invariant | definition | principle
+	Kind  *string   `json:"kind,omitempty"` // requirement | catalogue | invariant | definition | principle | capability
 	// Concept is a definition's concept IRI from ns/concept.ttl; "" clears it.
 	Concept *string `json:"concept,omitempty"`
 }

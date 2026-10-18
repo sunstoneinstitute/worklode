@@ -155,12 +155,13 @@ const (
 	RuleKindInvariant   = "invariant"
 	RuleKindDefinition  = "definition"
 	RuleKindPrinciple   = "principle"
+	RuleKindCapability  = "capability"
 	RuleKindInformative = "informative"
 )
 
 // RuleKinds are the kinds a rule may be given, in WL-REQ-1642's order; the
 // retired informative is not one of them.
-var RuleKinds = []string{RuleKindRequirement, RuleKindCatalogue, RuleKindInvariant, RuleKindDefinition, RuleKindPrinciple}
+var RuleKinds = []string{RuleKindRequirement, RuleKindCatalogue, RuleKindInvariant, RuleKindDefinition, RuleKindPrinciple, RuleKindCapability}
 
 // RuleKindCovered reports whether a plan covers rules of this kind: a
 // requirement or a catalogue. Every other kind is never covered and never a
