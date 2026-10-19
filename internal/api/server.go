@@ -1079,6 +1079,8 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("POST /api/v1/ideas/{id}/litmus-tests", s.addLitmusTest)
 	r.api("GET /api/v1/ideas/{id}/pre-research", s.getPreResearch)
 	r.api("PUT /api/v1/ideas/{id}/pre-research", s.putPreResearch)
+	r.api("GET /api/v1/ideas/{id}/sources", s.listIdeaSources)
+	r.api("POST /api/v1/ideas/{id}/sources", s.createIdeaSource)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
 	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)

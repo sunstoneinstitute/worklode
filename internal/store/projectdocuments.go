@@ -1,6 +1,9 @@
 // projectdocuments.go implements WL-REQ-1798's documents register: pointers
 // to files, datasets and links a project or idea works from. Every write is
 // one event (document.registered, document.updated, document.removed).
+// A row owned by an idea is read and written only while the idea is shared
+// (requireShared), so a private idea's sources are ErrNotShared to its author
+// and ErrNotFound to everyone else.
 package store
 
 import (
@@ -21,6 +24,9 @@ type DocOwner struct{ project, idea string }
 
 // ProjectOwner is the DocOwner for a project's register.
 func ProjectOwner(projectID string) DocOwner { return DocOwner{project: projectID} }
+
+// IdeaOwner is the DocOwner for an idea's sources.
+func IdeaOwner(ideaID string) DocOwner { return DocOwner{idea: ideaID} }
 
 const (
 	// Participants are read as JSON so database/sql needs no text[] codec.
@@ -139,9 +145,27 @@ func (s *Store) ListProjectDocuments(ctx context.Context, projectID string) ([]m
 	return s.listProjectDocuments(ctx, "project", projectID)
 }
 
-// ListIdeaDocuments returns an idea's register rows, oldest first.
-func (s *Store) ListIdeaDocuments(ctx context.Context, ideaTaskID string) ([]model.ProjectDocument, error) {
-	return s.listProjectDocuments(ctx, "idea", ideaTaskID)
+// ListIdeaDocuments returns a shared idea's register rows, oldest first.
+func (s *Store) ListIdeaDocuments(ctx context.Context, caller, ideaID string) ([]model.ProjectDocument, error) {
+	if err := requireShared(ctx, s.db, caller, ideaID); err != nil {
+		return nil, err
+	}
+	return s.listProjectDocuments(ctx, "idea", ideaID)
+}
+
+// getWritableDocument reads a row for PATCH or DELETE. A row owned by an
+// idea also needs the idea shared and visible to caller.
+func (s *Store) getWritableDocument(ctx context.Context, id, caller string) (*model.ProjectDocument, error) {
+	d, err := s.GetProjectDocument(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if d.Idea != "" {
+		if err := requireShared(ctx, s.db, caller, d.Idea); err != nil {
+			return nil, err
+		}
+	}
+	return d, nil
 }
 
 // GetProjectDocument returns one row, ErrNotFound when absent.
@@ -195,6 +219,11 @@ func (s *Store) CreateProjectDocument(ctx context.Context, owner DocOwner, in mo
 		return nil, err
 	}
 	if err := s.recordProjectDocEvent(ctx, "document.registered", actor, d, func(tx *sql.Tx) error {
+		if owner.idea != "" {
+			if err := requireShared(ctx, tx, actor, owner.idea); err != nil {
+				return err
+			}
+		}
 		if owner.project != "" {
 			var ok bool
 			if err := tx.QueryRow(`SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1)`, owner.project).Scan(&ok); err != nil {
@@ -217,7 +246,7 @@ func (s *Store) CreateProjectDocument(ctx context.Context, owner DocOwner, in mo
 // PatchProjectDocument applies the non-nil fields of in and records
 // document.updated. The owner never changes.
 func (s *Store) PatchProjectDocument(ctx context.Context, id string, in model.PatchProjectDocumentInput, actor string) (*model.ProjectDocument, error) {
-	d, err := s.GetProjectDocument(ctx, id)
+	d, err := s.getWritableDocument(ctx, id, actor)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +300,7 @@ func (s *Store) PatchProjectDocument(ctx context.Context, id string, in model.Pa
 
 // DeleteProjectDocument hard-deletes a row and records document.removed.
 func (s *Store) DeleteProjectDocument(ctx context.Context, id, actor string) error {
-	d, err := s.GetProjectDocument(ctx, id)
+	d, err := s.getWritableDocument(ctx, id, actor)
 	if err != nil {
 		return err
 	}

@@ -122,3 +122,77 @@ func TestProjectDocumentsCookieWrite(t *testing.T) {
 		t.Fatalf("with X-Requested-With = %d, want 201; body %s", rec.Code, rec.Body)
 	}
 }
+
+// TestIdeaSourcesAPI covers an idea's sources (WL-REQ-1798): a private
+// idea's sources are 404 to everyone but its author, an admin included, and
+// 409 to the author; a shared idea's rows take category "sources" and are
+// edited through the register's PATCH and DELETE.
+func TestIdeaSourcesAPI(t *testing.T) {
+	t.Parallel()
+	st := newTestStore(t)
+	admin := seedActor(t, st, "alice", "human", "Alice", true)
+	bob := seedActor(t, st, "bob", "human", "Bob", false)
+	createProject(t, st, "intake")
+	h, metricsH, err := api.NewServer(st, api.Config{WebOpen: true, IntakeProject: "intake"})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	idea := decodeIdea(t, doReq(t, h, "POST", "/api/v1/ideas", bob,
+		map[string]any{"title": "t", "type": "general"}), http.StatusCreated)
+	p := "/api/v1/ideas/" + idea.ID + "/sources"
+	body := map[string]any{"name": "Census", "category": "spec", "type": "dataset", "status": "draft", "source": "SSB"}
+
+	for _, method := range []string{"GET", "POST"} {
+		wantErr(t, doReq(t, h, method, p, admin, body), http.StatusNotFound, "")
+		wantErr(t, doReq(t, h, method, p, bob, body), http.StatusConflict, "idea not shared")
+		wantErr(t, doReq(t, h, method, "/api/v1/ideas/idea_nope/sources", bob, body), http.StatusNotFound, "")
+	}
+
+	decodeIdea(t, doReq(t, h, "POST", "/api/v1/ideas/"+idea.ID+"/share", bob, nil), http.StatusOK)
+
+	var list model.ProjectDocumentListResponse
+	decodeBody(t, doReq(t, h, "GET", p, admin, nil), http.StatusOK, &list)
+	if list.Documents == nil || len(list.Documents) != 0 {
+		t.Fatalf("empty list = %#v", list)
+	}
+	var d model.ProjectDocument
+	decodeBody(t, doReq(t, h, "POST", p, admin, body), http.StatusCreated, &d)
+	if d.ID == "" || d.Idea != idea.ID || d.Project != "" || d.Category != "sources" || d.Source != "SSB" {
+		t.Fatalf("created = %+v", d)
+	}
+	decodeBody(t, doReq(t, h, "GET", p, bob, nil), http.StatusOK, &list)
+	if len(list.Documents) != 1 || list.Documents[0].ID != d.ID {
+		t.Fatalf("list = %+v", list)
+	}
+	decodeBody(t, doReq(t, h, "GET", "/api/v1/projects/intake/documents", admin, nil), http.StatusOK, &list)
+	if len(list.Documents) != 0 {
+		t.Fatalf("intake project's register shows the idea's source: %+v", list)
+	}
+	wantErr(t, doReq(t, h, "POST", p, bob, map[string]any{"name": "x", "type": "nope", "status": "draft"}),
+		http.StatusBadRequest, "")
+
+	var patched model.ProjectDocument
+	decodeBody(t, doReq(t, h, "PATCH", "/api/v1/documents/"+d.ID, bob, map[string]any{"status": "final"}), http.StatusOK, &patched)
+	if patched.Status != "final" || patched.Idea != idea.ID {
+		t.Fatalf("patched = %+v", patched)
+	}
+	if rr := doReq(t, h, "DELETE", "/api/v1/documents/"+d.ID, bob, nil); rr.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d, want 204; body %s", rr.Code, rr.Body)
+	}
+
+	// A tombstoned idea's rows are gone for everyone.
+	decodeBody(t, doReq(t, h, "POST", p, bob, body), http.StatusCreated, &d)
+	if rr := doReq(t, h, "DELETE", "/api/v1/ideas/"+idea.ID, admin, nil); rr.Code != http.StatusNoContent {
+		t.Fatalf("delete idea = %d; body %s", rr.Code, rr.Body)
+	}
+	for _, who := range []string{admin, bob} {
+		wantErr(t, doReq(t, h, "PATCH", "/api/v1/documents/"+d.ID, who, map[string]any{"status": "final"}), http.StatusNotFound, "")
+		wantErr(t, doReq(t, h, "DELETE", "/api/v1/documents/"+d.ID, who, nil), http.StatusNotFound, "")
+		wantErr(t, doReq(t, h, "GET", p, who, nil), http.StatusNotFound, "")
+	}
+
+	metrics := doReq(t, metricsH, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_project_documents_writes_total{op="create"} 2`) {
+		t.Errorf("metrics missing two creates")
+	}
+}
