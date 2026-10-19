@@ -78,12 +78,12 @@ func TestClientForCallsAPIInProcessWithCallersToken(t *testing.T) {
 	s := &server{cfg: Config{API: stubAPI, PublicURL: "https://lode.example"}}
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-	if _, err := s.clientFor(req); err != errNoBearer {
+	if _, err := s.clientFor(req.Header); err != errNoBearer {
 		t.Fatalf("clientFor without bearer: err = %v, want errNoBearer", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer wl_test")
-	c, err := s.clientFor(req)
+	c, err := s.clientFor(req.Header)
 	if err != nil {
 		t.Fatal(err)
 	}
