@@ -258,9 +258,9 @@ func replaceExternalCover(tx *sql.Tx, edgeID, fromDoc int64, rules []int64) erro
 }
 
 // CapabilityCovered reports whether a capability rule is covered
-// (WL-REQ-1642): every live requirement and catalogue that refines it,
-// directly or through other refiners, is covered by an accepted, superseded
-// or spent plan. A capability nothing builds refines is covered vacuously.
+// (WL-REQ-1642): at least one live requirement or catalogue refines it,
+// directly or through other refiners, and every one of them is covered by an
+// accepted, superseded or spent plan. A capability nothing builds is not covered.
 func (s *Store) CapabilityCovered(ctx context.Context, ruleID int64) (bool, error) {
 	var covered bool
 	err := s.db.QueryRowContext(ctx,
@@ -269,13 +269,16 @@ func (s *Store) CapabilityCovered(ctx context.Context, ruleID int64) (bool, erro
 		   UNION
 		     SELECT e.from_rule FROM rule_edges e JOIN refiner f ON e.to_rule = f.rule_id
 		      WHERE e.type = 'refines'
-		 )
-		 SELECT NOT EXISTS (
-		     SELECT 1 FROM refiner f JOIN rules r ON r.id = f.rule_id
+		 ), builder AS (
+		     SELECT r.id FROM refiner f JOIN rules r ON r.id = f.rule_id
 		      WHERE r.kind IN ('`+designdoc.RuleKindRequirement+`', '`+designdoc.RuleKindCatalogue+`')
 		        AND r.status <> 'withdrawn'
-		        AND NOT EXISTS (SELECT 1 FROM covered_rules c JOIN docs d ON d.id = c.plan_id
-		                         WHERE c.rule_id = r.id AND d.deleted_at IS NULL
+		 )
+		 SELECT EXISTS (SELECT 1 FROM builder)
+		    AND NOT EXISTS (
+		     SELECT 1 FROM builder b
+		      WHERE NOT EXISTS (SELECT 1 FROM covered_rules c JOIN docs d ON d.id = c.plan_id
+		                         WHERE c.rule_id = b.id AND d.deleted_at IS NULL
 		                           AND d.status IN ('accepted', 'superseded', 'spent')))`,
 		ruleID).Scan(&covered)
 	if err != nil {
