@@ -1,4 +1,4 @@
-import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query"
+import { keepPreviousData, queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query"
 import { api } from "./client"
 import type { ErrorResponse } from "./types"
 
@@ -49,7 +49,8 @@ export const queryKeys = {
   },
   tasks: {
     all: ["tasks"] as const,
-    list: (project?: string) => ["tasks", { project: project ?? null }] as const,
+    list: (project?: string, states?: string[]) =>
+      ["tasks", { project: project ?? null, states: states ?? null }] as const,
   },
   documents: {
     all: ["documents"] as const,
@@ -135,12 +136,19 @@ export function useProjectCrew(id: string) {
   })
 }
 
-/** Tasks, optionally those of one project (`GET /api/v1/tasks?project=`) */
-export function useTasks({ project }: { project?: string } = {}) {
+/**
+ * Tasks, optionally those of one project and in some states
+ * (`GET /api/v1/tasks?project=&state=`). Bodies are left out (WL-REQ-1846).
+ */
+export function useTasks({ project, states }: { project?: string; states?: string[] } = {}) {
   return useQuery({
-    queryKey: queryKeys.tasks.list(project),
+    queryKey: queryKeys.tasks.list(project, states),
+    // A State filter change refetches; keep the old rows up meanwhile
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      const { data, error, response } = await api.GET("/api/v1/tasks", { params: { query: { project } } })
+      const { data, error, response } = await api.GET("/api/v1/tasks", {
+        params: { query: { project, state: states } },
+      })
       if (error) throw failure(error, response)
       return data.tasks ?? []
     },
