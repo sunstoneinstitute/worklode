@@ -223,6 +223,12 @@ when it drifts (`scripts/check-openapi-client.sh`, WL-REQ-1309). The MSW
 mocks are typed from it, so a mock shaped unlike the Go type fails
 `pnpm typecheck`. `e2e/webapp_test.go` drives both surfaces end to end.
 
+**One MCP endpoint.** `internal/mcp` serves `/mcp` (WL-REQ-1822) on the same
+host. Its tools call the API mux in-process with the caller's own token, so
+authorization stays in `routeGuards` and never forks into the tools
+(WL-RULE-1823). A project-scoped tool takes a handle from `project_use`, never
+a bare project name. `e2e/mcp_test.go` drives it over HTTP.
+
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks — including `merge_group` and `repository_ruleset` for the merge
 queue — and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer
