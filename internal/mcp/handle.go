@@ -31,11 +31,18 @@ var (
 )
 
 func handleMAC(secret []byte, actor, key string, hours uint32) []byte {
-	m := hmac.New(sha256.New, secret)
 	var h [4]byte
 	binary.BigEndian.PutUint32(h[:], hours)
-	m.Write([]byte(actor + "\x00" + key + "\x00"))
-	m.Write(h[:])
+	return mac8(secret, []byte(actor+"\x00"+key+"\x00"), h[:])
+}
+
+// mac8 is the first 8 bytes of HMAC-SHA256 over parts, shared by handles and
+// page cursors.
+func mac8(secret []byte, parts ...[]byte) []byte {
+	m := hmac.New(sha256.New, secret)
+	for _, p := range parts {
+		m.Write(p)
+	}
 	return m.Sum(nil)[:8]
 }
 
