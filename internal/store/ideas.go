@@ -165,11 +165,20 @@ func requireShared(ctx context.Context, q queryer, caller, id string) error {
 // recordIdeaEvent runs apply inside one event of type typ whose payload is
 // {idea, actor} (WL-REQ-1799). apply adds "task" itself when there is one.
 func (s *Store) recordIdeaEvent(ctx context.Context, typ, caller, id string, apply func(tx *sql.Tx, now time.Time, eventID int64) error) error {
+	return s.recordIdeaEventWith(ctx, typ, caller, id, nil, apply)
+}
+
+// recordIdeaEventWith is recordIdeaEvent with extra payload members.
+func (s *Store) recordIdeaEventWith(ctx context.Context, typ, caller, id string, extra map[string]string, apply func(tx *sql.Tx, now time.Time, eventID int64) error) error {
 	ext, err := randomExternalID()
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(map[string]string{"idea": id, "actor": caller})
+	members := map[string]string{"idea": id, "actor": caller}
+	for k, v := range extra {
+		members[k] = v
+	}
+	payload, err := json.Marshal(members)
 	if err != nil {
 		return err
 	}
