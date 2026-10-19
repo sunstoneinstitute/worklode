@@ -818,3 +818,56 @@ func DocPatchRender(w io.Writer, d model.Doc, res model.DocPatchResult, reviewer
 		fmt.Fprintf(w, "covering plans nobody has claimed work from yet: %s\n", strings.Join(ids, ", "))
 	}
 }
+
+// RuleFetcher reads one rule by ref for designdoc's inliner.
+func RuleFetcher(ctx context.Context, c *Client) func(string) (*model.Rule, error) {
+	return func(ref string) (*model.Rule, error) {
+		r, _, err := c.GetRule(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		return &r, nil
+	}
+}
+
+// DocShowText is the markdown `lode show` and the MCP show tool print for a
+// document. With inline it is the consolidated view (WL-84): every in-force
+// amendment folded into the section it acts on. Notes are folded in before a
+// section is cut, so a section and the whole document show the same note
+// (WL-REQ-171). A non-empty section (an anchor, "sec-3") narrows to that
+// section's whole subtree (WL-REQ-192).
+func DocShowText(ctx context.Context, c *Client, d model.DocDetail, section string, inline bool) (string, error) {
+	if inline {
+		out, err := designdoc.NewInliner(RuleFetcher(ctx, c)).Consolidate(&d, section)
+		if err != nil {
+			return "", err
+		}
+		return InlineDocNotes(out, d.Notes, d.Sections), nil
+	}
+	data := InlineDocNotes(d.Body, d.Notes, d.Sections)
+	if section == "" {
+		return data, nil
+	}
+	parsed, err := designdoc.Parse([]byte(data))
+	if err != nil {
+		return "", fmt.Errorf("parse %s: %w", cmp.Or(d.Ref, d.Slug), err)
+	}
+	text, ok := parsed.Subtree(section)
+	if !ok {
+		return "", fmt.Errorf("no section %s in %s", section, cmp.Or(d.Ref, d.Slug))
+	}
+	return text, nil
+}
+
+// NormalizeSection turns a --section value into a canonical anchor. It drops
+// an optional leading '#' and expands the shortcut form — a bare section
+// number like "3" or "4.1a" becomes "sec-3" / "sec-4.1a", so `--section 3` is
+// an alias for `--section sec-3`. A value already in "sec-..." form, or empty,
+// is returned unchanged.
+func NormalizeSection(s string) string {
+	s = strings.TrimPrefix(s, "#")
+	if s == "" || strings.HasPrefix(s, "sec-") {
+		return s
+	}
+	return "sec-" + s
+}

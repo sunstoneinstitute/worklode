@@ -960,7 +960,7 @@ func newDocNoteCmd() *cobra.Command {
 				return err
 			}
 			n, raw, err := c.AddDocNote(cmd.Context(), id, model.AddDocNoteInput{
-				Anchor: normalizeSection(anchor), Body: text,
+				Anchor: cli.NormalizeSection(anchor), Body: text,
 				Task: currentTaskID(), Session: currentSessionID(),
 			})
 			if err != nil {
