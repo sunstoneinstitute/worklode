@@ -172,6 +172,7 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 		"POST /hooks/flux",
 		"POST /hooks/github",
 		"POST /hooks/pipeline",
+		"POST /oauth/consent",
 	}
 
 	var got []string
@@ -207,6 +208,7 @@ func TestNoWriteRouteIsPublic(t *testing.T) {
 		"POST /hooks/pipeline":  true, // HMAC
 		"POST /auth/oidc/token": true, // verifies a Keycloak ID token
 		"POST /auth/cli/token":  true, // redeems a one-time code
+		"POST /oauth/consent":   true, // checks the session and the consent cookie
 	}
 	for pattern, g := range routeGuards {
 		if g.perm != permPublic || signedOrLogin[pattern] {

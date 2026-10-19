@@ -1,0 +1,34 @@
+package ui
+
+// consent.templ asks the signed-in user to Allow or Deny an MCP client's
+// access before any authorization code exists (WL-RULE-1837). Like CLICode it
+// skips the Page shell: it is reached mid-login, from the callback.
+
+templ Consent(v ConsentView) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ v.Title }</title>
+			<link rel="stylesheet" href={ assetURL("app.css") }/>
+		</head>
+		<body>
+			<main id="main-content">
+				<div class="canvas narrow">
+					<section class="card pad">
+						<h1>Signed in as { v.ActorID }</h1>
+						<p>
+							Allow { v.Destination } to use Worklode as { v.ActorID }?
+						</p>
+						<form method="post" action={ templ.SafeURL(v.Action) }>
+							<input type="hidden" name="consent_id" value={ v.ConsentID }/>
+							<button type="submit" class="btn" name="decision" value="allow">Allow</button>
+							<button type="submit" class="btn" name="decision" value="deny">Deny</button>
+						</form>
+					</section>
+				</div>
+			</main>
+		</body>
+	</html>
+}

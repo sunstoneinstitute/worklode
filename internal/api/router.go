@@ -236,6 +236,9 @@ var routeGuards = map[string]routeGuard{
 	"GET /.well-known/oauth-protected-resource/mcp": open("RFC 9728 discovery, by definition pre-login"),
 	"GET /.well-known/oauth-authorization-server":   open("RFC 8414 discovery, by definition pre-login"),
 	"GET /oauth/authorize":                          open("starts an MCP client's OAuth login, by definition pre-login"),
+	// The handler checks the browser session and the consent cookie itself
+	// (WL-REQ-1838): it answers with a redirect to the client, not a page.
+	"POST /oauth/consent": open("an MCP consent post; the handler requires the browser session"),
 
 	// --- tasks ---------------------------------------------------------------
 	"POST /api/v1/tasks":              guardedAny(permTaskWrite),
