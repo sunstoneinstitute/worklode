@@ -22,6 +22,8 @@ const testSecret = "mcp-test-secret"
 
 type fixture struct {
 	url        string
+	st         *store.Store
+	api        http.Handler
 	reg        *prometheus.Registry
 	alice, bob string
 }
@@ -32,7 +34,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	st := store.OpenTestStore(t)
 	ctx := context.Background()
-	f := &fixture{reg: prometheus.NewRegistry()}
+	f := &fixture{reg: prometheus.NewRegistry(), st: st}
 	for _, who := range []string{"alice", "bob"} {
 		if err := st.CreateActor(ctx, who, "human", who, false); err != nil {
 			t.Fatal(err)
@@ -56,6 +58,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.api = apiH
 	h := wlmcp.New(wlmcp.Config{API: apiH, PublicURL: "http://lode.test", SessionSecret: testSecret, Metrics: wlmcp.NewMetrics(f.reg)})
 	wlmcp.AddScopedProbe(h)
 	srv := httptest.NewServer(h)
