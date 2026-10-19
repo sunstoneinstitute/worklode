@@ -43,7 +43,7 @@ type Task struct {
 	ID                 string `json:"id"`
 	Project            string `json:"project"`
 	Title              string `json:"title"`
-	Body               string `json:"body"`
+	Body               string `json:"body,omitempty"`
 	Priority           string `json:"priority"`
 	Kind               string `json:"kind"`
 	State              string `json:"state"`
@@ -254,7 +254,7 @@ type TaskPublishResponse struct {
 }
 
 // TaskListParams is the query string of
-// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&deleted=&detail=&tree=&root=.
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&deleted=&detail=&include=&tree=&root=.
 // State is repeatable and/or comma-separated; the handler splits each value
 // on commas after decoding. Tree, Deleted, Detail and HasChildren are
 // booleans: a bare flag is false; a value that is not a boolean is a 400
@@ -297,6 +297,9 @@ type TaskListParams struct {
 	// Detail adds "blocked" and "edges" to each row (see TaskListDetail) at
 	// the cost of two extra bulk queries.
 	Detail bool `query:"detail,omitempty"`
+	// Include names fields the flat list leaves out by default; "body" is
+	// the only one (WL-REQ-1846). Repeatable and/or comma-separated.
+	Include []string `query:"include,omitempty"`
 	// Tree answers with the hierarchy instead of a flat list (see
 	// TaskTreeResponse); Project, States and Root still narrow it, every
 	// other field is ignored.

@@ -95,6 +95,9 @@ type TaskFilter struct {
 	// a row that is not there. The zero value lists live tasks, which is what
 	// every caller that predates the tombstone meant.
 	Deleted bool
+	// OmitBody reads every body as "", for lists that never show one
+	// (WL-REQ-1846).
+	OmitBody bool
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -654,6 +657,10 @@ const taskColumns = `id, project_id, title, body, priority, kind, state, concern
 // tasks against another table.
 var taskColumnsT = qualifyColumns(taskColumns, "t")
 
+// taskColumnsNoBody is taskColumns with body read as NULL, so a list that
+// shows no body does not ship them out of Postgres (WL-REQ-1846).
+var taskColumnsNoBody = strings.Replace(taskColumns, ", body,", ", NULL::text AS body,", 1)
+
 type rowScanner interface {
 	Scan(dest ...any) error
 }
@@ -882,7 +889,11 @@ func taskListOrder(alias string) string {
 // first), then by task id in model.CompareTaskIDs order (key lexically,
 // suffix numerically, so WL-9 precedes WL-10).
 func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, error) {
-	q := `SELECT ` + taskColumns + ` FROM tasks`
+	cols := taskColumns
+	if f.OmitBody {
+		cols = taskColumnsNoBody
+	}
+	q := `SELECT ` + cols + ` FROM tasks`
 	var conds []string
 	var args sqlArgs
 	// WL-REQ-117: a tombstoned task is out of every list by default.
