@@ -6,6 +6,7 @@ resources:
   - ../../base
   - externalsecret-worklode-secrets.yaml
   - externalsecret-worklode-secrets-catalog.yaml
+  - mcp-public-ingress.yaml
 patches:
   - patch: |-
       apiVersion: v1
@@ -30,6 +31,9 @@ patches:
       - op: add
         path: /data/LODE_OIDC_CLIENT_ID
         value: "worklode-prod"
+      - op: add
+        path: /data/LODE_MCP_PUBLIC_URL
+        value: "https://mcp.sunstoneinstitute.ai/worklode"
   - target:
       kind: Ingress
       name: worklode-ingress

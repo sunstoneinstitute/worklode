@@ -1,0 +1,48 @@
+# Public MCP origin for claude.ai and Cowork (WL-REQ-1841). Exposes only the
+# MCP paths, strips the /worklode prefix, and accepts only Anthropic's
+# outbound range. Host header is kept: lode-server picks the origin by Host.
+# One Ingress: the regex captures keep each rewrite to its own target.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: worklode-mcp-public-ingress
+  namespace: worklode
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # /worklode/mcp -> /mcp, /worklode/oauth/token -> /oauth/token
+    # /.well-known/oauth-protected-resource/worklode/mcp -> /.well-known/oauth-protected-resource/mcp
+    # /.well-known/oauth-authorization-server/worklode -> /.well-known/oauth-authorization-server
+    nginx.ingress.kubernetes.io/rewrite-target: /$1$2
+    nginx.ingress.kubernetes.io/whitelist-source-range: 160.79.104.0/21
+    # SSE: stream responses, hold the connection open.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - mcp.sunstoneinstitute.ai
+      secretName: worklode-mcp-tls
+  rules:
+    - host: mcp.sunstoneinstitute.ai
+      http:
+        paths:
+          - path: /worklode/(mcp)()$
+            pathType: ImplementationSpecific
+            backend: &backend
+              service:
+                name: worklode
+                port:
+                  number: 80
+          - path: /worklode/(oauth/token)()$
+            pathType: ImplementationSpecific
+            backend: *backend
+          - path: /(\.well-known/oauth-[a-z-]+)/worklode(/mcp)?$
+            pathType: ImplementationSpecific
+            backend: *backend
