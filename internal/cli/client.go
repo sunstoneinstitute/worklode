@@ -564,6 +564,14 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
+// NewClientWithTransport is NewClient sending every request through rt. The
+// MCP server uses it to call the API handler in-process (WL-RULE-1823).
+func NewClientWithTransport(cfg Config, rt http.RoundTripper) *Client {
+	c := NewClient(cfg)
+	c.http.Transport = rt
+	return c
+}
+
 // ServerURL returns the base URL this client talks to. Callers key
 // server-specific local state (such as the remote cache) by it.
 func (c *Client) ServerURL() string { return c.baseURL }
