@@ -80,24 +80,42 @@ block, preserves any other prose, and leaves the conditional root pointers.
 The install JSON's `instructions.shared_md` reports the shared block action;
 `agents_md` and `claude_md` report pointers in `AGENTS.md` and `CLAUDE.md`.
 
-## Connecting Claude Code to `/mcp`
+## Connecting clients to `/mcp`
 
-Until OAuth lands for the MCP endpoint, connect with a minted token. Put this
-in the project's `.mcp.json`, with the token in the environment:
+Hosts and ingress per environment are in `docs/mcp-connectors.md`. Login uses
+the static OAuth client `worklode-mcp` (WL-REQ-1840), so no token is minted.
+
+### Claude Code
+
+Put this in the project's `.mcp.json`. For dev use
+`https://worklode.dev.sunstoneinstitute.ai/mcp`; for prod use the mesh URL.
 
 ```json
 {
   "mcpServers": {
     "worklode": {
       "type": "http",
-      "url": "https://<LODE_PUBLIC_URL host>/mcp",
-      "headers": { "Authorization": "Bearer ${WORKLODE_TOKEN}" }
+      "url": "https://worklode.sunstone.internal/mcp",
+      "oauth": { "clientId": "worklode-mcp", "callbackPort": 33418 }
     }
   }
 }
 ```
 
-`WORKLODE_TOKEN` is a `wl_` token. Never commit the token itself.
+Run `/mcp` in Claude Code and choose Authenticate. The browser opens the
+Worklode login, then the consent page; Allow returns to the loopback callback
+on port 33418.
+
+### claude.ai and Cowork
+
+Add a custom connector with URL `https://mcp.sunstoneinstitute.ai/worklode/mcp`
+and OAuth client ID `worklode-mcp`, with no client secret. The URL is the
+public ingress, but the login and consent pages are served from the mesh host
+`worklode.sunstone.internal`, so the browser completing the connection must be
+on the mesh.
+
+For scripts, a minted `wl_` token still works as
+`"headers": { "Authorization": "Bearer ${WORKLODE_TOKEN}" }`. Never commit it.
 
 ## Authoring guidance starts from rules
 
