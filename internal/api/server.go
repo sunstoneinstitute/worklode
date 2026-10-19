@@ -302,6 +302,9 @@ type server struct {
 	cfg Config
 	log *slog.Logger
 
+	// mcpMetrics counts MCP OAuth requests (WL-REQ-1825); nil records nothing.
+	mcpMetrics *mcp.Metrics
+
 	// openapiJSON is the OpenAPI document registerRoutes builds at boot and
 	// GET /api/v1/openapi.json serves.
 	openapiJSON []byte
@@ -912,12 +915,16 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 
 	// The MCP server (WL-REQ-1822). Its tools call this mux in-process with
 	// the caller's own token (WL-RULE-1823).
+	s.mcpMetrics = mcp.NewMetrics(reg)
 	mcpHandler := mcp.New(mcp.Config{
 		API: r.mux, PublicURL: s.cfg.PublicURL, SessionSecret: s.cfg.SessionSecret, Now: s.st.Now,
-		Metrics: mcp.NewMetrics(reg),
+		Metrics: s.mcpMetrics,
 	})
 	r.bearerAPI("POST /mcp", mcpHandler.ServeHTTP)
 	r.bearerAPI("GET /mcp", mcpHandler.ServeHTTP)
+	r.publicFunc("GET /.well-known/oauth-protected-resource", s.protectedResourceMetadata)
+	r.publicFunc("GET /.well-known/oauth-protected-resource/mcp", s.protectedResourceMetadata)
+	r.publicFunc("GET /.well-known/oauth-authorization-server", s.authorizationServerMetadata)
 
 	// Provider-neutral, server-mediated CLI login (see cliauth.go).
 	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
