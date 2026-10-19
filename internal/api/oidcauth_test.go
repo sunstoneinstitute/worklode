@@ -331,3 +331,23 @@ func TestOIDCTokenExchange404WhenUnconfigured(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rr.Code)
 	}
 }
+
+// WL-REQ-1841: the MCP origin needs OIDC and an absolute URL.
+func TestNewServerMCPPublicURLNeedsOIDC(t *testing.T) {
+	t.Parallel()
+	st := newTestStore(t)
+	_, _, err := api.NewServer(st, api.Config{
+		PublicURL: "http://localhost:8080", MCPPublicURL: "https://mcp.example.com/worklode",
+	})
+	if err == nil {
+		t.Fatal("expected refusal with OIDC off")
+	}
+	iss := oidctest.NewIssuer(t)
+	_, _, err = api.NewServer(st, api.Config{
+		OIDCIssuer: iss.URL(), OIDCClientID: iss.ClientID, SessionSecret: "s",
+		PublicURL: "http://localhost:8080", MCPPublicURL: "mcp.example.com",
+	})
+	if err == nil {
+		t.Fatal("expected refusal for a relative MCP URL")
+	}
+}

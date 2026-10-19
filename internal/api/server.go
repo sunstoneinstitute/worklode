@@ -86,9 +86,12 @@ type Config struct {
 	// set; unset behaves exactly as before. SessionSecret is required when OIDC
 	// is enabled (Plan 2's web sessions sign cookies with it). PublicURL is the
 	// external base URL used to build the web callback redirect URI.
-	OIDCIssuer    string `env:"LODE_OIDC_ISSUER"`
-	OIDCClientID  string `env:"LODE_OIDC_CLIENT_ID"`
-	PublicURL     string `env:"LODE_PUBLIC_URL"`
+	OIDCIssuer   string `env:"LODE_OIDC_ISSUER"`
+	OIDCClientID string `env:"LODE_OIDC_CLIENT_ID"`
+	PublicURL    string `env:"LODE_PUBLIC_URL"`
+	// MCPPublicURL (LODE_MCP_PUBLIC_URL) is a second base URL MCP clients
+	// reach the server at; it may carry a path prefix (WL-REQ-1841). Needs OIDC.
+	MCPPublicURL  string `env:"LODE_MCP_PUBLIC_URL"`
 	SessionSecret string `env:"LODE_SESSION_SECRET"`
 
 	// WebOpen (LODE_WEB_OPEN) permits the web UI to serve anonymous callers on
@@ -704,9 +707,13 @@ func (s *server) intakeProject() (id string, ok bool) {
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
 // so the derived web callback redirect URIs are well-formed.
 func validatePublicURL(publicURL string) error {
-	u, err := url.Parse(publicURL)
+	return validateURL("LODE_PUBLIC_URL", publicURL)
+}
+
+func validateURL(name, raw string) error {
+	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("LODE_PUBLIC_URL must be an absolute http(s) URL (e.g. https://lode.example.com)")
+		return fmt.Errorf("%s must be an absolute http(s) URL (e.g. https://lode.example.com)", name)
 	}
 	return nil
 }
@@ -1237,6 +1244,15 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			return nil, nil, fmt.Errorf("configure oidc: %w", err)
 		}
 		s.oidc = v
+	}
+
+	if cfg.MCPPublicURL != "" {
+		if s.oidc == nil {
+			return nil, nil, fmt.Errorf("LODE_MCP_PUBLIC_URL requires OIDC: the MCP login runs through it")
+		}
+		if err := validateURL("LODE_MCP_PUBLIC_URL", cfg.MCPPublicURL); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
