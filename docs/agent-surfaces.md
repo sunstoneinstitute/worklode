@@ -80,6 +80,25 @@ block, preserves any other prose, and leaves the conditional root pointers.
 The install JSON's `instructions.shared_md` reports the shared block action;
 `agents_md` and `claude_md` report pointers in `AGENTS.md` and `CLAUDE.md`.
 
+## Connecting Claude Code to `/mcp`
+
+Until OAuth lands for the MCP endpoint, connect with a minted token. Put this
+in the project's `.mcp.json`, with the token in the environment:
+
+```json
+{
+  "mcpServers": {
+    "worklode": {
+      "type": "http",
+      "url": "https://<LODE_PUBLIC_URL host>/mcp",
+      "headers": { "Authorization": "Bearer ${WORKLODE_TOKEN}" }
+    }
+  }
+}
+```
+
+`WORKLODE_TOKEN` is a `wl_` token. Never commit the token itself.
+
 ## Authoring guidance starts from rules
 
 Every surface that teaches design authoring (root `CLAUDE.md`, the
