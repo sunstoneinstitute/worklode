@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/api"
 )
 
 // TestMCPRoute checks the /mcp row (WL-REQ-1822): a bearer token reaches the
@@ -12,7 +14,7 @@ import (
 // instance, where apiGuard alone would hand it the open subject.
 func TestMCPRoute(t *testing.T) {
 	t.Parallel()
-	_, h, token := newTestServer(t)
+	_, h, token := newTestServerWithConfig(t, api.Config{WebOpen: true, PublicURL: "https://lode.example.com"})
 	call := func(method, token string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, "/mcp",
 			strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
@@ -32,10 +34,20 @@ func TestMCPRoute(t *testing.T) {
 	if rr := call(http.MethodGet, token); rr.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET = %d, want 405", rr.Code)
 	}
-	if rr := call(http.MethodPost, ""); rr.Code != http.StatusUnauthorized {
-		t.Fatalf("no bearer = %d, want 401", rr.Code)
+	want := `Bearer resource_metadata="https://lode.example.com/.well-known/oauth-protected-resource/mcp"`
+	for name, tok := range map[string]string{"no": "", "unknown": "wl_deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"} {
+		rr := call(http.MethodPost, tok)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("%s bearer = %d, want 401", name, rr.Code)
+		}
+		if got := rr.Header().Get("WWW-Authenticate"); got != want {
+			t.Fatalf("%s bearer WWW-Authenticate = %q", name, got)
+		}
 	}
-	if rr := call(http.MethodPost, "wl_deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"); rr.Code != http.StatusUnauthorized {
-		t.Fatalf("unknown bearer = %d, want 401", rr.Code)
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"S256"`) {
+		t.Fatalf("as metadata = %d: %s", rr.Code, rr.Body)
 	}
 }
