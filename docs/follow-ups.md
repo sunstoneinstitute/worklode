@@ -969,3 +969,12 @@ Recorded by the clause increment 4b final review:
   since no `fetch` command exists in `internal/cmd` today. The drift predates
   increment 4b. The fix is adding `fetch` to `internal/cmd/CLAUDE.md`'s table
   (and to `l3DomainActions`) when `lode doc fetch` ships.
+
+Recorded by the idea findings increment (WL-REQ-1800):
+
+- `[P2]` **The sunstone-core `litmus-test` and `pre-research` skills do not
+  call the findings routes.** They still write their results as files. Each
+  must `POST /api/v1/ideas/{id}/litmus-tests` or `PUT
+  /api/v1/ideas/{id}/pre-research` with a bearer token (WL-RULE-1823), or the
+  Intake page stays empty. The skills live in the sunstone-core plugin, outside
+  this repo.

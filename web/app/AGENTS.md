@@ -176,11 +176,15 @@ reads `GET /api/v1/projects/{id}/summary` through `useProjectSummary`
 the idea mutations, WL-REQ-1806). An idea is private to its author until
 `POST /api/v1/ideas/{id}/share` mints its design task in the
 `LODE_INTAKE_PROJECT` project (WL-REQ-1799). The old `/work` routes are deleted, not
-redirected. Page
-code from the `worklode-design` prototype (intake,
-its optimistic list helpers) comes in when its page is
-ported, written against `schema.d.ts`. That repo's `docs/API.md` describes
-its mock API; the server's contract is `GET /api/v1/openapi.json`.
+redirected. The Intake page (`src/pages/IdeaIntake.tsx`) reads an idea's
+litmus tests, pre-research and sources (`useLitmusTests`, `usePreResearch`,
+`useIdeaSources`) and writes the decision with `useSaveIntake` (WL-REQ-1800,
+WL-REQ-1807). The litmus-test and pre-research skills write those findings
+through the API; the page never does. Every page of the design is ported
+except Home, which is not an SPA route yet. Page code from the
+`worklode-design` prototype is written against `schema.d.ts`. That repo's
+`docs/API.md` describes its mock API; the server's contract is
+`GET /api/v1/openapi.json`.
 
 MSW answers `/api/v1/*` with dummy data in `pnpm dev`
 (`src/mocks/browser.ts`) and in tests (`src/mocks/node.ts`).
