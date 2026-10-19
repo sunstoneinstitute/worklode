@@ -541,9 +541,9 @@ func TestSetRuleMetaKindRefusedWhenCovered(t *testing.T) {
 	}
 }
 
-// TestCapabilityCoveredRollsUp: a capability is covered when every
-// requirement and catalogue refining it, directly or through a principle, is
-// covered, and it is never a planning gap itself (WL-REQ-1642).
+// TestCapabilityCoveredRollsUp: a capability is covered when at least one
+// requirement or catalogue refines it, directly or through a principle, and
+// every one of them is covered. It is never a planning gap itself (WL-REQ-1642).
 func TestCapabilityCoveredRollsUp(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
@@ -554,15 +554,7 @@ func TestCapabilityCoveredRollsUp(t *testing.T) {
 		if err := SetRuleMeta(tx, c, model.RuleMetaInput{Kind: &capability}); err != nil {
 			return err
 		}
-		if err := SetRuleMeta(tx, p, model.RuleMetaInput{Kind: &principle}); err != nil {
-			return err
-		}
-		for _, e := range [][2]int64{{a, c}, {p, c}, {d, p}} {
-			if err := LinkRules(tx, e[0], e[1], "refines"); err != nil {
-				return err
-			}
-		}
-		return nil
+		return SetRuleMeta(tx, p, model.RuleMetaInput{Kind: &principle})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -573,6 +565,19 @@ func TestCapabilityCoveredRollsUp(t *testing.T) {
 			t.Fatal(err)
 		}
 		return ok
+	}
+	if covered() {
+		t.Error("covered with nothing refining it")
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		for _, e := range [][2]int64{{a, c}, {p, c}, {d, p}} {
+			if err := LinkRules(tx, e[0], e[1], "refines"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 	coveringPlan(t, s, "plan-a", true, "P1-REQ-2")
 	if covered() {
