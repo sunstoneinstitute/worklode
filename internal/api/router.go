@@ -100,6 +100,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /ideas":                          guarded(permWebRead),
 	"GET /ideas/new":                      guarded(permWebRead),
 	"GET /ideas/{ideaId}/edit":            guarded(permWebRead),
+	"GET /ideas/{ideaId}/intake":          guarded(permWebRead),
 	"GET /projects":                       guarded(permWebRead),
 	"GET /projects/{projectId}/tasks":     guarded(permWebRead),
 	"GET /tasks":                          guarded(permWebRead),

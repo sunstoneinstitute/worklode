@@ -112,6 +112,18 @@ export function useCreateProjectDocument(projectId: string) {
   })
 }
 
+/** Adds a source to a shared idea; the server sets its category to sources */
+export function useCreateIdeaSource(ideaId: string) {
+  return useCreateInList(DOCUMENTS, async (input: components["schemas"]["CreateProjectDocumentInput"]) => {
+    const { data, error, response } = await api.POST("/api/v1/ideas/{id}/sources", {
+      params: { path: { id: ideaId } },
+      body: input,
+    })
+    if (error) throw failure(error, response)
+    return data
+  })
+}
+
 export function useUpdateDocument() {
   return useUpdateInList<ProjectDocument>(DOCUMENTS, async (id, patch) => {
     const { error, response } = await api.PATCH("/api/v1/documents/{id}", { params: { path: { id } }, body: patch })
@@ -168,7 +180,8 @@ export function useUpdateIdea() {
       if (error) throw failure(error, response)
       return data
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: IDEAS.listKey }),
+    // The Intake page shows the idea it edits, so its detail refetches too
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: IDEAS.rootKey }),
   })
 }
 
@@ -192,5 +205,19 @@ export function useShareIdea() {
     onError: (error) =>
       toast.error(error instanceof HttpError && error.status === 409 ? error.message : "Couldn't share the idea"),
     onSettled: () => queryClient.invalidateQueries({ queryKey: IDEAS.rootKey }),
+  })
+}
+
+/**
+ * Records a shared idea's intake fields, shown at once and rolled back if
+ * the server refuses. The route replaces both fields, so `intake` is whole.
+ */
+export function useSaveIntake() {
+  return useUpdateInList<Idea>(IDEAS, async (id, { intake }) => {
+    const { error, response } = await api.PATCH("/api/v1/ideas/{id}/intake", {
+      params: { path: { id } },
+      body: { pre_research_authorized: intake?.pre_research_authorized ?? false, decision: intake?.decision ?? "" },
+    })
+    if (error) throw failure(error, response)
   })
 }
