@@ -24,6 +24,7 @@ const (
 	sessionCookieName = "wl_session"
 	oauthCookieName   = "wl_oauth"
 	cliCookieName     = "wl_cli"
+	mcpCookieName     = "wl_mcp"
 	sessionLifetime   = 12 * time.Hour
 	oauthStateMaxAge  = 10 * time.Minute
 )
@@ -116,7 +117,9 @@ type oauthState struct {
 	State    string `json:"s"`
 	Verifier string `json:"v"`
 	Next     string `json:"n"`
-	Exp      int64  `json:"e"`
+	// Nonce binds this login to a CLI or MCP intent cookie (WL-REQ-1835).
+	Nonce string `json:"nn,omitempty"`
+	Exp   int64  `json:"e"`
 }
 
 // signOAuthState signs an oauth-state cookie value.
@@ -152,6 +155,9 @@ type cliIntent struct {
 	// Mode is cliModeLoopback or cliModeManual. Empty means loopback, so a
 	// cookie signed before manual mode existed still completes.
 	Mode string `json:"m,omitempty"`
+	// Nonce must equal the login state's, or finishLogin ignores this intent
+	// (WL-REQ-1835).
+	Nonce string `json:"nn"`
 }
 
 func signCLIIntent(secret string, ci cliIntent) string {
