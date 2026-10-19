@@ -444,6 +444,7 @@ admin or the bootstrap token). When enabled:
 | `LODE_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
 | `LODE_OIDC_CLIENT_ID` | e.g. `worklode` |
 | `LODE_PUBLIC_URL` | external base URL, for the web login callback |
+| `LODE_MCP_PUBLIC_URL` | optional second base URL for MCP clients, may carry a path prefix (needs OIDC) |
 | `LODE_SESSION_SECRET` | HMAC key for web session cookies (required when OIDC is enabled) |
 
 Users then run `lode login` to obtain a 30-day `wl_` token from their SSO
