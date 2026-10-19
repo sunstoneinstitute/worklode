@@ -231,6 +231,11 @@ var routeGuards = map[string]routeGuard{
 	"POST /mcp": guarded(permProjectRead),
 	"GET /mcp":  guarded(permProjectRead),
 
+	// OAuth discovery for MCP clients (WL-REQ-1834).
+	"GET /.well-known/oauth-protected-resource":     open("RFC 9728 discovery, by definition pre-login"),
+	"GET /.well-known/oauth-protected-resource/mcp": open("RFC 9728 discovery, by definition pre-login"),
+	"GET /.well-known/oauth-authorization-server":   open("RFC 8414 discovery, by definition pre-login"),
+
 	// --- tasks ---------------------------------------------------------------
 	"POST /api/v1/tasks":              guardedAny(permTaskWrite),
 	"GET /api/v1/tasks":               guardedAny(permTaskRead),
@@ -616,13 +621,13 @@ func (r *router) api(pattern string, h http.HandlerFunc) {
 // to authenticate rather than refused as a cross-site write.
 func (r *router) bearerAPI(pattern string, h http.HandlerFunc) {
 	guarded := r.srv.apiGuard(r.guardFor(pattern), h)
-	r.mux.HandleFunc(pattern, func(w http.ResponseWriter, req *http.Request) {
+	r.mux.HandleFunc(pattern, r.srv.withChallenge(func(w http.ResponseWriter, req *http.Request) {
 		if token, ok := strings.CutPrefix(req.Header.Get("Authorization"), "Bearer "); !ok || token == "" {
 			writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		guarded(w, req)
-	})
+	}))
 }
 
 // web registers a web UI route behind webGuard, which resolves the session

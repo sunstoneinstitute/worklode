@@ -153,6 +153,9 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 	t.Parallel()
 	want := []string{
 		"GET /.well-known/lode-login",
+		"GET /.well-known/oauth-authorization-server",
+		"GET /.well-known/oauth-protected-resource",
+		"GET /.well-known/oauth-protected-resource/mcp",
 		"GET /api/v1/openapi.json",
 		"GET /assets/",
 		"GET /auth/callback",

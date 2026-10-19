@@ -43,3 +43,10 @@ func (m *Metrics) toolCall(tool, outcome string) {
 		m.toolCalls.WithLabelValues(tool, outcome).Inc()
 	}
 }
+
+// OAuthRequest counts one OAuth endpoint request (WL-REQ-1825).
+func (m *Metrics) OAuthRequest(endpoint, outcome string) {
+	if m != nil {
+		m.oauth.WithLabelValues(endpoint, outcome).Inc()
+	}
+}
