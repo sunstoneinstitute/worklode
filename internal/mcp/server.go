@@ -44,7 +44,7 @@ func New(cfg Config) http.Handler {
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if bearer(r) == "" {
+	if bearer(r.Header) == "" {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
