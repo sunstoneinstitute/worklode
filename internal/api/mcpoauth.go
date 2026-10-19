@@ -2,7 +2,9 @@ package api
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -327,6 +329,65 @@ func (s *server) oauthConsent(w http.ResponseWriter, r *http.Request) {
 	v.Set("code", code)
 	v.Set("iss", s.resourceOrigin(mi.Resource)) // RFC 9207
 	http.Redirect(w, r, mi.RedirectURI+"?"+v.Encode(), http.StatusFound)
+}
+
+// oauthToken handles POST /oauth/token (WL-REQ-1839): it redeems an
+// authorization code for a wl_ token. The code is spent by any lookup, so a
+// failed verifier cannot be retried (D6, D7 of WL-PLAN-160).
+func (s *server) oauthToken(w http.ResponseWriter, r *http.Request) {
+	fail := func(status int, code, desc string) {
+		s.mcpMetrics.OAuthRequest("token", code)
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, status, model.OAuthError{Error: code, ErrorDescription: desc})
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxWebForm)
+	if err := r.ParseForm(); err != nil {
+		fail(http.StatusBadRequest, "invalid_request", "bad form")
+		return
+	}
+	f := r.PostForm
+	if f.Get("grant_type") != "authorization_code" {
+		fail(http.StatusBadRequest, "unsupported_grant_type", "only authorization_code is supported")
+		return
+	}
+	if _, ok := mcpClients[f.Get("client_id")]; !ok {
+		fail(http.StatusBadRequest, "invalid_client", "unknown client_id")
+		return
+	}
+	if res := f.Get("resource"); res != "" && !s.isResource(res) {
+		fail(http.StatusBadRequest, "invalid_target", "resource is not an MCP URL of this server")
+		return
+	}
+	c, ok := s.mcpCodes.take(f.Get("code"))
+	if !ok {
+		fail(http.StatusBadRequest, "invalid_grant", "the code is unknown, expired or already used")
+		return
+	}
+	sum := sha256.Sum256([]byte(f.Get("code_verifier")))
+	verifier := base64.RawURLEncoding.EncodeToString(sum[:])
+	res := strings.TrimRight(f.Get("resource"), "/")
+	switch {
+	case c.clientID != f.Get("client_id"), c.redirectURI != f.Get("redirect_uri"),
+		f.Get("code_verifier") == "",
+		subtle.ConstantTimeCompare([]byte(verifier), []byte(c.codeChallenge)) != 1:
+		fail(http.StatusBadRequest, "invalid_grant", "the code does not match this request")
+		return
+	case res != "" && c.resource != "" && res != strings.TrimRight(c.resource, "/"):
+		fail(http.StatusBadRequest, "invalid_target", "resource differs from the authorization request")
+		return
+	}
+	exp := s.now().Add(ssoTokenTTL)
+	token, err := s.st.CreateToken(r.Context(), c.actor, "mcp: worklode-mcp", &exp)
+	if err != nil {
+		s.log.Error("create mcp token", "err", err)
+		fail(http.StatusInternalServerError, "server_error", "internal error")
+		return
+	}
+	s.mcpMetrics.OAuthRequest("token", "ok")
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, model.OAuthTokenResponse{
+		AccessToken: token, TokenType: "Bearer", ExpiresIn: int(ssoTokenTTL.Seconds()),
+	})
 }
 
 // pendingConsent is an MCP login waiting for its user's Allow or Deny.

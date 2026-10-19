@@ -369,3 +369,113 @@ func TestOAuthConsent(t *testing.T) {
 		}
 	}
 }
+
+const (
+	rfcVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk" // RFC 7636 appendix B
+	testRedir   = "https://claude.ai/api/mcp/auth_callback"
+)
+
+// authCode runs authorize, login and an Allow, and returns the minted code.
+func authCode(t *testing.T, h http.Handler, over map[string]string) string {
+	t.Helper()
+	consent := reachConsent(t, h, authorizePath(over))
+	allow := consentPost(h, consent, "allow", "", map[string]string{"Sec-Fetch-Site": "same-origin"})
+	loc, _ := url.Parse(allow.Header().Get("Location"))
+	code := loc.Query().Get("code")
+	if code == "" {
+		t.Fatalf("no code: %d %s", allow.Code, loc)
+	}
+	return code
+}
+
+func tokenPost(h http.Handler, over map[string]string) *httptest.ResponseRecorder {
+	v := url.Values{
+		"grant_type": {"authorization_code"}, "client_id": {"worklode-mcp"},
+		"redirect_uri": {testRedir}, "code_verifier": {rfcVerifier},
+	}
+	for k, val := range over {
+		v.Set(k, val)
+	}
+	req := httptest.NewRequest("POST", "/oauth/token", strings.NewReader(v.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	return rr
+}
+
+func TestOAuthToken(t *testing.T) {
+	t.Parallel()
+	h, admin, _ := newMCPOAuthServer(t, "https://mcp.example.com/worklode")
+	const res = "https://mcp.example.com/worklode/mcp"
+	withRes := map[string]string{"resource": res}
+
+	wantErr := func(name string, rr *httptest.ResponseRecorder, want string) {
+		t.Helper()
+		var e struct{ Error string }
+		_ = json.Unmarshal(rr.Body.Bytes(), &e)
+		if rr.Code != http.StatusBadRequest || e.Error != want || rr.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: %d %s; want %s", name, rr.Code, rr.Body.String(), want)
+		}
+	}
+
+	wantErr("grant_type", tokenPost(h, map[string]string{"grant_type": "password", "code": "x"}), "unsupported_grant_type")
+	wantErr("client", tokenPost(h, map[string]string{"client_id": "nope", "code": "x"}), "invalid_client")
+	wantErr("unknown code", tokenPost(h, map[string]string{"code": "nope"}), "invalid_grant")
+	wantErr("resource", tokenPost(h, map[string]string{"code": "x", "resource": "https://evil.example.com/mcp"}), "invalid_target")
+
+	for name, over := range map[string]map[string]string{
+		"verifier":     {"code_verifier": "wrong"},
+		"no verifier":  {"code_verifier": ""},
+		"redirect_uri": {"redirect_uri": "https://claude.ai/other"},
+	} {
+		over["code"] = authCode(t, h, withRes)
+		wantErr(name, tokenPost(h, over), "invalid_grant")
+		// The failed attempt spent the code.
+		wantErr(name+" retry", tokenPost(h, map[string]string{"code": over["code"]}), "invalid_grant")
+	}
+
+	wantErr("resource mismatch", tokenPost(h, map[string]string{
+		"code": authCode(t, h, withRes), "resource": "http://localhost:8080/mcp"}), "invalid_target")
+
+	code := authCode(t, h, withRes)
+	rr := tokenPost(h, map[string]string{"code": code, "resource": res})
+	var tok map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &tok)
+	access, _ := tok["access_token"].(string)
+	if rr.Code != http.StatusOK || rr.Header().Get("Cache-Control") != "no-store" ||
+		!strings.HasPrefix(access, "wl_") || tok["token_type"] != "Bearer" ||
+		tok["expires_in"] != float64(ssoTokenTTL.Seconds()) || tok["refresh_token"] != nil {
+		t.Fatalf("token: %d %s", rr.Code, rr.Body.String())
+	}
+	wantErr("replay", tokenPost(h, map[string]string{"code": code, "resource": res}), "invalid_grant")
+
+	// The token works on /mcp.
+	for _, body := range []string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
+	} {
+		req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+access)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("/mcp %s: %d %s", body[:40], rec.Code, rec.Body.String())
+		}
+	}
+
+	scrape := get(admin, "/metrics").Body.String()
+	for _, want := range []string{
+		`worklode_mcp_oauth_requests_total{endpoint="token",outcome="ok"} 1`,
+		`worklode_mcp_oauth_requests_total{endpoint="token",outcome="invalid_grant"}`,
+		`worklode_mcp_oauth_requests_total{endpoint="token",outcome="invalid_target"}`,
+		`worklode_mcp_oauth_requests_total{endpoint="token",outcome="invalid_client"} 1`,
+		`worklode_mcp_oauth_requests_total{endpoint="token",outcome="unsupported_grant_type"} 1`,
+	} {
+		if !strings.Contains(scrape, want) {
+			t.Errorf("metrics missing %s", want)
+		}
+	}
+}

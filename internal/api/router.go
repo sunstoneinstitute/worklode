@@ -239,6 +239,8 @@ var routeGuards = map[string]routeGuard{
 	// The handler checks the browser session and the consent cookie itself
 	// (WL-REQ-1838): it answers with a redirect to the client, not a page.
 	"POST /oauth/consent": open("an MCP consent post; the handler requires the browser session"),
+	// A cross-site form post by OAuth clients; the code and PKCE verifier authenticate it.
+	"POST /oauth/token": open("an MCP client redeeming a single-use authorization code with its PKCE verifier"),
 
 	// --- tasks ---------------------------------------------------------------
 	"POST /api/v1/tasks":              guardedAny(permTaskWrite),

@@ -933,6 +933,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.publicFunc("GET /.well-known/oauth-authorization-server", s.authorizationServerMetadata)
 	r.publicFunc("GET /oauth/authorize", s.oauthAuthorize)
 	r.publicFunc("POST /oauth/consent", s.oauthConsent)
+	r.publicFunc("POST /oauth/token", s.oauthToken)
 
 	// Provider-neutral, server-mediated CLI login (see cliauth.go).
 	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
