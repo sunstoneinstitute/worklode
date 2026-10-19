@@ -72,6 +72,8 @@ func (s *server) tool(name string, fn toolFunc) mcp.ToolHandler {
 		var oe *toolError
 		var ce *cli.ClientError
 		switch {
+		case errors.Is(err, errInvalidCursor):
+			outcome = outcomeInvalid
 		case errors.As(err, &oe):
 			outcome = oe.outcome
 		case errors.As(err, &ce):
