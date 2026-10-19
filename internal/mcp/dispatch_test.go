@@ -41,6 +41,7 @@ func TestToolOutcomesAndPanic(t *testing.T) {
 	}{
 		{"ok", func(context.Context, *cli.Client, *mcp.CallToolRequest) (*mcp.CallToolResult, error) { return ok, nil }, "ok", false},
 		{"invalid", failWith(&cli.ClientError{Status: 422, Msg: "bad"}), "invalid", true},
+		{"bad_cursor", failWith(errInvalidCursor), "invalid", true},
 		{"refused", failWith(&cli.ClientError{Status: 403, Msg: "no"}), "refused", true},
 		{"not_found", failWith(&cli.ClientError{Status: 404, Msg: "gone"}), "not_found", true},
 		{"conflict", failWith(&cli.ClientError{Status: 409, Msg: "dup"}), "conflict", true},
