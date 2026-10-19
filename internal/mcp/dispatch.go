@@ -17,10 +17,12 @@ import (
 type toolFunc func(ctx context.Context, c *cli.Client, req *mcp.CallToolRequest) (*mcp.CallToolResult, error)
 
 // toolError reports a tool failure that did not come from an API status,
-// such as project_required or confirm_project from the handle check.
+// such as project_required or confirm_project from the handle check. A
+// non-nil res is returned as the error result instead of msg alone.
 type toolError struct {
 	outcome string
 	msg     string
+	res     *mcp.CallToolResult
 }
 
 func (e *toolError) Error() string { return e.msg }
@@ -76,6 +78,10 @@ func (s *server) tool(name string, fn toolFunc) mcp.ToolHandler {
 			outcome = outcomeInvalid
 		case errors.As(err, &oe):
 			outcome = oe.outcome
+			if oe.res != nil {
+				oe.res.IsError = true
+				return oe.res, nil
+			}
 		case errors.As(err, &ce):
 			outcome = statusOutcome(ce.Status)
 			err = fmt.Errorf("%s", ce.Msg)

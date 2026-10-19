@@ -51,8 +51,8 @@ func TestInitializeThenToolsListIsStateless(t *testing.T) {
 	if id := rr.Header().Get("Mcp-Session-Id"); id != "" {
 		t.Fatalf("tools/list set Mcp-Session-Id %q", id)
 	}
-	if !strings.Contains(rr.Body.String(), `"tools":[]`) {
-		t.Fatalf("tools/list body = %s, want an empty tool list", rr.Body)
+	if !strings.Contains(rr.Body.String(), `"name":"project_use"`) {
+		t.Fatalf("tools/list body = %s, want project_use", rr.Body)
 	}
 }
 
