@@ -46,8 +46,8 @@ func TestToolOutcomesAndPanic(t *testing.T) {
 		{"not_found", failWith(&cli.ClientError{Status: 404, Msg: "gone"}), "not_found", true},
 		{"conflict", failWith(&cli.ClientError{Status: 409, Msg: "dup"}), "conflict", true},
 		{"error", failWith(errors.New("boom")), "error", true},
-		{"project_required", failWith(&toolError{outcomeProjectRequired, "pick one"}), "project_required", true},
-		{"confirm_project", failWith(&toolError{outcomeConfirmProject, "sure?"}), "confirm_project", true},
+		{"project_required", failWith(&toolError{outcome: outcomeProjectRequired, msg: "pick one"}), "project_required", true},
+		{"confirm_project", failWith(&toolError{outcome: outcomeConfirmProject, msg: "sure?"}), "confirm_project", true},
 		{"panic", func(context.Context, *cli.Client, *mcp.CallToolRequest) (*mcp.CallToolResult, error) { panic("x") }, "error", true},
 	}
 	for _, c := range cases {

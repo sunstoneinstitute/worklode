@@ -17,9 +17,9 @@ const (
 // candidate is one ranked answer to project_resolve. A list of candidates is
 // never a selection, even when it holds one perfect match.
 type candidate struct {
-	Key        string
-	Name       string
-	Confidence float64
+	Key        string  `json:"key"`
+	Name       string  `json:"name"`
+	Confidence float64 `json:"confidence,omitempty"`
 }
 
 // matchProjects ranks projects against a spoken name. Confidence is the larger
