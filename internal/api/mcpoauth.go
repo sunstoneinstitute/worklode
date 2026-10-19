@@ -2,10 +2,9 @@ package api
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,9 +12,11 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
-// consentTTL bounds a pending consent: 5 minutes, single use (D3 of WL-PLAN-160).
+// consentTTL bounds a pending consent and an authorization code: 5 minutes,
+// single use (D3 of WL-PLAN-160).
 const consentTTL = 5 * time.Minute
 
 // origins returns the base URLs MCP clients may discover: the browser origin
@@ -49,13 +50,28 @@ func advertise(origin, path string) string {
 // isResource reports whether s names an MCP resource: either base URL, or
 // either base URL plus /mcp (WL-REQ-1836).
 func (s *server) isResource(v string) bool {
+	_, ok := s.matchResource(v)
+	return ok
+}
+
+// resourceOrigin is the origin an authorize was discovered from: the one its
+// resource names, else the browser origin. The authorize endpoint always sits
+// on the browser origin, so the request's own Host cannot tell.
+func (s *server) resourceOrigin(resource string) string {
+	if o, ok := s.matchResource(resource); ok {
+		return o
+	}
+	return s.origins()[0]
+}
+
+func (s *server) matchResource(v string) (string, bool) {
 	v = strings.TrimRight(v, "/")
 	for _, o := range s.origins() {
 		if v == o || v == o+"/mcp" {
-			return true
+			return o, true
 		}
 	}
-	return false
+	return "", false
 }
 
 func hostOf(base string) string {
@@ -220,55 +236,135 @@ func (s *server) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	s.startLogin(w, r, "/", nonce)
 }
 
-// finishLoginMCP ends the Keycloak login of an MCP authorize: it records a
-// pending consent and shows the consent page. Nothing is minted here
-// (WL-RULE-1837).
+// finishLoginMCP ends the Keycloak login of an MCP authorize: it sets the
+// browser session that POST /oauth/consent requires, records a pending
+// consent and shows the consent page. No code is minted here (WL-RULE-1837).
 func (s *server) finishLoginMCP(w http.ResponseWriter, r *http.Request, actorID string, mi mcpIntent) {
 	clearAuthCookie(w, mcpCookieName)
 	clearAuthCookie(w, oauthCookieName)
-	p := pendingConsent{intent: mi, actor: actorID}
-	id, err := s.consents.put(p)
+	id, err := s.consents.put(pendingConsent{intent: mi, actor: actorID})
 	if err != nil {
 		s.mcpMetrics.OAuthRequest("callback", "server_error")
 		webErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	setAuthCookie(w, sessionCookieName, "/",
+		signSession(s.cfg.SessionSecret, actorID, s.now().Add(sessionLifetime)), sessionLifetime)
+	setAuthCookie(w, consentCookieName, consentPath, id, consentTTL)
 	s.mcpMetrics.OAuthRequest("callback", "ok")
-	s.renderConsent(w, r, id, p)
-}
-
-// renderConsent shows who is signing in and where the token goes. It is a
-// placeholder for WL-1203's consent page: it offers no Allow, so no code can
-// follow from it (WL-RULE-1837).
-func (s *server) renderConsent(w http.ResponseWriter, _ *http.Request, _ string, p pendingConsent) {
-	dest, _ := clientRedirect(p.intent.ClientID, p.intent.RedirectURI)
+	dest, _ := clientRedirect(mi.ClientID, mi.RedirectURI)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	fmt.Fprintf(w, "<!doctype html><title>worklode: connect</title><p>Signed in as %s. Connecting %s is not available yet.</p>",
-		html.EscapeString(p.actor), html.EscapeString(dest))
+	view := ui.ConsentView{Title: "worklode: connect", ActorID: actorID, Destination: dest, ConsentID: id, Action: consentPath}
+	if err := ui.Consent(view).Render(r.Context(), w); err != nil {
+		s.log.Error("render consent page", "err", err)
+	}
+}
+
+const (
+	consentCookieName = "wl_consent"
+	consentPath       = "/oauth/consent"
+)
+
+// oauthConsent handles POST /oauth/consent (WL-REQ-1838): a same-origin form
+// post from the signed-in user, carrying the consent id its cookie also
+// carries. Allow is the only place an MCP authorization code is minted
+// (WL-RULE-1837).
+func (s *server) oauthConsent(w http.ResponseWriter, r *http.Request) {
+	refuse := func(code int, msg string) {
+		s.mcpMetrics.OAuthRequest("consent", "invalid_request")
+		webErr(w, code, msg)
+	}
+	if !s.sameOriginForm(r) {
+		refuse(http.StatusForbidden, "cross-site form submission refused")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxWebForm)
+	if err := r.ParseForm(); err != nil {
+		refuse(http.StatusBadRequest, "bad form")
+		return
+	}
+	sc, err := r.Cookie(sessionCookieName)
+	if err != nil {
+		refuse(http.StatusForbidden, "connecting requires a signed-in browser session")
+		return
+	}
+	actor, ok := verifySession(s.cfg.SessionSecret, sc.Value, s.now())
+	if !ok {
+		refuse(http.StatusForbidden, "connecting requires a signed-in browser session")
+		return
+	}
+	id := r.PostFormValue("consent_id")
+	cc, err := r.Cookie(consentCookieName)
+	if err != nil || id == "" || subtle.ConstantTimeCompare([]byte(cc.Value), []byte(id)) != 1 {
+		refuse(http.StatusForbidden, "consent does not match this browser")
+		return
+	}
+	p, ok := s.consents.take(id)
+	if !ok || p.actor != actor {
+		refuse(http.StatusBadRequest, "this consent has expired or was already used; reconnect from the app")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: consentCookieName, Path: consentPath, MaxAge: -1})
+	mi := p.intent
+	v := url.Values{"state": {mi.State}}
+	if r.PostFormValue("decision") != "allow" {
+		s.mcpMetrics.OAuthRequest("consent", "access_denied")
+		v.Set("error", "access_denied")
+		http.Redirect(w, r, mi.RedirectURI+"?"+v.Encode(), http.StatusFound)
+		return
+	}
+	code, err := s.mcpCodes.put(mcpCode{
+		actor: p.actor, clientID: mi.ClientID, redirectURI: mi.RedirectURI,
+		codeChallenge: mi.CodeChallenge, resource: mi.Resource,
+	})
+	if err != nil {
+		s.mcpMetrics.OAuthRequest("consent", "server_error")
+		webErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	s.mcpMetrics.OAuthRequest("consent", "ok")
+	v.Set("code", code)
+	v.Set("iss", s.resourceOrigin(mi.Resource)) // RFC 9207
+	http.Redirect(w, r, mi.RedirectURI+"?"+v.Encode(), http.StatusFound)
 }
 
 // pendingConsent is an MCP login waiting for its user's Allow or Deny.
 type pendingConsent struct {
-	intent  mcpIntent
-	actor   string
-	expires time.Time
+	intent mcpIntent
+	actor  string
 }
 
-// consentStore holds pending consents in memory, keyed on a random id (D3 of
-// WL-PLAN-160). A restart drops them; the user reconnects.
-type consentStore struct {
+// mcpCode is an authorization code's binding (D6 of WL-PLAN-160); its expiry
+// is the store's. /oauth/token redeems it with take.
+type mcpCode struct {
+	actor, clientID, redirectURI, codeChallenge, resource string
+}
+
+// consentStore is the pending-consent store; mcpCodes uses the same shape.
+type consentStore = ttlStore[pendingConsent]
+
+func newConsentStore(now func() time.Time) *consentStore { return newTTLStore[pendingConsent](now) }
+
+// ttlStore holds single-use values in memory for consentTTL, keyed on a random
+// id (D3 of WL-PLAN-160). A restart drops them; the user reconnects.
+type ttlStore[T any] struct {
 	mu  sync.Mutex
-	m   map[string]pendingConsent
+	m   map[string]ttlEntry[T]
 	now func() time.Time
 }
 
-func newConsentStore(now func() time.Time) *consentStore {
-	return &consentStore{m: map[string]pendingConsent{}, now: now}
+type ttlEntry[T any] struct {
+	v       T
+	expires time.Time
 }
 
-// put stores p under a fresh id for consentTTL and drops expired entries.
-func (c *consentStore) put(p pendingConsent) (string, error) {
+func newTTLStore[T any](now func() time.Time) *ttlStore[T] {
+	return &ttlStore[T]{m: map[string]ttlEntry[T]{}, now: now}
+}
+
+// put stores v under a fresh id for consentTTL and drops expired entries.
+func (c *ttlStore[T]) put(v T) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -277,12 +373,25 @@ func (c *consentStore) put(p pendingConsent) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
-	for k, v := range c.m {
-		if now.After(v.expires) {
+	for k, e := range c.m {
+		if now.After(e.expires) {
 			delete(c.m, k)
 		}
 	}
-	p.expires = now.Add(consentTTL)
-	c.m[id] = p
+	c.m[id] = ttlEntry[T]{v: v, expires: now.Add(consentTTL)}
 	return id, nil
+}
+
+// take returns the value under id and spends it. Unknown, spent and expired
+// ids all fail.
+func (c *ttlStore[T]) take(id string) (T, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.m[id]
+	delete(c.m, id)
+	if !ok || c.now().After(e.expires) {
+		var zero T
+		return zero, false
+	}
+	return e.v, true
 }

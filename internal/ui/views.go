@@ -1564,3 +1564,13 @@ func progressMergeBody(task string, m model.ProgressMerge) string {
 	}
 	return string(b)
 }
+
+// ConsentView is the MCP consent page (WL-REQ-1838): who is signing in, where
+// the token goes, and the pending consent's id that Allow or Deny posts back.
+type ConsentView struct {
+	Title       string
+	ActorID     string
+	Destination string
+	ConsentID   string
+	Action      string
+}
