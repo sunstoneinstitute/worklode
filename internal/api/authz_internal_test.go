@@ -162,6 +162,7 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 		"GET /auth/cli/login",
 		"GET /auth/login",
 		"GET /auth/oidc/config",
+		"GET /oauth/authorize",
 		"GET /static/",
 		"POST /auth/cli/token",
 		"POST /auth/oidc/token",

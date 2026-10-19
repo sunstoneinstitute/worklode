@@ -235,6 +235,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /.well-known/oauth-protected-resource":     open("RFC 9728 discovery, by definition pre-login"),
 	"GET /.well-known/oauth-protected-resource/mcp": open("RFC 9728 discovery, by definition pre-login"),
 	"GET /.well-known/oauth-authorization-server":   open("RFC 8414 discovery, by definition pre-login"),
+	"GET /oauth/authorize":                          open("starts an MCP client's OAuth login, by definition pre-login"),
 
 	// --- tasks ---------------------------------------------------------------
 	"POST /api/v1/tasks":              guardedAny(permTaskWrite),
