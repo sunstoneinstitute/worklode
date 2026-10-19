@@ -485,6 +485,57 @@ func TestWebAppIdeas(t *testing.T) {
 	resp, body = call(srv.URL, http.MethodPatch, path, `{"title":"Hijacked"}`, b)
 	want(resp, body, http.StatusForbidden)
 
+	// 3b. Findings (WL-REQ-1800): the skills write with a token, the page reads
+	// with the cookie. The admin token has an actor, so writes are allowed.
+	resp, body = call(srv.URL, http.MethodPost, path+"/litmus-tests",
+		`{"date":"2026-10-01","summary":"Passes","recommendations":["Narrow to offshore"]}`, adm)
+	want(resp, body, http.StatusCreated)
+	resp, body = call(srv.URL, http.MethodPut, path+"/pre-research",
+		`{"date":"2026-10-02","findings":["Three subsidy schemes"]}`, adm)
+	want(resp, body, http.StatusOK)
+	resp, body = call(srv.URL, http.MethodGet, path+"/litmus-tests", "", b)
+	want(resp, body, http.StatusOK)
+	if !strings.Contains(body, "Narrow to offshore") {
+		t.Errorf("litmus tests = %s, want the posted recommendation", body)
+	}
+	resp, body = call(srv.URL, http.MethodGet, path+"/pre-research", "", b)
+	want(resp, body, http.StatusOK)
+	if !strings.Contains(body, "Three subsidy schemes") {
+		t.Errorf("pre-research = %s, want the put finding", body)
+	}
+	resp, body = call(srv.URL, http.MethodPost, path+"/sources",
+		`{"name":"Subsidy register","url":"https://example.org/register","type":"dataset","status":"draft"}`, b)
+	want(resp, body, http.StatusCreated)
+	resp, body = call(srv.URL, http.MethodGet, path+"/sources", "", a)
+	want(resp, body, http.StatusOK)
+	if !strings.Contains(body, "Subsidy register") {
+		t.Errorf("sources = %s, want the added source", body)
+	}
+	resp, body = call(srv.URL, http.MethodPatch, path+"/intake",
+		`{"pre_research_authorized":true,"decision":"narrow"}`, b)
+	want(resp, body, http.StatusOK)
+	if !strings.Contains(body, `"decision":"narrow"`) {
+		t.Errorf("patched intake = %s, want decision narrow", body)
+	}
+	resp, body = call(srv.URL, http.MethodGet, "/ideas/"+idea.ID+"/intake", "", map[string]string{"Cookie": b["Cookie"]})
+	want(resp, body, http.StatusOK)
+	if strings.Contains(body, `<nav aria-label="Primary"`) {
+		t.Error("/ideas/{id}/intake rendered the templ cockpit, want the SPA shell")
+	}
+
+	// 3c. A private idea has no findings: 409 to its author, 404 to anyone else.
+	resp, body = call(srv.URL, http.MethodPost, "/api/v1/ideas",
+		`{"title":"Still private","body":"x","type":"general"}`, a)
+	want(resp, body, http.StatusCreated)
+	var priv model.Idea
+	if err := json.Unmarshal([]byte(body), &priv); err != nil {
+		t.Fatalf("decode idea: %v", err)
+	}
+	resp, body = call(srv.URL, http.MethodGet, "/api/v1/ideas/"+priv.ID+"/litmus-tests", "", a)
+	want(resp, body, http.StatusConflict)
+	resp, body = call(srv.URL, http.MethodGet, "/api/v1/ideas/"+priv.ID+"/litmus-tests", "", b)
+	want(resp, body, http.StatusNotFound)
+
 	// 4. Deleting the shared idea tombstones its task.
 	resp, body = call(srv.URL, http.MethodDelete, path, "", a)
 	want(resp, body, http.StatusNoContent)
