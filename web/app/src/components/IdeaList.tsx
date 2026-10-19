@@ -47,20 +47,16 @@ function ideaColumns(me: string, users: DataTableUser[], onEdit: (id: string) =>
       type: "text",
       width: "w-70",
       filterable: false,
-      // Links to the edit form until the Intake page (/ideas/$ideaId/intake,
-      // WL-REQ-1807) exists; another actor's idea has nowhere to go yet
-      render: (idea) =>
-        idea.author === me ? (
-          <Link
-            to="/ideas/$ideaId/edit"
-            params={{ ideaId: idea.id ?? "" }}
-            className="underline-offset-2 transition-colors hover:text-highlight hover:underline"
-          >
-            {idea.title}
-          </Link>
-        ) : (
-          idea.title
-        ),
+      // Every visible idea has an Intake page (WL-REQ-1807)
+      render: (idea) => (
+        <Link
+          to="/ideas/$ideaId/intake"
+          params={{ ideaId: idea.id ?? "" }}
+          className="underline-offset-2 transition-colors hover:text-highlight hover:underline"
+        >
+          {idea.title}
+        </Link>
+      ),
     },
     {
       key: "author",

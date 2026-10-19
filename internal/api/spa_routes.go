@@ -9,6 +9,7 @@ import "strings"
 var spaRoutes = []string{
 	"/ideas",
 	"/ideas/$ideaId/edit",
+	"/ideas/$ideaId/intake",
 	"/ideas/new",
 	"/projects",
 	"/projects/$projectId",

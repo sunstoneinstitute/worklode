@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useState } from "react"
+import { type FormEvent, type ReactNode, type Ref, useImperativeHandle, useState } from "react"
 import { toast } from "sonner"
 import { useCreateIdea, useUpdateIdea } from "@/api/mutations"
 import { HttpError, useMe } from "@/api/queries"
@@ -35,12 +35,28 @@ function startingValues(idea?: Idea): Values {
   }
 }
 
+/** Lets a container (the Intake page's side panel) close the form through its leave guard */
+export type IdeaFormHandle = { requestClose: () => void }
+
 /**
  * The New and Edit Idea form (WL-REQ-1806). Values and field errors live in
  * React state (WL-REQ-1810); the server's 422 decides what is valid
  * (WL-REQ-1811). A new idea is private; there is no status field.
  */
-export function IdeaForm({ idea, onDone, onClose }: { idea?: Idea; onDone: () => void; onClose: () => void }) {
+export function IdeaForm({
+  idea,
+  onDone,
+  onClose,
+  heading = (text) => <h1 className="text-2xl md:text-3xl">{text}</h1>,
+  ref,
+}: {
+  idea?: Idea
+  onDone: () => void
+  onClose: () => void
+  /** Renders the form's title; a side panel passes its own accessible title */
+  heading?: (text: string) => ReactNode
+  ref?: Ref<IdeaFormHandle>
+}) {
   const actor = useMe().id ?? ""
   const [initial] = useState(() => startingValues(idea))
   const draft = useDraft({ actor, form: "idea", recordId: idea?.id, initial })
@@ -51,6 +67,7 @@ export function IdeaForm({ idea, onDone, onClose }: { idea?: Idea; onDone: () =>
   const update = useUpdateIdea()
   const saving = create.isPending || update.isPending
   const guard = useLeaveGuard({ dirty: draft.changed, onClose })
+  useImperativeHandle(ref, () => ({ requestClose: guard.requestClose }))
   const pitch = values.type === "story-pitch"
   const shown = new Set<string>(["title", "type", "body", ...(pitch ? ["story_type", "litmus_test_id"] : [])])
 
@@ -101,7 +118,7 @@ export function IdeaForm({ idea, onDone, onClose }: { idea?: Idea; onDone: () =>
 
   return (
     <form onSubmit={submit} noValidate className="flex max-w-185 flex-col gap-6 text-text-primary">
-      <h1 className="text-2xl md:text-3xl">{idea ? "Edit idea" : "New idea"}</h1>
+      {heading(idea ? "Edit idea" : "New idea")}
       <p className="text-sm">
         {idea?.status === "intake"
           ? "This idea is shared: everyone can see it in intake."
