@@ -318,6 +318,35 @@ func TestListTasksFilters(t *testing.T) {
 	}
 }
 
+// TestListTasksOmitsBody: the flat list, detail included, leaves body out
+// unless include=body names it; an unknown include field is a 400
+// (WL-REQ-1846).
+func TestListTasksOmitsBody(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "A", "body": "the body", "priority": "high", "kind": "feature"})
+
+	for path, want := range map[string]bool{
+		"/api/v1/tasks":                          false,
+		"/api/v1/tasks?detail=true":              false,
+		"/api/v1/tasks?include=body":             true,
+		"/api/v1/tasks?detail=true&include=body": true,
+	} {
+		rr := doReq(t, h, "GET", path, token, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d, body %s", path, rr.Code, rr.Body.String())
+		}
+		task := decodeMap(t, rr)["tasks"].([]any)[0].(map[string]any)
+		if got, _ := task["body"].(string); (got == "the body") != want {
+			t.Errorf("GET %s: body = %q, want present=%v", path, got, want)
+		}
+	}
+	if rr := doReq(t, h, "GET", "/api/v1/tasks?include=bodyy", token, nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("include=bodyy status = %d, want 400", rr.Code)
+	}
+}
+
 // TestGetTaskShowsPlanDoc: a task minted from a plan carries "plan_doc"
 // (WL-REQ-174); an ordinary task no plan authored omits the key entirely —
 // its absence is the correct answer, not a zero value.

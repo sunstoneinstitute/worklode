@@ -378,6 +378,21 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// The flat list leaves bodies out unless asked (WL-REQ-1846); an unknown
+	// field is refused so a typo does not read as "this field is empty".
+	withBody := false
+	for _, v := range p.Include {
+		for _, part := range strings.Split(v, ",") {
+			switch f := strings.TrimSpace(part); f {
+			case "":
+			case "body":
+				withBody = true
+			default:
+				writeErr(w, http.StatusBadRequest, fmt.Sprintf("include: unknown field %q (known: body)", f))
+				return
+			}
+		}
+	}
 	// tree=true answers with the hierarchy instead of a flat list, and is
 	// checked before the remaining filters because it reads only project and
 	// state (plus root); see listTaskTree.
@@ -445,6 +460,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		PlanDoc:      planDoc,
 		AboutDoc:     aboutDoc,
 		Deleted:      p.Deleted,
+		OmitBody:     !withBody,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

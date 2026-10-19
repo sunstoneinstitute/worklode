@@ -6069,6 +6069,7 @@ export interface paths {
                     about_doc?: null | number;
                     deleted?: boolean;
                     detail?: boolean;
+                    include?: string[];
                     tree?: boolean;
                     root?: string;
                 };

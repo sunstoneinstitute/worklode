@@ -81,9 +81,14 @@ export const handlers = [
 
   http.get("/api/v1/tasks", async ({ request }) => {
     await delay(LATENCY_MS)
-    const project = new URL(request.url).searchParams.get("project")
+    const params = new URL(request.url).searchParams
+    const project = params.get("project")
+    const states = params.getAll("state").flatMap((s) => s.split(","))
     const body: Ok<"/api/v1/tasks", "get"> = {
-      tasks: db.tasks.filter((t) => !project || t.project === project),
+      tasks: db.tasks
+        .filter((t) => !project || t.project === project)
+        .filter((t) => !states.length || states.includes(t.state ?? ""))
+        .map(({ body: _body, ...t }) => t),
     }
     return HttpResponse.json(body)
   }),
