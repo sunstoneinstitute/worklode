@@ -72,6 +72,8 @@ function seed() {
     { id: "doc_000000000001", project: "p1", name: "Launch brief", category: "spec", type: "document", status: "draft", url: "https://docs.example.com/brief", source: "", milestone: "", due: "", date: "", participants: [] },
     { id: "doc_000000000002", project: "p1", name: "Kickoff notes", category: "meeting-notes", type: "document", status: "final", url: "", source: "", milestone: "", due: "", date: "2026-10-05", participants: ["stig", "ada"] },
     { id: "doc_000000000003", project: "p2", name: "Glacier dataset", category: "sources", type: "dataset", status: "final", url: "", source: "NSIDC", milestone: "", due: "", date: "", participants: [] },
+    // An idea's source (GET /api/v1/ideas/{id}/sources)
+    { id: "doc_000000000004", idea: "idea_000000000002", name: "Station registry", category: "sources", type: "dataset", status: "final", url: "", source: "WMO", milestone: "", due: "", date: "", participants: [] },
   ]
   // Ideas (WL-REQ-1799): private to their author until shared
   const ideas: Idea[] = [
@@ -80,12 +82,23 @@ function seed() {
     // Another actor's private idea: the list never shows it
     idea({ id: "idea_000000000003", author: "bob", title: "Bob's secret", submitted: "2026-10-07" }),
   ]
+  // Findings on shared ideas (WL-REQ-1800), by idea id; litmus tests newest first
+  const litmusTests: Record<string, LitmusTest[]> = {
+    idea_000000000002: [
+      { id: "2", date: "2026-10-12", summary: "Strong fit once narrowed to one region.", recommendations: ["Start with the Alps."] },
+      { id: "1", date: "2026-10-09", summary: "Too broad as pitched.", recommendations: ["Pick a smaller set of stations."] },
+    ],
+  }
+  const preResearch: Record<string, string[]> = {
+    idea_000000000002: ["Station metadata is public through the WMO registry."],
+  }
   // LODE_INTAKE_PROJECT is set; false makes share answer 409
   const intakeConfigured: boolean = true
-  return { me, projects, crew, participants, tasks, summaries, docs, rules, documents, ideas, intakeConfigured }
+  return { me, projects, crew, participants, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured }
 }
 
 export type Idea = Ok<"/api/v1/ideas/{id}", "get">
+export type LitmusTest = NonNullable<Ok<"/api/v1/ideas/{id}/litmus-tests", "get">["litmus_tests"]>[number]
 
 /** An idea with the server's defaults; status follows `shared` */
 export function idea(fields: Partial<Idea> & { id: string; author: string }): Idea {
@@ -102,6 +115,17 @@ export function idea(fields: Partial<Idea> & { id: string; author: string }): Id
     ...fields,
     status: fields.shared ? "intake" : "private",
   }
+}
+
+/**
+ * The intake-side routes' check (WL-REQ-1799): a shared idea, else the
+ * error answer — 409 to a private idea's author, 404 to anyone else.
+ */
+export function sharedIdea(id: string): { idea: Idea } | { error: string; status: number } {
+  const found = visibleIdea(id)
+  if (!found) return { error: "idea not found", status: 404 }
+  if (!found.shared) return { error: "idea not shared", status: 409 }
+  return { idea: found }
 }
 
 /** What the store's visibility predicate lets the caller see: author = caller OR shared */

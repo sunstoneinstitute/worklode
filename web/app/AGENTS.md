@@ -128,7 +128,7 @@ any future page:
 (browser history), and `<Link to="...">` is typed, so a link to a missing
 route fails the type check. The pages are `/projects`, `/tasks`,
 `/projects/$projectId` (the Overview), `/projects/$projectId/crew`, `/projects/$projectId/documents`,
-`/projects/$projectId/tasks`, `/ideas`, `/ideas/new` and `/ideas/$ideaId/edit`; anything else
+`/projects/$projectId/tasks`, `/ideas`, `/ideas/new`, `/ideas/$ideaId/edit` and `/ideas/$ideaId/intake`; anything else
 renders `NotFound`. `src/routes.json` lists the same paths for the Go
 server (WL-REQ-1305), and `src/router.test.tsx` fails when the tree and
 the file disagree. Add a page to both, and to `spaRoutes` in

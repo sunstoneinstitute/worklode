@@ -54,11 +54,14 @@ export const queryKeys = {
   documents: {
     all: ["documents"] as const,
     list: (project: string) => ["documents", { project }] as const,
+    idea: (idea: string) => ["documents", { idea }] as const,
   },
   ideas: {
     all: ["ideas"] as const,
     list: ["ideas", "list"] as const,
     detail: (id: string) => ["ideas", "detail", id] as const,
+    litmusTests: (id: string) => ["ideas", "litmus-tests", id] as const,
+    preResearch: (id: string) => ["ideas", "pre-research", id] as const,
   },
   docs: (project: string, kind: string) => ["docs", { project, kind }] as const,
   rules: (project: string) => ["rules", { project }] as const,
@@ -218,5 +221,47 @@ export function useIdea(id: string) {
     },
     gcTime: 0,
     refetchOnWindowFocus: false,
+  })
+}
+
+// An idea's findings and sources exist for shared ideas only (WL-REQ-1800);
+// a private idea's page passes enabled: false so none of them is requested.
+
+/** A shared idea's litmus tests, newest first */
+export function useLitmusTests(id: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.ideas.litmusTests(id),
+    enabled,
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/ideas/{id}/litmus-tests", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data.litmus_tests ?? []
+    },
+  })
+}
+
+/** A shared idea's latest pre-research findings; empty when there is none */
+export function usePreResearch(id: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.ideas.preResearch(id),
+    enabled,
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/ideas/{id}/pre-research", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data.findings ?? []
+    },
+  })
+}
+
+/** A shared idea's sources, rows of the documents register (WL-REQ-1798) */
+export function useIdeaSources(id: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.documents.idea(id),
+    enabled,
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/ideas/{id}/sources", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data.documents ?? []
+    },
   })
 }

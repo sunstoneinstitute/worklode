@@ -14,6 +14,7 @@ import { ProjectLayout } from "@/layouts/ProjectLayout"
 import { RootLayout } from "@/layouts/RootLayout"
 import { isDocumentTab } from "@/lib/content-types"
 import { EditIdea } from "@/pages/EditIdea"
+import { IdeaIntake } from "@/pages/IdeaIntake"
 import { Ideas } from "@/pages/Ideas"
 import { NewIdea } from "@/pages/NewIdea"
 import { NotFound } from "@/pages/NotFound"
@@ -80,6 +81,12 @@ const editIdeaRoute = createRoute({
   component: EditIdea,
 })
 
+const ideaIntakeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "ideas/$ideaId/intake",
+  component: IdeaIntake,
+})
+
 // Pages under a project hang off this route as they are ported
 const projectRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -123,6 +130,7 @@ export const routeTree = rootRoute.addChildren([
   ideasRoute,
   newIdeaRoute,
   editIdeaRoute,
+  ideaIntakeRoute,
   projectRoute.addChildren([projectOverviewRoute, projectCrewRoute, projectDocumentsRoute, projectTasksRoute]),
 ])
 
