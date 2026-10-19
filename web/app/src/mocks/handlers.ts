@@ -1,6 +1,6 @@
 import { HttpResponse, delay, http } from "msw"
 import type { components } from "@/api/schema"
-import { type CrewMember, type ProjectDocument, type Task, db, idea, projectDetail, visibleIdea } from "./db"
+import { type CrewMember, type LitmusTest, type ProjectDocument, type Task, db, idea, projectDetail, sharedIdea, visibleIdea } from "./db"
 import type { Ok } from "./typed"
 
 // Visible loading states in development; instant in tests
@@ -269,6 +269,88 @@ export const handlers = [
     if (!found.shared) Object.assign(found, { shared: "2026-10-18", status: "intake", task: "WL-99" })
     const body: Ok<"/api/v1/ideas/{id}/share", "post"> = found
     return HttpResponse.json(body)
+  }),
+
+  http.patch("/api/v1/ideas/:id/intake", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const shared = sharedIdea(String(params.id))
+    if ("error" in shared) return HttpResponse.json({ error: shared.error }, { status: shared.status })
+    const input = (await request.json()) as components["schemas"]["PatchIdeaIntakeInput"]
+    if (!["accept", "narrow", "park", "stop", ""].includes(input.decision ?? "")) {
+      return HttpResponse.json({ error: `unknown decision ${input.decision}` }, { status: 400 })
+    }
+    shared.idea.intake = { pre_research_authorized: input.pre_research_authorized ?? false, decision: input.decision ?? "" }
+    const body: Ok<"/api/v1/ideas/{id}/intake", "patch"> = shared.idea
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/ideas/:id/litmus-tests", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const shared = sharedIdea(String(params.id))
+    if ("error" in shared) return HttpResponse.json({ error: shared.error }, { status: shared.status })
+    const body: Ok<"/api/v1/ideas/{id}/litmus-tests", "get"> = { litmus_tests: db.litmusTests[String(params.id)] ?? [] }
+    return HttpResponse.json(body)
+  }),
+
+  http.post("/api/v1/ideas/:id/litmus-tests", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const id = String(params.id)
+    const shared = sharedIdea(id)
+    if ("error" in shared) return HttpResponse.json({ error: shared.error }, { status: shared.status })
+    const input = (await request.json()) as components["schemas"]["CreateLitmusTestInput"]
+    const tests = (db.litmusTests[id] ??= [])
+    const test: LitmusTest = { summary: "", recommendations: [], ...input, id: String(tests.length + 1) }
+    tests.unshift(test)
+    return HttpResponse.json(test, { status: 201 })
+  }),
+
+  http.get("/api/v1/ideas/:id/pre-research", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const shared = sharedIdea(String(params.id))
+    if ("error" in shared) return HttpResponse.json({ error: shared.error }, { status: shared.status })
+    const body: Ok<"/api/v1/ideas/{id}/pre-research", "get"> = { findings: db.preResearch[String(params.id)] ?? [] }
+    return HttpResponse.json(body)
+  }),
+
+  http.put("/api/v1/ideas/:id/pre-research", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const shared = sharedIdea(String(params.id))
+    if ("error" in shared) return HttpResponse.json({ error: shared.error }, { status: shared.status })
+    const input = (await request.json()) as components["schemas"]["PutPreResearchInput"]
+    db.preResearch[String(params.id)] = input.findings ?? []
+    const body: Ok<"/api/v1/ideas/{id}/pre-research", "put"> = { findings: input.findings ?? [] }
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/ideas/:id/sources", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const id = String(params.id)
+    const shared = sharedIdea(id)
+    if ("error" in shared) return HttpResponse.json({ error: shared.error }, { status: shared.status })
+    const body: Ok<"/api/v1/ideas/{id}/sources", "get"> = { documents: db.documents.filter((d) => d.idea === id) }
+    return HttpResponse.json(body)
+  }),
+
+  http.post("/api/v1/ideas/:id/sources", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const id = String(params.id)
+    const shared = sharedIdea(id)
+    if ("error" in shared) return HttpResponse.json({ error: shared.error }, { status: shared.status })
+    const input = (await request.json()) as components["schemas"]["CreateProjectDocumentInput"]
+    const document: ProjectDocument = {
+      source: "",
+      milestone: "",
+      due: "",
+      date: "",
+      url: "",
+      participants: [],
+      ...input,
+      category: "sources",
+      id: `doc_${String(db.documents.length + 1).padStart(12, "0")}`,
+      idea: id,
+    }
+    db.documents.push(document)
+    return HttpResponse.json(document, { status: 201 })
   }),
 
   http.delete("/api/v1/ideas/:id", async ({ params }) => {
