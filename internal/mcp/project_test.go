@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/prometheus/client_golang/prometheus"
@@ -54,7 +55,7 @@ func newFixture(t *testing.T) *fixture {
 			t.Fatal(err)
 		}
 	}
-	apiH, _, err := api.NewServer(st, api.Config{SessionSecret: testSecret})
+	apiH, _, err := api.NewServer(st, api.Config{SessionSecret: testSecret, BackgroundCtx: t.Context(), EventPoll: 20 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
