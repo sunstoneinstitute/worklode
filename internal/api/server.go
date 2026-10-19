@@ -36,6 +36,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/indexer"
+	"github.com/sunstoneinstitute/worklode/internal/mcp"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
@@ -901,6 +902,14 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	// Both 404 when OIDC is unconfigured (s.oidc == nil).
 	r.publicFunc("GET /auth/oidc/config", s.oidcConfig)
 	r.publicFunc("POST /auth/oidc/token", s.oidcTokenExchange)
+
+	// The MCP server (WL-REQ-1822). Its tools call this mux in-process with
+	// the caller's own token (WL-RULE-1823).
+	mcpHandler := mcp.New(mcp.Config{
+		API: r.mux, PublicURL: s.cfg.PublicURL, SessionSecret: s.cfg.SessionSecret, Now: s.st.Now,
+	})
+	r.bearerAPI("POST /mcp", mcpHandler.ServeHTTP)
+	r.bearerAPI("GET /mcp", mcpHandler.ServeHTTP)
 
 	// Provider-neutral, server-mediated CLI login (see cliauth.go).
 	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
