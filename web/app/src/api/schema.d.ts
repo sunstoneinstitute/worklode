@@ -2862,6 +2862,170 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/ideas/{id}/litmus-tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a shared idea's litmus tests, newest date first */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LitmusTestListResponse"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Record a litmus test on a shared idea */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateLitmusTestInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LitmusTest"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ideas/{id}/pre-research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a shared idea's newest pre-research findings */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PreResearch"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        /** Record a pre-research run on a shared idea */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PutPreResearchInput"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PreResearch"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ideas/{id}/share": {
         parameters: {
             query?: never;
@@ -8567,6 +8731,11 @@ export interface components {
             title?: string;
             type?: string;
         };
+        CreateLitmusTestInput: {
+            date?: string;
+            recommendations?: string[] | null;
+            summary?: string;
+        };
         CreateMilestoneInput: {
             position?: number;
             title?: string;
@@ -9242,6 +9411,15 @@ export interface components {
             repo?: string;
             task_id?: string;
         };
+        LitmusTest: {
+            date?: string;
+            id?: string;
+            recommendations?: string[] | null;
+            summary?: string;
+        };
+        LitmusTestListResponse: {
+            litmus_tests?: components["schemas"]["LitmusTest"][] | null;
+        };
         MergeReport: {
             repo?: string;
             results?: components["schemas"]["MergeResult"][] | null;
@@ -9366,6 +9544,9 @@ export interface components {
             errors?: string[];
             repaired?: components["schemas"]["TaskRepair"][];
             run_id?: string;
+        };
+        PreResearch: {
+            findings?: string[] | null;
         };
         ProbeTargetsResponse: {
             artifacts?: string[] | null;
@@ -9555,6 +9736,10 @@ export interface components {
             priority?: string;
             repo?: string;
             title?: string;
+        };
+        PutPreResearchInput: {
+            date?: string;
+            findings?: string[] | null;
         };
         Rally: {
             blockers?: components["schemas"]["BlockerTree"];

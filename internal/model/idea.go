@@ -55,3 +55,39 @@ type PatchIdeaIntakeInput struct {
 type IdeaListResponse struct {
 	Ideas []Idea `json:"ideas"`
 }
+
+// LitmusTest is one litmus-test result recorded on a shared idea
+// (WL-REQ-1800). Date is YYYY-MM-DD.
+type LitmusTest struct {
+	ID              string   `json:"id"`
+	Date            string   `json:"date"`
+	Summary         string   `json:"summary"`
+	Recommendations []string `json:"recommendations"`
+}
+
+// LitmusTestListResponse is the response body of GET
+// /api/v1/ideas/{id}/litmus-tests, newest date first.
+type LitmusTestListResponse struct {
+	LitmusTests []LitmusTest `json:"litmus_tests"`
+}
+
+// CreateLitmusTestInput is the request body of POST
+// /api/v1/ideas/{id}/litmus-tests. Date is YYYY-MM-DD.
+type CreateLitmusTestInput struct {
+	Date            string   `json:"date"`
+	Summary         string   `json:"summary"`
+	Recommendations []string `json:"recommendations"`
+}
+
+// PreResearch is the response body of GET and PUT
+// /api/v1/ideas/{id}/pre-research: the newest run's findings.
+type PreResearch struct {
+	Findings []string `json:"findings"`
+}
+
+// PutPreResearchInput is the request body of PUT
+// /api/v1/ideas/{id}/pre-research; it records a new run. Date is YYYY-MM-DD.
+type PutPreResearchInput struct {
+	Date     string   `json:"date"`
+	Findings []string `json:"findings"`
+}
