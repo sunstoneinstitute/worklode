@@ -153,6 +153,10 @@ func (s *server) taskAdd(ctx context.Context, c *cli.Client, req *mcp.CallToolRe
 	if err != nil {
 		return nil, err
 	}
+	return s.addTask(ctx, c, a)
+}
+
+func (s *server) addTask(ctx context.Context, c *cli.Client, a taskAddArgs) (*mcp.CallToolResult, error) {
 	key, err := s.requireProject(ctx, c, a.Project, "")
 	if err != nil {
 		return nil, err

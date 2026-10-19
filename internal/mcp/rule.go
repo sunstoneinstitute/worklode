@@ -139,24 +139,32 @@ func (s *server) ruleAdd(ctx context.Context, c *cli.Client, req *mcp.CallToolRe
 	if err != nil {
 		return nil, err
 	}
-	p, _, err := s.ruleProject(ctx, c, a.Project, "")
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(a.Heading) == "" {
-		return nil, &toolError{outcome: outcomeInvalid, msg: "The rule needs a heading."}
-	}
-	in := model.AddRuleInput{Project: p.ID, Heading: strings.TrimSpace(a.Heading), Body: a.Body}
-	if a.Kind != "" {
-		if in.Kind, err = ruleKind(a.Kind); err != nil {
-			return nil, err
-		}
-	}
-	r, _, err := c.AddRule(ctx, in)
+	r, err := s.addRule(ctx, c, a)
 	if err != nil {
 		return nil, err
 	}
 	return say(fmt.Sprintf("Added the draft %s %s: %s.", r.Kind, r.Ref, r.Heading), nil), nil
+}
+
+func (s *server) addRule(ctx context.Context, c *cli.Client, a ruleAddArgs) (model.Rule, error) {
+	p, _, err := s.ruleProject(ctx, c, a.Project, "")
+	if err != nil {
+		return model.Rule{}, err
+	}
+	if strings.TrimSpace(a.Heading) == "" {
+		return model.Rule{}, &toolError{outcome: outcomeInvalid, msg: "The rule needs a heading."}
+	}
+	in := model.AddRuleInput{Project: p.ID, Heading: strings.TrimSpace(a.Heading), Body: a.Body}
+	if a.Kind != "" {
+		if in.Kind, err = ruleKind(a.Kind); err != nil {
+			return model.Rule{}, err
+		}
+	}
+	r, _, err := c.AddRule(ctx, in)
+	if err != nil {
+		return model.Rule{}, err
+	}
+	return r, nil
 }
 
 func (s *server) ruleEdit(ctx context.Context, c *cli.Client, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
