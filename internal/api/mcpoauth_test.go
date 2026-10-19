@@ -2,11 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
 )
@@ -167,8 +170,14 @@ func TestOAuthAuthorizeReachesConsent(t *testing.T) {
 	if rr.Code != http.StatusOK || !strings.Contains(body, "grace") || !strings.Contains(body, "the Worklode connector in claude.ai") {
 		t.Fatalf("consent: %d %s", rr.Code, body)
 	}
-	if c := cookieOf(rr, sessionCookieName); c != nil && c.Value != "" {
-		t.Fatal("the MCP branch set a browser session")
+	// The MCP branch signs the browser in: POST /oauth/consent requires the
+	// session (WL-REQ-1838). The consent cookie carries the form's id.
+	if c := cookieOf(rr, sessionCookieName); c == nil || c.Value == "" {
+		t.Fatal("the MCP branch set no browser session")
+	}
+	if c := cookieOf(rr, consentCookieName); c == nil || c.Path != "/oauth/consent" || !c.HttpOnly || !c.Secure ||
+		!strings.Contains(body, `name="consent_id" value="`+c.Value+`"`) {
+		t.Fatalf("consent cookie = %+v", c)
 	}
 	scrape := get(admin, "/metrics").Body.String()
 	for _, want := range []string{
@@ -247,5 +256,116 @@ func TestOAuthAuthorizeErrors(t *testing.T) {
 	}
 	if scrape := get(admin, "/metrics").Body.String(); !strings.Contains(scrape, `worklode_mcp_oauth_requests_total{endpoint="authorize",outcome="invalid_target"} 1`) {
 		t.Error("invalid_target not counted")
+	}
+}
+
+// consentPost posts decision for the consent page consent shows, with its
+// cookies except those named in drop. A non-empty id replaces the posted id.
+func consentPost(h http.Handler, consent *httptest.ResponseRecorder, decision, id string, hdr map[string]string, drop ...string) *httptest.ResponseRecorder {
+	if id == "" {
+		id = cookieOf(consent, consentCookieName).Value
+	}
+	req := httptest.NewRequest("POST", "/oauth/consent",
+		strings.NewReader(url.Values{"consent_id": {id}, "decision": {decision}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	for _, name := range []string{sessionCookieName, consentCookieName} {
+		if c := cookieOf(consent, name); c != nil && !slices.Contains(drop, name) {
+			req.AddCookie(c)
+		}
+	}
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	return rr
+}
+
+// No code exists until Allow is posted (WL-RULE-1837).
+func TestNoCodeBeforeConsent(t *testing.T) {
+	t.Parallel()
+	s := &server{cfg: Config{PublicURL: "http://localhost:8080", SessionSecret: "sek"}, log: slog.Default()}
+	s.consents = newConsentStore(time.Now)
+	s.mcpCodes = newTTLStore[mcpCode](time.Now)
+	rr := httptest.NewRecorder()
+	s.finishLoginMCP(rr, httptest.NewRequest("GET", "/auth/callback", nil), "grace", mcpIntent{
+		ClientID: "worklode-mcp", RedirectURI: "https://claude.ai/api/mcp/auth_callback", CodeChallenge: "cc", State: "st8",
+	})
+	if len(s.mcpCodes.m) != 0 || rr.Header().Get("Location") != "" {
+		t.Fatal("a code exists before the consent post")
+	}
+	post := consentPost(http.HandlerFunc(s.oauthConsent), rr, "allow", "", nil)
+	if post.Code != http.StatusFound || len(s.mcpCodes.m) != 1 {
+		t.Fatalf("allow: %d, %d codes", post.Code, len(s.mcpCodes.m))
+	}
+	for _, c := range s.mcpCodes.m {
+		if c.v != (mcpCode{actor: "grace", clientID: "worklode-mcp", redirectURI: "https://claude.ai/api/mcp/auth_callback", codeChallenge: "cc"}) {
+			t.Errorf("code binding = %+v", c.v)
+		}
+	}
+}
+
+func reachConsent(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	login := get(h, path)
+	rr := callback(h, login, cookieOf(login, mcpCookieName))
+	if rr.Code != http.StatusOK || cookieOf(rr, consentCookieName) == nil {
+		t.Fatalf("consent: %d %s", rr.Code, rr.Body.String())
+	}
+	return rr
+}
+
+func TestOAuthConsent(t *testing.T) {
+	t.Parallel()
+	h, admin, _ := newMCPOAuthServer(t, "https://mcp.example.com/worklode")
+	const res = "https://mcp.example.com/worklode/mcp"
+	path := authorizePath(map[string]string{"resource": res})
+	sameOrigin := map[string]string{"Sec-Fetch-Site": "same-origin"}
+
+	consent := reachConsent(t, h, path)
+	for name, rr := range map[string]*httptest.ResponseRecorder{
+		"cross-site":     consentPost(h, consent, "allow", "", map[string]string{"Sec-Fetch-Site": "cross-site"}),
+		"foreign origin": consentPost(h, consent, "allow", "", map[string]string{"Origin": "https://evil.example.com"}),
+		"cookie differs": consentPost(h, consent, "allow", strings.Repeat("0", 64), sameOrigin),
+		"no cookie":      consentPost(h, consent, "allow", "", sameOrigin, consentCookieName),
+		"no session":     consentPost(h, consent, "allow", "", sameOrigin, sessionCookieName),
+	} {
+		if rr.Code != http.StatusForbidden || rr.Header().Get("Location") != "" {
+			t.Errorf("%s: %d %q; want 403", name, rr.Code, rr.Header().Get("Location"))
+		}
+	}
+	// None of the refusals spent the consent.
+	allow := consentPost(h, consent, "allow", "", sameOrigin)
+	loc, _ := url.Parse(allow.Header().Get("Location"))
+	q := loc.Query()
+	if allow.Code != http.StatusFound || !strings.HasPrefix(loc.String(), "https://claude.ai/api/mcp/auth_callback?") ||
+		q.Get("code") == "" || q.Get("state") != "st8" || q.Get("iss") != "https://mcp.example.com/worklode" {
+		t.Fatalf("allow: %d %s", allow.Code, loc)
+	}
+	if again := consentPost(h, consent, "allow", "", sameOrigin); again.Code != http.StatusBadRequest || again.Header().Get("Location") != "" {
+		t.Errorf("second post: %d %q; want 400", again.Code, again.Header().Get("Location"))
+	}
+
+	deny := consentPost(h, reachConsent(t, h, path), "deny", "", sameOrigin)
+	loc, _ = url.Parse(deny.Header().Get("Location"))
+	if deny.Code != http.StatusFound || loc.Query().Get("error") != "access_denied" || loc.Query().Get("state") != "st8" || loc.Query().Has("code") {
+		t.Errorf("deny: %d %s", deny.Code, loc)
+	}
+
+	// The browser origin's resource gets the browser origin as iss.
+	allow = consentPost(h, reachConsent(t, h, authorizePath(map[string]string{"resource": "http://localhost:8080/mcp"})), "allow", "", sameOrigin)
+	if loc, _ = url.Parse(allow.Header().Get("Location")); loc.Query().Get("iss") != "http://localhost:8080" {
+		t.Errorf("browser iss: %s", loc)
+	}
+
+	scrape := get(admin, "/metrics").Body.String()
+	for _, want := range []string{
+		`worklode_mcp_oauth_requests_total{endpoint="consent",outcome="ok"} 2`,
+		`worklode_mcp_oauth_requests_total{endpoint="consent",outcome="access_denied"} 1`,
+		`worklode_mcp_oauth_requests_total{endpoint="consent",outcome="invalid_request"} 6`,
+	} {
+		if !strings.Contains(scrape, want) {
+			t.Errorf("metrics missing %s", want)
+		}
 	}
 }

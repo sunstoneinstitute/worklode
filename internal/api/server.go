@@ -421,6 +421,9 @@ type server struct {
 	// consents holds MCP logins awaiting the user's Allow or Deny.
 	consents *consentStore
 
+	// mcpCodes holds MCP authorization codes until /oauth/token redeems them.
+	mcpCodes *ttlStore[mcpCode]
+
 	// blobs is the object-storage backend for WL-SPEC-78's content-addressed
 	// blobs, or nil when no bucket is configured — the blob endpoints then
 	// answer 501 and nothing else changes.
@@ -929,6 +932,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.publicFunc("GET /.well-known/oauth-protected-resource/mcp", s.protectedResourceMetadata)
 	r.publicFunc("GET /.well-known/oauth-authorization-server", s.authorizationServerMetadata)
 	r.publicFunc("GET /oauth/authorize", s.oauthAuthorize)
+	r.publicFunc("POST /oauth/consent", s.oauthConsent)
 
 	// Provider-neutral, server-mediated CLI login (see cliauth.go).
 	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
@@ -1206,6 +1210,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	}
 	s.cliCodes = newCLICodeStore(st.Now)
 	s.consents = newConsentStore(st.Now)
+	s.mcpCodes = newTTLStore[mcpCode](st.Now)
 	s.bgCtx = cfg.BackgroundCtx
 	if s.bgCtx == nil {
 		s.bgCtx = context.Background()
