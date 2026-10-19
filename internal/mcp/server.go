@@ -25,6 +25,7 @@ type Config struct {
 
 type server struct {
 	cfg Config
+	srv *mcp.Server
 	h   http.Handler
 }
 
@@ -38,9 +39,11 @@ func New(cfg Config) http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "worklode"}, &mcp.ServerOptions{
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
-	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
+	s := &server{cfg: cfg, srv: srv}
+	s.addProjectTools()
+	s.h = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true})
-	return &server{cfg: cfg, h: h}
+	return s
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
