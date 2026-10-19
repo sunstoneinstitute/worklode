@@ -24,6 +24,10 @@ const STATE_OPTIONS = [
   { value: "abandoned", label: "Abandoned" },
 ]
 
+// What a task list fetches until its State filter names others: the closed
+// states make up most tasks and most of the response (WL-REQ-1803).
+const OPEN_STATES = ["draft", "ready", "in_progress", "in_review"]
+
 const PRIORITY_OPTIONS = [
   { value: "critical", label: "Critical", colorVar: "--color-accent-warn" },
   { value: "high", label: "High", colorVar: "--color-accent-warn" },
@@ -109,7 +113,6 @@ export function TaskList({
   showProject?: boolean
   syncWithUrl?: boolean
 }) {
-  const tasks = useTasks({ project: projectId })
   const crew = useCrew()
   const projects = useProjects()
   const createTask = useCreateTask()
@@ -122,6 +125,8 @@ export function TaskList({
     [showProject, projects.data],
   )
   const urlState = useTableUrlState(columns, { enabled: syncWithUrl })
+  const stateFilter = urlState.viewState?.columnFilters.find((f) => f.id === "state")?.value as string[] | undefined
+  const tasks = useTasks({ project: projectId, states: stateFilter?.length ? stateFilter : OPEN_STATES })
   const users = useMemo<DataTableUser[]>(
     () => (crew.data ?? []).map((c) => ({ id: c.actor ?? "", name: c.display_name || (c.actor ?? "") })),
     [crew.data],

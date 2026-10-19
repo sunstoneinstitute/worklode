@@ -124,6 +124,6 @@ describe("useTasks", () => {
     const { result } = renderHook(() => useTasks({ project: "p2" }), { wrapper })
 
     await waitFor(() => expect(result.current.data?.map((t) => t.id)).toEqual(["DP-1"]))
-    expect(queryClient.getQueryData(["tasks", { project: "p2" }])).toBeDefined()
+    expect(queryClient.getQueryData(["tasks", { project: "p2", states: null }])).toBeDefined()
   })
 })
