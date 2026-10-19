@@ -70,11 +70,11 @@ func TestFinishLoginCLIBranch(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=x&state=y", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  cliCookieName,
-		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "clistate", Exp: time.Unix(1000, 0).Add(cliCodeTTL).Unix()}),
+		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "clistate", Nonce: "n", Exp: time.Unix(1000, 0).Add(cliCodeTTL).Unix()}),
 	})
 	rr := httptest.NewRecorder()
 
-	s.finishLogin(rr, req, "github:42", "/")
+	s.finishLogin(rr, req, "github:42", oauthState{Next: "/", Nonce: "n"})
 
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d; want 302", rr.Code)
@@ -96,9 +96,32 @@ func TestFinishLoginCLIBranch(t *testing.T) {
 	}
 }
 
+// testVerifier is an OIDC verifier against a fake issuer.
+func testVerifier(t *testing.T) *oidc.Verifier {
+	t.Helper()
+	iss := oidctest.NewIssuer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	v, err := oidc.New(ctx, iss.URL(), iss.ClientID)
+	if err != nil {
+		t.Fatalf("configure oidc: %v", err)
+	}
+	return v
+}
+
+// cookieIn returns the named cookie's value from a response.
+func cookieIn(rr *httptest.ResponseRecorder, name string) string {
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == name {
+			return c.Value
+		}
+	}
+	return ""
+}
+
 func TestCLILoginValidatesLoopback(t *testing.T) {
 	t.Parallel()
-	s := &server{cfg: Config{SessionSecret: "sek"}, oidc: &oidc.Verifier{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
+	s := &server{cfg: Config{SessionSecret: "sek", PublicURL: "https://wl.example.com"}, oidc: testVerifier(t), cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 
 	bad := []string{
 		"", "https://evil.com/", "http://evil.com/", "http://localhost/", "ftp://localhost:1/",
@@ -120,19 +143,41 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 	if rr.Code != http.StatusFound {
 		t.Fatalf("good redirect_uri: status %d; want 302", rr.Code)
 	}
-	// Intent cookie is set, and we are redirected into the web login
-	// (Keycloak is the only provider -> /auth/login).
-	var hasIntent bool
-	for _, c := range rr.Result().Cookies() {
-		if c.Name == cliCookieName && c.Value != "" {
-			hasIntent = true
-		}
-	}
-	if !hasIntent {
+	// The intent cookie and the login state carry the same nonce, and the
+	// redirect goes straight to Keycloak: /auth/login would clear the intent.
+	ci, ok := verifyCLIIntent("sek", cookieIn(rr, cliCookieName), time.Unix(1000, 0))
+	if !ok {
 		t.Fatal("intent cookie not set")
 	}
-	if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/login") {
-		t.Fatalf("redirect = %q; want /auth/login", loc)
+	st, ok := verifyOAuthState("sek", cookieIn(rr, oauthCookieName), time.Unix(1000, 0))
+	if !ok || st.Nonce == "" || st.Nonce != ci.Nonce {
+		t.Fatalf("login state nonce %q, intent nonce %q; want equal and non-empty", st.Nonce, ci.Nonce)
+	}
+	if loc := rr.Header().Get("Location"); strings.HasPrefix(loc, "/auth/login") {
+		t.Fatalf("redirect = %q; want the issuer", loc)
+	}
+}
+
+// A CLI intent whose nonce is not this login's is ignored: the login ends as
+// a plain web login and no code is minted (WL-REQ-1835).
+func TestFinishLoginCLINonceMismatch(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(1000, 0)
+	s := &server{cfg: Config{SessionSecret: "sek"}, cliCodes: newCLICodeStore(func() time.Time { return now })}
+	req := httptest.NewRequest(http.MethodGet, "/auth/callback", nil)
+	req.AddCookie(&http.Cookie{
+		Name:  cliCookieName,
+		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "s", Nonce: "old", Exp: now.Add(cliCodeTTL).Unix()}),
+	})
+	for _, nonce := range []string{"new", ""} {
+		rr := httptest.NewRecorder()
+		s.finishLogin(rr, req, "stig", oauthState{Next: "/tasks", Nonce: nonce})
+		if loc := rr.Header().Get("Location"); loc != "/tasks" || cookieIn(rr, sessionCookieName) == "" {
+			t.Fatalf("nonce %q: Location %q; want a web login to /tasks", nonce, loc)
+		}
+	}
+	if len(s.cliCodes.codes) != 0 {
+		t.Fatal("a code was minted for a stale intent")
 	}
 }
 
@@ -141,15 +186,12 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 // the request is unchanged — a state is still required.
 func TestCLILoginManualMode(t *testing.T) {
 	t.Parallel()
-	s := &server{cfg: Config{SessionSecret: "sek"}, oidc: &oidc.Verifier{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
+	s := &server{cfg: Config{SessionSecret: "sek", PublicURL: "https://wl.example.com"}, oidc: testVerifier(t), cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 
 	rr := httptest.NewRecorder()
 	s.cliLogin(rr, httptest.NewRequest(http.MethodGet, "/auth/cli/login?mode=manual&state=clistate", nil))
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d; want 302", rr.Code)
-	}
-	if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/login") {
-		t.Fatalf("redirect = %q; want /auth/login", loc)
 	}
 
 	var intent string
@@ -195,12 +237,12 @@ func TestFinishLoginManualRendersRedeemableCode(t *testing.T) {
 	req.AddCookie(&http.Cookie{
 		Name: cliCookieName,
 		Value: signCLIIntent("sek", cliIntent{
-			Mode: cliModeManual, State: "clistate", Exp: now.Add(cliCodeTTL).Unix(),
+			Mode: cliModeManual, State: "clistate", Nonce: "n", Exp: now.Add(cliCodeTTL).Unix(),
 		}),
 	})
 	rr := httptest.NewRecorder()
 
-	s.finishLogin(rr, req, "stig", "/")
+	s.finishLogin(rr, req, "stig", oauthState{Next: "/", Nonce: "n"})
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d; want 200 (a page, not a redirect)", rr.Code)
@@ -245,11 +287,11 @@ func TestFinishLoginEmptyModeIsLoopback(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=x&state=y", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  cliCookieName,
-		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "s", Exp: now.Add(cliCodeTTL).Unix()}),
+		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "s", Nonce: "n", Exp: now.Add(cliCodeTTL).Unix()}),
 	})
 	rr := httptest.NewRecorder()
 
-	s.finishLogin(rr, req, "stig", "/")
+	s.finishLogin(rr, req, "stig", oauthState{Next: "/", Nonce: "n"})
 
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d; want 302 to the loopback", rr.Code)

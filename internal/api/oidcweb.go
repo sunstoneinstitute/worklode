@@ -58,14 +58,23 @@ func (s *server) loginTarget(next string) string {
 	return "/auth/login?next=" + url.QueryEscape(next)
 }
 
-// authLogin handles GET /auth/login: begin the auth-code + PKCE flow.
+// authLogin handles GET /auth/login: begin the auth-code + PKCE flow. A plain
+// login abandons any CLI or MCP login in flight, so it clears both intent
+// cookies (WL-REQ-1835).
 func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 	if s.oidc == nil {
 		webErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	next := safeNext(r.URL.Query().Get("next"))
+	clearAuthCookie(w, cliCookieName)
+	clearAuthCookie(w, mcpCookieName)
+	s.startLogin(w, r, safeNext(r.URL.Query().Get("next")), "")
+}
 
+// startLogin sets the signed oauth-state cookie and redirects to Keycloak.
+// nonce is empty for a plain login; an intent's starter passes the nonce its
+// intent cookie carries, which finishLogin compares (WL-REQ-1835).
+func (s *server) startLogin(w http.ResponseWriter, r *http.Request, next, nonce string) {
 	state, err := randToken()
 	if err != nil {
 		s.log.Error("generate login state", "err", err)
@@ -73,10 +82,9 @@ func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verifier := oauth2.GenerateVerifier()
-	now := s.st.Now()
 
 	setAuthCookie(w, oauthCookieName, "/auth/",
-		signOAuthState(s.cfg.SessionSecret, oauthState{State: state, Verifier: verifier, Next: next, Exp: now.Add(oauthStateMaxAge).Unix()}),
+		signOAuthState(s.cfg.SessionSecret, oauthState{State: state, Verifier: verifier, Next: next, Nonce: nonce, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
 		oauthStateMaxAge)
 
 	cfg := s.oidc.OAuth2Config(s.callbackURL(), oidcScopes)
@@ -143,5 +151,5 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.finishLogin(w, r, username, st.Next)
+	s.finishLogin(w, r, username, st)
 }

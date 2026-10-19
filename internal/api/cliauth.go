@@ -1,7 +1,7 @@
 // cliauth.go implements the server-mediated CLI login flow: a discovery
 // endpoint, a login-start endpoint that stamps a loopback redirect target into
 // a signed cookie, and a token endpoint that redeems a one-time code for a wl_
-// token. The one-time code is minted in finishLogin (shared by both web
+// token. The one-time code is minted in finishLoginCLI (reached from the web
 // callbacks) once the actor is provisioned. See
 // WL-SPEC-74.
 package api
@@ -112,16 +112,27 @@ func (s *server) cliIntentFrom(r *http.Request) (cliIntent, bool) {
 	return verifyCLIIntent(s.cfg.SessionSecret, c.Value, s.now())
 }
 
-// finishLogin ends a successful web login for actorID. When the CLI-intent
-// cookie is present (a server-mediated `lode login`), it mints a one-time code
-// and redirects to the loopback redirect_uri instead of establishing a browser
-// session. Otherwise it delegates to finishLoginWeb.
-func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next string) {
-	ci, ok := s.cliIntentFrom(r)
-	if !ok {
-		s.finishLoginWeb(w, r, actorID, next)
-		return
+// finishLogin ends a successful web login for actorID. An MCP or CLI intent
+// cookie is honoured only when its nonce is this login's (WL-REQ-1835): the MCP
+// branch shows the consent page, the CLI branch mints a one-time code. Any
+// other login gets a browser session through finishLoginWeb.
+func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID string, st oauthState) {
+	if st.Nonce != "" {
+		if mi, ok := s.mcpIntentFrom(r); ok && mi.Nonce == st.Nonce {
+			s.finishLoginMCP(w, r, actorID, mi)
+			return
+		}
+		if ci, ok := s.cliIntentFrom(r); ok && ci.Nonce == st.Nonce {
+			s.finishLoginCLI(w, r, actorID, ci)
+			return
+		}
 	}
+	s.finishLoginWeb(w, r, actorID, st.Next)
+}
+
+// finishLoginCLI mints a one-time code and hands it back to `lode login`
+// instead of establishing a browser session.
+func (s *server) finishLoginCLI(w http.ResponseWriter, r *http.Request, actorID string, ci cliIntent) {
 	code, err := s.cliCodes.mint(actorID, ci.State)
 	if err != nil {
 		s.log.Error("mint cli code", "err", err)
@@ -153,7 +164,7 @@ func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, ne
 // the original tail shared by both web callbacks.
 func (s *server) finishLoginWeb(w http.ResponseWriter, r *http.Request, actorID, next string) {
 	setAuthCookie(w, sessionCookieName, "/",
-		signSession(s.cfg.SessionSecret, actorID, s.st.Now().Add(sessionLifetime)), sessionLifetime)
+		signSession(s.cfg.SessionSecret, actorID, s.now().Add(sessionLifetime)), sessionLifetime)
 	clearAuthCookie(w, oauthCookieName)
 	http.Redirect(w, r, safeNext(next), http.StatusFound)
 }
@@ -214,7 +225,7 @@ func isLoopbackRedirect(raw string) bool {
 }
 
 // cliLogin handles GET /auth/cli/login: validate the loopback redirect target,
-// stamp it into a signed cookie, and redirect into the Keycloak web login.
+// stamp it into a signed cookie bound by nonce to the Keycloak login it starts.
 // 404 when OIDC is unconfigured (s.oidc == nil).
 func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
 	if s.oidc == nil {
@@ -242,10 +253,16 @@ func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid redirect_uri or state")
 		return
 	}
+	nonce, err := randToken()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	setAuthCookie(w, cliCookieName, "/auth/",
-		signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Mode: mode, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
+		signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Mode: mode, Nonce: nonce, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
 		oauthStateMaxAge)
-	http.Redirect(w, r, s.loginTarget("/"), http.StatusFound)
+	// Straight into Keycloak: /auth/login would clear the intent just set.
+	s.startLogin(w, r, "/", nonce)
 }
 
 // cliToken handles POST /auth/cli/token: redeem a one-time code (proof the
