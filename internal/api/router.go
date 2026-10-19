@@ -222,6 +222,15 @@ var routeGuards = map[string]routeGuard{
 	"POST /auth/cli/token":        open("redeems a one-time CLI login code"),
 	"GET /api/v1/openapi.json":    open("the API's own description; carries no project data"),
 
+	// --- MCP (WL-SPEC-88) ------------------------------------------------------
+	// Streamable HTTP is POST. GET has a row so it reaches the stateless
+	// handler's 405 rather than the cockpit's GET /{ref}; a bare "/mcp"
+	// pattern conflicts with that route. permProjectRead is held by every
+	// authenticated actor; each tool's own API call is guarded by its
+	// route's row (WL-RULE-1823).
+	"POST /mcp": guarded(permProjectRead),
+	"GET /mcp":  guarded(permProjectRead),
+
 	// --- tasks ---------------------------------------------------------------
 	"POST /api/v1/tasks":              guardedAny(permTaskWrite),
 	"GET /api/v1/tasks":               guardedAny(permTaskRead),
@@ -599,6 +608,21 @@ func (r *router) guardFor(pattern string) routeGuard {
 func (r *router) api(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
 	r.mux.Handle(pattern, r.srv.apiGuard(g, h))
+}
+
+// bearerAPI is api for a route that only a bearer token may call: a request
+// without one answers 401 before apiGuard can resolve a session or the open
+// subject in its place. /mcp uses it (WL-REQ-1822), so an MCP client is told
+// to authenticate rather than refused as a cross-site write.
+func (r *router) bearerAPI(pattern string, h http.HandlerFunc) {
+	guarded := r.srv.apiGuard(r.guardFor(pattern), h)
+	r.mux.HandleFunc(pattern, func(w http.ResponseWriter, req *http.Request) {
+		if token, ok := strings.CutPrefix(req.Header.Get("Authorization"), "Bearer "); !ok || token == "" {
+			writeErr(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		guarded(w, req)
+	})
 }
 
 // web registers a web UI route behind webGuard, which resolves the session

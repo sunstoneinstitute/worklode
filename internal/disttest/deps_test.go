@@ -36,6 +36,8 @@ func forbidden(dep string) string {
 		return "a Prometheus package"
 	case strings.HasPrefix(dep, "k8s.io/"):
 		return "a Kubernetes package"
+	case strings.HasPrefix(dep, "github.com/modelcontextprotocol/"):
+		return "the MCP SDK"
 	}
 	return ""
 }
