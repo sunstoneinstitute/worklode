@@ -358,7 +358,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"op"})
 	s.ideaWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_ideas_writes_total",
-		Help: "Successful ideas writes (WL-REQ-1799), by op (" +
+		Help: "Successful ideas writes (WL-REQ-1799, WL-REQ-1800), by op (" +
 			strings.Join(ideaWriteOps, ", ") + ").",
 	}, []string{"op"})
 	s.planBudgetChecks = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -1313,7 +1313,7 @@ func (s *server) observeProjectDocumentWrite(op string) {
 }
 
 // ideaWriteOps bounds worklode_ideas_writes_total's one label.
-var ideaWriteOps = []string{"create", "update", "share", "intake", "delete"}
+var ideaWriteOps = []string{"create", "update", "share", "intake", "delete", "litmus", "pre_research"}
 
 // observeIdeaWrite counts one successful ideas write. Nil-safe.
 func (s *server) observeIdeaWrite(op string) {

@@ -48,6 +48,26 @@ func (c *Client) SetIdeaIntake(ctx context.Context, id string, in model.PatchIde
 	return doJSON[model.Idea](ctx, c, http.MethodPatch, ideaPath(id)+"/intake", in, "idea")
 }
 
+// ListLitmusTests calls GET /api/v1/ideas/{id}/litmus-tests.
+func (c *Client) ListLitmusTests(ctx context.Context, id string) (model.LitmusTestListResponse, []byte, error) {
+	return doJSON[model.LitmusTestListResponse](ctx, c, http.MethodGet, ideaPath(id)+"/litmus-tests", nil, "litmus test list")
+}
+
+// AddLitmusTest calls POST /api/v1/ideas/{id}/litmus-tests.
+func (c *Client) AddLitmusTest(ctx context.Context, id string, in model.CreateLitmusTestInput) (model.LitmusTest, []byte, error) {
+	return doJSON[model.LitmusTest](ctx, c, http.MethodPost, ideaPath(id)+"/litmus-tests", in, "litmus test")
+}
+
+// GetPreResearch calls GET /api/v1/ideas/{id}/pre-research.
+func (c *Client) GetPreResearch(ctx context.Context, id string) (model.PreResearch, []byte, error) {
+	return doJSON[model.PreResearch](ctx, c, http.MethodGet, ideaPath(id)+"/pre-research", nil, "pre-research")
+}
+
+// PutPreResearch calls PUT /api/v1/ideas/{id}/pre-research.
+func (c *Client) PutPreResearch(ctx context.Context, id string, in model.PutPreResearchInput) (model.PreResearch, []byte, error) {
+	return doJSON[model.PreResearch](ctx, c, http.MethodPut, ideaPath(id)+"/pre-research", in, "pre-research")
+}
+
 // IdeaTable prints idea rows.
 func IdeaTable(w io.Writer, ideas []model.Idea) {
 	tbl := newTable(
