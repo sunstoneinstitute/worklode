@@ -19,3 +19,17 @@ type OAuthServerMetadata struct {
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
 }
+
+// OAuthTokenResponse is the RFC 6749 success body of POST /oauth/token
+// (WL-REQ-1839). There is no refresh token.
+type OAuthTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
+// OAuthError is the RFC 6749 error body of POST /oauth/token.
+type OAuthError struct {
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description,omitempty"`
+}
