@@ -1,5 +1,6 @@
-// projectdocuments.go serves a project's documents register (WL-REQ-1798)
-// over /api/v1.
+// projectdocuments.go serves the documents register (WL-REQ-1798) over
+// /api/v1: a project's rows, and an idea's sources. The store decides an
+// idea's visibility: a private idea is 409 to its author, 404 to anyone else.
 package api
 
 import (
@@ -12,12 +13,16 @@ import (
 
 // mapProjectDocumentErr maps a register write's error. A rejected value is a
 // 400 here (WL-REQ-1798), where other routes answer ErrInvalidInput with 422.
+// ErrNotShared carries WL-REQ-1799's exact message, as on the idea routes.
 func (s *server) mapProjectDocumentErr(w http.ResponseWriter, err error) {
-	if errors.Is(err, store.ErrInvalidInput) {
+	switch {
+	case errors.Is(err, store.ErrInvalidInput):
 		writeErr(w, http.StatusBadRequest, err.Error())
-		return
+	case errors.Is(err, store.ErrNotShared):
+		writeErr(w, http.StatusConflict, store.ErrNotShared.Error())
+	default:
+		s.mapStoreErr(w, err)
 	}
-	s.mapStoreErr(w, err)
 }
 
 // listProjectDocuments handles GET /api/v1/projects/{id}/documents.
@@ -51,6 +56,34 @@ func (s *server) createProjectDocument(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, d)
 }
 
+// listIdeaSources handles GET /api/v1/ideas/{id}/sources.
+func (s *server) listIdeaSources(w http.ResponseWriter, r *http.Request) {
+	docs, err := s.st.ListIdeaDocuments(r.Context(), actorIDFrom(r), r.PathValue("id"))
+	if err != nil {
+		s.mapProjectDocumentErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.ProjectDocumentListResponse{Documents: docs})
+}
+
+// createIdeaSource handles POST /api/v1/ideas/{id}/sources. The category is
+// always "sources".
+func (s *server) createIdeaSource(w http.ResponseWriter, r *http.Request) {
+	var in model.CreateProjectDocumentInput
+	if err := readJSON(w, r, &in); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	in.Category = "sources"
+	d, err := s.st.CreateProjectDocument(r.Context(), store.IdeaOwner(r.PathValue("id")), in, actorIDFrom(r))
+	if err != nil {
+		s.mapProjectDocumentErr(w, err)
+		return
+	}
+	s.observeProjectDocumentWrite("create")
+	writeJSON(w, http.StatusCreated, d)
+}
+
 // patchProjectDocument handles PATCH /api/v1/documents/{id}.
 func (s *server) patchProjectDocument(w http.ResponseWriter, r *http.Request) {
 	var in model.PatchProjectDocumentInput
@@ -70,7 +103,7 @@ func (s *server) patchProjectDocument(w http.ResponseWriter, r *http.Request) {
 // deleteProjectDocument handles DELETE /api/v1/documents/{id}.
 func (s *server) deleteProjectDocument(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.DeleteProjectDocument(r.Context(), r.PathValue("id"), actorIDFrom(r)); err != nil {
-		s.mapStoreErr(w, err)
+		s.mapProjectDocumentErr(w, err)
 		return
 	}
 	s.observeProjectDocumentWrite("delete")
@@ -85,6 +118,15 @@ var projectDocumentRouteDocs = map[string]routeDoc{
 	},
 	"POST /api/v1/projects/{id}/documents": {
 		summary:   "Register a document on a project",
+		request:   model.CreateProjectDocumentInput{},
+		responses: map[int]any{http.StatusCreated: model.ProjectDocument{}},
+	},
+	"GET /api/v1/ideas/{id}/sources": {
+		summary:   "List a shared idea's sources",
+		responses: map[int]any{http.StatusOK: model.ProjectDocumentListResponse{}},
+	},
+	"POST /api/v1/ideas/{id}/sources": {
+		summary:   "Register a source on a shared idea; the category is always sources",
 		request:   model.CreateProjectDocumentInput{},
 		responses: map[int]any{http.StatusCreated: model.ProjectDocument{}},
 	},
