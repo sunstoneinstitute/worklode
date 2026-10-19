@@ -45,6 +45,7 @@ func New(cfg Config) http.Handler {
 	s.addTaskTools()
 	s.addDocTools()
 	s.addRuleTools()
+	s.addFileTools()
 	s.h = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true})
 	return s

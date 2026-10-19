@@ -130,6 +130,10 @@ func (s *server) docAdd(ctx context.Context, c *cli.Client, req *mcp.CallToolReq
 	if err != nil {
 		return nil, err
 	}
+	return s.addDoc(ctx, c, a)
+}
+
+func (s *server) addDoc(ctx context.Context, c *cli.Client, a docAddArgs) (*mcp.CallToolResult, error) {
 	key, err := s.requireProject(ctx, c, a.Project, "")
 	if err != nil {
 		return nil, err
