@@ -907,6 +907,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	// the caller's own token (WL-RULE-1823).
 	mcpHandler := mcp.New(mcp.Config{
 		API: r.mux, PublicURL: s.cfg.PublicURL, SessionSecret: s.cfg.SessionSecret, Now: s.st.Now,
+		Metrics: mcp.NewMetrics(reg),
 	})
 	r.bearerAPI("POST /mcp", mcpHandler.ServeHTTP)
 	r.bearerAPI("GET /mcp", mcpHandler.ServeHTTP)

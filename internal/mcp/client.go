@@ -13,8 +13,8 @@ import (
 var errNoBearer = errors.New("mcp: request carries no bearer token")
 
 // bearer returns the request's bearer token, or "" when it has none.
-func bearer(r *http.Request) string {
-	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+func bearer(h http.Header) string {
+	token, ok := strings.CutPrefix(h.Get("Authorization"), "Bearer ")
 	if !ok {
 		return ""
 	}
@@ -23,8 +23,8 @@ func bearer(r *http.Request) string {
 
 // clientFor builds the cli.Client a tool call uses: it calls the API handler
 // in-process with the caller's own bearer token (WL-RULE-1823).
-func (s *server) clientFor(r *http.Request) (*cli.Client, error) {
-	token := bearer(r)
+func (s *server) clientFor(h http.Header) (*cli.Client, error) {
+	token := bearer(h)
 	if token == "" {
 		return nil, errNoBearer
 	}
