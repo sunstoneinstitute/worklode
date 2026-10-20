@@ -114,6 +114,11 @@ public ingress, but the login and consent pages are served from the mesh host
 `worklode.sunstone.internal`, so the browser completing the connection must be
 on the mesh.
 
+The MCP server's tools are registered with `addTool` in the `internal/mcp`
+feature files. `wantTools` in `internal/mcp/tools_test.go` transcribes the
+WL-REQ-1824 table, and `TestToolsListMatchesTable` fails when `tools/list`
+disagrees with it, so adding or dropping a tool means changing that rule first.
+
 For scripts, a minted `wl_` token still works as
 `"headers": { "Authorization": "Bearer ${WORKLODE_TOKEN}" }`. Never commit it.
 
