@@ -62,6 +62,7 @@ var l3DomainActions = map[string]bool{
 	"withdraw": true, "report": true, "check": true,
 	"supersede": true, // lode rule supersede: the refactor primitive
 	"arrange":   true, // lode rule arrange: place a rule in a spec (WL-REQ-1297)
+	"decide":    true, // lode approval decide: record a verdict (WL-REQ-1608)
 }
 
 // nounViews is the noun-subcommand table of WL-REQ-308, transcribed by full
