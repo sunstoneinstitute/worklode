@@ -214,5 +214,5 @@ Before retiring anything, the coordinator checks, and the owner approves the res
 - `lode rule set --kind informative` marks context. A rule that an accepted plan `covers` cannot become
   informative; leave it a requirement.
 - Stored doc notes cannot be deleted (as of October 2026). Leave stale ones.
-- Accepting a new spec can be blocked by an open approval that only the web UI can decide. Ask the owner.
+- Accepting a new spec can be blocked by an open approval that only its approver can decide. Ask the owner.
 - Write every task and doc reference shown to the owner as a link to the Worklode web UI.

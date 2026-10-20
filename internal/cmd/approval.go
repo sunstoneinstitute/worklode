@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -10,24 +11,15 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// newApprovalCmd is `lode approval`: require review, ask for it, and see what
-// is outstanding.
-//
-// There is no `lode approval approve` — nor reject, nor request-changes — and
-// that is WL-REQ-124, not an unfinished command family: approving is a web
-// UI act because the OIDC session's group claims are fresh and a 30-day CLI
-// token's are not. `lode approval list` prints the ids; the decision itself
-// happens on the cockpit's /reviews page.
+// newApprovalCmd is `lode approval`: require review, ask for it, see what is
+// outstanding, and decide it.
 func newApprovalCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "approval",
-		Short: "Require and request review, and see what review is outstanding",
-		Long: "Require and request review, and see what review is outstanding.\n\n" +
-			"Deciding an approval is a web UI act (WL-REQ-124) and has no\n" +
-			"command here: open the cockpit's Reviews page to approve, reject, or\n" +
-			"request changes.",
+		Short: "Require, request, list and decide approvals",
 	}
-	cmd.AddCommand(newApprovalAddCmd(), newApprovalRequestCmd(), newApprovalListCmd())
+	cmd.AddCommand(newApprovalAddCmd(), newApprovalRequestCmd(), newApprovalListCmd(),
+		newApprovalDecideCmd())
 	return cmd
 }
 
@@ -175,4 +167,73 @@ func newApprovalListCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// newApprovalDecideCmd records a verdict on one approval (WL-REQ-1608). The
+// decider is the token's actor; the server applies every store check.
+func newApprovalDecideCmd() *cobra.Command {
+	var verdict, note string
+	cmd := &cobra.Command{
+		Use:   "decide <id>",
+		Short: "Approve, request changes on, or reject an approval",
+		Long: "Approve, request changes on, or reject an approval (WL-REQ-1608).\n\n" +
+			"<id> is the approval id `lode approval list` prints. --verdict is\n" +
+			"approve, request_changes or reject. Deciding a row that needs a group\n" +
+			"requires a login within the last 24 hours: run `lode login` if refused.",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: awaitingApprovalIDs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := strconv.ParseInt(args[0], 10, 64)
+			if err != nil {
+				return fmt.Errorf("approval id %q is not a number", args[0])
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			a, raw, err := c.DecideApproval(cmd.Context(), id,
+				model.DecideApprovalInput{Verdict: verdict, Note: note})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.ApprovalRender(cmd.OutOrStdout(), a)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&verdict, "verdict", "", "approve, request_changes or reject")
+	cmd.Flags().StringVar(&note, "note", "", "optional note recorded with the decision")
+	_ = cmd.MarkFlagRequired("verdict")
+	_ = cmd.RegisterFlagCompletionFunc("verdict", func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		return staticCompletions([]string{"approve", "request_changes", "reject"}, toComplete)
+	})
+	return cmd
+}
+
+// awaitingApprovalIDs completes `approval decide`'s id from the awaiting
+// queue, each candidate described by its entity's title.
+func awaitingApprovalIDs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	ctx, cancel, c, _, ok := completionClient(cmd)
+	if !ok {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	defer cancel()
+	resp, _, err := c.ListApprovals(ctx)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	var out []cobra.Completion
+	for _, a := range resp.Approvals {
+		id := strconv.FormatInt(a.ID, 10)
+		if strings.HasPrefix(id, toComplete) {
+			out = append(out, cobra.CompletionWithDesc(id, completionDescription(a.Title)))
+		}
+	}
+	return out, cobra.ShellCompDirectiveNoFileComp
 }

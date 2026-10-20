@@ -1,10 +1,8 @@
 package api_test
 
-// docapproval_test.go covers the two approval routes a CLI token may reach:
-// POST /api/v1/docs/{id}/request-approval and GET /api/v1/approvals. What
-// they must NOT reach — a decide route — is covered by
-// TestNoDecideRouteOnTheJSONAPI below. POST /api/v1/docs/{id}/reviewers, the
-// durable reviewer set request-approval reads (WL-359), is covered in
+// docapproval_test.go covers POST /api/v1/docs/{id}/request-approval and
+// GET /api/v1/approvals; deciding is covered in approvaldecideapi_test.go.
+// POST /api/v1/docs/{id}/reviewers, the durable reviewer set request-approval reads (WL-359), is covered in
 // docreviewers_test.go — this file's setReviewers helper calls it, and
 // TestSetDocReviewersUnknownActor stays here since it is really about
 // request-approval's actor-validation contract having moved, not about the
@@ -227,27 +225,5 @@ func TestListApprovalsServesBothEntityKinds(t *testing.T) {
 	}
 	if doc.RequiredActorName == nil || *doc.RequiredActorName != "Bob" {
 		t.Errorf("doc row required_actor_name = %v, want Bob", doc.RequiredActorName)
-	}
-}
-
-// TestNoDecideRouteOnTheJSONAPI is the guard this whole change exists inside:
-// WL-REQ-124 makes deciding a web UI act because a session's group claims are
-// fresh and a 30-day CLI token's are not. A decide route reachable with a
-// bearer token would defeat that, so the absence is asserted rather than
-// merely intended.
-func TestNoDecideRouteOnTheJSONAPI(t *testing.T) {
-	t.Parallel()
-	st, h, token := newTestServer(t)
-	seeded := seedAwaitingPRApproval(t, st, "acme/site#72", "Fix the other thing")
-
-	for _, path := range []string{
-		"/api/v1/approvals/" + strconv.FormatInt(seeded.ID, 10) + "/decide",
-		"/api/v1/approvals/" + strconv.FormatInt(seeded.ID, 10),
-	} {
-		rr := doReq(t, h, "POST", path, token, map[string]string{"decision": "approve"})
-		if rr.Code != http.StatusNotFound && rr.Code != http.StatusMethodNotAllowed {
-			t.Errorf("POST %s = %d, want no such route (029 §7.3 keeps deciding on the web session)",
-				path, rr.Code)
-		}
 	}
 }

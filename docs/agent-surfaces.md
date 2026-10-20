@@ -117,6 +117,15 @@ on the mesh.
 For scripts, a minted `wl_` token still works as
 `"headers": { "Authorization": "Bearer ${WORKLODE_TOKEN}" }`. Never commit it.
 
+## Deciding an approval
+
+`lode approval decide <id> --verdict approve|request_changes|reject [--note]`
+calls `POST /api/v1/approvals/{id}/decide`, which makes the same decision as
+the cockpit's Reviews form (WL-REQ-1608). A token whose
+groups were synced more than 24 hours ago cannot decide a row that needs a
+group; the refusal says to run `lode login` or reconnect the MCP connector.
+A task-scoped token cannot decide at all.
+
 ## Authoring guidance starts from rules
 
 Every surface that teaches design authoring (root `CLAUDE.md`, the

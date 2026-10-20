@@ -387,11 +387,12 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/undelete": guarded(permDocWrite),
 
 	// --- approvals (WL-REQ-124) --------------------------------------------
-	// Reading the queue and filing an ad-hoc requirement (WL-REQ-1607). Deciding is
-	// not on the JSON API at all: WL-REQ-124 makes it a web-session act, and
-	// its route is "POST /approvals/{id}/decide" above.
-	"GET /api/v1/approvals":  guarded(permApprovalRead),
-	"POST /api/v1/approvals": guarded(permApprovalRequire),
+	// Reading the queue and filing an ad-hoc requirement (WL-REQ-1607), and
+	// deciding (WL-REQ-1608). guarded, not guardedAny: a task-scoped token
+	// cannot decide.
+	"GET /api/v1/approvals":              guarded(permApprovalRead),
+	"POST /api/v1/approvals":             guarded(permApprovalRequire),
+	"POST /api/v1/approvals/{id}/decide": guarded(permApprovalDecide),
 
 	// --- skills --------------------------------------------------------------
 	"GET /api/v1/skills":                       guardedAny(permSkillRead),
