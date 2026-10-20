@@ -236,5 +236,5 @@ configMapGenerator:
       - migrations/0111_capability-rule-kind.down.sql
       - migrations/0112_idea_findings.up.sql
       - migrations/0112_idea_findings.down.sql
-      - migrations/NEW-actor-groups-synced-at.up.sql
-      - migrations/NEW-actor-groups-synced-at.down.sql
+      - migrations/0113_actor-groups-synced-at.up.sql
+      - migrations/0113_actor-groups-synced-at.down.sql
