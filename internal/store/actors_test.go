@@ -452,3 +452,37 @@ func TestListHumanActors(t *testing.T) {
 		t.Fatalf("ListHumanActors = %+v, want %+v", got, want)
 	}
 }
+
+// TestUpsertHumanActorStampsGroupsSyncedAt asserts every login sets
+// groups_synced_at and a later one moves it forward, while a service actor
+// leaves it NULL (WL-REQ-1608).
+func TestUpsertHumanActorStampsGroupsSyncedAt(t *testing.T) {
+	t.Parallel()
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice", false, "", "", []string{"/a"}); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	a, err := s.GetActor(ctx, "alice")
+	if err != nil || a.GroupsSyncedAt == nil {
+		t.Fatalf("after first login: %+v, %v", a, err)
+	}
+	first := *a.GroupsSyncedAt
+
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice", false, "", "", []string{"/a"}); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+	a, _ = s.GetActor(ctx, "alice")
+	if a.GroupsSyncedAt == nil || !a.GroupsSyncedAt.After(first) {
+		t.Fatalf("second login did not move groups_synced_at past %v: %v", first, a.GroupsSyncedAt)
+	}
+
+	if err := s.EnsureServiceActor(ctx, "svc", "Svc"); err != nil {
+		t.Fatalf("service actor: %v", err)
+	}
+	svc, err := s.GetActor(ctx, "svc")
+	if err != nil || svc.GroupsSyncedAt != nil {
+		t.Fatalf("service actor groups_synced_at: %+v, %v", svc, err)
+	}
+}

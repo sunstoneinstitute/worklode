@@ -41,6 +41,10 @@ type Actor struct {
 	// user/admin) and re-synced on every login (WL-SPEC-74). Nil when the
 	// actor has never logged in since migration 0035.
 	Groups []string
+	// GroupsSyncedAt is when Groups was last written from Keycloak
+	// (WL-REQ-1608). Nil means never synced (service actors, or a human who
+	// has not logged in since the column was added), which counts as stale.
+	GroupsSyncedAt *time.Time
 }
 
 // tokenPrefix marks plaintext bearer tokens so they are visually
@@ -87,7 +91,8 @@ func (s *Store) EnsureServiceActor(ctx context.Context, id, displayName string) 
 }
 
 // UpsertHumanActor inserts a human actor, or on repeat login updates its
-// display name, admin flag, GitHub username, email, and groups. All of these
+// display name, admin flag, GitHub username, email, and groups, and stamps
+// groups_synced_at = now() on insert and every update (WL-REQ-1608). All of these
 // are re-synced on every login — Keycloak stays the sole authority (WL-SPEC-74)
 // — so a Keycloak demotion, a cleared githubUsername attribute, or a
 // narrower groups claim takes effect the next time the user logs in.
@@ -117,8 +122,8 @@ func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, ad
 		return fmt.Errorf("marshal groups for actor %s: %w", id, err)
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO actors (id, kind, display_name, admin, github_username, email, groups) VALUES ($1, 'human', $2, $3, $4, $5, $6)
-		 ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, admin = excluded.admin, github_username = excluded.github_username, email = excluded.email, groups = excluded.groups`,
+		`INSERT INTO actors (id, kind, display_name, admin, github_username, email, groups, groups_synced_at) VALUES ($1, 'human', $2, $3, $4, $5, $6, now())
+		 ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, admin = excluded.admin, github_username = excluded.github_username, email = excluded.email, groups = excluded.groups, groups_synced_at = now()`,
 		id, displayName, admin, ghLogin, emailArg, groupsJSON,
 	)
 	if err != nil {
@@ -144,7 +149,7 @@ func (s *Store) GetActor(ctx context.Context, id string) (*Actor, error) {
 }
 
 // actorColumns is the SELECT list scanActor expects, in order.
-const actorColumns = `id, kind, display_name, admin, github_username, email, groups`
+const actorColumns = `id, kind, display_name, admin, github_username, email, groups, groups_synced_at`
 
 // actorColumnsA is actorColumns under the `a` alias, for Authenticate's join.
 var actorColumnsA = qualifyColumns(actorColumns, "a")
@@ -153,7 +158,8 @@ func scanActor(row rowScanner) (*Actor, error) {
 	var a Actor
 	var displayName, ghLogin, email sql.NullString
 	var groupsRaw []byte
-	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin, &ghLogin, &email, &groupsRaw); err != nil {
+	var syncedAt sql.NullTime
+	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin, &ghLogin, &email, &groupsRaw, &syncedAt); err != nil {
 		return nil, err
 	}
 	a.DisplayName = displayName.String
@@ -164,6 +170,9 @@ func scanActor(row rowScanner) (*Actor, error) {
 		return nil, fmt.Errorf("actor %s: %w", a.ID, err)
 	}
 	a.Groups = groups
+	if syncedAt.Valid {
+		a.GroupsSyncedAt = &syncedAt.Time
+	}
 	return &a, nil
 }
 
