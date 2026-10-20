@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -112,7 +113,8 @@ func TestMCPProjectTools(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("confirmed project_use is an error: %+v", res.Content)
 	}
-	if h, _ := mcpDetail(t, res)["project"].(string); !strings.HasPrefix(h, "WL.") {
+	h, _ := mcpDetail(t, res)["project"].(string)
+	if !strings.HasPrefix(h, "WL.") {
 		t.Fatalf("handle = %q, want WL.<...>", h)
 	}
 
@@ -131,8 +133,125 @@ func TestMCPProjectTools(t *testing.T) {
 		t.Fatalf("project_resolve candidates = %v, want WL first", mcpDetail(t, res)["candidates"])
 	}
 
+	mcpJourney(t, call, h, tok.Token, srv.URL)
+
 	body := scrapeMetrics(t, admin)
-	if !strings.Contains(body, "worklode_mcp_tool_calls_total") {
-		t.Fatalf("/metrics missing worklode_mcp_tool_calls_total:\n%s", body)
+	for _, want := range []string{
+		`worklode_mcp_tool_calls_total{outcome="confirm_project",tool="project_use"} 1`,
+		`worklode_mcp_tool_calls_total{outcome="ok",tool="file"} 2`,
+		`worklode_mcp_tool_calls_total{outcome="ok",tool="decision_resolve"} 2`,
+		`worklode_mcp_tool_calls_total{outcome="ok",tool="approval_decide"} 2`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/metrics missing %s", want)
+		}
+	}
+}
+
+// mcpJourney files a bug, finds it, and walks a decision and an approval
+// through the unconfirmed fallback, which records nothing, then the confirmed
+// call, which records the user's answer (WL-REQ-1842, WL-REQ-1843).
+func mcpJourney(t *testing.T, call func(string, map[string]any) *sdk.CallToolResult, h, token, url string) {
+	t.Helper()
+	ctx := context.Background()
+	api := cli.NewClient(cli.Config{ServerURL: url, Token: token})
+	root := cli.NewClient(cli.Config{ServerURL: url, Token: bootstrapToken})
+	// Recording an answer assigns the task, so the decider is on the crew.
+	if _, _, err := root.AddCrewMember(ctx, "worklode", "mcp-user", "", false, false); err != nil {
+		t.Fatalf("add crew: %v", err)
+	}
+	first := func(res *sdk.CallToolResult) string { return res.Content[0].(*sdk.TextContent).Text }
+	ok := func(tool string, args map[string]any) *sdk.CallToolResult {
+		t.Helper()
+		res := call(tool, args)
+		if res.IsError {
+			t.Fatalf("%s = %s", tool, first(res))
+		}
+		return res
+	}
+
+	out := first(ok("file", map[string]any{"project": h, "what": "bug", "title": "Crash on save", "body": "It crashes."}))
+	bug := strings.TrimRight(strings.Fields(out)[1], ":,")
+	if !strings.HasPrefix(bug, "WL-") {
+		t.Fatalf("file bug = %q", out)
+	}
+	if res := ok("task_list", map[string]any{"project": h, "kind": "bugs"}); !strings.Contains(res.Content[1].(*sdk.TextContent).Text, bug) {
+		t.Fatalf("task_list bugs does not show %s: %+v", bug, res.Content)
+	}
+	spoken := "task " + strings.TrimPrefix(bug, "WL-")
+	if out := first(ok("show", map[string]any{"project": h, "ref": spoken})); !strings.Contains(out, "Crash on save") {
+		t.Fatalf("show %q = %q", spoken, out)
+	}
+
+	out = first(ok("decision_add", map[string]any{"project": h, "task": bug, "question": "Which database?", "options": []string{"Postgres", "SQLite"}}))
+	key := strings.TrimSuffix(strings.TrimPrefix(strings.Fields(out)[1], bug+"/"), ":")
+	answered := func() bool {
+		t.Helper()
+		d, _, err := api.GetDecision(ctx, bug, key)
+		if err != nil {
+			t.Fatalf("get decision %s: %v", key, err)
+		}
+		return d.Answer != nil
+	}
+	ok("decision_resolve", map[string]any{"project": h, "task": bug, "key": key, "answer": "Postgres"})
+	if answered() {
+		t.Fatal("decision_resolve without confirmed recorded an answer")
+	}
+	ok("decision_resolve", map[string]any{"project": h, "task": bug, "key": key, "answer": "Postgres", "confirmed": true})
+	if !answered() {
+		t.Fatal("confirmed decision_resolve recorded nothing")
+	}
+
+	// The approver is someone else: an author cannot decide their own change.
+	if _, _, err := root.CreateActor(ctx, model.CreateActorInput{ID: "mcp-reviewer", Kind: "human", DisplayName: "MCP Reviewer"}); err != nil {
+		t.Fatalf("create reviewer: %v", err)
+	}
+	rtok, _, err := root.CreateToken(ctx, "mcp-reviewer", "e2e mcp", nil)
+	if err != nil {
+		t.Fatalf("create reviewer token: %v", err)
+	}
+	rc, err := sdk.NewClient(&sdk.Implementation{Name: "e2e", Version: "0"}, nil).Connect(ctx, &sdk.StreamableClientTransport{
+		Endpoint: url + "/mcp", HTTPClient: &http.Client{Transport: mcpBearerRT(rtok.Token)}, DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("connect reviewer: %v", err)
+	}
+	defer rc.Close()
+	reviewer := func(args map[string]any) {
+		t.Helper()
+		res, err := rc.CallTool(ctx, &sdk.CallToolParams{Name: "approval_decide", Arguments: args})
+		if err != nil || res.IsError {
+			t.Fatalf("approval_decide = %v %+v", err, res)
+		}
+	}
+
+	// On a doc: a task approval carries no revision and cannot be decided.
+	out = first(ok("file", map[string]any{"project": h, "what": "spec", "title": "Reviewed thing", "body": "## 1. Scope {#sec-1}\n\nText.\n"}))
+	spec := strings.TrimSuffix(strings.Fields(out)[4], ":")
+	out = first(ok("approval_add", map[string]any{"project": h, "entity": spec, "approver": "mcp-reviewer"}))
+	id, err := strconv.ParseInt(strings.Fields(out)[1], 10, 64)
+	if err != nil {
+		t.Fatalf("approval_add = %q: %v", out, err)
+	}
+	awaiting := func() bool {
+		t.Helper()
+		r, _, err := api.ListApprovals(ctx)
+		if err != nil {
+			t.Fatalf("list approvals: %v", err)
+		}
+		for _, a := range r.Approvals {
+			if a.ID == id {
+				return a.State == "awaiting"
+			}
+		}
+		return false
+	}
+	reviewer(map[string]any{"id": id, "verdict": "approve"})
+	if !awaiting() {
+		t.Fatal("approval_decide without confirmed decided the approval")
+	}
+	reviewer(map[string]any{"id": id, "verdict": "approve", "confirmed": true})
+	if awaiting() {
+		t.Fatal("confirmed approval_decide left the approval awaiting")
 	}
 }
