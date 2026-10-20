@@ -1,18 +1,16 @@
-// approvals.go serves the approval surfaces a CLI token may reach:
-// requesting review on a document, filing an ad-hoc requirement on any
-// governed target (WL-REQ-124), and reading the awaiting queue.
-//
-// Deciding is deliberately absent. WL-REQ-124 makes approving a web UI act —
-// the OIDC session's group claims are fresh, a 30-day CLI token's are not —
-// so the only decision route is POST /approvals/{id}/decide, gated by
-// requireSession in webform.go. Adding a /api/v1 decide route here would
-// defeat that; it is not an oversight.
+// approvals.go serves the JSON approval surfaces: requesting review on a
+// document, filing an ad-hoc requirement on any governed target (WL-REQ-124),
+// reading the awaiting queue, and deciding a row (WL-REQ-1608).
 package api
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -91,9 +89,8 @@ func (s *server) setDocReviewers(w http.ResponseWriter, r *http.Request) {
 // project policy; this files one by hand, on the same table, so the queue
 // reads both without knowing which is which.
 //
-// Filing is not deciding. A bearer token reaches this route — an agent or a
-// CI job may say "this needs review" — while deciding stays a web-session act
-// (WL-REQ-124, see the file header). created_by is the requesting actor, not
+// Filing is not deciding: an agent or a CI job may say "this needs review",
+// and deciding is decideApprovalAPI's separate permission. created_by is the requesting actor, not
 // the 'worklode' system actor: a human filed this policy, and only
 // rule-created rows belong to worklode (store.FlowActorID).
 //
@@ -192,6 +189,117 @@ func (s *server) listApprovals(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.ApprovalListResponse{Approvals: rows})
 }
 
+// groupsFreshFor is how old a token subject's group sync may be before it can
+// decide a role-gated approval (WL-REQ-1608).
+const groupsFreshFor = 24 * time.Hour
+
+// errGroupsStale is the WL-REQ-1608 refusal: the answer says to log in again.
+const errGroupsStale = "your group membership was last synced more than 24 hours ago: " +
+	"log in again (lode login, or reconnect the MCP connector) to decide this approval"
+
+// decideApprovalAPI handles POST /api/v1/approvals/{id}/decide (WL-REQ-1608):
+// the same store.DecideApproval the cockpit form calls, with the subject's
+// actor as the decider. A task-scoped token never reaches it (routeGuards).
+// A token subject deciding a role-gated row must have had its groups synced
+// within groupsFreshFor; a session subject is fresh by construction.
+func (s *server) decideApprovalAPI(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req model.DecideApprovalInput
+	if err := readJSON(w, r, &req); err != nil {
+		s.observeApprovalDecision(decisionInvalid, decisionInvalid)
+		writeBodyErr(w, err)
+		return
+	}
+	verdict := strings.ReplaceAll(strings.TrimSpace(req.Verdict), " ", "_")
+	if _, ok := store.DecisionState(verdict); !ok {
+		s.observeApprovalDecision(decisionInvalid, decisionInvalid)
+		writeErr(w, http.StatusUnprocessableEntity,
+			"verdict must be approve, request_changes or reject")
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		s.observeApprovalDecision(verdict, "not_found")
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	sub := subjectFrom(r)
+	if sub.Via == authToken {
+		stale, err := s.groupsStaleFor(ctx, id, sub.ActorID)
+		if err != nil {
+			s.observeApprovalDecision(verdict, approvalDecisionOutcome(err))
+			s.mapStoreErr(w, err)
+			return
+		}
+		if stale {
+			s.observeApprovalDecision(verdict, "refused_stale")
+			writeErr(w, http.StatusForbidden, errGroupsStale)
+			return
+		}
+	}
+
+	var decided *model.Approval
+	err = s.recordEvent(ctx, "cli", "approval.decided", map[string]any{
+		"approval_id": id, "decision": verdict, "actor": sub.ActorID, "note": req.Note,
+	}, func(tx *sql.Tx, _ int64) error {
+		var err error
+		decided, err = store.DecideApproval(tx, store.DecideInput{
+			ApprovalID: id,
+			Decision:   verdict,
+			ActorID:    sub.ActorID,
+			Groups:     sub.Groups,
+			Now:        s.st.Now(),
+		})
+		return err
+	})
+	s.observeApprovalDecision(verdict, approvalDecisionOutcome(err))
+	if err != nil {
+		s.approvalDecideAPIErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, decided)
+}
+
+// groupsStaleFor reports whether approval id is role-gated and actorID's
+// groups were synced longer than groupsFreshFor ago, or never. A row that
+// names an actor or no role needs no group check (WL-REQ-1608).
+func (s *server) groupsStaleFor(ctx context.Context, id int64, actorID string) (bool, error) {
+	a, err := s.st.GetApproval(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if a.RequiredRole == nil || *a.RequiredRole == "" {
+		return false, nil
+	}
+	actor, err := s.st.GetActor(ctx, actorID)
+	if err != nil {
+		return false, err
+	}
+	return actor.GroupsSyncedAt == nil ||
+		s.st.Now().Sub(*actor.GroupsSyncedAt) > groupsFreshFor, nil
+}
+
+// approvalDecideAPIErr is approvalActErr for the JSON API: the same refusals,
+// as JSON errors.
+func (s *server) approvalDecideAPIErr(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, store.ErrApprovalResolved):
+		writeErr(w, http.StatusConflict, "this approval has already been decided")
+	case errors.Is(err, store.ErrNoRevision):
+		writeErr(w, http.StatusUnprocessableEntity, "nothing has been designated for review yet")
+	case errors.Is(err, store.ErrSelfApproval):
+		writeErr(w, http.StatusForbidden, "you authored this change, so you cannot decide it")
+	case errors.Is(err, store.ErrNotQualified):
+		writeErr(w, http.StatusForbidden, "deciding this approval needs a role you do not hold")
+	case errors.Is(err, store.ErrNotPriorApprover):
+		writeErr(w, http.StatusForbidden,
+			"only someone who approved this entity can say whether that decision still holds")
+	default:
+		s.mapStoreErr(w, err)
+	}
+}
+
 // approvalRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var approvalRouteDocs = map[string]routeDoc{
 	"GET /api/v1/approvals": {
@@ -206,6 +314,11 @@ var approvalRouteDocs = map[string]routeDoc{
 			http.StatusOK:      model.Approval{},
 			http.StatusCreated: model.Approval{},
 		},
+	},
+	"POST /api/v1/approvals/{id}/decide": {
+		summary:   "Decide an approval: approve, request changes or reject",
+		request:   model.DecideApprovalInput{},
+		responses: map[int]any{http.StatusOK: model.Approval{}},
 	},
 	"POST /api/v1/docs/{id}/reviewers": {
 		summary:   "Replace a document's durable reviewer set",

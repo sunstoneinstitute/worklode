@@ -115,7 +115,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"outcome"})
 	s.approvalDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_decisions_total",
-		Help: "Decisions submitted to POST /approvals/{id}/decide (WL-REQ-124), by decision (" +
+		Help: "Decisions submitted to POST /approvals/{id}/decide and POST /api/v1/approvals/{id}/decide (WL-REQ-1608), by decision (" +
 			strings.Join(approvalDecisionKinds, ", ") + ") and outcome (" +
 			strings.Join(approvalDecisionOutcomes, ", ") +
 			"). Labels are bounded: the approval, the decider and the required role are deliberately not among them. The session refusal in front of the route is counted by worklode_authz_decisions_total, not here.",
@@ -1040,7 +1040,7 @@ func (s *server) observeAPISessionRequest(outcome string) {
 var (
 	approvalDecisionKinds    = []string{"approve", "request_changes", "reject", decisionInvalid}
 	approvalDecisionOutcomes = []string{"resolved", "refused_self", "refused_role",
-		"refused_prior", "no_revision", "conflict", "not_found", "invalid", "error"}
+		"refused_prior", "refused_stale", "no_revision", "conflict", "not_found", "invalid", "error"}
 )
 
 // approvalActKinds and approvalActOutcomes are the bounded label values of
@@ -1086,7 +1086,7 @@ func approvalActOutcome(err error) string {
 const decisionInvalid = "invalid"
 
 // observeApprovalDecision records one submitted approval decision, called
-// exactly once per POST /approvals/{id}/decide that gets past requireSession.
+// exactly once per decide request that reaches a decide handler.
 // Nil-safe: tests build a *server directly without initMetrics.
 func (s *server) observeApprovalDecision(decision, outcome string) {
 	if s.approvalDecisions == nil {

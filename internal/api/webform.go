@@ -324,9 +324,8 @@ func formMessage(msg string) string {
 
 // decideApproval handles POST /approvals/{id}/decide, the cockpit's one
 // decision act. It is registered behind requireSession, so the subject here
-// was authenticated by a live session cookie: a bearer token and the
-// open-instance subject never reach it, and there is deliberately no CLI verb
-// and no /api/v1 route that decides an approval.
+// was authenticated by a live session cookie. Token subjects decide through
+// decideApprovalAPI (WL-REQ-1608).
 //
 // The decision itself belongs to the store: DecideApproval checks the row is
 // open, that the decider holds the group required_role names, and that they

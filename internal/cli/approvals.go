@@ -15,10 +15,6 @@ import (
 // (WL-REQ-1658; assigned separately, see SetDocReviewers) on its current version. A
 // document with no reviewers assigned is a 422 naming it. Re-requesting the
 // same set at the same version changes nothing.
-//
-// There is deliberately no Decide counterpart on this client: WL-REQ-124 makes
-// approving a web UI act, because a session's group claims are fresh and a
-// 30-day CLI token's are not.
 func (c *Client) RequestDocApproval(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return doJSON[model.Doc](ctx, c, http.MethodPost,
 		"/api/v1/docs/"+strconv.FormatInt(id, 10)+"/request-approval",
@@ -37,6 +33,14 @@ func (c *Client) ListApprovals(ctx context.Context) (model.ApprovalListResponse,
 // to repeat.
 func (c *Client) RequireApproval(ctx context.Context, in model.RequireApprovalInput) (model.Approval, []byte, error) {
 	return doJSON[model.Approval](ctx, c, http.MethodPost, "/api/v1/approvals", in, "approval")
+}
+
+// DecideApproval calls POST /api/v1/approvals/{id}/decide (WL-REQ-1608) and
+// returns the decided row. A token whose group sync is over 24 hours old is
+// refused on a role-gated row with a 403 saying to log in again.
+func (c *Client) DecideApproval(ctx context.Context, id int64, in model.DecideApprovalInput) (model.Approval, []byte, error) {
+	return doJSON[model.Approval](ctx, c, http.MethodPost,
+		"/api/v1/approvals/"+strconv.FormatInt(id, 10)+"/decide", in, "approval")
 }
 
 // ApprovalRender writes one approval in full: what it governs, which lane,

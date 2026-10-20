@@ -241,12 +241,11 @@ const (
 	// it spends GitHub App API calls across every repo the org has mapped.
 	permDeriveRun Permission = "derive.run"
 
-	// permApprovalDecide covers deciding an approval (WL-REQ-124): POST
-	// /approvals/{id}/decide, the web surface's only decision act. The route
-	// is additionally gated by requireSession, an authentication-method check
-	// that runs ahead of and is orthogonal to this role check, and by the
-	// approval's own required_role, which is a per-row fact the store checks
-	// rather than a role in this table.
+	// permApprovalDecide covers deciding an approval (WL-REQ-1608): POST
+	// /approvals/{id}/decide (session-only) and POST
+	// /api/v1/approvals/{id}/decide (group freshness for a token). Who may
+	// decide a given row is its required_role or required_actor, a per-row
+	// fact the store checks rather than a role in this table.
 	permApprovalDecide Permission = "approval.decide"
 
 	// permApprovalRead covers reading the awaiting queue (WL-REQ-124): GET
@@ -260,8 +259,7 @@ const (
 	// permApprovalRequire covers filing an ad-hoc approval requirement
 	// (WL-REQ-1607): POST /api/v1/approvals. Separate from permApprovalDecide on
 	// purpose — saying "this needs review" is authoring, which an agent or a
-	// CI job holding a bearer token may do, while the decision itself stays
-	// a web-session act.
+	// CI job holding a bearer token may do, while the decision is not.
 	permApprovalRequire Permission = "approval.require"
 
 	// permApprovalNote covers the dependent owner's note on an open impact
@@ -721,9 +719,8 @@ func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFu
 }
 
 // requireSession refuses any subject not authenticated by a live OIDC
-// session cookie. WL-REQ-124: approving is a web-session act because the
-// session's group claims are at most as old as the login that stored them; a
-// bearer token's are as old as the token. authOpen is refused too — an open
+// session cookie: the cockpit's approval acts, whose group claims are at most
+// as old as the login that stored them. authOpen is refused too — an open
 // instance has no identity to attribute a decision to.
 //
 // perm is the permission the route's routeGuards row already names, passed in

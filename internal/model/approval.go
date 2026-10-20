@@ -123,3 +123,11 @@ type RequireApprovalInput struct {
 type SetDocReviewersInput struct {
 	Reviewers []string `json:"reviewers"`
 }
+
+// DecideApprovalInput is the body of POST /api/v1/approvals/{id}/decide
+// (WL-REQ-1608). Verdict is approve, request_changes or reject. Note is
+// optional and is recorded on the decision's event.
+type DecideApprovalInput struct {
+	Verdict string `json:"verdict"`
+	Note    string `json:"note,omitempty"`
+}

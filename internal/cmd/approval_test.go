@@ -1,29 +1,59 @@
 package cmd
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// TestApprovalHasNoDecisionCommand is the CLI half of WL-REQ-124: approving is
-// a web UI act because an OIDC session's group claims are fresh and a 30-day
-// CLI token's are not. `lode approval` therefore offers add, request and list
-// and nothing else, and the absence is asserted so a later "for convenience"
-// addition trips a test rather than a spec review.
-func TestApprovalHasNoDecisionCommand(t *testing.T) {
-	want := map[string]bool{"add": true, "request": true, "list": true}
-	for _, sub := range newApprovalCmd().Commands() {
-		if !want[sub.Name()] {
-			t.Errorf("lode approval %s exists; 029 §7.3 keeps every decision on the web session",
-				sub.Name())
-		}
-		delete(want, sub.Name())
+// TestApprovalDecide covers `lode approval decide` (WL-REQ-1608): a verdict
+// resolves the row and renders it, and the store's own-work refusal reaches
+// the caller as an error.
+func TestApprovalDecide(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	var id int64
+	if _, _, err := st.RecordEvent(context.Background(), "cli", "seed-decide", "test.seed", []byte(`{}`),
+		func(tx *sql.Tx, _ int64) error {
+			if _, err := store.InsertAwaitingApproval(tx, st.Now(), "deliverable", "DEL-1", "r1", "", nil, nil, nil); err != nil {
+				return err
+			}
+			a, err := store.ApprovalByKey(tx, "deliverable", "DEL-1", "r1", "")
+			if a != nil {
+				id = a.ID
+			}
+			return err
+		}); err != nil {
+		t.Fatalf("seed approval: %v", err)
 	}
-	for name := range want {
-		t.Errorf("lode approval %s is missing", name)
+	out, err := runLode(t, "approval", "decide", strconv.FormatInt(id, 10),
+		"--verdict", "request_changes", "--note", "needs tests")
+	if err != nil {
+		t.Fatalf("approval decide: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "changes_requested") || !strings.Contains(out, "alice") {
+		t.Errorf("approval decide output = %q, want changes_requested by alice", out)
+	}
+
+	task := addTask(t, "--project", "proj", "--title", "My own work")
+	out, err = runLode(t, "approval", "add", "task", task.ID, "--revision", "abc", "--json")
+	if err != nil {
+		t.Fatalf("approval add: %v\noutput: %s", err, out)
+	}
+	var a model.Approval
+	if err := json.Unmarshal([]byte(out), &a); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if _, err := runLode(t, "approval", "decide", strconv.FormatInt(a.ID, 10), "--verdict", "approve"); err == nil ||
+		!strings.Contains(err.Error(), "you authored this change") {
+		t.Errorf("deciding own work: err = %v, want the authorship refusal", err)
 	}
 }
 
