@@ -542,9 +542,8 @@ type server struct {
 	// apiGuard and observeAPISessionRequest (WL-REQ-1307).
 	apiSessionRequests *prometheus.CounterVec
 
-	// approvalDecisions counts decisions submitted to POST
-	// /approvals/{id}/decide, by decision and outcome; see webform.go and
-	// observeApprovalDecision. The session refusal in front of the route is
+	// approvalDecisions counts decisions submitted to the web and API decide
+	// routes, by decision and outcome; see observeApprovalDecision. The session refusal in front of the route is
 	// not counted here — worklode_authz_decisions_total already carries it.
 	approvalDecisions *prometheus.CounterVec
 
@@ -872,16 +871,14 @@ func (s *server) registerCockpit(r *router) {
 	// marks that destination current rather than taking an eighth nav entry
 	// (see primaryNav's doc comment). Read-only: it renders no act.
 	r.web("GET /drift", s.navWrap("drift", s.driftPage))
-	// Deciding an approval is a web-session act (WL-REQ-124): the session's
-	// group claims are at most as old as the login that stored them, a bearer
-	// token's are as old as the token, and an open instance has no identity to
-	// attribute a decision to. requireSession is applied here, at
-	// registration, so no other route can reach the handler without it — and
-	// there is deliberately no CLI verb and no /api/v1 route for it.
+	// The cockpit's decide form is session-only: an open instance has no
+	// identity to attribute a decision to. Token subjects decide through
+	// POST /api/v1/approvals/{id}/decide, which checks group freshness
+	// (WL-REQ-1608).
 	r.web("POST /approvals/{id}/decide", s.navWrap("approval_decide", s.requireSession(permApprovalDecide, s.decideApproval)))
 	// The dependent owner's note on an open impact review (WL-REQ-124), the
 	// other half of that lifecycle: written before a prior approver decides,
-	// and a web-session act for the same reason the decision is.
+	// and a web-session act like the cockpit's decide form.
 	r.web("POST /approvals/{id}/note", s.navWrap("approval_note", s.requireSession(permApprovalNote, s.noteApproval)))
 	r.public("GET /assets/", s.assetHandler())
 }
@@ -1045,10 +1042,9 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("DELETE /api/v1/docs/{id}", s.deleteDoc)
 	r.api("POST /api/v1/docs/{id}/undelete", s.undeleteDoc)
 
-	// Requiring and listing only. Deciding is web-session-gated
-	// (WL-REQ-124) and lives at POST /approvals/{id}/decide; see approvals.go.
 	r.api("GET /api/v1/approvals", s.listApprovals)
 	r.api("POST /api/v1/approvals", s.requireApproval)
+	r.api("POST /api/v1/approvals/{id}/decide", s.decideApprovalAPI)
 
 	r.api("GET /api/v1/skills", s.listSkills)
 	r.api("GET /api/v1/skills/{name}", s.getSkill)
