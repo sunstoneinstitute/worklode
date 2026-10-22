@@ -98,7 +98,7 @@ func TestEdgeTermsMatchTurtle(t *testing.T) {
 		t.Fatalf("read ns/ontology.ttl: %v", err)
 	}
 	var want []string
-	for _, m := range regexp.MustCompile(`"((?:doc|rule|task)_edges\.\w+)"`).FindAllStringSubmatch(string(ttl), -1) {
+	for _, m := range regexp.MustCompile(`"((?:doc|rule|task)_edges\.\w+|inline_refs\.\w+)"`).FindAllStringSubmatch(string(ttl), -1) {
 		want = append(want, m[1])
 	}
 	var got []string

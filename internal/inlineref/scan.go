@@ -47,7 +47,7 @@ var (
 		return strings.Join(s, "|")
 	}()
 
-	anchorPat = `sec-[0-9A-Za-z._-]+`
+	anchorPat = `sec-[0-9A-Za-z._-]*[0-9A-Za-z]`
 	// A trailing anchor is part of the match only when it ends on an
 	// alphanumeric; the digit alternative keeps "WL-SPEC-12abc" out.
 	nodeRef = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(` + allInfixes + `)-(?:(\d+)#(` + anchorPat + `)|(\d+)\b)`)
