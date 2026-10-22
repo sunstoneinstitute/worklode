@@ -356,8 +356,8 @@ def extract(ttl: str) -> tuple[dict[str, list[str]], list[str]]:
     return schemes, statuses
 
 
-EDGE_TABLES = ("doc_edges", "rule_edges", "task_edges")
-_STORED_AS_RE = re.compile(r"^(doc_edges|rule_edges|task_edges)\.[A-Za-z_]+$")
+EDGE_TABLES = ("doc_edges", "rule_edges", "task_edges", "inline_refs")
+_STORED_AS_RE = re.compile(r"^(doc_edges|rule_edges|task_edges|inline_refs)\.[A-Za-z_]+$")
 
 
 def extract_edges(ttl: str) -> list[tuple[str, str, str, str, bool]]:

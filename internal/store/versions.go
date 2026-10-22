@@ -129,9 +129,19 @@ func moveSpecsToAcceptedRules(tx *sql.Tx, ruleIDs []int64, except int64) (map[in
 }
 
 // bumpRuleVersion snapshots rule ruleID's outgoing edges at its current
-// version into rule_edge_versions, moves the rule to the next version as a
-// draft, and inserts that version's text. It returns the new version.
+// version into rule_edge_versions, carries its manual inline_refs rows to
+// the next version (the caller re-derives the rest, WL-REQ-1852), moves the
+// rule to the next version as a draft, and inserts that version's text. It
+// returns the new version.
 func bumpRuleVersion(tx *sql.Tx, ruleID int64, heading, body string) (int, error) {
+	if _, err := tx.Exec(
+		`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, lines, source)
+		 SELECT i.from_kind, i.from_id, i.field, r.version + 1, i.to_kind, i.to_id, '{}', 'manual'
+		   FROM inline_refs i JOIN rules r ON r.id::text = i.from_id AND r.version = i.from_version
+		  WHERE i.from_kind = 'rule' AND i.from_id = $1::bigint::text AND i.source = 'manual'`, ruleID,
+	); err != nil {
+		return 0, fmt.Errorf("carry manual refs of rule %d: %w", ruleID, err)
+	}
 	if _, err := tx.Exec(
 		`INSERT INTO rule_edge_versions (rule_id, version, to_rule, type, source)
 		 SELECT e.from_rule, r.version, e.to_rule, e.type, e.source
@@ -237,18 +247,28 @@ func (s *Store) docVersionRules(ctx context.Context, id int64, version int, snap
 	return out, nil
 }
 
-// ruleEdgeSnapshotSQL reads a rule's outgoing edges as snapshotted at a
-// version, in ruleEdgesSQL's column order. A snapshot has no creation time.
+// ruleEdgeSnapshotSQL reads a rule's outgoing edges as they stood at a
+// version, in ruleEdgesSQL's column order: rule_edge_versions' snapshot plus
+// that version's rule-to-rule inline_refs rows. A snapshot has no creation
+// time.
 const ruleEdgeSnapshotSQL = `
+WITH e AS (
+    SELECT rule_id, version, to_rule, type, source FROM rule_edge_versions
+     WHERE rule_id = $1 AND version = $2
+    UNION ALL
+    SELECT $1, $2, i.to_id::bigint, 'references', max(i.source)
+      FROM inline_refs i
+     WHERE i.from_kind = 'rule' AND i.from_id = $1::bigint::text AND i.from_version = $2 AND i.to_kind = 'rule'
+     GROUP BY i.to_id
+)
 SELECT e.type, e.source, '0001-01-01T00:00:00Z'::timestamptz,
        pf.key, cf.number, cf.kind, vf.heading,
        pt.key, ct.number, ct.kind, vt.heading
-  FROM rule_edge_versions e
+  FROM e
   JOIN rules cf ON cf.id = e.rule_id
   JOIN projects pf ON pf.id = cf.project_id
   JOIN rule_versions vf ON vf.rule_id = cf.id AND vf.version = e.version
   JOIN rules ct ON ct.id = e.to_rule
   JOIN projects pt ON pt.id = ct.project_id
   JOIN rule_versions vt ON vt.rule_id = ct.id AND vt.version = ct.version
- WHERE e.rule_id = $1 AND e.version = $2
  ORDER BY e.type, ct.number`
