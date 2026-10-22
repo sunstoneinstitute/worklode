@@ -25,7 +25,7 @@ import (
 )
 
 // inlineMaxDepth caps transitive expansion; a chain this deep is a corpus
-// defect, not a rendering requirement (inlinespec.py uses the same bound).
+// defect, not a rendering requirement.
 const inlineMaxDepth = 8
 
 // Inliner folds a document's rule amendments into its body. fetchRule loads
