@@ -223,6 +223,21 @@ do), that path is a scratch buffer — the document is the `lode doc` row, and
 nothing reads the file once the row exists.
 ```
 
+## Without the lode binary
+
+When `command -v lode` fails and the Worklode MCP server is connected, pass
+the same arguments to its `lode` tool: `args` is the words after `lode`,
+`stdin` feeds a file flag given `-`, and `project` is the handle from
+`project_use`. Call `project_use` first; give it `from_instructions=true` when
+your project's instructions carry a `Worklode project: <name>` line. Commands
+that need your machine are refused: `install`, `login`, `doc import`, `task
+attach`, and every `work` command. Skills here keep CLI syntax; only the
+way you run it changes. To take a task with no worktree, use `lode task claim
+<id> --worktree mcp:<session id>` and the lease loop in the
+`working-under-worklode` skill. In a cloud session use the GitHub MCP tools in
+place of `gh`: `enable_pr_auto_merge`, `merge_pull_request`,
+`pull_request_read` and `list_pull_requests`.
+
 ## Reference index
 
 | File | Load it for |

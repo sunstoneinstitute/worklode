@@ -29,6 +29,23 @@ task genuinely still workable (wrong fit, user redirected you), just stop;
 removing the worktree releases the lease, and an untouched worktree ages out
 to the sweeper. Don't mark done what isn't.
 
+## With no worktree
+
+An agent that reaches Worklode only through the MCP `lode` tool has no
+worktree, so no hook renews its lease. The loop is yours:
+
+1. Claim with a key: `lode task claim <id> --worktree mcp:<session id>`, or
+   `--next` for the top-ranked ready task.
+2. Run `lode task renew <id>` after each push, and at least every 2 hours.
+3. When done, push, open the PR, arm auto-merge, then `lode task submit <id>`
+   and `lode task release <id>`.
+4. On a blocker, `lode task block <id> --by <blocking task>`, then
+   `lode task release <id>`.
+
+When the host fixes the branch name, put a `Worklode-Task: <task id>` line in
+the PR body so the PR still finds its task (WL-REQ-265). The done and block
+judgments above apply unchanged.
+
 ## When the plan or spec does not cover the case
 
 Do not improvise the design, and do not stop for a human. Run the ladder:

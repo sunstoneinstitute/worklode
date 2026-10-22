@@ -114,6 +114,15 @@ public ingress, but the login and consent pages are served from the mesh host
 `worklode.sunstone.internal`, so the browser completing the connection must be
 on the mesh.
 
+### Agents without the binary
+
+An agent with no `lode` binary (a cloud session, say) reaches the CLI through
+the MCP `lode` tool (WL-REQ-1862): `args` carries the words after `lode`. The
+shipped skills, `CLAUDE.md` and the agent keep their `lode` CLI syntax; only
+the way it runs changes, so nothing here forks per transport. Commands that
+need the caller's machine are refused, and such an agent holds its lease with
+`--worktree mcp:<session id>` (WL-REQ-265).
+
 The MCP server's tools are registered with `addTool` in the `internal/mcp`
 feature files. `wantTools` in `internal/mcp/tools_test.go` transcribes the
 WL-REQ-1824 table, and `TestToolsListMatchesTable` fails when `tools/list`

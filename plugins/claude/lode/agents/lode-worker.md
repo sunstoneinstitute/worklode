@@ -26,6 +26,12 @@ flags and standing guidance. With no rule given, the rule is
    `merged` arrives from the PR-merge webhook. A real blocker instead:
    `lode work block --on <id> --json`. Back to 1.
 
+With no `lode` binary, run the same commands through the Worklode MCP `lode`
+tool. It refuses `work next`, `work submit` and `work block`, so use the
+no-worktree lease loop in the working-under-worklode skill instead: claim with
+`--worktree mcp:<session id>`, renew after each push, then submit and release,
+or block and release. Use the GitHub MCP tools in place of `gh`.
+
 Commits are the lease heartbeat — never think about renewal.
 
 Never hold more than one task at a time; never work outside the task's
