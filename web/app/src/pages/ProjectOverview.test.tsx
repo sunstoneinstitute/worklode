@@ -23,9 +23,9 @@ describe("/projects/$projectId", () => {
     const summary = within(card())
     const view = within(card().querySelector<HTMLElement>('[data-summary-view="summary"]')!)
     const item = view.getByRole("link", { name: /Draft launch copy/ })
-    expect(item).toHaveAttribute("href", "/projects/p1/task/1")
+    expect(item).toHaveAttribute("href", "/projects/p1/feature/1")
     expect(item).toHaveTextContent("2 days late")
-    expect(summary.getByRole("link", { name: /Launch plan/ })).toHaveAttribute("href", "/projects/p1/docs/WL-SPEC-3")
+    expect(summary.getByRole("link", { name: /Launch plan/ })).toHaveAttribute("href", "/projects/p1/spec/3")
     // The task list sits under the card
     expect(await screen.findByRole("row", { name: /Audit icon set/ })).toBeInTheDocument()
   })

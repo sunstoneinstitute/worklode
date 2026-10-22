@@ -38,15 +38,15 @@ function seed() {
   // 2026-10-31 on.
   const summaries: Record<string, Ok<"/api/v1/projects/{id}/summary", "get">> = {
     p1: {
-      past_due: [{ id: "WL-1", label: "Draft launch copy", due: "2026-10-30", url: "/projects/p1/task/1" }],
-      awaiting_review: [{ id: "WL-SPEC-3", label: "Launch plan", due: "", url: "/projects/p1/docs/WL-SPEC-3" }],
+      past_due: [{ id: "WL-1", label: "Draft launch copy", due: "2026-10-30", url: "/projects/p1/feature/1" }],
+      awaiting_review: [{ id: "WL-SPEC-3", label: "Launch plan", due: "", url: "/projects/p1/spec/3" }],
       workloads: [
         {
           actor: "stig",
           availability: "overbooked",
           done: 0,
           total: 1,
-          past_due: [{ id: "WL-1", label: "Draft launch copy", due: "2026-10-30", url: "/projects/p1/task/1" }],
+          past_due: [{ id: "WL-1", label: "Draft launch copy", due: "2026-10-30", url: "/projects/p1/feature/1" }],
           upcoming: [],
           awaiting_review: [],
         },
