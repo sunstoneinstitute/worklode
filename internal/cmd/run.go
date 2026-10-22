@@ -41,28 +41,20 @@ type RunResult struct {
 	Err error
 }
 
-// ErrProjectRequired matches (errors.Is) the error of a command that needs a
-// project when none is set.
-var ErrProjectRequired = errors.New("no project")
+// The in-process run errors, declared in internal/cli so internal/mcp can
+// answer them without importing this package.
+var (
+	ErrProjectRequired = cli.ErrProjectRequired
+	ErrProjectNotFound = cli.ErrProjectNotFound
+	ErrLocalPath       = cli.ErrLocalPath
+	ErrProjectMismatch = cli.ErrProjectMismatch
+)
 
-// ErrProjectMismatch matches (errors.Is) the error of an in-process run whose
-// --project or --repo names a project other than the run's own.
-var ErrProjectMismatch = errors.New("project mismatch")
-
-// ProjectMismatchError is the ErrProjectMismatch a run returns. Requested is
-// the flag's value; Current is the run's project, "" when it has none.
-type ProjectMismatchError struct {
-	Current, Requested string
-}
-
-func (e *ProjectMismatchError) Error() string {
-	if e.Current == "" {
-		return fmt.Sprintf("--project %s: this run has no current project, and a flag cannot choose one", e.Requested)
-	}
-	return fmt.Sprintf("--project %s names a different project than the current one, %s", e.Requested, e.Current)
-}
-
-func (e *ProjectMismatchError) Is(target error) bool { return target == ErrProjectMismatch }
+type (
+	ProjectMismatchError      = cli.ProjectMismatchError
+	LocalCommandError         = cli.LocalCommandError
+	ConfirmationRequiredError = cli.ConfirmationRequiredError
+)
 
 // projectRequiredError keeps a command's own wording while matching
 // ErrProjectRequired.
@@ -90,6 +82,13 @@ func Run(ctx context.Context, o RunOptions) RunResult {
 	}
 	var stdout, stderr bytes.Buffer
 	root := newRootCmd()
+	// Only remote commands run in process (WL-REQ-1863). The hook runs after
+	// flag parsing, which `task claim --worktree` and `doc lint -` need, and
+	// not for --help, which cobra answers before any hook. No command in the
+	// tree sets its own persistent hook, so this one is always reached.
+	root.PersistentPreRunE = func(c *cobra.Command, args []string) error {
+		return remoteRefusal(c, args)
+	}
 	root.SetArgs(args)
 	root.SetIn(inProcessStdin{stdin})
 	root.SetOut(&stdout)
@@ -108,6 +107,28 @@ func Run(ctx context.Context, o RunOptions) RunResult {
 	}
 	res.Stdout, res.Stderr = stdout.Bytes(), stderr.Bytes()
 	return res
+}
+
+// InProcess is Run with plain arguments and results: the shape internal/mcp's
+// lode tool takes, so that package runs the command tree without importing
+// this one.
+func InProcess(ctx context.Context, args []string, stdin io.Reader, c *cli.Client, project string) (stdout, stderr []byte, exitCode int, err error) {
+	r := Run(ctx, RunOptions{Args: args, Stdin: stdin, Client: c, Project: project})
+	return r.Stdout, r.Stderr, r.ExitCode, r.Err
+}
+
+// ResolveCommand returns the command args name, as its path without the
+// root ("task gap"), or "unknown" when they name no command. Only paths in the
+// command tree come back, so the result is a bounded metric label
+// (WL-REQ-1865).
+func ResolveCommand(args []string) string {
+	root := newRootCmd()
+	c, _, err := root.Find(args)
+	if err != nil || c == nil || c == root {
+		return "unknown"
+	}
+	_, path, _ := strings.Cut(c.CommandPath(), " ")
+	return path
 }
 
 // inProcessStdin marks an in-process run's stdin, so readFileOrStdin, which
@@ -156,7 +177,7 @@ func (e *injectedEnv) projectFor(ctx context.Context) (model.Project, error) {
 		}
 		p, ok := matchProject(e.project, resp.Projects)
 		if !ok {
-			e.err = fmt.Errorf("project not found: %s", e.project)
+			e.err = fmt.Errorf("%w: %s", ErrProjectNotFound, e.project)
 			return
 		}
 		e.resolved = p

@@ -44,6 +44,8 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 				`{"id":"other","name":"Other","key":"OT","repos":[],"focus":[]}]}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/tasks":
 			io.WriteString(w, `{"tasks":[]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/docs":
+			io.WriteString(w, `{"docs":[{"id":7,"project":"worklode","kind":"spec","number":7,"title":"Seven","owner":"bob"}]}`)
 		default:
 			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 		}
@@ -278,5 +280,107 @@ func TestRunReadsNoServerFile(t *testing.T) {
 	body, err := readFileOrStdin("-", inProcessStdin{strings.NewReader("from stdin")})
 	if err != nil || string(body) != "from stdin" {
 		t.Errorf("stdin read = %q, %v", body, err)
+	}
+}
+
+// TestRunRefusesLocalCommands: Run itself enforces WL-REQ-1863, after flag
+// parsing, so the only in-process entry point cannot run a local command.
+func TestRunRefusesLocalCommands(t *testing.T) {
+	unreachableConfig(t)
+	f := newFakeAPI(t)
+	for _, tc := range []struct {
+		args    []string
+		refused string
+	}{
+		{[]string{"install"}, "install"},
+		{[]string{"work", "next"}, "work next"},
+		{[]string{"next", "WL-1"}, "next"},
+		{[]string{"task", "claim", "WL-1"}, "task claim"},
+		{[]string{"doc", "lint", "x.md"}, "doc lint"},
+		{[]string{"completion", "bash"}, "completion bash"},
+	} {
+		res := Run(context.Background(), RunOptions{Args: tc.args, Client: f.client(), Project: "WL"})
+		var lce *LocalCommandError
+		if !errors.As(res.Err, &lce) || lce.Path != tc.refused {
+			t.Errorf("lode %s: err = %v, want *LocalCommandError for %q", strings.Join(tc.args, " "), res.Err, tc.refused)
+			continue
+		}
+		if res.ExitCode != 1 || !strings.Contains(string(res.Stderr), "refused") {
+			t.Errorf("lode %s: code %d stderr %q", strings.Join(tc.args, " "), res.ExitCode, res.Stderr)
+		}
+	}
+	if len(f.requests()) != 0 {
+		t.Errorf("a refused command reached the API: %v", f.requests())
+	}
+	// Help, groups and remote commands still run.
+	for _, args := range [][]string{{"install", "--help"}, {"work"}, {"task"}, {"help", "task"}, {"task", "list", "--json"}} {
+		res := Run(context.Background(), RunOptions{Args: args, Client: f.client(), Project: "WL"})
+		if res.Err != nil || res.ExitCode != 0 || len(res.Stdout) == 0 {
+			t.Errorf("lode %s: code %d err %v stdout %q", strings.Join(args, " "), res.ExitCode, res.Err, res.Stdout)
+		}
+	}
+}
+
+// TestNoCommandSetsPersistentHook: Run's remote check is the root's
+// PersistentPreRunE, and cobra runs only the nearest persistent hook, so a
+// command with its own would bypass the check (WL-REQ-1863).
+func TestNoCommandSetsPersistentHook(t *testing.T) {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		if c.PersistentPreRun != nil || c.PersistentPreRunE != nil {
+			t.Errorf("%s sets a persistent pre-run hook, which would skip Run's remote check", c.CommandPath())
+		}
+		for _, s := range c.Commands() {
+			walk(s)
+		}
+	}
+	walk(newRootCmd())
+}
+
+// TestRunDocTransferNeedsYes: an in-process --from transfer moves nothing
+// unless stdin carries the answer the terminal prompt accepts.
+func TestRunDocTransferNeedsYes(t *testing.T) {
+	unreachableConfig(t)
+	args := []string{"doc", "transfer", "--from", "bob", "--to", "ada"}
+	for _, tc := range []struct {
+		stdin string
+		moved bool
+	}{{"", false}, {"n\n", false}, {"yes", true}, {"y\n", true}, {"YES\n", true}} {
+		f := newFakeAPI(t)
+		res := Run(context.Background(), RunOptions{Args: args, Stdin: strings.NewReader(tc.stdin), Client: f.client(), Project: "WL"})
+		posted := false
+		for _, r := range f.requests() {
+			if strings.HasPrefix(r, "POST ") {
+				posted = true
+			}
+		}
+		if posted != tc.moved {
+			t.Errorf("stdin %q: transfer attempted = %v, want %v (requests %v)", tc.stdin, posted, tc.moved, f.requests())
+		}
+		var cre *ConfirmationRequiredError
+		if got := errors.As(res.Err, &cre); got == tc.moved {
+			t.Errorf("stdin %q: err = %v", tc.stdin, res.Err)
+		}
+		if !tc.moved && !strings.Contains(string(res.Stderr), `"yes" on stdin`) {
+			t.Errorf("stdin %q: stderr %q does not say how to confirm", tc.stdin, res.Stderr)
+		}
+	}
+}
+
+func TestResolveCommand(t *testing.T) {
+	for args, want := range map[string]string{
+		"task gap WL-1":       "task gap",
+		"--json task list":    "task list",
+		"board":               "board",
+		"help task":           "help",
+		"":                    "unknown",
+		"--help":              "unknown",
+		"bogus":               "unknown",
+		"doc transfer --to x": "doc transfer",
+		"completion bash":     "completion bash",
+	} {
+		if got := ResolveCommand(strings.Fields(args)); got != want {
+			t.Errorf("ResolveCommand(%q) = %q, want %q", args, got, want)
+		}
 	}
 }

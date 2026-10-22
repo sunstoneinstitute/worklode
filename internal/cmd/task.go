@@ -235,7 +235,7 @@ func readFileOrStdin(path string, stdin io.Reader) ([]byte, error) {
 	}
 	if _, ok := stdin.(inProcessStdin); ok {
 		// An in-process run's disk is the server's (WL-REQ-1862).
-		return nil, fmt.Errorf("read file %s: an in-process run reads only stdin (-), not a path", path)
+		return nil, fmt.Errorf("read file %s: %w", path, ErrLocalPath)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {

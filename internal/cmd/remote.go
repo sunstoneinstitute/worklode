@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -54,22 +53,15 @@ func annotateCobraGenerated(root *cobra.Command) {
 	}
 }
 
-// LocalCommandError is returned when a command that needs the caller's
-// machine is asked to run somewhere else (the MCP lode tool).
-type LocalCommandError struct {
-	// Path is the command path without the root, e.g. "work next".
-	Path string
-}
-
-func (e *LocalCommandError) Error() string {
-	return fmt.Sprintf("refused: lode %s needs the lode binary on the caller's machine", e.Path)
-}
-
 // remoteRefusal returns nil when c, parsed with args, may run remotely, and a
 // *LocalCommandError naming the command when it may not. Call it after flag
 // parsing: `task claim` depends on --worktree and `doc lint` on its argument.
+// A command group carries no annotation (only leaves must) and is remote: it
+// prints its help, or, like `project crew <project>`, reads through the API.
+// Run calls it before every in-process command (WL-REQ-1863).
 func remoteRefusal(c *cobra.Command, args []string) error {
-	if c.Annotations[annRunWhere] == runRemoteVal {
+	where, annotated := c.Annotations[annRunWhere]
+	if where == runRemoteVal || (!annotated && c.HasSubCommands()) {
 		return nil
 	}
 	when := c.Annotations[annRemoteWhen]
