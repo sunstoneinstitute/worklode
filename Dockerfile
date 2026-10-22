@@ -4,9 +4,9 @@
 # Builds the SPA ahead of the Go build, so the server image embeds the real
 # dist/ output (WL-REQ-1310 §9) instead of the placeholder index.html checked
 # into internal/webapp/dist/.
-FROM node:24-bookworm-slim AS web
+FROM node:26-bookworm-slim AS web
 WORKDIR /src/web/app
-RUN corepack enable pnpm
+RUN npm install -g corepack && corepack enable pnpm
 # pnpm-workspace.yaml must come along with the lockfile: it carries the
 # allowBuilds approvals pnpm needs before it will run the postinstall
 # scripts for es5-ext, msw and ttf2woff2 (WL-PLAN-147 gap).
