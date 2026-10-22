@@ -16,6 +16,8 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cmd"
+	"github.com/sunstoneinstitute/worklode/internal/mcp"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -53,6 +55,7 @@ func TestMCPProjectTools(t *testing.T) {
 		SessionSecret:  "e2e-mcp-secret",
 		PublicURL:      "http://lode.test",
 		Metrics:        reg,
+		MCPCLI:         mcp.CLI{Run: cmd.InProcess, Command: cmd.ResolveCommand},
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -134,6 +137,7 @@ func TestMCPProjectTools(t *testing.T) {
 	}
 
 	mcpJourney(t, call, h, tok.Token, srv.URL)
+	mcpLodeTool(t, call, h)
 
 	body := scrapeMetrics(t, admin)
 	for _, want := range []string{
@@ -141,6 +145,9 @@ func TestMCPProjectTools(t *testing.T) {
 		`worklode_mcp_tool_calls_total{outcome="ok",tool="file"} 2`,
 		`worklode_mcp_tool_calls_total{outcome="ok",tool="decision_resolve"} 2`,
 		`worklode_mcp_tool_calls_total{outcome="ok",tool="approval_decide"} 2`,
+		`worklode_mcp_tool_calls_total{outcome="ok",tool="lode"} 2`,
+		`worklode_mcp_cli_commands_total{command="task add",outcome="ok"} 1`,
+		`worklode_mcp_cli_commands_total{command="show",outcome="ok"} 1`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("/metrics missing %s", want)
@@ -253,5 +260,28 @@ func mcpJourney(t *testing.T, call func(string, map[string]any) *sdk.CallToolRes
 	reviewer(map[string]any{"id": id, "verdict": "approve", "confirmed": true})
 	if awaiting() {
 		t.Fatal("confirmed approval_decide left the approval awaiting")
+	}
+}
+
+// mcpLodeTool files a task through the lode tool, in the project of the
+// handle, and reads it back by its full ref (WL-REQ-1862).
+func mcpLodeTool(t *testing.T, call func(string, map[string]any) *sdk.CallToolResult, h string) {
+	t.Helper()
+	text := func(res *sdk.CallToolResult, i int) string { return res.Content[i].(*sdk.TextContent).Text }
+	res := call("lode", map[string]any{
+		"args":    []string{"task", "add", "--title", "Filed by the lode tool", "--body-file", "-", "--json"},
+		"stdin":   "Body from stdin.",
+		"project": h,
+	})
+	if res.IsError || len(res.Content) != 3 || text(res, 2) != "exit code: 0" {
+		t.Fatalf("lode task add = %+v", res.Content)
+	}
+	var task model.Task
+	if err := json.Unmarshal([]byte(text(res, 0)), &task); err != nil || !strings.HasPrefix(task.ID, "WL-") {
+		t.Fatalf("lode task add stdout = %q: %v", text(res, 0), err)
+	}
+	res = call("lode", map[string]any{"args": []string{"show", task.ID}})
+	if res.IsError || !strings.Contains(text(res, 0), "Filed by the lode tool") {
+		t.Fatalf("lode show %s = %+v", task.ID, res.Content)
 	}
 }

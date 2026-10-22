@@ -118,6 +118,9 @@ The MCP server's tools are registered with `addTool` in the `internal/mcp`
 feature files. `wantTools` in `internal/mcp/tools_test.go` transcribes the
 WL-REQ-1824 table, and `TestToolsListMatchesTable` fails when `tools/list`
 disagrees with it, so adding or dropping a tool means changing that rule first.
+The `lode` tool (WL-REQ-1862) runs the CLI's own command tree in process, so a
+change to a remote command's flags or output is also a change to that tool;
+a new command must say whether it runs remotely (WL-REQ-1863).
 
 For scripts, a minted `wl_` token still works as
 `"headers": { "Authorization": "Bearer ${WORKLODE_TOKEN}" }`. Never commit it.

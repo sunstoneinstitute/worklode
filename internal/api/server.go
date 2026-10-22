@@ -273,6 +273,12 @@ type Config struct {
 	// empty registry; serve.go passes the process-wide one, which also
 	// carries the Go/process collectors and the store's instruments.
 	Metrics *prometheus.Registry
+
+	// MCPCLI is the command tree the MCP lode tool runs (WL-REQ-1862):
+	// lode-server passes cmd.InProcess and cmd.ResolveCommand. This package
+	// cannot import internal/cmd itself, whose tests import it. Zero leaves
+	// the tool answering that it is unavailable.
+	MCPCLI mcp.CLI
 }
 
 // githubAPIBase is the public GitHub REST endpoint. A var, not a const, so
@@ -921,7 +927,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	s.mcpMetrics = mcp.NewMetrics(reg)
 	mcpHandler := mcp.New(mcp.Config{
 		API: r.mux, PublicURL: s.cfg.PublicURL, SessionSecret: s.cfg.SessionSecret, Now: s.st.Now,
-		Metrics: s.mcpMetrics,
+		Metrics: s.mcpMetrics, CLI: s.cfg.MCPCLI,
 	})
 	r.bearerAPI("POST /mcp", mcpHandler.ServeHTTP)
 	r.bearerAPI("GET /mcp", mcpHandler.ServeHTTP)

@@ -5,10 +5,14 @@
 package mcp
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 // Config is what lode-server hands the MCP server.
@@ -21,6 +25,21 @@ type Config struct {
 	SessionSecret string
 	Metrics       *Metrics
 	Now           func() time.Time
+	// CLI is the lode command tree the lode tool runs (WL-REQ-1862).
+	CLI CLI
+}
+
+// CLI is the command tree as the lode tool runs it: lode-server's wiring
+// passes cmd.InProcess and cmd.ResolveCommand. It is injected, not imported,
+// because internal/cmd's tests import internal/api, which imports this
+// package. With Run nil the lode tool answers that it is unavailable.
+type CLI struct {
+	// Run runs args in process with c as the API client and project as the
+	// current project ("" for none).
+	Run func(ctx context.Context, args []string, stdin io.Reader, c *cli.Client, project string) (stdout, stderr []byte, exitCode int, err error)
+	// Command names the command args resolve to, without the root, or
+	// "unknown": a bounded metric label (WL-REQ-1865).
+	Command func(args []string) string
 }
 
 type server struct {
@@ -48,6 +67,7 @@ func New(cfg Config) http.Handler {
 	s.addFileTools()
 	s.addReviewTools()
 	s.addDecisionTools()
+	s.addCLITools()
 	s.h = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true})
 	return s

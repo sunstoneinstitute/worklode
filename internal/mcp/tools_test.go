@@ -18,6 +18,7 @@ var wantTools = []string{
 	"rule_list", "rule_add", "rule_edit", "rule_link", "rule_supersede",
 	"doc_reviewers", "approval_request", "approval_list", "approval_add", "approval_decide",
 	"decision_list", "decision_show", "decision_add", "decision_resolve",
+	"lode", // WL-REQ-1862
 }
 
 func TestToolsListMatchesTable(t *testing.T) {

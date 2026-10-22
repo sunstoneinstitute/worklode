@@ -227,7 +227,10 @@ mocks are typed from it, so a mock shaped unlike the Go type fails
 host. Its tools call the API mux in-process with the caller's own token, so
 authorization stays in `routeGuards` and never forks into the tools
 (WL-RULE-1823). A project-scoped tool takes a handle from `project_use`, never
-a bare project name. `e2e/mcp_test.go` drives it over HTTP.
+a bare project name. The `lode` tool runs the CLI's command tree in process
+(`cmd.InProcess`, injected through `api.Config.MCPCLI` because `internal/cmd`'s
+tests import `internal/api`), and only commands marked remote (WL-REQ-1863).
+`e2e/mcp_test.go` drives it over HTTP.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks — including `merge_group` and `repository_ruleset` for the merge
