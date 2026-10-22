@@ -55,6 +55,18 @@ var EdgeTerms = []EdgeTerm{
 	{Table: "task_edges", Type: "follow_up_to", Property: "https://worklode.io/ns/ontology#followUpTo", Inverse: "", Symmetric: false},
 }
 
+// One constant per wlc:TaskKind member, for code that names a kind.
+const (
+	TaskKindBug      = "bug"
+	TaskKindChore    = "chore"
+	TaskKindDecision = "decision"
+	TaskKindDesign   = "design"
+	TaskKindFeature  = "feature"
+	TaskKindRally    = "rally"
+	TaskKindReview   = "review"
+	TaskKindSpike    = "spike"
+)
+
 // TaskKindDescriptor records the configured permissions and completion behavior of a kind.
 type TaskKindDescriptor struct {
 	Claimable       bool
@@ -76,4 +88,32 @@ var TaskKindDescriptors = map[string]TaskKindDescriptor{
 	"rally":    {Claimable: false, AllowsChildren: false, PlanMintable: false, AllowsDecisions: false, CanBlock: false, KindMutable: true, ClosesOnAnswers: false},
 	"review":   {Claimable: true, AllowsChildren: true, PlanMintable: false, AllowsDecisions: true, CanBlock: true, KindMutable: true, ClosesOnAnswers: false},
 	"spike":    {Claimable: true, AllowsChildren: true, PlanMintable: false, AllowsDecisions: true, CanBlock: true, KindMutable: true, ClosesOnAnswers: false},
+}
+
+// TaskKindAliases maps each skos:altLabel of ns/task-kinds.ttl to its kind
+// (WL-REQ-1832).
+var TaskKindAliases = map[string]string{
+	"broken":        "bug",
+	"bug":           "bug",
+	"capability":    "feature",
+	"choice":        "decision",
+	"chore":         "chore",
+	"cleanup":       "chore",
+	"decision":      "decision",
+	"defect":        "bug",
+	"design task":   "design",
+	"enhancement":   "feature",
+	"experiment":    "spike",
+	"feature":       "feature",
+	"housekeeping":  "chore",
+	"investigation": "spike",
+	"issue":         "bug",
+	"maintenance":   "chore",
+	"problem":       "bug",
+	"prototype":     "spike",
+	"question":      "decision",
+	"review":        "review",
+	"spike":         "spike",
+	"story":         "feature",
+	"upgrade":       "chore",
 }

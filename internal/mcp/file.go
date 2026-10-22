@@ -9,6 +9,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 type fileArgs struct {
@@ -44,7 +45,7 @@ func (s *server) file(ctx context.Context, c *cli.Client, req *mcp.CallToolReque
 		return nil, &toolError{outcome: outcomeInvalid, msg: fmt.Sprintf("%q is not something I can file. Did you mean %s? Nothing was filed.", a.What, strings.Join(closest, ", "))}
 	}
 	entity := KindAliases[word].Entity
-	if a.Doc != "" && kind != "review" && entity != "rule" {
+	if a.Doc != "" && kind != ns.TaskKindReview && entity != "rule" {
 		return nil, &toolError{outcome: outcomeInvalid, msg: "doc applies to a review or a rule. Nothing was filed."}
 	}
 	body := a.Body
@@ -53,7 +54,7 @@ func (s *server) file(ctx context.Context, c *cli.Client, req *mcp.CallToolReque
 		if d, err = s.docID(ctx, c, a.Project, a.Doc); err != nil {
 			return nil, err
 		}
-		if kind == "review" {
+		if kind == ns.TaskKindReview {
 			body = strings.TrimSpace(fmt.Sprintf("Review %s.\n\n%s", cli.DocRef(d), body))
 		}
 	}
