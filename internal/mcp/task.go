@@ -11,6 +11,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // listFetch is how many tasks task_list asks the API for; the tool pages
@@ -78,8 +79,6 @@ func projectKeys(ps []model.Project) []string {
 	return keys
 }
 
-var taskKinds = []string{"bug", "feature", "chore", "spike", "decision", "review", "design"}
-
 // taskKind resolves a spoken kind word to a task kind. A trailing plural "s"
 // is dropped when the word is not an alias itself ("bugs" files as "bug").
 func taskKind(word string) (string, error) {
@@ -94,7 +93,7 @@ func taskKind(word string) (string, error) {
 	if kind == "" {
 		return "", &toolError{outcome: outcomeInvalid, msg: fmt.Sprintf("%q is not a task kind. Did you mean %s?", word, strings.Join(closest, ", "))}
 	}
-	if !slices.Contains(taskKinds, kind) {
+	if !slices.Contains(ns.TaskKinds, kind) {
 		return "", &toolError{outcome: outcomeInvalid, msg: fmt.Sprintf("%q is not a task kind.", word)}
 	}
 	return kind, nil
