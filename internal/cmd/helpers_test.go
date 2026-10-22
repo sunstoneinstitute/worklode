@@ -16,10 +16,9 @@ import (
 // isCobraGenerated reports whether name is a command cobra attaches itself
 // rather than one this repo declares: the default help and completion
 // commands, or the hidden __complete/__completeNoDesc RPC cobra lazily
-// registers the first time Execute runs. rootCmd is a package global, so
-// once any test executes it, these commands sit on the shared tree for
-// every later test — a tree-walking test passes alone and fails with the
-// package.
+// registers the first time Execute runs. A tree that has been executed
+// carries them, so a tree-walking test skips them rather than depend on
+// whether its tree ran.
 func isCobraGenerated(name string) bool {
 	return name == "help" || name == "completion" || strings.HasPrefix(name, "__")
 }

@@ -40,8 +40,9 @@ func newListenCmd() *cobra.Command {
 	var interval time.Duration
 	var once bool
 	cmd := &cobra.Command{
-		Use:   "listen",
-		Short: "Wait until there is work this worker could claim, then report it",
+		Annotations: runLocal,
+		Use:         "listen",
+		Short:       "Wait until there is work this worker could claim, then report it",
 		Long: "Polls the claim path in dry-run mode and reports the task `lode work next` " +
 			"would pick, without claiming it. Blocks until there is one.\n\n" +
 			"The filter flags are exactly those `lode work next` takes, so one filter " +
@@ -58,7 +59,7 @@ func newListenCmd() *cobra.Command {
 				return fmt.Errorf("--interval must be positive, got %s", interval)
 			}
 			warnDeprecatedTaskKind(cmd, kind)
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

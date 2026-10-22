@@ -18,11 +18,12 @@ const (
 // Metrics holds the MCP server's instruments (WL-REQ-1825). A nil *Metrics
 // records nothing.
 type Metrics struct {
-	toolCalls *prometheus.CounterVec
-	oauth     *prometheus.CounterVec
+	toolCalls   *prometheus.CounterVec
+	oauth       *prometheus.CounterVec
+	cliCommands *prometheus.CounterVec
 }
 
-// NewMetrics registers both MCP counters on reg.
+// NewMetrics registers the MCP counters on reg.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		toolCalls: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -33,8 +34,12 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_mcp_oauth_requests_total",
 			Help: "MCP OAuth requests, by endpoint (metadata, authorize, callback, consent, token) and outcome (ok, not_found, or the OAuth error code).",
 		}, []string{"endpoint", "outcome"}),
+		cliCommands: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_mcp_cli_commands_total",
+			Help: "CLI commands run by the MCP lode tool, by command path (e.g. \"task gap\", or unknown) and outcome (the tool call outcomes).",
+		}, []string{"command", "outcome"}),
 	}
-	reg.MustRegister(m.toolCalls, m.oauth)
+	reg.MustRegister(m.toolCalls, m.oauth, m.cliCommands)
 	return m
 }
 
@@ -48,5 +53,13 @@ func (m *Metrics) toolCall(tool, outcome string) {
 func (m *Metrics) OAuthRequest(endpoint, outcome string) {
 	if m != nil {
 		m.oauth.WithLabelValues(endpoint, outcome).Inc()
+	}
+}
+
+// cliCommand counts one command the lode tool ran (WL-REQ-1865). command is a
+// path in the command tree or "unknown", so the label stays bounded.
+func (m *Metrics) cliCommand(command, outcome string) {
+	if m != nil {
+		m.cliCommands.WithLabelValues(command, outcome).Inc()
 	}
 }

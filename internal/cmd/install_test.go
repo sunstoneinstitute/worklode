@@ -714,7 +714,7 @@ func TestReportUninstallAgentActions(t *testing.T) {
 }
 
 // jsonCmd builds a bare *cobra.Command carrying a local --json flag (the real
-// commands rely on the persistent one declared on rootCmd, which a standalone
+// commands rely on the persistent one declared on the root command, which a standalone
 // test command doesn't have), set to true, with output captured in buf.
 func jsonCmd(buf *bytes.Buffer) *cobra.Command {
 	cmd := &cobra.Command{Use: "test"}

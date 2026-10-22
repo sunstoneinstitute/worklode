@@ -16,8 +16,9 @@ func newReconcileCmd() *cobra.Command {
 	var repo, task, since string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "reconcile",
-		Short: "Repair what webhook ingestion missed",
+		Annotations: runRemote,
+		Use:         "reconcile",
+		Short:       "Repair what webhook ingestion missed",
 		Long: `Repair what webhook ingestion missed, in two engines: replay the
 stored *.ignored events, then poll GitHub for missed PR, merge and release
 facts. Polling is skipped when the server has no GitHub App configured, and
@@ -46,7 +47,7 @@ GitHub about because nothing was recorded for them.`,
 			if repo != "" && task != "" {
 				return fmt.Errorf("--repo and --task are mutually exclusive")
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

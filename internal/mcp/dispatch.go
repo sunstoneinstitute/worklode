@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -71,23 +70,27 @@ func (s *server) tool(name string, fn toolFunc) mcp.ToolHandler {
 		if err == nil {
 			return res, nil
 		}
-		var oe *toolError
-		var ce *cli.ClientError
-		switch {
-		case errors.Is(err, errInvalidCursor):
-			outcome = outcomeInvalid
-		case errors.As(err, &oe):
-			outcome = oe.outcome
-			if oe.res != nil {
-				oe.res.IsError = true
-				return oe.res, nil
-			}
-		case errors.As(err, &ce):
-			outcome = statusOutcome(ce.Status)
-			err = fmt.Errorf("%s", ce.Msg)
-		default:
-			outcome = outcomeError
-		}
-		return errorResult(err.Error()), nil
+		outcome, res = classify(err)
+		return res, nil
 	}
+}
+
+// classify returns the outcome a tool error counts under and the error result
+// it answers with.
+func classify(err error) (string, *mcp.CallToolResult) {
+	var oe *toolError
+	var ce *cli.ClientError
+	switch {
+	case errors.Is(err, errInvalidCursor):
+		return outcomeInvalid, errorResult(err.Error())
+	case errors.As(err, &oe):
+		if oe.res != nil {
+			oe.res.IsError = true
+			return oe.outcome, oe.res
+		}
+		return oe.outcome, errorResult(err.Error())
+	case errors.As(err, &ce):
+		return statusOutcome(ce.Status), errorResult(ce.Msg)
+	}
+	return outcomeError, errorResult(err.Error())
 }

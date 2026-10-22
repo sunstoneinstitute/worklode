@@ -41,7 +41,7 @@ func TestWithPagerSwapsAndRestoresOutput(t *testing.T) {
 	t.Cleanup(func() { pagerFn = old })
 
 	// cmd inherits its writer from parent, the way `show` inherits from
-	// rootCmd in the real command tree — never set explicitly on cmd
+	// the root command in the real command tree — never set explicitly on cmd
 	// itself. That's what lets a nil-clearing cleanup restore inheritance
 	// rather than pin a resolved snapshot (see withPager's cleanup comment).
 	var original bytes.Buffer
@@ -72,8 +72,7 @@ func TestWithPagerSwapsAndRestoresOutput(t *testing.T) {
 
 // TestWithPagerCleanupDoesNotPinStaleWriter reproduces the bug found during
 // Task 3 integration testing: reusing the same *cobra.Command across
-// sequential withPager calls (as runLode's long-lived rootCmd/show tree
-// does across many tests in one process) must not leave a stale writer
+// sequential withPager calls must not leave a stale writer
 // pinned on cmd after cleanup. A cleanup that restored a resolved
 // OutOrStdout() snapshot instead of clearing to nil would pin the first
 // call's writer permanently, silently breaking every later
@@ -91,8 +90,7 @@ func TestWithPagerCleanupDoesNotPinStaleWriter(t *testing.T) {
 	cleanup := withPager(cmd, true)
 	cleanup()
 
-	// Simulate the next test in the same process reusing cmd, the way
-	// runLode does with the package-level rootCmd/show tree.
+	// Simulate a second run reusing cmd.
 	var second bytes.Buffer
 	cmd.SetOut(&second)
 

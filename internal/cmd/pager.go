@@ -22,6 +22,11 @@ var pagerFn = cli.Pager
 // unchanged — whenever pagerFn declines to page (see cli.Pager: not
 // requested, stdout isn't a terminal, or the pager couldn't start).
 func withPager(cmd *cobra.Command, requested bool) func() {
+	if injected(cmd) != nil {
+		// An in-process run writes to a buffer; the server's stdout is
+		// nobody's terminal (WL-REQ-1862).
+		return func() {}
+	}
 	w, cleanup := pagerFn(requested)
 	if w == nil {
 		return func() {}

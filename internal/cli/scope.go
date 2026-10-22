@@ -17,6 +17,9 @@ const (
 	ScopeUserConfig ScopeSource = "user config"
 	ScopeGitRemote  ScopeSource = "git remote"
 	ScopeNone       ScopeSource = "none"
+	// ScopeInjected is a project the caller of an in-process run supplied
+	// (WL-REQ-1862), in place of config or a git remote.
+	ScopeInjected ScopeSource = "caller"
 )
 
 // Scope is a resolved project scope. An empty Project means "every project":
@@ -46,7 +49,7 @@ func ResolveScope(ctx context.Context, c *Client, cfg Config, dir string) Scope 
 			Path:    cfg.CurrentProjectPath,
 		}
 	}
-	if c == nil || dir == "" {
+	if c == nil || dir == "" || c.noLocalCache {
 		return Scope{Source: ScopeNone}
 	}
 	remote := gitRemoteURL(ctx, dir)
@@ -97,7 +100,7 @@ func ResolveScope(ctx context.Context, c *Client, cfg Config, dir string) Scope 
 // ForgetRemote drops c's cached answer for the repo containing dir, so the
 // next resolution re-queries. Backs `lode project resolve --refresh`.
 func ForgetRemote(ctx context.Context, c *Client, dir string) {
-	if c == nil {
+	if c == nil || c.noLocalCache {
 		return
 	}
 	remote := gitRemoteURL(ctx, dir)
@@ -115,6 +118,13 @@ func ForgetRemote(ctx context.Context, c *Client, dir string) {
 func ProjectKey(ctx context.Context, c *Client, project string) string {
 	if project == "" || c == nil {
 		return ""
+	}
+	if c.noLocalCache {
+		p, err := c.GetProject(ctx, project)
+		if err != nil {
+			return ""
+		}
+		return p.Key
 	}
 	now := time.Now()
 	cache := loadCache(c.ServerURL())

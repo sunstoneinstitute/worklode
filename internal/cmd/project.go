@@ -25,19 +25,16 @@ func newProjectCmd() *cobra.Command {
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newProjectCmd())
-}
-
 func newProjectAddCmd() *cobra.Command {
 	var name string
 	var key string
 	cmd := &cobra.Command{
-		Use:   "add <id>",
-		Short: "Create a project",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "add <id>",
+		Short:       "Create a project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -64,10 +61,11 @@ func newProjectAddCmd() *cobra.Command {
 
 func newProjectListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List projects",
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List projects",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -105,12 +103,13 @@ func newProjectRepoCmd() *cobra.Command {
 func newProjectRepoAddCmd() *cobra.Command {
 	var doneState string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "add <project> <owner/name>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Map a GitHub repo to a project",
 		Args:              cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -148,7 +147,7 @@ func newProjectCrewCmd() *cobra.Command {
 		Short:             "List, or manage, a project's Crew",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -172,6 +171,7 @@ func newProjectCrewAddCmd() *cobra.Command {
 	var role string
 	var lead, deputy bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "add <project> <actor>",
 		ValidArgsFunction: projectThenActor,
 		Short:             "Add an actor to a project's Crew",
@@ -185,7 +185,7 @@ func newProjectCrewAddCmd() *cobra.Command {
 			"read-only \"acting-lead\" role.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -218,6 +218,7 @@ func newProjectCrewAddCmd() *cobra.Command {
 // re-add, which is why there is no --role flag here.
 func newProjectCrewRemoveCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "remove <project> <actor>",
 		ValidArgsFunction: projectThenActor,
 		Short:             "Remove an actor from a project's Crew",
@@ -228,7 +229,7 @@ func newProjectCrewRemoveCmd() *cobra.Command {
 			"project lead cannot be removed at all while lead handoff is unimplemented.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -252,11 +253,12 @@ func newProjectCrewRemoveCmd() *cobra.Command {
 func newProjectRepoEditCmd() *cobra.Command {
 	var doneState string
 	cmd := &cobra.Command{
-		Use:   "edit <owner/name>",
-		Short: "Update settings on an already-mapped repo",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "edit <owner/name>",
+		Short:       "Update settings on an already-mapped repo",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -281,8 +283,9 @@ func newProjectRepoEditCmd() *cobra.Command {
 // most one project, so the repo names the mapping on its own.
 func newProjectRepoRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove <owner/name>",
-		Short: "Unmap a repo from its project",
+		Annotations: runRemote,
+		Use:         "remove <owner/name>",
+		Short:       "Unmap a repo from its project",
 		Long: "Unmap a repo from its project.\n\n" +
 			"Only the mapping goes. Tasks, documents and ingestion history filed\n" +
 			"while the repo was mapped keep their project and stay addressable;\n" +
@@ -290,7 +293,7 @@ func newProjectRepoRemoveCmd() *cobra.Command {
 			"This is not a delete: nothing is tombstoned.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -313,12 +316,13 @@ func newProjectRepoRemoveCmd() *cobra.Command {
 // view never writes (L6); the paired write is `lode project set focus`.
 func newProjectFocusCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "focus <id>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Show a project's ranking focus (ordered list of concerns)",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -343,12 +347,13 @@ func newProjectFocusCmd() *cobra.Command {
 // `lode task block <rally> --by <task>`, which already exist.
 func newProjectRallyCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "rally <id>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Show a project's active rally and its transitive open blockers",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -388,6 +393,7 @@ func newProjectSetCmd() *cobra.Command {
 // wrong-shaped value; key= (an empty value) removes that key.
 func newProjectSetSettingsCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "settings <id> <key=value>...",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Set or clear project settings (e.g. plan_tokens_soft, plan_tokens_hard)",
@@ -397,7 +403,7 @@ func newProjectSetSettingsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -451,6 +457,7 @@ func newProjectSetFlowCmd() *cobra.Command {
 	var name string
 	var reviewerArgs []string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "flow <id>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Apply an approval flow to a project, backfilling what it demands",
@@ -460,7 +467,7 @@ func newProjectSetFlowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -509,6 +516,7 @@ func parseReviewers(pairs []string) (map[string]string, error) {
 func newProjectSetFocusCmd() *cobra.Command {
 	var clear bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "focus <concern…> <id>",
 		ValidArgsFunction: projectSetFocusArgs,
 		Short:             "Set or clear a project's ranking focus (ordered list of concerns)",
@@ -523,7 +531,7 @@ func newProjectSetFocusCmd() *cobra.Command {
 				return fmt.Errorf("provide one or more concerns, or --clear to clear the focus")
 			}
 
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -551,6 +559,7 @@ func newProjectSetFocusNoteCmd() *cobra.Command {
 	var note, by string
 	var clear bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "focus-note <id>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Set or clear a project's pinned-focus note (cockpit card)",
@@ -563,7 +572,7 @@ func newProjectSetFocusNoteCmd() *cobra.Command {
 				return fmt.Errorf("provide --note, or --clear to remove the pinned focus")
 			}
 
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -594,6 +603,7 @@ func newProjectSetDecisionCmd() *cobra.Command {
 	var title, accountable, restsOn string
 	var clear bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "decision <id>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Set or clear a project's next-decision card (cockpit card)",
@@ -606,7 +616,7 @@ func newProjectSetDecisionCmd() *cobra.Command {
 				return fmt.Errorf("provide --title, or --clear to remove the next decision")
 			}
 
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -644,22 +654,28 @@ type resolveResult struct {
 func newProjectResolveCmd() *cobra.Command {
 	var refresh bool
 	cmd := &cobra.Command{
-		Use:   "resolve",
-		Short: "Show which project this directory scopes to, and why",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "resolve",
+		Short:       "Show which project this directory scopes to, and why",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
-			wd, err := workingDir()
-			if err != nil {
-				return err
+			var sc cli.Scope
+			if injected(cmd) != nil {
+				sc = currentScope(cmd.Context(), c, cfg)
+			} else {
+				wd, err := workingDir(cmd.Context())
+				if err != nil {
+					return err
+				}
+				if refresh {
+					cli.ForgetRemote(cmd.Context(), c, wd)
+				}
+				sc = cli.ResolveScope(cmd.Context(), c, cfg, wd)
 			}
-			if refresh {
-				cli.ForgetRemote(cmd.Context(), c, wd)
-			}
-			sc := cli.ResolveScope(cmd.Context(), c, cfg, wd)
 			if sc.Project != "" && sc.Key == "" {
 				sc.Key = cli.ProjectKey(cmd.Context(), c, sc.Project)
 			}
@@ -693,9 +709,10 @@ func newProjectShowCmd() *cobra.Command {
 	var project string
 	var days int
 	cmd := &cobra.Command{
-		Use:   "show",
-		Short: "Show a project's repos, focus, and token cost",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "show",
+		Short:       "Show a project's repos, focus, and token cost",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runProjectShow(cmd, project, days)
 		},
@@ -712,15 +729,26 @@ func newProjectShowCmd() *cobra.Command {
 // project show` with no flag does); days is the cost window, counting today
 // (see costWindow).
 func runProjectShow(cmd *cobra.Command, project string, days int) error {
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}
 	id := project
+	env := injected(cmd)
+	if env != nil && project != "" {
+		sc, err := env.checkFlag(cmd.Context(), project, nil)
+		if err != nil {
+			return err
+		}
+		id = sc.Project
+	}
 	if id == "" {
 		id = currentScope(cmd.Context(), c, cfg).Project
 	}
 	if id == "" {
+		if env != nil {
+			return errNoProject
+		}
 		o := cmd.OutOrStdout()
 		fmt.Fprintln(o, "no current project: pass --project <id> to name one")
 		fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project repo add"`)
@@ -761,11 +789,12 @@ func costWindowLabel(days int) string {
 // working for this repo (operator view, admin token required).
 func newProjectHealthCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "health [repo]",
-		Short: "Report webhook-ingestion health per mapped repo",
-		Args:  cobra.MaximumNArgs(1),
+		Annotations: runRemote,
+		Use:         "health [repo]",
+		Short:       "Report webhook-ingestion health per mapped repo",
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -795,10 +824,11 @@ func newProjectHealthCmd() *cobra.Command {
 func newProjectOverviewCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "overview",
-		Short: "One-screen roll-up: drift counts, gaps, frontier, critical head",
+		Annotations: runRemote,
+		Use:         "overview",
+		Short:       "One-screen roll-up: drift counts, gaps, frontier, critical head",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

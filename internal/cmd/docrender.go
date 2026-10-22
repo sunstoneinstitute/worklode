@@ -35,7 +35,7 @@ import (
 func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bool) error {
 	section = cli.NormalizeSection(section)
 
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}

@@ -11,12 +11,13 @@ import (
 // a flag here.
 func newTaskChecklistCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "checklist <id>",
 		Short:             "Show the checklist items parsed from the task's body",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

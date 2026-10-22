@@ -183,7 +183,7 @@ func TestNameRule(t *testing.T) {
 			walk(sub, depth+1)
 		}
 	}
-	walk(rootCmd, 0)
+	walk(newRootCmd(), 0)
 
 	// Staleness. A closed set or an allowlist naming something the tree no
 	// longer has means a rename landed without its rule following it.

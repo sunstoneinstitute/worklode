@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -28,8 +27,9 @@ func newGateCmd() *cobra.Command {
 func newGateCheckCmd() *cobra.Command {
 	var base, head, bodyFile string
 	cmd := &cobra.Command{
-		Use:   "check",
-		Short: "Refuse a change to a guarded path that names no design rule",
+		Annotations: runLocal,
+		Use:         "check",
+		Short:       "Refuse a change to a guarded path that names no design rule",
 		Long: `Reads the [gate] table of .worklode/config.toml, diffs --base to --head,
 and requires a Spec: trailer on the pull request body (--body-file) or in a
 commit message when a guarded path changed. The trailer names a rule
@@ -44,7 +44,7 @@ trailer is missing or malformed or a section citation is found. Without a
 trailer names.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			dir, err := os.Getwd()
+			dir, err := workingDir(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -78,7 +78,7 @@ func verdictDeclaration(d gate.Declaration) string {
 	if d.Rule == nil {
 		return d.String()
 	}
-	c, err := newAPIClient()
+	c, err := newAPIClient(nil)
 	if err != nil {
 		return d.Spelled()
 	}
@@ -100,15 +100,11 @@ func verdictDeclaration(d gate.Declaration) string {
 // which makes no Worklode API call per WL-REQ-8), the call fails within the
 // hook timeout of WL-REQ-1722, or the anchor arranges no single rule.
 func resolveSectionRule(sec designdoc.SectionRef) string {
-	c, err := newAPIClient()
+	c, err := newAPIClient(nil)
 	if err != nil {
 		return ""
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	return c.SectionRule(ctx, sec)
-}
-
-func init() {
-	rootCmd.AddCommand(newGateCmd())
 }

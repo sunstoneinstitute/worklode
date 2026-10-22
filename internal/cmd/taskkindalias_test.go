@@ -81,7 +81,7 @@ func TestTaskKindCommandsArePinned(t *testing.T) {
 			walk(sub)
 		}
 	}
-	walk(rootCmd)
+	walk(newRootCmd())
 	sort.Strings(got)
 
 	want := slices.Clone(taskKindCommands)

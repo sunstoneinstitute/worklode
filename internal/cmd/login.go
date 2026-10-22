@@ -16,8 +16,9 @@ func newLoginCmd() *cobra.Command {
 	var server string
 	var noBrowser bool
 	cmd := &cobra.Command{
-		Use:   "login",
-		Short: "Authenticate to worklode and store a token",
+		Annotations: runLocal,
+		Use:         "login",
+		Short:       "Authenticate to worklode and store a token",
 		Long: "Open a browser to sign in with Keycloak, then store the resulting\n" +
 			"30-day token in the OS keychain — or, on a machine that has no keychain,\n" +
 			"in ~/.config/worklode/token at mode 0600. Re-run after it expires.\n\n" +
@@ -27,6 +28,9 @@ func newLoginCmd() *cobra.Command {
 			"directly.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := refuseInProcess(cmd); err != nil {
+				return err
+			}
 			cfg, err := cli.LoadConfig()
 			if err != nil {
 				return err
@@ -71,8 +75,4 @@ func newLoginCmd() *cobra.Command {
 	cmd.Flags().StringVar(&server, "server", "", "worklode server URL (overrides LODE_SERVER / config file)")
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "print a URL to open elsewhere and wait for the code, instead of launching a browser")
 	return cmd
-}
-
-func init() {
-	rootCmd.AddCommand(newLoginCmd())
 }

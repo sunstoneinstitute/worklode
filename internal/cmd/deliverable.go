@@ -28,11 +28,12 @@ func newDeliverableCmd() *cobra.Command {
 func newDeliverableReportCmd() *cobra.Command {
 	var note string
 	cmd := &cobra.Command{
-		Use:   "report <deliverable> <state>",
-		Short: "Report a deliverable's state as a person (published, updated, deprecated, removed, failed)",
-		Args:  cobra.ExactArgs(2),
+		Annotations: runRemote,
+		Use:         "report <deliverable> <state>",
+		Short:       "Report a deliverable's state as a person (published, updated, deprecated, removed, failed)",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -55,12 +56,13 @@ func newDeliverableReportCmd() *cobra.Command {
 
 func newDeliverableListCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "list <project>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "List a project's deliverables",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -82,12 +84,13 @@ func newDeliverableListCmd() *cobra.Command {
 func newDeliverableAddCmd() *cobra.Command {
 	var description, deliverableURL, artifact, milestone string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "add <project> <name>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Declare a deliverable on a project",
 		Args:              cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -114,8 +117,4 @@ func newDeliverableAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&artifact, "artifact", "", "the artifact address this deliverable is verified by (e.g. bigquery://p/d/t)")
 	cmd.Flags().StringVar(&milestone, "milestone", "", "attach the deliverable to a milestone in the same project")
 	return cmd
-}
-
-func init() {
-	rootCmd.AddCommand(newDeliverableCmd())
 }

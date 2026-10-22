@@ -2,6 +2,8 @@
 
 > Before starting work, read `.worklode/agent-instructions.md` in the repository root if it exists.
 
+Worklode project: worklode
+
 Apply the `lode:anti-smartass` skill's plain-language style whenever writing
 specs, plans, docs, or other prose in this repo.
 
@@ -43,6 +45,19 @@ supersede`. Touch a spec only to change its arrangement (`lode rule arrange`,
 covers both.
 `docs/follow-ups.md` holds known non-blocking gaps — check it before filing
 something as new.
+
+**No `lode` binary?** When `command -v lode` fails and the Worklode MCP server
+is connected, pass the same arguments to its `lode` tool. Call `project_use`
+first, with `from_instructions=true`. The commands the binary-only list names
+are refused there (`work …`, `install`, `login`, `doc import` and the like), so
+claim without a worktree: `lode task claim <id> --worktree mcp:<session id>`
+(or `--next`), `lode task renew <id>` after each push and at least every 2
+hours, then `lode task submit <id>` and `lode task release <id>` when done
+(WL-REQ-265). A blocker is `lode task block <id> --by <blocking task>`, then
+release. In a cloud session use the GitHub MCP tools in place of `gh`:
+`enable_pr_auto_merge` for `gh pr merge --auto --squash`, `merge_pull_request`
+for `gh pr merge`, and `pull_request_read` or `list_pull_requests` for `gh pr
+view` or `gh pr list`.
 
 ## Where the rest of the guidance lives
 
@@ -227,7 +242,10 @@ mocks are typed from it, so a mock shaped unlike the Go type fails
 host. Its tools call the API mux in-process with the caller's own token, so
 authorization stays in `routeGuards` and never forks into the tools
 (WL-RULE-1823). A project-scoped tool takes a handle from `project_use`, never
-a bare project name. `e2e/mcp_test.go` drives it over HTTP.
+a bare project name. The `lode` tool runs the CLI's command tree in process
+(`cmd.InProcess`, injected through `api.Config.MCPCLI` because `internal/cmd`'s
+tests import `internal/api`), and only commands marked remote (WL-REQ-1863).
+`e2e/mcp_test.go` drives it over HTTP.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks — including `merge_group` and `repository_ruleset` for the merge

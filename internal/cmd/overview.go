@@ -14,10 +14,11 @@ import (
 func newCriticalPathCmd() *cobra.Command {
 	var task string
 	cmd := &cobra.Command{
-		Use:   "critical-path",
-		Short: "Estimate-free critical path over blocks + requires (D12)",
+		Annotations: runRemote,
+		Use:         "critical-path",
+		Short:       "Estimate-free critical path over blocks + requires (D12)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, _, err := newAPIClientWithConfig()
+			c, _, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

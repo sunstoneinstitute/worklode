@@ -53,6 +53,7 @@ func (s *server) addProjectTools() {
 }
 
 func (s *server) addTool(name, desc, schema string, fn toolFunc) {
+	s.known[name] = true
 	s.srv.AddTool(&mcp.Tool{Name: name, Description: desc, InputSchema: json.RawMessage(schema)}, s.tool(name, fn))
 }
 

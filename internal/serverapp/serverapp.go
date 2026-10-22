@@ -17,9 +17,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/cmd"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/indexer"
+	"github.com/sunstoneinstitute/worklode/internal/mcp"
 	"github.com/sunstoneinstitute/worklode/internal/projector"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -95,6 +97,7 @@ func Run(ctx context.Context, opts Options) error {
 		IndexInterval:        indexInterval,
 		Graph:                gc,
 		Metrics:              reg,
+		MCPCLI:               mcp.CLI{Run: cmd.InProcess, Command: cmd.ResolveCommand},
 	}
 	setEnvTaggedFields(&cfg)
 	handler, adminHandler, err := api.NewServer(st, cfg)

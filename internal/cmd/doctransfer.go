@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -41,6 +42,7 @@ func newDocTransferCmd() *cobra.Command {
 	var scope scopeFlags
 	var to, from string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "transfer [ref...] --to <actor>",
 		ValidArgsFunction: docRefs,
 		Short:             "Transfer document ownership to another actor",
@@ -63,7 +65,7 @@ func newDocTransferCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -79,7 +81,11 @@ func newDocTransferCmd() *cobra.Command {
 					return err
 				}
 				docs = resp.Docs
-				if !confirmDocTransfer(cmd, docs, from, to) {
+				ok, err := confirmDocTransfer(cmd, docs, from, to)
+				if err != nil {
+					return err
+				}
+				if !ok {
 					fmt.Fprintln(cmd.ErrOrStderr(), "aborted: no documents transferred")
 					return nil
 				}
@@ -138,24 +144,45 @@ func newDocTransferCmd() *cobra.Command {
 // or --json proceeds without asking, following the term.IsTerminal pattern
 // consentToSecrets uses (internal/cmd/secretsceremony.go:166) — there is no
 // shared confirm helper in this CLI.
-func confirmDocTransfer(cmd *cobra.Command, docs []model.Doc, from, to string) bool {
+//
+// An in-process run (the MCP lode tool, WL-REQ-1862) has no terminal, but its
+// caller can still ask the user: it proceeds only when its stdin carries the
+// answer the prompt accepts, and otherwise fails with a
+// *ConfirmationRequiredError instead of moving anything unasked.
+func confirmDocTransfer(cmd *cobra.Command, docs []model.Doc, from, to string) (bool, error) {
 	errw := cmd.ErrOrStderr()
 	if len(docs) == 0 {
 		fmt.Fprintf(errw, "%s owns no documents in scope; nothing to transfer\n", from)
-		return true
+		return true, nil
 	}
 	fmt.Fprintf(errw, "This will transfer %d document(s) from %s to %s:\n", len(docs), from, to)
 	for _, d := range docs {
 		fmt.Fprintf(errw, "  %s  %s\n", cli.DocRef(d), d.Title)
 	}
+	if injected(cmd) != nil {
+		if answeredYes(cmd.InOrStdin(), true) {
+			return true, nil
+		}
+		return false, &ConfirmationRequiredError{
+			Command: "doc transfer --from",
+			Action:  fmt.Sprintf("transfer %d document(s) from %s to %s", len(docs), from, to),
+		}
+	}
 	f, isFile := cmd.InOrStdin().(*os.File)
 	if jsonOut(cmd) || (isFile && !term.IsTerminal(int(f.Fd()))) {
-		return true
+		return true, nil
 	}
 	fmt.Fprint(errw, "Proceed? [y/N] ")
-	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-	if err != nil {
-		return false // EOF at a real prompt is an answer: no
+	return answeredYes(cmd.InOrStdin(), false), nil
+}
+
+// answeredYes reads one line from r and reports whether it says y or yes.
+// At a real prompt EOF before a newline is an answer: no. Text piped to an
+// in-process run (eofEnds) may end without one.
+func answeredYes(r io.Reader, eofEnds bool) bool {
+	line, err := bufio.NewReader(r).ReadString('\n')
+	if err != nil && !(eofEnds && errors.Is(err, io.EOF)) {
+		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes":

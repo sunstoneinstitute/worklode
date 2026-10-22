@@ -512,8 +512,9 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 
 func newInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "install",
-		Short: "Install Worklode's hooks for this repo's VCS and coding agent",
+		Annotations: runLocal,
+		Use:         "install",
+		Short:       "Install Worklode's hooks for this repo's VCS and coding agent",
 		Long: "Installs two integrations. The VCS side writes pre-commit, commit-msg, post-merge and " +
 			"post-commit hooks (into the repo's shared hooks directory, honoring core.hooksPath) " +
 			"that invoke `lode-hook <event>`, chaining any hook already present on the same event, " +
@@ -547,7 +548,7 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 			scope, _ := cmd.Flags().GetString("scope")
-			cwd, err := workingDir()
+			cwd, err := workingDir(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -570,8 +571,9 @@ func newInstallCmd() *cobra.Command {
 
 func newUninstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "uninstall",
-		Short: "Remove Worklode's hooks from this repo's VCS and coding agent",
+		Annotations: runLocal,
+		Use:         "uninstall",
+		Short:       "Remove Worklode's hooks from this repo's VCS and coding agent",
 		Long: "Removes what `lode install` added. The VCS side removes Worklode's pre-commit, " +
 			"commit-msg, post-merge and post-commit hooks and restores whatever it preserved, leaving a " +
 			"third-party hook it does not " +
@@ -595,7 +597,7 @@ func newUninstallCmd() *cobra.Command {
 				return err
 			}
 			scope, _ := cmd.Flags().GetString("scope")
-			cwd, err := workingDir()
+			cwd, err := workingDir(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -781,8 +783,4 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 		}
 	}
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(newInstallCmd(), newUninstallCmd())
 }

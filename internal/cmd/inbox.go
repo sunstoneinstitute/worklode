@@ -23,18 +23,15 @@ func newInboxCmd() *cobra.Command {
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newInboxCmd())
-}
-
 func newInboxListCmd() *cobra.Command {
 	var scope scopeFlags
 	var state string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List inbox issues",
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List inbox issues",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -72,9 +69,10 @@ func newInboxPromoteCmd() *cobra.Command {
 	var title, body, priority, kind, appliesTo, parent string
 	var draft bool
 	cmd := &cobra.Command{
-		Use:   "promote <repo> <number>",
-		Short: "Turn an inbox issue into a task",
-		Args:  cobra.ExactArgs(2),
+		Annotations: runRemote,
+		Use:         "promote <repo> <number>",
+		Short:       "Turn an inbox issue into a task",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			warnDeprecatedTaskKind(cmd, kind)
 			number, err := parseIssueNumber(args[1])
@@ -85,7 +83,7 @@ func newInboxPromoteCmd() *cobra.Command {
 			if appliesTo != "" {
 				versions = strings.Split(appliesTo, ",")
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -126,15 +124,16 @@ func newInboxPromoteCmd() *cobra.Command {
 
 func newInboxDismissCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "dismiss <repo> <number>",
-		Short: "Dismiss an inbox issue without creating a task",
-		Args:  cobra.ExactArgs(2),
+		Annotations: runRemote,
+		Use:         "dismiss <repo> <number>",
+		Short:       "Dismiss an inbox issue without creating a task",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			number, err := parseIssueNumber(args[1])
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -155,6 +154,7 @@ func newInboxDismissCmd() *cobra.Command {
 
 func newInboxLinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "link <repo> <number> <task-id>",
 		Short:             "Attach an inbox issue to a task that already exists",
 		Args:              cobra.ExactArgs(3),
@@ -164,7 +164,7 @@ func newInboxLinkCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -191,8 +191,9 @@ func newInboxImportCmd() *cobra.Command {
 	var state, since string
 	var includePRs, dryRun bool
 	cmd := &cobra.Command{
-		Use:   "import <repo>",
-		Short: "Backfill an inbox from a repo's existing GitHub issues",
+		Annotations: runRemote,
+		Use:         "import <repo>",
+		Short:       "Backfill an inbox from a repo's existing GitHub issues",
 		Long: "Pages the GitHub REST API and upserts through the same path the webhooks use.\n" +
 			"Re-running is safe and leaves already-triaged issues alone.",
 		Args: cobra.ExactArgs(1),
@@ -207,7 +208,7 @@ func newInboxImportCmd() *cobra.Command {
 				}
 				in.Since = &t
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

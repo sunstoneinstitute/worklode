@@ -20,14 +20,14 @@ const commandRefPath = "plugins/claude/lode/skills/worklode/references/commands.
 
 // TestCommandReference guards the worklode skill's on-demand command
 // catalog against CLI drift: a renamed command, added command, or changed
-// flag set changes rootCmd and this test fails until the file is
+// flag set changes the command tree and this test fails until the file is
 // regenerated. TestAgentSurfaces separately checks that every invocation
 // the file already contains still resolves; this test instead checks the
 // file is the *complete*, current tree — the gap TestAgentSurfaces cannot
 // see, since it only flags invocations that stopped resolving, never ones
 // silently missing.
 func TestCommandReference(t *testing.T) {
-	got := renderCommandReference(rootCmd)
+	got := renderCommandReference(newRootCmd())
 	path := filepath.Join(packageDir, "..", "..", commandRefPath)
 
 	if *updateCommandRef {

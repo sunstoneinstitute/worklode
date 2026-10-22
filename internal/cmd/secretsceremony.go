@@ -163,7 +163,7 @@ func consentToSecrets(cmd *cobra.Command, entries []secrets.Entry) (consented, a
 		fmt.Fprintf(errw, "  %-28s %s\n", e.Name, e.Description)
 	}
 	f, isFile := cmd.InOrStdin().(*os.File)
-	if jsonOut(cmd) || (isFile && !term.IsTerminal(int(f.Fd()))) {
+	if jsonOut(cmd) || injected(cmd) != nil || (isFile && !term.IsTerminal(int(f.Fd()))) {
 		fmt.Fprintln(errw, "secrets: no operator to ask — deferred, not declined; `lode work resume` in a terminal materializes them")
 		return false, false
 	}

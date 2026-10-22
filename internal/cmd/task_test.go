@@ -155,9 +155,7 @@ func TestTaskEditBody(t *testing.T) {
 		t.Fatalf("body after --body-file = %q", got)
 	}
 
-	rootCmd.SetIn(strings.NewReader("from stdin"))
-	t.Cleanup(func() { rootCmd.SetIn(nil) })
-	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", "-"); err != nil {
+	if _, err := runLodeIn(t, strings.NewReader("from stdin"), "task", "edit", task.ID, "--body-file", "-"); err != nil {
 		t.Fatalf("edit --body-file -: %v", err)
 	}
 	if got := taskBody(t, task.ID); got != "from stdin" {
@@ -234,8 +232,6 @@ func TestTaskListStatusFiltering(t *testing.T) {
 	// project) so `lode task list`'s --project default resolves to "proj"
 	// as the test intends.
 	setupRepoConfig(t, "proj")
-	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
-	resetProjectFlag(t, "task", "list")
 
 	sorted := func(ids ...string) []string {
 		sort.Strings(ids)
@@ -274,7 +270,6 @@ func TestTaskListFilterByKind(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupRepoConfig(t, "proj")
 	setupProject(t, c)
-	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
 
 	feature := createTestTask(t, c, "A feature")
 	design, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
@@ -302,7 +297,6 @@ func TestTaskListFilterByPlan(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupRepoConfig(t, "proj")
 	setupProject(t, c)
-	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
 
 	plan, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
 		Project: "proj", Kind: "plan", Slug: "mint-plan", Body: docPlanMintBody,
@@ -347,7 +341,6 @@ func TestTaskListFilterByAbout(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupRepoConfig(t, "proj")
 	setupProject(t, c)
-	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
 
 	doc, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
 		Project: "proj", Kind: "spec", Number: 1, Slug: "about-spec", Body: "# About\n",

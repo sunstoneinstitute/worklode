@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -99,10 +98,6 @@ func newDocCmd() *cobra.Command {
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newDocCmd())
-}
-
 // renumberAnchors is `--update-section-anchors`: rewrite the body's section
 // numbers and {#sec-N} anchors from the heading structure, so an inserted or
 // moved section does not leave the author fixing every number below it by
@@ -131,8 +126,9 @@ func newDocAddCmd() *cobra.Command {
 	var number int
 	var updateAnchors bool
 	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "Create a document (spec or plan) in draft",
+		Annotations: runRemote,
+		Use:         "add",
+		Short:       "Create a document (spec or plan) in draft",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !slices.Contains(docKinds, kind) {
 				return fmt.Errorf("unknown kind %q; valid kinds: %s", kind, strings.Join(docKinds, ", "))
@@ -148,7 +144,7 @@ func newDocAddCmd() *cobra.Command {
 					return err
 				}
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -165,7 +161,7 @@ func newDocAddCmd() *cobra.Command {
 			// agent working ad hoc both author documents legitimately.
 			d, raw, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
 				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: body, Owner: owner,
-				GeneratedByTask: currentTaskID(),
+				GeneratedByTask: currentTaskID(cmd.Context()),
 			})
 			if err != nil {
 				return err
@@ -202,8 +198,9 @@ func newDocListCmd() *cobra.Command {
 	var kind, status, owner, olderThan string
 	var needsPlanning, needsExecution, bareSuperseded, unresolved, deleted, hasNotes bool
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List documents: specs and plans",
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List documents: specs and plans",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Ahead of the client: a contradicting selector is an error
 			// whatever the server would say, and refusing it here costs no
@@ -218,7 +215,7 @@ func newDocListCmd() *cobra.Command {
 			if olderThanDays > 0 && !unresolved {
 				return errors.New("--older-than applies to --unresolved only (WL-REQ-1663)")
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -397,14 +394,15 @@ func isPlanFile(doc *designdoc.Document) bool {
 func newDocLintCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "lint [file]",
-		Short: "Lint a local file's anchors and task definitions, or the corpus's dangling references",
-		Args:  cobra.MaximumNArgs(1),
+		Annotations: runLocalUnlessStdin,
+		Use:         "lint [file]",
+		Short:       "Lint a local file's anchors and task definitions (\"-\" for stdin), or the corpus's dangling references",
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				return runDocLintFile(cmd, args[0])
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -435,8 +433,9 @@ func newDocLintCmd() *cobra.Command {
 // entries stored in to_external before their target had rules (WL-903).
 func newDocResolveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "resolve",
-		Short: "Re-resolve every plan's unresolved covers entries to rules",
+		Annotations: runRemote,
+		Use:         "resolve",
+		Short:       "Re-resolve every plan's unresolved covers entries to rules",
 		Long: `Re-resolve every plan's covers entries that are stored unresolved
 (to_external) because their target had no rules when the plan was written.
 An entry that now names requirements is replaced by its plan -> rule edges;
@@ -446,7 +445,7 @@ for entries naming that document, so this is for rows stranded before that.
 Admin only.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -467,7 +466,7 @@ Admin only.`,
 // runDocLintFile is `lode doc lint <file>`, the local pre-accept lint newDocLintCmd
 // documents.
 func runDocLintFile(cmd *cobra.Command, path string) error {
-	src, err := os.ReadFile(path)
+	src, err := readFileArg(cmd, path)
 	if err != nil {
 		return err
 	}
@@ -519,12 +518,13 @@ func newDocShowCmd() *cobra.Command {
 	var version int
 	var editable bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "show <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Show a document: its body, sections, and edges",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -574,12 +574,13 @@ func newDocShowCmd() *cobra.Command {
 // current version and every one it has superseded, newest first.
 func newDocVersionsCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "versions <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "List a document's version history",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -613,6 +614,7 @@ func newDocVersionsCmd() *cobra.Command {
 // whole-document ref has no answer rather than a broader one.
 func newDocReferrersCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "referrers <ref>#sec-N",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "List the open work pointing at one section of a document",
@@ -622,7 +624,7 @@ func newDocReferrersCmd() *cobra.Command {
 			if anchor == "" {
 				return fmt.Errorf("%q names no section: a referrer is a fact about one section, so name it (<ref>#sec-N)", args[0])
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -662,15 +664,16 @@ func newDocReferrersCmd() *cobra.Command {
 func newDocSectionsCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "sections [number]",
-		Short: "List document sections across the corpus",
-		Args:  cobra.MaximumNArgs(1),
+		Annotations: runRemote,
+		Use:         "sections [number]",
+		Short:       "List document sections across the corpus",
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var number string
 			if len(args) == 1 {
 				number = args[0]
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -710,6 +713,7 @@ func newDocEditCmd() *cobra.Command {
 	var substantive, updateAnchors bool
 	var ifVersion int
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "edit <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Replace a document's body (a draft or plan in place, an accepted spec as an amendment) or set its title and issued date",
@@ -730,7 +734,7 @@ func newDocEditCmd() *cobra.Command {
 						"set the title and issued date with --title and --issued, and edges with lode doc link")
 				}
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -786,7 +790,7 @@ func newDocEditCmd() *cobra.Command {
 			}
 			res, raw, err := c.PatchDoc(cmd.Context(), id, model.PatchDocInput{
 				Body: body, Substantive: substantive, Note: note,
-				Task: currentTaskID(), Session: currentSessionID(),
+				Task: currentTaskID(cmd.Context()), Session: currentSessionID(cmd.Context()),
 				IfVersion: ifVersion,
 			})
 			if err != nil {
@@ -868,6 +872,7 @@ func newDocEdgeCmd(use, short string,
 	targets := make([]string, len(docEdgeFlags))
 	var in model.DocEdgeInput
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               use,
 		ValidArgsFunction: docRefAt(0),
 		Short:             short,
@@ -887,7 +892,7 @@ func newDocEdgeCmd(use, short string,
 			if in.Owner != "" && in.Type != "defers" {
 				return errors.New("--owner goes with --defers")
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -935,6 +940,7 @@ func newDocEdgeCmd(use, short string,
 func newDocNoteCmd() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "note <ref>#sec-N",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Leave an anchored, non-blocking note on a document section",
@@ -951,7 +957,7 @@ func newDocNoteCmd() *cobra.Command {
 			if strings.TrimSpace(text) == "" {
 				return errors.New("a note needs something said: pass --body or --body-file")
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -961,7 +967,7 @@ func newDocNoteCmd() *cobra.Command {
 			}
 			n, raw, err := c.AddDocNote(cmd.Context(), id, model.AddDocNoteInput{
 				Anchor: cli.NormalizeSection(anchor), Body: text,
-				Task: currentTaskID(), Session: currentSessionID(),
+				Task: currentTaskID(cmd.Context()), Session: currentSessionID(cmd.Context()),
 			})
 			if err != nil {
 				return err
@@ -987,12 +993,13 @@ func newDocNoteCmd() *cobra.Command {
 
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "accept <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1027,12 +1034,13 @@ func newDocAcceptCmd() *cobra.Command {
 // minting a review task, say — is the doc-lifecycle watcher's to decide.
 func newDocSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "submit <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Submit a document for review (records a review event; the document's status does not change)",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1066,6 +1074,7 @@ func newDocSubmitCmd() *cobra.Command {
 func newDocWithdrawCmd() *cobra.Command {
 	var justification string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "withdraw <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Withdraw an accepted or stale document that will not be executed",
@@ -1076,7 +1085,7 @@ func newDocWithdrawCmd() *cobra.Command {
 			"resolved.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1110,6 +1119,7 @@ func newDocWithdrawCmd() *cobra.Command {
 func newDocDeleteCmd() *cobra.Command {
 	var justification string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "delete <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Delete a document: hide a row that should not have existed",
@@ -1119,7 +1129,7 @@ func newDocDeleteCmd() *cobra.Command {
 			"--justification.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1152,6 +1162,7 @@ func newDocDeleteCmd() *cobra.Command {
 // (WL-REQ-117).
 func newDocUndeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "undelete <ref>",
 		ValidArgsFunction: deletedDocRefAt(0),
 		Short:             "Restore a deleted document, clearing its tombstone",
@@ -1160,7 +1171,7 @@ func newDocUndeleteCmd() *cobra.Command {
 			"the tombstoned ones; `lode doc list --deleted` shows what is there.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1193,12 +1204,13 @@ func newDocReviseCmd() *cobra.Command {
 	var file string
 	var accept, discard bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "revise <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Open, update, land, or discard a document's candidate revision",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

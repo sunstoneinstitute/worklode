@@ -43,7 +43,7 @@ func TestConfirmDocTransferSkipsPromptOnNonTerminalStdin(t *testing.T) {
 	cmd.SetErr(io.Discard)
 
 	docs := []model.Doc{{ID: 1, Kind: "spec", Number: 1, Title: "x"}}
-	if !confirmDocTransfer(cmd, docs, "bob", "ada") {
+	if ok, err := confirmDocTransfer(cmd, docs, "bob", "ada"); !ok || err != nil {
 		t.Fatal("confirmDocTransfer on non-terminal stdin = false, want true (proceed without reading the file's \"n\" answer)")
 	}
 }
@@ -177,9 +177,7 @@ func TestDocTransferFromPromptsOnTTYAndRespectsDecline(t *testing.T) {
 		t.Fatalf("doc add: %v", err)
 	}
 
-	rootCmd.SetIn(strings.NewReader("n\n"))
-	t.Cleanup(func() { rootCmd.SetIn(nil) })
-	out, err := runLode(t, "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
+	out, err := runLodeIn(t, strings.NewReader("n\n"), "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
 	if err != nil {
 		t.Fatalf("decline: %v\noutput: %s", err, out)
 	}
@@ -194,8 +192,7 @@ func TestDocTransferFromPromptsOnTTYAndRespectsDecline(t *testing.T) {
 		t.Errorf("owner after a declined transfer = %q, want still bob", got)
 	}
 
-	rootCmd.SetIn(strings.NewReader("y\n"))
-	out, err = runLode(t, "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
+	out, err = runLodeIn(t, strings.NewReader("y\n"), "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
 	if err != nil {
 		t.Fatalf("accept: %v\noutput: %s", err, out)
 	}

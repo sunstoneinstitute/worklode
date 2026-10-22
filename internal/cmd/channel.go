@@ -31,13 +31,12 @@ func newChannelCmd() *cobra.Command {
 	return cmd
 }
 
-func init() { rootCmd.AddCommand(newChannelCmd()) }
-
 func newChannelServeCmd() *cobra.Command {
 	var interval time.Duration
 	cmd := &cobra.Command{
-		Use:   "serve",
-		Short: "Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications",
+		Annotations: runLocal,
+		Use:         "serve",
+		Short:       "Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications",
 		Long: `serve speaks just enough of the legacy MCP stdio protocol to stay a
 "channel": it answers initialize (echoing the caller's protocolVersion
 verbatim, which is what keeps Claude Code's unsolicited-notification path
@@ -56,7 +55,7 @@ serve takes no task or worktree argument.`,
 			if interval <= 0 {
 				return fmt.Errorf("--interval must be positive, got %s", interval)
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

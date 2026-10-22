@@ -27,8 +27,9 @@ func newSearchCmd() *cobra.Command {
 		scope scopeFlags
 	)
 	cmd := &cobra.Command{
-		Use:   "search <query>",
-		Short: "Search documents, tasks and skills by meaning and by exact token",
+		Annotations: runRemote,
+		Use:         "search <query>",
+		Short:       "Search documents, tasks and skills by meaning and by exact token",
 		Long: "Search the indexed corpus (WL-REQ-259, WL-REQ-1714). Two retrieval arms\n" +
 			"run and their rankings are fused: one over embeddings, which answers a\n" +
 			"question phrased differently from the text, and one lexical, which\n" +
@@ -41,7 +42,7 @@ func newSearchCmd() *cobra.Command {
 			"and says so on stderr; the results are real, just narrower.",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -88,5 +89,3 @@ func newSearchCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "search only this project's corpus")
 	return cmd
 }
-
-func init() { rootCmd.AddCommand(newSearchCmd()) }

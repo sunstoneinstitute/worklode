@@ -21,6 +21,7 @@ import (
 func newDocTodoCmd() *cobra.Command {
 	var deps bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "todo <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "What is left before a spec is fully implemented",
@@ -85,7 +86,7 @@ type docTodoResult struct {
 }
 
 func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}

@@ -14,8 +14,6 @@ import (
 // silently for out-of-tree callers — `lode task ready $ID && echo done`
 // printed "done" and published nothing.
 func TestGroupRejectsUnknownSubcommand(t *testing.T) {
-	groupTopLevel()
-	rejectStrayGroupArgs(rootCmd)
 	for _, args := range [][]string{
 		{"task", "bogusnothing"},
 		{"doc", "bogusnothing"},
@@ -38,8 +36,6 @@ func TestGroupRejectsUnknownSubcommand(t *testing.T) {
 // TestGroupAcceptsBareInvocation guards the other direction: `lode task` with
 // no arguments is a help request, not an error.
 func TestGroupAcceptsBareInvocation(t *testing.T) {
-	groupTopLevel()
-	rejectStrayGroupArgs(rootCmd)
 	for _, name := range []string{"task", "doc", "project", "work"} {
 		if _, err := runLode(t, name); err != nil {
 			t.Errorf("lode %s: want help and no error, got %v", name, err)
@@ -55,10 +51,6 @@ func TestGroupAcceptsBareInvocation(t *testing.T) {
 // rejecting a stray argument fails here whatever the mechanism — and it does
 // not care whether an earlier test already applied the fix.
 func TestEveryGroupRejectsStrayArgs(t *testing.T) {
-	groupTopLevel()
-	rootCmd.InitDefaultCompletionCmd()
-	rejectStrayGroupArgs(rootCmd)
-
 	var checked int
 	var walk func(*cobra.Command, []string)
 	walk = func(c *cobra.Command, path []string) {
@@ -86,7 +78,7 @@ func TestEveryGroupRejectsStrayArgs(t *testing.T) {
 			t.Errorf("%s: error %q does not name the unknown subcommand", name, err)
 		}
 	}
-	walk(rootCmd, nil)
+	walk(newRootCmd(), nil)
 
 	if checked < 15 {
 		t.Fatalf("only %d groups checked; the walk is not reaching the tree", checked)
@@ -97,10 +89,7 @@ func TestEveryGroupRejectsStrayArgs(t *testing.T) {
 // crew <project>` has subcommands and takes a real positional argument;
 // forcing NoArgs onto it would break a working command.
 func TestRunnableParentsAreLeftAlone(t *testing.T) {
-	groupTopLevel()
-	rejectStrayGroupArgs(rootCmd)
-
-	crew, _, err := rootCmd.Find([]string{"project", "crew"})
+	crew, _, err := newRootCmd().Find([]string{"project", "crew"})
 	if err != nil {
 		t.Fatalf("find project crew: %v", err)
 	}

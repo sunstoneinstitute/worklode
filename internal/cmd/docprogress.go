@@ -9,8 +9,9 @@ import (
 func newDocProgressCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "progress",
-		Short: "How much of each spec in a project exists, and what moves it next",
+		Annotations: runRemote,
+		Use:         "progress",
+		Short:       "How much of each spec in a project exists, and what moves it next",
 		Long: `Print the project's derived progress (WL-REQ-1334): one line per spec, grouped
 by the act that moves it next.
 
@@ -24,7 +25,7 @@ detail; this is the whole project at a glance. There is no completion
 percentage, by design.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
