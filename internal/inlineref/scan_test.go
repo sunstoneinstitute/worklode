@@ -21,6 +21,7 @@ func TestScan(t *testing.T) {
 		{"task id unknown key", "UTF-8 and SHA-256", wl, nil},
 		{"task id in branch name", "WL-12-fix-it", wl, nil},
 		{"anchor on doc", "WL-SPEC-7#sec-3.1", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Anchor: "sec-3.1", Raw: "WL-SPEC-7#sec-3.1"}}},
+		{"anchor before full stop", "See WL-SPEC-7#sec-3.1.", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Anchor: "sec-3.1", Raw: "WL-SPEC-7#sec-3.1", Start: 4, End: 21}}},
 		{"anchor dropped on rule", "WL-REQ-7#sec-3", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "REQ", Number: 7, Raw: "WL-REQ-7"}}},
 		{"keyword spec", "see spec 42 §3.", wl, []Hit{{Form: FormKeyword, Infix: "SPEC", Number: 42, Anchor: "sec-3", Raw: "spec 42 §3"}}},
 		{"keyword adr", "per ADR 7 here", wl, []Hit{{Form: FormKeyword, Infix: "ADR", Number: 7, Raw: "ADR 7"}}},

@@ -509,7 +509,7 @@ wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ;
 wl:references a owl:ObjectProperty ;
     skos:definition "references" ;
     wl:edgeOrigin wlc:declared ;
-    wl:storedAs "rule_edges.references" ;
+    wl:storedAs "inline_refs.references" ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Rule ;
     rdfs:range wl:Rule ;
