@@ -19,7 +19,7 @@ type Form string
 const (
 	FormTask    Form = "task"    // WL-12
 	FormNode    Form = "node"    // WL-SPEC-77
-	FormKeyword Form = "keyword" // spec 42 §3, ADR 7
+	FormKeyword Form = "keyword" // spec 42 §3, ADR 7 (spec-gate:ignore, an example of the form)
 	FormURL     Form = "url"     // a Worklode URL, bare or as a Markdown link
 )
 
@@ -52,7 +52,7 @@ var (
 	// alphanumeric; the digit alternative keeps "WL-SPEC-12abc" out.
 	nodeRef = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(` + allInfixes + `)-(?:(\d+)#(` + anchorPat + `)|(\d+)\b)`)
 	taskRef = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(\d+)\b`)
-	// spec 042 §10, ADR 48, as internal/mdrender/autolink.go reads them.
+	// spec 042 §10, ADR 48, as internal/mdrender/autolink.go reads them. spec-gate:ignore
 	keywordRef = regexp.MustCompile(`\b([Ss]pec|ADR|[Aa]dr)\s(\d{1,4})(?:\s?§\s?([0-9][0-9A-Za-z.]*))?`)
 
 	nodeFull = regexp.MustCompile(`^(` + refkind.KeyPattern + `)-(` + allInfixes + `)-(\d+)$`)
