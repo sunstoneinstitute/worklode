@@ -423,6 +423,8 @@ def extract_task_kinds(ttl: str, kinds: list[str]) -> dict[str, dict[str, bool]]
     """Join instance settings to the vocabulary by IRI; require explicit values."""
     rows: dict[str, dict[str, bool]] = {kind: {} for kind in kinds}
     for subject, predicate, value in Parser(ttl).parse():
+        if predicate == SKOS + "altLabel":
+            continue
         kind = local_name(subject, WLC)
         prop = local_name(predicate, WL)
         if kind not in rows:
@@ -439,6 +441,24 @@ def extract_task_kinds(ttl: str, kinds: list[str]) -> dict[str, dict[str, bool]]
         if missing:
             raise TurtleError(f"wlc:{kind}: missing descriptor properties: {sorted(missing)}")
     return rows
+
+
+def extract_task_kind_aliases(ttl: str, kinds: list[str]) -> dict[str, str]:
+    """Map each skos:altLabel word to its kind; a word may name one kind only."""
+    aliases: dict[str, str] = {}
+    for subject, predicate, value in Parser(ttl).parse():
+        if predicate != SKOS + "altLabel":
+            continue
+        kind = local_name(subject, WLC)
+        if kind not in kinds:
+            raise TurtleError(f"unknown task kind: {subject}")
+        if not isinstance(value, str) or not value.startswith('"'):
+            raise TurtleError(f"{subject}: skos:altLabel must be a string")
+        word = value.strip('"')
+        if word in aliases:
+            raise TurtleError(f"alias {word!r} names both wlc:{aliases[word]} and wlc:{kind}")
+        aliases[word] = kind
+    return aliases
 
 
 # --------------------------------------------------------------------------
@@ -477,7 +497,7 @@ var EdgeTerms = []EdgeTerm{
 '''
 
 
-def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds) -> str:
+def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds, aliases) -> str:
     def lit(values: list[str]) -> str:
         return ", ".join(f'"{v}"' for v in values)
 
@@ -513,6 +533,12 @@ def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds
         )
         descriptors += f"\t{key.ljust(width)} {{{settings}}},\n"
     descriptors += "}\n"
+    descriptors += "\n// TaskKindAliases maps each skos:altLabel of ns/task-kinds.ttl to its kind\n"
+    descriptors += "// (WL-REQ-1832).\nvar TaskKindAliases = map[string]string{\n"
+    width = max(map(len, aliases), default=0) + 3
+    for word, kind in sorted(aliases.items()):
+        descriptors += f'\t{(chr(34) + word + chr(34) + ":").ljust(width)} "{kind}",\n'
+    descriptors += "}\n"
     return TEMPLATE % (table, lit(statuses), terms) + descriptors
 
 
@@ -536,11 +562,13 @@ def main() -> int:
         print(f"{ONTOLOGY_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
     try:
-        task_kinds = extract_task_kinds(TASK_KINDS_TTL.read_text(encoding="utf-8"), schemes["TaskKind"])
+        ttl = TASK_KINDS_TTL.read_text(encoding="utf-8")
+        task_kinds = extract_task_kinds(ttl, schemes["TaskKind"])
+        aliases = extract_task_kind_aliases(ttl, schemes["TaskKind"])
     except (TurtleError, OSError) as exc:
         print(f"{TASK_KINDS_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
-    want = render(schemes, statuses, edges, task_kinds)
+    want = render(schemes, statuses, edges, task_kinds, aliases)
 
     if not args.check:
         GEN_GO.parent.mkdir(parents=True, exist_ok=True)
