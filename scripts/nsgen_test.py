@@ -311,6 +311,20 @@ wlc:bug wl:claimable true ; wl:allowsChildren true ;
                 nsgen.extract_task_kinds(self.PREFIXES + body, ["bug"])
 
 
+    def test_aliases_map_words_to_kinds(self):
+        prefixes = self.PREFIXES + "@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n"
+        body = 'wlc:bug skos:altLabel "bug", "defect" .\nwlc:chore skos:altLabel "cleanup" .\n'
+        self.assertEqual(nsgen.extract_task_kind_aliases(prefixes + body, ["bug", "chore"]),
+                         {"bug": "bug", "defect": "bug", "cleanup": "chore"})
+        for name, bad in {
+            "word on two kinds": body.replace('"cleanup"', '"defect"'),
+            "unknown kind": body.replace("wlc:chore", "wlc:typo"),
+            "IRI label": body.replace('"cleanup"', "wlc:cleanup"),
+        }.items():
+            with self.subTest(name=name), self.assertRaises(nsgen.TurtleError):
+                nsgen.extract_task_kind_aliases(prefixes + bad, ["bug", "chore"])
+
+
 class TestCli(unittest.TestCase):
     def run_nsgen(self, *args):
         return subprocess.run(
@@ -327,6 +341,10 @@ class TestCli(unittest.TestCase):
             *nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8")),
             nsgen.extract_edges(ONTOLOGY_TTL.read_text(encoding="utf-8")),
             nsgen.extract_task_kinds(
+                nsgen.TASK_KINDS_TTL.read_text(encoding="utf-8"),
+                nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8"))[0]["TaskKind"],
+            ),
+            nsgen.extract_task_kind_aliases(
                 nsgen.TASK_KINDS_TTL.read_text(encoding="utf-8"),
                 nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8"))[0]["TaskKind"],
             ),

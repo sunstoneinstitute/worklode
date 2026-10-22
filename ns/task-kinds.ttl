@@ -1,9 +1,12 @@
 # Instance configuration for the task kinds declared in concept.ttl.
 # Every kind supplies every property; missing values are errors, not defaults.
 # These descriptors drive runtime permission checks and completion behavior.
+# skos:altLabel lists the words the MCP file tool accepts for a kind
+# (WL-REQ-1832). It is optional: a kind without one cannot be filed by word.
 
 @prefix wl:  <https://worklode.io/ns/ontology#> .
 @prefix wlc: <https://worklode.io/ns/concept/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
 wlc:feature wl:claimable true ;
     wl:allowsChildren true ;
@@ -11,7 +14,8 @@ wlc:feature wl:claimable true ;
     wl:allowsDecisions true ;
     wl:canBlock true ;
     wl:kindMutable true ;
-    wl:closesOnAnswers false .
+    wl:closesOnAnswers false ;
+    skos:altLabel "feature", "enhancement", "story", "capability" .
 
 wlc:bug wl:claimable true ;
     wl:allowsChildren true ;
@@ -19,7 +23,8 @@ wlc:bug wl:claimable true ;
     wl:allowsDecisions true ;
     wl:canBlock true ;
     wl:kindMutable true ;
-    wl:closesOnAnswers false .
+    wl:closesOnAnswers false ;
+    skos:altLabel "bug", "defect", "problem", "issue", "broken" .
 
 wlc:chore wl:claimable true ;
     wl:allowsChildren true ;
@@ -27,7 +32,8 @@ wlc:chore wl:claimable true ;
     wl:allowsDecisions true ;
     wl:canBlock true ;
     wl:kindMutable true ;
-    wl:closesOnAnswers false .
+    wl:closesOnAnswers false ;
+    skos:altLabel "chore", "cleanup", "maintenance", "housekeeping", "upgrade" .
 
 wlc:design wl:claimable true ;
     wl:allowsChildren true ;
@@ -35,7 +41,8 @@ wlc:design wl:claimable true ;
     wl:allowsDecisions true ;
     wl:canBlock true ;
     wl:kindMutable true ;
-    wl:closesOnAnswers false .
+    wl:closesOnAnswers false ;
+    skos:altLabel "design task" .
 
 wlc:review wl:claimable true ;
     wl:allowsChildren true ;
@@ -43,7 +50,8 @@ wlc:review wl:claimable true ;
     wl:allowsDecisions true ;
     wl:canBlock true ;
     wl:kindMutable true ;
-    wl:closesOnAnswers false .
+    wl:closesOnAnswers false ;
+    skos:altLabel "review" .
 
 wlc:spike wl:claimable true ;
     wl:allowsChildren true ;
@@ -51,7 +59,8 @@ wlc:spike wl:claimable true ;
     wl:allowsDecisions true ;
     wl:canBlock true ;
     wl:kindMutable true ;
-    wl:closesOnAnswers false .
+    wl:closesOnAnswers false ;
+    skos:altLabel "spike", "experiment", "investigation", "prototype" .
 
 wlc:decision wl:claimable false ;
     wl:allowsChildren false ;
@@ -59,7 +68,8 @@ wlc:decision wl:claimable false ;
     wl:allowsDecisions true ;
     wl:canBlock true ;
     wl:kindMutable false ;
-    wl:closesOnAnswers true .
+    wl:closesOnAnswers true ;
+    skos:altLabel "decision", "question", "choice" .
 
 wlc:rally wl:claimable false ;
     wl:allowsChildren false ;

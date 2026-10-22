@@ -3,6 +3,8 @@ package mcp
 import (
 	"sort"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // KindTarget is what a spoken kind word files as (WL-REQ-1832).
@@ -21,13 +23,10 @@ func init() {
 			KindAliases[w] = KindTarget{Entity: entity, Kind: kind}
 		}
 	}
-	add("task", "bug", "bug", "defect", "problem", "issue", "broken")
-	add("task", "feature", "feature", "enhancement", "story", "capability")
-	add("task", "chore", "chore", "cleanup", "maintenance", "housekeeping", "upgrade")
-	add("task", "spike", "spike", "experiment", "investigation", "prototype")
-	add("task", "decision", "decision", "question", "choice")
-	add("task", "review", "review")
-	add("task", "design", "design task")
+	// Task words come from ns/task-kinds.ttl's skos:altLabel.
+	for w, kind := range ns.TaskKindAliases {
+		add("task", kind, w)
+	}
 	add("doc", "spec", "spec", "specification", "design doc", "design document", "adr")
 	add("doc", "plan", "plan", "implementation plan")
 	add("rule", "requirement", "requirement", "rule")

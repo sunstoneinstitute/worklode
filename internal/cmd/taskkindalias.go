@@ -37,7 +37,10 @@ var claimableTaskKinds = ns.TaskKindsMatching(func(d ns.TaskKindDescriptor) bool
 	return d.Claimable
 })
 
-// claimKindEnum is the value list both claim surfaces spell out in their
-// --kind help. It is ", "-separated because that is the form
-// TestAgentSurfaces parses when it checks the --kind values agent docs write.
-var claimKindEnum = strings.Join(claimableTaskKinds, ", ")
+// taskKindEnum and claimKindEnum are the value lists --kind help spells out.
+// They are ", "-separated because that is the form TestAgentSurfaces parses
+// when it checks the --kind values agent docs write.
+var (
+	taskKindEnum  = strings.Join(ns.TaskKinds, ", ")
+	claimKindEnum = strings.Join(claimableTaskKinds, ", ")
+)
