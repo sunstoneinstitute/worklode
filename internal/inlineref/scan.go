@@ -1,0 +1,313 @@
+// Package inlineref finds candidate references to Worklode nodes in Markdown
+// text (WL-REQ-1851). Scan is pure: it reports where a reference is spelled
+// and what it names, and resolves nothing.
+package inlineref
+
+import (
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
+)
+
+// Form is how a reference is spelled.
+type Form string
+
+const (
+	FormTask    Form = "task"    // WL-12
+	FormNode    Form = "node"    // WL-SPEC-77
+	FormKeyword Form = "keyword" // spec 42 §3, ADR 7
+	FormURL     Form = "url"     // a Worklode URL, bare or as a Markdown link
+)
+
+// Hit is one candidate reference.
+type Hit struct {
+	Line     int    // 1-based
+	Start    int    // byte offset in the line
+	End      int    // exclusive
+	Raw      string // the matched text, link syntax included
+	Form     Form
+	Key      string // project key; "" for the keyword form
+	Infix    string // "" for a task id, else a refkind infix
+	Number   int64
+	Anchor   string // "sec-3" without '#', or ""
+	LinkText string // text of [text](url) when the hit is a Markdown link
+	InCode   bool   // inside an inline code span
+}
+
+var (
+	allInfixes = func() string {
+		var s []string
+		for _, k := range refkind.All {
+			s = append(s, k.Infix)
+		}
+		return strings.Join(s, "|")
+	}()
+
+	anchorPat = `sec-[0-9A-Za-z._-]+`
+	// A trailing anchor is part of the match only when it ends on an
+	// alphanumeric; the digit alternative keeps "WL-SPEC-12abc" out.
+	nodeRef = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(` + allInfixes + `)-(?:(\d+)#(` + anchorPat + `)|(\d+)\b)`)
+	taskRef = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(\d+)\b`)
+	// spec 042 §10, ADR 48, as internal/mdrender/autolink.go reads them.
+	keywordRef = regexp.MustCompile(`\b([Ss]pec|ADR|[Aa]dr)\s(\d{1,4})(?:\s?§\s?([0-9][0-9A-Za-z.]*))?`)
+
+	nodeFull = regexp.MustCompile(`^(` + refkind.KeyPattern + `)-(` + allInfixes + `)-(\d+)$`)
+	taskFull = regexp.MustCompile(`^(` + refkind.KeyPattern + `)-(\d+)$`)
+
+	mdLink  = regexp.MustCompile(`\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)`)
+	bareURL = regexp.MustCompile(`(?:[A-Za-z][A-Za-z0-9+.-]*://[^/\s]*)?/[^\s<>)\]"']*`)
+)
+
+// Scan returns every candidate reference in text, in order. keys is the set
+// of project keys a bare <KEY>-<n> counts as a task id for.
+func Scan(text string, keys map[string]bool) []Hit {
+	var hits []Hit
+	fence := ""
+	for i, line := range strings.Split(text, "\n") {
+		if f := fenceOf(line); f != "" {
+			if fence == "" {
+				fence = f
+			} else if f[0] == fence[0] && len(f) >= len(fence) && strings.TrimSpace(line) == f {
+				fence = ""
+			}
+			continue
+		}
+		if fence != "" {
+			continue
+		}
+		for _, h := range scanLine(line, keys) {
+			h.Line = i + 1
+			hits = append(hits, h)
+		}
+	}
+	return hits
+}
+
+// fenceOf returns the opening run of a code fence line, "" for other lines.
+func fenceOf(line string) string {
+	s := strings.TrimLeft(line, " ")
+	if len(line)-len(s) > 3 || len(s) < 3 || (s[0] != '`' && s[0] != '~') {
+		return ""
+	}
+	n := 0
+	for n < len(s) && s[n] == s[0] {
+		n++
+	}
+	if n < 3 || (s[0] == '`' && strings.Contains(s[n:], "`")) {
+		return ""
+	}
+	return s[:n]
+}
+
+func scanLine(line string, keys map[string]bool) []Hit {
+	var hits []Hit
+	taken := func(s, e int) bool {
+		for _, h := range hits {
+			if s < h.End && e > h.Start {
+				return true
+			}
+		}
+		return false
+	}
+	add := func(h Hit, loc []int) {
+		h.Start, h.End, h.Raw = loc[0], loc[1], line[loc[0]:loc[1]]
+		if !taken(h.Start, h.End) {
+			hits = append(hits, h)
+		}
+	}
+
+	for _, m := range mdLink.FindAllStringSubmatchIndex(line, -1) {
+		if h, ok := parseURL(line[m[4]:m[5]]); ok {
+			h.LinkText = line[m[2]:m[3]]
+			add(h, m[:2])
+		}
+	}
+	for _, m := range bareURL.FindAllStringIndex(line, -1) {
+		s, e := m[0], m[1]
+		if !strings.Contains(line[s:e], "://") && s > 0 && strings.ContainsRune("/.:-_", rune(line[s-1])) || (s > 0 && isAlnum(line[s-1])) {
+			continue
+		}
+		for e > s && strings.ContainsRune(".,;:!?", rune(line[e-1])) {
+			e--
+		}
+		if h, ok := parseURL(line[s:e]); ok {
+			add(h, []int{s, e})
+		}
+	}
+	for _, m := range nodeRef.FindAllStringSubmatchIndex(line, -1) {
+		n, err := strconv.ParseInt(line[max(m[6], m[10]):max(m[7], m[11])], 10, 64)
+		if err != nil {
+			continue
+		}
+		h := Hit{Form: FormNode, Key: line[m[2]:m[3]], Infix: line[m[4]:m[5]], Number: n}
+		end := m[1]
+		if m[8] >= 0 {
+			if t, _ := refkind.Lookup(h.Infix); t == refkind.Doc {
+				h.Anchor = line[m[8]:m[9]]
+			} else {
+				end = m[7] // an anchor is a doc-ref feature
+			}
+		}
+		add(h, []int{m[0], end})
+	}
+	for _, m := range keywordRef.FindAllStringSubmatchIndex(line, -1) {
+		n, _ := strconv.ParseInt(line[m[4]:m[5]], 10, 64)
+		h := Hit{Form: FormKeyword, Infix: refkind.SPEC, Number: n}
+		if strings.EqualFold(line[m[2]:m[3]], "adr") {
+			h.Infix = refkind.ADR
+		}
+		end := m[1]
+		if m[6] >= 0 {
+			for end > m[6] && line[end-1] == '.' {
+				end--
+			}
+			h.Anchor = "sec-" + line[m[6]:end]
+		}
+		add(h, []int{m[0], end})
+	}
+	for _, m := range taskRef.FindAllStringSubmatchIndex(line, -1) {
+		s, e := m[0], m[1]
+		if !keys[line[m[2]:m[3]]] || (s > 0 && line[s-1] == '-') || (e < len(line) && line[e] == '-') {
+			continue
+		}
+		n, err := strconv.ParseInt(line[m[4]:m[5]], 10, 64)
+		if err != nil {
+			continue
+		}
+		add(Hit{Form: FormTask, Key: line[m[2]:m[3]], Number: n}, m[:2])
+	}
+
+	slices.SortFunc(hits, func(a, b Hit) int { return a.Start - b.Start })
+	spans := codeSpans(line)
+	for i := range hits {
+		for _, sp := range spans {
+			if hits[i].Start >= sp[0] && hits[i].End <= sp[1] {
+				hits[i].InCode = true
+			}
+		}
+	}
+	return hits
+}
+
+func isAlnum(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// codeSpans returns the [start,end) of each inline code span on the line,
+// backticks included. A run of n backticks closes on the next run of n.
+func codeSpans(line string) [][2]int {
+	var out [][2]int
+	for i := 0; i < len(line); {
+		if line[i] != '`' {
+			i++
+			continue
+		}
+		j := i
+		for j < len(line) && line[j] == '`' {
+			j++
+		}
+		run := line[i:j]
+		if k := strings.Index(line[j:], run); k >= 0 {
+			// the closing run must be exactly n long; skip longer runs
+			end := j + k + len(run)
+			if end >= len(line) || line[end] != '`' {
+				out = append(out, [2]int{i, end})
+				i = end
+				continue
+			}
+		}
+		i = j
+	}
+	return out
+}
+
+// parseURL reads a Worklode node URL in any shape internal/api/router.go
+// serves. Scheme and host are ignored.
+func parseURL(u string) (Hit, bool) {
+	if i := strings.Index(u, "://"); i >= 0 {
+		u = u[i+3:]
+		j := strings.Index(u, "/")
+		if j < 0 {
+			return Hit{}, false
+		}
+		u = u[j:]
+	}
+	anchor := ""
+	if i := strings.IndexByte(u, '#'); i >= 0 {
+		anchor, u = u[i+1:], u[:i]
+	}
+	if i := strings.IndexByte(u, '?'); i >= 0 {
+		u = u[:i]
+	}
+	u = strings.TrimSuffix(u, "/")
+	if !strings.HasPrefix(u, "/") {
+		return Hit{}, false
+	}
+	p := strings.Split(u[1:], "/")
+	h := Hit{Form: FormURL}
+	switch {
+	case len(p) == 1:
+		return ref(h, p[0], anchor)
+	case len(p) == 2 && p[0] == "tasks":
+		return ref(h, p[1], "")
+	case len(p) == 2 && p[0] == "rules":
+		return ref(h, p[1], "")
+	case len(p) == 3 && p[0] == "docs" && p[1] == "ref":
+		return ref(h, p[2], anchor)
+	case (len(p) == 4 || len(p) == 5) && p[0] == "projects":
+		n, err := strconv.ParseInt(p[3], 10, 64)
+		if err != nil || (len(p) == 5 && !allDigits(p[4])) {
+			return Hit{}, false
+		}
+		h.Key, h.Number = p[1], n
+		switch kind := p[2]; {
+		case kind == "rule":
+			h.Infix = refkind.RULE
+		case kind == "spec":
+			h.Infix = refkind.SPEC
+		case kind == "plan":
+			h.Infix = refkind.PLAN
+		case slices.Contains(ns.TaskKinds, kind):
+		default:
+			return Hit{}, false
+		}
+		if t, _ := refkind.Lookup(h.Infix); t == refkind.Doc && strings.HasPrefix(anchor, "sec-") {
+			h.Anchor = anchor
+		}
+		return h, true
+	}
+	return Hit{}, false
+}
+
+func allDigits(s string) bool {
+	_, err := strconv.ParseUint(s, 10, 64)
+	return err == nil
+}
+
+// ref fills h from a task id or a node ref, as a URL path segment spells it.
+func ref(h Hit, s, anchor string) (Hit, bool) {
+	if m := nodeFull.FindStringSubmatch(s); m != nil {
+		n, err := strconv.ParseInt(m[3], 10, 64)
+		if err != nil {
+			return Hit{}, false
+		}
+		h.Key, h.Infix, h.Number = m[1], m[2], n
+		if t, _ := refkind.Lookup(h.Infix); t == refkind.Doc && strings.HasPrefix(anchor, "sec-") {
+			h.Anchor = anchor
+		}
+		return h, true
+	}
+	if m := taskFull.FindStringSubmatch(s); m != nil {
+		n, err := strconv.ParseInt(m[2], 10, 64)
+		if err != nil {
+			return Hit{}, false
+		}
+		h.Key, h.Number = m[1], n
+		return h, true
+	}
+	return Hit{}, false
+}
