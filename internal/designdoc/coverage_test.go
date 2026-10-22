@@ -204,8 +204,7 @@ func TestSectionCoveringSortedByPath(t *testing.T) {
 }
 
 // TestSectionNumberedAliasResolvesToKnownSlug (WL-404): a spec whose live
-// corpus identity dropped its leading number (docs/authoring-design-docs.md's
-// own examples, and scripts/secmeta.py's on-disk check, still write the
+// corpus identity dropped its leading number (older plans still write the
 // numbered git filename) is still found when a plan's covers entry names it
 // that way — the plan-committed reference and the backbone's slug-derived
 // identity are allowed to diverge in only that one respect.

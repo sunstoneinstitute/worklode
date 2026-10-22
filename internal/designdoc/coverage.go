@@ -327,9 +327,7 @@ func underDir(p, dir string) (rel string, ok bool) {
 // document's own corpus-relative directory ("docs/plans"): a "./" or
 // "../"-prefixed reference is resolved against home and cleaned, and an
 // already corpus-relative reference ("docs/specs/...", "docs/plans/...") is
-// returned unchanged. Both mirror scripts/secmeta.py's resolve_ref — 026
-// review round 2 ruled the port should not replicate its bare-filename-only
-// gap, filing it there as a follow-up instead so the two reconverge.
+// returned unchanged.
 //
 // A bare reference (no "/") is tried home-relative first — correct for a
 // same-corpus reference, `requires` naming another document
@@ -420,10 +418,9 @@ var numberPrefixPattern = regexp.MustCompile(`^\d+-`)
 
 // resolveNumberedAlias recognises ref as a numbered-filename alias of a spec
 // or ADR the corpus already holds under the number-stripped slug that is its
-// live identity: docs/authoring-design-docs.md's own examples, and the only
-// form scripts/secmeta.py's on-disk check accepts, still write a numbered
-// spec by its git filename, while the document's `covers:`-matching identity
-// is the slug the backbone assigned it (WL-404).
+// live identity: older plans still write a numbered spec by its git
+// filename, while the document's `covers:`-matching identity is the slug the
+// backbone assigned it (WL-404).
 //
 // ref is returned unchanged when it is already a known identity (the common
 // case — most specs' slugs still carry their number), or when stripping its
