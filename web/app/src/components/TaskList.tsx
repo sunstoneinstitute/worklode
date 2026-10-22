@@ -35,10 +35,9 @@ const PRIORITY_OPTIONS = [
   { value: "low", label: "Low" },
 ]
 
-/** A task's canonical URL, /projects/<proj>/task/<n> (WL-RULE-1306) */
+/** The root shortcut /<id>, which redirects to the task's canonical URL (WL-RULE-1306) */
 function taskHref(task: Task) {
-  const n = (task.id ?? "").split("-").pop()
-  return `/projects/${task.project}/task/${n}`
+  return `/${task.id}`
 }
 
 const TITLE_COLUMN: DataTableColumn<Task> = {
