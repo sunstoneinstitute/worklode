@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -23,9 +22,10 @@ func newSkillCmd() *cobra.Command {
 
 func newSkillsListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List org skills known to the server",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List org skills known to the server",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -49,9 +49,10 @@ func newSkillsRecommendCmd() *cobra.Command {
 	var taskID, text, file string
 	var limit int
 	cmd := &cobra.Command{
-		Use:   "recommend",
-		Short: "Recommend skills for a task or free text",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "recommend",
+		Short:       "Recommend skills for a task or free text",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			set := 0
 			for _, v := range []string{taskID, text, file} {
@@ -63,7 +64,7 @@ func newSkillsRecommendCmd() *cobra.Command {
 				return fmt.Errorf("exactly one of --task, --text, --file is required")
 			}
 			if file != "" {
-				b, err := os.ReadFile(file)
+				b, err := readFileArg(cmd, file)
 				if err != nil {
 					return err
 				}
@@ -99,16 +100,17 @@ func newSkillsRecommendCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&taskID, "task", "", "recommend for this task id")
 	cmd.Flags().StringVar(&text, "text", "", "recommend for this free text")
-	cmd.Flags().StringVar(&file, "file", "", "recommend for this file's contents")
+	cmd.Flags().StringVar(&file, "file", "", `recommend for this file's contents ("-" for stdin)`)
 	cmd.Flags().IntVar(&limit, "limit", 5, "max matches")
 	return cmd
 }
 
 func newSkillsInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "install <name>[@<hash>]",
-		Short: "Install a skill into the local store (~/.worklode/store)",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runLocal,
+		Use:         "install <name>[@<hash>]",
+		Short:       "Install a skill into the local store (~/.worklode/store)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, hash, _ := strings.Cut(args[0], "@")
 			if name == "" {
@@ -220,9 +222,10 @@ func publishLinked(cmd *cobra.Command, dirs skillstore.Dirs, ids []string, name 
 
 func newSkillsSyncCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "sync",
-		Short: "Trigger a full server-side skill sync (admin)",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "sync",
+		Short:       "Trigger a full server-side skill sync (admin)",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {

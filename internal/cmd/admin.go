@@ -23,9 +23,10 @@ func newActorAddCmd() *cobra.Command {
 	var kind, name string
 	var admin bool
 	cmd := &cobra.Command{
-		Use:   "add <id>",
-		Short: "Create an actor",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "add <id>",
+		Short:       "Create an actor",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -70,8 +71,9 @@ func newTokenAddCmd() *cobra.Command {
 	var actor, description, expiresAt, task string
 	var ttl time.Duration
 	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "Mint a bearer token for an actor (printed once — save it now)",
+		Annotations: runRemote,
+		Use:         "add",
+		Short:       "Mint a bearer token for an actor (printed once — save it now)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if task != "" {
 				if cmd.Flags().Changed("description") || cmd.Flags().Changed("expires-at") {
@@ -145,9 +147,10 @@ func runTaskTokenAdd(cmd *cobra.Command, task, actor string, ttl time.Duration) 
 
 func newTokenRevokeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "revoke <token>",
-		Short: "Revoke a bearer token",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "revoke <token>",
+		Short:       "Revoke a bearer token",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -184,8 +187,9 @@ func newBlobGCCmd() *cobra.Command {
 	var apply bool
 	var graceHours int
 	cmd := &cobra.Command{
-		Use:   "gc",
-		Short: "Collect unreferenced blobs and orphan objects",
+		Annotations: runRemote,
+		Use:         "gc",
+		Short:       "Collect unreferenced blobs and orphan objects",
 		Long: "Reports by default. Pass --apply to delete. Grace period keeps both\n" +
 			"sweeps clear of uploads in flight.",
 		RunE: func(cmd *cobra.Command, args []string) error {

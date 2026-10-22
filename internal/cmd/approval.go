@@ -34,8 +34,9 @@ func newApprovalCmd() *cobra.Command {
 func newApprovalAddCmd() *cobra.Command {
 	var role, actor, lane, revision string
 	cmd := &cobra.Command{
-		Use:   "add <kind> <id>",
-		Short: "Require an approval on one entity",
+		Annotations: runRemote,
+		Use:         "add <kind> <id>",
+		Short:       "Require an approval on one entity",
 		Long: "Require an approval on one entity (WL-REQ-124): a review lane a\n" +
 			"project's flow did not demand, filed by hand.\n\n" +
 			"<kind> is " + strings.Join(model.ApprovalEntityKinds, ", ") + " and <id> is that\n" +
@@ -106,8 +107,9 @@ func approvalTargetArgs(cmd *cobra.Command, args []string, toComplete string) ([
 // WL-487) — this command only materializes the lanes.
 func newApprovalRequestCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "request <ref>",
-		Short: "Open an approval lane for each of a document's assigned reviewers",
+		Annotations: runRemote,
+		Use:         "request <ref>",
+		Short:       "Open an approval lane for each of a document's assigned reviewers",
 		Long: "Open an approval lane for each of a document's assigned reviewers,\n" +
 			"on its current version (WL-REQ-1658). Assign the reviewer set first with\n" +
 			"`lode doc set reviewers <actor> <actor> ... <ref>`; re-running this\n" +
@@ -145,9 +147,10 @@ func newApprovalRequestCmd() *cobra.Command {
 // newApprovalListCmd prints the awaiting queue, oldest first.
 func newApprovalListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List every outstanding approval, oldest first",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List every outstanding approval, oldest first",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -172,8 +175,9 @@ func newApprovalListCmd() *cobra.Command {
 func newApprovalDecideCmd() *cobra.Command {
 	var verdict, note string
 	cmd := &cobra.Command{
-		Use:   "decide <id>",
-		Short: "Approve, request changes on, or reject an approval",
+		Annotations: runRemote,
+		Use:         "decide <id>",
+		Short:       "Approve, request changes on, or reject an approval",
 		Long: "Approve, request changes on, or reject an approval (WL-REQ-1608).\n\n" +
 			"<id> is the approval id `lode approval list` prints. --verdict is\n" +
 			"approve, request_changes or reject. Deciding a row that needs a group\n" +

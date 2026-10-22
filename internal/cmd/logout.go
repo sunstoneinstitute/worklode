@@ -26,9 +26,10 @@ func runLogout(server string) error {
 func newLogoutCmd() *cobra.Command {
 	var server string
 	cmd := &cobra.Command{
-		Use:   "logout",
-		Short: "Remove the stored token for a server from the OS keychain or token file",
-		Args:  cobra.NoArgs,
+		Annotations: runLocal,
+		Use:         "logout",
+		Short:       "Remove the stored token for a server from the OS keychain or token file",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := cli.LoadConfig()
 			if err != nil {

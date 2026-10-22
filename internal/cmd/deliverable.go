@@ -28,9 +28,10 @@ func newDeliverableCmd() *cobra.Command {
 func newDeliverableReportCmd() *cobra.Command {
 	var note string
 	cmd := &cobra.Command{
-		Use:   "report <deliverable> <state>",
-		Short: "Report a deliverable's state as a person (published, updated, deprecated, removed, failed)",
-		Args:  cobra.ExactArgs(2),
+		Annotations: runRemote,
+		Use:         "report <deliverable> <state>",
+		Short:       "Report a deliverable's state as a person (published, updated, deprecated, removed, failed)",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -55,6 +56,7 @@ func newDeliverableReportCmd() *cobra.Command {
 
 func newDeliverableListCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "list <project>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "List a project's deliverables",
@@ -82,6 +84,7 @@ func newDeliverableListCmd() *cobra.Command {
 func newDeliverableAddCmd() *cobra.Command {
 	var description, deliverableURL, artifact, milestone string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "add <project> <name>",
 		ValidArgsFunction: projectKeyAt(0),
 		Short:             "Declare a deliverable on a project",

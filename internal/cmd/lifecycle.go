@@ -294,8 +294,9 @@ func newNextCmd() *cobra.Command {
 	var strictFocus bool
 	var replan bool
 	cmd := &cobra.Command{
-		Use:   "next [id]",
-		Short: "Claim a task (or the top-ranked ready one), set up its worktree, and print its brief",
+		Annotations: runLocal,
+		Use:         "next [id]",
+		Short:       "Claim a task (or the top-ranked ready one), set up its worktree, and print its brief",
 		Long: "The one way to enter Worklode mode: claims a task, creates its worktree " +
 			"and its task branch, binds the lease to that worktree, and prints " +
 			"the task's brief. With an id, claims that task; without one, claims the top-ranked " +
@@ -497,8 +498,9 @@ func printNotClaimed(cmd *cobra.Command, resp model.ClaimNextResponse) error {
 // newResumeCmd builds `lode work resume`.
 func newResumeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "resume [dir]",
-		Short: "Re-acquire the lease on the current (or given) worktree's task",
+		Annotations: runLocal,
+		Use:         "resume [dir]",
+		Short:       "Re-acquire the lease on the current (or given) worktree's task",
 		Long: "Renews the lease if this worktree still holds it, or re-claims the task if the " +
 			"sweeper reclaimed an expired lease (the task is back in ready). Errors if the task " +
 			"is actively leased to a different worktree.",
@@ -574,8 +576,9 @@ func runResume(cmd *cobra.Command, dir string) error {
 // pushed yet.
 func newSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "submit",
-		Short: "Submit the current worktree's task for review and release its lease",
+		Annotations: runLocal,
+		Use:         "submit",
+		Short:       "Submit the current worktree's task for review and release its lease",
 		Long: "Submit the current worktree's task for review and release its lease.\n\n" +
 			"The task moves to in_review, not merged: `merged` records that the\n" +
 			"work landed on the default branch, which the PR-merge webhook reports.\n" +
@@ -644,9 +647,10 @@ func submitForReview(ctx context.Context, c *cli.Client, taskID string) (model.T
 func newBlockCmd() *cobra.Command {
 	var on string
 	cmd := &cobra.Command{
-		Use:   "block --on <blocker-id>",
-		Short: "Record that another task blocks the current worktree's task, and release its lease",
-		Args:  cobra.NoArgs,
+		Annotations: runLocal,
+		Use:         "block --on <blocker-id>",
+		Short:       "Record that another task blocks the current worktree's task, and release its lease",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -737,9 +741,10 @@ func hasSessionMarker(root string) bool {
 // newStatusCmd builds `lode work status`: read-only, never claims/renews/releases.
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
-		Short: "Show the current worktree's task, lease, and session-marker state (read-only)",
-		Args:  cobra.NoArgs,
+		Annotations: runLocal,
+		Use:         "status",
+		Short:       "Show the current worktree's task, lease, and session-marker state (read-only)",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStatus(cmd)
 		},

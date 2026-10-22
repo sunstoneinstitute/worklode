@@ -119,6 +119,7 @@ func newShowCmd() *cobra.Command {
 	var pager, inline, usage, closure bool
 	var version int
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "show [id]",
 		ValidArgsFunction: showRefs,
 		Short:             "Show any entity by id or kind flag: a task, a design doc, a project",

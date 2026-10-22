@@ -30,9 +30,10 @@ func newRuleAddCmd() *cobra.Command {
 	var heading, file, kind string
 	var tags []string
 	cmd := &cobra.Command{
-		Use:   "add --heading <text> --file <body>",
-		Short: "Add a rule arranged in no document, as a draft owned by you",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "add --heading <text> --file <body>",
+		Short:       "Add a rule arranged in no document, as a draft owned by you",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if strings.TrimSpace(heading) == "" {
 				return errors.New("no heading: pass --heading <text>")
@@ -80,6 +81,7 @@ func newRuleAddCmd() *cobra.Command {
 func newRuleAcceptCmd() *cobra.Command {
 	var in model.AcceptRuleInput
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "accept <ref>",
 		Short:             "Accept a rule's newest draft version (owner only); the specs arranging it move to it",
 		Args:              cobra.ExactArgs(1),
@@ -112,9 +114,10 @@ func newRuleAcceptCmd() *cobra.Command {
 func newRuleArrangeCmd() *cobra.Command {
 	var in model.ArrangeRuleInput
 	cmd := &cobra.Command{
-		Use:   "arrange <spec> <rule>",
-		Short: "Place an existing rule in a spec; an accepted spec gets it in its candidate revision",
-		Args:  cobra.ExactArgs(2),
+		Annotations: runRemote,
+		Use:         "arrange <spec> <rule>",
+		Short:       "Place an existing rule in a spec; an accepted spec gets it in its candidate revision",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -147,9 +150,10 @@ func newRuleArrangeCmd() *cobra.Command {
 // from a spec without withdrawing it.
 func newRuleUnarrangeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "unarrange <spec> <rule>",
-		Short: "Remove a rule from a spec without withdrawing it; an accepted spec loses it in its candidate revision",
-		Args:  cobra.ExactArgs(2),
+		Annotations: runRemote,
+		Use:         "unarrange <spec> <rule>",
+		Short:       "Remove a rule from a spec without withdrawing it; an accepted spec loses it in its candidate revision",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -177,6 +181,7 @@ func newRuleShowCmd() *cobra.Command {
 	var version int
 	var inline, closure bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "show <ref>",
 		ValidArgsFunction: ruleRefAt(0),
 		Short:             "Show a rule: its status, version, placements and text",
@@ -203,9 +208,10 @@ func newRuleShowCmd() *cobra.Command {
 func newRuleLintCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "lint",
-		Short: "Report rules per spec, closure sizes, undefined terms, conflicts, positional and unresolved references, and converted headings",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "lint",
+		Short:       "Report rules per spec, closure sizes, undefined terms, conflicts, positional and unresolved references, and converted headings",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -244,8 +250,9 @@ func newRuleListCmd() *cobra.Command {
 	var scope scopeFlags
 	var doc, status string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List rules, or one document's rules in arrangement order",
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List rules, or one document's rules in arrangement order",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -286,9 +293,10 @@ func newRuleListCmd() *cobra.Command {
 func newRuleEditCmd() *cobra.Command {
 	var file, heading string
 	cmd := &cobra.Command{
-		Use:   "edit <ref>",
-		Short: "Write a rule's next draft version (body and heading) from a file",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "edit <ref>",
+		Short:       "Write a rule's next draft version (body and heading) from a file",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body, err := readBodyFile(cmd, file)
 			if err != nil {
@@ -385,9 +393,10 @@ var edgeFlagUsage = map[string]string{
 
 func newRuleLinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "link <ref>",
-		Short: "Relate a rule to another: --refines, --needs, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "link <ref>",
+		Short:       "Relate a rule to another: --refines, --needs, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>",
+		Args:        cobra.ExactArgs(1),
 	}
 	typ := edgeTypeFlags(cmd)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -412,9 +421,10 @@ func newRuleLinkCmd() *cobra.Command {
 
 func newRuleUnlinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "unlink <ref>",
-		Short: "Remove a relation written with rule link",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "unlink <ref>",
+		Short:       "Remove a relation written with rule link",
+		Args:        cobra.ExactArgs(1),
 	}
 	typ := edgeTypeFlags(cmd)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -490,9 +500,10 @@ func newRuleSetCmd() *cobra.Command {
 // reusing it here for "clear" would give it two contradictory meanings.
 func newRuleSetOwnerCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "owner <ref> <actor>",
-		Short: `Set a rule's owner; "" clears it`,
-		Args:  cobra.ExactArgs(2),
+		Annotations: runRemote,
+		Use:         "owner <ref> <actor>",
+		Short:       `Set a rule's owner; "" clears it`,
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			owner := args[1]
 			c, err := newAPIClient()
@@ -519,9 +530,10 @@ func newRuleSetOwnerCmd() *cobra.Command {
 // rather than being read as "leave it alone".
 func newRuleSetTagsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "tags <ref> [tag ...]",
-		Short: "Replace a rule's tags; naming none clears them",
-		Args:  cobra.MinimumNArgs(1),
+		Annotations: runRemote,
+		Use:         "tags <ref> [tag ...]",
+		Short:       "Replace a rule's tags; naming none clears them",
+		Args:        cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tags := append([]string{}, args[1:]...)
 			c, err := newAPIClient()
@@ -544,9 +556,10 @@ func newRuleSetTagsCmd() *cobra.Command {
 
 func newRuleVersionsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "versions <ref>",
-		Short: "List a rule's versions, newest first",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "versions <ref>",
+		Short:       "List a rule's versions, newest first",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -576,9 +589,10 @@ func newRuleSupersedeCmd() *cobra.Command {
 	var dryRun bool
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "supersede",
-		Short: "Apply a refactor map: withdraw old rules and link each to its successors (S24)",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "supersede",
+		Short:       "Apply a refactor map: withdraw old rules and link each to its successors (S24)",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if mapFile == "" {
 				return errors.New(`no map: pass --map <file>, or "-" to read it from stdin`)
@@ -655,9 +669,10 @@ func parseSupersedeMap(content string) ([]model.SupersedeEntry, error) {
 func newRuleTermsCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "terms",
-		Short: "List a project's definition rules with their term slugs",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "terms",
+		Short:       "List a project's definition rules with their term slugs",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {

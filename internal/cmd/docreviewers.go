@@ -21,6 +21,7 @@ import (
 // reviewers <reviewer…> <ref>` (WL-487), matching `lode task set skills`.
 func newDocReviewersCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "reviewers <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Show a document's assigned reviewer set",
@@ -87,6 +88,7 @@ var docSetFields = []string{"reviewers"}
 // actor ids, and naming none clears the set.
 func newDocSetCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "set <field> <value…> <ref>",
 		ValidArgsFunction: docSetArgs,
 		Short:             "Set one field on a document, e.g. `lode doc set reviewers alice bob rev-spec`",

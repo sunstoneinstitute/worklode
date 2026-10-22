@@ -11,9 +11,10 @@ import (
 func newBoardCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "board [project]",
-		Short: "Show the task board: what's in progress, in review, blocked, and ready",
-		Args:  cobra.MaximumNArgs(1),
+		Annotations: runRemote,
+		Use:         "board [project]",
+		Short:       "Show the task board: what's in progress, in review, blocked, and ready",
+		Args:        cobra.MaximumNArgs(1),
 		// The positional is the older spelling of --project (see RunE), so it
 		// completes from the same live project listing the flag does.
 		ValidArgsFunction: projectKeyAt(0),

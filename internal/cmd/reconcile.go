@@ -16,8 +16,9 @@ func newReconcileCmd() *cobra.Command {
 	var repo, task, since string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "reconcile",
-		Short: "Repair what webhook ingestion missed",
+		Annotations: runRemote,
+		Use:         "reconcile",
+		Short:       "Repair what webhook ingestion missed",
 		Long: `Repair what webhook ingestion missed, in two engines: replay the
 stored *.ignored events, then poll GitHub for missed PR, merge and release
 facts. Polling is skipped when the server has no GitHub App configured, and

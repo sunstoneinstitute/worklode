@@ -82,8 +82,9 @@ func newDecisionCmd() *cobra.Command {
 func newDecisionResolveCmd() *cobra.Command {
 	var a model.DecisionAnswer
 	cmd := &cobra.Command{
-		Use:   "resolve <task>/<key>",
-		Short: "Record the answer to a posed question",
+		Annotations: runRemote,
+		Use:         "resolve <task>/<key>",
+		Short:       "Record the answer to a posed question",
 		Long: "Record the answer to a posed question. Recording is terminal: an answered\n" +
 			"row is never written over, so deciding again means posing another question.\n" +
 			"On a decision-kind task the last answer closes the task in the same act.",
@@ -123,9 +124,10 @@ func newDecisionResolveCmd() *cobra.Command {
 
 func newDecisionListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list <task>",
-		Short: "List the questions a task poses",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "list <task>",
+		Short:       "List the questions a task poses",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -147,9 +149,10 @@ func newDecisionListCmd() *cobra.Command {
 
 func newDecisionShowCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show <task>/<key>",
-		Short: "Show one question, its options and its answer",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "show <task>/<key>",
+		Short:       "Show one question, its options and its answer",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			onTask, key, err := cli.ParseDecisionRef(args[0])
 			if err != nil {
@@ -176,8 +179,9 @@ func newDecisionShowCmd() *cobra.Command {
 func newDecisionAddCmd() *cobra.Command {
 	var f decisionFlags
 	cmd := &cobra.Command{
-		Use:   "add <task>",
-		Short: "Pose a question on a task",
+		Annotations: runRemote,
+		Use:         "add <task>",
+		Short:       "Pose a question on a task",
 		Long: "Pose a question on a task. Any kind of task may carry questions; a\n" +
 			"decision-kind task closes when its last one is answered.",
 		Args: cobra.ExactArgs(1),
@@ -213,8 +217,9 @@ func newDecisionEditCmd() *cobra.Command {
 	var f decisionFlags
 	var task string
 	cmd := &cobra.Command{
-		Use:   "edit <task>/<key>",
-		Short: "Reword, regroup or re-parent an unanswered question",
+		Annotations: runRemote,
+		Use:         "edit <task>/<key>",
+		Short:       "Reword, regroup or re-parent an unanswered question",
 		Long: "Reword, regroup or re-parent an unanswered question. An answered row is\n" +
 			"immutable: pose a new one instead. Naming --type replaces the whole answer\n" +
 			"shape (type, options and pick bounds); leaving it out keeps all four.",

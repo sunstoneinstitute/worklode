@@ -84,8 +84,9 @@ func newDocImportCmd() *cobra.Command {
 	var docsDir string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "import",
-		Short: "Import a git corpus of design documents into the backbone",
+		Annotations: runLocal,
+		Use:         "import",
+		Short:       "Import a git corpus of design documents into the backbone",
 		Long: `Import a git corpus of design documents into the backbone.
 
 Walks <docs>/specs/*.md and <docs>/plans/*.md — the top level of each, never a

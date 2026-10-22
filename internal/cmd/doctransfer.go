@@ -41,6 +41,7 @@ func newDocTransferCmd() *cobra.Command {
 	var scope scopeFlags
 	var to, from string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "transfer [ref...] --to <actor>",
 		ValidArgsFunction: docRefs,
 		Short:             "Transfer document ownership to another actor",

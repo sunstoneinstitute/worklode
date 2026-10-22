@@ -14,6 +14,7 @@ import (
 // unrelated concept that happens to share the name.
 func newTaskInstructCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "instruct <id> <message>",
 		Short:             "Queue a steering instruction for whichever actor next holds the task's lease",
 		Args:              cobra.ExactArgs(2),

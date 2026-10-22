@@ -25,8 +25,9 @@ func newMilestoneCmd() *cobra.Command {
 func newMilestoneListCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List a project's milestones, in position order",
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List a project's milestones, in position order",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -68,9 +69,10 @@ func deliverableIDOrErr(id string) error {
 
 func newMilestoneAttachCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "attach <milestone> <deliverable>",
-		Short: "Attach a deliverable to a milestone in the same project",
-		Args:  cobra.ExactArgs(2),
+		Annotations: runRemote,
+		Use:         "attach <milestone> <deliverable>",
+		Short:       "Attach a deliverable to a milestone in the same project",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			milestone, deliverable := args[0], args[1]
 			if err := deliverableIDOrErr(deliverable); err != nil {
@@ -97,9 +99,10 @@ func newMilestoneAttachCmd() *cobra.Command {
 
 func newMilestoneDetachCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "detach <deliverable>",
-		Short: "Detach a deliverable from its milestone",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "detach <deliverable>",
+		Short:       "Detach a deliverable from its milestone",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			deliverable := args[0]
 			if err := deliverableIDOrErr(deliverable); err != nil {
@@ -131,8 +134,9 @@ func newMilestoneDetachCmd() *cobra.Command {
 func newMilestoneDeleteCmd() *cobra.Command {
 	var cascade bool
 	cmd := &cobra.Command{
-		Use:   "delete <milestone>",
-		Short: "Delete an empty milestone, or --cascade one that still holds work",
+		Annotations: runRemote,
+		Use:         "delete <milestone>",
+		Short:       "Delete an empty milestone, or --cascade one that still holds work",
 		Long: "Delete a milestone. The row is removed, not tombstoned: what it held is\n" +
 			"derived from children that outlive it.\n\n" +
 			"A milestone that still holds tasks or deliverables is refused, naming the\n" +
@@ -169,9 +173,10 @@ func newMilestoneAddCmd() *cobra.Command {
 	var scope scopeFlags
 	var position int
 	cmd := &cobra.Command{
-		Use:   "add <title>",
-		Short: "Create a milestone",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "add <title>",
+		Short:       "Create a milestone",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {

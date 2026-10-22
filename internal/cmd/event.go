@@ -31,9 +31,10 @@ func newEventTailCmd() *cobra.Command {
 	var limit int
 	var follow bool
 	cmd := &cobra.Command{
-		Use:   "tail",
-		Short: "List recent events, newest last (--follow to keep watching)",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "tail",
+		Short:       "List recent events, newest last (--follow to keep watching)",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -116,9 +117,10 @@ func followEvents(cmd *cobra.Command, c *cli.Client, typ string, backlog []model
 
 func newEventSubscribersCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "subscribers",
-		Short: "Show subscriber offsets, lag, and lock holder",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "subscribers",
+		Short:       "Show subscriber offsets, lag, and lock holder",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -141,9 +143,10 @@ func newEventSubscribersCmd() *cobra.Command {
 func newEventSeekCmd() *cobra.Command {
 	var to int64
 	cmd := &cobra.Command{
-		Use:   "seek <name>",
-		Short: "Move a subscriber's offsets (admin; a replay relies on handler idempotency)",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "seek <name>",
+		Short:       "Move a subscriber's offsets (admin; a replay relies on handler idempotency)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {

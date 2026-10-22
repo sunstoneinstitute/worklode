@@ -90,6 +90,7 @@ type taskTransition func(*cli.Client, context.Context, string) (model.Task, []by
 // worktree's task stamp when the transition ends the work on that task.
 func newTaskTransitionCmd(use, short string, clearBinding bool, call taskTransition) *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               use,
 		Short:             short,
 		Args:              cobra.ExactArgs(1),
@@ -136,6 +137,7 @@ type taskEdge func(*cli.Client, context.Context, string, string) ([]byte, error)
 func newTaskEdgeCmd(use, short, flag, flagHelp, msg string, call taskEdge) *cobra.Command {
 	var other string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               use,
 		Short:             short,
 		Args:              cobra.ExactArgs(1),
@@ -162,6 +164,7 @@ func newTaskEdgeCmd(use, short, flag, flagHelp, msg string, call taskEdge) *cobr
 // task, and reports why there is nothing to drop when there is none.
 func newTaskUnEdgeCmd(use, short, msg string, find func(model.TaskDetail) (string, error), call taskEdge) *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               use,
 		Short:             short,
 		Args:              cobra.ExactArgs(1),
@@ -211,18 +214,35 @@ func resolveBody(body, bodyFile string, stdin io.Reader) (string, error) {
 	if bodyFile == "" {
 		return body, nil
 	}
-	if bodyFile == "-" {
-		b, err := io.ReadAll(stdin)
-		if err != nil {
-			return "", fmt.Errorf("read body from stdin: %w", err)
-		}
-		return string(b), nil
-	}
-	b, err := os.ReadFile(bodyFile)
+	b, err := readFileOrStdin(bodyFile, stdin)
 	if err != nil {
-		return "", fmt.Errorf("read body file: %w", err)
+		return "", err
 	}
 	return string(b), nil
+}
+
+// readFileOrStdin reads path, or stdin when path is "-". It is the one place a
+// file-taking flag turns its value into bytes, so every such flag accepts "-"
+// the same way and the MCP lode tool, which has no local files, can pipe the
+// input in (WL-REQ-1863).
+func readFileOrStdin(path string, stdin io.Reader) ([]byte, error) {
+	if path == "-" {
+		b, err := io.ReadAll(stdin)
+		if err != nil {
+			return nil, fmt.Errorf("read stdin: %w", err)
+		}
+		return b, nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+	return b, nil
+}
+
+// readFileArg is readFileOrStdin reading the command's own stdin.
+func readFileArg(cmd *cobra.Command, path string) ([]byte, error) {
+	return readFileOrStdin(path, cmd.InOrStdin())
 }
 
 // uploadBodyImages uploads every local relative image the body references and
@@ -301,8 +321,9 @@ func newTaskAddCmd() *cobra.Command {
 	var secretNames []string
 	var governedBy []string
 	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "Create a task",
+		Annotations: runRemote,
+		Use:         "add",
+		Short:       "Create a task",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			warnDeprecatedTaskKind(cmd, kind)
 			body, err := resolveBody(body, bodyFile, cmd.InOrStdin())
@@ -375,8 +396,9 @@ func newTaskListCmd() *cobra.Command {
 	var statuses []string
 	var deleted bool
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List tasks (delivered and abandoned are hidden unless requested with --status)",
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List tasks (delivered and abandoned are hidden unless requested with --status)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			warnDeprecatedTaskKind(cmd, kind)
 			states := resolveDeletedStatusFilter(statuses, deleted, cmd.Flags().Changed("status"))
@@ -473,6 +495,7 @@ func resolveStatusFilter(statuses []string) []string {
 func newTaskShowCmd() *cobra.Command {
 	var pager, usage, status bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "show <id>",
 		Short:             "Show a task's details: body, edges, blocked status, and lease holder",
 		Args:              cobra.ExactArgs(1),
@@ -570,6 +593,7 @@ type taskShowUsageResult struct {
 // rule L6). The paired write is `lode task set skills <name…> <id>`.
 func newTaskSkillsCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "skills <id>",
 		Short:             "Show the task's pinned skills",
 		Args:              cobra.ExactArgs(1),
@@ -602,6 +626,7 @@ func newTaskEditCmd() *cobra.Command {
 	var needsDecomposition, humanOnly, noUpload bool
 	var secretNames, artifacts []string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "edit <id>",
 		Short:             "Edit a task's title, body, concern, priority, milestone, plan link, needs-decomposition or human-only flag, or declare an artifact it is verified by",
 		Args:              cobra.ExactArgs(1),
@@ -792,6 +817,7 @@ func newTaskClaimCmd() *cobra.Command {
 	var kinds []string
 	var scope scopeFlags
 	cmd := &cobra.Command{
+		Annotations:       runLocalUnlessWorktree,
 		Use:               "claim [id]",
 		Short:             "Lease a task to the current worktree and move it to in_progress",
 		Args:              cobra.MaximumNArgs(1),
@@ -907,6 +933,7 @@ func newTaskClaimCmd() *cobra.Command {
 func newTaskRenewCmd() *cobra.Command {
 	var ttl time.Duration
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "renew <id>",
 		Short:             "Extend the caller's lease on a task",
 		Args:              cobra.ExactArgs(1),
@@ -938,6 +965,7 @@ func newTaskRenewCmd() *cobra.Command {
 
 func newTaskReleaseCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "release <id>",
 		Short:             "Release the caller's lease on a task, returning it to ready",
 		Args:              cobra.ExactArgs(1),
@@ -970,6 +998,7 @@ func newTaskReleaseCmd() *cobra.Command {
 func newTaskAssignCmd() *cobra.Command {
 	var to string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "assign <id> [--to <actor>]",
 		Short:             "Assign a task to an actor (default: yourself)",
 		Args:              cobra.ExactArgs(1),
@@ -1035,8 +1064,9 @@ var taskSetFields = []string{"state", "skills", "checklist"}
 // returned unchanged.
 func newTaskSetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "set <field> <value…> <id>",
-		Short: "Set one field on a task, e.g. `lode task set state merged WL-5`",
+		Annotations: runRemote,
+		Use:         "set <field> <value…> <id>",
+		Short:       "Set one field on a task, e.g. `lode task set state merged WL-5`",
 		Long: `Set one named field on a task. The task id is always the last argument;
 everything between the field and the id is the value.
 
@@ -1143,8 +1173,9 @@ func newTaskAbandonCmd() *cobra.Command {
 func newTaskDeleteCmd() *cobra.Command {
 	var justification string
 	cmd := &cobra.Command{
-		Use:   "delete <id>",
-		Short: "Delete a task: hide a row that should not have existed",
+		Annotations: runRemote,
+		Use:         "delete <id>",
+		Short:       "Delete a task: hide a row that should not have existed",
 		Long: "Delete a task. Prefer `lode task abandon`, which keeps the decision\n" +
 			"record that work was considered and dropped; delete is for a row that\n" +
 			"should not have existed at all (WL-REQ-117). The row is tombstoned, not\n" +
@@ -1209,6 +1240,7 @@ func newTaskBlockCmd() *cobra.Command {
 func newTaskBlockersCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "blockers [id]",
 		Short:             "Show what transitively blocks a task, or every blocked task in scope, as a tree",
 		Args:              cobra.MaximumNArgs(1),
@@ -1259,8 +1291,9 @@ func newTaskBlockersCmd() *cobra.Command {
 func newTaskFrontierCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "frontier",
-		Short: "Ready, unblocked tasks in pickup order",
+		Annotations: runRemote,
+		Use:         "frontier",
+		Short:       "Ready, unblocked tasks in pickup order",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1288,6 +1321,7 @@ func newTaskFrontierCmd() *cobra.Command {
 
 func newTaskBriefCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "brief <id>",
 		Short:             "Fetch a task's brief: body, branch, open blockers, and active lease",
 		Args:              cobra.ExactArgs(1),
@@ -1324,8 +1358,9 @@ func newTaskCostCmd() *cobra.Command {
 	var days int
 	var children bool
 	cmd := &cobra.Command{
-		Use:   "cost <id>",
-		Short: "Show the token cost billed to a task",
+		Annotations: runRemote,
+		Use:         "cost <id>",
+		Short:       "Show the token cost billed to a task",
 		Long: "Show the token cost billed to a task: the usage of agent sessions\n" +
 			"that held a lease on the task. A container task reports its own\n" +
 			"sessions unless --children is given, which folds in its child_of\n" +
@@ -1372,6 +1407,7 @@ func newTaskUnblockCmd() *cobra.Command {
 func newTaskRuleCmd(use, short, msg string, call taskEdge) *cobra.Command {
 	var by string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               use,
 		Short:             short,
 		Args:              cobra.ExactArgs(1),
@@ -1400,6 +1436,7 @@ func newTaskGovernCmd() *cobra.Command {
 	var by string
 	var pin bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "govern <id>",
 		Short:             "Record a design rule that governs a task",
 		Args:              cobra.ExactArgs(1),
@@ -1514,6 +1551,7 @@ func newTaskUnduplicateCmd() *cobra.Command {
 func newTaskTreeCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "tree [id]",
 		Short:             "Show tasks with children, and their children, with per-parent progress",
 		Args:              cobra.MaximumNArgs(1),
@@ -1555,6 +1593,7 @@ func newTaskTreeCmd() *cobra.Command {
 func newTaskDecomposeCmd() *cobra.Command {
 	var into []string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "decompose <id>",
 		Short:             "Split an oversized task into children, in place",
 		Args:              cobra.ExactArgs(1),
@@ -1596,8 +1635,9 @@ func newTaskAttachCmd() *cobra.Command {
 	var noEmbed bool
 	var alt string
 	cmd := &cobra.Command{
-		Use:   "attach <task-id> <file>...",
-		Short: "Upload files and attach them to a task",
+		Annotations: runLocal,
+		Use:         "attach <task-id> <file>...",
+		Short:       "Upload files and attach them to a task",
 		Long: "Images and videos are appended to the task body as markdown so they render\n" +
 			"inline; every other type is attached only. Use - to read one blob from stdin,\n" +
 			"which pairs with a clipboard tool: pngpaste - | lode task attach WL-42 -\n\n" +
@@ -1720,6 +1760,7 @@ func embedMarkup(alt string, blob model.BlobResponse) string {
 // hash gets a warning rather than a silent no-op.
 func newTaskDetachCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "detach <task-id> <hash>",
 		Short:             "Remove an attached blob from a task",
 		Args:              cobra.ExactArgs(2),
@@ -1757,8 +1798,9 @@ func newTaskDetachCmd() *cobra.Command {
 func newTaskEscalateCmd() *cobra.Command {
 	var to, reason, doc, section string
 	cmd := &cobra.Command{
-		Use:   "escalate --to plan|spec --reason <why>",
-		Short: "Report that the plan or spec does not cover this case, and hand the fix upward",
+		Annotations: runRemote,
+		Use:         "escalate --to plan|spec --reason <why>",
+		Short:       "Report that the plan or spec does not cover this case, and hand the fix upward",
 		Long: "Report that the plan or spec does not cover this case, and hand the fix upward.\n\n" +
 			"The current worktree's task goes back to ready with its lease released, and a\n" +
 			"design task against the document is minted and assigned to whoever wrote it.\n" +
@@ -1813,9 +1855,10 @@ func newTaskEscalateCmd() *cobra.Command {
 func newTaskGapCmd() *cobra.Command {
 	var reason string
 	cmd := &cobra.Command{
-		Use:   "gap <docref> --reason <why>",
-		Short: "Log that the plan or spec does not cover this case, without escalating it",
-		Args:  cobra.ExactArgs(1),
+		Annotations: runRemote,
+		Use:         "gap <docref> --reason <why>",
+		Short:       "Log that the plan or spec does not cover this case, without escalating it",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -1854,9 +1897,10 @@ func newTaskGapCmd() *cobra.Command {
 func newTaskFixCmd() *cobra.Command {
 	var phase, tier, doc, outcome string
 	cmd := &cobra.Command{
-		Use:   "fix --phase started|finished",
-		Short: "Log the start or finish of a design fix",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "fix --phase started|finished",
+		Short:       "Log the start or finish of a design fix",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {

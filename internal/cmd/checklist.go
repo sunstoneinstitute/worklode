@@ -11,6 +11,7 @@ import (
 // a flag here.
 func newTaskChecklistCmd() *cobra.Command {
 	return &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "checklist <id>",
 		Short:             "Show the checklist items parsed from the task's body",
 		Args:              cobra.ExactArgs(1),

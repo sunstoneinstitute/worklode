@@ -16,8 +16,9 @@ func newLoginCmd() *cobra.Command {
 	var server string
 	var noBrowser bool
 	cmd := &cobra.Command{
-		Use:   "login",
-		Short: "Authenticate to worklode and store a token",
+		Annotations: runLocal,
+		Use:         "login",
+		Short:       "Authenticate to worklode and store a token",
 		Long: "Open a browser to sign in with Keycloak, then store the resulting\n" +
 			"30-day token in the OS keychain — or, on a machine that has no keychain,\n" +
 			"in ~/.config/worklode/token at mode 0600. Re-run after it expires.\n\n" +

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -127,8 +126,9 @@ func newDocAddCmd() *cobra.Command {
 	var number int
 	var updateAnchors bool
 	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "Create a document (spec or plan) in draft",
+		Annotations: runRemote,
+		Use:         "add",
+		Short:       "Create a document (spec or plan) in draft",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !slices.Contains(docKinds, kind) {
 				return fmt.Errorf("unknown kind %q; valid kinds: %s", kind, strings.Join(docKinds, ", "))
@@ -198,8 +198,9 @@ func newDocListCmd() *cobra.Command {
 	var kind, status, owner, olderThan string
 	var needsPlanning, needsExecution, bareSuperseded, unresolved, deleted, hasNotes bool
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List documents: specs and plans",
+		Annotations: runRemote,
+		Use:         "list",
+		Short:       "List documents: specs and plans",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Ahead of the client: a contradicting selector is an error
 			// whatever the server would say, and refusing it here costs no
@@ -393,9 +394,10 @@ func isPlanFile(doc *designdoc.Document) bool {
 func newDocLintCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "lint [file]",
-		Short: "Lint a local file's anchors and task definitions, or the corpus's dangling references",
-		Args:  cobra.MaximumNArgs(1),
+		Annotations: runLocalUnlessStdin,
+		Use:         "lint [file]",
+		Short:       "Lint a local file's anchors and task definitions (\"-\" for stdin), or the corpus's dangling references",
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				return runDocLintFile(cmd, args[0])
@@ -431,8 +433,9 @@ func newDocLintCmd() *cobra.Command {
 // entries stored in to_external before their target had rules (WL-903).
 func newDocResolveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "resolve",
-		Short: "Re-resolve every plan's unresolved covers entries to rules",
+		Annotations: runRemote,
+		Use:         "resolve",
+		Short:       "Re-resolve every plan's unresolved covers entries to rules",
 		Long: `Re-resolve every plan's covers entries that are stored unresolved
 (to_external) because their target had no rules when the plan was written.
 An entry that now names requirements is replaced by its plan -> rule edges;
@@ -463,7 +466,7 @@ Admin only.`,
 // runDocLintFile is `lode doc lint <file>`, the local pre-accept lint newDocLintCmd
 // documents.
 func runDocLintFile(cmd *cobra.Command, path string) error {
-	src, err := os.ReadFile(path)
+	src, err := readFileArg(cmd, path)
 	if err != nil {
 		return err
 	}
@@ -515,6 +518,7 @@ func newDocShowCmd() *cobra.Command {
 	var version int
 	var editable bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "show <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Show a document: its body, sections, and edges",
@@ -570,6 +574,7 @@ func newDocShowCmd() *cobra.Command {
 // current version and every one it has superseded, newest first.
 func newDocVersionsCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "versions <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "List a document's version history",
@@ -609,6 +614,7 @@ func newDocVersionsCmd() *cobra.Command {
 // whole-document ref has no answer rather than a broader one.
 func newDocReferrersCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "referrers <ref>#sec-N",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "List the open work pointing at one section of a document",
@@ -658,9 +664,10 @@ func newDocReferrersCmd() *cobra.Command {
 func newDocSectionsCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "sections [number]",
-		Short: "List document sections across the corpus",
-		Args:  cobra.MaximumNArgs(1),
+		Annotations: runRemote,
+		Use:         "sections [number]",
+		Short:       "List document sections across the corpus",
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var number string
 			if len(args) == 1 {
@@ -706,6 +713,7 @@ func newDocEditCmd() *cobra.Command {
 	var substantive, updateAnchors bool
 	var ifVersion int
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "edit <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Replace a document's body (a draft or plan in place, an accepted spec as an amendment) or set its title and issued date",
@@ -864,6 +872,7 @@ func newDocEdgeCmd(use, short string,
 	targets := make([]string, len(docEdgeFlags))
 	var in model.DocEdgeInput
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               use,
 		ValidArgsFunction: docRefAt(0),
 		Short:             short,
@@ -931,6 +940,7 @@ func newDocEdgeCmd(use, short string,
 func newDocNoteCmd() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "note <ref>#sec-N",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Leave an anchored, non-blocking note on a document section",
@@ -983,6 +993,7 @@ func newDocNoteCmd() *cobra.Command {
 
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "accept <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it",
@@ -1023,6 +1034,7 @@ func newDocAcceptCmd() *cobra.Command {
 // minting a review task, say — is the doc-lifecycle watcher's to decide.
 func newDocSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "submit <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Submit a document for review (records a review event; the document's status does not change)",
@@ -1062,6 +1074,7 @@ func newDocSubmitCmd() *cobra.Command {
 func newDocWithdrawCmd() *cobra.Command {
 	var justification string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "withdraw <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Withdraw an accepted or stale document that will not be executed",
@@ -1106,6 +1119,7 @@ func newDocWithdrawCmd() *cobra.Command {
 func newDocDeleteCmd() *cobra.Command {
 	var justification string
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "delete <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Delete a document: hide a row that should not have existed",
@@ -1148,6 +1162,7 @@ func newDocDeleteCmd() *cobra.Command {
 // (WL-REQ-117).
 func newDocUndeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "undelete <ref>",
 		ValidArgsFunction: deletedDocRefAt(0),
 		Short:             "Restore a deleted document, clearing its tombstone",
@@ -1189,6 +1204,7 @@ func newDocReviseCmd() *cobra.Command {
 	var file string
 	var accept, discard bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "revise <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "Open, update, land, or discard a document's candidate revision",

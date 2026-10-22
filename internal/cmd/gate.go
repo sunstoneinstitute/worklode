@@ -28,8 +28,9 @@ func newGateCmd() *cobra.Command {
 func newGateCheckCmd() *cobra.Command {
 	var base, head, bodyFile string
 	cmd := &cobra.Command{
-		Use:   "check",
-		Short: "Refuse a change to a guarded path that names no design rule",
+		Annotations: runLocal,
+		Use:         "check",
+		Short:       "Refuse a change to a guarded path that names no design rule",
 		Long: `Reads the [gate] table of .worklode/config.toml, diffs --base to --head,
 and requires a Spec: trailer on the pull request body (--body-file) or in a
 commit message when a guarded path changed. The trailer names a rule

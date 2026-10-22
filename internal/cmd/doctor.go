@@ -378,9 +378,10 @@ func sweepSecrets(ctx context.Context, c *cli.Client, serverReachable bool) doct
 
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "doctor",
-		Short: "Diagnose this machine's lode setup",
-		Args:  cobra.NoArgs,
+		Annotations: runLocal,
+		Use:         "doctor",
+		Short:       "Diagnose this machine's lode setup",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := os.Getwd()
 			if err != nil {

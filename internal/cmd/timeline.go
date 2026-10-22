@@ -8,6 +8,7 @@ import (
 
 func newTimelineCmd() *cobra.Command {
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "timeline <task-id>",
 		Short:             "Show a task's full history: state changes, PRs, CI, reviews, deployments, runtime events",
 		Args:              cobra.ExactArgs(1),

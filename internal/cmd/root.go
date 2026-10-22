@@ -129,7 +129,9 @@ func newRootCmd() *cobra.Command {
 	// cobra builds `completion` and its four shell subcommands lazily inside
 	// Execute, so they have to be materialised first or the walk never sees
 	// them and `lode completion bogus` keeps exiting 0.
+	root.InitDefaultHelpCmd()
 	root.InitDefaultCompletionCmd()
+	annotateCobraGenerated(root)
 	rejectStrayGroupArgs(root)
 	return root
 }

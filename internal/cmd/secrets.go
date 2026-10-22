@@ -32,9 +32,10 @@ func newSecretCmd() *cobra.Command {
 
 func newSecretsCatalogCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "catalog",
-		Short: "List the org secrets catalog: names, baseline flag, descriptions",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "catalog",
+		Short:       "List the org secrets catalog: names, baseline flag, descriptions",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -66,9 +67,10 @@ func newSecretsCatalogCmd() *cobra.Command {
 
 func newSecretsStatusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
-		Short: "Show declared vs materialized secret names for the bound task (names only)",
-		Args:  cobra.NoArgs,
+		Annotations: runLocal,
+		Use:         "status",
+		Short:       "Show declared vs materialized secret names for the bound task (names only)",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -126,9 +128,10 @@ func newSecretsStatusCmd() *cobra.Command {
 func newSecretsPurgeCmd() *cobra.Command {
 	var taskID string
 	cmd := &cobra.Command{
-		Use:   "purge [--task <id>]",
-		Short: "Remove the task's keystore items (invoked by release hooks)",
-		Args:  cobra.NoArgs,
+		Annotations: runLocal,
+		Use:         "purge [--task <id>]",
+		Short:       "Remove the task's keystore items (invoked by release hooks)",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := taskID
 			if id == "" {
@@ -164,10 +167,11 @@ func newSecretsPurgeCmd() *cobra.Command {
 func newSecretsPackCmd() *cobra.Command {
 	var taskID, namesCSV, declinedCSV string
 	cmd := &cobra.Command{
-		Use:    "pack",
-		Hidden: true,
-		Short:  "Internal: write op-run-resolved env values into the OS keystore",
-		Args:   cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "pack",
+		Hidden:      true,
+		Short:       "Internal: write op-run-resolved env values into the OS keystore",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			names, declined := splitNames(namesCSV), splitNames(declinedCSV)
 			if taskID == "" || len(names) == 0 {
@@ -232,8 +236,9 @@ var execFn = syscall.Exec
 
 func newSecretsExecCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "exec [--] <command> [args...]",
-		Short: "Run a command with the bound task's materialized secrets in its environment",
+		Annotations: runLocal,
+		Use:         "exec [--] <command> [args...]",
+		Short:       "Run a command with the bound task's materialized secrets in its environment",
 		Long: "Resolves the task from the wt/<id>-<slug> worktree guard, reads that task's " +
 			"items from the OS keystore, injects them as environment variables, and execs. " +
 			"Values exist only in the child process. The injected set is exactly the task's " +

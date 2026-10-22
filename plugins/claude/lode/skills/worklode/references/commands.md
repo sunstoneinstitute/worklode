@@ -60,7 +60,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc link` — Add an edge to a document (a plan's next version, a draft in place, an accepted spec on its candidate revision)
   Flags: --blocked-by, --covers, --defers, --derived-from, --from-anchor, --owner, --requires
-- `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
+- `lode doc lint` — Lint a local file's anchors and task definitions ("-" for stdin), or the corpus's dangling references
   Flags: --project, --repo
 - `lode doc list` — List documents: specs and plans
   Flags: --bare-superseded, --deleted, --has-notes, --kind, --needs-execution, --needs-planning, --older-than, --owner, --project, --repo, --status, --unresolved

@@ -21,6 +21,7 @@ import (
 func newDocTodoCmd() *cobra.Command {
 	var deps bool
 	cmd := &cobra.Command{
+		Annotations:       runRemote,
 		Use:               "todo <ref>",
 		ValidArgsFunction: docRefAt(0),
 		Short:             "What is left before a spec is fully implemented",

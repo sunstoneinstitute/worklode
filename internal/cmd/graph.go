@@ -40,9 +40,10 @@ func newGraphCmd() *cobra.Command {
 // depth under the single-child rule — flattened straight onto `graph`.
 func newGraphQuarantinesCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "quarantines",
-		Short: "Show the projects the projector has quarantined, since when, and why",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "quarantines",
+		Short:       "Show the projects the projector has quarantined, since when, and why",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -77,9 +78,10 @@ func newGraphTriplesCmd() *cobra.Command {
 	var scope scopeFlags
 	var output string
 	cmd := &cobra.Command{
-		Use:   "triples",
-		Short: "Write a project's tasks, the documents they reach, and the edges between them as N-Triples",
-		Args:  cobra.NoArgs,
+		Annotations: runRemote,
+		Use:         "triples",
+		Short:       "Write a project's tasks, the documents they reach, and the edges between them as N-Triples",
+		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -253,8 +255,9 @@ func newGraphDeriveCmd() *cobra.Command {
 	var allowEmpty bool
 	var server bool
 	cmd := &cobra.Command{
-		Use:   "derive",
-		Short: "Run the repo-local observed-layer derivers (go-imports, repo-layout), or --server for the server-side ones",
+		Annotations: runLocal,
+		Use:         "derive",
+		Short:       "Run the repo-local observed-layer derivers (go-imports, repo-layout), or --server for the server-side ones",
 		Long: `Run the repo-local observed-layer derivers (go-imports, repo-layout) over
 the current checkout and write the resulting graphs.
 
@@ -356,8 +359,9 @@ func newGraphDriftCmd() *cobra.Command {
 	var acknowledged bool
 	var component string
 	cmd := &cobra.Command{
-		Use:   "drift",
-		Short: "Architectural drift: violations and stale intent (WL-REQ-1362)",
+		Annotations: runRemote,
+		Use:         "drift",
+		Short:       "Architectural drift: violations and stale intent (WL-REQ-1362)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newAPIClientWithConfig()
 			if err != nil {
@@ -386,8 +390,9 @@ func newGraphDriftCmd() *cobra.Command {
 // newGraphGapsCmd wires `lode graph gaps` (WL-SPEC-82).
 func newGraphGapsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "gaps",
-		Short: "Doc gaps and unmatched-path coverage gaps",
+		Annotations: runRemote,
+		Use:         "gaps",
+		Short:       "Doc gaps and unmatched-path coverage gaps",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newAPIClientWithConfig()
 			if err != nil {
