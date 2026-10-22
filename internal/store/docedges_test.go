@@ -415,8 +415,8 @@ defers:
 }
 
 // TestDocDefersOwnerWithFragmentRejected: the owner is a document, never a
-// section — a `to` carrying a #sec-N fragment is refused, matching
-// secmeta.py's check rather than silently stripping the fragment (WL-RULE-202).
+// section — a `to` carrying a `#sec-N` fragment is refused rather than
+// silently stripping the fragment (WL-RULE-202).
 func TestDocDefersOwnerWithFragmentRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)

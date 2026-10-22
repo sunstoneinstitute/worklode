@@ -255,8 +255,8 @@ func TestFrontmatterCoverageRerendersEditedMappings(t *testing.T) {
 }
 
 // TestFrontmatterNoSpecRemainsBareWhenOtherFieldChanges catches the renderer
-// turning the reserved scalar sentinel into a qualified mapping, which
-// secmeta rejects because NO-SPEC has no section or coverage level to qualify.
+// turning the reserved scalar sentinel into a qualified mapping, which is
+// invalid because NO-SPEC has no section or coverage level to qualify.
 func TestFrontmatterNoSpecRemainsBareWhenOtherFieldChanges(t *testing.T) {
 	src := "---\nstatus: draft\ncovers: NO-SPEC\n---\n\n# Plan\n"
 	doc, err := Parse([]byte(src))
