@@ -32,7 +32,7 @@ func newDocReviewersCmd() *cobra.Command {
 			"current version. The paired write is `lode doc set reviewers`.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -107,7 +107,7 @@ argument; everything between the field and the ref is the value.
 			default:
 				return fmt.Errorf("unknown field %q: settable fields are %s", field, strings.Join(docSetFields, ", "))
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

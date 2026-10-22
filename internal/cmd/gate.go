@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -45,7 +44,7 @@ trailer is missing or malformed or a section citation is found. Without a
 trailer names.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			dir, err := os.Getwd()
+			dir, err := workingDir(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -79,7 +78,7 @@ func verdictDeclaration(d gate.Declaration) string {
 	if d.Rule == nil {
 		return d.String()
 	}
-	c, err := newAPIClient()
+	c, err := newAPIClient(nil)
 	if err != nil {
 		return d.Spelled()
 	}
@@ -101,7 +100,7 @@ func verdictDeclaration(d gate.Declaration) string {
 // which makes no Worklode API call per WL-REQ-8), the call fails within the
 // hook timeout of WL-REQ-1722, or the anchor arranges no single rule.
 func resolveSectionRule(sec designdoc.SectionRef) string {
-	c, err := newAPIClient()
+	c, err := newAPIClient(nil)
 	if err != nil {
 		return ""
 	}

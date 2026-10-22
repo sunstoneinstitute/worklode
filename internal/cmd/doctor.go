@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -383,7 +382,7 @@ func newDoctorCmd() *cobra.Command {
 		Short:       "Diagnose this machine's lode setup",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir, err := os.Getwd()
+			dir, err := workingDir(cmd.Context())
 			if err != nil {
 				return err
 			}

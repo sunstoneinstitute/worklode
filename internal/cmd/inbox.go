@@ -31,7 +31,7 @@ func newInboxListCmd() *cobra.Command {
 		Use:         "list",
 		Short:       "List inbox issues",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -83,7 +83,7 @@ func newInboxPromoteCmd() *cobra.Command {
 			if appliesTo != "" {
 				versions = strings.Split(appliesTo, ",")
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -133,7 +133,7 @@ func newInboxDismissCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -164,7 +164,7 @@ func newInboxLinkCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -208,7 +208,7 @@ func newInboxImportCmd() *cobra.Command {
 				}
 				in.Since = &t
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

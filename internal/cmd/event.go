@@ -36,7 +36,7 @@ func newEventTailCmd() *cobra.Command {
 		Short:       "List recent events, newest last (--follow to keep watching)",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -122,7 +122,7 @@ func newEventSubscribersCmd() *cobra.Command {
 		Short:       "Show subscriber offsets, lag, and lock holder",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -148,7 +148,7 @@ func newEventSeekCmd() *cobra.Command {
 		Short:       "Move a subscriber's offsets (admin; a replay relies on handler idempotency)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

@@ -428,7 +428,7 @@ func TestResolveDocRefTiersFallsBackToBackbone(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("LODE_SERVER", ts.URL)
 	t.Setenv("LODE_TOKEN", "test-token")
-	c, _, err := newAPIClientWithConfig()
+	c, _, err := newAPIClientWithConfig(nil)
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}

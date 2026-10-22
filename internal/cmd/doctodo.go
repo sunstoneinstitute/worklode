@@ -86,7 +86,7 @@ type docTodoResult struct {
 }
 
 func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}

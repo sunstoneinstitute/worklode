@@ -40,14 +40,24 @@ func resolveScope(ctx context.Context, cmd *cobra.Command, c *cli.Client, cfg cl
 	if projectSet && repoSet {
 		return cli.Scope{}, errors.New("--project and --repo name the same thing; pass only one")
 	}
+	env := injectedFromContext(ctx)
 	if repoSet {
 		p, err := c.ResolveRemote(ctx, f.repo)
 		if err != nil {
 			return cli.Scope{}, fmt.Errorf("resolve --repo %s: %w", f.repo, err)
 		}
+		if env != nil {
+			return env.checkFlag(ctx, f.repo, &p)
+		}
 		return cli.Scope{Project: p.ID, Key: p.Key, Source: cli.ScopeFlag}, nil
 	}
 	if projectSet {
+		if env != nil {
+			// An in-process run's project is the caller's handle; a flag may
+			// repeat it but never move the run to another project, nor widen
+			// it to every project with --project= (WL-REQ-1862).
+			return env.checkFlag(ctx, f.project, nil)
+		}
 		return cli.Scope{Project: f.project, Source: cli.ScopeFlag}, nil
 	}
 
@@ -55,8 +65,8 @@ func resolveScope(ctx context.Context, cmd *cobra.Command, c *cli.Client, cfg cl
 }
 
 // errNoProject is what every project-scoped create command returns when the
-// resolution chain came up empty.
-var errNoProject = errors.New(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project repo add"`)
+// resolution chain came up empty. It matches ErrProjectRequired.
+var errNoProject error = projectRequiredError{`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project repo add"`}
 
 // bareTaskNumber matches a task number without its project key, as accepted
 // by every id-taking command.
@@ -91,8 +101,16 @@ func resolveTaskIDPair(ctx context.Context, a, b string, c *cli.Client, cfg cli.
 	return ra, rb, nil
 }
 
-// workingDir is os.Getwd with one error wording for the whole package.
-func workingDir() (string, error) {
+// errNoWorkingDir is workingDir's answer in an in-process run: the server's
+// working directory is no caller's checkout (WL-REQ-1862).
+var errNoWorkingDir = errors.New("this command reads the working directory, which an in-process run does not have")
+
+// workingDir is os.Getwd with one error wording for the whole package. An
+// in-process run (ctx from Run) has no working directory.
+func workingDir(ctx context.Context) (string, error) {
+	if injectedFromContext(ctx) != nil {
+		return "", errNoWorkingDir
+	}
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("determine working directory: %w", err)
@@ -102,8 +120,12 @@ func workingDir() (string, error) {
 
 // currentScope resolves the project the working directory belongs to. An
 // unreadable working directory is not fatal — the config/git-remote chain
-// simply has one fewer input.
+// simply has one fewer input. An in-process run's scope is its injected
+// project and nothing else.
 func currentScope(ctx context.Context, c *cli.Client, cfg cli.Config) cli.Scope {
+	if env := injectedFromContext(ctx); env != nil {
+		return env.scope(ctx)
+	}
 	wd, err := os.Getwd()
 	if err != nil {
 		wd = ""
@@ -124,7 +146,7 @@ func resolveTaskIDInScope(ctx context.Context, arg string, c *cli.Client, scope 
 	}
 	if key == "" {
 		if scope.Project == "" {
-			return "", fmt.Errorf("%s is a task number, not a task id, and no current project is set:\npass a full id like WL-%s, or set current_project", arg, arg)
+			return "", projectRequiredError{fmt.Sprintf("%s is a task number, not a task id, and no current project is set:\npass a full id like WL-%s, or set current_project", arg, arg)}
 		}
 		return "", fmt.Errorf("%s is a task number, and no task-id key could be looked up for project %s:\ncheck that the project exists and that the server is reachable", arg, scope.Project)
 	}

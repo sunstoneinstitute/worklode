@@ -144,7 +144,7 @@ func newDocAddCmd() *cobra.Command {
 					return err
 				}
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -161,7 +161,7 @@ func newDocAddCmd() *cobra.Command {
 			// agent working ad hoc both author documents legitimately.
 			d, raw, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
 				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: body, Owner: owner,
-				GeneratedByTask: currentTaskID(),
+				GeneratedByTask: currentTaskID(cmd.Context()),
 			})
 			if err != nil {
 				return err
@@ -215,7 +215,7 @@ func newDocListCmd() *cobra.Command {
 			if olderThanDays > 0 && !unresolved {
 				return errors.New("--older-than applies to --unresolved only (WL-REQ-1663)")
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -402,7 +402,7 @@ func newDocLintCmd() *cobra.Command {
 			if len(args) == 1 {
 				return runDocLintFile(cmd, args[0])
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -445,7 +445,7 @@ for entries naming that document, so this is for rows stranded before that.
 Admin only.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -524,7 +524,7 @@ func newDocShowCmd() *cobra.Command {
 		Short:             "Show a document: its body, sections, and edges",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -580,7 +580,7 @@ func newDocVersionsCmd() *cobra.Command {
 		Short:             "List a document's version history",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -624,7 +624,7 @@ func newDocReferrersCmd() *cobra.Command {
 			if anchor == "" {
 				return fmt.Errorf("%q names no section: a referrer is a fact about one section, so name it (<ref>#sec-N)", args[0])
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -673,7 +673,7 @@ func newDocSectionsCmd() *cobra.Command {
 			if len(args) == 1 {
 				number = args[0]
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -734,7 +734,7 @@ func newDocEditCmd() *cobra.Command {
 						"set the title and issued date with --title and --issued, and edges with lode doc link")
 				}
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -790,7 +790,7 @@ func newDocEditCmd() *cobra.Command {
 			}
 			res, raw, err := c.PatchDoc(cmd.Context(), id, model.PatchDocInput{
 				Body: body, Substantive: substantive, Note: note,
-				Task: currentTaskID(), Session: currentSessionID(),
+				Task: currentTaskID(cmd.Context()), Session: currentSessionID(cmd.Context()),
 				IfVersion: ifVersion,
 			})
 			if err != nil {
@@ -892,7 +892,7 @@ func newDocEdgeCmd(use, short string,
 			if in.Owner != "" && in.Type != "defers" {
 				return errors.New("--owner goes with --defers")
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -957,7 +957,7 @@ func newDocNoteCmd() *cobra.Command {
 			if strings.TrimSpace(text) == "" {
 				return errors.New("a note needs something said: pass --body or --body-file")
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -967,7 +967,7 @@ func newDocNoteCmd() *cobra.Command {
 			}
 			n, raw, err := c.AddDocNote(cmd.Context(), id, model.AddDocNoteInput{
 				Anchor: cli.NormalizeSection(anchor), Body: text,
-				Task: currentTaskID(), Session: currentSessionID(),
+				Task: currentTaskID(cmd.Context()), Session: currentSessionID(cmd.Context()),
 			})
 			if err != nil {
 				return err
@@ -999,7 +999,7 @@ func newDocAcceptCmd() *cobra.Command {
 		Short:             "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1040,7 +1040,7 @@ func newDocSubmitCmd() *cobra.Command {
 		Short:             "Submit a document for review (records a review event; the document's status does not change)",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1085,7 +1085,7 @@ func newDocWithdrawCmd() *cobra.Command {
 			"resolved.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1129,7 +1129,7 @@ func newDocDeleteCmd() *cobra.Command {
 			"--justification.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1171,7 +1171,7 @@ func newDocUndeleteCmd() *cobra.Command {
 			"the tombstoned ones; `lode doc list --deleted` shows what is there.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1210,7 +1210,7 @@ func newDocReviseCmd() *cobra.Command {
 		Short:             "Open, update, land, or discard a document's candidate revision",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

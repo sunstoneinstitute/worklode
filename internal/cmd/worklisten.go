@@ -59,7 +59,7 @@ func newListenCmd() *cobra.Command {
 				return fmt.Errorf("--interval must be positive, got %s", interval)
 			}
 			warnDeprecatedTaskKind(cmd, kind)
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

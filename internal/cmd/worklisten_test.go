@@ -164,7 +164,7 @@ func TestWorkListenRejectsNonPositiveInterval(t *testing.T) {
 func TestWorkListenPrintsOnlyPickChanges(t *testing.T) {
 	fakeClaimNext(t, dryRunPick, dryRunPick, noReadyTask, dryRunPick)
 
-	c, _, err := newAPIClientWithConfig()
+	c, _, err := newAPIClientWithConfig(nil)
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}

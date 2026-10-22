@@ -42,7 +42,7 @@ func newSearchCmd() *cobra.Command {
 			"and says so on stderr; the results are real, just narrower.",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

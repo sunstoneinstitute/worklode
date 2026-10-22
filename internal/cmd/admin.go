@@ -28,7 +28,7 @@ func newActorAddCmd() *cobra.Command {
 		Short:       "Create an actor",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -95,7 +95,7 @@ func newTokenAddCmd() *cobra.Command {
 				}
 				exp = &t
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -122,7 +122,7 @@ func newTokenAddCmd() *cobra.Command {
 // runTaskTokenAdd is `lode token add --task`'s body: mint a task-scoped
 // token (WL-REQ-48), the same request `lode task token` used to make.
 func runTaskTokenAdd(cmd *cobra.Command, task, actor string, ttl time.Duration) error {
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func newTokenRevokeCmd() *cobra.Command {
 		Short:       "Revoke a bearer token",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -193,7 +193,7 @@ func newBlobGCCmd() *cobra.Command {
 		Long: "Reports by default. Pass --apply to delete. Grace period keeps both\n" +
 			"sweeps clear of uploads in flight.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

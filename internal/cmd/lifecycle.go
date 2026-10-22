@@ -83,8 +83,8 @@ func resolveWorktreeTask(l worktree.Layout, dir, byName string) (taskID, root st
 // precondition it enforces: `lode doc add` run from a plain checkout still
 // creates the document (WL-REQ-177, migration 0044). Commands that genuinely
 // need the binding use resolveWorktreeTask and get its diagnosis.
-func currentTaskID() string {
-	dir, err := workingDir()
+func currentTaskID(ctx context.Context) string {
+	dir, err := workingDir(ctx)
 	if err != nil {
 		return ""
 	}
@@ -107,8 +107,8 @@ func currentTaskID() string {
 //
 // Like currentTaskID, every failure is the same answer: a session id is
 // provenance a command records when it has it, never a precondition.
-func currentSessionID() string {
-	dir, err := workingDir()
+func currentSessionID(ctx context.Context) string {
+	dir, err := workingDir(ctx)
 	if err != nil {
 		return ""
 	}
@@ -128,7 +128,7 @@ func currentSessionID() string {
 // SessionStart or EnterWorktree hook fires in the worktree (WL-942). Outside
 // Claude Code it does nothing. Failures warn and never fail the claim.
 func linkClaudeSession(cmd *cobra.Command, c *cli.Client, taskID, root string) {
-	sessionID := os.Getenv("CLAUDE_CODE_SESSION_ID")
+	sessionID := processEnv(cmd, "CLAUDE_CODE_SESSION_ID")
 	if sessionID == "" {
 		return
 	}
@@ -327,7 +327,7 @@ func newNextCmd() *cobra.Command {
 func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kinds []string, strictFocus, replan bool) error {
 	warnDeprecatedTaskKinds(cmd, kinds)
 	kind := strings.Join(kinds, ",")
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}
@@ -517,7 +517,7 @@ func newResumeCmd() *cobra.Command {
 }
 
 func runResume(cmd *cobra.Command, dir string) error {
-	c, err := newAPIClient()
+	c, err := newAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -586,7 +586,7 @@ func newSubmitCmd() *cobra.Command {
 			"`lode task set state merged <id>` once it has actually landed.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -652,7 +652,7 @@ func newBlockCmd() *cobra.Command {
 		Short:       "Record that another task blocks the current worktree's task, and release its lease",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -754,7 +754,7 @@ func newStatusCmd() *cobra.Command {
 // runStatus is `lode work status`'s body: read the worktree's task, classify its
 // lease, and report both with the project the directory scopes to.
 func runStatus(cmd *cobra.Command) error {
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}

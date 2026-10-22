@@ -64,7 +64,7 @@ func newDocTransferCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -150,7 +150,7 @@ func confirmDocTransfer(cmd *cobra.Command, docs []model.Doc, from, to string) b
 		fmt.Fprintf(errw, "  %s  %s\n", cli.DocRef(d), d.Title)
 	}
 	f, isFile := cmd.InOrStdin().(*os.File)
-	if jsonOut(cmd) || (isFile && !term.IsTerminal(int(f.Fd()))) {
+	if jsonOut(cmd) || injected(cmd) != nil || (isFile && !term.IsTerminal(int(f.Fd()))) {
 		return true
 	}
 	fmt.Fprint(errw, "Proceed? [y/N] ")

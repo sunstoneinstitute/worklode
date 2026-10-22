@@ -45,7 +45,7 @@ func newGraphQuarantinesCmd() *cobra.Command {
 		Short:       "Show the projects the projector has quarantined, since when, and why",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -83,7 +83,7 @@ func newGraphTriplesCmd() *cobra.Command {
 		Short:       "Write a project's tasks, the documents they reach, and the edges between them as N-Triples",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -270,7 +270,7 @@ not apply to them.`,
 			if server {
 				return runDeriveServer(cmd)
 			}
-			cwd, err := os.Getwd()
+			cwd, err := workingDir(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -304,7 +304,7 @@ not apply to them.`,
 				switch {
 				case graphURL != "":
 					c = graphserver.New(graphURL, nil)
-				case os.Getenv("LODE_GRAPHSERVER_URL") != "":
+				case processEnv(cmd, "LODE_GRAPHSERVER_URL") != "":
 					if c, err = graphserver.FromEnv(); err != nil {
 						return err
 					}
@@ -335,7 +335,7 @@ not apply to them.`,
 // runDeriveServer is `lode graph derive --server`: ask the backbone to run
 // its own derivers and report what each one wrote.
 func runDeriveServer(cmd *cobra.Command) error {
-	c, err := newAPIClient()
+	c, err := newAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -363,7 +363,7 @@ func newGraphDriftCmd() *cobra.Command {
 		Use:         "drift",
 		Short:       "Architectural drift: violations and stale intent (WL-REQ-1362)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, _, err := newAPIClientWithConfig()
+			c, _, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -394,7 +394,7 @@ func newGraphGapsCmd() *cobra.Command {
 		Use:         "gaps",
 		Short:       "Doc gaps and unmatched-path coverage gaps",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, _, err := newAPIClientWithConfig()
+			c, _, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

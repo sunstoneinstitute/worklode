@@ -551,6 +551,10 @@ type Client struct {
 	baseURL string
 	token   string
 	http    *http.Client
+
+	// noLocalCache keeps the client off this machine's remote cache and git
+	// remote discovery; see WithoutLocalCache.
+	noLocalCache bool
 }
 
 // NewClient builds a Client from cfg. It does not validate cfg.ServerURL —
@@ -570,6 +574,16 @@ func NewClientWithTransport(cfg Config, rt http.RoundTripper) *Client {
 	c := NewClient(cfg)
 	c.http.Transport = rt
 	return c
+}
+
+// WithoutLocalCache returns a copy of c that never reads or writes this
+// machine's remote cache and never resolves a project from a git remote. An
+// in-process run on the server uses it: the server's home directory belongs
+// to no caller (WL-REQ-1862).
+func (c *Client) WithoutLocalCache() *Client {
+	cp := *c
+	cp.noLocalCache = true
+	return &cp
 }
 
 // ServerURL returns the base URL this client talks to. Callers key

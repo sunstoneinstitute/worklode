@@ -26,7 +26,7 @@ import (
 
 // lifecycleTestServer opens a fresh store, creates admin actor "alice" with a
 // token, starts a real HTTP server, and points LODE_SERVER/LODE_TOKEN at it
-// (the lifecycle commands build their own client via newAPIClient(), reading
+// (the lifecycle commands build their own client via newAPIClient, reading
 // those env vars). Returns the store, for out-of-band setup, and a Client
 // authenticated as alice for direct API calls the test needs outside the CLI.
 func lifecycleTestServer(t *testing.T) (*store.Store, *cli.Client) {

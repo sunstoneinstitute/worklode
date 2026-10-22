@@ -138,7 +138,7 @@ Stating a status needs the admin-only doc.import permission.`,
 				return nil
 			}
 
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

@@ -29,7 +29,7 @@ var completionTimeout = 250 * time.Millisecond
 // project before completing a project argument would offer nothing in exactly
 // the case that needs it most: a checkout with no project scoped.
 func completionClient(cmd *cobra.Command) (context.Context, context.CancelFunc, *cli.Client, cli.Config, bool) {
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return nil, nil, nil, cli.Config{}, false
 	}

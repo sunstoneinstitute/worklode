@@ -42,7 +42,7 @@ func newRuleAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -87,7 +87,7 @@ func newRuleAcceptCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: ruleRefAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -119,7 +119,7 @@ func newRuleArrangeCmd() *cobra.Command {
 		Short:       "Place an existing rule in a spec; an accepted spec gets it in its candidate revision",
 		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -155,7 +155,7 @@ func newRuleUnarrangeCmd() *cobra.Command {
 		Short:       "Remove a rule from a spec without withdrawing it; an accepted spec loses it in its candidate revision",
 		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -213,7 +213,7 @@ func newRuleLintCmd() *cobra.Command {
 		Short:       "Report rules per spec, closure sizes, undefined terms, conflicts, positional and unresolved references, and converted headings",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -254,7 +254,7 @@ func newRuleListCmd() *cobra.Command {
 		Use:         "list",
 		Short:       "List rules, or one document's rules in arrangement order",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -302,7 +302,7 @@ func newRuleEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -400,7 +400,7 @@ func newRuleLinkCmd() *cobra.Command {
 	}
 	typ := edgeTypeFlags(cmd)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		c, err := newAPIClient()
+		c, err := newAPIClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -428,7 +428,7 @@ func newRuleUnlinkCmd() *cobra.Command {
 	}
 	typ := edgeTypeFlags(cmd)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		c, err := newAPIClient()
+		c, err := newAPIClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -471,7 +471,7 @@ func newRuleSetCmd() *cobra.Command {
 			if in.Kind == nil && in.Concept == nil {
 				return errors.New("name a field: --kind <kind>, --concept <iri>, or the owner or tags subcommand")
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -506,7 +506,7 @@ func newRuleSetOwnerCmd() *cobra.Command {
 		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			owner := args[1]
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -536,7 +536,7 @@ func newRuleSetTagsCmd() *cobra.Command {
 		Args:        cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tags := append([]string{}, args[1:]...)
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -561,7 +561,7 @@ func newRuleVersionsCmd() *cobra.Command {
 		Short:       "List a rule's versions, newest first",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -605,7 +605,7 @@ func newRuleSupersedeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -674,7 +674,7 @@ func newRuleTermsCmd() *cobra.Command {
 		Short:       "List a project's definition rules with their term slugs",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

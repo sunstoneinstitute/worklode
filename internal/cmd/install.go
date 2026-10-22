@@ -548,7 +548,7 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 			scope, _ := cmd.Flags().GetString("scope")
-			cwd, err := workingDir()
+			cwd, err := workingDir(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -597,7 +597,7 @@ func newUninstallCmd() *cobra.Command {
 				return err
 			}
 			scope, _ := cmd.Flags().GetString("scope")
-			cwd, err := workingDir()
+			cwd, err := workingDir(cmd.Context())
 			if err != nil {
 				return err
 			}

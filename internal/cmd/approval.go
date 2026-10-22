@@ -49,7 +49,7 @@ func newApprovalAddCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(2),
 		ValidArgsFunction: approvalTargetArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -120,7 +120,7 @@ func newApprovalRequestCmd() *cobra.Command {
 		// spelled and completed like every other one: `<ref>`, docRefAt.
 		ValidArgsFunction: docRefAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -152,7 +152,7 @@ func newApprovalListCmd() *cobra.Command {
 		Short:       "List every outstanding approval, oldest first",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -189,7 +189,7 @@ func newApprovalDecideCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("approval id %q is not a number", args[0])
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

@@ -19,7 +19,7 @@ func newBoardCmd() *cobra.Command {
 		// completes from the same live project listing the flag does.
 		ValidArgsFunction: projectKeyAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

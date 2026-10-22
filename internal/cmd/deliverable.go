@@ -33,7 +33,7 @@ func newDeliverableReportCmd() *cobra.Command {
 		Short:       "Report a deliverable's state as a person (published, updated, deprecated, removed, failed)",
 		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -62,7 +62,7 @@ func newDeliverableListCmd() *cobra.Command {
 		Short:             "List a project's deliverables",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -90,7 +90,7 @@ func newDeliverableAddCmd() *cobra.Command {
 		Short:             "Declare a deliverable on a project",
 		Args:              cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

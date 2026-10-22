@@ -94,7 +94,7 @@ func newDecisionResolveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -129,7 +129,7 @@ func newDecisionListCmd() *cobra.Command {
 		Short:       "List the questions a task poses",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -158,7 +158,7 @@ func newDecisionShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -193,7 +193,7 @@ func newDecisionAddCmd() *cobra.Command {
 			if in.ResponseType == "" {
 				in.ResponseType = "freetext"
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -234,7 +234,7 @@ func newDecisionEditCmd() *cobra.Command {
 				return err
 			}
 			in.Task = task
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

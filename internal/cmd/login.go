@@ -28,6 +28,9 @@ func newLoginCmd() *cobra.Command {
 			"directly.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := refuseInProcess(cmd); err != nil {
+				return err
+			}
 			cfg, err := cli.LoadConfig()
 			if err != nil {
 				return err

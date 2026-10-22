@@ -197,15 +197,24 @@ func jsonOut(cmd *cobra.Command) bool {
 // newAPIClient loads the client config (LODE_SERVER/LODE_TOKEN env vars override
 // a repo-local .worklode/config.toml, which overrides
 // ~/.config/worklode/config.toml) and returns a ready-to-use Client, or an error
-// telling the user how to configure the server URL.
-func newAPIClient() (*cli.Client, error) {
-	c, _, err := newAPIClientWithConfig()
+// telling the user how to configure the server URL. In an in-process run
+// (Run) it returns the injected client and reads none of that. cmd may be
+// nil, which is the binary.
+func newAPIClient(cmd *cobra.Command) (*cli.Client, error) {
+	c, _, err := newAPIClientWithConfig(cmd)
 	return c, err
 }
 
 // newAPIClientWithConfig is newAPIClient plus the config it was built from,
 // for commands that also read config values such as current_project.
-func newAPIClientWithConfig() (*cli.Client, cli.Config, error) {
+func newAPIClientWithConfig(cmd *cobra.Command) (*cli.Client, cli.Config, error) {
+	if env := injected(cmd); env != nil {
+		cfg, err := env.config(cmd.Context())
+		if err != nil {
+			return nil, cli.Config{}, err
+		}
+		return env.client, cfg, nil
+	}
 	cfg, err := cli.LoadConfig()
 	if err != nil {
 		return nil, cli.Config{}, err

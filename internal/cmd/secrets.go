@@ -37,7 +37,7 @@ func newSecretsCatalogCmd() *cobra.Command {
 		Short:       "List the org secrets catalog: names, baseline flag, descriptions",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -72,7 +72,7 @@ func newSecretsStatusCmd() *cobra.Command {
 		Short:       "Show declared vs materialized secret names for the bound task (names only)",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -187,7 +187,7 @@ func newSecretsPackCmd() *cobra.Command {
 			}
 			var missing []string
 			for _, n := range names {
-				if os.Getenv(n) == "" {
+				if processEnv(cmd, n) == "" {
 					missing = append(missing, n)
 				}
 			}
@@ -196,7 +196,7 @@ func newSecretsPackCmd() *cobra.Command {
 					strings.Join(missing, ", "))
 			}
 			for _, n := range names {
-				if err := secrets.Put(taskID, n, os.Getenv(n)); err != nil {
+				if err := secrets.Put(taskID, n, processEnv(cmd, n)); err != nil {
 					return err
 				}
 			}

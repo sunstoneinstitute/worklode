@@ -47,7 +47,7 @@ GitHub about because nothing was recorded for them.`,
 			if repo != "" && task != "" {
 				return fmt.Errorf("--repo and --task are mutually exclusive")
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

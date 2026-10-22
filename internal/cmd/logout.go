@@ -31,6 +31,9 @@ func newLogoutCmd() *cobra.Command {
 		Short:       "Remove the stored token for a server from the OS keychain or token file",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := refuseInProcess(cmd); err != nil {
+				return err
+			}
 			cfg, err := cli.LoadConfig()
 			if err != nil {
 				return err

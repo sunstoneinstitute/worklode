@@ -27,7 +27,7 @@ func newSkillsListCmd() *cobra.Command {
 		Short:       "List org skills known to the server",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -73,7 +73,7 @@ func newSkillsRecommendCmd() *cobra.Command {
 					return fmt.Errorf("%s is empty", file)
 				}
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -121,7 +121,7 @@ func newSkillsInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -227,7 +227,7 @@ func newSkillsSyncCmd() *cobra.Command {
 		Short:       "Trigger a full server-side skill sync (admin)",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

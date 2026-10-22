@@ -29,7 +29,7 @@ func newMilestoneListCmd() *cobra.Command {
 		Use:         "list",
 		Short:       "List a project's milestones, in position order",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -78,7 +78,7 @@ func newMilestoneAttachCmd() *cobra.Command {
 			if err := deliverableIDOrErr(deliverable); err != nil {
 				return err
 			}
-			c, _, err := newAPIClientWithConfig()
+			c, _, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -108,7 +108,7 @@ func newMilestoneDetachCmd() *cobra.Command {
 			if err := deliverableIDOrErr(deliverable); err != nil {
 				return err
 			}
-			c, _, err := newAPIClientWithConfig()
+			c, _, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -148,7 +148,7 @@ func newMilestoneDeleteCmd() *cobra.Command {
 			"only undo, and a deleted deliverable has none at all.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -178,7 +178,7 @@ func newMilestoneAddCmd() *cobra.Command {
 		Short:       "Create a milestone",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}

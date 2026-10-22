@@ -55,7 +55,7 @@ serve takes no task or worktree argument.`,
 			if interval <= 0 {
 				return fmt.Errorf("--interval must be positive, got %s", interval)
 			}
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}

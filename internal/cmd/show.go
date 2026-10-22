@@ -304,7 +304,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 // keyless --plan on a spec (or vice versa) still gets the KindMismatchError,
 // not a silent wrong-kind render.
 func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string, inline bool) error {
-	cfg, err := cli.LoadConfig()
+	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
@@ -321,7 +321,7 @@ func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string, inline
 // (dispatchShowPositional) and the ordinal-flag path
 // (runMilestoneShowByOrdinal).
 func runMilestoneShow(cmd *cobra.Command, id string) error {
-	c, err := newAPIClient()
+	c, err := newAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -345,12 +345,12 @@ func runMilestoneShow(cmd *cobra.Command, id string) error {
 // is either built here or not at all — so an unconfigured key is refused
 // outright rather than silently taken as a doc-ref tier.
 func runMilestoneShowByOrdinal(cmd *cobra.Command, value string) error {
-	cfg, err := cli.LoadConfig()
+	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
 	if cfg.ProjectKey == "" {
-		return errors.New("no project key configured; pass the full id (e.g. WL-MILE-2) positionally")
+		return projectRequiredError{"no project key configured; pass the full id (e.g. WL-MILE-2) positionally"}
 	}
 	return runMilestoneShow(cmd, fmt.Sprintf("%s-MILE-%s", cfg.ProjectKey, value))
 }
@@ -360,7 +360,7 @@ func runMilestoneShowByOrdinal(cmd *cobra.Command, value string) error {
 // (dispatchShowPositional) and the ordinal-flag path
 // (runDeliverableShowByOrdinal).
 func runDeliverableShow(cmd *cobra.Command, id string) error {
-	c, err := newAPIClient()
+	c, err := newAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -380,7 +380,7 @@ func runDeliverableShow(cmd *cobra.Command, id string) error {
 // versionSet, it renders that past version (GET .../versions/{n}) instead of
 // the rule's current one.
 func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline bool) error {
-	c, err := newAPIClient()
+	c, err := newAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -416,7 +416,7 @@ func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline
 
 // runRuleClosure renders a rule's context closure (WL-REQ-1367).
 func runRuleClosure(cmd *cobra.Command, ref string) error {
-	c, err := newAPIClient()
+	c, err := newAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -438,12 +438,12 @@ func runRuleClosure(cmd *cobra.Command, ref string) error {
 // the configured project key, and an unconfigured key is refused outright —
 // a deliverable id has no bare-number fallback form to fall back to.
 func runDeliverableShowByOrdinal(cmd *cobra.Command, value string) error {
-	cfg, err := cli.LoadConfig()
+	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
 	if cfg.ProjectKey == "" {
-		return errors.New("no project key configured; pass the full id (e.g. WL-DEL-3) positionally")
+		return projectRequiredError{"no project key configured; pass the full id (e.g. WL-DEL-3) positionally"}
 	}
 	return runDeliverableShow(cmd, fmt.Sprintf("%s-DEL-%s", cfg.ProjectKey, value))
 }

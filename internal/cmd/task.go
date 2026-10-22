@@ -96,7 +96,7 @@ func newTaskTransitionCmd(use, short string, clearBinding bool, call taskTransit
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -143,7 +143,7 @@ func newTaskEdgeCmd(use, short, flag, flagHelp, msg string, call taskEdge) *cobr
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -170,7 +170,7 @@ func newTaskUnEdgeCmd(use, short, msg string, find func(model.TaskDetail) (strin
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -232,6 +232,10 @@ func readFileOrStdin(path string, stdin io.Reader) ([]byte, error) {
 			return nil, fmt.Errorf("read stdin: %w", err)
 		}
 		return b, nil
+	}
+	if _, ok := stdin.(inProcessStdin); ok {
+		// An in-process run's disk is the server's (WL-REQ-1862).
+		return nil, fmt.Errorf("read file %s: an in-process run reads only stdin (-), not a path", path)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -330,7 +334,7 @@ func newTaskAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -402,7 +406,7 @@ func newTaskListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			warnDeprecatedTaskKind(cmd, kind)
 			states := resolveDeletedStatusFilter(statuses, deleted, cmd.Flags().Changed("status"))
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -518,7 +522,7 @@ func newTaskShowCmd() *cobra.Command {
 
 // runTaskStatus is `task show --status`'s body, and `lode status <id>`'s.
 func runTaskStatus(cmd *cobra.Command, arg string) error {
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}
@@ -544,7 +548,7 @@ func runTaskStatus(cmd *cobra.Command, arg string) error {
 // reports by default (no --days/--children window here; use `task cost` for
 // that).
 func runTaskShow(cmd *cobra.Command, arg string, usage bool) error {
-	c, cfg, err := newAPIClientWithConfig()
+	c, cfg, err := newAPIClientWithConfig(cmd)
 	if err != nil {
 		return err
 	}
@@ -599,7 +603,7 @@ func newTaskSkillsCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -684,7 +688,7 @@ func newTaskEditCmd() *cobra.Command {
 				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --kind, --needs-decomposition, --human-only, --secrets, --artifact, --milestone, or --plan")
 			}
 
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -776,8 +780,8 @@ func newTaskReworkCmd() *cobra.Command {
 // (can't tell) is treated as permission, not refusal: this check is a new
 // guard against a real trap, not a reason to break claims in a repo layout
 // it cannot read.
-func currentWorktreeIdentity() (string, error) {
-	cwd, err := workingDir()
+func currentWorktreeIdentity(ctx context.Context) (string, error) {
+	cwd, err := workingDir(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -798,11 +802,11 @@ func currentWorktreeIdentity() (string, error) {
 // cwdRoot is the git worktree root of the working directory when the claim
 // leased it (fromCwd: no --worktree given), else "": an explicit --worktree
 // may name a checkout on another host, so no marker is written for it.
-func cwdRoot(fromCwd bool) string {
+func cwdRoot(ctx context.Context, fromCwd bool) string {
 	if !fromCwd {
 		return ""
 	}
-	dir, err := workingDir()
+	dir, err := workingDir(ctx)
 	if err != nil {
 		return ""
 	}
@@ -823,7 +827,7 @@ func newTaskClaimCmd() *cobra.Command {
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -842,7 +846,7 @@ func newTaskClaimCmd() *cobra.Command {
 					return err
 				}
 				if worktree == "" {
-					worktree, err = currentWorktreeIdentity()
+					worktree, err = currentWorktreeIdentity(cmd.Context())
 					if err != nil {
 						return err
 					}
@@ -851,7 +855,7 @@ func newTaskClaimCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				linkClaudeSession(cmd, c, id, cwdRoot(fromCwd))
+				linkClaudeSession(cmd, c, id, cwdRoot(cmd.Context(), fromCwd))
 				if jsonOut(cmd) {
 					printRaw(cmd, raw)
 					return nil
@@ -870,7 +874,7 @@ func newTaskClaimCmd() *cobra.Command {
 			}
 			warnDeprecatedTaskKinds(cmd, kinds)
 			if worktree == "" && !dryRun {
-				worktree, err = currentWorktreeIdentity()
+				worktree, err = currentWorktreeIdentity(cmd.Context())
 				if err != nil {
 					return err
 				}
@@ -892,7 +896,7 @@ func newTaskClaimCmd() *cobra.Command {
 				return err
 			}
 			if resp.Claimed && resp.Task != nil && !resp.DryRun {
-				linkClaudeSession(cmd, c, resp.Task.ID, cwdRoot(fromCwd))
+				linkClaudeSession(cmd, c, resp.Task.ID, cwdRoot(cmd.Context(), fromCwd))
 			}
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
@@ -939,7 +943,7 @@ func newTaskRenewCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -971,7 +975,7 @@ func newTaskReleaseCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1004,7 +1008,7 @@ func newTaskAssignCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1103,7 +1107,7 @@ everything between the field and the id is the value.
 			default:
 				return fmt.Errorf("unknown field %q: settable fields are %s", field, strings.Join(taskSetFields, ", "))
 			}
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1184,7 +1188,7 @@ func newTaskDeleteCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1246,7 +1250,7 @@ func newTaskBlockersCmd() *cobra.Command {
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1295,7 +1299,7 @@ func newTaskFrontierCmd() *cobra.Command {
 		Use:         "frontier",
 		Short:       "Ready, unblocked tasks in pickup order",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1327,7 +1331,7 @@ func newTaskBriefCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1368,7 +1372,7 @@ func newTaskCostCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1413,7 +1417,7 @@ func newTaskRuleCmd(use, short, msg string, call taskEdge) *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1442,7 +1446,7 @@ func newTaskGovernCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1557,7 +1561,7 @@ func newTaskTreeCmd() *cobra.Command {
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1599,7 +1603,7 @@ func newTaskDecomposeCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1649,7 +1653,7 @@ func newTaskAttachCmd() *cobra.Command {
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1766,7 +1770,7 @@ func newTaskDetachCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(2),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
+			c, cfg, err := newAPIClientWithConfig(cmd)
 			if err != nil {
 				return err
 			}
@@ -1810,7 +1814,7 @@ func newTaskEscalateCmd() *cobra.Command {
 			"spec that plan covers for --to spec.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1860,7 +1864,7 @@ func newTaskGapCmd() *cobra.Command {
 		Short:       "Log that the plan or spec does not cover this case, without escalating it",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
@@ -1902,7 +1906,7 @@ func newTaskFixCmd() *cobra.Command {
 		Short:       "Log the start or finish of a design fix",
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, err := newAPIClient(cmd)
 			if err != nil {
 				return err
 			}
