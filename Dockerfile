@@ -6,7 +6,7 @@
 # into internal/webapp/dist/.
 FROM node:26-bookworm-slim AS web
 WORKDIR /src/web/app
-RUN corepack enable pnpm
+RUN npm install -g corepack && corepack enable pnpm
 # pnpm-workspace.yaml must come along with the lockfile: it carries the
 # allowBuilds approvals pnpm needs before it will run the postinstall
 # scripts for es5-ext, msw and ttf2woff2 (WL-PLAN-147 gap).
