@@ -33,25 +33,6 @@ func setupRepoConfig(t *testing.T, currentProject string) string {
 	return repo
 }
 
-// resetProjectFlag clears the --project flag of a subcommand. rootCmd is a
-// process-wide singleton, so a --project passed by one runLode call would
-// otherwise stay "changed" (and keep its value) for every later call.
-func resetProjectFlag(t *testing.T, path ...string) {
-	t.Helper()
-	c, _, err := rootCmd.Find(path)
-	if err != nil {
-		t.Fatalf("find %v: %v", path, err)
-	}
-	f := c.Flags().Lookup("project")
-	if f == nil {
-		t.Fatalf("%v has no --project flag", path)
-	}
-	if err := f.Value.Set(""); err != nil {
-		t.Fatalf("reset --project: %v", err)
-	}
-	f.Changed = false
-}
-
 // addTask runs `lode task add` and returns the created task.
 func addTask(t *testing.T, args ...string) model.Task {
 	t.Helper()
@@ -70,7 +51,6 @@ func TestTaskAddUsesCurrentProject(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	setupRepoConfig(t, "proj")
-	resetProjectFlag(t, "task", "add")
 
 	task := addTask(t, "--title", "From the repo config")
 	if task.Project != "proj" {
@@ -85,8 +65,6 @@ func TestTaskAddProjectFlagBeatsCurrentProject(t *testing.T) {
 		t.Fatalf("create other project: %v", err)
 	}
 	setupRepoConfig(t, "proj")
-	t.Cleanup(func() { resetProjectFlag(t, "task", "add") })
-	resetProjectFlag(t, "task", "add")
 
 	task := addTask(t, "--project", "other", "--title", "Explicit flag")
 	if task.Project != "other" {
@@ -107,8 +85,6 @@ func TestTaskListDefaultsToCurrentProject(t *testing.T) {
 		t.Fatalf("create task in other project: %v", err)
 	}
 	setupRepoConfig(t, "proj")
-	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
-	resetProjectFlag(t, "task", "list")
 
 	if got := taskListIDs(t); len(got) != 1 || got[0] != mine.ID {
 		t.Fatalf("task ids = %v; want only %s (current_project)", got, mine.ID)

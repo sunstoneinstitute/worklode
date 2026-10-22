@@ -100,8 +100,6 @@ func approvalTargetArgs(cmd *cobra.Command, args []string, toComplete string) ([
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
-func init() { rootCmd.AddCommand(newApprovalCmd()) }
-
 // newApprovalRequestCmd opens one awaiting lane per reviewer in the
 // document's durable reviewer set (WL-REQ-170) on its current version. The set
 // itself is assigned separately, with `lode doc set reviewers` (WL-359,

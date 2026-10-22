@@ -108,7 +108,3 @@ func resolveSectionRule(sec designdoc.SectionRef) string {
 	defer cancel()
 	return c.SectionRule(ctx, sec)
 }
-
-func init() {
-	rootCmd.AddCommand(newGateCmd())
-}

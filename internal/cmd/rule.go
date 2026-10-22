@@ -23,10 +23,6 @@ func newRuleCmd() *cobra.Command {
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newRuleCmd())
-}
-
 // newRuleAddCmd is `lode rule add`: a rule in the current project, arranged
 // in no document, at draft version 1 and owned by the caller (WL-REQ-1296).
 func newRuleAddCmd() *cobra.Command {

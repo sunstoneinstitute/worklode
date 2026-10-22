@@ -43,8 +43,6 @@ func TestProjectRepoDoneState(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 
-	// runLode reuses rootCmd, so a flag value set by one call leaks into a
-	// later call that omits it: exercise the omitted-flag case first.
 	if out, err := runLode(t, "project", "repo", "add", "proj", "acme/widgets"); err != nil {
 		t.Fatalf("repo add: %v\noutput: %s", err, out)
 	}
@@ -473,8 +471,6 @@ func TestProjectCrewAdd(t *testing.T) {
 		}
 	}
 
-	// runLode reuses rootCmd, so a flag set by one call leaks into a later
-	// call that omits it: exercise the omitted-flag case first.
 	out, err := runLode(t, "project", "crew", "add", "proj", "bob")
 	if err != nil {
 		t.Fatalf("crew add: %v\noutput: %s", err, out)

@@ -177,9 +177,7 @@ func TestDocTransferFromPromptsOnTTYAndRespectsDecline(t *testing.T) {
 		t.Fatalf("doc add: %v", err)
 	}
 
-	rootCmd.SetIn(strings.NewReader("n\n"))
-	t.Cleanup(func() { rootCmd.SetIn(nil) })
-	out, err := runLode(t, "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
+	out, err := runLodeIn(t, strings.NewReader("n\n"), "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
 	if err != nil {
 		t.Fatalf("decline: %v\noutput: %s", err, out)
 	}
@@ -194,8 +192,7 @@ func TestDocTransferFromPromptsOnTTYAndRespectsDecline(t *testing.T) {
 		t.Errorf("owner after a declined transfer = %q, want still bob", got)
 	}
 
-	rootCmd.SetIn(strings.NewReader("y\n"))
-	out, err = runLode(t, "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
+	out, err = runLodeIn(t, strings.NewReader("y\n"), "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
 	if err != nil {
 		t.Fatalf("accept: %v\noutput: %s", err, out)
 	}

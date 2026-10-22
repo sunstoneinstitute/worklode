@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,9 +15,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
@@ -69,57 +67,27 @@ func testServer(t *testing.T, cfg api.Config, wrap func(http.Handler) http.Handl
 	return st, cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token})
 }
 
-// runLode executes rootCmd with args and returns its captured stdout. rootCmd
-// is a package-level singleton built once in init(), so every flag it owns
-// keeps its value and Changed state between calls; resetFlags scrubs both so a
-// prior test's `--json` or `--body` does not leak into a later Execute().
+// runLode executes a fresh command tree with args and returns its captured
+// stdout. Each call builds its own tree, so no flag value or Changed state from
+// an earlier call can leak into this one.
 func runLode(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	resetFlags(t, rootCmd)
-	buf := &bytes.Buffer{}
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs(args)
-	err := rootCmd.Execute()
-	return buf.String(), err
+	return runLodeIn(t, nil, args...)
 }
 
-// resetFlags restores every flag in cmd's tree to its declared default and
-// clears Changed, so commands that branch on Flags().Changed(...) see only the
-// flags of the current invocation.
-func resetFlags(t *testing.T, cmd *cobra.Command) {
+// runLodeIn is runLode with stdin read from in (nil means the process's own).
+func runLodeIn(t *testing.T, in io.Reader, args ...string) (string, error) {
 	t.Helper()
-	reset := func(f *pflag.Flag) {
-		f.Changed = false
-		if sv, ok := f.Value.(pflag.SliceValue); ok {
-			// Replace, not Set: a slice flag's Set appends once Changed is
-			// set. Its declared default has to be restored rather than
-			// cleared, or a flag like --agent loses the value the command
-			// relies on when nothing was passed.
-			if err := sv.Replace(defaultSliceValue(f.DefValue)); err != nil {
-				t.Fatalf("reset --%s: %v", f.Name, err)
-			}
-			return
-		}
-		if err := f.Value.Set(f.DefValue); err != nil {
-			t.Fatalf("reset --%s: %v", f.Name, err)
-		}
+	root := newRootCmd()
+	buf := &bytes.Buffer{}
+	root.SetOut(buf)
+	root.SetErr(buf)
+	if in != nil {
+		root.SetIn(in)
 	}
-	cmd.Flags().VisitAll(reset)
-	cmd.PersistentFlags().VisitAll(reset)
-	for _, sub := range cmd.Commands() {
-		resetFlags(t, sub)
-	}
-}
-
-// defaultSliceValue parses a slice flag's rendered DefValue ("[]", "[auto]",
-// "[a,b]") back into its elements.
-func defaultSliceValue(def string) []string {
-	inner := strings.TrimSuffix(strings.TrimPrefix(def, "["), "]")
-	if inner == "" {
-		return nil
-	}
-	return strings.Split(inner, ",")
+	root.SetArgs(args)
+	err := root.Execute()
+	return buf.String(), err
 }
 
 // initGitRepo creates a fresh git repo with one commit (so `git worktree add

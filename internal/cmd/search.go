@@ -88,5 +88,3 @@ func newSearchCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "search only this project's corpus")
 	return cmd
 }
-
-func init() { rootCmd.AddCommand(newSearchCmd()) }

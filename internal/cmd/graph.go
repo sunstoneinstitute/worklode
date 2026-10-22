@@ -35,8 +35,6 @@ func newGraphCmd() *cobra.Command {
 	return cmd
 }
 
-func init() { rootCmd.AddCommand(newGraphCmd()) }
-
 // newGraphQuarantinesCmd wires `lode graph quarantines` (WL-REQ-306, WL-REQ-309 rule
 // 4): `graph projection` had exactly one child, `status`, which is pointless
 // depth under the single-child rule — flattened straight onto `graph`.

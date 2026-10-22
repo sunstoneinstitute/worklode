@@ -145,13 +145,13 @@ func buildTarGz(t *testing.T, files map[string]string) []byte {
 // for tests asserting which stream a command writes to.
 func runLodeOutErr(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
-	resetFlags(t, rootCmd)
+	root := newRootCmd()
 	outBuf := &bytes.Buffer{}
 	errBuf := &bytes.Buffer{}
-	rootCmd.SetOut(outBuf)
-	rootCmd.SetErr(errBuf)
-	rootCmd.SetArgs(args)
-	err = rootCmd.Execute()
+	root.SetOut(outBuf)
+	root.SetErr(errBuf)
+	root.SetArgs(args)
+	err = root.Execute()
 	return outBuf.String(), errBuf.String(), err
 }
 

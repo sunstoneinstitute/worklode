@@ -202,7 +202,3 @@ func newMilestoneAddCmd() *cobra.Command {
 		"position in the project's milestone order (default: after the last one)")
 	return cmd
 }
-
-func init() {
-	rootCmd.AddCommand(newMilestoneCmd())
-}

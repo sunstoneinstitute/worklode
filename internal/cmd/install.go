@@ -782,7 +782,3 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 	}
 	return nil
 }
-
-func init() {
-	rootCmd.AddCommand(newInstallCmd(), newUninstallCmd())
-}

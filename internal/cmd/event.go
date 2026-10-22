@@ -25,8 +25,6 @@ func newEventCmd() *cobra.Command {
 	return cmd
 }
 
-func init() { rootCmd.AddCommand(newEventCmd()) }
-
 func newEventTailCmd() *cobra.Command {
 	var typ string
 	var since time.Duration

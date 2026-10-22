@@ -20,14 +20,14 @@ import (
 // environment (as the child of `op run`) and the exec command's child
 // environment. Neither is ever written, logged, or echoed.
 
-func init() {
+func newSecretCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secret",
 		Short: "Task-declared secrets: catalog, status, exec, purge (WL-REQ-67)",
 	}
 	cmd.AddCommand(newSecretsCatalogCmd(), newSecretsStatusCmd(), newSecretsExecCmd(),
 		newSecretsPurgeCmd(), newSecretsPackCmd())
-	rootCmd.AddCommand(cmd)
+	return cmd
 }
 
 func newSecretsCatalogCmd() *cobra.Command {

@@ -12,22 +12,6 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
-var rootCmd = &cobra.Command{
-	Use:     "lode",
-	Short:   "lode is the Sunstone Institute work tracker",
-	Version: buildinfo.Version,
-	// SilenceUsage/SilenceErrors: main.go already prints the error returned
-	// by Execute() and exits 1. Without these, cobra additionally prints
-	// "Error: ..." itself and dumps a full usage block for every runtime
-	// error (e.g. a 404 from the server), which drowns the one line that
-	// actually matters.
-	SilenceUsage:  true,
-	SilenceErrors: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Help()
-	},
-}
-
 // Help headings for the top-level command list. Cobra only splits that list
 // into headings once a group exists, so declaring the shortcut group means
 // declaring the ordinary one too — otherwise every non-shortcut command lands
@@ -71,27 +55,90 @@ var shortcuts = []shortcut{
 	{target: []string{"project", "overview"}, build: newProjectOverviewCmd, reason: "read many times per session"},
 }
 
-func init() {
-	rootCmd.PersistentFlags().Bool("json", false, "print the raw JSON response instead of a table")
+// newRootCmd builds the complete lode command tree. Each call returns a fresh
+// tree: cobra keeps parsed flag values and Changed state on the commands
+// themselves, so a tree that has run once cannot run again, or alongside
+// another run, without one invocation's flags leaking into the next. Building
+// per run is what lets the tree be executed more than once in one process
+// (WL-REQ-1862).
+//
+// Every top-level command is registered here, in this one list; no file
+// registers itself from an init().
+func newRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:     "lode",
+		Short:   "lode is the Sunstone Institute work tracker",
+		Version: buildinfo.Version,
+		// SilenceUsage/SilenceErrors: main.go already prints the error returned
+		// by Execute() and exits 1. Without these, cobra additionally prints
+		// "Error: ..." itself and dumps a full usage block for every runtime
+		// error (e.g. a 404 from the server), which drowns the one line that
+		// actually matters.
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	root.PersistentFlags().Bool("json", false, "print the raw JSON response instead of a table")
 
-	rootCmd.AddGroup(
+	root.AddGroup(
 		&cobra.Group{ID: commandGroupID, Title: "Available Commands:"},
 		&cobra.Group{ID: shortcutGroupID, Title: "Shortcuts:"},
 	)
-	rootCmd.SetHelpCommandGroupID(commandGroupID)
-	rootCmd.SetCompletionCommandGroupID(commandGroupID)
+	root.SetHelpCommandGroupID(commandGroupID)
+	root.SetCompletionCommandGroupID(commandGroupID)
+
+	root.AddCommand(
+		newActorCmd(),
+		newTokenCmd(),
+		newBlobCmd(),
+		newApprovalCmd(),
+		newChannelCmd(),
+		newDecisionCmd(),
+		newDeliverableCmd(),
+		newDocCmd(),
+		newDoctorCmd(),
+		newEventCmd(),
+		newGateCmd(),
+		newGraphCmd(),
+		newInboxCmd(),
+		newInstallCmd(),
+		newUninstallCmd(),
+		newWorkCmd(),
+		newLoginCmd(),
+		newLogoutCmd(),
+		newMilestoneCmd(),
+		newProjectCmd(),
+	)
 	for _, s := range shortcuts {
 		cmd := s.build()
 		cmd.GroupID = shortcutGroupID
-		rootCmd.AddCommand(cmd)
+		root.AddCommand(cmd)
 	}
+	root.AddCommand(
+		newRuleCmd(),
+		newSearchCmd(),
+		newSecretCmd(),
+		newShowCmd(),
+		newSkillCmd(),
+		newTaskCmd(),
+	)
+
+	groupTopLevel(root)
+	// cobra builds `completion` and its four shell subcommands lazily inside
+	// Execute, so they have to be materialised first or the walk never sees
+	// them and `lode completion bogus` keeps exiting 0.
+	root.InitDefaultCompletionCmd()
+	rejectStrayGroupArgs(root)
+	return root
 }
 
 // groupTopLevel files every ordinary top-level command under the "Available
-// Commands:" heading. Registration is spread across per-file init() funcs
-// whose relative order is not fixed, so this runs once all of them have.
-func groupTopLevel() {
-	for _, c := range rootCmd.Commands() {
+// Commands:" heading, so a command added to newRootCmd's list cannot forget
+// its group.
+func groupTopLevel(root *cobra.Command) {
+	for _, c := range root.Commands() {
 		if c.GroupID == "" {
 			c.GroupID = commandGroupID
 		}
@@ -134,15 +181,9 @@ func rejectStrayGroupArgs(c *cobra.Command) {
 	}
 }
 
-// Execute runs the root command.
+// Execute builds the command tree and runs it.
 func Execute() error {
-	groupTopLevel()
-	// cobra builds `completion` and its four shell subcommands lazily inside
-	// Execute, so they have to be materialised first or the walk never sees
-	// them and `lode completion bogus` keeps exiting 0.
-	rootCmd.InitDefaultCompletionCmd()
-	rejectStrayGroupArgs(rootCmd)
-	return rootCmd.Execute()
+	return newRootCmd().Execute()
 }
 
 // jsonOut reports whether --json was passed to cmd (or an ancestor of it).

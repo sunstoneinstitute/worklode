@@ -99,10 +99,6 @@ func newDocCmd() *cobra.Command {
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newDocCmd())
-}
-
 // renumberAnchors is `--update-section-anchors`: rewrite the body's section
 // numbers and {#sec-N} anchors from the heading structure, so an inserted or
 // moved section does not leave the author fixing every number below it by

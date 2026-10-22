@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -132,15 +131,9 @@ func TestRuleEditReadsStdin(t *testing.T) {
 	t.Setenv("LODE_SERVER", srv.URL)
 	t.Setenv("LODE_TOKEN", "test-token")
 
-	resetFlags(t, rootCmd)
-	buf := &bytes.Buffer{}
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetIn(strings.NewReader("Piped body.\n"))
-	defer rootCmd.SetIn(nil)
-	rootCmd.SetArgs([]string{"rule", "edit", "WL-RULE-1", "--file", "-"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("lode rule edit --file -: %v\noutput: %s", err, buf.String())
+	out, err := runLodeIn(t, strings.NewReader("Piped body.\n"), "rule", "edit", "WL-RULE-1", "--file", "-")
+	if err != nil {
+		t.Fatalf("lode rule edit --file -: %v\noutput: %s", err, out)
 	}
 	if putBody.Body != "Piped body.\n" {
 		t.Fatalf("PUT body = %q; want the piped text", putBody.Body)

@@ -72,7 +72,3 @@ func newLoginCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "print a URL to open elsewhere and wait for the code, instead of launching a browser")
 	return cmd
 }
-
-func init() {
-	rootCmd.AddCommand(newLoginCmd())
-}

@@ -221,9 +221,3 @@ func newBlobGCCmd() *cobra.Command {
 	cmd.Flags().IntVar(&graceHours, "grace-hours", 24, "ignore blobs and objects newer than this")
 	return cmd
 }
-
-func init() {
-	rootCmd.AddCommand(newActorCmd())
-	rootCmd.AddCommand(newTokenCmd())
-	rootCmd.AddCommand(newBlobCmd())
-}

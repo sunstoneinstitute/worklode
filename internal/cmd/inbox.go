@@ -23,10 +23,6 @@ func newInboxCmd() *cobra.Command {
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newInboxCmd())
-}
-
 func newInboxListCmd() *cobra.Command {
 	var scope scopeFlags
 	var state string

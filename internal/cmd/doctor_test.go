@@ -20,7 +20,7 @@ import (
 
 // fakeEdgeAgent points edgeAgentHealthURL at an httptest.Server for the
 // duration of the test and restores the production value on cleanup, so the
-// full-command doctor tests (which run rootCmd in-process rather than
+// full-command doctor tests (which run the command tree in-process rather than
 // through checkEdgeAgent directly) can control what the edge-agent check
 // sees without a user-facing config knob.
 func fakeEdgeAgent(t *testing.T, status int, body string) {

@@ -50,7 +50,7 @@ func TestMilestoneAddPostsToProject(t *testing.T) {
 }
 
 // TestMilestoneAddJSON: --json prints the server's own body, unreformatted.
-// Driven through rootCmd because --json is a root persistent flag.
+// Driven through the full command tree because --json is a root persistent flag.
 func TestMilestoneAddJSON(t *testing.T) {
 	const body = `{"id":"COW-MILE-1","project":"cow","title":"Internal review","position":1}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +106,7 @@ func TestMilestoneListGetsProjectMilestones(t *testing.T) {
 }
 
 // TestMilestoneListJSON: --json prints the server's own body, unreformatted.
-// Driven through rootCmd because --json is a root persistent flag.
+// Driven through the full command tree because --json is a root persistent flag.
 func TestMilestoneListJSON(t *testing.T) {
 	const body = `{"milestones":[{"id":"COW-MILE-1","project":"cow","title":"Internal review","position":1}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

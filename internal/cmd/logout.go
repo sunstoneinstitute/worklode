@@ -47,7 +47,3 @@ func newLogoutCmd() *cobra.Command {
 	cmd.Flags().StringVar(&server, "server", "", "worklode server URL (overrides LODE_SERVER / config file)")
 	return cmd
 }
-
-func init() {
-	rootCmd.AddCommand(newLogoutCmd())
-}

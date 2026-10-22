@@ -230,10 +230,6 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newShowCmd())
-}
-
 // ordinalShapeError reports a kind flag's value failing its ordinal shape:
 // flag values are bare ordinals, never shorthands, so the fix is either a bare
 // ordinal on the flag or the full id positionally — "--spec WL-SPEC-6" is told

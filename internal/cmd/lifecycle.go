@@ -26,10 +26,6 @@ import (
 // This file implements the `lode work` group's commands. See WL-REQ-305
 // L8 for what belongs here and why.
 
-func init() {
-	rootCmd.AddCommand(newWorkCmd())
-}
-
 func newWorkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "work",

@@ -115,7 +115,3 @@ func newDeliverableAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&milestone, "milestone", "", "attach the deliverable to a milestone in the same project")
 	return cmd
 }
-
-func init() {
-	rootCmd.AddCommand(newDeliverableCmd())
-}

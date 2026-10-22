@@ -216,8 +216,9 @@ func TestAgentsBlockInvocationsResolve(t *testing.T) {
 		t.Fatalf("found %d lode invocations in the block, want the four entry commands",
 			len(invocations))
 	}
+	root := newRootCmd()
 	for _, inv := range invocations {
-		if reason := checkInvocation(rootCmd, inv.text); reason != "" {
+		if reason := checkInvocation(root, inv.text); reason != "" {
 			t.Errorf("%s block: %s\n\t%s", agentsFile, reason, inv.text)
 		}
 	}

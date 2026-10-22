@@ -16,7 +16,7 @@ import (
 // findCommand walks the cobra tree by name, e.g. ("task", "delete").
 func findCommand(t *testing.T, path ...string) *cobra.Command {
 	t.Helper()
-	cur := rootCmd
+	cur := newRootCmd()
 	for _, name := range path {
 		var next *cobra.Command
 		for _, sub := range cur.Commands() {

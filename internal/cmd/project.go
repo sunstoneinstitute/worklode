@@ -25,10 +25,6 @@ func newProjectCmd() *cobra.Command {
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newProjectCmd())
-}
-
 func newProjectAddCmd() *cobra.Command {
 	var name string
 	var key string

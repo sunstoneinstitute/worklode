@@ -222,7 +222,7 @@ func checkInvocation(root *cobra.Command, text string) string {
 		return fmt.Sprintf("%q is not a lode command", rest[0])
 	}
 	if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") && !placeholder(rest[0]) &&
-		!cmd.Runnable() && cmd.HasSubCommands() {
+		isCommandGroup(cmd) {
 		return fmt.Sprintf("%q is not a subcommand of %q", rest[0], cmd.CommandPath())
 	}
 
@@ -243,6 +243,21 @@ func checkInvocation(root *cobra.Command, text string) string {
 		}
 	}
 	return ""
+}
+
+// isCommandGroup reports whether c only dispatches to subcommands, so a
+// positional word after it must name one. rejectStrayGroupArgs makes every
+// such group runnable (to reach its NoArgs validator), so runnability alone
+// no longer tells a group from a parent like `lode project crew <project>`
+// that takes a positional of its own; its Args validator does.
+func isCommandGroup(c *cobra.Command) bool {
+	if !c.HasSubCommands() {
+		return false
+	}
+	if !c.Runnable() {
+		return true
+	}
+	return c.Args != nil && c.Args(c, []string{"bogusnothing"}) != nil
 }
 
 // flagValue returns the value written for the flag at rest[i], from either
@@ -327,6 +342,7 @@ func TestAgentSurfaces(t *testing.T) {
 	repoRoot := filepath.Join(packageDir, "..", "..")
 	exempt := exemptions(t)
 
+	root := newRootCmd()
 	var failures []string
 	for _, rel := range surfaceFiles(t, repoRoot) {
 		body, err := os.ReadFile(filepath.Join(repoRoot, rel))
@@ -337,7 +353,7 @@ func TestAgentSurfaces(t *testing.T) {
 			if exempt[inv.text] {
 				continue
 			}
-			if reason := checkInvocation(rootCmd, inv.text); reason != "" {
+			if reason := checkInvocation(root, inv.text); reason != "" {
 				failures = append(failures,
 					fmt.Sprintf("%s:%d: %s\n\t%s", inv.file, inv.line, reason, inv.text))
 			}
@@ -383,8 +399,9 @@ func TestCheckInvocation(t *testing.T) {
 		{"lode work next --jsonn", true},
 		{"lode task add --titel x", true},
 	}
+	root := newRootCmd()
 	for _, c := range cases {
-		reason := checkInvocation(rootCmd, c.text)
+		reason := checkInvocation(root, c.text)
 		if (reason != "") != c.wantFail {
 			t.Errorf("%q: got %q, wantFail=%v", c.text, reason, c.wantFail)
 		}
@@ -415,7 +432,7 @@ func TestFindInvocations(t *testing.T) {
 // to ns.TaskKinds, the generated source of truth (WL-REQ-178). Without this the
 // value check would quietly follow a usage string that had itself drifted.
 func TestKindEnumMatchesNS(t *testing.T) {
-	cmd, _ := resolve(rootCmd, []string{"task", "add"})
+	cmd, _ := resolve(newRootCmd(), []string{"task", "add"})
 	got := slices.Clone(enumValues(lookupFlag(cmd, "kind")))
 	slices.Sort(got)
 

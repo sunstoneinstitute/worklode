@@ -81,10 +81,6 @@ func newTaskCmd() *cobra.Command {
 	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(newTaskCmd())
-}
-
 // taskTransition is the shape of every cli.Client call that moves one task by
 // id; call sites pass a method expression, e.g. (*cli.Client).ReadyTask.
 type taskTransition func(*cli.Client, context.Context, string) (model.Task, []byte, error)

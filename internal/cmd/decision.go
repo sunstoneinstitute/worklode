@@ -249,7 +249,3 @@ func newDecisionEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&task, "task", "", "move the question to this task")
 	return cmd
 }
-
-func init() {
-	rootCmd.AddCommand(newDecisionCmd())
-}

@@ -84,7 +84,7 @@ func TestEntityArgsComplete(t *testing.T) {
 			walk(sub)
 		}
 	}
-	walk(rootCmd)
+	walk(newRootCmd())
 	for path, reason := range entityArgsExempt {
 		if !seen[path] {
 			t.Errorf("entityArgsExempt names %q (%s), which takes no entity placeholder: "+

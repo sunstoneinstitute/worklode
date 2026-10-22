@@ -31,8 +31,6 @@ func newChannelCmd() *cobra.Command {
 	return cmd
 }
 
-func init() { rootCmd.AddCommand(newChannelCmd()) }
-
 func newChannelServeCmd() *cobra.Command {
 	var interval time.Duration
 	cmd := &cobra.Command{

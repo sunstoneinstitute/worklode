@@ -21,8 +21,6 @@ func newSkillCmd() *cobra.Command {
 	return cmd
 }
 
-func init() { rootCmd.AddCommand(newSkillCmd()) }
-
 func newSkillsListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
