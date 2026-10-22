@@ -238,3 +238,5 @@ configMapGenerator:
       - migrations/0112_idea_findings.down.sql
       - migrations/0113_actor-groups-synced-at.up.sql
       - migrations/0113_actor-groups-synced-at.down.sql
+      - migrations/0114_inline-refs.up.sql
+      - migrations/0114_inline-refs.down.sql
