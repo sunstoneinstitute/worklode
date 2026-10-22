@@ -471,7 +471,7 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 	}
 	// Rally membership comes only from blocks edges; plan ordering must not
 	// introduce a second set. PlanMintable governs creation, not retagging.
-	if policy.AllowsDecisions && policy.CanBlock && kind != "rally" {
+	if policy.AllowsDecisions && policy.CanBlock && kind != ns.TaskKindRally {
 		return nil
 	}
 	var decisions, blocks int
@@ -483,7 +483,7 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 		id).Scan(&decisions, &blocks, &planned); err != nil {
 		return fmt.Errorf("kind retag checks for %s: %w", id, err)
 	}
-	if kind == "rally" && planned {
+	if kind == ns.TaskKindRally && planned {
 		return fmt.Errorf("task %s was minted from a plan, which a rally cannot be (a plan orders its blockers, and a rally's members are its 'blocks' edges): %w", id, ErrInvalidInput)
 	}
 	if !policy.AllowsDecisions && decisions > 0 {

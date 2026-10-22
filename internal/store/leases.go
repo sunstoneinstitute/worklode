@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // Lease grants one actor exclusive claim to a task until it expires or is
@@ -216,9 +218,9 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			if !policy.Claimable {
 				hint := ""
 				switch kind {
-				case "decision":
+				case ns.TaskKindDecision:
 					hint = "; use 'lode task assign' instead"
-				case "rally":
+				case ns.TaskKindRally:
 					hint = "; claim one of its members instead"
 				}
 				return fmt.Errorf("task %s is a %s and cannot be claimed%s: %w", taskID, kind, hint, ErrBadTransition)

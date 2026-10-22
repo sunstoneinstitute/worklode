@@ -55,6 +55,18 @@ var EdgeTerms = []EdgeTerm{
 	{Table: "task_edges", Type: "follow_up_to", Property: "https://worklode.io/ns/ontology#followUpTo", Inverse: "", Symmetric: false},
 }
 
+// One constant per wlc:TaskKind member, for code that names a kind.
+const (
+	TaskKindBug      = "bug"
+	TaskKindChore    = "chore"
+	TaskKindDecision = "decision"
+	TaskKindDesign   = "design"
+	TaskKindFeature  = "feature"
+	TaskKindRally    = "rally"
+	TaskKindReview   = "review"
+	TaskKindSpike    = "spike"
+)
+
 // TaskKindDescriptor records the configured permissions and completion behavior of a kind.
 type TaskKindDescriptor struct {
 	Claimable       bool

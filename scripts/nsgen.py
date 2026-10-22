@@ -492,9 +492,14 @@ def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds
         f'\t{{Table: "{t}", Type: "{typ}", Property: "{prop}", Inverse: "{inv}", Symmetric: {str(sym).lower()}}},\n'
         for t, typ, prop, inv, sym in edges
     )
+    names = {k: "TaskKind" + k[0].upper() + k[1:] for k in schemes.get("TaskKind", [])}
+    width = max(map(len, names.values()), default=0)
+    consts = "\n// One constant per wlc:TaskKind member, for code that names a kind.\nconst (\n"
+    consts += "".join(f'\t{name.ljust(width)} = "{k}"\n' for k, name in names.items())
+    consts += ")\n"
     fields = [p[0].upper() + p[1:] for p in TASK_KIND_PROPERTIES]
     width = max(map(len, fields))
-    descriptors = "\n// TaskKindDescriptor records the configured permissions and completion behavior of a kind.\n"
+    descriptors = consts + "\n// TaskKindDescriptor records the configured permissions and completion behavior of a kind.\n"
     descriptors += "type TaskKindDescriptor struct {\n"
     descriptors += "".join(f"\t{field.ljust(width)} bool\n" for field in fields)
     descriptors += "}\n\n// TaskKindDescriptors is generated from ns/task-kinds.ttl, keyed by kind.\n"
