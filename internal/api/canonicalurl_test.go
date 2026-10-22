@@ -48,6 +48,8 @@ func TestCanonicalTaskAndDocURLs(t *testing.T) {
 		"/docs/WL-SPEC-1?body=source": base + "/spec/1?body=source",
 		// A task under the wrong kind redirects to its own kind.
 		base + "/feature/1": base + "/bug/1",
+		// "task" stands in for any kind.
+		base + "/task/1": base + "/bug/1",
 		// An uppercase project key redirects to the id form.
 		"/projects/WL/bug/1": base + "/bug/1",
 		// The bare-reference shortcut lands on the canonical URL in one hop.
