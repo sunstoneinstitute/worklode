@@ -273,7 +273,8 @@ func TestUnlinkRulesDerived(t *testing.T) {
 	a, b := ruleID(t, s, "P1", 1), ruleID(t, s, "P1", 3)
 	ctx := context.Background()
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'references', 'derived')`, a, b)
+		_, err := tx.Exec(`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, lines, source)
+			VALUES ('rule', $1::bigint::text, 'body', 1, 'rule', $2::bigint::text, '{1}', 'derived')`, a, b)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -333,7 +334,7 @@ func TestDerivedReferences(t *testing.T) {
 }
 
 // TestDerivedReferencesSameDocument: a section citing another section of
-// its own document derives the edge too. deriveReferences must run only
+// its own document derives the edge too. deriveInlineRefs must run only
 // after every doc_rules row for the write is in place, or the anchor it
 // resolves through is empty (forward ref) or not yet rewritten (backward
 // ref) and the edge is silently dropped (S26).

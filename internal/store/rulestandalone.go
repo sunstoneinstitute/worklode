@@ -47,7 +47,7 @@ func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string
 			return fmt.Errorf("read project %q: %w", in.Project, err)
 		}
 		body := sectionBody(in.Body, true)
-		id, _, err := insertRule(tx, in.Project, in.Heading, body)
+		id, version, err := insertRule(tx, in.Project, in.Heading, body)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string
 			id, actor, nonNil(in.Tags), in.Kind).Scan(&number); err != nil {
 			return fmt.Errorf("set meta of rule %d: %w", id, err)
 		}
-		if err := deriveReferences(tx, in.Project, id, in.Heading+"\n"+body); err != nil {
+		if err := deriveRuleInlineRefs(tx, in.Project, id, version, in.Heading, body); err != nil {
 			return err
 		}
 		return MergeEventPayload(tx, eventID, map[string]any{"rule": designdoc.FormatRuleRef(key, number, in.Kind)})

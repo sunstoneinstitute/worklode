@@ -132,8 +132,9 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable stri
 	// already ran (backward), so it would resolve through an empty or stale
 	// arrangement and drop the edge every time (S26).
 	type changedRule struct {
-		id   int64
-		text string
+		id            int64
+		version       int
+		heading, body string
 	}
 	var changed []changedRule
 	position := 0
@@ -166,7 +167,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable stri
 			return false, nil, err
 		}
 		if m == nil || m.heading != sec.Title || !sameRuleBody(m.body, sec.Body) {
-			changed = append(changed, changedRule{id, sec.Title + "\n" + sec.Body})
+			changed = append(changed, changedRule{id, version, sec.Title, sec.Body})
 		}
 		if _, err := tx.Exec(
 			`INSERT INTO doc_rules (doc_id, position, rule_id, rule_version, depth, slug)
@@ -191,7 +192,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable stri
 	}
 	return minted, func() error {
 		for _, c := range changed {
-			if err := deriveReferences(tx, project, c.id, c.text); err != nil {
+			if err := deriveRuleInlineRefs(tx, project, c.id, c.version, c.heading, c.body); err != nil {
 				return err
 			}
 			if err := checkTermSlug(tx, c.id); err != nil {
@@ -700,10 +701,11 @@ func (s *Store) EditRule(ctx context.Context, projectKey string, number int64, i
 		if heading == in.Heading && sameRuleBody(current, body) {
 			return nil
 		}
-		if _, _, err := reviseRule(tx, id, in.Heading, body); err != nil {
+		_, version, err := reviseRule(tx, id, in.Heading, body)
+		if err != nil {
 			return err
 		}
-		return deriveReferences(tx, project, id, in.Heading+"\n"+body)
+		return deriveRuleInlineRefs(tx, project, id, version, in.Heading, body)
 	})
 	if err != nil {
 		return nil, err

@@ -240,3 +240,5 @@ configMapGenerator:
       - migrations/0113_actor-groups-synced-at.down.sql
       - migrations/0114_inline-refs.up.sql
       - migrations/0114_inline-refs.down.sql
+      - migrations/NEW-rule-references-to-inline-refs.up.sql
+      - migrations/NEW-rule-references-to-inline-refs.down.sql
