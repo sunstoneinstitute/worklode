@@ -36,7 +36,7 @@ describe("TaskList", () => {
 
   it("links a task's title to its canonical URL", async () => {
     await renderApp("/tasks")
-    expect(await screen.findByRole("link", { name: "Draft launch copy" })).toHaveAttribute("href", "/projects/p1/task/1")
+    expect(await screen.findByRole("link", { name: "Draft launch copy" })).toHaveAttribute("href", "/WL-1")
   })
 
   it("editing a due date patches {due}", async () => {

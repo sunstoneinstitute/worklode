@@ -46,8 +46,8 @@ func withQuery(path string, r *http.Request) string {
 
 // projectEntityPage handles GET /projects/{proj}/{kind}/{n} and its /{ver}
 // sibling. A document kind serves the document page, or one version of it; a
-// task kind serves the task page, and a task named under another kind
-// redirects to its own. Tasks have no versions.
+// task kind serves the task page, and a task named under another kind, or
+// under "task", redirects to its own. Tasks have no versions.
 func (s *server) projectEntityPage(w http.ResponseWriter, r *http.Request) {
 	p, redirected := s.projectFromPath(w, r, r.PathValue("proj"))
 	if p == nil || redirected {
@@ -62,7 +62,8 @@ func (s *server) projectEntityPage(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case slices.Contains(docKinds, kind):
 		s.projectDocPage(w, r, p, kind, n, ver)
-	case slices.Contains(ns.TaskKinds, kind) && ver == "":
+	// "task" is no task kind: it is a kind-free alias that redirects below.
+	case (slices.Contains(ns.TaskKinds, kind) || kind == "task") && ver == "":
 		t, err := s.st.GetTask(r.Context(), fmt.Sprintf("%s-%d", p.Key, n))
 		if err != nil {
 			s.webStoreErr(w, err)
