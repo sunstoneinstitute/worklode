@@ -96,11 +96,17 @@ Put this in the project's `.mcp.json`. For dev use
     "worklode": {
       "type": "http",
       "url": "https://worklode.sunstone.internal/mcp",
+      "headers": { "Worklode-Tools": "cli" },
       "oauth": { "clientId": "worklode-mcp", "callbackPort": 33418 }
     }
   }
 }
 ```
+
+The `Worklode-Tools: cli` header limits the server to `lode` and the three
+project tools (WL-REQ-1864); claude.ai and Cowork connectors cannot set
+headers and get the full tool set. Any other header value is refused with a
+400.
 
 Run `/mcp` in Claude Code and choose Authenticate. The browser opens the
 Worklode login, then the consent page; Allow returns to the loopback callback
