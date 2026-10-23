@@ -37,7 +37,23 @@ func TestScan(t *testing.T) {
 		{"url unknown kind", "https://x.io/projects/worklode/nope/8", wl, nil},
 		{"markdown link", "[the spec](https://x.io/WL-SPEC-1) ok", wl, []Hit{{Form: FormURL, Key: "WL", Infix: "SPEC", Number: 1, LinkText: "the spec", Raw: "[the spec](https://x.io/WL-SPEC-1)"}}},
 		{"fenced block", "```\nWL-1\n```\nWL-2", wl, []Hit{{Line: 4, Form: FormTask, Key: "WL", Number: 2, Raw: "WL-2"}}},
-		{"inline code", "a `WL-1` b", wl, []Hit{{Form: FormTask, Key: "WL", Number: 1, Raw: "WL-1", InCode: true}}},
+		{"inline code", "a `WL-1` b", wl, []Hit{{Form: FormTask, Key: "WL", Number: 1, Raw: "WL-1", Literal: true}}},
+		{"code span across lines", "a `b WL-1\nc` WL-2", wl, []Hit{
+			{Form: FormTask, Key: "WL", Number: 1, Raw: "WL-1", Literal: true},
+			{Line: 2, Form: FormTask, Key: "WL", Number: 2, Raw: "WL-2"},
+		}},
+		{"blank line ends a code span", "a `b\n\nWL-1 `", wl, []Hit{{Line: 3, Form: FormTask, Key: "WL", Number: 1, Raw: "WL-1"}}},
+		{"quoted", `the form ("WL-1") and “WL-2” but WL-3`, wl, []Hit{
+			{Form: FormTask, Key: "WL", Number: 1, Raw: "WL-1", Literal: true},
+			{Form: FormTask, Key: "WL", Number: 2, Raw: "WL-2", Literal: true},
+			{Form: FormTask, Key: "WL", Number: 3, Raw: "WL-3"},
+		}},
+		{"section range", "WL-SPEC-7#sec-3–§4", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Anchor: "sec-3", Raw: "WL-SPEC-7#sec-3", Literal: true}}},
+		{"section list", "WL-SPEC-7#sec-3, #sec-5", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Anchor: "sec-3", Raw: "WL-SPEC-7#sec-3", Literal: true}}},
+		{"two section refs are no list", "WL-SPEC-7#sec-3, WL-SPEC-7#sec-5", wl, []Hit{
+			{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Anchor: "sec-3", Raw: "WL-SPEC-7#sec-3"},
+			{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Anchor: "sec-5", Raw: "WL-SPEC-7#sec-5"},
+		}},
 		{"two hits in order", "WL-2 then WL-SPEC-1", wl, []Hit{
 			{Form: FormTask, Key: "WL", Number: 2, Raw: "WL-2"},
 			{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 1, Raw: "WL-SPEC-1"},
@@ -55,7 +71,7 @@ func TestScan(t *testing.T) {
 					w.Line = 1
 				}
 				if g.Raw != w.Raw || g.Line != w.Line || g.Form != w.Form || g.Key != w.Key || g.Infix != w.Infix ||
-					g.Number != w.Number || g.Anchor != w.Anchor || g.LinkText != w.LinkText || g.InCode != w.InCode {
+					g.Number != w.Number || g.Anchor != w.Anchor || g.LinkText != w.LinkText || g.Literal != w.Literal {
 					t.Errorf("hit %d:\n got %+v\nwant %+v", i, g, w)
 				}
 			}
