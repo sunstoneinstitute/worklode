@@ -437,25 +437,55 @@ func TestDeriveTargets(t *testing.T) {
 	seedDocNoteTask(t, s, "P1-7")
 	seedDocNoteTask(t, s, "P1-8")
 	ctx := t.Context()
-	got, err := s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Refs: []string{"P1-8"}})
+	got, _, err := s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Refs: []string{"P1-8"}})
 	if err != nil || !slices.Equal(got, []string{"P1-8"}) {
 		t.Errorf("refs: %v, %v", got, err)
 	}
-	got, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", All: true})
+	got, _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", All: true})
 	if err != nil || len(got) != 2 {
 		t.Errorf("all: %v, %v", got, err)
 	}
-	got, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Status: []string{"merged"}})
+	got, _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Status: []string{"merged"}})
 	if err != nil || len(got) != 0 {
 		t.Errorf("status: %v, %v", got, err)
 	}
-	if _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task"}); !errors.Is(err, ErrInvalidInput) {
+	if _, _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task"}); !errors.Is(err, ErrInvalidInput) {
 		t.Errorf("nothing selected: %v", err)
 	}
-	if _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Refs: []string{"P1-404"}}); !errors.Is(err, ErrNotFound) {
+	if _, _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Refs: []string{"P1-404"}}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown ref: %v", err)
 	}
-	if _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "idea", All: true}); !errors.Is(err, ErrInvalidInput) {
+	if _, _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "idea", All: true}); !errors.Is(err, ErrInvalidInput) {
 		t.Errorf("idea: %v", err)
+	}
+}
+
+// TestDeriveTargetsPages: Limit pages the selection in id order, Next
+// resumes it, and the last page has no Next (WL-REQ-1860).
+func TestDeriveTargetsPages(t *testing.T) {
+	s := openDocStore(t)
+	for _, id := range []string{"P1-7", "P1-8", "P1-9"} {
+		seedDocNoteTask(t, s, id)
+	}
+	var got []string
+	var pages int
+	p := model.RefDeriveParams{Kind: "task", All: true, Limit: 2}
+	for {
+		ids, next, err := s.DeriveTargets(t.Context(), "p1", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pages++
+		got = append(got, ids...)
+		if next == "" {
+			break
+		}
+		if next != ids[len(ids)-1] {
+			t.Fatalf("next = %q, want last id of %v", next, ids)
+		}
+		p.After = next
+	}
+	if pages != 2 || !slices.Equal(got, []string{"P1-7", "P1-8", "P1-9"}) {
+		t.Errorf("pages = %d, ids = %v", pages, got)
 	}
 }

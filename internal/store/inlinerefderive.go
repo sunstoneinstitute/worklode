@@ -18,8 +18,30 @@ import (
 // selects (WL-REQ-1860): the named refs, else the kind's own filters, else
 // every node under All. Selecting nothing is ErrInvalidInput. A superseded or
 // withdrawn doc or rule is skipped when only All selects it, because no
-// normalization writes one.
-func (s *Store) DeriveTargets(ctx context.Context, project string, p model.RefDeriveParams) ([]string, error) {
+// normalization writes one. A positive Limit returns one page of the selection
+// in id order after p.After, and next is the After of the following page,
+// empty on the last.
+func (s *Store) DeriveTargets(ctx context.Context, project string, p model.RefDeriveParams) (ids []string, next string, err error) {
+	ids, err = s.deriveSelection(ctx, project, p)
+	if err != nil || (p.Limit <= 0 && p.After == "") {
+		return ids, "", err
+	}
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	start, found := slices.BinarySearch(ids, p.After)
+	if found {
+		start++
+	}
+	ids = ids[start:]
+	if p.Limit > 0 && len(ids) > p.Limit {
+		ids = ids[:p.Limit]
+		next = ids[len(ids)-1]
+	}
+	return ids, next, nil
+}
+
+// deriveSelection lists the ids DeriveTargets pages.
+func (s *Store) deriveSelection(ctx context.Context, project string, p model.RefDeriveParams) ([]string, error) {
 	switch p.Kind {
 	case "doc", "task", "rule":
 	default:

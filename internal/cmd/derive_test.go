@@ -71,3 +71,47 @@ func TestDeriveCommand(t *testing.T) {
 		t.Error("selecting nothing succeeded")
 	}
 }
+
+// TestDeriveCommandPages: --all pages through the selection one request per
+// batch and renders the merged report once; a failed node does not stop the
+// later pages (WL-REQ-1860).
+func TestDeriveCommandPages(t *testing.T) {
+	pages := map[string]model.RefDeriveReport{
+		"":     {Nodes: []model.RefDeriveNode{{Ref: "WL-1", Rewrites: 1}}, Next: "WL-1"},
+		"WL-1": {Nodes: []model.RefDeriveNode{{Ref: "WL-2", Error: "boom"}}, Next: "WL-2"},
+		"WL-2": {Nodes: []model.RefDeriveNode{{Ref: "WL-3", Rewrites: 2}}},
+	}
+	var posted []model.RefDeriveParams
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in model.RefDeriveParams
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			t.Fatalf("decode POST body: %v", err)
+		}
+		posted = append(posted, in)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(pages[in.After])
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	out, err := runLode(t, "task", "derive", "--all", "--project", "cow")
+	if err == nil || !strings.Contains(err.Error(), "1 failed: WL-2") {
+		t.Errorf("err = %v", err)
+	}
+	if len(posted) != 3 || posted[0].Limit <= 0 || !posted[2].All || posted[2].After != "WL-2" {
+		t.Errorf("posted %+v", posted)
+	}
+	for _, ref := range []string{"WL-1", "WL-2", "WL-3"} {
+		if !strings.Contains(out, ref) {
+			t.Errorf("output lacks %s: %q", ref, out)
+		}
+	}
+
+	posted = nil
+	out, _ = runLode(t, "task", "derive", "--all", "--project", "cow", "--json")
+	var rep model.RefDeriveReport
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || len(rep.Nodes) != 3 || rep.Next != "" {
+		t.Errorf("json = %q, %v", out, err)
+	}
+}
