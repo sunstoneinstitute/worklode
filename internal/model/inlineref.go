@@ -4,6 +4,14 @@ package model
 // (WL-REQ-1852): "doc", "rule", "task", "milestone" or "deliverable".
 type NodeKind string
 
+// Ideas, decisions and approvals hold Markdown fields but are not nodes: these
+// kinds are valid only as an InlineRef's FromKind (WL-RULE-1848).
+const (
+	NodeKindIdea     NodeKind = "idea"
+	NodeKindDecision NodeKind = "decision"
+	NodeKindApproval NodeKind = "approval"
+)
+
 // InlineRef is one row of inline_refs: a node's field names another node on
 // the listed lines (WL-REQ-1852). FromVersion is nil for an unversioned field.
 // Lines holds one entry per occurrence, so a line naming the target twice

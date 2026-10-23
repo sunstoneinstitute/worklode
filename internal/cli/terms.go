@@ -25,7 +25,7 @@ func TermsTable(w io.Writer, terms []model.Term) {
 		titleColumn("HEADING"),
 	)
 	for _, t := range terms {
-		tbl.add(t.Slug, t.Rule.Ref, t.Rule.Status, t.Rule.ConceptIRI, t.Rule.Heading)
+		tbl.add(t.Slug, t.Rule.Ref, t.Rule.Status, t.Rule.ConceptIRI, string(t.Rule.Heading))
 	}
 	tbl.flush(w)
 }

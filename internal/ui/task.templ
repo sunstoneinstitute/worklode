@@ -383,7 +383,7 @@ templ taskPrerequisites(v TaskView) {
 			if len(p.Tree) > 0 {
 				<div class="pq-tree">
 					<div class="pq-node pq-target" id={ "pq-" + v.Task.ID }>
-						@prereqCard(PrerequisiteNode{ID: v.Task.ID, Title: v.Task.Title, State: "this task", Levels: p.Levels, Below: p.Below})
+						@prereqCard(PrerequisiteNode{ID: v.Task.ID, Title: string(v.Task.Title), State: "this task", Levels: p.Levels, Below: p.Below})
 					</div>
 					@prereqLevel(p.Tree)
 				</div>

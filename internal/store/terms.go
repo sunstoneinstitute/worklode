@@ -33,7 +33,7 @@ func terms(rules []model.Rule) []model.Term {
 	out := []model.Term{}
 	for _, r := range rules {
 		if liveDefinition(r) {
-			out = append(out, model.Term{Slug: designdoc.TermSlug(r.Heading), Rule: r, NeededBy: []model.RuleEdge{}})
+			out = append(out, model.Term{Slug: designdoc.TermSlug(string(r.Heading)), Rule: r, NeededBy: []model.RuleEdge{}})
 		}
 	}
 	slices.SortFunc(out, func(a, b model.Term) int { return strings.Compare(a.Slug, b.Slug) })

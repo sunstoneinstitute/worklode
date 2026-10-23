@@ -4,8 +4,8 @@ package model
 // until shared, when it gains an intake task.
 type Idea struct {
 	ID           string     `json:"id"`
-	Title        string     `json:"title"`
-	Body         string     `json:"body"`
+	Title        Markdown   `json:"title"`
+	Body         Markdown   `json:"body"`
 	Author       string     `json:"author"`
 	Type         string     `json:"type"`       // general or story-pitch
 	StoryType    string     `json:"story_type"` // data-story, short-story or ""
@@ -27,21 +27,21 @@ type IdeaIntake struct {
 // CreateIdeaInput is the request body of POST /api/v1/ideas. The author is
 // the caller, never the body.
 type CreateIdeaInput struct {
-	Title        string `json:"title"`
-	Body         string `json:"body"`
-	Type         string `json:"type"`
-	StoryType    string `json:"story_type"`
-	LitmusTestID string `json:"litmus_test_id"`
+	Title        Markdown `json:"title"`
+	Body         Markdown `json:"body"`
+	Type         string   `json:"type"`
+	StoryType    string   `json:"story_type"`
+	LitmusTestID string   `json:"litmus_test_id"`
 }
 
 // PatchIdeaInput is the request body of PATCH /api/v1/ideas/{id}. A nil
 // field is left unchanged.
 type PatchIdeaInput struct {
-	Title        *string `json:"title,omitempty"`
-	Body         *string `json:"body,omitempty"`
-	Type         *string `json:"type,omitempty"`
-	StoryType    *string `json:"story_type,omitempty"`
-	LitmusTestID *string `json:"litmus_test_id,omitempty"`
+	Title        *Markdown `json:"title,omitempty"`
+	Body         *Markdown `json:"body,omitempty"`
+	Type         *string   `json:"type,omitempty"`
+	StoryType    *string   `json:"story_type,omitempty"`
+	LitmusTestID *string   `json:"litmus_test_id,omitempty"`
 }
 
 // PatchIdeaIntakeInput is the request body of PATCH

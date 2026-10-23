@@ -125,7 +125,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 			}
 			docs = append(docs, model.Doc{
 				ID: id, Project: "proj", ProjectKey: "WL", Kind: kind, Number: number,
-				Slug: slug, Title: slug, Status: "accepted", Version: 1,
+				Slug: slug, Title: model.Markdown(slug), Status: "accepted", Version: 1,
 			})
 			bodies[id] = files[name]
 		}
@@ -172,7 +172,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 			if d.ID != id {
 				continue
 			}
-			d.Body = bodies[id]
+			d.Body = model.Markdown(bodies[id])
 			detail := model.DocDetail{Doc: d}
 			detail.Sections, detail.Edges = testDocDetail(t, d, docs)
 			if override, ok := srv.edgeOverrides[d.Slug]; ok {

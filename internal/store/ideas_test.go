@@ -60,7 +60,7 @@ func TestIdeaVisibilityAndShare(t *testing.T) {
 		}
 	}
 	title := "Stolen"
-	if _, err := s.PatchIdea(ctx, "b", idea.ID, model.PatchIdeaInput{Title: &title}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.PatchIdea(ctx, "b", idea.ID, model.PatchIdeaInput{Title: (*model.Markdown)(&title)}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("b patch private = %v, want ErrNotFound", err)
 	}
 	if _, err := s.ShareIdea(ctx, "b", idea.ID, "intake"); !errors.Is(err, ErrNotFound) {
@@ -112,7 +112,7 @@ func TestIdeaVisibilityAndShare(t *testing.T) {
 	if _, err := s.GetIdea(ctx, "b", idea.ID); err != nil {
 		t.Fatalf("b get shared: %v", err)
 	}
-	if _, err := s.PatchIdea(ctx, "b", idea.ID, model.PatchIdeaInput{Title: &title}); !errors.Is(err, ErrForbidden) {
+	if _, err := s.PatchIdea(ctx, "b", idea.ID, model.PatchIdeaInput{Title: (*model.Markdown)(&title)}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("b patch shared = %v, want ErrForbidden", err)
 	}
 	if _, err := s.ShareIdea(ctx, "b", idea.ID, "intake"); !errors.Is(err, ErrForbidden) {
@@ -128,10 +128,10 @@ func TestIdeaVisibilityAndShare(t *testing.T) {
 
 	// The author's edit of a shared idea edits the intake task too.
 	newTitle, newBody := "Rivers and lakes", "new body"
-	if _, err := s.PatchIdea(ctx, "a", idea.ID, model.PatchIdeaInput{Title: &newTitle, Body: &newBody}); err != nil {
+	if _, err := s.PatchIdea(ctx, "a", idea.ID, model.PatchIdeaInput{Title: (*model.Markdown)(&newTitle), Body: (*model.Markdown)(&newBody)}); err != nil {
 		t.Fatalf("a patch shared: %v", err)
 	}
-	if task, _ := s.GetTask(ctx, shared.Task); task.Title != newTitle || task.Body != newBody {
+	if task, _ := s.GetTask(ctx, shared.Task); string(task.Title) != newTitle || string(task.Body) != newBody {
 		t.Fatalf("task after patch = %q / %q", task.Title, task.Body)
 	}
 
@@ -175,7 +175,7 @@ func TestIdeaBlankingAndPrivateDelete(t *testing.T) {
 		t.Fatalf("bad type = %v, want ErrInvalidInput", err)
 	}
 	blank := " "
-	if _, err := s.PatchIdea(ctx, "a", idea.ID, model.PatchIdeaInput{Title: &blank}); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.PatchIdea(ctx, "a", idea.ID, model.PatchIdeaInput{Title: (*model.Markdown)(&blank)}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("blank title = %v, want ErrInvalidInput", err)
 	}
 

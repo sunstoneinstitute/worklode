@@ -154,7 +154,7 @@ func (s *server) addRule(ctx context.Context, c *cli.Client, a ruleAddArgs) (mod
 	if strings.TrimSpace(a.Heading) == "" {
 		return model.Rule{}, &toolError{outcome: outcomeInvalid, msg: "The rule needs a heading."}
 	}
-	in := model.AddRuleInput{Project: p.ID, Heading: strings.TrimSpace(a.Heading), Body: a.Body}
+	in := model.AddRuleInput{Project: p.ID, Heading: model.Markdown(strings.TrimSpace(a.Heading)), Body: model.Markdown(a.Body)}
 	if a.Kind != "" {
 		if in.Kind, err = ruleKind(a.Kind); err != nil {
 			return model.Rule{}, err
@@ -186,10 +186,10 @@ func (s *server) ruleEdit(ctx context.Context, c *cli.Client, req *mcp.CallToolR
 	}
 	in := model.EditRuleInput{Heading: cur.Heading, Body: cur.Body}
 	if a.Heading != nil {
-		in.Heading = strings.TrimSpace(*a.Heading)
+		in.Heading = model.Markdown(strings.TrimSpace(*a.Heading))
 	}
 	if a.Body != nil {
-		in.Body = *a.Body
+		in.Body = model.Markdown(*a.Body)
 	}
 	r, _, err := c.EditRule(ctx, ref, in)
 	if err != nil {

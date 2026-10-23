@@ -45,7 +45,7 @@ func SetChecklistItem(tx *sql.Tx, now time.Time, id string, input model.SetCheck
 		id, newBody, now.UTC()); err != nil {
 		return model.ChecklistItem{}, fmt.Errorf("set checklist item on task %s: %w", id, err)
 	}
-	return item, nil
+	return item, deriveTaskRefs(tx, id)
 }
 
 // resolveChecklistOrdinal turns input's ordinal-or-title identifier into a

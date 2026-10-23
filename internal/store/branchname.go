@@ -190,12 +190,12 @@ func BranchFor(t *model.Task) string {
 	// calls this once per row: skip the two unused slugifies and the
 	// reflective render in the configuration everything actually runs.
 	if text == DefaultBranchTemplate {
-		return t.ID + "-" + SlugifyTitle(t.Title)
+		return t.ID + "-" + SlugifyTitle(string(t.Title))
 	}
-	f := branchFields{id: t.ID, slug: SlugifyTitle(t.Title), projectID: SlugifyTitle(t.Project), kind: SlugifyTitle(t.Kind)}
+	f := branchFields{id: t.ID, slug: SlugifyTitle(string(t.Title)), projectID: SlugifyTitle(t.Project), kind: SlugifyTitle(t.Kind)}
 	out, err := render(tmpl, f)
 	if err != nil || out == "" {
-		return t.ID + "-" + SlugifyTitle(t.Title)
+		return t.ID + "-" + SlugifyTitle(string(t.Title))
 	}
 	return out
 }

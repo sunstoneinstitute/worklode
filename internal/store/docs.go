@@ -254,7 +254,9 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		map[string]string{"field": "status", "new": status}); err != nil {
 		return nil, err
 	}
-
+	if err := deriveDocRefs(tx, id); err != nil {
+		return nil, err
+	}
 	return getDocTx(tx, id)
 }
 
@@ -308,7 +310,7 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 		if err != nil {
 			return nil, err
 		}
-		if storedBody(kind, body) == storedBody(kind, cur.Body) {
+		if storedBody(kind, body) == storedBody(kind, string(cur.Body)) {
 			return cur, nil
 		}
 	}
@@ -346,6 +348,9 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 		map[string]string{"field": "body"}); err != nil {
 		return nil, err
 	}
+	if err := deriveDocRefs(tx, id); err != nil {
+		return nil, err
+	}
 	return getDocTx(tx, id)
 }
 
@@ -372,11 +377,11 @@ func SetDocColumns(tx *sql.Tx, now time.Time, id int64, in model.DocColumnsInput
 	title, issued := cur.Title, cur.Issued
 	var changes []map[string]string
 	if in.Title != nil {
-		title = strings.TrimSpace(*in.Title)
+		title = model.Markdown(strings.TrimSpace(string(*in.Title)))
 		if title == "" {
 			return nil, fmt.Errorf("doc %d: title must not be empty: %w", id, ErrInvalidInput)
 		}
-		changes = append(changes, map[string]string{"field": "title", "old": cur.Title, "new": title})
+		changes = append(changes, map[string]string{"field": "title", "old": string(cur.Title), "new": string(title)})
 	}
 	if in.Issued != nil {
 		issued = strings.TrimSpace(*in.Issued)
@@ -395,6 +400,9 @@ func SetDocColumns(tx *sql.Tx, now time.Time, id int64, in model.DocColumnsInput
 		if err := logDocChange(tx, id, eventID, c); err != nil {
 			return nil, err
 		}
+	}
+	if err := deriveDocRefs(tx, id); err != nil {
+		return nil, err
 	}
 	return getDocTx(tx, id)
 }

@@ -50,7 +50,7 @@ func TestSetChecklistItemByOrdinalChecksItem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	items := model.ParseChecklist(got.Body)
+	items := model.ParseChecklist(string(got.Body))
 	if !items[0].Checked {
 		t.Fatalf("item 0 not persisted as checked: %#v", items)
 	}
@@ -175,7 +175,7 @@ func TestSetChecklistItemRaceNoLostUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	items := model.ParseChecklist(got.Body)
+	items := model.ParseChecklist(string(got.Body))
 	if len(items) != n {
 		t.Fatalf("items = %d, want %d", len(items), n)
 	}

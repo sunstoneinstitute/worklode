@@ -105,7 +105,7 @@ func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.Front
 	out := make([]model.FrontierTask, 0, len(tasks))
 	for _, t := range tasks {
 		out = append(out, model.FrontierTask{
-			ID: t.ID, Title: t.Title, Project: t.Project,
+			ID: t.ID, Title: string(t.Title), Project: t.Project,
 			Priority: t.Priority, Concern: t.Concern,
 			FanOut: fanOut[t.ID], Depth: full.Depth[t.ID], IsCritical: open.Critical[t.ID],
 		})

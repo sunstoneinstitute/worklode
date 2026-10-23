@@ -308,6 +308,9 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		}); err != nil {
 		return nil, err
 	}
+	if err := deriveDocRefs(tx, id); err != nil {
+		return nil, err
+	}
 	return getDocTx(tx, id)
 }
 

@@ -242,3 +242,5 @@ configMapGenerator:
       - migrations/0114_inline-refs.down.sql
       - migrations/0115_rule-references-to-inline-refs.up.sql
       - migrations/0115_rule-references-to-inline-refs.down.sql
+      - migrations/0116_inline-refs-source-only-kinds.up.sql
+      - migrations/0116_inline-refs-source-only-kinds.down.sql

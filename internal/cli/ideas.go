@@ -80,7 +80,7 @@ func IdeaTable(w io.Writer, ideas []model.Idea) {
 		column{header: "SUBMITTED"},
 	)
 	for _, i := range ideas {
-		tbl.add(i.ID, i.Title, i.Type, i.Status, i.Author, dash(i.Task), i.Submitted)
+		tbl.add(i.ID, string(i.Title), i.Type, i.Status, i.Author, dash(i.Task), i.Submitted)
 	}
 	tbl.flush(w)
 }

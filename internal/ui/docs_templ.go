@@ -919,7 +919,7 @@ func Doc(v DocView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if v.Editor {
-					templ_7745c5c3_Err = docEditor(v.Doc.Body).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = docEditor(string(v.Doc.Body)).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

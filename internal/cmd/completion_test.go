@@ -78,7 +78,7 @@ func captureStderr(t *testing.T) func() string {
 func tasksResponse(ids ...string) model.TaskListResponse {
 	var resp model.TaskListResponse
 	for _, id := range ids {
-		resp.Tasks = append(resp.Tasks, model.Task{ID: id, Project: "proj", Title: "t " + id})
+		resp.Tasks = append(resp.Tasks, model.Task{ID: id, Project: "proj", Title: model.Markdown("t " + id)})
 	}
 	return resp
 }
@@ -93,7 +93,7 @@ func TestTaskIDCompletionSanitizesTitle(t *testing.T) {
 		var resp model.TaskListResponse
 		resp.Tasks = []model.Task{
 			{ID: "WL-1", Project: "proj", Title: "fix\tthe\nthing\r\n"},
-			{ID: "WL-2", Project: "proj", Title: longTitle},
+			{ID: "WL-2", Project: "proj", Title: model.Markdown(longTitle)},
 		}
 		writeTestJSON(t, w, resp)
 	})

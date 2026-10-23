@@ -91,7 +91,7 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 		DocID:     doc.ID,
 		DocIRI:    iri,
 		DocKind:   doc.Kind,
-		DocTitle:  doc.Title,
+		DocTitle:  string(doc.Title),
 		Version:   doc.Version,
 		Project:   doc.Project,
 	}

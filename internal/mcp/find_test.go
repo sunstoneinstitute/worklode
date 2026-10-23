@@ -127,7 +127,7 @@ func TestSearchPages(t *testing.T) {
 	f := newFixture(t)
 	c := f.client(f.alice)
 	for i := range 12 {
-		task, _, err := c.CreateTask(t.Context(), model.CreateTaskInput{Project: "worklode", Title: fmt.Sprintf("Quokka %d", i), Kind: "feature", Priority: "medium"})
+		task, _, err := c.CreateTask(t.Context(), model.CreateTaskInput{Project: "worklode", Title: model.Markdown(fmt.Sprintf("Quokka %d", i)), Kind: "feature", Priority: "medium"})
 		if err != nil {
 			t.Fatal(err)
 		}

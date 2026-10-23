@@ -41,7 +41,7 @@ func RulesTable(w io.Writer, rules []model.Rule) {
 		for i, a := range c.ArrangedIn {
 			placed[i] = a.DocRef + "#" + a.Anchor
 		}
-		tbl.add(c.Ref, c.Kind, c.Status, strconv.Itoa(c.Version), strings.Join(placed, ", "), c.Heading)
+		tbl.add(c.Ref, c.Kind, c.Status, strconv.Itoa(c.Version), strings.Join(placed, ", "), string(c.Heading))
 	}
 	tbl.flush(w)
 }
@@ -88,7 +88,7 @@ func RuleRender(w io.Writer, c model.Rule) {
 	}
 	if c.Body != "" {
 		fmt.Fprintln(w)
-		Markdown(w, c.Body)
+		Markdown(w, string(c.Body))
 	}
 }
 

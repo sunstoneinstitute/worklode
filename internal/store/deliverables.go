@@ -181,7 +181,7 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 		ID:          id,
 		Project:     in.ProjectID,
 		Name:        name,
-		Description: strings.TrimSpace(in.Description),
+		Description: model.Markdown(strings.TrimSpace(in.Description)),
 		URL:         strings.TrimSpace(in.URL),
 		CreatedBy:   in.CreatedBy,
 		CreatedAt:   ts,
@@ -211,7 +211,7 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 			return nil, err
 		}
 	}
-	return d, nil
+	return d, deriveDeliverableRefs(tx, d.ID)
 }
 
 // scanDeliverable reads one row selected with deliverableSelect. It is the
@@ -400,6 +400,9 @@ func DeleteDeliverable(tx *sql.Tx, id string) error {
 	if err != nil {
 		return fmt.Errorf("delete deliverable %s: %w", id, err)
 	}
-	return requireOneAffected(res, "delete deliverable "+id,
-		fmt.Errorf("deliverable %s: %w", id, ErrNotFound))
+	if err := requireOneAffected(res, "delete deliverable "+id,
+		fmt.Errorf("deliverable %s: %w", id, ErrNotFound)); err != nil {
+		return err
+	}
+	return deleteInlineRefs(tx, "deliverable", id)
 }

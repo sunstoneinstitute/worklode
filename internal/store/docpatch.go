@@ -161,6 +161,9 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 	} else if err := patchNote(tx, now, in, next, changed, eventID); err != nil {
 		return nil, nil, err
 	}
+	if err := deriveDocRefs(tx, in.ID); err != nil {
+		return nil, nil, err
+	}
 
 	doc, err := getDocTx(tx, in.ID)
 	if err != nil {
@@ -400,7 +403,7 @@ func patchNote(tx *sql.Tx, now time.Time, in DocPatchInput, next parsedDoc,
 		body = "[" + strings.Join(changed, ", ") + "] " + body
 	}
 	_, err := AddDocNote(tx, now, in.ID, model.AddDocNoteInput{
-		Anchor: anchor, Body: body, Task: in.TaskID, Session: in.SessionID,
+		Anchor: anchor, Body: model.Markdown(body), Task: in.TaskID, Session: in.SessionID,
 	}, in.ActorID, eventID)
 	return err
 }

@@ -68,7 +68,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Parent = strings.TrimSpace(req.Parent)
 	req.FollowUpTo = strings.TrimSpace(req.FollowUpTo)
-	if strings.TrimSpace(req.Title) == "" {
+	if strings.TrimSpace(string(req.Title)) == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "title is required")
 		return
 	}
@@ -140,8 +140,8 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		func(tx *sql.Tx, eventID int64) error {
 			t, err := store.CreateTask(tx, now, store.TaskInput{
 				ProjectID: req.Project,
-				Title:     req.Title,
-				Body:      req.Body,
+				Title:     string(req.Title),
+				Body:      string(req.Body),
 				Priority:  req.Priority,
 				Kind:      req.Kind,
 				Concern:   req.Concern,
@@ -189,7 +189,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if err := store.ReconcileEmbedded(tx, now, t.ID,
-				blobref.Extract(req.Body), actorID); err != nil {
+				blobref.Extract(string(req.Body)), actorID); err != nil {
 				return err
 			}
 			// Every kind may carry rows (WL-REQ-176), and a decision-kind
@@ -293,7 +293,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Hierarchy.Progress = progress
 	if parent != nil {
-		resp.Hierarchy.Parent = &model.TaskParent{ID: parent.ID, Title: parent.Title, State: parent.State}
+		resp.Hierarchy.Parent = &model.TaskParent{ID: parent.ID, Title: string(parent.Title), State: parent.State}
 	}
 
 	blobs, err := s.st.ListTaskBlobs(r.Context(), id)
@@ -569,7 +569,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
+	if req.Title != nil && strings.TrimSpace(string(*req.Title)) == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "title must not be blank")
 		return
 	}
@@ -644,7 +644,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			for field, val := range map[string]*string{
-				"title": req.Title, "body": req.Body, "priority": req.Priority, "concern": req.Concern,
+				"title": (*string)(req.Title), "body": (*string)(req.Body), "priority": req.Priority, "concern": req.Concern,
 				"kind": req.Kind, "milestone": req.Milestone, "due": req.Due,
 			} {
 				if val == nil {

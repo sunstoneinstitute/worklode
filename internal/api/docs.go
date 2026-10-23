@@ -118,7 +118,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	}
 	// The plan token budget (S6, S19): a plan body over the hard ceiling is
 	// refused before the write; over the soft budget only warns.
-	warnings, err := s.checkPlanBudget(r.Context(), req.Kind, req.Project, req.Body)
+	warnings, err := s.checkPlanBudget(r.Context(), req.Kind, req.Project, string(req.Body))
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -142,7 +142,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 				Kind:      req.Kind,
 				Number:    req.Number,
 				Slug:      req.Slug,
-				Body:      req.Body,
+				Body:      string(req.Body),
 				Owner:     req.Owner,
 				CreatedBy: actorID,
 				// The authoring task (WL-REQ-177). Left empty by every caller
@@ -737,7 +737,7 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	warnings, err := s.checkPlanBudget(r.Context(), existing.Kind, existing.Project, req.Body)
+	warnings, err := s.checkPlanBudget(r.Context(), existing.Kind, existing.Project, string(req.Body))
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -747,7 +747,7 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	var updated *model.Doc
 	err = s.recordDocEvent(w, r, "update", "doc.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			d, err := store.UpdateDocBody(tx, now, id, req.Body, req.IfVersion, eventID)
+			d, err := store.UpdateDocBody(tx, now, id, string(req.Body), req.IfVersion, eventID)
 			if err != nil {
 				return err
 			}
@@ -791,7 +791,7 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 	err := s.recordDocEvent(w, r, "patch", watcher.TypeDocPatched, id, req,
 		func(tx *sql.Tx, eventID int64) error {
 			d, p, err := store.PatchDoc(tx, now, store.DocPatchInput{
-				ID: id, Body: req.Body, Substantive: req.Substantive, Note: req.Note,
+				ID: id, Body: string(req.Body), Substantive: req.Substantive, Note: string(req.Note),
 				ActorID: actorID, TaskID: req.Task, SessionID: req.Session,
 				IfVersion: req.IfVersion,
 			}, eventID)
@@ -1168,7 +1168,7 @@ func (s *server) updateDocRevision(w http.ResponseWriter, r *http.Request) {
 	now := s.st.Now()
 	err := s.recordDocEvent(w, r, "update", "doc.revision_updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.UpdateRevision(tx, now, id, req.Body, eventID)
+			return store.UpdateRevision(tx, now, id, string(req.Body), eventID)
 		})
 	if err != nil {
 		return

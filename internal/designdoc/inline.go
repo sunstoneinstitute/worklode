@@ -104,8 +104,8 @@ func (in *Inliner) ruleBlocks(root string, amenders []string, seen map[string]bo
 			return nil, nil, err
 		}
 		pending = append(pending, nestedPending...)
-		parts := []string{"**" + a.Heading + "**"}
-		if body := strings.TrimSpace(flattenHeadings(a.Body)); body != "" {
+		parts := []string{"**" + string(a.Heading) + "**"}
+		if body := strings.TrimSpace(flattenHeadings(string(a.Body))); body != "" {
 			parts = append(parts, body)
 		}
 		parts = append(parts, nested...)

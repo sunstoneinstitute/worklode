@@ -168,7 +168,7 @@ Stating a status needs the admin-only doc.import permission.`,
 					if err != nil {
 						return fmt.Errorf("read the stored body of %s: %w", d.path, err)
 					}
-					if sameImportedBody(d.kind, stored.Body, d.stored) {
+					if sameImportedBody(d.kind, string(stored.Body), d.stored) {
 						continue
 					}
 					// Editable in place: a plan at any status, a draft spec or
@@ -182,7 +182,7 @@ Stating a status needs the admin-only doc.import permission.`,
 						continue
 					}
 					if _, _, err := c.UpdateDocBody(cmd.Context(), id,
-						model.UpdateDocBodyInput{Body: d.stored}); err != nil {
+						model.UpdateDocBodyInput{Body: model.Markdown(d.stored)}); err != nil {
 						return fmt.Errorf("update the drifted body of %s: %w", d.path, err)
 					}
 					updated++
@@ -190,7 +190,7 @@ Stating a status needs the admin-only doc.import permission.`,
 				}
 				nd, _, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
 					Project: sc.Project, Kind: d.kind, Number: d.number,
-					Slug: d.slug, Body: d.body, Status: d.status,
+					Slug: d.slug, Body: model.Markdown(d.body), Status: d.status,
 				})
 				if err != nil {
 					return fmt.Errorf("create %s: %w", d.path, err)

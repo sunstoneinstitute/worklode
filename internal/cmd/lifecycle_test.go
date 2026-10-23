@@ -146,7 +146,7 @@ func moveToReview(t *testing.T, st *store.Store, taskID string) {
 func createTestTask(t *testing.T, c *cli.Client, title string) model.Task {
 	t.Helper()
 	ctx := context.Background()
-	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: model.Markdown(title), Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("create task %q: %v", title, err)
 	}

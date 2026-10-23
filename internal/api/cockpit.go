@@ -331,7 +331,7 @@ func mapWorkItem(f store.ProjectWorkFact, blocked bool, resolveActor func(string
 
 	return model.CockpitWorkItem{
 		ID:             t.ID,
-		Title:          t.Title,
+		Title:          string(t.Title),
 		Priority:       t.Priority,
 		State:          t.State,
 		Blocked:        blocked,

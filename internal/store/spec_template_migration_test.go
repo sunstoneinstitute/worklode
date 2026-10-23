@@ -134,10 +134,10 @@ func TestSpecTemplateMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plain(got.Body) != tmplSpecOne {
+	if plain(string(got.Body)) != tmplSpecOne {
 		t.Errorf("rendered PM-SPEC-1:\n%q\nwant the text it had:\n%q", got.Body, tmplSpecOne)
 	}
-	if got, err = s.GetDoc(t.Context(), two); err != nil || plain(got.Body) != tmplSpecTwo {
+	if got, err = s.GetDoc(t.Context(), two); err != nil || plain(string(got.Body)) != tmplSpecTwo {
 		t.Errorf("rendered PM-SPEC-2:\n%q, err %v", got.Body, err)
 	}
 

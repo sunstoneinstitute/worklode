@@ -722,7 +722,7 @@ func TestEnsureDraftRally(t *testing.T) {
 	if first.Kind != "rally" || first.State != "draft" {
 		t.Errorf("draft rally is %s/%s, want rally/draft", first.Kind, first.State)
 	}
-	if want := "Rally 2026-07-19"; first.Title != want {
+	if want := "Rally 2026-07-19"; string(first.Title) != want {
 		t.Errorf("title = %q, want %q", first.Title, want)
 	}
 
@@ -834,7 +834,7 @@ func TestMintAcceptDecision(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("MintAcceptDecision: %v", err)
 	}
-	if want := "Accept P1-PLAN-7?"; task.Title != want {
+	if want := "Accept P1-PLAN-7?"; string(task.Title) != want {
 		t.Errorf("title = %q, want %q", task.Title, want)
 	}
 	if task.Kind != "decision" || task.AboutDoc != plan.ID {
