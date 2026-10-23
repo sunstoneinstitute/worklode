@@ -17,6 +17,10 @@ func resolveFake(h Hit) *Target {
 			return &Target{Ref: "WL-REQ-12"}
 		}
 		return &Target{Ref: "WL-SPEC-77", DocAnchor: true}
+	case h.Infix == "ADR":
+		return &Target{Ref: "WL-SPEC-77"}
+	case h.Infix == "SPEC" && h.Anchor != "":
+		return &Target{Ref: "WL-REQ-848"}
 	case h.Infix == "SPEC":
 		return &Target{Ref: "WL-SPEC-77"}
 	case h.Infix == "RULE" || h.Infix == "REQ":
@@ -42,9 +46,58 @@ func TestNormalize(t *testing.T) {
 		{"section with rule", "see WL-SPEC-77#sec-4 now", "see WL-REQ-12 now"},
 		{"section without rule", "see WL-SPEC-77#sec-9 now", "see WL-SPEC-77#sec-9 now"},
 		{"wrong infix", "see WL-RULE-12 now", "see WL-REQ-12 now"},
-		{"keyword", "see spec 77 now", "see WL-SPEC-77 now"},
 		{"in code", "see `/tasks/WL-7` now", "see `/tasks/WL-7` now"},
+		{"in code across lines", "see `a\n/tasks/WL-7` now", "see `a\n/tasks/WL-7` now"},
 		{"fenced", "```\n/tasks/WL-7\n```", "```\n/tasks/WL-7\n```"},
+		{"quoted", `the form "/tasks/WL-7" and /tasks/WL-7`, `the form "/tasks/WL-7" and WL-7`},
+		{"range of full refs", "see WL-SPEC-77#sec-4–§5 now", "see WL-SPEC-77#sec-4–§5 now"},
+		{"list of full refs", "see WL-SPEC-77#sec-4, §5 now", "see WL-SPEC-77#sec-4, §5 now"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := normalize(c.in); got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestNormalizeLeavesCorpusExamples: the rewrites the WL-1243 dry run showed
+// to change meaning are left as written (WL-REQ-1854).
+func TestNormalizeLeavesCorpusExamples(t *testing.T) {
+	for name, text := range map[string]string{
+		"keyword":         "see spec 77 now",
+		"keyword section": "see spec 77 §4 now",
+		"adr":             "per ADR 7 here",
+		"WL-REQ-1809":     `number ("spec 74") is read as a spec of the rendering page's project, and`,
+		"WL-REQ-1650":     "it names the Glossary, and a citation of spec 002 written before September 2026 means",
+		"WL-PLAN-4":       "Exact values from spec 039 §3–§4 — quoted",
+		"WL-PLAN-2 range": "grows the loop (spec 040 §7–§8); `serve`",
+		"WL-PLAN-10 list": "Rendering and lifetime (spec 042 §4, §4.1, §5)",
+		"WL-PLAN-137":     "- [ ] Commit: `Review button, disabled until spec 059 is built (WL-SPEC-66\n      §3.3)`.",
+		"WL-PLAN-79":      `011 §1 (the "Corrected against spec 004 §2" self-correction)`, // spec-gate:ignore
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := normalize(text); got != text {
+				t.Errorf("rewritten:\n got %q\nwant %q", got, text)
+			}
+			hits := Scan(text, testKeys)
+			if len(hits) == 0 {
+				t.Fatal("no hits: left-alone text must still yield edges")
+			}
+			for _, h := range hits {
+				if resolveFake(h) == nil {
+					t.Errorf("%q does not resolve", h.Raw)
+				}
+			}
+		})
+	}
+}
+
+func TestNormalizeAllowedForms(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"url with section", "see /WL-SPEC-77#sec-4 now", "see WL-REQ-12 now"},
+		{"full section ref next to a keyword", "WL-SPEC-77#sec-4 (spec 77 §4)", "WL-REQ-12 (spec 77 §4)"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -74,6 +127,20 @@ func TestVerify(t *testing.T) {
 		"target change": strings.Replace(ok, "WL-7", "WL-8", 1),
 	} {
 		if err := Verify(old, bad, testKeys, resolveFake); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+// TestVerifyRefusesLiteralRewrites: Verify accepts only what Normalize would
+// rewrite, so a rewrite of a short form, quoted text or code is refused.
+func TestVerifyRefusesLiteralRewrites(t *testing.T) {
+	for name, c := range map[string][2]string{
+		"keyword": {"see spec 77 now", "see WL-SPEC-77 now"},
+		"quoted":  {`the form "/tasks/WL-7"`, `the form "WL-7"`},
+		"code":    {"see `a\n/tasks/WL-7` now", "see `a\nWL-7` now"},
+	} {
+		if err := Verify(c[0], c[1], testKeys, resolveFake); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
