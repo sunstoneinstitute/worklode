@@ -484,3 +484,32 @@ func TestCheckPendingDerive(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckPendingDerivePages: the derive check follows Next and counts the
+// nodes of every page (WL-REQ-295).
+func TestCheckPendingDerivePages(t *testing.T) {
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var in model.RefDeriveParams
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if in.Limit <= 0 {
+			t.Errorf("params = %+v, want a Limit", in)
+		}
+		rep := model.RefDeriveReport{Nodes: []model.RefDeriveNode{}}
+		if in.Kind == "task" {
+			rep.Nodes = []model.RefDeriveNode{{Ref: "WL-" + in.After + "x", Rewrites: 1}}
+			if in.After == "" {
+				rep.Next = "1"
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(rep)
+	}))
+	t.Cleanup(srv.Close)
+	c := cli.NewClient(cli.Config{ServerURL: srv.URL})
+	got := checkPendingDerive(context.Background(), c, "demo", true)
+	if !got.Warn || got.Detail != "0 docs, 0 rules, 2 tasks need derive" || requests != 4 {
+		t.Errorf("checkPendingDerive = %+v after %d requests", got, requests)
+	}
+}
