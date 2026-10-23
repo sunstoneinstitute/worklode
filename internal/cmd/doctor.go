@@ -20,6 +20,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/gate"
 	"github.com/sunstoneinstitute/worklode/internal/githooks"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -105,7 +106,7 @@ func checkEdgeAgent(ctx context.Context, url string) doctorCheck {
 	return pass(name, url+" healthy")
 }
 
-// runDoctorChecks runs the spec's seven checks in order from dir. Later
+// runDoctorChecks runs the spec's checks in order from dir. Later
 // checks still run when earlier ones fail, degrading to skips where they
 // cannot be evaluated, so one run reports everything wrong at once.
 func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
@@ -261,7 +262,41 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 	// unreachable.
 	checks = append(checks, checkEdgeAgent(ctx, edgeAgentHealthURL))
 
+	// 10. Nodes whose inline references a derive run would change
+	// (WL-REQ-1860). A dry run, so the check writes nothing.
+	checks = append(checks, checkPendingDerive(ctx, c, cfg.CurrentProject, serverReachable))
+
 	return checks
+}
+
+// checkPendingDerive dry-runs derive over every doc, rule and task of the
+// project. A node has changes when its entry has added or removed references
+// or rewrites. Anything short of an answer is a skip, never a warning.
+func checkPendingDerive(ctx context.Context, c *cli.Client, project string, serverReachable bool) doctorCheck {
+	const name = "derive"
+	switch {
+	case !serverReachable:
+		return skip(name, "unknown: server unreachable")
+	case project == "":
+		return skip(name, "unknown: no current_project")
+	}
+	var counts [3]int
+	for i, kind := range []model.NodeKind{"doc", "rule", "task"} {
+		rep, _, err := c.DeriveRefs(ctx, project, model.RefDeriveParams{Kind: kind, All: true, DryRun: true})
+		if err != nil {
+			return skip(name, "unknown: "+err.Error())
+		}
+		for _, n := range rep.Nodes {
+			if len(n.Added) > 0 || len(n.Removed) > 0 || n.Rewrites > 0 {
+				counts[i]++
+			}
+		}
+	}
+	if counts == [3]int{} {
+		return pass(name, "no node needs derive")
+	}
+	return warn(name, fmt.Sprintf("%d docs, %d rules, %d tasks need derive", counts[0], counts[1], counts[2]),
+		"lode doc derive --all, lode rule derive --all, lode task derive --all")
 }
 
 // checkGatePRs reports whether a gated repo's default branch requires pull

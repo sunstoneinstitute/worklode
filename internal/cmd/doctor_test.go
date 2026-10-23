@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/githooks"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 )
 
@@ -418,6 +421,65 @@ func TestCheckGatePRs(t *testing.T) {
 			}
 			if tc.reachable && tc.remote != "" && gotRemote != tc.remote {
 				t.Errorf("remote sent = %q, want %q", gotRemote, tc.remote)
+			}
+		})
+	}
+}
+
+// TestCheckPendingDerive covers the derive check (WL-REQ-295, WL-REQ-1860):
+// a node has changes when it has added or removed references or rewrites.
+func TestCheckPendingDerive(t *testing.T) {
+	node := func(ref, added string, rewrites int) string {
+		a := "[]"
+		if added != "" {
+			a = `[{"field":"body","to_ref":"` + added + `"}]`
+		}
+		return `{"ref":"` + ref + `","added":` + a + `,"removed":[],"unresolved":[],"rewrites":` + strconv.Itoa(rewrites) + `}`
+	}
+	cases := []struct {
+		name       string
+		bodies     map[string]string // kind -> response body
+		status     int
+		reachable  bool
+		project    string
+		wantWarn   bool
+		wantSkip   bool
+		wantDetail string
+	}{
+		{"clean", map[string]string{"doc": `{"nodes":[` + node("WL-SPEC-1", "", 0) + `]}`, "rule": `{"nodes":[]}`, "task": `{"nodes":[]}`},
+			200, true, "demo", false, false, "no node needs derive"},
+		{"pending", map[string]string{"doc": `{"nodes":[` + node("WL-SPEC-1", "WL-1", 0) + `,` + node("WL-SPEC-2", "", 2) + `,` + node("WL-SPEC-3", "", 0) + `]}`,
+			"rule": `{"nodes":[` + node("WL-REQ-1", "", 1) + `]}`, "task": `{"nodes":[]}`},
+			200, true, "demo", true, false, "2 docs, 1 rules, 0 tasks need derive"},
+		{"server error", nil, 500, true, "demo", false, true, "unknown"},
+		{"unreachable", nil, 200, false, "demo", false, true, "server unreachable"},
+		{"no project", nil, 200, true, "", false, true, "no current_project"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/projects/demo/refs/derive" {
+					t.Errorf("path = %q", r.URL.Path)
+				}
+				var in model.RefDeriveParams
+				_ = json.NewDecoder(r.Body).Decode(&in)
+				if !in.All || !in.DryRun {
+					t.Errorf("params = %+v, want All and DryRun", in)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				io.WriteString(w, tc.bodies[string(in.Kind)])
+			}))
+			t.Cleanup(srv.Close)
+			c := cli.NewClient(cli.Config{ServerURL: srv.URL})
+
+			got := checkPendingDerive(context.Background(), c, tc.project, tc.reachable)
+			if got.Name != "derive" || !got.OK || got.Warn != tc.wantWarn || got.Skipped != tc.wantSkip ||
+				!strings.Contains(got.Detail, tc.wantDetail) {
+				t.Fatalf("checkPendingDerive = %+v, want warn=%v skip=%v detail ~ %q", got, tc.wantWarn, tc.wantSkip, tc.wantDetail)
+			}
+			if tc.wantWarn && got.Fix != "lode doc derive --all, lode rule derive --all, lode task derive --all" {
+				t.Errorf("fix = %q", got.Fix)
 			}
 		})
 	}
