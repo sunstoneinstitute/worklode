@@ -183,7 +183,7 @@ templ Doc(v DocView) {
 				// allowlist, an id on a heading matching the section-anchor
 				// grammar, and nothing else.
 				if v.Editor {
-					@docEditor(v.Doc.Body)
+					@docEditor(string(v.Doc.Body))
 				} else {
 					<div class="bd prose">
 						@templ.Raw(string(v.BodyHTML))

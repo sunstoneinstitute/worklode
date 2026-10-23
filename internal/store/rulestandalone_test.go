@@ -185,7 +185,7 @@ func TestAcceptRuleBumpsArrangingSpecs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if d.Version != before[id]+1 || !strings.Contains(d.Body, "C changed.") {
+		if d.Version != before[id]+1 || !strings.Contains(string(d.Body), "C changed.") {
 			t.Errorf("doc %d: version %d (was %d), body:\n%s", id, d.Version, before[id], d.Body)
 		}
 		prior, err := s.GetDocVersion(ctx, id, before[id])

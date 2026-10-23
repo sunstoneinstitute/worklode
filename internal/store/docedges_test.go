@@ -218,7 +218,7 @@ func TestReplaceDocEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDoc: %v", err)
 	}
-	if after.Version != 1 || after.Status != "accepted" || plain(after.Body) != noHeader(t, planBody) {
+	if after.Version != 1 || after.Status != "accepted" || plain(string(after.Body)) != noHeader(t, planBody) {
 		t.Errorf("doc = {version:%d status:%s}, want the source untouched at version 1",
 			after.Version, after.Status)
 	}
@@ -827,7 +827,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	// unresolvable reference (to_doc NULL -> 0) sorts ahead of a resolved one.
 	specFar := func(e model.DocEdge) model.DocEdge {
 		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind, e.ToNumber = spec.ID, "p1", spec.Slug, "spec", 25
-		e.ToStatus, e.ToTitle, e.ToKey = spec.Status, spec.Title, "P1"
+		e.ToStatus, e.ToTitle, e.ToKey = spec.Status, string(spec.Title), "P1"
 		return e
 	}
 	wantOut := []model.DocEdge{
@@ -862,7 +862,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		// far end names one too.
 		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind = plan.ID, "p1", plan.Slug, "plan"
 		e.ToNumber = plan.Number
-		e.ToStatus, e.ToTitle, e.ToKey = plan.Status, plan.Title, "P1"
+		e.ToStatus, e.ToTitle, e.ToKey = plan.Status, string(plan.Title), "P1"
 		return e
 	}
 	wantIn := []model.DocEdge{
@@ -910,7 +910,7 @@ func TestDocListEdgesResolvesFarProject(t *testing.T) {
 	want := []model.DocEdge{{
 		Type: "wasDerivedFrom", ToDoc: far.ID,
 		ToProject: "p2", ToSlug: "007-far-spec", ToKind: "spec", ToNumber: 7,
-		ToStatus: far.Status, ToTitle: far.Title, ToKey: "P2",
+		ToStatus: far.Status, ToTitle: string(far.Title), ToKey: "P2",
 	}}
 	if !reflect.DeepEqual(out, want) {
 		t.Fatalf("edges out of the near plan = %+v, want %+v", out, want)
@@ -923,7 +923,7 @@ func TestDocListEdgesResolvesFarProject(t *testing.T) {
 	wantIn := []model.DocEdge{{
 		Type: "hadDerivation", ToDoc: near.ID, ToNumber: near.Number,
 		ToProject: "p1", ToSlug: "plan-across", ToKind: "plan", ToStatus: near.Status,
-		ToTitle: near.Title, ToKey: "P1",
+		ToTitle: string(near.Title), ToKey: "P1",
 	}}
 	if !reflect.DeepEqual(in, wantIn) {
 		t.Fatalf("edges into the far spec = %+v, want %+v", in, wantIn)

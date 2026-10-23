@@ -136,7 +136,7 @@ func TestPatchDocRuleSplit(t *testing.T) {
 				if getErr != nil {
 					t.Fatal(getErr)
 				}
-				if after.Version != 1 || plain(after.Body) != noHeader(t, patchSpecBody) {
+				if after.Version != 1 || plain(string(after.Body)) != noHeader(t, patchSpecBody) {
 					t.Errorf("refused patch still moved the document: version %d", after.Version)
 				}
 				return
@@ -201,8 +201,8 @@ func TestPatchDocRuleSplit(t *testing.T) {
 			// WL-REQ-171: the fixer's own record of what changed and why, anchored
 			// at the first section the patch touched and naming them all.
 			if len(notes) != 1 || notes[0].Anchor != res.ChangedAnchors[0] ||
-				!strings.Contains(notes[0].Body, tc.note) ||
-				!strings.Contains(notes[0].Body, res.ChangedAnchors[0]) {
+				!strings.Contains(string(notes[0].Body), tc.note) ||
+				!strings.Contains(string(notes[0].Body), res.ChangedAnchors[0]) {
 				t.Errorf("notes = %+v, want one anchored at %s carrying %q and the changed anchors",
 					notes, res.ChangedAnchors[0], tc.note)
 			}
@@ -471,13 +471,13 @@ func TestPatchDocIfVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Version != spec.Version+1 || !strings.Contains(after.Body, "Scope body, restated.") {
+	if after.Version != spec.Version+1 || !strings.Contains(string(after.Body), "Scope body, restated.") {
 		t.Errorf("refused patch moved the document: version %d", after.Version)
 	}
 
 	// Rebased on the version that landed, the same amendment goes through.
 	if _, _, err := patchDoc(t, s, DocPatchInput{
-		ID: spec.ID, Body: rewordSec2(after.Body), ActorID: "stig",
+		ID: spec.ID, Body: rewordSec2(string(after.Body)), ActorID: "stig",
 		Note: "reworded the model", IfVersion: after.Version,
 	}); err != nil {
 		t.Fatalf("PatchDoc after re-reading the version: %v", err)

@@ -891,7 +891,7 @@ func (s *server) namePlanTasks(r *http.Request, d *model.DocDetail, body string)
 // story, and the page labels it.
 func (s *server) docPageBody(r *http.Request, d *model.DocDetail) (string, bool) {
 	if r.URL.Query().Get("body") == "source" {
-		return d.Doc.Body, false
+		return string(d.Doc.Body), false
 	}
 	out, err := designdoc.NewInliner(func(ref string) (*model.Rule, error) {
 		rr, ok := designdoc.ParseRuleRef(ref)
@@ -903,7 +903,7 @@ func (s *server) docPageBody(r *http.Request, d *model.DocDetail) (string, bool)
 	if err != nil {
 		s.log.Warn("rendering doc page from its stored source: consolidation failed",
 			"doc", d.Doc.ID, "err", err)
-		return withPendingMarkers(d.Doc.Body, d.Sections), false
+		return withPendingMarkers(string(d.Doc.Body), d.Sections), false
 	}
 	return withPendingMarkers(out, d.Sections), true
 }

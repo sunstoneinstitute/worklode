@@ -159,7 +159,7 @@ func approvalDetailView(a *store.Approval, title, url string,
 		v.DecidedBy = names[*a.ResolvingActor]
 	}
 	if a.Note != nil {
-		v.Note = *a.Note
+		v.Note = string(*a.Note)
 	}
 	v.ImpactOpen = a.ReviewKind == "impact" &&
 		(a.State == "awaiting" || a.State == "changes_requested")
@@ -405,7 +405,7 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable, mile
 		row := ui.DeliverableRow{
 			ID:                 d.ID,
 			Name:               d.Name,
-			Description:        d.Description,
+			Description:        string(d.Description),
 			URL:                d.URL,
 			CreatedBy:          d.CreatedBy,
 			CreatedAt:          d.CreatedAt,
@@ -425,7 +425,7 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable, mile
 	for _, m := range milestones {
 		if rows := byMilestone[m.ID]; len(rows) > 0 {
 			v.Groups = append(v.Groups, ui.DeliverableGroup{
-				MilestoneID: m.ID, MilestoneTitle: m.Title, Rows: rows,
+				MilestoneID: m.ID, MilestoneTitle: string(m.Title), Rows: rows,
 			})
 		}
 	}
@@ -510,7 +510,7 @@ func docNoteRows(md *mdrender.Cache, keys mdrender.ProjectKeys, notes []model.Do
 	for _, n := range notes {
 		out = append(out, ui.DocNoteRow{
 			Anchor:    n.Anchor,
-			BodyHTML:  md.Body(keys, n.Body),
+			BodyHTML:  md.Body(keys, string(n.Body)),
 			CreatedBy: n.CreatedBy,
 			CreatedAt: n.CreatedAt,
 			Task:      n.Task,
@@ -565,7 +565,7 @@ func docEdgeRows(edges []model.DocEdge, keys mdrender.ProjectKeys) []ui.DocEdgeR
 		switch {
 		case e.ToDoc != 0:
 			far := model.Doc{ID: e.ToDoc, Project: e.ToProject, ProjectKey: e.ToKey,
-				Slug: e.ToSlug, Kind: e.ToKind, Number: e.ToNumber, Title: e.ToTitle}
+				Slug: e.ToSlug, Kind: e.ToKind, Number: e.ToNumber, Title: model.Markdown(e.ToTitle)}
 			if far.Slug == "" {
 				row.Label = "document " + strconv.FormatInt(far.ID, 10)
 				break
@@ -578,7 +578,7 @@ func docEdgeRows(edges []model.DocEdge, keys mdrender.ProjectKeys) []ui.DocEdgeR
 				row.Label += "#" + e.ToAnchor
 			}
 			if far.Title != "" {
-				row.Label += " " + far.Title
+				row.Label += " " + string(far.Title)
 			}
 		case e.ToExternal != "":
 			// A reference the store kept verbatim. A bare number is a spec
@@ -657,7 +657,7 @@ func milestoneFormOptions(milestones []model.Milestone, selected string) []ui.Fo
 	out := make([]ui.FormOption, 0, len(milestones)+1)
 	out = append(out, ui.FormOption{Value: "", Label: "No milestone", Selected: selected == ""})
 	for _, m := range milestones {
-		out = append(out, ui.FormOption{Value: m.ID, Label: m.Title, Selected: m.ID == selected})
+		out = append(out, ui.FormOption{Value: m.ID, Label: string(m.Title), Selected: m.ID == selected})
 	}
 	return out
 }
@@ -707,7 +707,7 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 		// Sanitising happens here rather than in ui: internal/ui is a
 		// stdlib + internal/model leaf and cannot import mdrender's
 		// goldmark/bluemonday dependencies (WL-RULE-1349, CLAUDE.md).
-		BodyHTML: md.Body(keys, t.Body),
+		BodyHTML: md.Body(keys, string(t.Body)),
 		Blocked:  blocked,
 		Timeline: timelineRows(entries),
 	}
@@ -810,7 +810,7 @@ func ruleView(md *mdrender.Cache, keys mdrender.ProjectKeys, c *model.Rule, vers
 	v := ui.RuleView{
 		Page:         ui.PageProps{Title: "worklode: " + c.Ref, ActiveGlobal: "knowledge"},
 		Rule:         *c,
-		BodyHTML:     md.Body(keys, c.Body),
+		BodyHTML:     md.Body(keys, string(c.Body)),
 		Versions:     versions,
 		CanonicalURL: fmt.Sprintf("/projects/%s/rule/%d", projectID, c.Number),
 		// versions is newest first, so its head is the rule's live
@@ -833,9 +833,9 @@ func ruleView(md *mdrender.Cache, keys mdrender.ProjectKeys, c *model.Rule, vers
 // own project, which is the glossary project for an instance term.
 func termView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Term, projectID string) ui.TermView {
 	return ui.TermView{
-		Page:     ui.PageProps{Title: "worklode: " + t.Rule.Heading, ActiveGlobal: "knowledge"},
+		Page:     ui.PageProps{Title: string("worklode: " + t.Rule.Heading), ActiveGlobal: "knowledge"},
 		Term:     *t,
-		BodyHTML: md.Body(keys, t.Rule.Body),
+		BodyHTML: md.Body(keys, string(t.Rule.Body)),
 		RuleURL:  fmt.Sprintf("/projects/%s/rule/%d", t.Rule.Project, t.Rule.Number),
 	}
 }

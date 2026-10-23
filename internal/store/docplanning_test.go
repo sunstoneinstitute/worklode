@@ -104,7 +104,7 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 		if task.Project != "p1" {
 			t.Errorf("minted task %d project = %q, want p1", i, task.Project)
 		}
-		if task.Title != wantTitles[i] {
+		if string(task.Title) != wantTitles[i] {
 			t.Errorf("minted task %d title = %q, want %q", i, task.Title, wantTitles[i])
 		}
 		if task.Kind != wantKinds[i] {
@@ -117,7 +117,7 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 			t.Errorf("minted task %d created_by = %q, want stig", i, task.CreatedBy)
 		}
 	}
-	if !strings.Contains(minted[0].Body, "Do the first thing.") {
+	if !strings.Contains(string(minted[0].Body), "Do the first thing.") {
 		t.Errorf("minted task 0 body = %q, missing prose", minted[0].Body)
 	}
 	if len(minted[0].Skills) != 1 || minted[0].Skills[0] != "superpowers:test-driven-development" {
@@ -415,7 +415,7 @@ func TestDocUpdateBodyMintedPlanRequiresReadableTasks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetDoc: %v", err)
 			}
-			if plain(got.Body) != noHeader(t, planMintBody) {
+			if plain(string(got.Body)) != noHeader(t, planMintBody) {
 				t.Errorf("body moved to %q, want the refused edit not to land", got.Body)
 			}
 		})

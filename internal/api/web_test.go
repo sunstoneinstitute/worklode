@@ -309,7 +309,7 @@ func TestReviewsPageDocRowLinksItsPage(t *testing.T) {
 
 	body := doReq(t, h, "GET", "/reviews", "", nil).Body.String()
 	bodyContains(t, body, `href="/projects/proj/spec/29"`,
-		doc.Title, ">doc<")
+		string(doc.Title), ">doc<")
 }
 
 // TestReviewsPageEmptyIsHonest checks an empty queue states that honestly

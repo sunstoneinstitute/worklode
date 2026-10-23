@@ -1470,7 +1470,7 @@ func SetImpactNote(tx *sql.Tx, id int64, note string) error {
 	if _, err := tx.Exec(`UPDATE approvals SET note = $1 WHERE id = $2`, note, id); err != nil {
 		return fmt.Errorf("set impact note on approval %d: %w", id, err)
 	}
-	return nil
+	return deriveApprovalRefs(tx, id)
 }
 
 // GovernedRef is one revision-bound reference a designation recorded:

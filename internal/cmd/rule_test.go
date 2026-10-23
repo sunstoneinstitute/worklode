@@ -158,7 +158,7 @@ func TestRuleEditResolvesHeadingLocally(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/rules/WL-RULE-1", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(model.Rule{Ref: "WL-RULE-1", Heading: heading, Status: "draft", Version: 1})
+		json.NewEncoder(w).Encode(model.Rule{Ref: "WL-RULE-1", Heading: model.Markdown(heading), Status: "draft", Version: 1})
 	})
 	mux.HandleFunc("PUT /api/v1/rules/WL-RULE-1", func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&putBody); err != nil {

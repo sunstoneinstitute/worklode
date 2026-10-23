@@ -90,7 +90,7 @@ func CreateMilestone(tx *sql.Tx, now time.Time, projectID, title string, positio
 	m := &model.Milestone{
 		ID:        fmt.Sprintf("%s-%s-%d", key, milestoneSeqKind, n),
 		Project:   projectID,
-		Title:     title,
+		Title:     model.Markdown(title),
 		Position:  position,
 		CreatedBy: createdBy,
 		CreatedAt: ts,
@@ -102,7 +102,7 @@ func CreateMilestone(tx *sql.Tx, now time.Time, projectID, title string, positio
 	); err != nil {
 		return nil, fmt.Errorf("insert milestone %s: %w", m.ID, err)
 	}
-	return m, nil
+	return m, deriveMilestoneRefs(tx, m.ID)
 }
 
 // scanMilestone reads one row selected with milestoneColumns. Progress is not
@@ -433,7 +433,7 @@ func DeleteMilestone(tx *sql.Tx, id string, cascade bool) (*model.MilestoneDelet
 	if _, err := tx.ExecContext(ctx, `DELETE FROM milestones WHERE id = $1`, id); err != nil {
 		return nil, fmt.Errorf("delete milestone %s: %w", id, err)
 	}
-	return out, nil
+	return out, deleteInlineRefs(tx, "milestone", id)
 }
 
 // detachFromMilestone clears milestone_id on every row of table that names the

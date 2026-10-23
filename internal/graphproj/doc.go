@@ -64,7 +64,7 @@ func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
 	subj := iri.Doc(DocKey(d))
 	triples := []Triple{
 		{S: subj, P: RDFType, O: IRIRef(iri.Term(docClass(d.Kind)))},
-		{S: subj, P: DCTTitle, O: Text(d.Title)},
+		{S: subj, P: DCTTitle, O: Text(string(d.Title))},
 		{S: subj, P: iri.Term("status"), O: IRIRef(iri.Concept(d.Status))},
 		{S: subj, P: DCATVersion, O: Text(strconv.Itoa(d.Version))},
 		{S: subj, P: DCTCreated, O: Typed(d.CreatedAt.UTC().Format(time.RFC3339), XSDDateTime)},
@@ -150,7 +150,7 @@ func RuleTriples(d model.Doc, rules []model.Rule, lastRevisedIn map[string]int, 
 		triples = append(triples,
 			Triple{S: subj, P: RDFType, O: IRIRef(iri.Term("Rule"))},
 			Triple{S: subj, P: DCTIdentifier, O: Text(r.Ref)},
-			Triple{S: subj, P: DCTTitle, O: Text(r.Heading)},
+			Triple{S: subj, P: DCTTitle, O: Text(string(r.Heading))},
 			Triple{S: subj, P: iri.Term("ruleKind"), O: IRIRef(iri.Concept(r.Kind))},
 			Triple{S: subj, P: iri.Term("status"), O: IRIRef(iri.Concept(r.Status))},
 			Triple{S: subj, P: DCTIsPartOf, O: IRIRef(iri.Doc(DocKey(d)))},

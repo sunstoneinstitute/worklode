@@ -480,7 +480,7 @@ func TestDocUpdateBodyDraftSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDocBody: %v", err)
 	}
-	if plain(updated.Body) != noHeader(t, edited) {
+	if plain(string(updated.Body)) != noHeader(t, edited) {
 		t.Error("body not swapped")
 	}
 	if updated.Title != doc.Title {
@@ -599,7 +599,7 @@ func TestDocUpdateBodyAcceptedPlanAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDocBody on an accepted plan: %v", err)
 	}
-	if plain(updated.Body) != noHeader(t, edited) {
+	if plain(string(updated.Body)) != noHeader(t, edited) {
 		t.Error("body not swapped")
 	}
 	if edges := docEdges(t, s, doc.ID); len(edges) == 0 {
@@ -632,7 +632,7 @@ func TestDocGetAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDoc: %v", err)
 	}
-	if got.Slug != "025-x" || plain(got.Body) != noHeader(t, specBody) {
+	if got.Slug != "025-x" || plain(string(got.Body)) != noHeader(t, specBody) {
 		t.Errorf("GetDoc = %+v, want the spec", got)
 	}
 	if _, err := s.GetDoc(t.Context(), 9999); !errors.Is(err, ErrNotFound) {
@@ -994,7 +994,7 @@ func snapshotTask(t *testing.T, s *Store, id string) taskSnapshot {
 		t.Fatalf("GetTask(%s): %v", id, err)
 	}
 	return taskSnapshot{
-		Title: task.Title, Body: task.Body, Kind: task.Kind,
+		Title: string(task.Title), Body: string(task.Body), Kind: task.Kind,
 		Priority: task.Priority, State: task.State, UpdatedAt: task.UpdatedAt,
 	}
 }

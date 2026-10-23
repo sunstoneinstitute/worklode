@@ -75,7 +75,7 @@ func MilestoneTable(w io.Writer, ms []model.Milestone) {
 		tbl.add(m.ID, strconv.Itoa(m.Position),
 			progressCell(m.Progress.TasksClosed, m.Progress.TasksTotal),
 			progressCell(m.Progress.DeliverablesLive, m.Progress.DeliverablesTotal),
-			m.Title)
+			string(m.Title))
 	}
 	tbl.flush(w)
 }

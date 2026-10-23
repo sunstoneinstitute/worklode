@@ -39,7 +39,7 @@ func createTaskInState(t *testing.T, st *store.Store, c *cli.Client, title strin
 	t.Helper()
 	task, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
 		Project:  "proj",
-		Title:    title,
+		Title:    model.Markdown(title),
 		Priority: "high",
 		Kind:     "feature",
 		Draft:    path[0] == "draft",

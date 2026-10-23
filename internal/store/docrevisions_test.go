@@ -36,7 +36,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("doc_versions rows = %+v, want 1 row", rows)
 	}
-	if rows[0].version != 1 || rows[0].body != noHeader(t, planMintBody) || rows[0].title != doc.Title {
+	if rows[0].version != 1 || rows[0].body != noHeader(t, planMintBody) || rows[0].title != string(doc.Title) {
 		t.Errorf("snapshot = %+v, want version 1 of the pre-edit body/title", rows[0])
 	}
 
@@ -222,7 +222,7 @@ func TestDocUpdateRevision(t *testing.T) {
 	if plain(rev.Body) != noHeader(t, revisedSpecBody) {
 		t.Error("candidate body not swapped")
 	}
-	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || plain(got.Body) != noHeader(t, specBody) {
+	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || plain(string(got.Body)) != noHeader(t, specBody) {
 		t.Fatal("the accepted body must stay authoritative throughout (WL-SPEC-77 §9)")
 	}
 
@@ -311,7 +311,7 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DiscardRevision: %v", err)
 	}
-	if back.Version != 1 || plain(back.Body) != noHeader(t, specBody) {
+	if back.Version != 1 || plain(string(back.Body)) != noHeader(t, specBody) {
 		t.Errorf("returned doc = version %d, want the accepted version untouched", back.Version)
 	}
 
@@ -329,7 +329,7 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Version != 1 || plain(got.Body) != noHeader(t, specBody) {
+	if got.Version != 1 || plain(string(got.Body)) != noHeader(t, specBody) {
 		t.Errorf("doc = version %d, want the accepted version untouched by a discard", got.Version)
 	}
 }
@@ -472,7 +472,7 @@ func TestDocAcceptRevisionAcceptsRenumber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcceptRevision: %v", err)
 	}
-	if !strings.Contains(got.Body, "## 2. Model (P1-REQ-2) {#sec-2}") {
+	if !strings.Contains(string(got.Body), "## 2. Model (P1-REQ-2) {#sec-2}") {
 		t.Errorf("body:\n%s\nwant Model at its derived number", got.Body)
 	}
 	if after := sectionRules(t, s, doc.ID); !reflect.DeepEqual(after, before) {
@@ -497,7 +497,7 @@ func TestDocAcceptRevisionAcceptsDroppedNumber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcceptRevision: %v", err)
 	}
-	if !strings.Contains(got.Body, "## 2. Model (P1-REQ-2) {#sec-2}") {
+	if !strings.Contains(string(got.Body), "## 2. Model (P1-REQ-2) {#sec-2}") {
 		t.Errorf("body:\n%s\nwant Model numbered 2", got.Body)
 	}
 }
@@ -576,8 +576,8 @@ func TestDocAcceptRevision(t *testing.T) {
 		t.Fatalf("AcceptRevision: %v", err)
 	}
 	// The inserted 2a lands at its derived number (WL-REQ-165).
-	if want := strings.Replace(noHeader(t, revisedSpecBody), "## 2a. Inserted {#sec-2a}", "## 3. Inserted {#sec-3}", 1); plain(updated.Body) != want {
-		t.Errorf("body:\n%s\nwant:\n%s", plain(updated.Body), want)
+	if want := strings.Replace(noHeader(t, revisedSpecBody), "## 2a. Inserted {#sec-2a}", "## 3. Inserted {#sec-3}", 1); plain(string(updated.Body)) != want {
+		t.Errorf("body:\n%s\nwant:\n%s", plain(string(updated.Body)), want)
 	}
 	if updated.Version != 2 {
 		t.Errorf("version = %d, want 2", updated.Version)
@@ -799,7 +799,7 @@ func TestUpdateDocBodyIfVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDoc: %v", err)
 	}
-	if !strings.Contains(got.Body, "Writer A was here.") {
+	if !strings.Contains(string(got.Body), "Writer A was here.") {
 		t.Errorf("body was overwritten by the refused write")
 	}
 

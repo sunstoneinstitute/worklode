@@ -92,7 +92,7 @@ func windowed(b Budget, anchor, header, text string, start int) []Chunk {
 func ChunkDoc(b Budget, doc model.Doc, sections []model.DocSection) []Chunk {
 	parsed, err := designdoc.Parse([]byte(doc.Body))
 	if err != nil {
-		return windowed(b, "", DocHeader(doc, "", ""), doc.Body, 0)
+		return windowed(b, "", DocHeader(doc, "", ""), string(doc.Body), 0)
 	}
 	if len(parsed.Sections) == 0 {
 		return windowed(b, "", DocHeader(doc, "", ""), parsed.Preamble, 0)
@@ -155,7 +155,7 @@ func chunkPlan(b Budget, doc model.Doc, parsed *designdoc.Document) []Chunk {
 // indexes the title: titles are the highest-signal text in the tracker.
 func ChunkTask(b Budget, task model.Task) []Chunk {
 	text := task.Title + "\n\n" + task.Body
-	return windowed(b, "", TaskHeader(task), text, 0)
+	return windowed(b, "", TaskHeader(task), string(text), 0)
 }
 
 // ChunkSkill indexes a skill's description prepended to its SKILL.md body,

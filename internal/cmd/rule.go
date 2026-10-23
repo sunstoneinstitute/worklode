@@ -57,7 +57,7 @@ func newRuleAddCmd() *cobra.Command {
 				return errNoProject
 			}
 			rule, raw, err := c.AddRule(cmd.Context(), model.AddRuleInput{
-				Project: sc.Project, Heading: strings.TrimSpace(heading), Body: body, Tags: tags, Kind: kind,
+				Project: sc.Project, Heading: model.Markdown(strings.TrimSpace(heading)), Body: model.Markdown(body), Tags: tags, Kind: kind,
 			})
 			if err != nil {
 				return err
@@ -312,9 +312,9 @@ func newRuleEditCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				h = current.Heading
+				h = string(current.Heading)
 			}
-			rule, raw, err := c.EditRule(cmd.Context(), args[0], model.EditRuleInput{Heading: strings.TrimSpace(h), Body: body})
+			rule, raw, err := c.EditRule(cmd.Context(), args[0], model.EditRuleInput{Heading: model.Markdown(strings.TrimSpace(h)), Body: model.Markdown(body)})
 			if err != nil {
 				return err
 			}

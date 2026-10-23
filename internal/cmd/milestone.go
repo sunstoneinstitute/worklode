@@ -185,7 +185,7 @@ func newMilestoneAddCmd() *cobra.Command {
 				return errNoProject
 			}
 			m, raw, err := c.CreateMilestone(cmd.Context(), sc.Project,
-				model.CreateMilestoneInput{Title: args[0], Position: position})
+				model.CreateMilestoneInput{Title: model.Markdown(args[0]), Position: position})
 			if err != nil {
 				return err
 			}

@@ -555,9 +555,9 @@ func TestListAwaitingApprovalsCoversEveryKind(t *testing.T) {
 	}
 	want := []struct{ kind, title, url, taskID string }{
 		{"pr", "a pr", pr.URL, task.ID},
-		{"doc", doc.Title, "/projects/horndb/spec/29", ""},
+		{"doc", string(doc.Title), "/projects/horndb/spec/29", ""},
 		{"deliverable", del.Name, "https://example.org/casualties", ""},
-		{"task", reviewed.Title, "/tasks/" + reviewed.ID, ""},
+		{"task", string(reviewed.Title), "/tasks/" + reviewed.ID, ""},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d rows, want one per kind: %+v", len(got), got)
@@ -772,7 +772,7 @@ func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
 	if prRow.Title != "a pr" || prRow.URL != pr.URL || prRow.Task != task.ID {
 		t.Errorf("pr row = %+v, want the PR's own title/url/task", prRow)
 	}
-	if docRow.Title != doc.Title {
+	if docRow.Title != string(doc.Title) {
 		t.Errorf("doc row Title = %q, want %q", docRow.Title, doc.Title)
 	}
 	if want := "/projects/horndb/spec/26"; docRow.URL != want {

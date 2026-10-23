@@ -409,7 +409,7 @@ func TaskTable(w io.Writer, tasks []model.Task) {
 		if hasDue {
 			row = append(row, dash(t.Due))
 		}
-		tbl.add(append(row, t.Title)...)
+		tbl.add(append(row, string(t.Title))...)
 	}
 	tbl.flush(w)
 }
@@ -474,7 +474,7 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	}
 	if t.Body != "" {
 		fmt.Fprintln(w)
-		MarkdownWithBase(w, t.Body, server)
+		MarkdownWithBase(w, string(t.Body), server)
 	}
 	if len(t.Edges.Out) > 0 || len(t.Edges.In) > 0 {
 		fmt.Fprintln(w, "\nedges:")

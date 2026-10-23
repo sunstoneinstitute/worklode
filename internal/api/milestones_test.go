@@ -98,7 +98,7 @@ func TestCreateMilestoneAPIRefusals(t *testing.T) {
 		want       int
 	}{
 		{"blank title", "/api/v1/projects/proj/milestones", model.CreateMilestoneInput{Title: "   "}, http.StatusUnprocessableEntity},
-		{"long title", "/api/v1/projects/proj/milestones", model.CreateMilestoneInput{Title: strings.Repeat("x", 201)}, http.StatusUnprocessableEntity},
+		{"long title", "/api/v1/projects/proj/milestones", model.CreateMilestoneInput{Title: model.Markdown(strings.Repeat("x", 201))}, http.StatusUnprocessableEntity},
 		{"negative position", "/api/v1/projects/proj/milestones", model.CreateMilestoneInput{Title: "ok", Position: -1}, http.StatusUnprocessableEntity},
 		{"unknown project", "/api/v1/projects/nosuch/milestones", model.CreateMilestoneInput{Title: "ok"}, http.StatusNotFound},
 	} {
@@ -263,7 +263,7 @@ func TestMilestonesPage(t *testing.T) {
 
 	for _, title := range []string{"Internal review", "Publication"} {
 		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token,
-			model.CreateMilestoneInput{Title: title}); rr.Code != http.StatusCreated {
+			model.CreateMilestoneInput{Title: model.Markdown(title)}); rr.Code != http.StatusCreated {
 			t.Fatalf("seed %q status = %d; body %s", title, rr.Code, rr.Body.String())
 		}
 	}

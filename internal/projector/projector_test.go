@@ -376,7 +376,7 @@ func TestRunOnceProjectsVersionGraphs(t *testing.T) {
 	}
 	byHeading := map[string]string{}
 	for _, r := range rules {
-		byHeading[r.Heading] = "<" + iri.Rule(r.Project, r.Number) + ">"
+		byHeading[string(r.Heading)] = "<" + iri.Rule(r.Project, r.Number) + ">"
 	}
 	scope, model := byHeading["Renamed scope"], byHeading["Model"]
 	if scope == "" || model == "" {

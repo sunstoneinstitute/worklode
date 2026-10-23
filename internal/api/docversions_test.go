@@ -23,7 +23,7 @@ func TestDocVersions(t *testing.T) {
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
 	})
 	edited := strings.Replace(docPlanBody, "Do the thing.", "Do it now.", 1)
-	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: noHeader(t, edited)}); rr.Code != http.StatusOK {
+	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: model.Markdown(noHeader(t, edited))}); rr.Code != http.StatusOK {
 		t.Fatalf("update body status = %d, body %s", rr.Code, rr.Body.String())
 	}
 

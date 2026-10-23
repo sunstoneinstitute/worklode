@@ -170,7 +170,7 @@ func (s *server) addTask(ctx context.Context, c *cli.Client, a taskAddArgs) (*mc
 	}
 	p, _ := exactProject(key, ps)
 	keys := projectKeys(ps)
-	in := model.CreateTaskInput{Project: p.ID, Kind: kind, Title: a.Title, Body: a.Body, Priority: "medium"}
+	in := model.CreateTaskInput{Project: p.ID, Kind: kind, Title: model.Markdown(a.Title), Body: model.Markdown(a.Body), Priority: "medium"}
 	if a.Parent != "" {
 		in.Parent = parseRef(a.Parent, key, keys)
 	}
@@ -205,7 +205,7 @@ func (s *server) taskUpdate(ctx context.Context, c *cli.Client, req *mcp.CallToo
 	if a.Title == nil && a.Body == nil && a.Priority == nil {
 		return nil, &toolError{outcome: outcomeInvalid, msg: "Nothing to change: give a title, body or priority."}
 	}
-	t, _, err := c.EditTask(ctx, id, model.EditTaskInput{Title: a.Title, Body: a.Body, Priority: a.Priority})
+	t, _, err := c.EditTask(ctx, id, model.EditTaskInput{Title: (*model.Markdown)(a.Title), Body: (*model.Markdown)(a.Body), Priority: a.Priority})
 	if err != nil {
 		return nil, err
 	}

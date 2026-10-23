@@ -11,8 +11,8 @@ type Decision struct {
 	Key          string           `json:"key"`
 	Position     int              `json:"position"`
 	Group        string           `json:"group,omitempty"`
-	Question     string           `json:"question"`
-	Context      string           `json:"context,omitempty"`
+	Question     Markdown         `json:"question"`
+	Context      Markdown         `json:"context,omitempty"`
 	ResponseType string           `json:"response_type"`
 	Options      []DecisionOption `json:"options,omitempty"`
 	MinPicks     *int             `json:"min_picks,omitempty"`
@@ -52,8 +52,8 @@ type DecisionInput struct {
 	Task         string           `json:"task,omitempty"`
 	Key          string           `json:"key,omitempty"`
 	Group        *string          `json:"group,omitempty"`
-	Question     string           `json:"question,omitempty"`
-	Context      *string          `json:"context,omitempty"`
+	Question     Markdown         `json:"question,omitempty"`
+	Context      *Markdown        `json:"context,omitempty"`
 	ResponseType string           `json:"response_type,omitempty"`
 	Options      []DecisionOption `json:"options,omitempty"`
 	MinPicks     *int             `json:"min_picks,omitempty"`

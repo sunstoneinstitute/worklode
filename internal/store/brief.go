@@ -111,7 +111,7 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 
 	return &Brief{
 		Task:          *t,
-		Body:          t.Body,
+		Body:          string(t.Body),
 		Branch:        BranchFor(t),
 		OpenBlockers:  blockers,
 		BlockingPlans: plans,

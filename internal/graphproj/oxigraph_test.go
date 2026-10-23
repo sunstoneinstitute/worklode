@@ -25,7 +25,7 @@ func testTask(id, project, state string) model.Task {
 	return model.Task{
 		ID:        id,
 		Project:   project,
-		Title:     "Task " + id,
+		Title:     model.Markdown("Task " + id),
 		State:     state,
 		Kind:      "feature",
 		Priority:  "high",
@@ -190,14 +190,14 @@ func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revise
 
 	var summaries []model.DocVersionSummary
 	for _, v := range versions {
-		summaries = append(summaries, model.DocVersionSummary{Version: v, Title: d.Title, CreatedAt: ts})
+		summaries = append(summaries, model.DocVersionSummary{Version: v, Title: string(d.Title), CreatedAt: ts})
 	}
 
 	var rules []model.Rule
 	revised := map[string]int{}
 	for n, v := range revisedIn {
 		ref := fmt.Sprintf("ST-REQ-%d", n)
-		rules = append(rules, model.Rule{Project: d.Project, Number: n, Ref: ref, Kind: "requirement", Status: "accepted", Heading: ref})
+		rules = append(rules, model.Rule{Project: d.Project, Number: n, Ref: ref, Kind: "requirement", Status: "accepted", Heading: model.Markdown(ref)})
 		revised[ref] = v
 	}
 	sort.Slice(rules, func(i, j int) bool { return rules[i].Number < rules[j].Number })
@@ -206,7 +206,7 @@ func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revise
 	declared := append(DocTriples(d, summaries), RuleTriples(d, rules, revised, nil)...)
 	graphtest.PutGraph(t, base, iri.DeclaredGraph(key), Document(declared))
 	for _, v := range versions {
-		dv := model.DocVersion{Version: v, Title: d.Title, CreatedAt: ts}
+		dv := model.DocVersion{Version: v, Title: string(d.Title), CreatedAt: ts}
 		graphtest.PutGraph(t, base, iri.DeclaredVersionGraph(key, v), Document(DocVersionTriples(d, dv, nil)))
 	}
 	return key, d.Project

@@ -140,7 +140,7 @@ SELECT d.id, coalesce(d.number, 0), d.title, d.status, d.updated_at,
 		}
 		d.Kind = "spec"
 		out[d.ID] = &progress.Spec{
-			Doc: d.ID, Ref: d.FormatRef(), Title: d.Title, Updated: d.UpdatedAt,
+			Doc: d.ID, Ref: d.FormatRef(), Title: string(d.Title), Updated: d.UpdatedAt,
 			Status: status, Owner: owner,
 		}
 	}
@@ -185,7 +185,7 @@ SELECT d.id, coalesce(d.number, 0), d.title, d.status, coalesce(p.key, ''), coal
 		}
 		d.Kind = "plan"
 		out[d.ID] = &progress.Plan{
-			Doc: d.ID, Ref: d.FormatRef(), Title: d.Title, Status: status, Owner: owner,
+			Doc: d.ID, Ref: d.FormatRef(), Title: string(d.Title), Status: status, Owner: owner,
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -502,7 +502,7 @@ func (s *Store) progressRally(ctx context.Context, projectID string) (*model.Ral
 		return nil, err
 	}
 	return &model.RallyBand{
-		ID: rally.ID, Title: rally.Title, Members: members, Landed: landed,
+		ID: rally.ID, Title: string(rally.Title), Members: members, Landed: landed,
 	}, nil
 }
 
@@ -543,7 +543,7 @@ func (s *Store) DraftRallyBand(ctx context.Context, projectID string) (*model.Ra
 		return nil, err
 	}
 	return &model.RallyBand{
-		ID: rally.ID, Title: rally.Title, Members: members, Specs: specs,
+		ID: rally.ID, Title: string(rally.Title), Members: members, Specs: specs,
 	}, nil
 }
 

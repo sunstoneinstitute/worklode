@@ -77,11 +77,11 @@ func TestDecisionMetrics(t *testing.T) {
 	}
 	q := "Do we ship X in October?"
 	if _, err := s.EditDecision(ctx, task.ID, "x-distribution", "stig",
-		model.DecisionInput{Question: q}); err != nil {
+		model.DecisionInput{Question: model.Markdown(q)}); err != nil {
 		t.Fatalf("edit decision: %v", err)
 	}
 	if _, err := s.EditDecision(ctx, task.ID, "nope", "stig",
-		model.DecisionInput{Question: q}); !errors.Is(err, ErrNotFound) {
+		model.DecisionInput{Question: model.Markdown(q)}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("edit unknown row err = %v, want ErrNotFound", err)
 	}
 

@@ -20,7 +20,7 @@ import (
 // write. One rule.added event records it.
 func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string) (r *model.Rule, err error) {
 	defer func() { s.metrics.ruleOp("add", err) }()
-	in.Heading = strings.TrimSpace(in.Heading)
+	in.Heading = model.Markdown(strings.TrimSpace(string(in.Heading)))
 	if in.Heading == "" {
 		return nil, fmt.Errorf("rule heading is required: %w", ErrInvalidInput)
 	}
@@ -46,8 +46,8 @@ func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string
 		} else if err != nil {
 			return fmt.Errorf("read project %q: %w", in.Project, err)
 		}
-		body := sectionBody(in.Body, true)
-		id, version, err := insertRule(tx, in.Project, in.Heading, body)
+		body := sectionBody(string(in.Body), true)
+		id, version, err := insertRule(tx, in.Project, string(in.Heading), body)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string
 			id, actor, nonNil(in.Tags), in.Kind).Scan(&number); err != nil {
 			return fmt.Errorf("set meta of rule %d: %w", id, err)
 		}
-		if err := deriveRuleInlineRefs(tx, in.Project, id, version, in.Heading, body); err != nil {
+		if err := deriveRuleInlineRefs(tx, in.Project, id, version, string(in.Heading), body); err != nil {
 			return err
 		}
 		return MergeEventPayload(tx, eventID, map[string]any{"rule": designdoc.FormatRuleRef(key, number, in.Kind)})

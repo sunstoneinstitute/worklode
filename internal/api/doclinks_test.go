@@ -73,13 +73,13 @@ func TestSetDocColumnsRoute(t *testing.T) {
 		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
 	})
 	title, issued := "Renamed", "2026-09-01"
-	rr := doReq(t, h, "PATCH", docPath(doc.ID, ""), token, model.DocColumnsInput{Title: &title, Issued: &issued})
+	rr := doReq(t, h, "PATCH", docPath(doc.ID, ""), token, model.DocColumnsInput{Title: (*model.Markdown)(&title), Issued: &issued})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	var detail model.DocDetail
 	decodeInto(t, rr, &detail)
-	if detail.Title != title || detail.Issued != issued || detail.Version != doc.Version {
+	if string(detail.Title) != title || detail.Issued != issued || detail.Version != doc.Version {
 		t.Errorf("doc = {title:%q issued:%q version:%d}, want {%q %q %d}",
 			detail.Title, detail.Issued, detail.Version, title, issued, doc.Version)
 	}

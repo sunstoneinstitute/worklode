@@ -219,7 +219,7 @@ func TestDocWatchMintsReviewOnSubmit(t *testing.T) {
 	if got.AboutDoc != f.doc.ID {
 		t.Errorf("about_doc = %d, want %d", got.AboutDoc, f.doc.ID)
 	}
-	if !strings.Contains(got.Title, f.doc.Title) {
+	if !strings.Contains(string(got.Title), string(f.doc.Title)) {
 		t.Errorf("title = %q, want it to name the document %q", got.Title, f.doc.Title)
 	}
 	f.wantActions(t, "review-on-submit", "applied", 1)
@@ -296,7 +296,7 @@ func TestDocWatchMaterializesApprovalOnSubmit(t *testing.T) {
 		{"entity_id", got.EntityID, store.DocEntityID(f.doc.ID)},
 		{"subject_revision", got.SubjectRevision, strconv.Itoa(f.doc.Version)},
 		{"lane", got.Lane, ""},
-		{"title", got.Title, f.doc.Title},
+		{"title", got.Title, string(f.doc.Title)},
 		{"project", got.Project, f.doc.Project},
 	} {
 		if c.got != c.want {
@@ -452,7 +452,7 @@ func TestDocWatchMintsReviewOnPatch(t *testing.T) {
 	}
 	// The ref, not the title: §7.3's task names the document the way a
 	// reader cites it, and the sections that need looking at.
-	if want := "Re-review patched sections of WL-SPEC-25: sec-1"; got.Title != want {
+	if want := "Re-review patched sections of WL-SPEC-25: sec-1"; string(got.Title) != want {
 		t.Errorf("title = %q, want %q", got.Title, want)
 	}
 
@@ -579,7 +579,7 @@ func TestDocWatchMintsReplanOnStale(t *testing.T) {
 	}
 	// The §8.6 cause, not §8.7's idle clock: the plan is stale because the
 	// spec moved under it.
-	if !strings.Contains(tasks[0].Body, "amended in") {
+	if !strings.Contains(string(tasks[0].Body), "amended in") {
 		t.Errorf("body = %q, want it to name the amendment as the cause", tasks[0].Body)
 	}
 	f.wantActions(t, "groom-on-stale", "applied", 1)

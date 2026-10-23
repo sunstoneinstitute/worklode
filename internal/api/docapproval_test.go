@@ -103,7 +103,7 @@ func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
 			t.Errorf("row %d project/task = %q/%q, want proj/\"\"",
 				row.ID, row.Project, row.Task)
 		}
-		if row.Title != d.Title {
+		if row.Title != string(d.Title) {
 			t.Errorf("row %d title = %q, want the document title %q", row.ID, row.Title, d.Title)
 		}
 	}
@@ -220,7 +220,7 @@ func TestListApprovalsServesBothEntityKinds(t *testing.T) {
 	if !ok {
 		t.Fatalf("no doc row in the queue: %+v", resp.Approvals)
 	}
-	if doc.Title != d.Title {
+	if doc.Title != string(d.Title) {
 		t.Errorf("doc title = %q, want %q", doc.Title, d.Title)
 	}
 	if doc.RequiredActorName == nil || *doc.RequiredActorName != "Bob" {

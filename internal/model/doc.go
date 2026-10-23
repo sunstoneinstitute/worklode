@@ -33,15 +33,15 @@ type Doc struct {
 	// FormerADR is the number this spec carried as an ADR before the adr
 	// kind was retired, 0 for a document that never was one. It is what keeps
 	// a <KEY>-ADR-<n> ref resolving to this spec (WL-REQ-1357).
-	FormerADR int    `json:"former_adr,omitempty"`
-	Slug      string `json:"slug"`
-	Title     string `json:"title"`
-	Body      string `json:"body"` // the full markdown, frontmatter included
-	Status    string `json:"status"`
-	Version   int    `json:"version"`
-	Issued    string `json:"issued"` // YYYY-MM-DD, "" when unset
-	Owner     string `json:"owner"`
-	CreatedBy string `json:"created_by"`
+	FormerADR int      `json:"former_adr,omitempty"`
+	Slug      string   `json:"slug"`
+	Title     Markdown `json:"title"`
+	Body      Markdown `json:"body"` // the full markdown, frontmatter included
+	Status    string   `json:"status"`
+	Version   int      `json:"version"`
+	Issued    string   `json:"issued"` // YYYY-MM-DD, "" when unset
+	Owner     string   `json:"owner"`
+	CreatedBy string   `json:"created_by"`
 	// GeneratedByTask is the task that authored this document (WL-REQ-177,
 	// projected as prov:wasGeneratedBy), "" when no task did — a cockpit
 	// author, an agent outside a claimed worktree, a corpus import. Distinct
@@ -197,7 +197,7 @@ type DocNote struct {
 	ID        int64     `json:"id"`
 	Doc       int64     `json:"doc"`
 	Anchor    string    `json:"anchor"`
-	Body      string    `json:"body"`
+	Body      Markdown  `json:"body"`
 	Task      string    `json:"task,omitempty"`
 	Session   string    `json:"session,omitempty"`
 	CreatedBy string    `json:"created_by"`
@@ -209,10 +209,10 @@ type DocNote struct {
 // not a note, it is noise. Task and Session are filled by the CLI from the
 // worktree it stands in, and omitted when it stands in none.
 type AddDocNoteInput struct {
-	Anchor  string `json:"anchor"`
-	Body    string `json:"body"`
-	Task    string `json:"task,omitempty"`
-	Session string `json:"session,omitempty"`
+	Anchor  string   `json:"anchor"`
+	Body    Markdown `json:"body"`
+	Task    string   `json:"task,omitempty"`
+	Session string   `json:"session,omitempty"`
 }
 
 // DocEdge is one typed link between documents (WL-REQ-168), always stated from
@@ -317,13 +317,13 @@ type DocReferrersResponse struct {
 // Every other caller is refused with a 422 naming the field — a document is
 // created as a draft and accepted through POST /api/v1/docs/{id}/accept.
 type CreateDocInput struct {
-	Project string `json:"project"`
-	Kind    string `json:"kind"` // spec | adr | plan
-	Number  int    `json:"number,omitempty"`
-	Slug    string `json:"slug"`
-	Body    string `json:"body"`
-	Owner   string `json:"owner,omitempty"`
-	Status  string `json:"status,omitempty"`
+	Project string   `json:"project"`
+	Kind    string   `json:"kind"` // spec | adr | plan
+	Number  int      `json:"number,omitempty"`
+	Slug    string   `json:"slug"`
+	Body    Markdown `json:"body"`
+	Owner   string   `json:"owner,omitempty"`
+	Status  string   `json:"status,omitempty"`
 	// GeneratedByTask names the task authoring the document (WL-REQ-177). The
 	// CLI fills it from the worktree lease it is standing in; it is omitted
 	// when the caller is bound to no task, which leaves the document with no
@@ -358,8 +358,8 @@ type WithdrawDocInput struct {
 // revision edit names the candidate, not the document's version, and refuses
 // a non-zero IfVersion rather than ignore one.
 type UpdateDocBodyInput struct {
-	Body      string `json:"body"`
-	IfVersion int    `json:"if_version,omitempty"`
+	Body      Markdown `json:"body"`
+	IfVersion int      `json:"if_version,omitempty"`
 }
 
 // DocEdgeInput is one document edge as a caller names it: the request body of
@@ -384,8 +384,8 @@ type ReplaceDocEdgesInput struct {
 // metadata a body no longer states (WL-REQ-168). A nil field is left as
 // it is. Issued is YYYY-MM-DD.
 type DocColumnsInput struct {
-	Title  *string `json:"title,omitempty"`
-	Issued *string `json:"issued,omitempty"`
+	Title  *Markdown `json:"title,omitempty"`
+	Issued *string   `json:"issued,omitempty"`
 }
 
 // PatchDocInput is the request body for POST /api/v1/docs/{id}/patch: the
@@ -401,12 +401,12 @@ type DocColumnsInput struct {
 //
 // IfVersion is the same optional compare-and-swap UpdateDocBodyInput carries.
 type PatchDocInput struct {
-	Body        string `json:"body"`
-	Substantive bool   `json:"substantive,omitempty"`
-	Note        string `json:"note,omitempty"`
-	Task        string `json:"task,omitempty"`
-	Session     string `json:"session,omitempty"`
-	IfVersion   int    `json:"if_version,omitempty"`
+	Body        Markdown `json:"body"`
+	Substantive bool     `json:"substantive,omitempty"`
+	Note        Markdown `json:"note,omitempty"`
+	Task        string   `json:"task,omitempty"`
+	Session     string   `json:"session,omitempty"`
+	IfVersion   int      `json:"if_version,omitempty"`
 }
 
 // DocPatchResult is what an in-place amendment did (WL-REQ-171).

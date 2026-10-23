@@ -544,13 +544,13 @@ func TestProgressPlanMintsOnce(t *testing.T) {
 	// thing, so the title is the doc-lifecycle subscriber's own.
 	subscriber := watcher.Evaluate(watcher.Input{
 		EventType: eventbus.TypeDocumentAccepted,
-		DocKind:   "spec", DocTitle: spec.Title,
+		DocKind:   "spec", DocTitle: string(spec.Title),
 	})
-	if len(subscriber) != 1 || task.Title != subscriber[0].Title {
+	if len(subscriber) != 1 || string(task.Title) != subscriber[0].Title {
 		t.Fatalf("minted title = %q; want the subscriber's %+v", task.Title, subscriber)
 	}
-	if task.Title != watcher.PlanningTitle(spec.Title) {
-		t.Errorf("minted title = %q; want %q", task.Title, watcher.PlanningTitle(spec.Title))
+	if string(task.Title) != watcher.PlanningTitle(string(spec.Title)) {
+		t.Errorf("minted title = %q; want %q", task.Title, watcher.PlanningTitle(string(spec.Title)))
 	}
 }
 

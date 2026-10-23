@@ -358,7 +358,7 @@ func InsertDecision(tx *sql.Tx, taskID string, d model.Decision) (*model.Decisio
 		}
 		return nil, fmt.Errorf("pose decision %s/%s: %w", taskID, d.Key, err)
 	}
-	return &out, nil
+	return &out, deriveDecisionRefs(tx, out.ID)
 }
 
 // AddDecision poses one question on an existing task (WL-REQ-176), recorded
@@ -666,7 +666,7 @@ func updateDecision(tx *sql.Tx, id int64, taskID string, d model.Decision, repos
 		}
 		return nil, fmt.Errorf("edit decision %s/%s: %w", taskID, d.Key, err)
 	}
-	return &out, nil
+	return &out, deriveDecisionRefs(tx, out.ID)
 }
 
 // requireLiveTask refuses an unknown or soft-deleted task, the same

@@ -108,7 +108,7 @@ func taskIDs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Comp
 	})
 	ids := make([]cobra.Completion, 0, len(tasks))
 	for _, task := range tasks {
-		ids = append(ids, cobra.Completion(task.ID+"\t"+completionDescription(task.Title)))
+		ids = append(ids, cobra.Completion(task.ID+"\t"+completionDescription(string(task.Title))))
 	}
 	return ids, cobra.ShellCompDirectiveNoFileComp
 }
@@ -229,7 +229,7 @@ func docRefsFiltered(cmd *cobra.Command, toComplete string, deleted bool) ([]cob
 	})
 	out := make([]cobra.Completion, 0, 2*len(docs))
 	for _, d := range docs {
-		desc := completionDescription(d.Title)
+		desc := completionDescription(string(d.Title))
 		refs := []string{d.Slug}
 		// A document with no number predates WL-REQ-122's backfill; DocRef
 		// degrades it to a bare kind ("spec"), which is not a reference.
@@ -282,7 +282,7 @@ func ruleRefAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion
 		var out []cobra.Completion
 		for _, cl := range rules {
 			if strings.HasPrefix(cl.Ref, toComplete) {
-				out = append(out, cobra.Completion(cl.Ref+"\t"+completionDescription(cl.Heading)))
+				out = append(out, cobra.Completion(cl.Ref+"\t"+completionDescription(string(cl.Heading))))
 			}
 		}
 		return out, cobra.ShellCompDirectiveNoFileComp

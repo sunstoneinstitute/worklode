@@ -197,7 +197,7 @@ func renderDocs(ctx context.Context, q rowQueryer, docs ...*model.Doc) error {
 		return err
 	}
 	for _, d := range docs {
-		d.Body = renderBody(d.Body, texts[d.ID])
+		d.Body = model.Markdown(renderBody(string(d.Body), texts[d.ID]))
 	}
 	return nil
 }
