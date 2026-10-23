@@ -131,7 +131,7 @@ func TestLocalMergeReportEndToEnd(t *testing.T) {
 func claimForMerge(t *testing.T, ctx context.Context, agent *cli.Client, title, wt string) (id, branch string) {
 	t.Helper()
 	task, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
-		Project: "demo", Title: title, Priority: "high", Kind: "feature",
+		Project: "demo", Title: model.Markdown(title), Priority: "high", Kind: "feature",
 	})
 	if err != nil {
 		t.Fatalf("create task %q: %v", title, err)

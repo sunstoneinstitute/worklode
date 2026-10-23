@@ -184,7 +184,7 @@ func renderEditorPage(body string) (string, error) {
 	var b strings.Builder
 	v := DocView{
 		Page:   PageProps{Title: "worklode: distributed-downloader-mesh", ActiveGlobal: "knowledge"},
-		Doc:    model.Doc{Project: "edge-agent", Kind: "spec", Number: 2, Slug: "distributed-downloader-mesh", Title: "Distributed downloader mesh", Status: "draft", Body: body},
+		Doc:    model.Doc{Project: "edge-agent", Kind: "spec", Number: 2, Slug: "distributed-downloader-mesh", Title: "Distributed downloader mesh", Status: "draft", Body: model.Markdown(body)},
 		Ref:    "EA-SPEC-2",
 		Editor: true,
 	}
