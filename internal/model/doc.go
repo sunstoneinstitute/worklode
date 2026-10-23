@@ -442,6 +442,7 @@ type DocPatchResponse struct {
 // type. Revision is the open candidate revision, null when none is open.
 type DocDetail struct {
 	Doc
+	InlineRefs
 	Sections []DocSection `json:"sections"`
 	Edges    []DocEdge    `json:"edges"`
 	EdgesIn  []DocEdge    `json:"edges_in"`

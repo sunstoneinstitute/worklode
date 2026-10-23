@@ -29,3 +29,19 @@ type InlineRef struct {
 	Lines       []int    `json:"lines"`
 	Source      string   `json:"source"` // manual | derived
 }
+
+// InlineRefs is the inline references a node shows (WL-REQ-1852): Out are the
+// ones its own fields make, In the ones other nodes' fields make to it. Both
+// are arrays, empty when there are none. It is embedded in the detail of a doc,
+// task, milestone and deliverable.
+type InlineRefs struct {
+	Out []InlineRef `json:"inline_refs_out"`
+	In  []InlineRef `json:"inline_refs_in"`
+}
+
+// DeliverableDetail is GET /api/v1/deliverables/{id}: the deliverable plus the
+// inline references it makes and receives.
+type DeliverableDetail struct {
+	Deliverable
+	InlineRefs
+}

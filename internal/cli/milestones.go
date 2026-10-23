@@ -110,4 +110,5 @@ func MilestoneRender(w io.Writer, d model.MilestoneDetail) {
 		fmt.Fprintln(w, "\ndeliverables:")
 		DeliverableTable(w, d.Deliverables)
 	}
+	InlineRefsRender(w, d.InlineRefs)
 }
