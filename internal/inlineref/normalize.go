@@ -14,8 +14,12 @@ type Target struct {
 
 // rewritable reports whether Normalize may rewrite the hit. A keyword form is
 // a short form: the number it names depends on when it was written, so it is
-// never rewritten (WL-REQ-1854, WL-REQ-1650).
+// never rewritten (WL-REQ-1854, WL-REQ-1650). A URL path with no scheme and
+// host is a short form too.
 func rewritable(h Hit, t *Target) bool {
+	if h.Form == FormURL && !h.Absolute {
+		return false
+	}
 	return t != nil && !t.DocAnchor && !h.Literal && h.Form != FormKeyword
 }
 
