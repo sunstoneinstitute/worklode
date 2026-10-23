@@ -631,3 +631,127 @@ func normalizeDoc(tx *sql.Tx, now time.Time, n *normalizer, id string, eventID i
 	}
 	return fmt.Errorf("doc %s is %s; only a draft, an accepted doc or a plan is normalized: %w", ref, status, ErrBadTransition)
 }
+
+// ListInlineRefs lists the current inline references of a node (WL-REQ-1852):
+// dir "out" are the rows its own fields make, "in" the rows other nodes make to
+// it. A row is current when it is unversioned or at its source's current
+// version. Each row carries the display ref and title of the node at the far
+// end. Never nil.
+func (s *Store) ListInlineRefs(ctx context.Context, kind model.NodeKind, id, dir string) ([]model.InlineRef, error) {
+	var where string
+	switch dir {
+	case "out":
+		where = `from_kind = $1 AND from_id = $2`
+	case "in":
+		where = `to_kind = $1 AND to_id = $2`
+	default:
+		return nil, fmt.Errorf("inline ref direction %q must be out or in: %w", dir, ErrInvalidInput)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT from_kind, from_id, field, from_version, to_kind, to_id, lines::text, source
+		   FROM inline_refs WHERE `+where+` ORDER BY from_kind, from_id, field, to_kind, to_id`, kind, id)
+	if err != nil {
+		return nil, fmt.Errorf("list inline refs of %s %s: %w", kind, id, err)
+	}
+	all, err := collectRows(rows, "list inline refs of "+string(kind)+" "+id, func(r rowScanner) (model.InlineRef, error) {
+		var x model.InlineRef
+		var v sql.NullInt64
+		var lines string
+		if err := r.Scan(&x.FromKind, &x.FromID, &x.Field, &v, &x.ToKind, &x.ToID, &lines, &x.Source); err != nil {
+			return x, err
+		}
+		if v.Valid {
+			n := int(v.Int64)
+			x.FromVersion = &n
+		}
+		for _, f := range strings.Split(strings.Trim(lines, "{}"), ",") {
+			if f == "" {
+				continue
+			}
+			n, err := strconv.Atoi(f)
+			if err != nil {
+				return x, fmt.Errorf("parse lines %q: %w", lines, err)
+			}
+			x.Lines = append(x.Lines, n)
+		}
+		return x, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := []model.InlineRef{}
+	for _, x := range all {
+		from, err := s.nodeLabel(ctx, x.FromKind, x.FromID)
+		if err != nil {
+			return nil, err
+		}
+		if x.FromVersion != nil && (from.version == nil || *from.version != *x.FromVersion) {
+			continue // a superseded version's row
+		}
+		to, err := s.nodeLabel(ctx, x.ToKind, x.ToID)
+		if err != nil {
+			return nil, err
+		}
+		x.FromRef, x.ToRef, x.ToTitle = from.ref, to.ref, to.title
+		out = append(out, x)
+	}
+	return out, nil
+}
+
+// label is how a node is shown at the end of an inline reference.
+type label struct {
+	ref, title string
+	version    *int // the current version of a versioned node, else nil
+}
+
+// nodeLabel reads a node's display ref, title and current version. A node
+// that no longer exists keeps its id as its ref. ponytail: one query per row,
+// batch by kind if a node ever shows hundreds.
+func (s *Store) nodeLabel(ctx context.Context, kind model.NodeKind, id string) (label, error) {
+	var q string
+	switch kind {
+	case "doc":
+		q = `SELECT coalesce(` + docRefSQL("p", "d") + `, d.slug), d.title, d.version
+		       FROM docs d JOIN projects p ON p.id = d.project_id WHERE d.id = $1::bigint`
+	case "rule":
+		q = `SELECT ` + ruleRefSQL("p", "r") + `, rv.heading, r.version
+		       FROM rules r JOIN projects p ON p.id = r.project_id
+		       JOIN rule_versions rv ON rv.rule_id = r.id AND rv.version = r.version WHERE r.id = $1::bigint`
+	case "task":
+		q = `SELECT id, title, NULL::int FROM tasks WHERE id = $1`
+	case "milestone":
+		q = `SELECT id, title, NULL::int FROM milestones WHERE id = $1`
+	case "deliverable":
+		q = `SELECT id, name, NULL::int FROM deliverables WHERE id = $1`
+	case model.NodeKindIdea:
+		q = `SELECT id, title, NULL::int FROM ideas WHERE id = $1`
+	case model.NodeKindDecision:
+		q = `SELECT id::text, question, NULL::int FROM decisions WHERE id = $1::bigint`
+	default: // approval: no title of its own
+		return label{ref: string(kind) + " " + id}, nil
+	}
+	l := label{ref: id}
+	var v sql.NullInt64
+	err := s.db.QueryRowContext(ctx, q, id).Scan(&l.ref, &l.title, &v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return label{ref: id}, nil
+	}
+	if err != nil {
+		return label{}, fmt.Errorf("label %s %s: %w", kind, id, err)
+	}
+	if v.Valid {
+		n := int(v.Int64)
+		l.version = &n
+	}
+	return l, nil
+}
+
+// InlineRefsOf is both directions of ListInlineRefs, for a node's detail.
+func (s *Store) InlineRefsOf(ctx context.Context, kind model.NodeKind, id string) (model.InlineRefs, error) {
+	out, err := s.ListInlineRefs(ctx, kind, id, "out")
+	if err != nil {
+		return model.InlineRefs{}, err
+	}
+	in, err := s.ListInlineRefs(ctx, kind, id, "in")
+	return model.InlineRefs{Out: out, In: in}, err
+}

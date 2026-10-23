@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -328,5 +329,42 @@ func TestNormalizeAcceptedDoc(t *testing.T) {
 	}
 	if len(versions) < 2 || versions[0].Version != got.Version || versions[0].Change != "normalize" || versions[1].Change != "edit" {
 		t.Errorf("versions %+v", versions)
+	}
+}
+
+// TestListInlineRefs: a task shows the doc that names it as an incoming ref
+// and the doc shows it as outgoing, each with the far end's ref and title; a
+// row at a version the source has moved past is not listed (WL-REQ-1852).
+func TestListInlineRefs(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	seedDocNoteTask(t, s, "P1-7")
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a",
+		Body: "---\nstatus: draft\n---\n# A\n\nSee P1-7.\n", CreatedBy: "stig"})
+	doc := strconv.FormatInt(d.ID, 10)
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, lines, source)
+		 VALUES ('doc', $1, 'body', 99, 'task', 'P1-7', '{1}', 'derived')`, doc); err != nil {
+		t.Fatal(err)
+	}
+
+	in, err := s.ListInlineRefs(ctx, "task", "P1-7", "in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(in) != 1 || in[0].FromKind != "doc" || in[0].FromID != doc || in[0].FromRef != "P1-SPEC-1" ||
+		in[0].ToRef != "P1-7" || in[0].ToTitle != "T" || !slices.Equal(in[0].Lines, []int{3}) {
+		t.Errorf("in = %+v", in)
+	}
+	out, err := s.ListInlineRefs(ctx, "doc", doc, "out")
+	if err != nil || len(out) != 1 || out[0].ToKind != "task" {
+		t.Errorf("out = %+v, %v", out, err)
+	}
+	none, err := s.ListInlineRefs(ctx, "task", "P1-7", "out")
+	if err != nil || none == nil || len(none) != 0 {
+		t.Errorf("none = %#v, %v", none, err)
+	}
+	if _, err := s.ListInlineRefs(ctx, "task", "P1-7", "sideways"); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("bad dir: %v", err)
 	}
 }

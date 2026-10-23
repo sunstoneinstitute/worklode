@@ -20,8 +20,8 @@ func (c *Client) SetDeliverableMilestone(ctx context.Context, deliverable, miles
 }
 
 // GetDeliverable calls GET /api/v1/deliverables/{id}.
-func (c *Client) GetDeliverable(ctx context.Context, id string) (model.Deliverable, []byte, error) {
-	return doJSON[model.Deliverable](ctx, c,
+func (c *Client) GetDeliverable(ctx context.Context, id string) (model.DeliverableDetail, []byte, error) {
+	return doJSON[model.DeliverableDetail](ctx, c,
 		http.MethodGet, "/api/v1/deliverables/"+url.PathEscape(id), nil, "deliverable")
 }
 
@@ -81,7 +81,7 @@ func DeliverableTable(w io.Writer, ds []model.Deliverable) {
 // <deliverable>` view. ReportedState is "declared" until something reports
 // against Artifact (WL-RULE-121) — the deliverable itself carries no state of
 // its own.
-func DeliverableRender(w io.Writer, d model.Deliverable) {
+func DeliverableRender(w io.Writer, d model.DeliverableDetail) {
 	fmt.Fprintf(w, "%s  %s\n", d.ID, d.Name)
 	fmt.Fprintf(w, "  project:   %s\n", d.Project)
 	fmt.Fprintf(w, "  milestone: %s\n", dash(d.Milestone))
@@ -101,4 +101,5 @@ func DeliverableRender(w io.Writer, d model.Deliverable) {
 	if d.Description != "" {
 		fmt.Fprintf(w, "\n%s\n", d.Description)
 	}
+	InlineRefsRender(w, d.InlineRefs)
 }

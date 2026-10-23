@@ -580,7 +580,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a deliverable */
+        /** Get a deliverable, with the inline references it makes and receives */
         get: {
             parameters: {
                 query?: never;
@@ -598,7 +598,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["Deliverable"];
+                        "application/json": components["schemas"]["DeliverableDetail"];
                     };
                 };
                 /** @description Any non-2xx answer */
@@ -9008,6 +9008,27 @@ export interface components {
             updated_at?: string;
             url?: string;
         };
+        DeliverableDetail: {
+            artifact?: string;
+            /** Format: date-time */
+            created_at?: string;
+            created_by?: string;
+            description?: string;
+            id?: string;
+            inline_refs_in?: components["schemas"]["InlineRef"][] | null;
+            inline_refs_out?: components["schemas"]["InlineRef"][] | null;
+            label?: string;
+            milestone?: string;
+            name?: string;
+            project?: string;
+            /** Format: date-time */
+            reported_at?: null | string;
+            reported_provenance?: string;
+            reported_state?: string;
+            /** Format: date-time */
+            updated_at?: string;
+            url?: string;
+        };
         DeliverableListResponse: {
             deliverables?: components["schemas"]["Deliverable"][] | null;
         };
@@ -9081,6 +9102,8 @@ export interface components {
             generated_by_task?: string;
             /** Format: int64 */
             id?: number;
+            inline_refs_in?: components["schemas"]["InlineRef"][] | null;
+            inline_refs_out?: components["schemas"]["InlineRef"][] | null;
             issued?: string;
             kind?: string;
             notes?: components["schemas"]["DocNote"][];
@@ -9501,6 +9524,19 @@ export interface components {
             repo?: string;
             truncated?: boolean;
         };
+        InlineRef: {
+            field?: string;
+            from_id?: string;
+            from_kind?: string;
+            from_ref?: string;
+            from_version?: null | number;
+            lines?: number[] | null;
+            source?: string;
+            to_id?: string;
+            to_kind?: string;
+            to_ref?: string;
+            to_title?: string;
+        };
         Instruction: {
             body?: string;
             /** Format: date-time */
@@ -9597,6 +9633,8 @@ export interface components {
             created_by?: string;
             deliverables?: components["schemas"]["Deliverable"][] | null;
             id?: string;
+            inline_refs_in?: components["schemas"]["InlineRef"][] | null;
+            inline_refs_out?: components["schemas"]["InlineRef"][] | null;
             position?: number;
             progress?: components["schemas"]["MilestoneProgress"];
             project?: string;
@@ -10319,6 +10357,8 @@ export interface components {
             hierarchy?: components["schemas"]["TaskHierarchy"];
             human_only?: boolean;
             id?: string;
+            inline_refs_in?: components["schemas"]["InlineRef"][] | null;
+            inline_refs_out?: components["schemas"]["InlineRef"][] | null;
             kind?: string;
             lease?: components["schemas"]["Lease"];
             milestone?: string;
