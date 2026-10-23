@@ -67,7 +67,7 @@ func TestDeriveRefsRoute(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Target", "priority": "medium", "kind": "feature"})
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Source", "priority": "medium", "kind": "feature", "body": "Needs /WL-1 first.\n"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Source", "priority": "medium", "kind": "feature", "body": "Needs https://lode.example/WL-1 first.\n"})
 	const path = "/api/v1/projects/proj/refs/derive"
 	body := func(t *testing.T) string {
 		t.Helper()
@@ -94,7 +94,7 @@ func TestDeriveRefsRoute(t *testing.T) {
 	if d, _ := n["diff"].(string); !strings.Contains(d, "+Needs WL-1 first.") {
 		t.Errorf("diff = %v", n)
 	}
-	if got := body(t); !strings.Contains(got, "/WL-1") {
+	if got := body(t); !strings.Contains(got, "lode.example/WL-1") {
 		t.Fatalf("a dry run or diff wrote: %q", got)
 	}
 
@@ -102,7 +102,7 @@ func TestDeriveRefsRoute(t *testing.T) {
 	if n["ref"] == nil {
 		t.Fatalf("node = %v", n)
 	}
-	if got := body(t); strings.Contains(got, "/WL-1") {
+	if got := body(t); strings.Contains(got, "lode.example/WL-1") {
 		t.Errorf("real run left %q", got)
 	}
 
