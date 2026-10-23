@@ -50,7 +50,8 @@ type DeliverableDetail struct {
 // (WL-REQ-1860). Kind is "doc", "task" or "rule". The nodes come from Refs,
 // else from the kind's own filters (Status, DocKind, TaskKind), else from All;
 // selecting nothing is a 400. DryRun and Diff compute the report and write
-// nothing.
+// nothing. Limit pages the selection: the nodes sort by id, After skips
+// those up to and including it, and the report's Next resumes the rest.
 type RefDeriveParams struct {
 	Kind     NodeKind `json:"kind"`
 	Refs     []string `json:"refs,omitempty"`
@@ -60,6 +61,8 @@ type RefDeriveParams struct {
 	All      bool     `json:"all,omitempty"`
 	DryRun   bool     `json:"dry_run,omitempty"`
 	Diff     bool     `json:"diff,omitempty"`
+	After    string   `json:"after,omitempty"`
+	Limit    int      `json:"limit,omitempty"`
 }
 
 // RefDeriveNode is what deriving one node did, or would do under DryRun.
@@ -78,6 +81,8 @@ type RefDeriveNode struct {
 }
 
 // RefDeriveReport is the response of POST /api/v1/projects/{id}/refs/derive.
+// Next is the After of the following page, empty on the last one.
 type RefDeriveReport struct {
 	Nodes []RefDeriveNode `json:"nodes"`
+	Next  string          `json:"next,omitempty"`
 }
