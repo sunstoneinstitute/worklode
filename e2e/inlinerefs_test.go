@@ -34,7 +34,7 @@ func TestRuleDeriveEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
-	rule, _, err := admin.AddRule(ctx, model.AddRuleInput{Project: "dv", Heading: model.Markdown("Names a task"), Body: model.Markdown("See /" + task.ID + " first.")})
+	rule, _, err := admin.AddRule(ctx, model.AddRuleInput{Project: "dv", Heading: model.Markdown("Names a task"), Body: model.Markdown("See https://lode.example/" + task.ID + " first.")})
 	if err != nil {
 		t.Fatalf("add rule: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestRuleDeriveEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rule derive: %v\n%s", err, out)
 	}
-	if got := body(); !strings.Contains(got, "See "+task.ID+" first.") || strings.Contains(got, "/"+task.ID) {
+	if got := body(); !strings.Contains(got, "See "+task.ID+" first.") || strings.Contains(got, "lode.example") {
 		t.Errorf("body after derive = %q", got)
 	}
 	detail, _, err := admin.GetTask(ctx, task.ID)
