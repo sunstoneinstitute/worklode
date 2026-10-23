@@ -35,6 +35,7 @@ type MilestoneListResponse struct {
 // children the progress was derived from.
 type MilestoneDetail struct {
 	Milestone
+	InlineRefs
 	Tasks        []Task        `json:"tasks"`
 	Deliverables []Deliverable `json:"deliverables"`
 }

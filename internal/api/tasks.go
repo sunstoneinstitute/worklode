@@ -292,6 +292,10 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp.Hierarchy.Progress = progress
+	if resp.InlineRefs, err = s.st.InlineRefsOf(r.Context(), "task", id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
 	if parent != nil {
 		resp.Hierarchy.Parent = &model.TaskParent{ID: parent.ID, Title: string(parent.Title), State: parent.State}
 	}

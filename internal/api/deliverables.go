@@ -154,7 +154,12 @@ func (s *server) getDeliverable(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, d)
+	refs, err := s.st.InlineRefsOf(r.Context(), "deliverable", d.ID)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.DeliverableDetail{Deliverable: *d, InlineRefs: refs})
 }
 
 // listProjectDeliverables handles GET /api/v1/projects/{id}/deliverables.
@@ -321,7 +326,7 @@ var deliverableRouteDocs = map[string]routeDoc{
 		responses: map[int]any{http.StatusOK: model.Deliverable{}},
 	},
 	"GET /api/v1/deliverables/{id}": {
-		summary:   "Get a deliverable",
-		responses: map[int]any{http.StatusOK: model.Deliverable{}},
+		summary:   "Get a deliverable, with the inline references it makes and receives",
+		responses: map[int]any{http.StatusOK: model.DeliverableDetail{}},
 	},
 }

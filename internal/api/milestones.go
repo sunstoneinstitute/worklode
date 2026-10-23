@@ -79,6 +79,12 @@ func (s *server) getMilestone(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	refs, err := s.st.InlineRefsOf(r.Context(), "milestone", d.ID)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	d.InlineRefs = refs
 	writeJSON(w, http.StatusOK, d)
 }
 
