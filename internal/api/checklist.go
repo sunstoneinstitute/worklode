@@ -17,7 +17,7 @@ func (s *server) getChecklist(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, model.ParseChecklist(t.Body))
+	writeJSON(w, http.StatusOK, model.ParseChecklist(string(t.Body)))
 }
 
 // setChecklistItem handles POST /api/v1/tasks/{id}/checklist: checks or

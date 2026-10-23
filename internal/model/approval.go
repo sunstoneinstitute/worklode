@@ -62,7 +62,7 @@ type Approval struct {
 	// impact rows, empty on ordinary reviews. ExceptionAuthorizedBy is the
 	// author who decided their own entity under a flow that allows
 	// self-review (WL-REQ-124), rendered beside the decision (WL-REQ-344).
-	Note                  *string    `json:"note,omitempty"`
+	Note                  *Markdown  `json:"note,omitempty"`
 	ExceptionAuthorizedBy *string    `json:"exception_authorized_by,omitempty"`
 	CreatedAt             time.Time  `json:"created_at"`
 	CreatedBy             *string    `json:"created_by,omitempty"`

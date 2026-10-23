@@ -141,7 +141,7 @@ func (s *server) decisionAdd(ctx context.Context, c *cli.Client, req *mcp.CallTo
 	if err != nil {
 		return nil, err
 	}
-	in := model.DecisionInput{Key: decisionKey(a.Question), Question: a.Question, ResponseType: "freetext"}
+	in := model.DecisionInput{Key: decisionKey(a.Question), Question: model.Markdown(a.Question), ResponseType: "freetext"}
 	if len(a.Options) > 0 {
 		in.ResponseType = "pick_or_freetext"
 		for _, o := range a.Options {
@@ -196,14 +196,14 @@ func (s *server) decisionResolve(ctx context.Context, c *cli.Client, req *mcp.Ca
 		}
 		schema, _ := json.Marshal(map[string]any{"type": "object", "properties": props})
 		return &mcp.CallToolResult{InputRequests: mcp.InputRequestMap{elicitAnswer: &mcp.ElicitParams{
-			Mode: "form", Message: d.Question, RequestedSchema: json.RawMessage(schema),
+			Mode: "form", Message: string(d.Question), RequestedSchema: json.RawMessage(schema),
 		}}}, nil
 	}
 	return say(fmt.Sprintf("Ask the user: %s Nothing was recorded.", d.Question), struct {
 		Question    string   `json:"question"`
 		Options     []string `json:"options,omitempty"`
 		Instruction string   `json:"instruction"`
-	}{d.Question, opts, decisionInstruction}), nil
+	}{string(d.Question), opts, decisionInstruction}), nil
 }
 
 // decisionOptions are the choices to offer: the option labels, or yes, no

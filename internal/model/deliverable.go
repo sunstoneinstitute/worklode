@@ -12,7 +12,7 @@ type Deliverable struct {
 	ID          string    `json:"id"`
 	Project     string    `json:"project"`
 	Name        string    `json:"name"`
-	Description string    `json:"description"`
+	Description Markdown  `json:"description"`
 	URL         string    `json:"url"`
 	CreatedBy   string    `json:"created_by"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -55,11 +55,11 @@ type DeliverableListResponse struct {
 // CreateDeliverableInput is the request body for declaring a deliverable
 // (POST /api/v1/projects/{id}/deliverables).
 type CreateDeliverableInput struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	URL         string `json:"url"`
-	Artifact    string `json:"artifact"`
-	Label       bool   `json:"label"`
+	Name        string   `json:"name"`
+	Description Markdown `json:"description"`
+	URL         string   `json:"url"`
+	Artifact    string   `json:"artifact"`
+	Label       bool     `json:"label"`
 	// Milestone attaches the deliverable to a milestone in the same project
 	// at declaration time (WL-REQ-118), "" for none.
 	Milestone string `json:"milestone,omitempty"`

@@ -27,7 +27,7 @@ func TestPatchDocRoute(t *testing.T) {
 
 	edited := strings.Replace(docSpecBody, "Scope body.", "Scope body, restated.", 1)
 	rr := doReq(t, h, "POST", docPath(spec.ID, "/patch"), token,
-		model.PatchDocInput{Body: noHeader(t, edited), Note: "clarified the scope"})
+		model.PatchDocInput{Body: model.Markdown(noHeader(t, edited)), Note: "clarified the scope"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -90,7 +90,7 @@ func TestPatchDocRefusedIsUnprocessable(t *testing.T) {
 
 	edited := strings.Replace(docSpecBody, "Scope body.", "Scope body, run `lode doc show`.", 1)
 	rr := doReq(t, h, "POST", docPath(spec.ID, "/patch"), token,
-		model.PatchDocInput{Body: noHeader(t, edited), Note: "names a command"})
+		model.PatchDocInput{Body: model.Markdown(noHeader(t, edited)), Note: "names a command"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422, body %s", rr.Code, rr.Body.String())
 	}

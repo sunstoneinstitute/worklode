@@ -486,7 +486,7 @@ func TestDocPatch(t *testing.T) {
 	// through the API and rendered on the document's own page.
 	const note = "Dropped a stray word from the model section."
 	patched, _, err := author.PatchDoc(ctx, doc.ID, model.PatchDocInput{
-		Body: noHeader(t, gateSpecV2), Note: note,
+		Body: model.Markdown(noHeader(t, gateSpecV2)), Note: note,
 	})
 	if err != nil {
 		t.Fatalf("non-substantive patch: %v", err)
@@ -515,7 +515,7 @@ func TestDocPatch(t *testing.T) {
 	if len(notes) != 1 {
 		t.Fatalf("doc %d has %d notes, want 1: %+v", doc.ID, len(notes), notes)
 	}
-	if notes[0].Anchor != "sec-2" || !strings.Contains(notes[0].Body, note) {
+	if notes[0].Anchor != "sec-2" || !strings.Contains(string(notes[0].Body), note) {
 		t.Fatalf("note = %+v, want the patch's own note anchored at sec-2", notes[0])
 	}
 	// A numbered document is served under its citable ref, not its row id:
@@ -546,7 +546,7 @@ func TestDocPatch(t *testing.T) {
 	}
 	clientErr(t, func() error {
 		_, _, err := author.PatchDoc(ctx, doc.ID, model.PatchDocInput{
-			Body: noHeader(t, gateSpecV2b), Note: "Another pass at the model.",
+			Body: model.Markdown(noHeader(t, gateSpecV2b)), Note: "Another pass at the model.",
 		})
 		return err
 	}(), "patch a section a second spec requires", "referrer", "sec-2", "DP-SPEC-2")
@@ -556,7 +556,7 @@ func TestDocPatch(t *testing.T) {
 	// reviewers are reopened at the new version, and the watcher mints the
 	// re-review task that asks for those decisions.
 	substantive, _, err := author.PatchDoc(ctx, doc.ID, model.PatchDocInput{
-		Body: noHeader(t, gateSpecV3), Substantive: true,
+		Body: model.Markdown(noHeader(t, gateSpecV3)), Substantive: true,
 	})
 	if err != nil {
 		t.Fatalf("substantive patch: %v", err)
@@ -608,8 +608,8 @@ func TestDocPatch(t *testing.T) {
 		t.Fatalf("re-review task %s = state %q created_by %q, want a ready watcher mint",
 			rereview.ID, rereview.State, rereview.CreatedBy)
 	}
-	if !strings.HasPrefix(rereview.Title, "Re-review patched sections of") ||
-		!strings.Contains(rereview.Title, "sec-1") {
+	if !strings.HasPrefix(string(rereview.Title), "Re-review patched sections of") ||
+		!strings.Contains(string(rereview.Title), "sec-1") {
 		t.Fatalf("re-review task title = %q, want it to name the patched section", rereview.Title)
 	}
 

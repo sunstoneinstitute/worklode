@@ -138,7 +138,7 @@ func TestRuleReferencesAcrossVersions(t *testing.T) {
 	s := openDocStore(t)
 	ctx := context.Background()
 	for _, body := range []string{"B.", "Names P1-REQ-1."} {
-		if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "H", Body: body}, "stig"); err != nil {
+		if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "H", Body: model.Markdown(body)}, "stig"); err != nil {
 			t.Fatal(err)
 		}
 	}

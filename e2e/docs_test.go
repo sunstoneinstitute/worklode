@@ -347,13 +347,13 @@ func TestDocLifecycle(t *testing.T) {
 	// --if-version carried through: the caller names the version it read, and
 	// the edit lands because nothing else has written the plan since.
 	if _, _, err := actorA.UpdateDocBody(ctx, plan.ID,
-		model.UpdateDocBodyInput{Body: noHeader(t, editedPlanBody), IfVersion: plan.Version}); err != nil {
+		model.UpdateDocBodyInput{Body: model.Markdown(noHeader(t, editedPlanBody)), IfVersion: plan.Version}); err != nil {
 		t.Fatalf("edit plan body while draft: %v", err)
 	}
 	// The same version again is stale now, and the server refuses with 409
 	// instead of overwriting the edit above.
 	if _, _, err := actorA.UpdateDocBody(ctx, plan.ID,
-		model.UpdateDocBodyInput{Body: noHeader(t, planSourceBody), IfVersion: plan.Version}); err == nil {
+		model.UpdateDocBodyInput{Body: model.Markdown(noHeader(t, planSourceBody)), IfVersion: plan.Version}); err == nil {
 		t.Fatal("stale --if-version edit: want an error, got nil")
 	} else if status := clientErrStatus(t, err); status != http.StatusConflict {
 		t.Fatalf("stale --if-version edit: status = %d, want 409 (err %v)", status, err)
@@ -561,7 +561,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 		if got.PlanDoc != beta.ID {
 			t.Fatalf("minted task %s plan_doc = %d, want %d", got.ID, got.PlanDoc, beta.ID)
 		}
-		if got.Title != want.title || got.Kind != want.kind || got.Priority != want.priority {
+		if string(got.Title) != want.title || got.Kind != want.kind || got.Priority != want.priority {
 			t.Fatalf("minted task %s = %q/%s/%s, want %q/%s/%s",
 				got.ID, got.Title, got.Kind, got.Priority, want.title, want.kind, want.priority)
 		}

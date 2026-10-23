@@ -232,7 +232,7 @@ func setupLeasedWorktree(t *testing.T, c *cli.Client, root, title string) (taskI
 			t.Fatalf("create project: %v", err)
 		}
 	}
-	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: model.Markdown(title), Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}

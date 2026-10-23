@@ -297,7 +297,7 @@ func TestDocImport(t *testing.T) {
 		if len(d.Edges) != 0 || len(d.EdgesIn) != 0 {
 			t.Errorf("edges = %+v / %+v, want none: task: is not a relation", d.Edges, d.EdgesIn)
 		}
-		if strings.Contains(d.Body, "task: WL-99") {
+		if strings.Contains(string(d.Body), "task: WL-99") {
 			t.Errorf("body = %q, want it stored without its header (WL-SPEC-77 §7)", d.Body)
 		}
 		// The task set is asserted empty above; nothing else on the document
@@ -513,13 +513,13 @@ Now also declaring a dependency on spec 002.
 	})
 
 	t.Run("a drifted draft spec is updated in place", func(t *testing.T) {
-		if d := importedDoc(t, c, "002-target-spec"); !strings.Contains(d.Body, draftMarker) {
+		if d := importedDoc(t, c, "002-target-spec"); !strings.Contains(string(d.Body), draftMarker) {
 			t.Errorf("draft spec body was not updated; drift silently kept")
 		}
 	})
 
 	t.Run("a drifted accepted spec is refused and reported", func(t *testing.T) {
-		if d := importedDoc(t, c, "001-forward-spec"); strings.Contains(d.Body, acceptedMarker) {
+		if d := importedDoc(t, c, "001-forward-spec"); strings.Contains(string(d.Body), acceptedMarker) {
 			t.Errorf("accepted spec body was edited in place; it must be revised instead")
 		}
 		if !strings.Contains(stderr, "001-forward-spec") || !strings.Contains(stderr, "lode doc revise") {

@@ -22,7 +22,7 @@ import (
 func inboxFact(id, project, state, assignee, creator string, blockers ...string) store.ProjectWorkFact {
 	f := store.ProjectWorkFact{
 		Task: model.Task{
-			ID: id, Project: project, Title: id + " title", Priority: "medium",
+			ID: id, Project: project, Title: model.Markdown(id + " title"), Priority: "medium",
 			State: state, Assignee: assignee, CreatedBy: creator,
 			CreatedAt: fixedNow.Add(-3 * time.Hour),
 		},

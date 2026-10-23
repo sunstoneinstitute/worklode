@@ -477,7 +477,7 @@ func updateTaskFields(t *testing.T, s *Store, now time.Time, id string, title, b
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition, nil, nil, nil, nil)
+			return UpdateTaskFields(tx, now, id, (*model.Markdown)(title), (*model.Markdown)(body), priority, concern, nil, needsDecomposition, nil, nil, nil, nil)
 		})
 	return err
 }
@@ -737,7 +737,7 @@ func TestUpdateTaskFieldsRejectsBlankTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if got.Title != in.Title {
+	if string(got.Title) != in.Title {
 		t.Fatalf("title after rejected updates = %q, want %q", got.Title, in.Title)
 	}
 
@@ -772,7 +772,7 @@ func TestUpdateTaskFieldsUsabilityRejectsEmptyAlt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if got.Body == emptyAlt {
+	if string(got.Body) == emptyAlt {
 		t.Fatalf("rejected body was written anyway")
 	}
 

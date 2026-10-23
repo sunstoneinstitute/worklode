@@ -161,7 +161,7 @@ func (s *server) addDoc(ctx context.Context, c *cli.Client, a docAddArgs) (*mcp.
 		}
 	}
 	fmt.Fprintf(&b, "---\n\n# %s\n\n%s\n", a.Title, strings.TrimSpace(a.Body))
-	d, _, err := c.CreateDoc(ctx, model.CreateDocInput{Project: p.ID, Kind: kind, Slug: slug, Body: b.String()})
+	d, _, err := c.CreateDoc(ctx, model.CreateDocInput{Project: p.ID, Kind: kind, Slug: slug, Body: model.Markdown(b.String())})
 	if err != nil {
 		return nil, err
 	}
@@ -219,13 +219,13 @@ func (s *server) docEdit(ctx context.Context, c *cli.Client, req *mcp.CallToolRe
 		return nil, err
 	}
 	if a.Patch != "" {
-		r, _, err := c.PatchDoc(ctx, d.ID, model.PatchDocInput{Body: a.Patch, Note: a.Note, IfVersion: a.IfVersion})
+		r, _, err := c.PatchDoc(ctx, d.ID, model.PatchDocInput{Body: model.Markdown(a.Patch), Note: model.Markdown(a.Note), IfVersion: a.IfVersion})
 		if err != nil {
 			return nil, withCurrentVersion(ctx, c, d, err)
 		}
 		return say(fmt.Sprintf("Amended %s in place, now at version %d.", cli.DocRef(d), r.Doc.Version), nil), nil
 	}
-	u, _, err := c.UpdateDocBody(ctx, d.ID, model.UpdateDocBodyInput{Body: a.Body, IfVersion: a.IfVersion})
+	u, _, err := c.UpdateDocBody(ctx, d.ID, model.UpdateDocBodyInput{Body: model.Markdown(a.Body), IfVersion: a.IfVersion})
 	if err != nil {
 		return nil, withCurrentVersion(ctx, c, d, err)
 	}

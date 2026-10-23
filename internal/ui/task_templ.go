@@ -1886,7 +1886,7 @@ func taskPrerequisites(v TaskView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = prereqCard(PrerequisiteNode{ID: v.Task.ID, Title: v.Task.Title, State: "this task", Levels: p.Levels, Below: p.Below}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = prereqCard(PrerequisiteNode{ID: v.Task.ID, Title: string(v.Task.Title), State: "this task", Levels: p.Levels, Below: p.Below}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

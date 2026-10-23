@@ -43,7 +43,7 @@ func docBody(t *testing.T, s *Store, id int64) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return plain(d.Body)
+	return plain(string(d.Body))
 }
 
 func ruleCount(t *testing.T, s *Store) int {
@@ -267,7 +267,7 @@ func TestEditableFormWritesRules(t *testing.T) {
 		{0, 2, 3, 1, "sec-1", "draft"},
 		{1, 2, 5, 1, "sec-2", "draft"},
 	})
-	if r, err := s.GetRule(ctx, "P1", 3); err != nil || strings.TrimSpace(r.Body) != "C edited." || r.Version != 1 {
+	if r, err := s.GetRule(ctx, "P1", 3); err != nil || strings.TrimSpace(string(r.Body)) != "C edited." || r.Version != 1 {
 		t.Fatalf("shared rule = %+v, %v", r, err)
 	}
 	if r, err := s.GetRule(ctx, "P1", 4); err != nil || len(r.ArrangedIn) != 0 || r.Status != "draft" {

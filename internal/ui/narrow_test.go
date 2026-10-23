@@ -48,7 +48,7 @@ func pages(t *testing.T) map[string]string {
 			Page:    PageProps{Title: "WL-234"},
 			Project: proj,
 			Task: model.Task{
-				ID: "WL-234", Project: "worklode", Title: longTitle, Priority: "low", Kind: "chore",
+				ID: "WL-234", Project: "worklode", Title: model.Markdown(longTitle), Priority: "low", Kind: "chore",
 				State: "in_progress", Concern: "usability", CreatedBy: "stig", Assignee: "stig@sunstoneinstitute.ai",
 				CreatedAt: now, UpdatedAt: now, Branch: "WL-234-make-the-narrow-width-reflow-check-runna",
 			},
@@ -229,7 +229,7 @@ func pages(t *testing.T) map[string]string {
 			RestoreDocAction:  "/projects/worklode/deleted/docs/restore",
 			RestoreError:      "WL-234 is not deleted. It may already have been restored.",
 			Tasks: []model.Task{{
-				ID: "WL-234", Title: longTitle, Kind: "feature", Priority: "low", State: "ready",
+				ID: "WL-234", Title: model.Markdown(longTitle), Kind: "feature", Priority: "low", State: "ready",
 				Tombstone: &model.Tombstone{
 					DeletedAt: now, DeletedBy: "stig@sunstoneinstitute.ai",
 					Justification: "Filed twice by the importer against " + token + ", and this is the copy nobody worked.",
@@ -238,7 +238,7 @@ func pages(t *testing.T) map[string]string {
 			Docs: []DeletedDocRow{{
 				Doc: model.Doc{
 					ID: 44, Kind: "spec", Slug: "044-deleting-tasks-and-documents",
-					Title: longTitle, Status: "draft",
+					Title: model.Markdown(longTitle), Status: "draft",
 					Tombstone: &model.Tombstone{DeletedAt: now, DeletedBy: "claude-worker-01"},
 				},
 				URL: "/docs/44", Ref: "spec 44",

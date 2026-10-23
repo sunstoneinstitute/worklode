@@ -93,7 +93,7 @@ func newDeliverableAddCmd() *cobra.Command {
 			}
 			d, raw, err := c.CreateDeliverable(cmd.Context(), args[0], model.CreateDeliverableInput{
 				Name:        args[1],
-				Description: description,
+				Description: model.Markdown(description),
 				URL:         deliverableURL,
 				Artifact:    artifact,
 				Milestone:   milestone,

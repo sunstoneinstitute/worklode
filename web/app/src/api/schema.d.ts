@@ -8965,7 +8965,7 @@ export interface components {
             value?: string;
         };
         DecisionInput: {
-            context?: null | string;
+            context?: string;
             group?: null | string;
             key?: string;
             max_picks?: null | number;

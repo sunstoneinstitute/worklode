@@ -299,7 +299,7 @@ func MintAcceptDecision(tx *sql.Tx, now time.Time, planDoc int64, actorID string
 		return nil, err
 	}
 	if _, err := InsertDecision(tx, t.ID, model.Decision{
-		Key: "accept", Question: title, ResponseType: "yes_no",
+		Key: "accept", Question: model.Markdown(title), ResponseType: "yes_no",
 	}); err != nil {
 		return nil, err
 	}

@@ -223,7 +223,7 @@ func workItems(facts []store.ProjectWorkFact, pos map[string]int, now time.Time)
 	out := make([]ui.InboxItem, 0, len(facts))
 	for _, f := range facts {
 		out = append(out, ui.InboxItem{
-			Text:   f.Task.ID + " " + f.Task.Title,
+			Text:   f.Task.ID + " " + string(f.Task.Title),
 			Href:   "/tasks/" + f.Task.ID,
 			Detail: detail(f.Task.Project, f.Task.CreatedAt, now),
 		})

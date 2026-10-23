@@ -41,7 +41,7 @@ func TestBrief(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
-	if b.Task.ID != task.ID || b.Body != task.Body {
+	if b.Task.ID != task.ID || b.Body != string(task.Body) {
 		t.Fatalf("brief task = %+v, want id=%s body=%q", b.Task, task.ID, task.Body)
 	}
 	if want := task.ID + "-a-task"; b.Branch != want {

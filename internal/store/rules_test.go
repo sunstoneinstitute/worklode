@@ -101,7 +101,7 @@ func TestSyncRulesMintsVersionsAndKeepsIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Version != 1 || !strings.Contains(c.Body, "C changed.") {
+	if c.Version != 1 || !strings.Contains(string(c.Body), "C changed.") {
 		t.Errorf("draft edit should rewrite v1 in place: %+v", c)
 	}
 }
@@ -252,7 +252,7 @@ func TestRuleVersionsAndGovernedTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v1.Version != 1 || strings.Contains(v1.Body, "changed") || v1.Ref != "P1-REQ-3" {
+	if v1.Version != 1 || strings.Contains(string(v1.Body), "changed") || v1.Ref != "P1-REQ-3" {
 		t.Errorf("v1 = %+v", v1)
 	}
 	if _, err := s.GetRuleVersion(context.Background(), "P1", 3, 9); !errors.Is(err, ErrNotFound) {
@@ -292,7 +292,7 @@ func TestEditRuleDraftRewritesInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := noHeader(t, strings.Replace(ruleDocV1, "### 1.1 Sub {#sec-1.1}\n\nB.\n", "### 1.1 Subsection {#sec-1.1}\n\nB changed.\n", 1))
-	if plain(got.Body) != want {
+	if plain(string(got.Body)) != want {
 		t.Errorf("body after rule edit:\n%s\nwant:\n%s", got.Body, want)
 	}
 	c, err := s.GetRule(context.Background(), "P1", 2)
@@ -321,7 +321,7 @@ func TestEditRuleAcceptedAddsDraftVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, body := range []string{"\nC changed.\n", "\nC again.\n"} {
-		if err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: body}, "stig"); err != nil {
+		if err := editRule(t, s, "P1", 3, model.EditRuleInput{Heading: "Two", Body: model.Markdown(body)}, "stig"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -339,7 +339,7 @@ func TestEditRuleAcceptedAddsDraftVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got.Body, "\nC.\n") || strings.Contains(got.Body, "C again.") {
+	if !strings.Contains(string(got.Body), "\nC.\n") || strings.Contains(string(got.Body), "C again.") {
 		t.Errorf("accepted spec must show the accepted text:\n%s", got.Body)
 	}
 	secs, err := s.ListDocSections(ctx, d.ID)
@@ -404,7 +404,7 @@ func TestEditRuleNormalisesBodyWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(plain(got.Body), "## 2. Two {#sec-2}\n\nC tight.\n") {
+	if !strings.HasSuffix(plain(string(got.Body)), "## 2. Two {#sec-2}\n\nC tight.\n") {
 		t.Errorf("document body after editing the last rule:\n%q", got.Body)
 	}
 }

@@ -196,9 +196,9 @@ func TestBlobLifecycle(t *testing.T) {
 		Title:    "Map flashes narrow at 390px",
 		Priority: "high",
 		Kind:     "bug",
-		Body: "## Repro\n\nScroll back up.\n\n" +
+		Body: model.Markdown("## Repro\n\nScroll back up.\n\n" +
 			"![before](" + upA.URL + ")\n\n" +
-			"![after](" + upB.URL + ")\n",
+			"![after](" + upB.URL + ")\n"),
 	})
 	if err != nil {
 		t.Fatalf("create task: %v", err)
@@ -240,7 +240,7 @@ func TestBlobLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get task: %v", err)
 	}
-	if strings.Contains(detail.Body, "crash.log") {
+	if strings.Contains(string(detail.Body), "crash.log") {
 		t.Fatalf("attach appended to the body:\n%s", detail.Body)
 	}
 
@@ -325,7 +325,7 @@ func TestBlobLifecycle(t *testing.T) {
 	// 7. Edit the second image out of the body. The derived half of the graph
 	// follows the body: the row goes, the attachment does not.
 	newBody := "## Repro\n\nScroll back up.\n\n![before](" + upA.URL + ")\n"
-	if _, _, err := user.EditTask(ctx, task.ID, model.EditTaskInput{Body: &newBody}); err != nil {
+	if _, _, err := user.EditTask(ctx, task.ID, model.EditTaskInput{Body: (*model.Markdown)(&newBody)}); err != nil {
 		t.Fatalf("edit task: %v", err)
 	}
 	refs = taskBlobsByHash(t, user, task.ID)

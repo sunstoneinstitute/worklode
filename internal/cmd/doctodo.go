@@ -263,7 +263,7 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 			p := pathBySlug[d.Slug]
 			out[i] = designdoc.CorpusDoc{
 				Filename: path.Base(p), Path: p, Kind: d.Kind, Number: d.Number,
-				Status: detail.Doc.Status, Title: detail.Doc.Title,
+				Status: detail.Doc.Status, Title: string(detail.Doc.Title),
 				Sections: docTodoSectionMetas(detail.Sections),
 				Edges:    docTodoEdgeMetas(detail.Edges, pathByRef),
 			}
