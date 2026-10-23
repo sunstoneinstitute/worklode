@@ -1012,3 +1012,29 @@ func gatheredLabelPairs(t *testing.T, reg *prometheus.Registry, name, first, sec
 	slices.Sort(out)
 	return out
 }
+
+// TestObserveRefsDerived: a node counts once by outcome, a rewrite counts as
+// normalized, a run that wrote nothing counts nothing, and the series exist
+// at zero (WL-REQ-1861).
+func TestObserveRefsDerived(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+	if got := testutil.CollectAndCount(s.refsDerived); got != 9 {
+		t.Fatalf("refsDerived series = %d, want 9", got)
+	}
+	s.observeRefsDerived("rule", model.RefDeriveNode{Rewrites: 2}, true)
+	s.observeRefsDerived("rule", model.RefDeriveNode{}, true)
+	s.observeRefsDerived("rule", model.RefDeriveNode{Error: "x"}, true)
+	s.observeRefsDerived("rule", model.RefDeriveNode{Rewrites: 1}, false)
+	for outcome, want := range map[string]float64{"changed": 1, "unchanged": 1, "error": 1} {
+		if got := testutil.ToFloat64(s.refsDerived.WithLabelValues("rule", outcome)); got != want {
+			t.Errorf("refsDerived{rule,%s} = %v, want %v", outcome, got, want)
+		}
+	}
+	if got := testutil.ToFloat64(s.refsNormalized.WithLabelValues("rule")); got != 1 {
+		t.Errorf("refsNormalized{rule} = %v, want 1", got)
+	}
+	(&server{}).observeRefsDerived("task", model.RefDeriveNode{}, true) // nil-safe
+}

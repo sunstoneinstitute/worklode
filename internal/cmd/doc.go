@@ -95,6 +95,7 @@ func newDocCmd() *cobra.Command {
 		newDocTransferCmd(),
 		newDocReviewersCmd(),
 		newDocSetCmd(),
+		newDeriveCmd("doc"),
 	)
 	return cmd
 }

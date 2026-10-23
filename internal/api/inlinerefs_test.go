@@ -1,6 +1,8 @@
 package api_test
 
 import (
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -54,5 +56,58 @@ func TestShowCarriesInlineRefs(t *testing.T) {
 	}
 	if out := refs("/api/v1/deliverables/"+del, "inline_refs_out"); len(out) != 1 {
 		t.Errorf("deliverable inline_refs_out = %v", out)
+	}
+}
+
+// TestDeriveRefsRoute: a dry run and a diff write nothing, a real run
+// rewrites and reports, and selecting nothing is a 400 (WL-REQ-1860).
+func TestDeriveRefsRoute(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Target", "priority": "medium", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Source", "priority": "medium", "kind": "feature", "body": "Needs /WL-1 first.\n"})
+	const path = "/api/v1/projects/proj/refs/derive"
+	body := func(t *testing.T) string {
+		t.Helper()
+		return decodeMap(t, doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil))["body"].(string)
+	}
+	node := func(t *testing.T, req model.RefDeriveParams) map[string]any {
+		t.Helper()
+		rr := doReq(t, h, "POST", path, token, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+		}
+		nodes := decodeMap(t, rr)["nodes"].([]any)
+		if len(nodes) != 1 {
+			t.Fatalf("nodes = %v", nodes)
+		}
+		return nodes[0].(map[string]any)
+	}
+
+	n := node(t, model.RefDeriveParams{Kind: "task", Refs: []string{"WL-2"}, DryRun: true})
+	if n["rewrites"] != float64(1) || n["diff"] != nil {
+		t.Errorf("dry run = %v", n)
+	}
+	n = node(t, model.RefDeriveParams{Kind: "task", Refs: []string{"WL-2"}, Diff: true})
+	if d, _ := n["diff"].(string); !strings.Contains(d, "+Needs WL-1 first.") {
+		t.Errorf("diff = %v", n)
+	}
+	if got := body(t); !strings.Contains(got, "/WL-1") {
+		t.Fatalf("a dry run or diff wrote: %q", got)
+	}
+
+	n = node(t, model.RefDeriveParams{Kind: "task", Refs: []string{"WL-2"}})
+	if n["ref"] == nil {
+		t.Fatalf("node = %v", n)
+	}
+	if got := body(t); strings.Contains(got, "/WL-1") {
+		t.Errorf("real run left %q", got)
+	}
+
+	for _, bad := range []model.RefDeriveParams{{Kind: "task"}, {Kind: "idea", All: true}} {
+		if rr := doReq(t, h, "POST", path, token, bad); rr.Code != http.StatusBadRequest {
+			t.Errorf("%+v: status %d, want 400", bad, rr.Code)
+		}
 	}
 }

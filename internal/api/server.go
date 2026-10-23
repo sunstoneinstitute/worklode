@@ -542,6 +542,12 @@ type server struct {
 	// apiGuard and observeAPISessionRequest (WL-REQ-1307).
 	apiSessionRequests *prometheus.CounterVec
 
+	// refsDerived counts nodes `lode <kind> derive` processed, by kind and
+	// outcome, and refsNormalized the ones it rewrote (WL-REQ-1861). Dry runs
+	// and diffs write nothing and count nothing.
+	refsDerived    *prometheus.CounterVec
+	refsNormalized *prometheus.CounterVec
+
 	// approvalDecisions counts decisions submitted to the web and API decide
 	// routes, by decision and outcome; see observeApprovalDecision. The session refusal in front of the route is
 	// not counted here — worklode_authz_decisions_total already carries it.
@@ -1018,6 +1024,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("POST /api/v1/rules/{id}/edges", s.linkRule)
 	r.api("DELETE /api/v1/rules/{id}/edges", s.unlinkRule)
 	r.api("POST /api/v1/projects/{id}/rules/supersede", s.supersedeRules)
+	r.api("POST /api/v1/projects/{id}/refs/derive", s.deriveRefs)
 	r.api("GET /api/v1/projects/{id}/terms", s.listTerms)
 	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
 	r.api("POST /api/v1/docs/{id}/patch", s.patchDoc)
