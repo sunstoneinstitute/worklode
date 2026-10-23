@@ -19,7 +19,7 @@ func newRuleCmd() *cobra.Command {
 		Use:   "rule",
 		Short: "Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another, arrange it in a spec, list terms",
 	}
-	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleArrangeCmd(), newRuleUnarrangeCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleLintCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd(), newRuleTermsCmd())
+	cmd.AddCommand(newRuleAddCmd(), newRuleAcceptCmd(), newRuleArrangeCmd(), newRuleUnarrangeCmd(), newRuleShowCmd(), newRuleListCmd(), newRuleLintCmd(), newRuleEditCmd(), newRuleVersionsCmd(), newRuleLinkCmd(), newRuleUnlinkCmd(), newRuleSetCmd(), newRuleSupersedeCmd(), newRuleTermsCmd(), newDeriveCmd("rule"))
 	return cmd
 }
 

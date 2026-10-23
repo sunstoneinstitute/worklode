@@ -638,6 +638,16 @@ func normalizeDoc(tx *sql.Tx, now time.Time, n *normalizer, id string, eventID i
 // version. Each row carries the display ref and title of the node at the far
 // end. Never nil.
 func (s *Store) ListInlineRefs(ctx context.Context, kind model.NodeKind, id, dir string) ([]model.InlineRef, error) {
+	return listInlineRefs(ctx, s.db, kind, id, dir)
+}
+
+// rowsQueryer is what *sql.DB and *sql.Tx share, so a read runs on either.
+type rowsQueryer interface {
+	QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row
+}
+
+func listInlineRefs(ctx context.Context, db rowsQueryer, kind model.NodeKind, id, dir string) ([]model.InlineRef, error) {
 	var where string
 	switch dir {
 	case "out":
@@ -647,7 +657,7 @@ func (s *Store) ListInlineRefs(ctx context.Context, kind model.NodeKind, id, dir
 	default:
 		return nil, fmt.Errorf("inline ref direction %q must be out or in: %w", dir, ErrInvalidInput)
 	}
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := db.QueryContext(ctx,
 		`SELECT from_kind, from_id, field, from_version, to_kind, to_id, lines::text, source
 		   FROM inline_refs WHERE `+where+` ORDER BY from_kind, from_id, field, to_kind, to_id`, kind, id)
 	if err != nil {
@@ -681,14 +691,14 @@ func (s *Store) ListInlineRefs(ctx context.Context, kind model.NodeKind, id, dir
 	}
 	out := []model.InlineRef{}
 	for _, x := range all {
-		from, err := s.nodeLabel(ctx, x.FromKind, x.FromID)
+		from, err := nodeLabel(ctx, db, x.FromKind, x.FromID)
 		if err != nil {
 			return nil, err
 		}
 		if x.FromVersion != nil && (from.version == nil || *from.version != *x.FromVersion) {
 			continue // a superseded version's row
 		}
-		to, err := s.nodeLabel(ctx, x.ToKind, x.ToID)
+		to, err := nodeLabel(ctx, db, x.ToKind, x.ToID)
 		if err != nil {
 			return nil, err
 		}
@@ -707,7 +717,7 @@ type label struct {
 // nodeLabel reads a node's display ref, title and current version. A node
 // that no longer exists keeps its id as its ref. ponytail: one query per row,
 // batch by kind if a node ever shows hundreds.
-func (s *Store) nodeLabel(ctx context.Context, kind model.NodeKind, id string) (label, error) {
+func nodeLabel(ctx context.Context, db rowsQueryer, kind model.NodeKind, id string) (label, error) {
 	var q string
 	switch kind {
 	case "doc":
@@ -732,7 +742,7 @@ func (s *Store) nodeLabel(ctx context.Context, kind model.NodeKind, id string) (
 	}
 	l := label{ref: id}
 	var v sql.NullInt64
-	err := s.db.QueryRowContext(ctx, q, id).Scan(&l.ref, &l.title, &v)
+	err := db.QueryRowContext(ctx, q, id).Scan(&l.ref, &l.title, &v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return label{ref: id}, nil
 	}
