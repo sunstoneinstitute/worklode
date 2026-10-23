@@ -35,6 +35,10 @@ type Hit struct {
 	Number   int64
 	Anchor   string // "sec-3" without '#', or ""
 	LinkText string // text of [text](url) when the hit is a Markdown link
+	// Absolute is set on a URL with scheme and host. A bare path such as
+	// /<ref> is a short form: it yields an edge but is never rewritten
+	// (WL-REQ-1854).
+	Absolute bool
 	// Literal is set inside inline code, inside quotation marks, and on a
 	// section that starts a range or list. Such a hit yields an edge but is
 	// never rewritten (WL-REQ-1854).
@@ -292,7 +296,9 @@ func codeSpans(line string) [][2]int {
 // parseURL reads a Worklode node URL in any shape internal/api/router.go
 // serves. Scheme and host are ignored.
 func parseURL(u string) (Hit, bool) {
+	absolute := false
 	if i := strings.Index(u, "://"); i >= 0 {
+		absolute = true
 		u = u[i+3:]
 		j := strings.Index(u, "/")
 		if j < 0 {
@@ -312,7 +318,7 @@ func parseURL(u string) (Hit, bool) {
 		return Hit{}, false
 	}
 	p := strings.Split(u[1:], "/")
-	h := Hit{Form: FormURL}
+	h := Hit{Form: FormURL, Absolute: absolute}
 	switch {
 	case len(p) == 1:
 		return ref(h, p[0], anchor)
