@@ -45,3 +45,39 @@ type DeliverableDetail struct {
 	Deliverable
 	InlineRefs
 }
+
+// RefDeriveParams is the body of POST /api/v1/projects/{id}/refs/derive
+// (WL-REQ-1860). Kind is "doc", "task" or "rule". The nodes come from Refs,
+// else from the kind's own filters (Status, DocKind, TaskKind), else from All;
+// selecting nothing is a 400. DryRun and Diff compute the report and write
+// nothing.
+type RefDeriveParams struct {
+	Kind     NodeKind `json:"kind"`
+	Refs     []string `json:"refs,omitempty"`
+	Status   []string `json:"status,omitempty"`
+	DocKind  string   `json:"doc_kind,omitempty"`
+	TaskKind string   `json:"task_kind,omitempty"`
+	All      bool     `json:"all,omitempty"`
+	DryRun   bool     `json:"dry_run,omitempty"`
+	Diff     bool     `json:"diff,omitempty"`
+}
+
+// RefDeriveNode is what deriving one node did, or would do under DryRun.
+// Added and Removed are its outgoing inline references that appeared and
+// disappeared, Unresolved the references in its text that name nothing, and
+// Rewrites the lines normalization rewrote. Error is set when the node failed
+// and nothing of it was written.
+type RefDeriveNode struct {
+	Ref        string      `json:"ref"`
+	Added      []InlineRef `json:"added"`
+	Removed    []InlineRef `json:"removed"`
+	Unresolved []string    `json:"unresolved"`
+	Rewrites   int         `json:"rewrites"`
+	Diff       string      `json:"diff,omitempty"`
+	Error      string      `json:"error,omitempty"`
+}
+
+// RefDeriveReport is the response of POST /api/v1/projects/{id}/refs/derive.
+type RefDeriveReport struct {
+	Nodes []RefDeriveNode `json:"nodes"`
+}

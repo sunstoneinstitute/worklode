@@ -4582,6 +4582,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/refs/derive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Normalize and re-extract the inline references of the selected docs, tasks or rules */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RefDeriveParams"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RefDeriveReport"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/repos": {
         parameters: {
             query?: never;
@@ -9950,6 +10001,28 @@ export interface components {
             poll_skipped?: string;
             replay?: components["schemas"]["ReplayResult"];
             run_id?: string;
+        };
+        RefDeriveNode: {
+            added?: components["schemas"]["InlineRef"][] | null;
+            diff?: string;
+            error?: string;
+            ref?: string;
+            removed?: components["schemas"]["InlineRef"][] | null;
+            rewrites?: number;
+            unresolved?: string[] | null;
+        };
+        RefDeriveParams: {
+            all?: boolean;
+            diff?: boolean;
+            doc_kind?: string;
+            dry_run?: boolean;
+            kind?: string;
+            refs?: string[];
+            status?: string[];
+            task_kind?: string;
+        };
+        RefDeriveReport: {
+            nodes?: components["schemas"]["RefDeriveNode"][] | null;
         };
         ReferenceListResponse: {
             references?: components["schemas"]["EntityEdge"][] | null;
