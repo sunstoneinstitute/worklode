@@ -368,3 +368,94 @@ func TestListInlineRefs(t *testing.T) {
 		t.Errorf("bad dir: %v", err)
 	}
 }
+
+// deriveNode runs DeriveNode in its own event's transaction.
+func deriveNode(t *testing.T, s *Store, kind model.NodeKind, id string) (model.RefDeriveNode, error) {
+	t.Helper()
+	var n model.RefDeriveNode
+	_, _, err := s.RecordDocEvent(t.Context(), "derive", "cli",
+		fmt.Sprintf("derive-%d", docEventSeq.Add(1)), "refs.derived", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			n, err = DeriveNode(tx, s.Now(), "p1", kind, id, eventID)
+			return err
+		})
+	return n, err
+}
+
+// TestDeriveNodeTask: deriving a task whose rows were never written adds the
+// reference rows, rewrites the link into plain form, names what resolves to
+// nothing, and does nothing the second time (WL-REQ-1860).
+func TestDeriveNodeTask(t *testing.T) {
+	s := openDocStore(t)
+	seedDocNoteTask(t, s, "P1-8")
+	seedDocNoteTask(t, s, "P1-7")
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE tasks SET body = $1 WHERE id = 'P1-7'`, "Needs /P1-8 first.\nNot P1-99."); err != nil {
+		t.Fatal(err)
+	}
+	n, err := deriveNode(t, s, "task", "P1-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Ref != "P1-7" || n.Rewrites != 1 || len(n.Added) != 1 || n.Added[0].ToRef != "P1-8" || len(n.Removed) != 0 ||
+		!slices.Equal(n.Unresolved, []string{"P1-99"}) || !strings.Contains(n.Diff, "+Needs P1-8 first.") {
+		t.Errorf("first run: %+v", n)
+	}
+	n, err = deriveNode(t, s, "task", "P1-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Rewrites != 0 || len(n.Added) != 0 || len(n.Removed) != 0 || n.Diff != "" {
+		t.Errorf("second run: %+v", n)
+	}
+}
+
+// TestDeriveNodeRemovesStale: a row for a reference the text no longer makes
+// is reported removed.
+func TestDeriveNodeRemovesStale(t *testing.T) {
+	s := openDocStore(t)
+	seedDocNoteTask(t, s, "P1-8")
+	seedDocNoteTask(t, s, "P1-7")
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO inline_refs (from_kind, from_id, field, to_kind, to_id, lines, source)
+		 VALUES ('task', 'P1-7', 'body', 'task', 'P1-8', '{1}', 'derived')`); err != nil {
+		t.Fatal(err)
+	}
+	n, err := deriveNode(t, s, "task", "P1-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(n.Removed) != 1 || n.Removed[0].ToRef != "P1-8" || len(n.Added) != 0 {
+		t.Errorf("%+v", n)
+	}
+}
+
+// TestDeriveTargets: refs, filters and all each select; nothing selected is
+// invalid input.
+func TestDeriveTargets(t *testing.T) {
+	s := openDocStore(t)
+	seedDocNoteTask(t, s, "P1-7")
+	seedDocNoteTask(t, s, "P1-8")
+	ctx := t.Context()
+	got, err := s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Refs: []string{"P1-8"}})
+	if err != nil || !slices.Equal(got, []string{"P1-8"}) {
+		t.Errorf("refs: %v, %v", got, err)
+	}
+	got, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", All: true})
+	if err != nil || len(got) != 2 {
+		t.Errorf("all: %v, %v", got, err)
+	}
+	got, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Status: []string{"merged"}})
+	if err != nil || len(got) != 0 {
+		t.Errorf("status: %v, %v", got, err)
+	}
+	if _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("nothing selected: %v", err)
+	}
+	if _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "task", Refs: []string{"P1-404"}}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown ref: %v", err)
+	}
+	if _, err = s.DeriveTargets(ctx, "p1", model.RefDeriveParams{Kind: "idea", All: true}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("idea: %v", err)
+	}
+}

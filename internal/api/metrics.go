@@ -99,6 +99,16 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(inboxRenderOutcomes, ", ") +
 			"). A rising \"empty\" share means people are landing on an inbox with nothing waiting on them. Bounded by construction: no actor or task id is a label here.",
 	}, []string{"outcome"})
+	s.refsDerived = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_refs_derived_total",
+		Help: "Nodes processed by lode doc, task and rule derive (WL-REQ-1861), by kind (" +
+			strings.Join(refsDeriveKinds, ", ") + ") and outcome (" + strings.Join(refsDeriveOutcomes, ", ") +
+			"). Dry runs and diffs are not counted.",
+	}, []string{"kind", "outcome"})
+	s.refsNormalized = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_refs_normalized_total",
+		Help: "Nodes whose text derive rewrote into plain reference form (WL-REQ-1861), by kind.",
+	}, []string{"kind"})
 	s.authzDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_authz_decisions_total",
 		Help: "Authorization decisions, by permission and outcome (allow, deny). A deny rate above zero on a permission nobody should be attempting is the signal worth alerting on.",
@@ -372,7 +382,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.spaRequests, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions, s.apiSessionRequests,
+		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.spaRequests, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions, s.apiSessionRequests, s.refsDerived, s.refsNormalized,
 		s.approvalDecisions, s.approvalActs, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
@@ -419,6 +429,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, outcome := range apiSessionRequestOutcomes {
 		s.apiSessionRequests.WithLabelValues(outcome)
+	}
+	for _, kind := range refsDeriveKinds {
+		s.refsNormalized.WithLabelValues(kind)
+		for _, outcome := range refsDeriveOutcomes {
+			s.refsDerived.WithLabelValues(kind, outcome)
+		}
 	}
 	for _, surface := range []string{"api"} {
 		for _, action := range crewChangeActions {
@@ -1784,4 +1800,31 @@ func (s *server) observeBriefReview(outcome string) {
 		return
 	}
 	s.briefReviews.WithLabelValues(outcome).Inc()
+}
+
+// refsDeriveKinds and refsDeriveOutcomes are the bounded label values of
+// worklode_refs_derived_total.
+var (
+	refsDeriveKinds    = []string{"doc", "task", "rule"}
+	refsDeriveOutcomes = []string{"changed", "unchanged", "error"}
+)
+
+// observeRefsDerived records one node of a derive run (WL-REQ-1861). A run
+// that wrote nothing is not counted. Nil-safe: tests build a *server directly
+// without initMetrics.
+func (s *server) observeRefsDerived(kind model.NodeKind, n model.RefDeriveNode, wrote bool) {
+	if s.refsDerived == nil || !wrote {
+		return
+	}
+	outcome := "unchanged"
+	switch {
+	case n.Error != "":
+		outcome = "error"
+	case n.Rewrites > 0 || len(n.Added) > 0 || len(n.Removed) > 0:
+		outcome = "changed"
+	}
+	s.refsDerived.WithLabelValues(string(kind), outcome).Inc()
+	if outcome != "error" && n.Rewrites > 0 {
+		s.refsNormalized.WithLabelValues(string(kind)).Inc()
+	}
 }
