@@ -142,6 +142,9 @@ type DocVersionSummary struct {
 	// but docs.updated_at (drifts on status/supersession/soft-delete) for
 	// the current row (WL-346).
 	CreatedAt time.Time `json:"created_at"`
+	// Change is how the version was made: edit, or normalize for a rewrite
+	// of inline references only (WL-REQ-1855).
+	Change string `json:"change"`
 }
 
 // DocVersion is the full content of one document version, current or
