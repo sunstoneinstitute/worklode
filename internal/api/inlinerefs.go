@@ -16,7 +16,9 @@ var errDeriveRollback = errors.New("dry run: roll back")
 // deriveRefs handles POST /api/v1/projects/{id}/refs/derive (WL-REQ-1860):
 // normalize and re-extract the inline references of the selected nodes, each
 // in its own transaction. A node that fails is reported with its error and
-// leaves the rest running. DryRun and Diff roll every node back.
+// leaves the rest running. DryRun and Diff roll every node back. Limit and
+// After page the selection so each request stays inside the client and
+// ingress timeouts.
 func (s *server) deriveRefs(w http.ResponseWriter, r *http.Request) {
 	var req model.RefDeriveParams
 	if err := readJSON(w, r, &req); err != nil {
@@ -33,19 +35,23 @@ func (s *server) deriveRefs(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "select nodes: give refs, a filter or all")
 		return
 	}
+	if req.Limit < 0 {
+		writeErr(w, http.StatusBadRequest, "limit must not be negative")
+		return
+	}
 	project := r.PathValue("id")
 	if _, err := s.st.GetProject(r.Context(), project); err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
-	ids, err := s.st.DeriveTargets(r.Context(), project, req)
+	ids, next, err := s.st.DeriveTargets(r.Context(), project, req)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
 	write := !req.DryRun && !req.Diff
 	actor := actorIDFrom(r)
-	report := model.RefDeriveReport{Nodes: []model.RefDeriveNode{}}
+	report := model.RefDeriveReport{Nodes: []model.RefDeriveNode{}, Next: next}
 	for _, id := range ids {
 		var node model.RefDeriveNode
 		extID, err := randomExternalID()

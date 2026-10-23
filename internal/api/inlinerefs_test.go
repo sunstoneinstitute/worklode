@@ -60,7 +60,8 @@ func TestShowCarriesInlineRefs(t *testing.T) {
 }
 
 // TestDeriveRefsRoute: a dry run and a diff write nothing, a real run
-// rewrites and reports, and selecting nothing is a 400 (WL-REQ-1860).
+// rewrites and reports, Limit pages the selection, and selecting nothing is
+// a 400 (WL-REQ-1860).
 func TestDeriveRefsRoute(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -105,7 +106,24 @@ func TestDeriveRefsRoute(t *testing.T) {
 		t.Errorf("real run left %q", got)
 	}
 
-	for _, bad := range []model.RefDeriveParams{{Kind: "task"}, {Kind: "idea", All: true}} {
+	page := func(t *testing.T, after string) (string, map[string]any) {
+		t.Helper()
+		rr := doReq(t, h, "POST", path, token, model.RefDeriveParams{Kind: "task", All: true, DryRun: true, Limit: 1, After: after})
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+		}
+		m := decodeMap(t, rr)
+		next, _ := m["next"].(string)
+		return next, m
+	}
+	next, first := page(t, "")
+	last, second := page(t, next)
+	if next != "WL-1" || last != "" || len(first["nodes"].([]any)) != 1 ||
+		second["nodes"].([]any)[0].(map[string]any)["ref"] != "WL-2" {
+		t.Errorf("pages: %v then %v", first, second)
+	}
+
+	for _, bad := range []model.RefDeriveParams{{Kind: "task"}, {Kind: "idea", All: true}, {Kind: "task", All: true, Limit: -1}} {
 		if rr := doReq(t, h, "POST", path, token, bad); rr.Code != http.StatusBadRequest {
 			t.Errorf("%+v: status %d, want 400", bad, rr.Code)
 		}

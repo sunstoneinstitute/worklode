@@ -10012,16 +10012,19 @@ export interface components {
             unresolved?: string[] | null;
         };
         RefDeriveParams: {
+            after?: string;
             all?: boolean;
             diff?: boolean;
             doc_kind?: string;
             dry_run?: boolean;
             kind?: string;
+            limit?: number;
             refs?: string[];
             status?: string[];
             task_kind?: string;
         };
         RefDeriveReport: {
+            next?: string;
             nodes?: components["schemas"]["RefDeriveNode"][] | null;
         };
         ReferenceListResponse: {
