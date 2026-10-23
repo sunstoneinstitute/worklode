@@ -666,7 +666,7 @@ func (s *Store) GetRuleVersion(ctx context.Context, projectKey string, number in
 // or superseded rule is ErrBadTransition. One rule.edited event records it.
 func (s *Store) EditRule(ctx context.Context, projectKey string, number int64, in model.EditRuleInput, actor string) (r *model.Rule, err error) {
 	defer func() { s.metrics.ruleOp("edit", err) }()
-	in.Heading = strings.TrimSpace(in.Heading)
+	in.Heading = model.Markdown(strings.TrimSpace(string(in.Heading)))
 	if in.Heading == "" {
 		return nil, fmt.Errorf("rule heading is required: %w", ErrInvalidInput)
 	}
@@ -691,21 +691,21 @@ func (s *Store) EditRule(ctx context.Context, projectKey string, number int64, i
 		if status != "draft" && status != "accepted" {
 			return fmt.Errorf("rule %s is %s; only a live rule is edited: %w", ref, status, ErrBadTransition)
 		}
-		body := sectionBody(in.Body, true)
+		body := sectionBody(string(in.Body), true)
 		var heading, current string
 		if err := tx.QueryRow(
 			`SELECT v.heading, v.body FROM rule_versions v JOIN rules r ON r.id = v.rule_id AND r.version = v.version
 			  WHERE r.id = $1`, id).Scan(&heading, &current); err != nil {
 			return fmt.Errorf("read rule %s text: %w", ref, err)
 		}
-		if heading == in.Heading && sameRuleBody(current, body) {
+		if heading == string(in.Heading) && sameRuleBody(current, body) {
 			return nil
 		}
-		_, version, err := reviseRule(tx, id, in.Heading, body)
+		_, version, err := reviseRule(tx, id, string(in.Heading), body)
 		if err != nil {
 			return err
 		}
-		return deriveRuleInlineRefs(tx, project, id, version, in.Heading, body)
+		return deriveRuleInlineRefs(tx, project, id, version, string(in.Heading), body)
 	})
 	if err != nil {
 		return nil, err

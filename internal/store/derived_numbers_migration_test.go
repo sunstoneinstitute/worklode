@@ -105,7 +105,7 @@ func TestDerivedSectionNumbersMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, w := range []string{"## 4. Three-a (PM-REQ-4) {#sec-4}", "## 5. Four (PM-REQ-5) {#sec-5}", "## Open questions {#sec-open-questions}"} {
-		if !strings.Contains(got.Body, w) {
+		if !strings.Contains(string(got.Body), w) {
 			t.Errorf("rendered body lacks %q:\n%s", w, got.Body)
 		}
 	}

@@ -30,11 +30,11 @@ func toBriefJSON(b *store.Brief) model.Brief {
 	for i := range b.OpenBlockers {
 		blk := &b.OpenBlockers[i]
 		out.OpenBlockers = append(out.OpenBlockers, model.BriefBlocker{
-			ID: blk.ID, Title: blk.Title, State: blk.State,
+			ID: blk.ID, Title: string(blk.Title), State: blk.State,
 		})
 	}
 	if b.Parent != nil {
-		out.Parent = &model.TaskParent{ID: b.Parent.ID, Title: b.Parent.Title, State: b.Parent.State}
+		out.Parent = &model.TaskParent{ID: b.Parent.ID, Title: string(b.Parent.Title), State: b.Parent.State}
 	}
 	if b.Lease != nil {
 		l := toLeaseJSON(b.Lease)
@@ -92,7 +92,7 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	if s.queryEmbedder != nil && !s.cfg.DisableSkillMatching {
 		out.Skills.Provider = "openai-compatible"
 	}
-	matches, warnings := s.skillMatches(r.Context(), b.Task.Title+"\n\n"+b.Body, pinnedNames, 0)
+	matches, warnings := s.skillMatches(r.Context(), string(b.Task.Title)+"\n\n"+b.Body, pinnedNames, 0)
 	out.Skills.Matches = matches
 	out.Skills.Warnings = append(out.Skills.Warnings, warnings...)
 

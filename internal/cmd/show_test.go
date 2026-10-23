@@ -122,7 +122,7 @@ func setupDocServer(t *testing.T, projectKey string, files map[string]string) st
 		}
 		docs = append(docs, model.Doc{
 			ID: id, Project: "proj", Kind: kind, Number: number, FormerADR: formerADR,
-			Slug: slug, Title: slug, Status: "accepted", Version: 1,
+			Slug: slug, Title: model.Markdown(slug), Status: "accepted", Version: 1,
 		})
 		bodies[id] = files[name]
 	}
@@ -149,7 +149,7 @@ func setupDocServer(t *testing.T, projectKey string, files map[string]string) st
 			if d.ID != id {
 				continue
 			}
-			d.Body = bodies[id]
+			d.Body = model.Markdown(bodies[id])
 			writeTestJSON(t, w, model.DocDetail{Doc: d})
 			return
 		}

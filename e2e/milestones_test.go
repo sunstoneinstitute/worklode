@@ -181,7 +181,7 @@ func TestMilestoneJourney(t *testing.T) {
 		t.Fatalf("GET /projects/a/milestones: status = %d, want 200", code)
 	}
 	for _, want := range []string{
-		mile1.Title, mile2.Title,
+		string(mile1.Title), string(mile2.Title),
 		"0/1 tasks closed \u00b7 0/2 deliverables live", // mile1: nothing closed or live yet
 		"0/0 tasks closed \u00b7 0/0 deliverables live", // mile2: nothing attached
 	} {
@@ -217,13 +217,13 @@ func TestMilestoneJourney(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("GET /projects/a/deliverables (after detach): status = %d, want 200", code)
 	}
-	if !strings.Contains(body, "<h4>"+mile1.Title+"</h4>") {
+	if !strings.Contains(body, string("<h4>"+mile1.Title+"</h4>")) {
 		t.Fatalf("deliverables page missing the %s group header:\n%s", mile1.Title, body)
 	}
 	if !strings.Contains(body, "<h4>No milestone</h4>") {
 		t.Fatalf("deliverables page missing the unattached group header:\n%s", body)
 	}
-	mileHeaderIdx := strings.Index(body, "<h4>"+mile1.Title+"</h4>")
+	mileHeaderIdx := strings.Index(body, string("<h4>"+mile1.Title+"</h4>"))
 	unattachedIdx := strings.Index(body, "<h4>No milestone</h4>")
 	del1Idx := strings.Index(body, del1.Name)
 	del2Idx := strings.Index(body, del2.Name)

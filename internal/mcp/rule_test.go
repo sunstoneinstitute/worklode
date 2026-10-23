@@ -43,7 +43,7 @@ func TestRuleTools(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("rule_edit = %+v", res.Content)
 	}
-	if got, _, _ := api.GetRule(ctx, a); got.Heading != "First rule" || !strings.Contains(got.Body, "New body.") {
+	if got, _, _ := api.GetRule(ctx, a); got.Heading != "First rule" || !strings.Contains(string(got.Body), "New body.") {
 		t.Fatalf("edited = %+v", got)
 	}
 

@@ -91,7 +91,7 @@ func TestDocViewRendersBody(t *testing.T) {
 			ID:   25,
 			Kind: "spec",
 			Slug: "025-documents",
-			Body: body,
+			Body: model.Markdown(body),
 		},
 	}, body, false, "/docs/WL-SPEC-25")
 	got := string(v.BodyHTML)
@@ -117,7 +117,7 @@ func TestDocViewLinksArrangedRulesInPage(t *testing.T) {
 	t.Parallel()
 	body := "## 4. Routes {#sec-4}\n\nSee WL-REQ-1305 and WL-REQ-334.\n"
 	v := docView(nil, mdrender.ProjectKeys{}, &model.DocDetail{
-		Doc:      model.Doc{ID: 83, Kind: "spec", Body: body},
+		Doc:      model.Doc{ID: 83, Kind: "spec", Body: model.Markdown(body)},
 		Sections: []model.DocSection{{Anchor: "sec-4", Rule: "WL-REQ-1305"}},
 	}, body, false, "/docs/WL-SPEC-83")
 	got := string(v.BodyHTML)

@@ -262,11 +262,14 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		map[string]string{"field": "state", "new": state}); err != nil {
 		return nil, err
 	}
+	if err := deriveTaskRefs(tx, id); err != nil {
+		return nil, err
+	}
 	created := &model.Task{
 		ID:          id,
 		Project:     in.ProjectID,
-		Title:       in.Title,
-		Body:        in.Body,
+		Title:       model.Markdown(in.Title),
+		Body:        model.Markdown(in.Body),
 		Priority:    in.Priority,
 		Kind:        in.Kind,
 		State:       state,
@@ -511,13 +514,13 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 // other value must name a milestone in the task's own project (WL-REQ-120) — a
 // cross-project attach and an unknown milestone are both ErrInvalidInput,
 // checked inside this transaction against the task's current project.
-func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind, milestone, due *string) error {
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body *model.Markdown, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind, milestone, due *string) error {
 	if due != nil {
 		if err := ValidDue(*due); err != nil {
 			return err
 		}
 	}
-	if title != nil && strings.TrimSpace(*title) == "" {
+	if title != nil && strings.TrimSpace(string(*title)) == "" {
 		return fmt.Errorf("title must not be blank: %w", ErrInvalidInput)
 	}
 	if priority != nil && !validPriorities[*priority] {
@@ -573,7 +576,7 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 				return fmt.Errorf("get task %s concern: %w", id, err)
 			}
 		}
-		if err := lintUsabilityAlt(effConcern, *body); err != nil {
+		if err := lintUsabilityAlt(effConcern, string(*body)); err != nil {
 			return err
 		}
 	}
@@ -637,8 +640,14 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 		}
 		return fmt.Errorf("update task %s: %w", id, err)
 	}
-	return requireOneAffected(res, "update task "+id,
-		fmt.Errorf("task %s: %w", id, ErrNotFound))
+	if err := requireOneAffected(res, "update task "+id,
+		fmt.Errorf("task %s: %w", id, ErrNotFound)); err != nil {
+		return err
+	}
+	if title == nil && body == nil {
+		return nil
+	}
+	return deriveTaskRefs(tx, id)
 }
 
 // taskColumns is the SELECT list scanTask expects, in order. skills,
@@ -683,7 +692,7 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	t.AboutDoc = aboutDoc.Int64
 	t.AboutAnchor = aboutAnchor.String
 	t.Due = due.String
-	t.Body = body.String
+	t.Body = model.Markdown(body.String)
 	t.Concern = concern.String
 	t.Assignee = assignee.String
 	t.Milestone = milestone.String

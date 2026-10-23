@@ -40,15 +40,15 @@ var TaskConcerns = []string{"completeness", "performance", "usability", "securit
 // "" when the task is unassigned; Skills is never nil (the store guarantees
 // an empty slice, so the JSON reads [] rather than null).
 type Task struct {
-	ID                 string `json:"id"`
-	Project            string `json:"project"`
-	Title              string `json:"title"`
-	Body               string `json:"body,omitempty"`
-	Priority           string `json:"priority"`
-	Kind               string `json:"kind"`
-	State              string `json:"state"`
-	Concern            string `json:"concern"`
-	NeedsDecomposition bool   `json:"needs_decomposition"`
+	ID                 string   `json:"id"`
+	Project            string   `json:"project"`
+	Title              Markdown `json:"title"`
+	Body               Markdown `json:"body,omitempty"`
+	Priority           string   `json:"priority"`
+	Kind               string   `json:"kind"`
+	State              string   `json:"state"`
+	Concern            string   `json:"concern"`
+	NeedsDecomposition bool     `json:"needs_decomposition"`
 	// Due is the task's due date, YYYY-MM-DD, or "" when it has none (WL-REQ-1796).
 	Due string `json:"due"`
 	// HumanOnly marks a task no unattended worker may pick up: ready to work,
@@ -132,13 +132,13 @@ var SettableTaskStates = []string{"merged", "deployed_dev", "deployed_prod", "re
 
 // CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).
 type CreateTaskInput struct {
-	Project  string `json:"project"`
-	Title    string `json:"title"`
-	Body     string `json:"body"`
-	Priority string `json:"priority"`
-	Kind     string `json:"kind"`
-	Concern  string `json:"concern,omitempty"`
-	Draft    bool   `json:"draft"`
+	Project  string   `json:"project"`
+	Title    Markdown `json:"title"`
+	Body     Markdown `json:"body"`
+	Priority string   `json:"priority"`
+	Kind     string   `json:"kind"`
+	Concern  string   `json:"concern,omitempty"`
+	Draft    bool     `json:"draft"`
 	// Due is YYYY-MM-DD, or "" for no due date (WL-REQ-1796).
 	Due    string   `json:"due,omitempty"`
 	Skills []string `json:"skills,omitempty"`
@@ -165,11 +165,11 @@ type CreateTaskInput struct {
 // "none" clears the concern. State requests one of the transitions
 // patchStateFrom allows (internal/api/tasks.go) in the same request.
 type EditTaskInput struct {
-	Title              *string `json:"title"`
-	Body               *string `json:"body"`
-	Priority           *string `json:"priority"`
-	Concern            *string `json:"concern"`
-	NeedsDecomposition *bool   `json:"needs_decomposition"`
+	Title              *Markdown `json:"title"`
+	Body               *Markdown `json:"body"`
+	Priority           *string   `json:"priority"`
+	Concern            *string   `json:"concern"`
+	NeedsDecomposition *bool     `json:"needs_decomposition"`
 	// Due, when non-nil, sets the due date (YYYY-MM-DD); "" clears it (WL-REQ-1796).
 	Due *string `json:"due"`
 	// HumanOnly, when non-nil, sets or clears the no-unattended-pickup flag.

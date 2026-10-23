@@ -8,7 +8,7 @@ import "time"
 type Milestone struct {
 	ID        string            `json:"id"` // <KEY>-MILE-<n>
 	Project   string            `json:"project"`
-	Title     string            `json:"title"`
+	Title     Markdown          `json:"title"`
 	Position  int               `json:"position"`
 	CreatedBy string            `json:"created_by"`
 	CreatedAt time.Time         `json:"created_at"`
@@ -59,8 +59,8 @@ type MilestoneDeletion struct {
 // CreateMilestoneInput is POST /api/v1/projects/{id}/milestones. Position 0
 // means append after the project's last milestone.
 type CreateMilestoneInput struct {
-	Title    string `json:"title"`
-	Position int    `json:"position,omitempty"`
+	Title    Markdown `json:"title"`
+	Position int      `json:"position,omitempty"`
 }
 
 // MilestoneDeleteParams is the query string of DELETE /api/v1/milestones/{id}.

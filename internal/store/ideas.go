@@ -80,7 +80,7 @@ func scanIdea(row rowScanner) (*model.Idea, error) {
 // normalizeIdea trims the title, checks the enums, and blanks the story
 // fields of an idea that is not a story pitch.
 func normalizeIdea(i *model.Idea) error {
-	i.Title = strings.TrimSpace(i.Title)
+	i.Title = model.Markdown(strings.TrimSpace(string(i.Title)))
 	if i.Title == "" {
 		return &FieldError{Field: "title", Msg: "Give your idea a title."}
 	}
@@ -207,7 +207,7 @@ func (s *Store) CreateIdea(ctx context.Context, caller string, in model.CreateId
 			id, caller, i.Title, i.Body, i.Type, i.StoryType, i.LitmusTestID, now); err != nil {
 			return fmt.Errorf("insert idea %s: %w", id, err)
 		}
-		return nil
+		return deriveIdeaRefs(tx, id)
 	}); err != nil {
 		return nil, err
 	}
@@ -223,9 +223,14 @@ func (s *Store) PatchIdea(ctx context.Context, caller, id string, in model.Patch
 		if err != nil {
 			return err
 		}
+		if in.Title != nil {
+			i.Title = *in.Title
+		}
+		if in.Body != nil {
+			i.Body = *in.Body
+		}
 		for _, f := range []struct{ dst, src *string }{
-			{&i.Title, in.Title}, {&i.Body, in.Body}, {&i.Type, in.Type},
-			{&i.StoryType, in.StoryType}, {&i.LitmusTestID, in.LitmusTestID},
+			{&i.Type, in.Type}, {&i.StoryType, in.StoryType}, {&i.LitmusTestID, in.LitmusTestID},
 		} {
 			if f.src != nil {
 				*f.dst = *f.src
@@ -240,6 +245,9 @@ func (s *Store) PatchIdea(ctx context.Context, caller, id string, in model.Patch
 			return fmt.Errorf("update idea %s: %w", id, err)
 		}
 		if err := requireOneAffected(res, "update idea "+id, fmt.Errorf("idea %s: %w", id, ErrNotFound)); err != nil {
+			return err
+		}
+		if err := deriveIdeaRefs(tx, id); err != nil {
 			return err
 		}
 		if i.Task == "" {
@@ -269,7 +277,7 @@ func (s *Store) ShareIdea(ctx context.Context, caller, id, intakeProject string)
 			return errAlreadyShared
 		}
 		task, err := CreateTask(tx, now, TaskInput{
-			ProjectID: intakeProject, Title: i.Title, Body: i.Body,
+			ProjectID: intakeProject, Title: string(i.Title), Body: string(i.Body),
 			Kind: "design", Priority: "medium", CreatedBy: i.Author,
 		}, eventID)
 		if err != nil {
@@ -307,8 +315,11 @@ func (s *Store) DeleteIdea(ctx context.Context, caller, id, justification string
 			if err != nil {
 				return fmt.Errorf("delete idea %s: %w", id, err)
 			}
-			return requireOneAffected(res, "delete idea "+id,
-				fmt.Errorf("idea %s belongs to its author: %w", id, ErrForbidden))
+			if err := requireOneAffected(res, "delete idea "+id,
+				fmt.Errorf("idea %s belongs to its author: %w", id, ErrForbidden)); err != nil {
+				return err
+			}
+			return deleteInlineRefs(tx, model.NodeKindIdea, id)
 		}
 		if _, err := tx.ExecContext(ctx, ideaTombstoneQuery, caller, id, now); err != nil {
 			return fmt.Errorf("tombstone idea %s: %w", id, err)

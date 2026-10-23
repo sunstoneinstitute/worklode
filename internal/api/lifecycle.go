@@ -110,7 +110,7 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 func (s *server) toTaskPickJSON(t *model.Task, fanOut int, lease *store.Lease) model.ClaimNextPick {
 	pick := model.ClaimNextPick{
 		ID:       t.ID,
-		Slug:     SlugifyTitle(t.Title),
+		Slug:     SlugifyTitle(string(t.Title)),
 		Branch:   store.BranchFor(t),
 		Concern:  t.Concern,
 		Priority: t.Priority,

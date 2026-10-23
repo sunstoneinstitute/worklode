@@ -175,7 +175,7 @@ func TestEditRuleShowsInTheDraftSpec(t *testing.T) {
 		t.Fatalf("edit of a rule a plan covers: %v", err)
 	}
 	d, err := s.GetDoc(t.Context(), spec.ID)
-	if err != nil || !strings.Contains(d.Body, "Changed.") {
+	if err != nil || !strings.Contains(string(d.Body), "Changed.") {
 		t.Fatalf("spec body should carry the edit: %v %q", err, d.Body)
 	}
 }

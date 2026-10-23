@@ -93,7 +93,7 @@ func (s *server) createMilestone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	created, err := s.recordMilestone(r.Context(), "cli", r.PathValue("id"),
-		req.Title, req.Position, actorIDFrom(r))
+		string(req.Title), req.Position, actorIDFrom(r))
 	s.observeMilestoneChange("create", err)
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -228,7 +228,7 @@ func milestonesView(project ui.CockpitProject, milestones []model.Milestone,
 		section := ui.MilestoneSection{
 			ID:                m.ID,
 			AddAction:         "/projects/" + project.ID + "/milestones/" + m.ID + "/references",
-			Title:             m.Title,
+			Title:             string(m.Title),
 			TasksTotal:        m.Progress.TasksTotal,
 			TasksClosed:       m.Progress.TasksClosed,
 			DeliverablesTotal: m.Progress.DeliverablesTotal,
@@ -236,14 +236,14 @@ func milestonesView(project ui.CockpitProject, milestones []model.Milestone,
 		}
 		for _, t := range tasks[m.ID] {
 			section.Tasks = append(section.Tasks, ui.MilestoneTaskRow{
-				ID: t.ID, Title: t.Title, State: t.State, Assignee: t.Assignee,
+				ID: t.ID, Title: string(t.Title), State: t.State, Assignee: t.Assignee,
 			})
 		}
 		for _, d := range deliverables[m.ID] {
 			section.Deliverables = append(section.Deliverables, ui.DeliverableRow{
 				ID:            d.ID,
 				Name:          d.Name,
-				Description:   d.Description,
+				Description:   string(d.Description),
 				URL:           d.URL,
 				CreatedBy:     d.CreatedBy,
 				CreatedAt:     d.CreatedAt,

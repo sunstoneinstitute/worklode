@@ -46,7 +46,7 @@ func escalateFixture(t *testing.T, h http.Handler, token string, specSlugs ...st
 	}
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "plan", Slug: "escalate-plan",
-		Body: escalatePlanBody(specSlugs...),
+		Body: model.Markdown(escalatePlanBody(specSlugs...)),
 	})
 	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
 	if rr.Code != http.StatusOK {

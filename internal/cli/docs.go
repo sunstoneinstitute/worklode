@@ -171,7 +171,7 @@ func (c *Client) ReviseDoc(ctx context.Context, id int64) (model.DocRevision, []
 // candidate's body.
 func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (model.DocRevision, []byte, error) {
 	return c.docRevisionWrite(ctx, http.MethodPut, docPath(id, "/revision"),
-		model.UpdateDocBodyInput{Body: body})
+		model.UpdateDocBodyInput{Body: model.Markdown(body)})
 }
 
 // DiscardDocRevision calls DELETE /api/v1/docs/{id}/revision, withdrawing the
@@ -299,7 +299,7 @@ func DocTable(w io.Writer, docs []model.Doc) {
 		titleColumn("TITLE"),
 	)
 	for _, d := range docs {
-		tbl.add(DocRef(d), d.Status, d.Title)
+		tbl.add(DocRef(d), d.Status, string(d.Title))
 	}
 	tbl.flush(w)
 }
@@ -317,7 +317,7 @@ func DocUnresolvedTable(w io.Writer, docs []model.Doc) {
 		column{header: "AGE"},
 	)
 	for _, d := range docs {
-		tbl.add(DocRef(d), d.Status, d.Title, Age(d.UpdatedAt))
+		tbl.add(DocRef(d), d.Status, string(d.Title), Age(d.UpdatedAt))
 	}
 	tbl.flush(w)
 }
@@ -336,7 +336,7 @@ func DocTransferTable(w io.Writer, outcomes []DocTransferOutcome) {
 		if o.Err != "" {
 			result = "FAILED: " + o.Err
 		}
-		tbl.add(DocRef(o.Doc), o.Doc.Title, result)
+		tbl.add(DocRef(o.Doc), string(o.Doc.Title), result)
 	}
 	tbl.flush(w)
 }
@@ -399,7 +399,7 @@ func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc
 	)
 	for _, d := range docs {
 		sections, anchors := gapsOf(d)
-		tbl.add(DocRef(d), d.Title,
+		tbl.add(DocRef(d), string(d.Title),
 			fmt.Sprintf("%d/%d", len(anchors), sections),
 			strings.Join(anchors, " "))
 	}
@@ -602,7 +602,7 @@ func DocEditableRender(w io.Writer, d model.DocDetail) {
 			refs[sec.Anchor] = sec.Rule
 		}
 	}
-	fmt.Fprint(w, designdoc.Editable(d.Body, refs))
+	fmt.Fprint(w, designdoc.Editable(string(d.Body), refs))
 }
 
 func DocDetailRender(w io.Writer, d model.DocDetail) {
@@ -656,7 +656,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	}
 	if d.Body != "" {
 		fmt.Fprintln(w)
-		Markdown(w, InlineDocNotes(d.Body, d.Notes, d.Sections))
+		Markdown(w, InlineDocNotes(string(d.Body), d.Notes, d.Sections))
 	}
 	if len(d.Edges) > 0 || len(d.EdgesIn) > 0 {
 		fmt.Fprintln(w, "\nedges:")
@@ -686,14 +686,14 @@ func DocNoteLine(n model.DocNote) string {
 		who += " (" + n.Task + ")"
 	}
 	return fmt.Sprintf("**note** — %s, %s: %s",
-		who, LocalTime(n.CreatedAt), strings.Join(strings.Fields(n.Body), " "))
+		who, LocalTime(n.CreatedAt), strings.Join(strings.Fields(string(n.Body)), " "))
 }
 
 // DocNoteRender prints the one-line confirmation `lode doc note` answers with:
 // the anchor the note landed on and the note itself.
 func DocNoteRender(w io.Writer, d model.Doc, n model.DocNote) {
 	fmt.Fprintf(w, "noted on %s#%s: %s\n", DocRef(d), n.Anchor,
-		strings.Join(strings.Fields(n.Body), " "))
+		strings.Join(strings.Fields(string(n.Body)), " "))
 }
 
 // docPatchedMarker is what a section amended in place since it was last
@@ -844,7 +844,7 @@ func DocShowText(ctx context.Context, c *Client, d model.DocDetail, section stri
 		}
 		return InlineDocNotes(out, d.Notes, d.Sections), nil
 	}
-	data := InlineDocNotes(d.Body, d.Notes, d.Sections)
+	data := InlineDocNotes(string(d.Body), d.Notes, d.Sections)
 	if section == "" {
 		return data, nil
 	}

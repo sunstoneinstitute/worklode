@@ -447,7 +447,7 @@ func TestDocLifecycle(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &detail); err != nil {
 		t.Fatalf("decode doc detail %q: %v", out, err)
 	}
-	if !strings.Contains(detail.Body, "Some body text.") {
+	if !strings.Contains(string(detail.Body), "Some body text.") {
 		t.Errorf("doc show: body = %q, want it to contain the source body", detail.Body)
 	}
 
@@ -468,7 +468,7 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("doc edit: %v\noutput: %s", err, out)
 	}
 	edited := docJSON(t, out)
-	if edited.Body != editedBody {
+	if string(edited.Body) != editedBody {
 		t.Errorf("doc edit: body = %q, want %q", edited.Body, editedBody)
 	}
 
@@ -562,7 +562,7 @@ func TestDocLifecycle(t *testing.T) {
 	if landed.Version != 3 {
 		t.Errorf("doc revise --accept: version = %d, want 3 (draft edit, then the landed revision)", landed.Version)
 	}
-	if landed.Body != revisedBody {
+	if string(landed.Body) != revisedBody {
 		t.Errorf("doc revise --accept: body = %q, want %q", landed.Body, revisedBody)
 	}
 }
@@ -1252,7 +1252,7 @@ func TestDocShowEditable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doc edit: %v\noutput: %s", err, out)
 	}
-	if got := docJSON(t, out); got.Version != d.Version || strings.Contains(got.Body, "rule=") {
+	if got := docJSON(t, out); got.Version != d.Version || strings.Contains(string(got.Body), "rule=") {
 		t.Errorf("round trip: version %d (was %d), body\n%s", got.Version, d.Version, got.Body)
 	}
 }

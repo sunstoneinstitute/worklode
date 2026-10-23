@@ -15,7 +15,7 @@ import (
 // means "no recorded transition" (StateEvent stays nil).
 func fact(id, priority, state string, age time.Duration, blockers ...store.TaskRef) store.ProjectWorkFact {
 	f := store.ProjectWorkFact{
-		Task:         model.Task{ID: id, Title: id + " title", Priority: priority, State: state},
+		Task:         model.Task{ID: id, Title: model.Markdown(id + " title"), Priority: priority, State: state},
 		OpenBlockers: blockers,
 	}
 	if age >= 0 {

@@ -39,7 +39,7 @@ func TestCreateDocPlanTokenBudget(t *testing.T) {
 
 	// Clean: well under the soft budget (a 50-rune body is about 28 tokens).
 	clean := createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "proj", Kind: "plan", Slug: "clean-plan", Body: planBudgetBody(50),
+		Project: "proj", Kind: "plan", Slug: "clean-plan", Body: model.Markdown(planBudgetBody(50)),
 	})
 	if len(clean.Warnings) != 0 {
 		t.Errorf("clean plan: warnings = %v, want none", clean.Warnings)
@@ -47,7 +47,7 @@ func TestCreateDocPlanTokenBudget(t *testing.T) {
 
 	// Over soft (50), under hard (100): a warning, still created.
 	warned := createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "proj", Kind: "plan", Slug: "warned-plan", Body: planBudgetBody(120),
+		Project: "proj", Kind: "plan", Slug: "warned-plan", Body: model.Markdown(planBudgetBody(120)),
 	})
 	if len(warned.Warnings) != 1 {
 		t.Fatalf("warned plan: warnings = %v, want one", warned.Warnings)
@@ -55,7 +55,7 @@ func TestCreateDocPlanTokenBudget(t *testing.T) {
 
 	// Over hard (100): refused.
 	rr := doReq(t, h, "POST", "/api/v1/docs", token, model.CreateDocInput{
-		Project: "proj", Kind: "plan", Slug: "over-hard-plan", Body: planBudgetBody(300),
+		Project: "proj", Kind: "plan", Slug: "over-hard-plan", Body: model.Markdown(planBudgetBody(300)),
 	})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("over-hard plan status = %d, want 422, body %s", rr.Code, rr.Body.String())
@@ -63,7 +63,7 @@ func TestCreateDocPlanTokenBudget(t *testing.T) {
 
 	// A spec of the same size is never measured.
 	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "proj", Kind: "spec", Slug: "big-spec", Body: docSpecBody + strings.Repeat("x", 500),
+		Project: "proj", Kind: "spec", Slug: "big-spec", Body: model.Markdown(docSpecBody + strings.Repeat("x", 500)),
 	})
 	if len(spec.Warnings) != 0 {
 		t.Errorf("spec: warnings = %v, want none (specs are not measured)", spec.Warnings)
@@ -76,7 +76,7 @@ func TestCreateDocPlanTokenBudget(t *testing.T) {
 		t.Fatalf("set plan_tokens_hard status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	lifted := createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "proj", Kind: "plan", Slug: "lifted-plan", Body: planBudgetBody(300),
+		Project: "proj", Kind: "plan", Slug: "lifted-plan", Body: model.Markdown(planBudgetBody(300)),
 	})
 	if len(lifted.Warnings) != 1 {
 		t.Errorf("lifted plan: warnings = %v, want one (still over the soft budget)", lifted.Warnings)
@@ -91,17 +91,17 @@ func TestUpdateDocBodyPlanTokenBudget(t *testing.T) {
 	createProject(t, st, "proj")
 
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
-		Project: "proj", Kind: "plan", Slug: "editable-plan", Body: planBudgetBody(50),
+		Project: "proj", Kind: "plan", Slug: "editable-plan", Body: model.Markdown(planBudgetBody(50)),
 	})
 
 	rr := doReq(t, h, "PUT", docPath(plan.ID, "/body"), token,
-		model.UpdateDocBodyInput{Body: planBudgetBody(300)})
+		model.UpdateDocBodyInput{Body: model.Markdown(planBudgetBody(300))})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("over-hard edit status = %d, want 422, body %s", rr.Code, rr.Body.String())
 	}
 
 	rr = doReq(t, h, "PUT", docPath(plan.ID, "/body"), token,
-		model.UpdateDocBodyInput{Body: planBudgetBody(120)})
+		model.UpdateDocBodyInput{Body: model.Markdown(planBudgetBody(120))})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("over-soft edit status = %d, body %s", rr.Code, rr.Body.String())
 	}

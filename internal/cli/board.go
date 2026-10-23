@@ -143,7 +143,7 @@ func boardSection(w io.Writer, b boardBucket) {
 		if r.rank == 1 {
 			id = "└ " + id
 		}
-		row := []string{id, t.Priority, t.Title}
+		row := []string{id, t.Priority, string(t.Title)}
 		if hasHolders {
 			holder := "-"
 			if t.Holder != nil {

@@ -108,7 +108,7 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 			s.mapStoreErr(w, err)
 			return
 		}
-		text = task.Title + "\n\n" + task.Body
+		text = string(task.Title + "\n\n" + task.Body)
 		pins = task.Skills
 	}
 	rec, err := s.recommendation(r.Context(), text, pins, req.Limit)

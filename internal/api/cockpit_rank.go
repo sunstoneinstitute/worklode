@@ -287,7 +287,7 @@ func rootTitle(r *concernRoot) string {
 		return r.ref.title
 	}
 	if r.fact != nil {
-		return r.fact.Task.Title
+		return string(r.fact.Task.Title)
 	}
 	return r.ref.title
 }

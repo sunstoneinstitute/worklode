@@ -74,7 +74,7 @@ func TestResolveTermProjectFirst(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s %s: %v", tc.project, tc.slug, err)
 		}
-		if term.Rule.Ref != tc.ref || term.Instance != tc.instance || strings.TrimSpace(term.Rule.Body) != tc.body {
+		if term.Rule.Ref != tc.ref || term.Instance != tc.instance || strings.TrimSpace(string(term.Rule.Body)) != tc.body {
 			t.Errorf("%s %s = %s instance=%v body=%q, want %s instance=%v %q",
 				tc.project, tc.slug, term.Rule.Ref, term.Instance, term.Rule.Body, tc.ref, tc.instance, tc.body)
 		}

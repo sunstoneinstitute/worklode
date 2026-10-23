@@ -352,7 +352,7 @@ func TestEscalationLadder(t *testing.T) {
 		t.Fatalf("escalation task %s assignee = %q, want alice, who wrote the plan (§8.1.4)",
 			design.ID, design.Assignee)
 	}
-	if !strings.HasPrefix(design.Title, "Gap in ") || !strings.Contains(design.Title, "§2") {
+	if !strings.HasPrefix(string(design.Title), "Gap in ") || !strings.Contains(string(design.Title), "§2") {
 		t.Fatalf("escalation task title = %q, want it to name the document and section", design.Title)
 	}
 
@@ -408,7 +408,7 @@ func TestEscalationLadder(t *testing.T) {
 	modelling := acceptTwo.Tasks[0]
 
 	patched, _, err := alice.PatchDoc(ctx, spec.ID, model.PatchDocInput{
-		Body: noHeader(t, ladderSpecAmended), Note: "Dropped a stray word from the model section.",
+		Body: model.Markdown(noHeader(t, ladderSpecAmended)), Note: "Dropped a stray word from the model section.",
 	})
 	if err != nil {
 		t.Fatalf("amend the spec: %v", err)

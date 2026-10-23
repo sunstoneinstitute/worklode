@@ -98,7 +98,7 @@ func TestRuleEditAndVersionsAPI(t *testing.T) {
 		rr := doReq(t, h, http.MethodGet, fmt.Sprintf("/api/v1/docs/%d", doc.ID), token, nil)
 		var d model.DocDetail
 		decodeInto(t, rr, &d)
-		return d.Body
+		return string(d.Body)
 	}
 	if b := docBody(); !strings.Contains(b, "### 1.1 Subsection (WL-REQ-2) {#sec-1.1}\n\nB changed.\n") {
 		t.Errorf("doc body does not render the edit:\n%s", b)

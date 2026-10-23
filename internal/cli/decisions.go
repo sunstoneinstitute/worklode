@@ -85,7 +85,7 @@ func DecisionTable(w io.Writer, rows []model.Decision) {
 		if d.Answer != nil {
 			answered = "yes"
 		}
-		tbl.add(d.Key, dash(d.Group), d.ResponseType, answered, d.Question)
+		tbl.add(d.Key, dash(d.Group), d.ResponseType, answered, string(d.Question))
 	}
 	tbl.flush(w)
 }
@@ -115,7 +115,7 @@ func DecisionRender(w io.Writer, d model.Decision) {
 	}
 	tw.Flush()
 	if d.Context != "" {
-		fmt.Fprintf(w, "\n%s\n", strings.TrimRight(d.Context, "\n"))
+		fmt.Fprintf(w, "\n%s\n", strings.TrimRight(string(d.Context), "\n"))
 	}
 }
 

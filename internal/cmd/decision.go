@@ -38,7 +38,7 @@ func addDecisionFlags(cmd *cobra.Command, f *decisionFlags) {
 // input builds the wire body from the flags actually set. Everything a flag
 // did not touch is left out, so an edit changes only what was named.
 func (f *decisionFlags) input(cmd *cobra.Command) (model.DecisionInput, error) {
-	in := model.DecisionInput{Key: f.key, Question: f.question, ResponseType: f.responseType}
+	in := model.DecisionInput{Key: f.key, Question: model.Markdown(f.question), ResponseType: f.responseType}
 	for _, raw := range f.options {
 		opt, err := cli.ParseDecisionOption(raw)
 		if err != nil {
@@ -55,7 +55,7 @@ func (f *decisionFlags) input(cmd *cobra.Command) (model.DecisionInput, error) {
 		in.Group = &f.group
 	}
 	if cmd.Flags().Changed("context") {
-		in.Context = &f.context
+		in.Context = (*model.Markdown)(&f.context)
 	}
 	if cmd.Flags().Changed("min-picks") {
 		in.MinPicks = &f.minPicks

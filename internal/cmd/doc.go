@@ -164,7 +164,7 @@ func newDocAddCmd() *cobra.Command {
 			// rather than refusing the create — a human in the cockpit and an
 			// agent working ad hoc both author documents legitimately.
 			d, raw, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
-				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: body, Owner: owner,
+				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: model.Markdown(body), Owner: owner,
 				GeneratedByTask: currentTaskID(),
 			})
 			if err != nil {
@@ -767,7 +767,7 @@ func newDocEditCmd() *cobra.Command {
 			// correct on both sides of the document's acceptance.
 			if detail.Kind == "plan" || detail.Status != "accepted" {
 				d, raw, err := c.UpdateDocBody(cmd.Context(), id,
-					model.UpdateDocBodyInput{Body: body, IfVersion: ifVersion})
+					model.UpdateDocBodyInput{Body: model.Markdown(body), IfVersion: ifVersion})
 				if err != nil {
 					return err
 				}
@@ -785,7 +785,7 @@ func newDocEditCmd() *cobra.Command {
 				return nil
 			}
 			res, raw, err := c.PatchDoc(cmd.Context(), id, model.PatchDocInput{
-				Body: body, Substantive: substantive, Note: note,
+				Body: model.Markdown(body), Substantive: substantive, Note: model.Markdown(note),
 				Task: currentTaskID(), Session: currentSessionID(),
 				IfVersion: ifVersion,
 			})
@@ -822,7 +822,7 @@ func newDocEditCmd() *cobra.Command {
 func setDocColumns(cmd *cobra.Command, c *cli.Client, id int64, setTitle bool, title string, setIssued bool, issued string) error {
 	var in model.DocColumnsInput
 	if setTitle {
-		in.Title = &title
+		in.Title = (*model.Markdown)(&title)
 	}
 	if setIssued {
 		in.Issued = &issued
@@ -960,7 +960,7 @@ func newDocNoteCmd() *cobra.Command {
 				return err
 			}
 			n, raw, err := c.AddDocNote(cmd.Context(), id, model.AddDocNoteInput{
-				Anchor: cli.NormalizeSection(anchor), Body: text,
+				Anchor: cli.NormalizeSection(anchor), Body: model.Markdown(text),
 				Task: currentTaskID(), Session: currentSessionID(),
 			})
 			if err != nil {

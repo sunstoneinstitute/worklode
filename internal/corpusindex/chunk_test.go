@@ -26,7 +26,7 @@ func TestChunkDocSplitsOversizedSectionInheritingAnchor(t *testing.T) {
 	body := "# Test Spec\n\n" +
 		"## 1 Big {#sec-1}\n\n" + bigText(9000) + "\n\n" +
 		"## 2 Small {#sec-2}\n\nshort\n"
-	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 99, Title: "Test Spec", Body: body}
+	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 99, Title: "Test Spec", Body: model.Markdown(body)}
 	sections := []model.DocSection{
 		{Anchor: "sec-1", Number: "1", Heading: "Big", Depth: 2, Position: 0},
 		{Anchor: "sec-2", Number: "2", Heading: "Small", Depth: 2, Position: 1},
@@ -72,7 +72,7 @@ func TestChunkDocShortSectionsNotMerged(t *testing.T) {
 	body := "# Spec\n\n" +
 		"## 1 First {#sec-1}\n\nfirst body\n\n" +
 		"## 2 Second {#sec-2}\n\nsecond body\n"
-	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: body}
+	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: model.Markdown(body)}
 	sections := []model.DocSection{
 		{Anchor: "sec-1", Number: "1", Heading: "First", Position: 0},
 		{Anchor: "sec-2", Number: "2", Heading: "Second", Position: 1},
@@ -96,7 +96,7 @@ func TestChunkDocSectionOrderFollowsPosition(t *testing.T) {
 	body := "# Spec\n\n" +
 		"## 1 First {#sec-1}\n\nfirst body\n\n" +
 		"## 2 Second {#sec-2}\n\nsecond body\n"
-	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: body}
+	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: model.Markdown(body)}
 	// Passed out of position order.
 	sections := []model.DocSection{
 		{Anchor: "sec-2", Number: "2", Heading: "Second", Position: 1},
@@ -116,7 +116,7 @@ func TestChunkDocPlanHeadings(t *testing.T) {
 		"## Global constraints\n\nconstraints body\n\n" +
 		"## Tasks\n\n" +
 		"### Task 1 — Do the thing\n\ntask one body\n"
-	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: body}
+	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: model.Markdown(body)}
 
 	chunks := ChunkDoc(DefaultBudget, doc, nil)
 
@@ -150,7 +150,7 @@ func TestChunkDocPlanHeadings(t *testing.T) {
 // zero chunks.
 func TestChunkDocPlanUnstructuredFallsBackToWindows(t *testing.T) {
 	body := "# A Plan\n\n" + bigText(500) + "\n"
-	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: body}
+	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: model.Markdown(body)}
 
 	chunks := ChunkDoc(DefaultBudget, doc, nil)
 	if len(chunks) != 1 {
@@ -173,7 +173,7 @@ func TestChunkDocPlanIndexUniquePerAnchor(t *testing.T) {
 		"## First\n\none\n\n" +
 		"## Second\n\ntwo\n\n" +
 		"## Third\n\nthree\n"
-	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: body}
+	doc := model.Doc{ProjectKey: "WL", Kind: "plan", Title: "A Plan", Body: model.Markdown(body)}
 
 	chunks := ChunkDoc(DefaultBudget, doc, nil)
 
@@ -217,7 +217,7 @@ func TestChunkTaskEmptyBodyIndexesTitle(t *testing.T) {
 // TestChunkTaskOverBudgetSplits asserts a task body past DefaultBudget.Runes splits
 // into multiple chunks, all headed the same way.
 func TestChunkTaskOverBudgetSplits(t *testing.T) {
-	task := model.Task{ID: "WL-1", Kind: "feature", State: "ready", Title: "Big task", Body: bigText(9000)}
+	task := model.Task{ID: "WL-1", Kind: "feature", State: "ready", Title: "Big task", Body: model.Markdown(bigText(9000))}
 
 	chunks := ChunkTask(DefaultBudget, task)
 	if len(chunks) < 2 {
@@ -262,7 +262,7 @@ func TestChunkDocSectionsIndexUniquePerAnchor(t *testing.T) {
 		"## 1 First {#sec-1}\n\nfirst body\n\n" +
 		"##### Unanchored one\n\nbody one\n\n" +
 		"##### Unanchored two\n\nbody two\n"
-	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: body}
+	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: model.Markdown(body)}
 	sections := []model.DocSection{
 		{Anchor: "sec-1", Number: "1", Heading: "First", Position: 0},
 		{Anchor: "", Heading: "Unanchored one", Position: 1},
@@ -294,7 +294,7 @@ func TestBudgetFor(t *testing.T) {
 // chunk and the rule under it keeps its own body (WL-REQ-1295).
 func TestChunkDocSkipsSpecHeadings(t *testing.T) {
 	body := "# Spec\n\n## 1 A {#sec-1}\n\n### 1.1 B {#sec-1.1}\n\nb body\n"
-	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: body}
+	doc := model.Doc{ProjectKey: "WL", Kind: "spec", Number: 1, Title: "Spec", Body: model.Markdown(body)}
 	sections := []model.DocSection{
 		{Anchor: "sec-1", Number: "1", Heading: "A", Position: 0, Kind: "heading"},
 		{Anchor: "sec-1.1", Number: "1.1", Heading: "B", Position: 1, Kind: "requirement"},

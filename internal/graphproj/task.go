@@ -47,7 +47,7 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 	subj := iri.Task(t.ID)
 	triples := []Triple{
 		{S: subj, P: RDFType, O: IRIRef(iri.Term("Task"))},
-		{S: subj, P: DCTTitle, O: Text(t.Title)},
+		{S: subj, P: DCTTitle, O: Text(string(t.Title))},
 		{S: subj, P: iri.Term("taskState"), O: Text(t.State)},
 		{S: subj, P: iri.Term("taskKind"), O: IRIRef(iri.Concept(t.Kind))},
 		{S: subj, P: iri.Term("priority"), O: Text(t.Priority)},

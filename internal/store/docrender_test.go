@@ -43,7 +43,7 @@ func TestGetDocRendersArrangedRuleText(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"Intro.", "## 2. Second (P1-REQ-3) {#sec-2}", "C from the rule."} {
-		if !strings.Contains(got.Body, want) {
+		if !strings.Contains(string(got.Body), want) {
 			t.Errorf("rendered body lacks %q:\n%s", want, got.Body)
 		}
 	}
@@ -51,7 +51,7 @@ func TestGetDocRendersArrangedRuleText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Body != got.Body {
+	if v.Body != string(got.Body) {
 		t.Errorf("current version body:\n%s\nwant the document's:\n%s", v.Body, got.Body)
 	}
 }
@@ -90,7 +90,7 @@ func TestSpecWriteStoresTemplate(t *testing.T) {
 	if stored != want {
 		t.Errorf("stored body:\n%q\nwant:\n%q", stored, want)
 	}
-	if plain(d.Body) != body {
+	if plain(string(d.Body)) != body {
 		t.Errorf("rendered body:\n%q\nwant:\n%q", d.Body, body)
 	}
 	edited := strings.Replace(body, "C.", "C, edited.", 1)
@@ -98,11 +98,11 @@ func TestSpecWriteStoresTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plain(got.Body) != edited {
+	if plain(string(got.Body)) != edited {
 		t.Errorf("rendered after edit:\n%q", got.Body)
 	}
 	list, err := s.ListDocs(ctx, DocFilter{Project: "p1"})
-	if err != nil || len(list) != 1 || plain(list[0].Body) != edited {
+	if err != nil || len(list) != 1 || plain(string(list[0].Body)) != edited {
 		t.Errorf("ListDocs body:\n%+v, err %v", list, err)
 	}
 }

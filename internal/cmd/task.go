@@ -332,7 +332,7 @@ func newTaskAddCmd() *cobra.Command {
 				return errNoProject
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), model.CreateTaskInput{
-				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
+				Project: sc.Project, Title: model.Markdown(title), Body: model.Markdown(body), Priority: priority, Kind: kind,
 				Concern: concern, Draft: draft, Skills: skills, Parent: parent, FollowUpTo: followUpTo,
 				Secrets: secretNames, GovernedBy: governedBy,
 			})
@@ -613,19 +613,19 @@ func newTaskEditCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var in model.EditTaskInput
 			if cmd.Flags().Changed("title") {
-				in.Title = &title
+				in.Title = (*model.Markdown)(&title)
 			}
 			switch {
 			case cmd.Flags().Changed("body") && cmd.Flags().Changed("body-file"):
 				return fmt.Errorf("--body and --body-file are mutually exclusive")
 			case cmd.Flags().Changed("body"):
-				in.Body = &body
+				in.Body = (*model.Markdown)(&body)
 			case cmd.Flags().Changed("body-file"):
 				text, err := readBodyFile(cmd, bodyFile)
 				if err != nil {
 					return err
 				}
-				in.Body = &text
+				in.Body = (*model.Markdown)(&text)
 			}
 			if cmd.Flags().Changed("concern") {
 				in.Concern = &concern
@@ -675,12 +675,12 @@ func newTaskEditCmd() *cobra.Command {
 			// base directory to resolve local images against; --body and
 			// --body-file - (stdin) never rewrite (no base directory).
 			if in.Body != nil && cmd.Flags().Changed("body-file") && bodyFile != "-" && !noUpload {
-				rewritten, err := uploadBodyImages(cmd.Context(), c, *in.Body,
+				rewritten, err := uploadBodyImages(cmd.Context(), c, string(*in.Body),
 					filepath.Dir(bodyFile), cmd.OutOrStdout())
 				if err != nil {
 					return err
 				}
-				in.Body = &rewritten
+				in.Body = (*model.Markdown)(&rewritten)
 			}
 			t, raw, err := c.EditTask(cmd.Context(), id, in)
 			if err != nil {
@@ -1662,10 +1662,10 @@ func newTaskAttachCmd() *cobra.Command {
 						altText = alt
 						altUsed = true
 					}
-					if body != "" && !strings.HasSuffix(body, "\n") {
+					if body != "" && !strings.HasSuffix(string(body), "\n") {
 						body += "\n"
 					}
-					body += "\n" + embedMarkup(altText, blob) + "\n"
+					body += model.Markdown("\n" + embedMarkup(altText, blob) + "\n")
 					appended = true
 					fmt.Fprintf(cmd.OutOrStdout(), "embedded %s (%s)\n", name, blob.Hash[:12])
 					continue

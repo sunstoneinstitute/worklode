@@ -136,7 +136,7 @@ func TestApprovalFlow(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("GET /reviews after the ad-hoc requirement: status = %d, want 200", code)
 	}
-	if !strings.Contains(body, task.Title) {
+	if !strings.Contains(body, string(task.Title)) {
 		t.Fatalf("reviews page missing the ad-hoc row for %q:\n%s", task.Title, body)
 	}
 	m := decideAction.FindStringSubmatch(body)
@@ -155,7 +155,7 @@ func TestApprovalFlow(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("GET /reviews after the refused decide: status = %d, want 200", code)
 	}
-	if !strings.Contains(body, task.Title) {
+	if !strings.Contains(body, string(task.Title)) {
 		t.Fatalf("the refused decide removed the ad-hoc row:\n%s", body)
 	}
 

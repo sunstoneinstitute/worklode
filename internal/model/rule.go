@@ -15,11 +15,11 @@ type Rule struct {
 	Number int64  `json:"number"`
 	// Kind is requirement, catalogue, invariant, definition, principle or
 	// capability (WL-REQ-1642). informative is retired and reads as a principle.
-	Kind    string `json:"kind"`
-	Status  string `json:"status"` // draft | accepted | superseded | withdrawn
-	Version int    `json:"version"`
-	Heading string `json:"heading"`
-	Body    string `json:"body"`
+	Kind    string   `json:"kind"`
+	Status  string   `json:"status"` // draft | accepted | superseded | withdrawn
+	Version int      `json:"version"`
+	Heading Markdown `json:"heading"`
+	Body    Markdown `json:"body"`
 	// ConceptIRI is the ns/concept.ttl concept a definition defines, empty
 	// when it names none (WL-REQ-1368).
 	ConceptIRI string `json:"concept_iri"`
@@ -79,8 +79,8 @@ type RuleTask struct {
 // rewritten in place, an accepted one gets the next version as a draft
 // (WL-REQ-1298).
 type EditRuleInput struct {
-	Heading string `json:"heading"`
-	Body    string `json:"body"`
+	Heading Markdown `json:"heading"`
+	Body    Markdown `json:"body"`
 }
 
 // AcceptRuleInput is the optional body of POST /api/v1/rules/{id}/accept.
@@ -209,8 +209,8 @@ type RuleLintFinding struct {
 // defaults to requirement.
 type AddRuleInput struct {
 	Project string   `json:"project"`
-	Heading string   `json:"heading"`
-	Body    string   `json:"body"`
+	Heading Markdown `json:"heading"`
+	Body    Markdown `json:"body"`
 	Tags    []string `json:"tags,omitempty"`
 	Kind    string   `json:"kind,omitempty"`
 }

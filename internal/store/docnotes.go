@@ -32,7 +32,7 @@ func AddDocNote(
 	if err != nil {
 		return model.DocNote{}, err
 	}
-	body := strings.TrimSpace(in.Body)
+	body := strings.TrimSpace(string(in.Body))
 	if body == "" {
 		return model.DocNote{}, fmt.Errorf("a note on doc %d needs a body: %w", docID, ErrInvalidInput)
 	}
@@ -57,7 +57,7 @@ func AddDocNote(
 	}
 
 	note := model.DocNote{
-		Doc: docID, Anchor: anchor, Body: body,
+		Doc: docID, Anchor: anchor, Body: model.Markdown(body),
 		Task: in.Task, Session: in.Session, CreatedBy: actorID,
 		CreatedAt: now.UTC().Truncate(time.Second),
 	}
@@ -67,6 +67,9 @@ func AddDocNote(
 		docID, anchor, body, nullText(in.Task), nullText(in.Session), nullText(actorID), note.CreatedAt,
 	).Scan(&note.ID); err != nil {
 		return model.DocNote{}, fmt.Errorf("add note on doc %d #%s: %w", docID, anchor, err)
+	}
+	if err := deriveDocNoteRefs(tx, note.ID); err != nil {
+		return model.DocNote{}, err
 	}
 	if err := logDocChange(tx, docID, eventID,
 		map[string]string{"field": "note", "new": anchor}); err != nil {

@@ -45,7 +45,7 @@ func (s *Store) ProjectSummaryFacts(ctx context.Context, projectID string) (*Sum
 	}
 	f := &SummaryFacts{Roster: roster}
 	for _, t := range tasks {
-		f.Tasks = append(f.Tasks, SummaryTask{t.ID, t.Title, t.State, t.Assignee, t.Due, t.Kind, closed[t.ID]})
+		f.Tasks = append(f.Tasks, SummaryTask{t.ID, string(t.Title), t.State, t.Assignee, t.Due, t.Kind, closed[t.ID]})
 	}
 
 	rows, err := s.db.QueryContext(ctx,
@@ -70,7 +70,7 @@ func (s *Store) ProjectSummaryFacts(ctx context.Context, projectID string) (*Sum
 		if err != nil {
 			return nil, err
 		}
-		f.Docs = append(f.Docs, SummaryDoc{d.FormatRef(), d.Title, model.DocCanonicalURL(*d)})
+		f.Docs = append(f.Docs, SummaryDoc{d.FormatRef(), string(d.Title), model.DocCanonicalURL(*d)})
 	}
 	return f, nil
 }

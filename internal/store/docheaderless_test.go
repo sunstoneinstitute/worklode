@@ -46,7 +46,7 @@ func TestCreateDocStoresNoHeader(t *testing.T) {
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
 	})
-	if !strings.HasPrefix(doc.Body, "# Documents in the backbone") {
+	if !strings.HasPrefix(string(doc.Body), "# Documents in the backbone") {
 		t.Errorf("stored body = %q, want it to open with the H1", doc.Body)
 	}
 	if doc.Issued != "2026-08-01" || doc.Title != "Documents in the backbone" {
@@ -144,11 +144,11 @@ func TestSetDocColumns(t *testing.T) {
 		return out, err
 	}
 	title, issued := "Renamed", "2026-09-01"
-	got, err := set(doc.ID, model.DocColumnsInput{Title: &title, Issued: &issued})
+	got, err := set(doc.ID, model.DocColumnsInput{Title: (*model.Markdown)(&title), Issued: &issued})
 	if err != nil {
 		t.Fatalf("SetDocColumns: %v", err)
 	}
-	if got.Title != title || got.Issued != issued || got.Version != doc.Version {
+	if string(got.Title) != title || got.Issued != issued || got.Version != doc.Version {
 		t.Errorf("doc = {title:%q issued:%q version:%d}, want {%q %q %d}",
 			got.Title, got.Issued, got.Version, title, issued, doc.Version)
 	}
@@ -163,13 +163,13 @@ func TestSetDocColumns(t *testing.T) {
 	}
 
 	empty, bad := " ", "01/09/2026"
-	for _, in := range []model.DocColumnsInput{{Title: &empty}, {Issued: &bad}, {}} {
+	for _, in := range []model.DocColumnsInput{{Title: (*model.Markdown)(&empty)}, {Issued: &bad}, {}} {
 		if _, err := set(doc.ID, in); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("SetDocColumns(%+v) = %v, want ErrInvalidInput", in, err)
 		}
 	}
 	setDocStatus(t, s, doc.ID, "superseded")
-	if _, err := set(doc.ID, model.DocColumnsInput{Title: &title}); !errors.Is(err, ErrInvalidInput) {
+	if _, err := set(doc.ID, model.DocColumnsInput{Title: (*model.Markdown)(&title)}); !errors.Is(err, ErrInvalidInput) {
 		t.Errorf("SetDocColumns on a superseded doc = %v, want ErrInvalidInput", err)
 	}
 }

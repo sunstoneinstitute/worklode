@@ -59,7 +59,7 @@ func TestProjectSummaryFacts(t *testing.T) {
 	if len(f.Roster) != 2 {
 		t.Errorf("roster = %+v", f.Roster)
 	}
-	if len(f.Docs) != 1 || f.Docs[0].Title != doc.Title || f.Docs[0].Ref != doc.FormatRef() ||
+	if len(f.Docs) != 1 || f.Docs[0].Title != string(doc.Title) || f.Docs[0].Ref != doc.FormatRef() ||
 		f.Docs[0].URL == "" {
 		t.Errorf("docs = %+v (want %s)", f.Docs, doc.FormatRef())
 	}

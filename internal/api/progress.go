@@ -383,7 +383,7 @@ func (s *server) mintPlanningTask(tx *sql.Tx, doc *model.Doc, actorID string, ev
 	iri := store.DocIRI(*doc)
 	t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
 		ProjectID: doc.Project,
-		Title:     watcher.PlanningTitle(doc.Title),
+		Title:     watcher.PlanningTitle(string(doc.Title)),
 		Body:      watcher.PlanningBody(iri, doc.Version, eventID),
 		Kind:      "design",
 		Priority:  "medium",
