@@ -12,12 +12,14 @@ type Target struct {
 	DocAnchor bool   // section with no rule: leave the text as written
 }
 
-// rewritable reports whether Normalize may rewrite the hit.
+// rewritable reports whether Normalize may rewrite the hit. A keyword form is
+// a short form: the number it names depends on when it was written, so it is
+// never rewritten (WL-REQ-1854, WL-REQ-1650).
 func rewritable(h Hit, t *Target) bool {
-	return t != nil && !t.DocAnchor && !h.InCode
+	return t != nil && !t.DocAnchor && !h.Literal && h.Form != FormKeyword
 }
 
-// Normalize rewrites hits outside code into their plain form (WL-REQ-1854).
+// Normalize rewrites each rewritable hit into its plain form (WL-REQ-1854).
 // targets is indexed like hits; a nil entry is unresolved and left alone.
 func Normalize(text string, hits []Hit, targets []*Target) string {
 	lines := strings.Split(text, "\n")
@@ -90,12 +92,12 @@ func matchesOutside(old, new string, spans [][2]int) bool {
 	return len(new)-pos >= len(tail) && strings.HasSuffix(new, tail)
 }
 
-// targetSet lists "line target" for every resolved hit outside code, sorted.
+// targetSet lists "line target" for every resolved non-literal hit, sorted.
 func targetSet(hits []Hit, resolve func(Hit) *Target) []string {
 	var out []string
 	for _, h := range hits {
 		t := resolve(h)
-		if t == nil || h.InCode {
+		if t == nil || h.Literal {
 			continue
 		}
 		ref := t.Ref
