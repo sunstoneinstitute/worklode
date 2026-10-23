@@ -640,6 +640,9 @@ func (s *server) docDetail(r *http.Request, id int64) (*model.DocDetail, error) 
 		Doc: s.withProjectKey(ctx, *d), Sections: sections, Edges: out, EdgesIn: in, Notes: notes,
 		Amendments: amendments,
 	}
+	if detail.InlineRefs, err = s.st.InlineRefsOf(ctx, "doc", strconv.FormatInt(id, 10)); err != nil {
+		return nil, err
+	}
 	// No open revision is the ordinary case, not a failure: only an accepted
 	// spec or ADR ever has one.
 	rev, err := s.st.GetDocRevision(ctx, id)

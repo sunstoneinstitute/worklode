@@ -512,6 +512,7 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 		}
 		tw.Flush()
 	}
+	InlineRefsRender(w, t.InlineRefs)
 }
 
 // BriefRender prints a task's brief as a readable summary — the `lode task

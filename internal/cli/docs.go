@@ -668,6 +668,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 			fmt.Fprintf(w, "  %s %s %s\n", docEdgeTarget(e), e.Type, cmp.Or(DocRef(d.Doc), d.Slug))
 		}
 	}
+	InlineRefsRender(w, d.InlineRefs)
 }
 
 // DocNoteLine renders one note as the attributed one-liner it is meant to be
