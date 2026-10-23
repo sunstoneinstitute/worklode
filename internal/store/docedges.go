@@ -73,7 +73,7 @@ func changeDocEdge(tx *sql.Tx, now time.Time, docID int64, in model.DocEdgeInput
 	case d.status == "superseded" || d.status == "withdrawn" || d.status == "spent":
 		return fmt.Errorf("doc %d is %s: its edges no longer change: %w", docID, d.status, ErrInvalidInput)
 	case d.kind == "plan":
-		if _, err := bumpDocVersion(tx, docID); err != nil {
+		if _, err := bumpDocVersion(tx, docID, "edit"); err != nil {
 			return err
 		}
 	case d.status == "accepted":

@@ -494,9 +494,10 @@ func DocVersionsTable(w io.Writer, versions []model.DocVersionSummary) {
 		titleColumn("TITLE"),
 		column{header: "ISSUED"},
 		column{header: "SNAPSHOT AT"},
+		column{header: "CHANGE"},
 	)
 	for _, v := range versions {
-		tbl.add(strconv.Itoa(v.Version), v.Title, dash(v.Issued), LocalTime(v.CreatedAt))
+		tbl.add(strconv.Itoa(v.Version), v.Title, dash(v.Issued), LocalTime(v.CreatedAt), dash(v.Change))
 	}
 	tbl.flush(w)
 }

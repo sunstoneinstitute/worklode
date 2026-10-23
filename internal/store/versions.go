@@ -23,7 +23,12 @@ import (
 // The snapshot holds the rendered text (WL-REQ-1299), so a version keeps
 // what it showed even where a draft rule version it arranged is rewritten in
 // place later.
-func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
+//
+// change, edit or normalize, is how the new version was made (WL-REQ-1855).
+// The new version lives in docs until it is replaced, so the marker is stored
+// on the snapshot row of the version it replaces; ListDocVersions reads it
+// one version up.
+func bumpDocVersion(tx *sql.Tx, docID int64, change string) (int, error) {
 	var body string
 	if err := tx.QueryRow(`SELECT body FROM docs WHERE id = $1`, docID).Scan(&body); err != nil {
 		return 0, fmt.Errorf("read doc %d before version bump: %w", docID, err)
@@ -33,8 +38,8 @@ func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
 		return 0, err
 	}
 	if _, err := tx.Exec(
-		`INSERT INTO doc_versions (doc_id, version, body, title, issued, created_at)
-		 SELECT id, version, $2, title, issued, updated_at FROM docs WHERE id = $1`, docID, renderBody(body, texts[docID]),
+		`INSERT INTO doc_versions (doc_id, version, body, title, issued, created_at, change)
+		 SELECT id, version, $2, title, issued, updated_at, $3 FROM docs WHERE id = $1`, docID, renderBody(body, texts[docID]), change,
 	); err != nil {
 		return 0, fmt.Errorf("snapshot doc %d before version bump: %w", docID, err)
 	}
@@ -71,8 +76,9 @@ func bumpDocVersion(tx *sql.Tx, docID int64) (int, error) {
 // keeps the rule versions it showed, and the sections whose rule moved are
 // stamped revised in the new version; a draft spec follows without a bump.
 // except is the spec whose own accept lands the rules, 0 for none. It
-// returns the accepted specs it bumped, with their new versions.
-func moveSpecsToAcceptedRules(tx *sql.Tx, ruleIDs []int64, except int64) (map[int64]int, error) {
+// returns the accepted specs it bumped, with their new versions. change is
+// bumpDocVersion's.
+func moveSpecsToAcceptedRules(tx *sql.Tx, ruleIDs []int64, except int64, change string) (map[int64]int, error) {
 	rows, err := tx.Query(
 		`SELECT DISTINCT dr.doc_id, d.status FROM doc_rules dr
 		   JOIN rules r ON r.id = dr.rule_id
@@ -107,7 +113,7 @@ func moveSpecsToAcceptedRules(tx *sql.Tx, ruleIDs []int64, except int64) (map[in
 	for _, sp := range specs {
 		version := 0
 		if sp.accepted {
-			if version, err = bumpDocVersion(tx, sp.id); err != nil {
+			if version, err = bumpDocVersion(tx, sp.id, change); err != nil {
 				return nil, err
 			}
 			bumped[sp.id] = version
@@ -131,9 +137,11 @@ func moveSpecsToAcceptedRules(tx *sql.Tx, ruleIDs []int64, except int64) (map[in
 // bumpRuleVersion snapshots rule ruleID's outgoing edges at its current
 // version into rule_edge_versions, carries its manual inline_refs rows to
 // the next version (the caller re-derives the rest, WL-REQ-1852), moves the
-// rule to the next version as a draft, and inserts that version's text. It
+// rule to the next version, and inserts that version's text marked with
+// change. An edit makes the version a draft; a normalization keeps the
+// rule's status, so an accepted rule stays accepted (WL-REQ-1855). It
 // returns the new version.
-func bumpRuleVersion(tx *sql.Tx, ruleID int64, heading, body string) (int, error) {
+func bumpRuleVersion(tx *sql.Tx, ruleID int64, heading, body, change string) (int, error) {
 	if _, err := tx.Exec(
 		`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, lines, source)
 		 SELECT i.from_kind, i.from_id, i.field, r.version + 1, i.to_kind, i.to_id, '{}', 'manual'
@@ -152,13 +160,15 @@ func bumpRuleVersion(tx *sql.Tx, ruleID int64, heading, body string) (int, error
 	}
 	var version int
 	if err := tx.QueryRow(
-		`UPDATE rules SET version = version + 1, status = 'draft', updated_at = now() WHERE id = $1 RETURNING version`,
-		ruleID).Scan(&version); err != nil {
+		`UPDATE rules SET version = version + 1, updated_at = now(),
+		        status = CASE WHEN $2 = 'normalize' THEN status ELSE 'draft' END
+		  WHERE id = $1 RETURNING version`,
+		ruleID, change).Scan(&version); err != nil {
 		return 0, fmt.Errorf("bump rule %d: %w", ruleID, err)
 	}
 	if _, err := tx.Exec(
-		`INSERT INTO rule_versions (rule_id, version, heading, body) VALUES ($1, $2, $3, $4)`,
-		ruleID, version, heading, body); err != nil {
+		`INSERT INTO rule_versions (rule_id, version, heading, body, change) VALUES ($1, $2, $3, $4, $5)`,
+		ruleID, version, heading, body, change); err != nil {
 		return 0, fmt.Errorf("insert rule %d v%d: %w", ruleID, version, err)
 	}
 	return version, nil

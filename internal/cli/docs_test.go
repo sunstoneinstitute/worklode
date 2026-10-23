@@ -177,3 +177,15 @@ func TestDocUnresolvedTableShowsAge(t *testing.T) {
 		t.Errorf("output = %q, want an AGE column reading 45d", out)
 	}
 }
+
+func TestDocVersionsTableMarksNormalize(t *testing.T) {
+	var b strings.Builder
+	DocVersionsTable(&b, []model.DocVersionSummary{
+		{Version: 3, Title: "T", Change: "normalize"},
+		{Version: 2, Title: "T", Change: "edit"},
+	})
+	lines := strings.Split(b.String(), "\n")
+	if len(lines) < 3 || !strings.Contains(lines[0], "CHANGE") || !strings.Contains(lines[1], "normalize") || strings.Contains(lines[2], "normalize") {
+		t.Errorf("table:\n%s", b.String())
+	}
+}

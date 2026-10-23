@@ -9264,6 +9264,7 @@ export interface components {
             rule_version?: number;
         };
         DocVersionSummary: {
+            change?: string;
             /** Format: date-time */
             created_at?: string;
             issued?: string;
@@ -9988,6 +9989,7 @@ export interface components {
         Rule: {
             arranged_in?: components["schemas"]["RuleArrangement"][] | null;
             body?: string;
+            change?: string;
             concept_iri?: string;
             covered_by?: components["schemas"]["RulePlan"][] | null;
             /** Format: date-time */

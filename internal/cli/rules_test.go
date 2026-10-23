@@ -119,3 +119,16 @@ func TestSectionRule(t *testing.T) {
 		t.Errorf("SectionRule(unarranged) = %q, want empty", got)
 	}
 }
+
+func TestRuleRenderNormalizeVersion(t *testing.T) {
+	var b strings.Builder
+	RuleRender(&b, model.Rule{Ref: "WL-RULE-2", Heading: "Sub", Status: "accepted", Version: 2, Change: "normalize"})
+	if !strings.Contains(b.String(), "  version:  2 (normalize)\n") {
+		t.Errorf("render:\n%s", b.String())
+	}
+	b.Reset()
+	RuleRender(&b, model.Rule{Ref: "WL-RULE-2", Heading: "Sub", Status: "accepted", Version: 2, Change: "edit"})
+	if !strings.Contains(b.String(), "  version:  2\n") {
+		t.Errorf("an edit prints no marker:\n%s", b.String())
+	}
+}
