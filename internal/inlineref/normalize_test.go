@@ -40,16 +40,19 @@ func normalize(text string) string {
 
 func TestNormalize(t *testing.T) {
 	cases := []struct{ name, in, want string }{
-		{"bare url", "see /tasks/WL-7 now", "see WL-7 now"},
-		{"link with ref text", "see [WL-7](/tasks/WL-7) now", "see WL-7 now"},
-		{"link with other text", "see [the task](/tasks/WL-7) now", "see [the task](WL-7) now"},
+		{"bare url", "see https://lode.example/tasks/WL-7 now", "see WL-7 now"},
+		{"link with ref text", "see [WL-7](https://lode.example/tasks/WL-7) now", "see WL-7 now"},
+		{"link with other text", "see [the task](https://lode.example/tasks/WL-7) now", "see [the task](WL-7) now"},
+		{"bare path", "see /tasks/WL-7 now", "see /tasks/WL-7 now"},
+		{"link to path", "see [WL-7](/tasks/WL-7) now", "see [WL-7](/tasks/WL-7) now"},
+		{"link text with scheme, path target", "see [http://x](/WL-7) now", "see [http://x](/WL-7) now"},
 		{"section with rule", "see WL-SPEC-77#sec-4 now", "see WL-REQ-12 now"},
 		{"section without rule", "see WL-SPEC-77#sec-9 now", "see WL-SPEC-77#sec-9 now"},
 		{"wrong infix", "see WL-RULE-12 now", "see WL-REQ-12 now"},
 		{"in code", "see `/tasks/WL-7` now", "see `/tasks/WL-7` now"},
 		{"in code across lines", "see `a\n/tasks/WL-7` now", "see `a\n/tasks/WL-7` now"},
 		{"fenced", "```\n/tasks/WL-7\n```", "```\n/tasks/WL-7\n```"},
-		{"quoted", `the form "/tasks/WL-7" and /tasks/WL-7`, `the form "/tasks/WL-7" and WL-7`},
+		{"quoted", `the form "https://lode.example/tasks/WL-7" and https://lode.example/tasks/WL-7`, `the form "https://lode.example/tasks/WL-7" and WL-7`},
 		{"range of full refs", "see WL-SPEC-77#sec-4–§5 now", "see WL-SPEC-77#sec-4–§5 now"},
 		{"list of full refs", "see WL-SPEC-77#sec-4, §5 now", "see WL-SPEC-77#sec-4, §5 now"},
 	}
@@ -94,9 +97,36 @@ func TestNormalizeLeavesCorpusExamples(t *testing.T) {
 	}
 }
 
+// TestNormalizeLeavesUrlPaths: a URL path with no scheme and host is a short
+// form. The lines are the first lines of WL-1135 and WL-891 (WL-REQ-1854).
+func TestNormalizeLeavesUrlPaths(t *testing.T) {
+	for name, text := range map[string]string{
+		"WL-1135": "GET /WL-MILE-2 answered `{\"error\":\"ref \\\"WL-MILE-2\\\" names no document in the backbone\"}`: refShortcut tried rule refs, tasks, then documents, never milestones or deliverables. The infixes were hardcoded in a dozen regexps and switches, so a new one had to be added everywhere by hand.",
+		"WL-891":  "GET /{ref} (WL-721) resolves tasks and documents only, so a rule ref pasted at the root 404s: /WL-RULE-1 and its alias /WL-CL-1 both answer \"names no document in the backbone\", while /rules/WL-RULE-1 redirects. Fix: refShortcut hands a rule ref to ruleRefRedirect before the task lookup. Test: TestRefShortcut gains WL-RULE-1 and WL-CL-1 cases.",
+	} {
+		t.Run(name, func(t *testing.T) {
+			hits := Scan(text, testKeys)
+			ts := make([]*Target, len(hits))
+			urls := 0
+			for i, h := range hits {
+				if h.Form == FormURL {
+					ts[i] = &Target{Ref: "WL-X-9"}
+					urls++
+				}
+			}
+			if urls == 0 {
+				t.Fatal("no URL-path hits: the paths must still yield edges")
+			}
+			if got := Normalize(text, hits, ts); got != text {
+				t.Errorf("rewritten:\n got %q\nwant %q", got, text)
+			}
+		})
+	}
+}
+
 func TestNormalizeAllowedForms(t *testing.T) {
 	cases := []struct{ name, in, want string }{
-		{"url with section", "see /WL-SPEC-77#sec-4 now", "see WL-REQ-12 now"},
+		{"url with section", "see https://lode.example/WL-SPEC-77#sec-4 now", "see WL-REQ-12 now"},
 		{"full section ref next to a keyword", "WL-SPEC-77#sec-4 (spec 77 §4)", "WL-REQ-12 (spec 77 §4)"},
 	}
 	for _, c := range cases {
@@ -116,7 +146,7 @@ func TestNormalizeUnresolvedUntouched(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	old := "a /tasks/WL-7 b\nc WL-RULE-12 d"
+	old := "a https://lode.example/tasks/WL-7 b\nc WL-RULE-12 d"
 	ok := normalize(old)
 	if err := Verify(old, ok, testKeys, resolveFake); err != nil {
 		t.Errorf("pure normalization rejected: %v", err)
@@ -137,8 +167,9 @@ func TestVerify(t *testing.T) {
 func TestVerifyRefusesLiteralRewrites(t *testing.T) {
 	for name, c := range map[string][2]string{
 		"keyword": {"see spec 77 now", "see WL-SPEC-77 now"},
-		"quoted":  {`the form "/tasks/WL-7"`, `the form "WL-7"`},
-		"code":    {"see `a\n/tasks/WL-7` now", "see `a\nWL-7` now"},
+		"quoted":  {`the form "https://lode.example/tasks/WL-7"`, `the form "WL-7"`},
+		"code":    {"see `a\nhttps://lode.example/tasks/WL-7` now", "see `a\nWL-7` now"},
+		"path":    {"see /tasks/WL-7 now", "see WL-7 now"},
 	} {
 		if err := Verify(c[0], c[1], testKeys, resolveFake); err == nil {
 			t.Errorf("%s: accepted", name)

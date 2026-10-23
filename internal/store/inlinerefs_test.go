@@ -281,7 +281,7 @@ func TestNormalizeTaskBody(t *testing.T) {
 	s := openDocStore(t)
 	seedDocNoteTask(t, s, "P1-8")
 	seedDocNoteTask(t, s, "P1-7")
-	if _, err := s.db.ExecContext(t.Context(), `UPDATE tasks SET body = $1 WHERE id = 'P1-7'`, "Needs /P1-8 first.\nThen [it](/tasks/P1-8)."); err != nil {
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE tasks SET body = $1 WHERE id = 'P1-7'`, "Needs https://lode.example/P1-8 first.\nThen [it](https://lode.example/tasks/P1-8)."); err != nil {
 		t.Fatal(err)
 	}
 	changed, _, err := normalizeNode(t, s, "task", "P1-7")
@@ -303,7 +303,7 @@ func TestNormalizeTaskBody(t *testing.T) {
 func TestNormalizeAcceptedDoc(t *testing.T) {
 	s := openDocStore(t)
 	seedDocNoteTask(t, s, "P1-8")
-	body := strings.Replace(ruleDocV1, "Intro.", "Intro names /P1-8.", 1)
+	body := strings.Replace(ruleDocV1, "Intro.", "Intro names https://lode.example/P1-8.", 1)
 	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: body, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, d.ID, "stig"); err != nil {
 		t.Fatal(err)
@@ -390,7 +390,7 @@ func TestDeriveNodeTask(t *testing.T) {
 	s := openDocStore(t)
 	seedDocNoteTask(t, s, "P1-8")
 	seedDocNoteTask(t, s, "P1-7")
-	if _, err := s.db.ExecContext(t.Context(), `UPDATE tasks SET body = $1 WHERE id = 'P1-7'`, "Needs /P1-8 first.\nNot P1-99."); err != nil {
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE tasks SET body = $1 WHERE id = 'P1-7'`, "Needs https://lode.example/P1-8 first.\nNot P1-99."); err != nil {
 		t.Fatal(err)
 	}
 	n, err := deriveNode(t, s, "task", "P1-7")
