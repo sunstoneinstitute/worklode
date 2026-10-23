@@ -235,7 +235,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	ts := now.UTC().Truncate(time.Second)
 	// Snapshot the version this accept replaces (WL-REQ-164) and move to the
 	// next one, before any other write.
-	version, err := bumpDocVersion(tx, id)
+	version, err := bumpDocVersion(tx, id, "edit")
 	if err != nil {
 		return nil, err
 	}

@@ -125,7 +125,7 @@ func (s *Store) AcceptRule(ctx context.Context, projectKey string, number int64,
 		if _, err := tx.Exec(`UPDATE rules SET status = 'accepted', updated_at = now() WHERE id = $1`, id); err != nil {
 			return fmt.Errorf("accept rule %s: %w", ref, err)
 		}
-		bumped, err := moveSpecsToAcceptedRules(tx, []int64{id}, 0)
+		bumped, err := moveSpecsToAcceptedRules(tx, []int64{id}, 0, "edit")
 		if err != nil {
 			return err
 		}

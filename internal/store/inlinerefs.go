@@ -1,10 +1,13 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/inlineref"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -327,4 +330,304 @@ func deleteInlineRefs(tx *sql.Tx, kind model.NodeKind, id string) error {
 		return fmt.Errorf("delete inline refs of %s %s: %w", kind, id, err)
 	}
 	return nil
+}
+
+// normalizer rewrites a project's inline references into their plain form
+// (WL-REQ-1854). The first resolution error is kept in err, because
+// inlineref.Verify's resolver cannot return one.
+type normalizer struct {
+	tx      *sql.Tx
+	project string
+	key     string
+	keys    map[string]bool
+	err     error
+}
+
+func newNormalizer(tx *sql.Tx, project string) (*normalizer, error) {
+	keys, err := projectKeys(tx)
+	if err != nil {
+		return nil, err
+	}
+	n := &normalizer{tx: tx, project: project, keys: keys}
+	if err := tx.QueryRow(`SELECT key FROM projects WHERE id = $1`, project).Scan(&n.key); err != nil {
+		return nil, fmt.Errorf("read key of project %q: %w", project, err)
+	}
+	return n, nil
+}
+
+// target is the plain form of what h resolves to; nil leaves h as written.
+func (n *normalizer) target(h inlineref.Hit) *inlineref.Target {
+	if n.err != nil {
+		return nil
+	}
+	kind, id, ok, err := resolveHit(n.tx, n.project, n.key, h)
+	if err != nil || !ok {
+		n.err = err
+		return nil
+	}
+	var ref sql.NullString
+	switch kind {
+	case "rule":
+		err = n.tx.QueryRow(`SELECT `+ruleRefSQL("p", "r")+` FROM rules r JOIN projects p ON p.id = r.project_id
+		  WHERE r.id = $1::bigint`, id).Scan(&ref)
+	case "doc":
+		if h.Anchor != "" {
+			return &inlineref.Target{Ref: "doc:" + id, DocAnchor: true}
+		}
+		err = n.tx.QueryRow(`SELECT `+docRefSQL("p", "d")+` FROM docs d JOIN projects p ON p.id = d.project_id
+		  WHERE d.id = $1::bigint`, id).Scan(&ref)
+	default:
+		return &inlineref.Target{Ref: id}
+	}
+	if err != nil {
+		n.err = fmt.Errorf("plain ref of %s %s: %w", kind, id, err)
+		return nil
+	}
+	if !ref.Valid { // a doc with no number has no shorthand
+		return nil
+	}
+	return &inlineref.Target{Ref: ref.String}
+}
+
+// text is text with every resolvable reference outside code in plain form.
+func (n *normalizer) text(text string) (string, error) {
+	hits := inlineref.Scan(text, n.keys)
+	targets := make([]*inlineref.Target, len(hits))
+	for i, h := range hits {
+		targets[i] = n.target(h)
+	}
+	return inlineref.Normalize(text, hits, targets), n.err
+}
+
+// verify refuses newText unless it is a pure normalization of oldText
+// (WL-REQ-1855), naming the node in the error.
+func (n *normalizer) verify(node, field, oldText, newText string) error {
+	err := inlineref.Verify(oldText, newText, n.keys, n.target)
+	if n.err != nil {
+		return n.err
+	}
+	if err != nil {
+		return fmt.Errorf("%s %s is not a pure normalization: %v: %w", node, field, err, ErrInvalidInput)
+	}
+	return nil
+}
+
+// lineDiff appends the lines of one field a normalization changed. A
+// normalization never adds or removes a line (WL-REQ-1854), so lines pair up
+// by number.
+func lineDiff(b *strings.Builder, label, oldText, newText string) {
+	ol, nl := strings.Split(oldText, "\n"), strings.Split(newText, "\n")
+	for i := range min(len(ol), len(nl)) {
+		if ol[i] != nl[i] {
+			fmt.Fprintf(b, "%s line %d\n-%s\n+%s\n", label, i+1, ol[i], nl[i])
+		}
+	}
+}
+
+// NormalizeNode rewrites the inline references of one doc, rule or task of
+// project into their plain form (WL-REQ-1854) and reports whether anything
+// changed, with a line diff. A draft doc or rule, a plan and an unversioned
+// field are written through their normal write paths. An accepted doc or rule
+// gets a new version marked normalize that stays accepted, with no review
+// task, once inlineref.Verify passes; otherwise nothing is written and the
+// error names the node (WL-REQ-1855).
+func NormalizeNode(tx *sql.Tx, now time.Time, project string, kind model.NodeKind, id string, eventID int64) (bool, string, error) {
+	n, err := newNormalizer(tx, project)
+	if err != nil {
+		return false, "", err
+	}
+	var b strings.Builder
+	switch kind {
+	case "task":
+		err = normalizeTask(tx, now, n, id, &b)
+	case "rule":
+		err = normalizeRuleNode(tx, n, id, &b)
+	case "doc":
+		err = normalizeDoc(tx, now, n, id, eventID, &b)
+	default:
+		err = fmt.Errorf("normalize %s %s: only a doc, rule or task: %w", kind, id, ErrInvalidInput)
+	}
+	if err != nil {
+		return false, "", err
+	}
+	return b.Len() > 0, b.String(), nil
+}
+
+func normalizeTask(tx *sql.Tx, now time.Time, n *normalizer, id string, b *strings.Builder) error {
+	var title, body string
+	err := tx.QueryRow(`SELECT title, coalesce(body, '') FROM tasks WHERE id = $1 AND project_id = $2 FOR UPDATE`,
+		id, n.project).Scan(&title, &body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("task %s in %s: %w", id, n.project, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("read task %s: %w", id, err)
+	}
+	var newTitle, newBody *model.Markdown
+	for _, f := range []struct {
+		name string
+		old  string
+		dst  **model.Markdown
+	}{{"title", title, &newTitle}, {"body", body, &newBody}} {
+		t, err := n.text(f.old)
+		if err != nil {
+			return err
+		}
+		if t != f.old {
+			m := model.Markdown(t)
+			*f.dst = &m
+			lineDiff(b, id+" "+f.name, f.old, t)
+		}
+	}
+	if newTitle == nil && newBody == nil {
+		return nil
+	}
+	return UpdateTaskFields(tx, now, id, newTitle, newBody, nil, nil, nil, nil, nil, nil, nil, nil)
+}
+
+func normalizeRuleNode(tx *sql.Tx, n *normalizer, id string, b *strings.Builder) error {
+	ruleID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return fmt.Errorf("rule id %q: %w", id, ErrInvalidInput)
+	}
+	var heading, body string
+	err = tx.QueryRow(
+		`SELECT v.heading, v.body FROM rules r JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+		  WHERE r.id = $1 AND r.project_id = $2`, ruleID, n.project).Scan(&heading, &body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("rule %s in %s: %w", id, n.project, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("read rule %s: %w", id, err)
+	}
+	newHeading, err := n.text(heading)
+	if err != nil {
+		return err
+	}
+	newBody, err := n.text(body)
+	if err != nil {
+		return err
+	}
+	if newHeading == heading && newBody == body {
+		return nil
+	}
+	ref := ruleRefOf(tx, ruleID)
+	lineDiff(b, ref+" heading", heading, newHeading)
+	lineDiff(b, ref+" body", body, newBody)
+	return normalizeRule(tx, n.project, ruleID, newHeading, newBody)
+}
+
+// normalizeRule writes heading and body as rule ruleID's normalized text: a
+// draft is rewritten in place, as lode rule edit would; an accepted rule gets
+// the next version, accepted and marked normalize, when the text is a pure
+// normalization, and every spec arranging it moves to that version
+// (WL-REQ-1298, WL-REQ-1855).
+func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body string) error {
+	var status, oldHeading, oldBody string
+	if err := tx.QueryRow(
+		`SELECT r.status, v.heading, v.body FROM rules r JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+		  WHERE r.id = $1 FOR NO KEY UPDATE OF r`, ruleID).Scan(&status, &oldHeading, &oldBody); err != nil {
+		return fmt.Errorf("read rule %d: %w", ruleID, err)
+	}
+	ref := ruleRefOf(tx, ruleID)
+	var version int
+	var err error
+	switch status {
+	case "draft":
+		_, version, err = reviseRule(tx, ruleID, heading, body)
+		if err != nil {
+			return err
+		}
+		return deriveRuleInlineRefs(tx, project, ruleID, version, heading, body)
+	case "accepted":
+		n, err := newNormalizer(tx, project)
+		if err != nil {
+			return err
+		}
+		if err := n.verify(ref, "heading", oldHeading, heading); err != nil {
+			return err
+		}
+		if err := n.verify(ref, "body", oldBody, body); err != nil {
+			return err
+		}
+		if version, err = bumpRuleVersion(tx, ruleID, heading, body, "normalize"); err != nil {
+			return err
+		}
+		if err := deriveRuleInlineRefs(tx, project, ruleID, version, heading, body); err != nil {
+			return err
+		}
+		_, err = moveSpecsToAcceptedRules(tx, []int64{ruleID}, 0, "normalize")
+		return err
+	}
+	return fmt.Errorf("rule %s is %s; only a live rule is normalized: %w", ref, status, ErrBadTransition)
+}
+
+// normalizeDoc normalizes a doc's title and its own stored text, which for a
+// spec is the template around its rules; the rules normalize on their own.
+// ponytail: a spec heading also lives in doc_rules and doc_sections, which
+// keep the old spelling of a ref in a heading; rewrite them when a heading
+// ever holds one.
+func normalizeDoc(tx *sql.Tx, now time.Time, n *normalizer, id string, eventID int64, b *strings.Builder) error {
+	docID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return fmt.Errorf("doc id %q: %w", id, ErrInvalidInput)
+	}
+	var kind, status, ref, title, body string
+	err = tx.QueryRow(
+		`SELECT d.kind, d.status, coalesce(`+docRefSQL("p", "d")+`, d.slug), d.title, d.body
+		   FROM docs d JOIN projects p ON p.id = d.project_id
+		  WHERE d.id = $1 AND d.project_id = $2 AND d.deleted_at IS NULL FOR UPDATE OF d`, docID, n.project).
+		Scan(&kind, &status, &ref, &title, &body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("doc %s in %s: %w", id, n.project, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("read doc %s: %w", id, err)
+	}
+	newTitle, err := n.text(title)
+	if err != nil {
+		return err
+	}
+	newBody, err := n.text(body)
+	if err != nil {
+		return err
+	}
+	if newTitle != title {
+		lineDiff(b, ref+" title", title, newTitle)
+		t := model.Markdown(newTitle)
+		if _, err := SetDocColumns(tx, now, docID, model.DocColumnsInput{Title: &t}, eventID); err != nil {
+			return err
+		}
+	}
+	if newBody == body {
+		return nil
+	}
+	lineDiff(b, ref+" body", body, newBody)
+	switch {
+	case kind == "plan" || status == "draft":
+		// UpdateDocBody takes a spec's editable form: the template with its
+		// rules' text filled in.
+		texts, err := arrangedTexts(context.Background(), tx, "doc_rules", "x.doc_id = $1", docID)
+		if err != nil {
+			return err
+		}
+		_, err = UpdateDocBody(tx, now, docID, renderBody(newBody, texts[docID]), 0, eventID)
+		return err
+	case status == "accepted":
+		if err := n.verify(ref, "body", body, newBody); err != nil {
+			return err
+		}
+		if _, err := bumpDocVersion(tx, docID, "normalize"); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`,
+			docID, newBody, now.UTC().Truncate(time.Second)); err != nil {
+			return fmt.Errorf("normalize doc %s body: %w", ref, err)
+		}
+		if err := logDocChange(tx, docID, eventID, map[string]string{"field": "body", "change": "normalize"}); err != nil {
+			return err
+		}
+		return deriveDocRefs(tx, docID)
+	}
+	return fmt.Errorf("doc %s is %s; only a draft, an accepted doc or a plan is normalized: %w", ref, status, ErrBadTransition)
 }

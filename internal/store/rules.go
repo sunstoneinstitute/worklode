@@ -358,7 +358,7 @@ func reviseRule(tx *sql.Tx, id int64, heading, body string) (int64, int, error) 
 		}
 		return id, version, nil
 	}
-	version, err := bumpRuleVersion(tx, id, heading, body)
+	version, err := bumpRuleVersion(tx, id, heading, body, "edit")
 	if err != nil {
 		return 0, 0, err
 	}
@@ -401,7 +401,7 @@ func acceptDocRules(tx *sql.Tx, docID int64) ([]int64, map[int64]int, error) {
 	if err != nil || len(ids) == 0 {
 		return nil, nil, err
 	}
-	bumped, err := moveSpecsToAcceptedRules(tx, ids, docID)
+	bumped, err := moveSpecsToAcceptedRules(tx, ids, docID, "edit")
 	return ids, bumped, err
 }
 
@@ -412,13 +412,13 @@ func (s *Store) GetRule(ctx context.Context, projectKey string, number int64) (*
 	var owner sql.NullString
 	var tagsRaw string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT c.id, c.project_id, p.key, c.number, c.kind, c.status, c.version,
+		`SELECT c.id, c.project_id, p.key, c.number, c.kind, c.status, c.version, cv.change,
 		        cv.heading, cv.body, coalesce(c.concept_iri, ''), c.owner, c.tags, c.created_at, c.updated_at
 		   FROM rules c
 		   JOIN projects p ON p.id = c.project_id
 		   JOIN rule_versions cv ON cv.rule_id = c.id AND cv.version = c.version
 		  WHERE p.key = $1 AND c.number = $2`, projectKey, number,
-	).Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Kind, &c.Status, &c.Version,
+	).Scan(&c.ID, &c.Project, &c.ProjectKey, &c.Number, &c.Kind, &c.Status, &c.Version, &c.Change,
 		&c.Heading, &c.Body, &c.ConceptIRI, &owner, &tagsRaw, &c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -633,8 +633,8 @@ func (s *Store) GetRuleVersion(ctx context.Context, projectKey string, number in
 		return nil, err
 	}
 	err = s.db.QueryRowContext(ctx,
-		`SELECT heading, body FROM rule_versions WHERE rule_id = $1 AND version = $2`,
-		c.ID, version).Scan(&c.Heading, &c.Body)
+		`SELECT heading, body, change FROM rule_versions WHERE rule_id = $1 AND version = $2`,
+		c.ID, version).Scan(&c.Heading, &c.Body, &c.Change)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("rule %s v%d: %w", c.Ref, version, ErrNotFound)
 	}

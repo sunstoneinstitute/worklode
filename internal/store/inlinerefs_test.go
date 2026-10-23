@@ -185,3 +185,148 @@ func TestRuleReferencesAcrossVersions(t *testing.T) {
 		t.Errorf("v1: %q, want %q", got, want)
 	}
 }
+
+// normalizeNode runs NormalizeNode in its own event's transaction.
+func normalizeNode(t *testing.T, s *Store, kind model.NodeKind, id string) (bool, string, error) {
+	t.Helper()
+	var changed bool
+	var diff string
+	_, _, err := s.RecordDocEvent(t.Context(), "normalize", "cli",
+		fmt.Sprintf("normalize-%d", docEventSeq.Add(1)), "refs.normalized", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			changed, diff, err = NormalizeNode(tx, s.Now(), "p1", kind, id, eventID)
+			return err
+		})
+	return changed, diff, err
+}
+
+// taskCount counts tasks, so a test can see that a write minted none.
+func taskCount(t *testing.T, s *Store) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRowContext(t.Context(), `SELECT count(*) FROM tasks`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// TestNormalizeAcceptedRule: an accepted rule normalizes to a new accepted
+// version marked normalize, with no review task (WL-REQ-1855).
+func TestNormalizeAcceptedRule(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "Target", Body: "T.", Kind: "invariant"}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "Names", Body: "Names P1-REQ-1.\nAnd `P1-REQ-1`."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AcceptRule(ctx, "P1", 2, false, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	before := taskCount(t, s)
+	changed, diff, err := normalizeNode(t, s, "rule", strconv.FormatInt(ruleID(t, s, "P1", 2), 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || !strings.Contains(diff, "-Names P1-REQ-1.") || !strings.Contains(diff, "+Names P1-RULE-1.") {
+		t.Errorf("changed %v, diff:\n%s", changed, diff)
+	}
+	r, err := s.GetRule(ctx, "P1", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Version != 2 || r.Status != "accepted" || r.Change != "normalize" || !strings.HasPrefix(string(r.Body), "\nNames P1-RULE-1.\nAnd `P1-REQ-1`.") {
+		t.Errorf("v%d %s %q body %q", r.Version, r.Status, r.Change, r.Body)
+	}
+	if n := taskCount(t, s); n != before {
+		t.Errorf("tasks %d -> %d; a normalization mints no review", before, n)
+	}
+	if changed, _, err := normalizeNode(t, s, "rule", strconv.FormatInt(ruleID(t, s, "P1", 2), 10)); err != nil || changed {
+		t.Errorf("second run: changed %v, err %v", changed, err)
+	}
+}
+
+// TestNormalizeRefusesForgedChange: a rewrite that is not a pure
+// normalization of an accepted rule writes nothing and names the rule
+// (WL-REQ-1855).
+func TestNormalizeRefusesForgedChange(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "Names", Body: "Names P1-7."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AcceptRule(ctx, "P1", 1, false, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return normalizeRule(tx, "p1", ruleID(t, s, "P1", 1), "Names", "\nNames P1-7, and more.\n")
+	})
+	if err == nil || !strings.Contains(err.Error(), "P1-REQ-1") {
+		t.Fatalf("err = %v, want a refusal naming P1-REQ-1", err)
+	}
+	r, err := s.GetRule(ctx, "P1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Version != 1 || r.Status != "accepted" {
+		t.Errorf("v%d %s after a refused normalization", r.Version, r.Status)
+	}
+}
+
+// TestNormalizeTaskBody: a task body is rewritten in place (WL-REQ-1855).
+func TestNormalizeTaskBody(t *testing.T) {
+	s := openDocStore(t)
+	seedDocNoteTask(t, s, "P1-8")
+	seedDocNoteTask(t, s, "P1-7")
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE tasks SET body = $1 WHERE id = 'P1-7'`, "Needs /P1-8 first.\nThen [it](/tasks/P1-8)."); err != nil {
+		t.Fatal(err)
+	}
+	changed, _, err := normalizeNode(t, s, "task", "P1-7")
+	if err != nil || !changed {
+		t.Fatalf("changed %v, err %v", changed, err)
+	}
+	var body string
+	if err := s.db.QueryRowContext(t.Context(), `SELECT body FROM tasks WHERE id = 'P1-7'`).Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Needs P1-8 first.\nThen [it](P1-8)."; body != want {
+		t.Errorf("body %q, want %q", body, want)
+	}
+}
+
+// TestNormalizeAcceptedDoc: an accepted spec's own text normalizes to a new
+// version that stays accepted, and lode doc versions marks it normalize
+// (WL-REQ-1855).
+func TestNormalizeAcceptedDoc(t *testing.T) {
+	s := openDocStore(t)
+	seedDocNoteTask(t, s, "P1-8")
+	body := strings.Replace(ruleDocV1, "Intro.", "Intro names /P1-8.", 1)
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: body, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, d.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	before := taskCount(t, s)
+	changed, _, err := normalizeNode(t, s, "doc", strconv.FormatInt(d.ID, 10))
+	if err != nil || !changed {
+		t.Fatalf("changed %v, err %v", changed, err)
+	}
+	got, err := s.GetDoc(t.Context(), d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "accepted" || !strings.Contains(string(got.Body), "Intro names P1-8.") || !strings.Contains(string(got.Body), "\nA.\n") {
+		t.Errorf("%s body %q", got.Status, got.Body)
+	}
+	if n := taskCount(t, s); n != before {
+		t.Errorf("tasks %d -> %d; a normalization mints no review", before, n)
+	}
+	versions, err := s.ListDocVersions(t.Context(), d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) < 2 || versions[0].Version != got.Version || versions[0].Change != "normalize" || versions[1].Change != "edit" {
+		t.Errorf("versions %+v", versions)
+	}
+}
