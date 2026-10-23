@@ -35,7 +35,10 @@ type Hit struct {
 	Number   int64
 	Anchor   string // "sec-3" without '#', or ""
 	LinkText string // text of [text](url) when the hit is a Markdown link
-	InCode   bool   // inside an inline code span
+	// Literal is set inside inline code, inside quotation marks, and on a
+	// section that starts a range or list. Such a hit yields an edge but is
+	// never rewritten (WL-REQ-1854).
+	Literal bool
 }
 
 var (
@@ -60,14 +63,17 @@ var (
 
 	mdLink  = regexp.MustCompile(`\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)`)
 	bareURL = regexp.MustCompile(`(?:[A-Za-z][A-Za-z0-9+.-]*://[^/\s]*)?/[^\s<>)\]"']*`)
+	// What follows the first section of a range or list: "–§4", ", §5", ", #sec-5". spec-gate:ignore
+	sectionMore = regexp.MustCompile(`^\s*(?:[–—-]|,|and|or|to)\s*(?:§|#?sec-)`)
 )
 
 // Scan returns every candidate reference in text, in order. keys is the set
 // of project keys a bare <KEY>-<n> counts as a task id for.
 func Scan(text string, keys map[string]bool) []Hit {
-	var hits []Hit
+	lines := strings.Split(text, "\n")
+	scanned := make([]bool, len(lines))
 	fence := ""
-	for i, line := range strings.Split(text, "\n") {
+	for i, line := range lines {
 		if f := fenceOf(line); f != "" {
 			if fence == "" {
 				fence = f
@@ -76,15 +82,50 @@ func Scan(text string, keys map[string]bool) []Hit {
 			}
 			continue
 		}
-		if fence != "" {
+		scanned[i] = fence == ""
+	}
+	code := paragraphCodeSpans(lines, scanned)
+	var hits []Hit
+	for i, line := range lines {
+		if !scanned[i] {
 			continue
 		}
-		for _, h := range scanLine(line, keys) {
+		for _, h := range scanLine(line, keys, code[i]) {
 			h.Line = i + 1
 			hits = append(hits, h)
 		}
 	}
 	return hits
+}
+
+// paragraphCodeSpans returns each line's inline code spans. A code span can
+// continue onto the next line of its paragraph, so spans are found over each
+// run of scanned, non-blank lines and split back into lines.
+func paragraphCodeSpans(lines []string, scanned []bool) [][][2]int {
+	out := make([][][2]int, len(lines))
+	for i := 0; i < len(lines); {
+		if !scanned[i] || strings.TrimSpace(lines[i]) == "" {
+			i++
+			continue
+		}
+		j := i
+		for j < len(lines) && scanned[j] && strings.TrimSpace(lines[j]) != "" {
+			j++
+		}
+		para := strings.Join(lines[i:j], "\n")
+		for _, sp := range codeSpans(para) {
+			off := 0
+			for k := i; k < j; k++ {
+				s, e := max(sp[0]-off, 0), min(sp[1]-off, len(lines[k]))
+				if s < e {
+					out[k] = append(out[k], [2]int{s, e})
+				}
+				off += len(lines[k]) + 1
+			}
+		}
+		i = j
+	}
+	return out
 }
 
 // fenceOf returns the opening run of a code fence line, "" for other lines.
@@ -103,7 +144,7 @@ func fenceOf(line string) string {
 	return s[:n]
 }
 
-func scanLine(line string, keys map[string]bool) []Hit {
+func scanLine(line string, keys map[string]bool, code [][2]int) []Hit {
 	var hits []Hit
 	taken := func(s, e int) bool {
 		for _, h := range hits {
@@ -182,15 +223,38 @@ func scanLine(line string, keys map[string]bool) []Hit {
 	}
 
 	slices.SortFunc(hits, func(a, b Hit) int { return a.Start - b.Start })
-	spans := codeSpans(line)
-	for i := range hits {
-		for _, sp := range spans {
-			if hits[i].Start >= sp[0] && hits[i].End <= sp[1] {
-				hits[i].InCode = true
+	literal := slices.Concat(code, quoteSpans(line, code))
+	for i, h := range hits {
+		if h.Anchor != "" && sectionMore.MatchString(line[h.End:]) {
+			hits[i].Literal = true
+		}
+		for _, sp := range literal {
+			if h.Start >= sp[0] && h.End <= sp[1] {
+				hits[i].Literal = true
 			}
 		}
 	}
 	return hits
+}
+
+// quoteSpans returns the [start,end) of each double-quoted run on the line,
+// straight or curly, ignoring quote marks inside code.
+func quoteSpans(line string, code [][2]int) [][2]int {
+	var out [][2]int
+	open := -1
+	for i, r := range line {
+		if slices.ContainsFunc(code, func(sp [2]int) bool { return i >= sp[0] && i < sp[1] }) {
+			continue
+		}
+		switch {
+		case r == '“' || (r == '"' && open < 0):
+			open = i
+		case (r == '”' || r == '"') && open >= 0:
+			out = append(out, [2]int{open, i + len(string(r))})
+			open = -1
+		}
+	}
+	return out
 }
 
 func isAlnum(c byte) bool {
