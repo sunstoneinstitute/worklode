@@ -59,7 +59,11 @@ func RuleRender(w io.Writer, c model.Rule) {
 		fmt.Fprintf(w, "  concept:  %s\n", c.ConceptIRI)
 	}
 	fmt.Fprintf(w, "  status:   %s\n", c.Status)
-	fmt.Fprintf(w, "  version:  %d\n", c.Version)
+	if c.Change == "normalize" {
+		fmt.Fprintf(w, "  version:  %d (normalize)\n", c.Version)
+	} else {
+		fmt.Fprintf(w, "  version:  %d\n", c.Version)
+	}
 	if c.Owner != "" {
 		fmt.Fprintf(w, "  owner:    %s\n", c.Owner)
 	}

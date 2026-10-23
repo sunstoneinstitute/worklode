@@ -326,7 +326,7 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 	// too: the acceptance event's external id is derived from the document's
 	// IRI and version (WL-RULE-179), so a re-accept at an unchanged version
 	// collapses at the log.
-	if version, err = bumpDocVersion(tx, id); err != nil {
+	if version, err = bumpDocVersion(tx, id, "edit"); err != nil {
 		return nil, err
 	}
 	ts := now.UTC().Truncate(time.Second)
@@ -1158,11 +1158,11 @@ func (s *Store) GeneratedDocs(ctx context.Context, taskID string) ([]model.TaskG
 }
 
 // scanDocVersionSummary scans one row of ListDocVersions' union: version,
-// title, issued, created_at, in that order.
+// title, issued, created_at, change, in that order.
 func scanDocVersionSummary(row rowScanner) (model.DocVersionSummary, error) {
 	var v model.DocVersionSummary
 	var issued sql.NullTime
-	if err := row.Scan(&v.Version, &v.Title, &issued, &v.CreatedAt); err != nil {
+	if err := row.Scan(&v.Version, &v.Title, &issued, &v.CreatedAt, &v.Change); err != nil {
 		return model.DocVersionSummary{}, err
 	}
 	if issued.Valid {
@@ -1179,10 +1179,13 @@ func (s *Store) ListDocVersions(ctx context.Context, id int64) (out []model.DocV
 	defer func() { s.metrics.docOp("list-versions", err) }()
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT version, title, issued, updated_at FROM docs WHERE id = $1
-		 UNION ALL
-		 SELECT version, title, issued, created_at FROM doc_versions WHERE doc_id = $1
-		 ORDER BY version DESC`, id)
+		`WITH v AS (
+		     SELECT version, title, issued, updated_at AS at FROM docs WHERE id = $1
+		     UNION ALL
+		     SELECT version, title, issued, created_at FROM doc_versions WHERE doc_id = $1)
+		 SELECT v.version, v.title, v.issued, v.at, coalesce(p.change, 'edit')
+		   FROM v LEFT JOIN doc_versions p ON p.doc_id = $1 AND p.version = v.version - 1
+		  ORDER BY v.version DESC`, id)
 	if err != nil {
 		return nil, fmt.Errorf("list versions of doc %d: %w", id, err)
 	}

@@ -336,7 +336,7 @@ func unexecutedCoveringPlans(tx *sql.Tx, docID int64, anchor string, exclude int
 func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 	next parsedDoc, changed []string, prior map[string]priorSection, eventID int64) (int, error) {
 
-	version, err := bumpDocVersion(tx, in.ID)
+	version, err := bumpDocVersion(tx, in.ID, "edit")
 	if err != nil {
 		return 0, err
 	}

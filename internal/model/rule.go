@@ -15,9 +15,12 @@ type Rule struct {
 	Number int64  `json:"number"`
 	// Kind is requirement, catalogue, invariant, definition, principle or
 	// capability (WL-REQ-1642). informative is retired and reads as a principle.
-	Kind    string   `json:"kind"`
-	Status  string   `json:"status"` // draft | accepted | superseded | withdrawn
-	Version int      `json:"version"`
+	Kind    string `json:"kind"`
+	Status  string `json:"status"` // draft | accepted | superseded | withdrawn
+	Version int    `json:"version"`
+	// Change is how Version was made: edit, or normalize for a rewrite of
+	// inline references only (WL-REQ-1855).
+	Change  string   `json:"change,omitempty"`
 	Heading Markdown `json:"heading"`
 	Body    Markdown `json:"body"`
 	// ConceptIRI is the ns/concept.ttl concept a definition defines, empty
