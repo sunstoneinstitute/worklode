@@ -54,5 +54,5 @@ patches:
         value: worklode.sunstone.internal
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
-    newTag: v0.16.1
+    newTag: v0.17.0
     newName: ghcr.io/sunstoneinstitute/worklode
