@@ -42,7 +42,8 @@ command or a flag, then `go test ./internal/cmd -run TestCommandReference
 **`lode doc derive`, `lode task derive` and `lode rule derive` (WL-REQ-1860)** are
 catalogued in `references/commands.md` by the generator above. They take
 `[<ref>...]`, `--project`, `--status`, `--kind` (not on `rule`), `--all`,
-`--dry-run`, `--diff`, `--classify`, `--reclassify` and `--json`. No skill or other surface names them yet.
+`--dry-run`, `--diff`, `--classify`, `--reclassify`, `--stats` (WL-REQ-1859, the
+classification quality report) and `--json`. No skill or other surface names them yet.
 
 **The agent host scripts are instructions by another route.** `supervisor.sh`
 does not merely invoke `lode`: it reads

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -116,4 +117,29 @@ func RefDeriveDiff(w io.Writer, rep model.RefDeriveReport) {
 			fmt.Fprintf(w, "~ %s %s %s %s %s:%d (%s %.2f)\n", n.Ref, c.Predicate, c.ToKind, c.ToID, c.Field, c.Line, c.Classifier, c.Confidence)
 		}
 	}
+}
+
+// RefStats calls GET /api/v1/projects/{id}/refs/stats (WL-REQ-1859); raw is
+// the response JSON.
+func (c *Client) RefStats(ctx context.Context, project string, in model.RefStatsParams) (model.RefStats, []byte, error) {
+	path := withParams("/api/v1/projects/"+url.PathEscape(project)+"/refs/stats", in)
+	return doJSON[model.RefStats](ctx, c, http.MethodGet, path, nil, "ref stats")
+}
+
+// RefStatsTable prints one line per classifier version, predicate and
+// confidence bucket: the four outcome counts, each with its rate.
+func RefStatsTable(w io.Writer, st model.RefStats) {
+	if len(st.Rows) == 0 {
+		fmt.Fprintln(w, "No classifications.")
+		return
+	}
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "CLASSIFIER\tVERSION\tPREDICATE\tCONFIDENCE\tKEPT\tADJUSTED\tREJECTED\tMISSED")
+	pct := func(n int, rate float64) string { return fmt.Sprintf("%d (%.0f%%)", n, rate*100) }
+	for _, r := range st.Rows {
+		fmt.Fprintf(tw, "%s\t%d\t%s\t%.1f-%.1f\t%s\t%s\t%s\t%s\n", r.Classifier, r.ClassifierVersion, r.Predicate,
+			r.ConfidenceBucket, r.ConfidenceBucket+0.1,
+			pct(r.Kept, r.KeptRate), pct(r.Adjusted, r.AdjustedRate), pct(r.Rejected, r.RejectedRate), pct(r.Missed, r.MissedRate))
+	}
+	tw.Flush()
 }

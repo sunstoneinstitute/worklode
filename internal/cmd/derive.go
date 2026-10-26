@@ -18,7 +18,7 @@ func newDeriveCmd(kind model.NodeKind) *cobra.Command {
 	var scope scopeFlags
 	var statuses []string
 	var nodeKind string
-	var all, dryRun, diff, classify, reclassify bool
+	var all, dryRun, diff, classify, reclassify, stats bool
 	cmd := &cobra.Command{
 		Use:   "derive [<ref>...]",
 		Short: fmt.Sprintf("Normalize and re-extract the inline references of %ss", kind),
@@ -27,13 +27,18 @@ form, then re-derive their reference rows. Name refs, give a filter, or pass
 --all. --dry-run and --diff report what would change and write nothing.
 --classify also asks the jev classifier which relation each unclassified
 reference states, and writes the typed edge it picks; --reclassify re-asks
-those an older classifier version answered.`, kind),
+those an older classifier version answered. --stats writes nothing and
+reports how the selected %ss' classifications fared, by classifier version,
+predicate and confidence bucket.`, kind, kind),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 && len(statuses) == 0 && nodeKind == "" && !all {
 				return errors.New("select nodes: name refs, or pass --status, --kind or --all")
 			}
 			if reclassify && !classify {
 				return errors.New("--reclassify needs --classify")
+			}
+			if stats && (classify || dryRun || diff) {
+				return errors.New("--stats cannot combine with --classify, --dry-run or --diff")
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -45,6 +50,19 @@ those an older classifier version answered.`, kind),
 			}
 			if sc.Project == "" {
 				return errNoProject
+			}
+			if stats {
+				st, raw, err := c.RefStats(cmd.Context(), sc.Project, model.RefStatsParams{Kind: kind, Refs: args, Status: statuses,
+					DocKind: kindFilter(kind, "doc", nodeKind), TaskKind: kindFilter(kind, "task", nodeKind), All: all})
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+				} else {
+					cli.RefStatsTable(cmd.OutOrStdout(), st)
+				}
+				return nil
 			}
 			in := model.RefDeriveParams{Kind: kind, Refs: args, Status: statuses, All: all, DryRun: dryRun, Diff: diff,
 				Classify: classify, Reclassify: reclassify}
@@ -86,7 +104,16 @@ those an older classifier version answered.`, kind),
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would change, write nothing")
 	cmd.Flags().BoolVar(&diff, "diff", false, "print the text and reference changes, write nothing")
 	cmd.Flags().BoolVar(&classify, "classify", false, "also run the jev classifier on references it has not classified")
+	cmd.Flags().BoolVar(&stats, "stats", false, "report the classification quality of the selected nodes, write nothing")
 	cmd.Flags().BoolVar(&reclassify, "reclassify", false, "with --classify: also re-run references an older classifier version answered")
 	addScopeFlags(cmd, &scope, "project id")
 	return cmd
+}
+
+// kindFilter is nodeKind when the command's kind is want, else empty.
+func kindFilter(kind, want model.NodeKind, nodeKind string) string {
+	if kind == want {
+		return nodeKind
+	}
+	return ""
 }
