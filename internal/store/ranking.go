@@ -65,7 +65,7 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 }
 
 // readyCandidates returns every task eligible for pickup: state ready, no
-// child_of children, neither a decision nor a rally, not
+// childOf children, neither a decision nor a rally, not
 // needs_decomposition, not human_only, unleased, not blocked by an open
 // 'blocks' edge from a task not
 // in a closed state, and not held by a plan-to-plan ordering edge
@@ -94,7 +94,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 		  AND t.deleted_at IS NULL
 		  AND NOT EXISTS (SELECT 1 FROM task_edges c
 		                  JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
-		                  WHERE c.to_task = t.id AND c.type = 'child_of')
+		                  WHERE c.to_task = t.id AND c.type = 'childOf')
 		  AND t.kind = ANY($3)
 		  AND NOT t.needs_decomposition
 		  AND NOT t.human_only

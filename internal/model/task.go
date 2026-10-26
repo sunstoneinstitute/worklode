@@ -269,7 +269,7 @@ type TaskListParams struct {
 	// Parent narrows to the direct children of this task id.
 	Parent string `query:"parent,omitempty"`
 	// Milestone narrows to the tasks attached to this milestone and every
-	// task under them in the child_of hierarchy.
+	// task under them in the childOf hierarchy.
 	Milestone string `query:"milestone,omitempty"`
 	// Assignee narrows to tasks assigned to this actor id.
 	Assignee string `query:"assignee,omitempty"`

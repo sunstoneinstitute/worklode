@@ -250,7 +250,7 @@ func checkPlanTasksMinted(tx *sql.Tx, id int64, doc *designdoc.Document) error {
 // them the same way — each plan's tasks are held by the next plan's open set,
 // so no set can ever close — and plans stay mutable at any status, so it is
 // only the write closing the cycle that can catch it. Both are refused here,
-// the way AddEdge refuses a child_of cycle between tasks (WL-144).
+// the way AddEdge refuses a childOf cycle between tasks (WL-144).
 //
 // docKind is the declaring document's own kind, which every caller already
 // holds (from lockDoc or from the create input) — re-reading it here would

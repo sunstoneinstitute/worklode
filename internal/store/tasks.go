@@ -68,12 +68,12 @@ type TaskFilter struct {
 	Kind     string
 	Parent   string
 	Assignee string
-	// HasChildren narrows to containers — tasks with at least one child_of
+	// HasChildren narrows to containers — tasks with at least one childOf
 	// child. Container-ness is inferred from the edges, so this is the only
 	// selector for it; no kind declares one (WL-REQ-88).
 	HasChildren bool
 	// Milestone narrows to the tasks attached to this milestone and their
-	// child_of descendants, which carry no milestone of their own.
+	// childOf descendants, which carry no milestone of their own.
 	Milestone string
 	// Repo narrows to the tasks of the project that owns this "owner/name"
 	// repo. A repo maps to at most one project (project_repos.repo is
@@ -101,7 +101,7 @@ type TaskFilter struct {
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
-// blocked until A reaches a closed state (see taskClosed); "A child_of B"
+// blocked until A reaches a closed state (see taskClosed); "A childOf B"
 // makes B a container.
 type Edge struct {
 	FromTask string
@@ -934,13 +934,13 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	}
 	if f.Parent != "" {
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges e
-		          WHERE e.from_task = tasks.id AND e.to_task = `+args.next(f.Parent)+` AND e.type = 'child_of')`)
+		          WHERE e.from_task = tasks.id AND e.to_task = `+args.next(f.Parent)+` AND e.type = 'childOf')`)
 	}
 	if f.Milestone != "" {
 		conds = append(conds, `id IN (WITH RECURSIVE m(id) AS (
 		              SELECT id FROM tasks WHERE milestone_id = `+args.next(f.Milestone)+`
 		            UNION
-		              SELECT e.from_task FROM task_edges e JOIN m ON e.to_task = m.id AND e.type = 'child_of'
+		              SELECT e.from_task FROM task_edges e JOIN m ON e.to_task = m.id AND e.type = 'childOf'
 		          ) SELECT id FROM m)`)
 	}
 	if f.HasChildren {
@@ -949,7 +949,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 		// would list as a container the claim path treats as an ordinary task.
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges c
 		                              JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
-		                              WHERE c.to_task = tasks.id AND c.type = 'child_of')`)
+		                              WHERE c.to_task = tasks.id AND c.type = 'childOf')`)
 	}
 	if f.Repo != "" {
 		conds = append(conds, `EXISTS (SELECT 1 FROM project_repos pr
@@ -1017,18 +1017,18 @@ func taskProjects(tx *sql.Tx, ids ...string) (map[string]string, error) {
 }
 
 // AddEdge inserts a typed edge between two existing tasks inside the given
-// transaction. Self-edges are rejected for all four types. A child_of edge
+// transaction. Self-edges are rejected for all four types. A childOf edge
 // must also satisfy the spec-004 hierarchy invariants (see checkHierarchy):
 // one project, one parent per task, no cycle, and at most maxHierarchyDepth
 // edges. A 'blocks' edge may not start at a rally: a rally's own blockers are
 // its membership, and it blocks nothing in turn; nor may it close a 'blocks'
 // loop, which would deadlock every task on it (ErrCycle). follow_up_to and
-// duplicate_of are unchecked beyond their partial unique indexes: both are
+// duplicateOf are unchecked beyond their partial unique indexes: both are
 // cross-project by design and nothing walks either transitively. A missing
 // endpoint returns ErrNotFound. Appends a state_log row for both endpoints,
 // attributed to eventID, so a cross-project edge dirties both projects.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID int64) error {
-	if typ != "child_of" && typ != "blocks" && typ != "follow_up_to" && typ != "duplicate_of" {
+	if typ != "childOf" && typ != "blocks" && typ != "followUpTo" && typ != "duplicateOf" {
 		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
 	}
 	if fromTask == toTask {
@@ -1047,7 +1047,7 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
 	}
-	if typ == "child_of" {
+	if typ == "childOf" {
 		if err := checkHierarchy(tx, fromTask, toTask, project); err != nil {
 			return err
 		}
@@ -1114,7 +1114,7 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 // reachesViaEdge reports whether target is reachable from start by following
 // edges of type typ in the from_task -> to_task direction. The visited set
 // keeps the walk terminating even if the stored graph already contains a
-// cycle. Used to refuse the edge that would close one: for child_of that
+// cycle. Used to refuse the edge that would close one: for childOf that
 // direction is child -> parent, for blocks it is blocker -> blocked.
 func reachesViaEdge(tx *sql.Tx, start, target, typ string) (bool, error) {
 	visited := map[string]bool{start: true}
@@ -1380,7 +1380,7 @@ func taskClosed(alias string) string {
 	return `(` + state + ` = 'abandoned' OR (` + deliveryRank(state) + ` > 0
 	     AND (EXISTS (SELECT 1 FROM task_edges ch
 	                  JOIN tasks cht ON cht.id = ch.from_task AND cht.deleted_at IS NULL
-	                  WHERE ch.to_task = ` + alias + `.id AND ch.type = 'child_of')
+	                  WHERE ch.to_task = ` + alias + `.id AND ch.type = 'childOf')
 	          OR NOT EXISTS (SELECT 1 FROM task_commits tc
 	                         JOIN main_commits mc ON mc.repo = tc.repo AND mc.sha = tc.sha
 	                         LEFT JOIN project_repos pr ON pr.repo = tc.repo

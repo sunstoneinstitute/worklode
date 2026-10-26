@@ -90,7 +90,7 @@ type TaskGeneratedDoc struct {
 
 // TaskListDetail is one row of GET /api/v1/tasks?detail=true: the base task
 // plus the two field groups a list consumer cannot cheaply reconstruct. It is
-// not TaskDetail: hierarchy is derivable from the child_of edges below, and
+// not TaskDetail: hierarchy is derivable from the childOf edges below, and
 // lease is per-task ephemeral state that a cached list would misreport. Both
 // stay on GET /api/v1/tasks/{id}.
 type TaskListDetail struct {

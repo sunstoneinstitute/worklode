@@ -443,8 +443,8 @@ func TestBriefParent(t *testing.T) {
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+	if err := addEdge(t, s, child.ID, container.ID, "childOf"); err != nil {
+		t.Fatalf("childOf: %v", err)
 	}
 
 	b, err := s.Brief(t.Context(), child.ID, BriefOptions{Skills: true})

@@ -53,8 +53,8 @@ func TestAllBlockEdges(t *testing.T) {
 	if err := addEdge(t, s, a.ID, b.ID, "blocks"); err != nil {
 		t.Fatalf("addEdge blocks: %v", err)
 	}
-	if err := addEdge(t, s, b.ID, a.ID, "child_of"); err != nil {
-		t.Fatalf("addEdge child_of: %v", err)
+	if err := addEdge(t, s, b.ID, a.ID, "childOf"); err != nil {
+		t.Fatalf("addEdge childOf: %v", err)
 	}
 
 	edges, err := s.AllBlockEdges(context.Background())

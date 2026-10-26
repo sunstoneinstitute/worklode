@@ -244,3 +244,5 @@ configMapGenerator:
       - migrations/0115_rule-references-to-inline-refs.down.sql
       - migrations/0116_inline-refs-source-only-kinds.up.sql
       - migrations/0116_inline-refs-source-only-kinds.down.sql
+      - migrations/NEW-task-edge-ontology-names.up.sql
+      - migrations/NEW-task-edge-ontology-names.down.sql
