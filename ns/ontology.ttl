@@ -278,6 +278,16 @@ wl:governs a owl:ObjectProperty ;
     rdfs:range wl:Component ;
     rdfs:comment "This design doc governs the architecture of that component." .
 
+wl:governedBy a owl:ObjectProperty ;
+    skos:definition "is governed by" ;
+    skos:prefLabel "governed by" ;
+    wl:edgeOrigin wlc:declared ;
+    wl:storedAs "task_governed_by.governedBy" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Rule ;
+    rdfs:comment "This task is governed by that rule: the rule's context applies to the task." .
+
 wl:deliveredBy a owl:ObjectProperty ;
     skos:definition "is delivered by" ;
     wl:layer wlc:intent ;
@@ -451,6 +461,8 @@ wl:position a owl:DatatypeProperty ;
 
 wl:refines a owl:ObjectProperty ;
     skos:definition "refines" ;
+    skos:prefLabel "refines" ;
+    skos:altLabel "narrows" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.refines" ;
     wl:layer wlc:intent ;
@@ -470,6 +482,8 @@ wl:refinedBy a owl:ObjectProperty ;
 
 wl:needs a owl:ObjectProperty ;
     skos:definition "needs" ;
+    skos:prefLabel "needs" ;
+    skos:altLabel "relies on" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.needs" ;
     wl:layer wlc:intent ;
@@ -489,6 +503,7 @@ wl:neededBy a owl:ObjectProperty ;
 
 wl:constrains a owl:ObjectProperty ;
     skos:definition "constrains" ;
+    skos:prefLabel "constrains" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.constrains" ;
     wl:layer wlc:intent ;
@@ -498,6 +513,7 @@ wl:constrains a owl:ObjectProperty ;
 
 wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ;
     skos:definition "conflicts with" ;
+    skos:prefLabel "conflicts with" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.conflictsWith" ;
     wl:layer wlc:intent ;
@@ -541,6 +557,7 @@ wl:defers a owl:ObjectProperty ;
 
 wl:amends a owl:ObjectProperty ;
     skos:definition "amends" ;
+    skos:prefLabel "amends" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "rule_edges.amends" ;
     wl:layer wlc:intent ;
@@ -639,6 +656,8 @@ wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;
 
 wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;
     skos:definition "depends on" ;
+    skos:prefLabel "depends on" ;
+    skos:altLabel "blocked by", "requires task" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "task_edges.dependsOn" ;
     wl:layer wlc:execution ;
@@ -660,6 +679,7 @@ wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
 
 wl:blockedByPlan a owl:ObjectProperty, owl:TransitiveProperty ;
     skos:definition "is ordered after" ;
+    skos:prefLabel "runs after" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "doc_edges.blockedBy" ;
     wl:layer wlc:execution ;
@@ -690,6 +710,8 @@ wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
 
 wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
     skos:definition "duplicates" ;
+    skos:prefLabel "duplicate of" ;
+    skos:altLabel "duplicates" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "task_edges.duplicateOf" ;
     wl:layer wlc:execution ;
@@ -706,6 +728,8 @@ wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
 
 wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
     skos:definition "follows up on" ;
+    skos:prefLabel "follow-up to" ;
+    skos:altLabel "follows up on" ;
     wl:edgeOrigin wlc:declared ;
     wl:storedAs "task_edges.followUpTo" ;
     wl:layer wlc:execution ;
@@ -880,6 +904,7 @@ wl:storedAs a owl:AnnotationProperty ;
 
 dct:requires wl:edgeOrigin wlc:declared ;
     skos:definition "requires" ;
+    skos:prefLabel "requires" ;
     wl:storedAs "doc_edges.requires" ;
     rdfs:comment "Declared between documents: the subject needs the object." .
 
@@ -890,6 +915,7 @@ dct:isRequiredBy wl:edgeOrigin wlc:inferred ;
 
 prov:wasDerivedFrom wl:edgeOrigin wlc:declared ;
     skos:definition "was derived from" ;
+    skos:prefLabel "derived from" ;
     wl:storedAs "doc_edges.wasDerivedFrom", "rule_edges.wasDerivedFrom" ;
     rdfs:comment "Declared on a document or rule derived from the object." .
 
@@ -905,6 +931,8 @@ dct:isReplacedBy wl:edgeOrigin wlc:inferred ;
 
 dct:isPartOf wl:edgeOrigin wlc:declared ;
     skos:definition "is part of" ;
+    skos:prefLabel "child of" ;
+    skos:altLabel "subtask of", "part of" ;
     wl:storedAs "task_edges.childOf" ;
     rdfs:comment "Declared on a child task, pointing at its parent." .
 
