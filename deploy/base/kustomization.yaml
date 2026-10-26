@@ -248,5 +248,5 @@ configMapGenerator:
       - migrations/0117_task-edge-ontology-names.down.sql
       - migrations/0118_inline-refs-via.up.sql
       - migrations/0118_inline-refs-via.down.sql
-      - migrations/NEW-ref-classifications.up.sql
-      - migrations/NEW-ref-classifications.down.sql
+      - migrations/0119_ref-classifications.up.sql
+      - migrations/0119_ref-classifications.down.sql
