@@ -8,6 +8,9 @@ package eventbus
 const (
 	TypeDocumentSubmitted = "wl:DocumentSubmitted"
 	TypeDocumentAccepted  = "wl:DocumentAccepted"
+
+	TypeReferenceClassified    = "wl:ReferenceClassified"
+	TypeClassificationRepaired = "wl:ClassificationRepaired"
 )
 
 // baseProperties are allowed in every domain-event payload.
@@ -22,6 +25,9 @@ var baseProperties = []string{
 var payloadProperties = map[string][]string{
 	TypeDocumentSubmitted: {},
 	TypeDocumentAccepted:  {"wl:fromStatus", "wl:toStatus"},
+	// The payload of these two is a ref_classifications row, not a DomainEvent.
+	TypeReferenceClassified:    {},
+	TypeClassificationRepaired: {},
 }
 
 // KnownType reports whether typ is a generated domain-event type. Metrics
