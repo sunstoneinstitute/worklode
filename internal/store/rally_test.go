@@ -50,7 +50,7 @@ func TestRallyNeverInReadySet(t *testing.T) {
 }
 
 // TestRallyCannotTakeChildren covers both doors into childOf: the edge and
-// Decompose. A rally's membership is its 'blocks' edges; children would be a
+// Decompose. A rally's membership is its 'dependsOn' edges; children would be a
 // second, contradicting set.
 func TestRallyCannotTakeChildren(t *testing.T) {
 	t.Parallel()
@@ -66,23 +66,23 @@ func TestRallyCannotTakeChildren(t *testing.T) {
 	}
 }
 
-// TestRallyCannotBlock: a rally is only ever the to_task of a 'blocks' edge.
+// TestRallyCannotBlock: a rally is only ever the from_task of a 'dependsOn' edge.
 func TestRallyCannotBlock(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
 	rally := createTask(t, s, taskTestNow, rallyInput())
 	other := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	err := addEdge(t, s, rally.ID, other.ID, "blocks")
+	err := addEdge(t, s, other.ID, rally.ID, "dependsOn")
 	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("rally blocks %s: want ErrInvalidInput, got %v", other.ID, err)
+		t.Fatalf("%s dependsOn rally: want ErrInvalidInput, got %v", other.ID, err)
 	}
 	if !strings.Contains(err.Error(), rally.ID) {
 		t.Fatalf("refusal %q does not name the rally %s", err, rally.ID)
 	}
 	// The other direction is the whole point of the kind.
-	if err := addEdge(t, s, other.ID, rally.ID, "blocks"); err != nil {
-		t.Fatalf("%s blocks rally: %v", other.ID, err)
+	if err := addEdge(t, s, rally.ID, other.ID, "dependsOn"); err != nil {
+		t.Fatalf("rally dependsOn %s: %v", other.ID, err)
 	}
 }
 
@@ -169,7 +169,7 @@ func TestRallyMembersTransitive(t *testing.T) {
 	outside := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	for _, e := range [][2]string{{near.ID, rally.ID}, {far.ID, near.ID}, {done.ID, rally.ID}} {
-		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
+		if err := addEdge(t, s, e[1], e[0], "dependsOn"); err != nil {
 			t.Fatalf("addEdge %s blocks %s: %v", e[0], e[1], err)
 		}
 	}
@@ -192,7 +192,7 @@ func TestRallyMembersIgnoreClosedRally(t *testing.T) {
 	s := openTaskStore(t)
 	rally := createTask(t, s, taskTestNow, rallyInput())
 	member := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, member.ID, rally.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, rally.ID, member.ID, "dependsOn"); err != nil {
 		t.Fatalf("addEdge: %v", err)
 	}
 	walkTo(t, s, rally.ID, "abandoned")
@@ -207,7 +207,7 @@ func TestRallyMembersIgnoreClosedRally(t *testing.T) {
 }
 
 // TestRallyMembersCycleTerminates: AddEdge now refuses the write that closes
-// a 'blocks' cycle, but rows written before that guard existed can still hold
+// a 'dependsOn' cycle, but rows written before that guard existed can still hold
 // one, so only the CTE's UNION dedup keeps the walk finite. A UNION ALL
 // regression hangs here instead of returning.
 func TestRallyMembersCycleTerminates(t *testing.T) {
@@ -217,7 +217,7 @@ func TestRallyMembersCycleTerminates(t *testing.T) {
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
 	b := createTask(t, s, taskTestNow, defaultTaskInput())
 	for _, e := range [][2]string{{a.ID, rally.ID}, {b.ID, a.ID}, {a.ID, b.ID}} {
-		insertEdgeRaw(t, s, e[0], e[1], "blocks")
+		insertEdgeRaw(t, s, e[1], e[0], "dependsOn")
 	}
 
 	got, err := s.rallyMembers(t.Context())
@@ -261,7 +261,7 @@ func TestRallyMemberOutranksCritical(t *testing.T) {
 	t.Parallel()
 	s := openClaimNextStore(t)
 	rally, low, critical := rallyFixture(t, s)
-	if err := addEdge(t, s, low.ID, rally.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, rally.ID, low.ID, "dependsOn"); err != nil {
 		t.Fatalf("addEdge: %v", err)
 	}
 
@@ -303,7 +303,7 @@ func TestRallyMemberTransitiveRanksIn(t *testing.T) {
 	rally, near, critical := rallyFixture(t, s)
 	far := createTask(t, s, claimNextTestNow, defaultTaskInput())
 	for _, e := range [][2]string{{near.ID, rally.ID}, {far.ID, near.ID}} {
-		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
+		if err := addEdge(t, s, e[1], e[0], "dependsOn"); err != nil {
 			t.Fatalf("addEdge %s blocks %s: %v", e[0], e[1], err)
 		}
 	}
@@ -327,7 +327,7 @@ func TestClaimNextFallsThroughLeasedRallyMembers(t *testing.T) {
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	rally, member, other := rallyFixture(t, s)
-	if err := addEdge(t, s, member.ID, rally.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, rally.ID, member.ID, "dependsOn"); err != nil {
 		t.Fatalf("addEdge: %v", err)
 	}
 	if _, err := s.Claim(ctx, member.ID, "stig", "host:/wt-1", 0); err != nil {
@@ -390,7 +390,7 @@ func TestDraftRallyContributesNoMembers(t *testing.T) {
 	s := openTaskStore(t)
 	rally := createTask(t, s, taskTestNow, draftRallyInput())
 	member := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, member.ID, rally.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, rally.ID, member.ID, "dependsOn"); err != nil {
 		t.Fatalf("addEdge: %v", err)
 	}
 
@@ -422,7 +422,7 @@ func TestDraftRallySteersNothing(t *testing.T) {
 	s := openClaimNextStore(t)
 	low, critical := rallyRankingPair(t, s)
 	draft := createTask(t, s, claimNextTestNow, draftRallyInput())
-	if err := addEdge(t, s, low.ID, draft.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, draft.ID, low.ID, "dependsOn"); err != nil {
 		t.Fatalf("addEdge: %v", err)
 	}
 
@@ -527,7 +527,7 @@ func TestRetagRefusesStateTheKindForbids(t *testing.T) {
 		}, "decision row"},
 		{"rally blocking another task", "rally", func(t *testing.T, s *Store, id string) {
 			other := createTask(t, s, taskTestNow, defaultTaskInput())
-			if err := addEdge(t, s, id, other.ID, "blocks"); err != nil {
+			if err := addEdge(t, s, other.ID, id, "dependsOn"); err != nil {
 				t.Fatalf("addEdge: %v", err)
 			}
 		}, "blocks 1 task"},
@@ -596,8 +596,8 @@ func TestRetagToRallyRefusedWhenOneIsActive(t *testing.T) {
 }
 
 // TestRetagToRallyRefusedWhenPlanMinted: a plan-minted task carries
-// plan-ordering blockers that are not 'blocks' edges, and a rally's
-// membership is its 'blocks' edges alone. Retag is the only way plan_doc and
+// plan-ordering blockers that are not 'dependsOn' edges, and a rally's
+// membership is its 'dependsOn' edges alone. Retag is the only way plan_doc and
 // kind='rally' could ever meet, so this is what makes "a rally carries no
 // plan_doc" true rather than merely so far unobserved.
 func TestRetagToRallyRefusedWhenPlanMinted(t *testing.T) {
@@ -668,7 +668,7 @@ func TestRallyMemberCountSkipsTombstoned(t *testing.T) {
 	live := createTask(t, s, taskTestNow, defaultTaskInput())
 	gone := createTask(t, s, taskTestNow, defaultTaskInput())
 	for _, m := range []string{live.ID, gone.ID} {
-		if err := addEdge(t, s, m, rally.ID, "blocks"); err != nil {
+		if err := addEdge(t, s, rally.ID, m, "dependsOn"); err != nil {
 			t.Fatalf("addEdge %s blocks %s: %v", m, rally.ID, err)
 		}
 	}

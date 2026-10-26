@@ -1,7 +1,7 @@
 // rally.go holds what the rally kind needs: a project's active rally, the
 // draft rally the Progress page assembles into, the membership set that
 // steers ranking, and the writes that fill a draft. A rally carries no work
-// of its own — the 'blocks' edges pointing at it are its whole content,
+// of its own — its own 'dependsOn' edges are its whole content,
 // naming the tasks a human picked as the thing to finish now.
 //
 // A project holds at most one DRAFT rally and at most one ACTIVE one, each
@@ -87,7 +87,7 @@ func (s *Store) DraftRally(ctx context.Context, projectID string) (*model.Task, 
 }
 
 // RallyMemberCount returns how many live tasks a rally's direct membership
-// names: the 'blocks' edges pointing at it, whatever state those tasks are
+// names: the to_task of its 'dependsOn' edges, whatever state those tasks are
 // in. The tombstone filter is the point — ListEdges has none while
 // blockerRelation does, so a total taken from the raw edges would keep a
 // soft-deleted member in the denominator while the open set dropped it, and
@@ -96,8 +96,8 @@ func (s *Store) RallyMemberCount(ctx context.Context, rallyID string) (int, erro
 	var n int
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT count(*) FROM task_edges e
-		   JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
-		  WHERE e.to_task = $1 AND e.type = 'blocks'`, rallyID).Scan(&n); err != nil {
+		   JOIN tasks f ON f.id = e.to_task AND f.deleted_at IS NULL
+		  WHERE e.from_task = $1 AND e.type = 'dependsOn'`, rallyID).Scan(&n); err != nil {
 		return 0, fmt.Errorf("rally member count for %s: %w", rallyID, err)
 	}
 	return n, nil
@@ -113,8 +113,8 @@ func (s *Store) RallyMemberCount(ctx context.Context, rallyID string) (int, erro
 // The relation walked is blockerRelation, the one `lode task blockers` reports
 // and openBlockers gates claims on, so rally membership and the blocker view
 // cannot disagree about what blocks what — including about what "open" means.
-// Recursion is UNION over one column, so a blocks-cycle stops at its repeat;
-// nothing validates 'blocks' against cycles on write.
+// Recursion is UNION over one column, so a 'dependsOn' cycle written before
+// AddEdge refused cycles stops at its repeat.
 func (s *Store) rallyMembers(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx, `
 WITH RECURSIVE blockers(blocked, id, title, state, project_id) AS (`+blockerRelation+`),
@@ -198,14 +198,15 @@ func EnsureDraftRally(tx *sql.Tx, now time.Time, projectID, actorID string, even
 	}, eventID)
 }
 
-// AddRallyMembers adds each task to the rally as a 'blocks' edge, the only
-// edge a rally carries (WL-REQ-97), and reports how many edges were new.
+// AddRallyMembers adds each task to the rally as a 'dependsOn' edge from the
+// rally to the task, the only edge a rally carries (WL-REQ-97), and reports
+// how many edges were new.
 // Adding is set-like (WL-REQ-1337): a task already in the rally, or named twice
 // in one call, is added once.
 //
 // The membership it already holds is read first rather than letting the
 // task_edges unique key refuse the duplicate: AddEdge is the door that holds
-// the rally invariants (no outbound blocks edge, no cycle) and logs both
+// the rally invariants (nothing depends on a rally, no cycle) and logs both
 // endpoints, and a unique violation raised inside this transaction would
 // abort every edge added before it, not just the repeat.
 func AddRallyMembers(tx *sql.Tx, now time.Time, rallyID string, taskIDs []string, eventID int64) (added int, err error) {
@@ -213,8 +214,8 @@ func AddRallyMembers(tx *sql.Tx, now time.Time, rallyID string, taskIDs []string
 		return 0, nil
 	}
 	rows, err := tx.Query(
-		`SELECT from_task FROM task_edges
-		  WHERE to_task = $1 AND type = 'blocks' AND from_task = ANY($2)`,
+		`SELECT to_task FROM task_edges
+		  WHERE from_task = $1 AND type = 'dependsOn' AND to_task = ANY($2)`,
 		rallyID, taskIDs)
 	if err != nil {
 		return 0, fmt.Errorf("rally %s membership: %w", rallyID, err)
@@ -239,7 +240,7 @@ func AddRallyMembers(tx *sql.Tx, now time.Time, rallyID string, taskIDs []string
 			continue
 		}
 		seen[id] = true
-		if err := AddEdge(tx, now, id, rallyID, "blocks", eventID); err != nil {
+		if err := AddEdge(tx, now, rallyID, id, "dependsOn", eventID); err != nil {
 			return added, err
 		}
 		added++

@@ -209,7 +209,7 @@ func TestClaimErrors(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocked", "priority": "high", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Draft", "priority": "low", "kind": "chore", "draft": true})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add edge status = %d", rr.Code)
 	}

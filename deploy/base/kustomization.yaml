@@ -250,3 +250,5 @@ configMapGenerator:
       - migrations/0118_inline-refs-via.down.sql
       - migrations/0119_ref-classifications.up.sql
       - migrations/0119_ref-classifications.down.sql
+      - migrations/0120_task-edges-depends-on.up.sql
+      - migrations/0120_task-edges-depends-on.down.sql

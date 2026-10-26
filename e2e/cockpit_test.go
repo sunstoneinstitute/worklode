@@ -198,8 +198,8 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		},
 	})
 
-	// 4. A blocker and a dependent task, linked by a "blocks" edge (blocker
-	// blocks dependent).
+	// 4. A blocker and a dependent task, linked by a "dependsOn" edge
+	// (dependent dependsOn blocker).
 	blocker, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Blocker task", Priority: "medium", Kind: "chore",
 	})

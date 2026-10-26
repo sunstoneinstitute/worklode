@@ -546,7 +546,7 @@ func TestProjectProgressQueryFootprint(t *testing.T) {
 		walkTo(t, s, id, "merged")
 		landCommit(t, s, id, "acme/app", fmt.Sprintf("sha%04d", i))
 	}
-	if err := addEdge(t, s, taskIDs[4], taskIDs[0], "blocks"); err != nil {
+	if err := addEdge(t, s, taskIDs[0], taskIDs[4], "dependsOn"); err != nil {
 		t.Fatalf("addEdge: %v", err)
 	}
 	// taskIDs[4] is open and sits in the first plan, so nothing blocks it.

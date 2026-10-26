@@ -30,13 +30,13 @@ func TestBlockerTree(t *testing.T) {
 		{c.ID, a.ID}, {c.ID, b.ID},
 		{d.ID, c.ID},
 	} {
-		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
+		if err := addEdge(t, s, e[1], e[0], "dependsOn"); err != nil {
 			t.Fatalf("add blocks edge %s -> %s: %v", e[0], e[1], err)
 		}
 	}
 	// AddEdge refuses the edge that closes the c <-> d loop; rows predating
 	// that guard can still hold one, and the walk must survive it.
-	insertEdgeRaw(t, s, c.ID, d.ID, "blocks")
+	insertEdgeRaw(t, s, d.ID, c.ID, "dependsOn")
 
 	tree, err := s.BlockerTree(ctx, root.ID)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestBlockerForest(t *testing.T) {
 	for _, e := range [][2]string{
 		{mid.ID, top.ID}, {bottom.ID, mid.ID}, {otherBlocker.ID, other.ID},
 	} {
-		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
+		if err := addEdge(t, s, e[1], e[0], "dependsOn"); err != nil {
 			t.Fatalf("add blocks edge %s -> %s: %v", e[0], e[1], err)
 		}
 	}

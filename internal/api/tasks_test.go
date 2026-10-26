@@ -949,50 +949,50 @@ func TestEdges(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocked", "priority": "high", "kind": "feature"})
 
-	// WL-1 blocks WL-2, expressed via "to" on WL-1.
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	// WL-2 dependsOn WL-1, expressed via "to" on WL-2.
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
 	// Adding the same edge again conflicts.
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("duplicate edge status = %d, want 409; body %s", rr.Code, rr.Body.String())
 	}
 
-	// Blocked task shows blocked:true and the incoming edge.
+	// Blocked task shows blocked:true and the outgoing edge.
 	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil)
 	got := decodeMap(t, rr)
 	if got["blocked"] != true {
 		t.Fatalf("WL-2 blocked = %v, want true", got["blocked"])
 	}
-	in := got["edges"].(map[string]any)["in"].([]any)
-	if len(in) != 1 {
-		t.Fatalf("WL-2 edges.in = %v, want 1 edge", in)
+	out := got["edges"].(map[string]any)["out"].([]any)
+	if len(out) != 1 {
+		t.Fatalf("WL-2 edges.out = %v, want 1 edge", out)
 	}
-	e := in[0].(map[string]any)
-	if e["from"] != "WL-1" || e["type"] != "blocks" {
-		t.Fatalf("WL-2 in edge = %v", e)
+	e := out[0].(map[string]any)
+	if e["to"] != "WL-1" || e["type"] != "dependsOn" {
+		t.Fatalf("WL-2 out edge = %v", e)
 	}
 
-	// Blocker shows the outgoing edge and is not itself blocked.
+	// The prerequisite shows the incoming edge and is not itself blocked.
 	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-1", token, nil)
 	got = decodeMap(t, rr)
 	if got["blocked"] != false {
 		t.Fatalf("WL-1 blocked = %v, want false", got["blocked"])
 	}
-	out := got["edges"].(map[string]any)["out"].([]any)
-	if len(out) != 1 {
-		t.Fatalf("WL-1 edges.out = %v, want 1 edge", out)
+	in := got["edges"].(map[string]any)["in"].([]any)
+	if len(in) != 1 {
+		t.Fatalf("WL-1 edges.in = %v, want 1 edge", in)
 	}
-	e = out[0].(map[string]any)
-	if e["to"] != "WL-2" || e["type"] != "blocks" {
-		t.Fatalf("WL-1 out edge = %v", e)
+	e = in[0].(map[string]any)
+	if e["from"] != "WL-2" || e["type"] != "dependsOn" {
+		t.Fatalf("WL-1 in edge = %v", e)
 	}
 
 	// Remove the edge; WL-2 unblocks.
-	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1001,9 +1001,50 @@ func TestEdges(t *testing.T) {
 		t.Fatalf("WL-2 blocked after removal = %v, want false", got["blocked"])
 	}
 	// Removing again: gone.
-	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("second remove status = %d, want 404", rr.Code)
+	}
+}
+
+// TestEdgesLegacyBlocks: an older client still names the inverse, blocks.
+// "A blocks B" is stored as "B dependsOn A" (WL-REQ-1655), whichever end the
+// request names, and DELETE removes it the same way.
+func TestEdgesLegacyBlocks(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocked", "priority": "high", "kind": "feature"})
+
+	// WL-1 blocks WL-2, via "to" on WL-1.
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add blocks edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var edge model.Edge
+	if err := json.Unmarshal(rr.Body.Bytes(), &edge); err != nil {
+		t.Fatal(err)
+	}
+	if want := (model.Edge{From: "WL-2", To: "WL-1", Type: "dependsOn"}); edge != want {
+		t.Fatalf("stored edge = %+v, want %+v", edge, want)
+	}
+	if got := decodeMap(t, doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil)); got["blocked"] != true {
+		t.Fatalf("WL-2 blocked = %v, want true", got["blocked"])
+	}
+
+	// The old `lode task block WL-2 --by WL-1` body: "from" on WL-2 names
+	// the same edge.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"from": "WL-1", "type": "blocks"})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("same edge via from: status = %d, want 409; body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token, map[string]any{"from": "WL-1", "type": "blocks"})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("remove blocks edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil)); got["blocked"] != false {
+		t.Fatalf("WL-2 blocked after removal = %v, want false", got["blocked"])
 	}
 }
 
@@ -1049,11 +1090,11 @@ func TestEdgeValidation(t *testing.T) {
 		body map[string]any
 		want int
 	}{
-		{"both to and from", map[string]any{"to": "WL-2", "from": "WL-2", "type": "blocks"}, 422},
-		{"neither to nor from", map[string]any{"type": "blocks"}, 422},
-		{"self edge", map[string]any{"to": "WL-1", "type": "blocks"}, 422},
+		{"both to and from", map[string]any{"to": "WL-2", "from": "WL-2", "type": "dependsOn"}, 422},
+		{"neither to nor from", map[string]any{"type": "dependsOn"}, 422},
+		{"self edge", map[string]any{"to": "WL-1", "type": "dependsOn"}, 422},
 		{"bad type", map[string]any{"to": "WL-2", "type": "depends"}, 422},
-		{"unknown target", map[string]any{"to": "WL-99", "type": "blocks"}, 404},
+		{"unknown target", map[string]any{"to": "WL-99", "type": "dependsOn"}, 404},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1335,7 +1376,7 @@ func TestEdgeEndpointRejectsUnknownType(t *testing.T) {
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
-	for _, typ := range []string{"blocks", "childOf", "followUpTo", "duplicateOf"} {
+	for _, typ := range []string{"dependsOn", "childOf", "followUpTo", "duplicateOf"} {
 		if !strings.Contains(rr.Body.String(), typ) {
 			t.Fatalf("body %s, want it to name %q", rr.Body.String(), typ)
 		}
@@ -1479,9 +1520,9 @@ func TestListTasksDetailExpansion(t *testing.T) {
 			"project": "proj", "title": title, "priority": "medium", "kind": "feature",
 		})
 	}
-	// WL-1 blocks WL-2.
-	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"}); rr.Code != http.StatusCreated {
-		t.Fatalf("blocks edge: %d %s", rr.Code, rr.Body)
+	// WL-2 dependsOn WL-1.
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"}); rr.Code != http.StatusCreated {
+		t.Fatalf("dependsOn edge: %d %s", rr.Code, rr.Body)
 	}
 	// WL-3 childOf WL-1.
 	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"from": "WL-3", "type": "childOf"}); rr.Code != http.StatusCreated {
@@ -1546,19 +1587,21 @@ func TestListTasksDetailExpansion(t *testing.T) {
 	if wl2.Blocked == nil || !*wl2.Blocked {
 		t.Errorf("WL-2 blocked = %v, want true", wl2.Blocked)
 	}
-	if wl2.Edges == nil || len(wl2.Edges.In) != 1 || wl2.Edges.In[0].From != "WL-1" || wl2.Edges.In[0].Type != "blocks" {
-		t.Errorf("WL-2 edges.in = %+v, want [{WL-1 blocks}]", wl2.Edges)
+	if wl2.Edges == nil || len(wl2.Edges.Out) != 1 || wl2.Edges.Out[0].To != "WL-1" || wl2.Edges.Out[0].Type != "dependsOn" {
+		t.Errorf("WL-2 edges.out = %+v, want [{WL-1 dependsOn}]", wl2.Edges)
 	}
 
 	wl1 := byID["WL-1"]
 	if wl1.Blocked == nil || *wl1.Blocked {
 		t.Errorf("WL-1 blocked = %v, want false", wl1.Blocked)
 	}
-	if wl1.Edges == nil || len(wl1.Edges.Out) != 1 || wl1.Edges.Out[0].To != "WL-2" || wl1.Edges.Out[0].Type != "blocks" {
-		t.Errorf("WL-1 edges.out = %+v, want [{WL-2 blocks}]", wl1.Edges)
+	if wl1.Edges == nil || len(wl1.Edges.Out) != 0 {
+		t.Errorf("WL-1 edges.out = %+v, want []", wl1.Edges)
 	}
-	if wl1.Edges == nil || len(wl1.Edges.In) != 1 || wl1.Edges.In[0].From != "WL-3" || wl1.Edges.In[0].Type != "childOf" {
-		t.Errorf("WL-1 edges.in = %+v, want [{WL-3 childOf}]", wl1.Edges)
+	if wl1.Edges == nil || len(wl1.Edges.In) != 2 ||
+		wl1.Edges.In[0].From != "WL-2" || wl1.Edges.In[0].Type != "dependsOn" ||
+		wl1.Edges.In[1].From != "WL-3" || wl1.Edges.In[1].Type != "childOf" {
+		t.Errorf("WL-1 edges.in = %+v, want [{WL-2 dependsOn} {WL-3 childOf}]", wl1.Edges)
 	}
 
 	wl4 := byID["WL-4"]
@@ -1579,7 +1622,7 @@ func TestListTasksDetailMatchesGetTask(t *testing.T) {
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocked", "priority": "high", "kind": "feature"})
-	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"}); rr.Code != http.StatusCreated {
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"}); rr.Code != http.StatusCreated {
 		t.Fatalf("blocks edge: %d %s", rr.Code, rr.Body)
 	}
 

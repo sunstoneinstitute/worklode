@@ -35,7 +35,7 @@ func TestTaskTools(t *testing.T) {
 	if got.CreatedBy != "alice" || got.Kind != "bug" {
 		t.Fatalf("task = created_by %q kind %q", got.CreatedBy, got.Kind)
 	}
-	if len(got.Edges.In) != 1 || got.Edges.In[0].Type != "blocks" {
+	if len(got.Edges.Out) != 1 || got.Edges.Out[0].Type != "dependsOn" || got.Edges.Out[0].To != blocker.ID {
 		t.Fatalf("edges = %+v", got.Edges)
 	}
 

@@ -14,9 +14,9 @@ import (
 )
 
 // BlockingFanOut returns, for every task that blocks at least one other task,
-// the transitive count of distinct OPEN tasks it unblocks over 'blocks'
-// edges. A task absent from the returned map has fan-out 0. The closure
-// itself walks every live 'blocks' edge — a closed intermediate does not cut
+// the transitive count of distinct OPEN tasks that depend on it over
+// 'dependsOn' edges. A task absent from the returned map has fan-out 0. The
+// closure itself walks every live 'dependsOn' edge — a closed intermediate does not cut
 // an open dependent off from its root — but the count keeps only open tasks
 // (the taskClosed predicate, per-repo done_state and all): WL-SPEC-82's
 // closed-task rule (WL-354). "How much work t unblocks when done" is about
@@ -30,14 +30,14 @@ import (
 func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		WITH RECURSIVE closure(root, task) AS (
-		    SELECT e.from_task, e.to_task FROM task_edges e
+		    SELECT e.to_task, e.from_task FROM task_edges e
 		      JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
 		      JOIN tasks b ON b.id = e.to_task   AND b.deleted_at IS NULL
-		     WHERE e.type = 'blocks'
+		     WHERE e.type = 'dependsOn'
 		  UNION
-		    SELECT c.root, e.to_task
-		    FROM closure c JOIN task_edges e ON e.from_task = c.task AND e.type = 'blocks'
-		      JOIN tasks b ON b.id = e.to_task AND b.deleted_at IS NULL
+		    SELECT c.root, e.from_task
+		    FROM closure c JOIN task_edges e ON e.to_task = c.task AND e.type = 'dependsOn'
+		      JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
 		)
 		SELECT c.root, COUNT(DISTINCT c.task)
 		  FROM closure c
@@ -66,9 +66,8 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 
 // readyCandidates returns every task eligible for pickup: state ready, no
 // childOf children, neither a decision nor a rally, not
-// needs_decomposition, not human_only, unleased, not blocked by an open
-// 'blocks' edge from a task not
-// in a closed state, and not held by a plan-to-plan ordering edge
+// needs_decomposition, not human_only, unleased, without a 'dependsOn' edge
+// to a task not in a closed state, and not held by a plan-to-plan ordering edge
 // (planBlockedCondition, WL-REQ-172). An empty projectID matches every
 // project; kind is a comma-separated list of kinds and matches every kind
 // when empty, which is how a loop restricts itself to its own tier
@@ -103,7 +102,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 		  AND NOT EXISTS (SELECT 1 FROM leases l
 		                  WHERE l.task_id = t.id AND l.released_at IS NULL)
 		  AND NOT EXISTS (SELECT 1 FROM task_edges e
-		                  WHERE e.to_task = t.id AND `+blockedCondition+`)
+		                  WHERE e.from_task = t.id AND `+blockedCondition+`)
 		  AND NOT (`+planBlockedCondition+`)`, projectID, kind, ns.TaskKindsMatching(func(d ns.TaskKindDescriptor) bool { return d.Claimable }))
 	if err != nil {
 		return nil, fmt.Errorf("ready candidates: %w", err)

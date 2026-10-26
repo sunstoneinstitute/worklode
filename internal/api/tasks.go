@@ -55,12 +55,13 @@ var validKinds = ns.Set(ns.TaskKinds)
 // message cannot drift from the set when a kind is added.
 var invalidKindMsg = "invalid kind: must be " + ns.OrList(ns.TaskKinds)
 
-var validEdgeTypes = map[string]bool{
-	"blocks": true, "childOf": true, "followUpTo": true, "duplicateOf": true,
-}
+var validEdgeTypes = ns.Set(ns.DeclaredEdges("task_edges"))
+
+var invalidEdgeTypeMsg = "invalid edge type: must be " + ns.OrList(ns.DeclaredEdges("task_edges"))
 
 // legacyEdgeTypes maps the pre-WL-REQ-1655 stored names to the ontology
-// names, so an older lode binary keeps working against this server.
+// names, so an older lode binary keeps working against this server. The old
+// name blocks is handled in resolveEdge, because it also points the other way.
 var legacyEdgeTypes = map[string]string{
 	"child_of": "childOf", "follow_up_to": "followUpTo", "duplicate_of": "duplicateOf",
 }
@@ -720,7 +721,8 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 // resolveEdge validates an edge request against the {id} path task and
 // returns the (from, to) endpoints, rewriting a legacy type name in req.
-// A written response means failure.
+// "A blocks B" from an older client is stored as "B dependsOn A"
+// (WL-REQ-1655). A written response means failure.
 func resolveEdge(w http.ResponseWriter, id string, req *model.EdgeInput) (from, to string, ok bool) {
 	if t, ok := legacyEdgeTypes[req.Type]; ok {
 		req.Type = t
@@ -729,15 +731,21 @@ func resolveEdge(w http.ResponseWriter, id string, req *model.EdgeInput) (from, 
 		writeErr(w, http.StatusUnprocessableEntity, "exactly one of to/from must be set")
 		return "", "", false
 	}
+	blocks := req.Type == "blocks"
+	if blocks {
+		req.Type = "dependsOn"
+	}
 	if !validEdgeTypes[req.Type] {
-		writeErr(w, http.StatusUnprocessableEntity,
-			"invalid edge type: must be blocks, childOf, followUpTo, or duplicateOf")
+		writeErr(w, http.StatusUnprocessableEntity, invalidEdgeTypeMsg)
 		return "", "", false
 	}
 	if req.To != nil {
 		from, to = id, *req.To
 	} else {
 		from, to = *req.From, id
+	}
+	if blocks {
+		from, to = to, from
 	}
 	if from == to {
 		writeErr(w, http.StatusUnprocessableEntity, "self-edge not allowed")

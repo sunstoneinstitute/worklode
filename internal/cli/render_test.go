@@ -652,17 +652,17 @@ func TestActorName(t *testing.T) {
 func TestTimelineSummaryEdgeChange(t *testing.T) {
 	added := model.TimelineEntry{
 		Type:   "state",
-		Change: []byte(`{"field":"edge","op":"add","type":"blocks","from":"WL-1","to":"WL-2"}`),
+		Change: []byte(`{"field":"edge","op":"add","type":"dependsOn","from":"WL-2","to":"WL-1"}`),
 	}
-	if got, want := timelineSummary(added), "edge added: WL-1 blocks WL-2"; got != want {
+	if got, want := timelineSummary(added), "edge added: WL-2 dependsOn WL-1"; got != want {
 		t.Fatalf("timelineSummary(add) = %q, want %q", got, want)
 	}
 
 	removed := model.TimelineEntry{
 		Type:   "state",
-		Change: []byte(`{"field":"edge","op":"remove","type":"blocks","from":"WL-1","to":"WL-2"}`),
+		Change: []byte(`{"field":"edge","op":"remove","type":"dependsOn","from":"WL-2","to":"WL-1"}`),
 	}
-	if got, want := timelineSummary(removed), "edge removed: WL-1 blocks WL-2"; got != want {
+	if got, want := timelineSummary(removed), "edge removed: WL-2 dependsOn WL-1"; got != want {
 		t.Fatalf("timelineSummary(remove) = %q, want %q", got, want)
 	}
 }

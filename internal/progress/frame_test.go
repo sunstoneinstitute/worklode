@@ -77,9 +77,9 @@ func TestResolve(t *testing.T) {
 			Touch{Task: "WL-22", Kind: "task"}, "store/decisions.go"},
 		// The two edge events name their endpoints, never a "task": the kind
 		// alone is what the page gets, which still refreshes the summary.
-		{"task.edge_added", map[string]any{"from": "WL-23", "to": "WL-24", "type": "blocks"},
+		{"task.edge_added", map[string]any{"from": "WL-24", "to": "WL-23", "type": "dependsOn"},
 			Touch{Kind: "task"}, "api/tasks.go addEdge"},
-		{"task.edge_removed", map[string]any{"from": "WL-23", "to": "WL-24", "type": "blocks"},
+		{"task.edge_removed", map[string]any{"from": "WL-24", "to": "WL-23", "type": "dependsOn"},
 			Touch{Kind: "task"}, "api/tasks.go removeEdge"},
 
 		// --- lease, session, decision, issue -----------------------------

@@ -28,13 +28,13 @@ const (
 // faithful full projection only if each task's projection stays within its
 // own subject.
 //
-// Edge direction convention (model.Edge{From, To, Type}): "A blocks B" is
-// stored as {From: A, To: B, Type: "blocks"} — read literally, subject
-// blocks object. So for this task's out-edges (From == t.ID), an out
-// childOf means this task is the child (dct:isPartOf the parent in To); an
-// out blocks means this task blocks To (wl:blocks). For in-edges (To ==
-// t.ID), an in blocks means From blocks this task, i.e. this task depends on
-// it (wl:dependsOn). An in childOf means this task is somebody else's
+// Edge direction convention (model.Edge{From, To, Type}): an edge reads
+// subject-predicate-object, so "A dependsOn B" is stored as {From: A, To: B,
+// Type: "dependsOn"} (WL-REQ-1655). For this task's out-edges (From == t.ID),
+// an out childOf means this task is the child (dct:isPartOf the parent in
+// To); an out dependsOn means this task depends on To (wl:dependsOn). For
+// in-edges (To == t.ID), an in dependsOn means From depends on this task,
+// i.e. this task blocks it (wl:blocks). An in childOf means this task is somebody else's
 // parent; that triple belongs on the child's own projection (dct:isPartOf
 // with this task as object), not here — subject-completeness requires
 // emitting nothing for it.
@@ -70,8 +70,8 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 		switch e.Type {
 		case "childOf":
 			triples = append(triples, Triple{S: subj, P: DCTIsPartOf, O: IRIRef(iri.Task(e.To))})
-		case "blocks":
-			triples = append(triples, Triple{S: subj, P: iri.Term("blocks"), O: IRIRef(iri.Task(e.To))})
+		case "dependsOn":
+			triples = append(triples, Triple{S: subj, P: iri.Term("dependsOn"), O: IRIRef(iri.Task(e.To))})
 		case "followUpTo":
 			triples = append(triples, Triple{S: subj, P: iri.Term("followUpTo"), O: IRIRef(iri.Task(e.To))})
 		case "duplicateOf":
@@ -80,10 +80,10 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 	}
 
 	for _, e := range in {
-		if e.Type == "blocks" {
-			triples = append(triples, Triple{S: subj, P: iri.Term("dependsOn"), O: IRIRef(iri.Task(e.From))})
+		if e.Type == "dependsOn" {
+			triples = append(triples, Triple{S: subj, P: iri.Term("blocks"), O: IRIRef(iri.Task(e.From))})
 		}
-		// in childOf, in follow_up_to, in duplicateOf: belong to the other task's subject,
+		// in childOf, in followUpTo, in duplicateOf: belong to the other task's subject,
 		// not this one — emit nothing (subject-completeness).
 	}
 
