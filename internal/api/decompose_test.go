@@ -21,7 +21,7 @@ func TestDecomposeEndpoint(t *testing.T) {
 	}
 	got := decodeMap(t, rr)
 	// The response names the parent, and WL-REQ-120 / WL-REQ-88 leave its kind
-	// untouched — the child_of edges are what make it a container.
+	// untouched — the childOf edges are what make it a container.
 	gotParent := got["parent"].(map[string]any)
 	if gotParent["kind"] != "feature" || gotParent["id"] != id {
 		t.Fatalf("parent = %v, want %s split in place with kind feature", gotParent, id)

@@ -1333,7 +1333,7 @@ func newTaskCostCmd() *cobra.Command {
 		Short: "Show the token cost billed to a task",
 		Long: "Show the token cost billed to a task: the usage of agent sessions\n" +
 			"that held a lease on the task. A container task reports its own\n" +
-			"sessions unless --children is given, which folds in its child_of\n" +
+			"sessions unless --children is given, which folds in its childOf\n" +
 			"descendants' sessions too.",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
@@ -1360,7 +1360,7 @@ func newTaskCostCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&days, "days", 0, "cost window in days, counting today; 0 for all history")
-	cmd.Flags().BoolVar(&children, "children", false, "include the task's child_of descendants' sessions")
+	cmd.Flags().BoolVar(&children, "children", false, "include the task's childOf descendants' sessions")
 	return cmd
 }
 
@@ -1476,7 +1476,7 @@ func newTaskUnfollowUpCmd() *cobra.Command {
 		"%s is no longer a follow-up to %s",
 		func(t model.TaskDetail) (string, error) {
 			for _, e := range t.Edges.Out {
-				if e.Type == "follow_up_to" {
+				if e.Type == "followUpTo" {
 					return e.To, nil
 				}
 			}
@@ -1506,7 +1506,7 @@ func newTaskUnduplicateCmd() *cobra.Command {
 		"%s is no longer marked a duplicate of %s",
 		func(t model.TaskDetail) (string, error) {
 			for _, e := range t.Edges.Out {
-				if e.Type == "duplicate_of" {
+				if e.Type == "duplicateOf" {
 					return e.To, nil
 				}
 			}

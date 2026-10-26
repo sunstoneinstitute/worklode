@@ -115,7 +115,7 @@ func TestEdgeTermsMatchTurtle(t *testing.T) {
 // TestDeclaredEdges pins the stored types per table: declared terms only,
 // never their inferred inverses.
 func TestDeclaredEdges(t *testing.T) {
-	if got, want := ns.DeclaredEdges("task_edges"), []string{"child_of", "dependsOn", "duplicate_of", "follow_up_to"}; !slices.Equal(got, want) {
+	if got, want := ns.DeclaredEdges("task_edges"), []string{"childOf", "dependsOn", "duplicateOf", "followUpTo"}; !slices.Equal(got, want) {
 		t.Errorf("DeclaredEdges(task_edges) = %v, want %v", got, want)
 	}
 	doc := ns.DeclaredEdges("doc_edges")

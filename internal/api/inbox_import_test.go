@@ -572,9 +572,9 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 	}
 	if _, _, err := st0.RecordEvent(ctx, "cli", edgeExtID, "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.AddEdge(tx, st0.Now(), taskID, containerID, "child_of", eventID)
+			return store.AddEdge(tx, st0.Now(), taskID, containerID, "childOf", eventID)
 		}); err != nil {
-		t.Fatalf("add child_of edge: %v", err)
+		t.Fatalf("add childOf edge: %v", err)
 	}
 
 	pulls := []map[string]any{{

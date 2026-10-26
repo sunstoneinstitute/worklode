@@ -1510,7 +1510,7 @@ func TestTaskPageShowsDuplicates(t *testing.T) {
 		"project": "proj", "title": "Filed twice", "priority": "medium", "kind": "bug",
 	})
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
-		map[string]any{"to": "WL-1", "type": "duplicate_of"})
+		map[string]any{"to": "WL-1", "type": "duplicateOf"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}

@@ -676,7 +676,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 			if req.Parent != "" {
 				// Same transaction as the promotion: there is no window
 				// where the child exists unparented.
-				if err := store.AddEdge(tx, s.st.Now(), t.ID, req.Parent, "child_of", eventID); err != nil {
+				if err := store.AddEdge(tx, s.st.Now(), t.ID, req.Parent, "childOf", eventID); err != nil {
 					return err
 				}
 			}

@@ -49,10 +49,10 @@ var EdgeTerms = []EdgeTerm{
 	{Table: "rule_edges", Type: "refines", Property: "https://worklode.io/ns/ontology#refines", Inverse: "https://worklode.io/ns/ontology#refinedBy", Symmetric: false},
 	{Table: "rule_edges", Type: "supersedes", Property: "http://purl.org/dc/terms/replaces", Inverse: "http://purl.org/dc/terms/isReplacedBy", Symmetric: false},
 	{Table: "rule_edges", Type: "wasDerivedFrom", Property: "http://www.w3.org/ns/prov#wasDerivedFrom", Inverse: "", Symmetric: false},
-	{Table: "task_edges", Type: "child_of", Property: "http://purl.org/dc/terms/isPartOf", Inverse: "http://purl.org/dc/terms/hasPart", Symmetric: false},
+	{Table: "task_edges", Type: "childOf", Property: "http://purl.org/dc/terms/isPartOf", Inverse: "http://purl.org/dc/terms/hasPart", Symmetric: false},
 	{Table: "task_edges", Type: "dependsOn", Property: "https://worklode.io/ns/ontology#dependsOn", Inverse: "https://worklode.io/ns/ontology#blocks", Symmetric: false},
-	{Table: "task_edges", Type: "duplicate_of", Property: "https://worklode.io/ns/ontology#duplicateOf", Inverse: "", Symmetric: false},
-	{Table: "task_edges", Type: "follow_up_to", Property: "https://worklode.io/ns/ontology#followUpTo", Inverse: "", Symmetric: false},
+	{Table: "task_edges", Type: "duplicateOf", Property: "https://worklode.io/ns/ontology#duplicateOf", Inverse: "", Symmetric: false},
+	{Table: "task_edges", Type: "followUpTo", Property: "https://worklode.io/ns/ontology#followUpTo", Inverse: "", Symmetric: false},
 }
 
 // One constant per wlc:TaskKind member, for code that names a kind.

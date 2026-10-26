@@ -119,7 +119,7 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 	return Transition(tx, now, parentID, state, target, eventID)
 }
 
-// childStates returns parentID's direct child_of children — state plus the
+// childStates returns parentID's direct childOf children — state plus the
 // per-repo closed verdict — in no particular order, since containerTarget only
 // counts them. Tombstoned children are not children for this purpose (WL-REQ-117),
 // so deleting the last unfinished one closes the parent — DeleteTask re-runs
@@ -134,7 +134,7 @@ func childStates(tx *sql.Tx, parentID string) ([]childState, error) {
 	rows, err := tx.Query(
 		`SELECT t.state, `+taskClosed("t")+`
 		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
-		  WHERE e.to_task = $1 AND e.type = 'child_of'
+		  WHERE e.to_task = $1 AND e.type = 'childOf'
 		    AND t.deleted_at IS NULL`, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("children of %s: %w", parentID, err)
@@ -151,7 +151,7 @@ func childStates(tx *sql.Tx, parentID string) ([]childState, error) {
 // resolveParent rolls the task's parent, if it has one, up to the state its
 // children imply. Transition calls this rather than its call sites doing so:
 // hooking each caller would leave the invariant one forgotten call site away
-// from breaking. Recursion terminates because checkHierarchy caps a child_of
+// from breaking. Recursion terminates because checkHierarchy caps a childOf
 // chain at maxHierarchyDepth edges — a subtask resolves its task, and that
 // task has no parent.
 func resolveParent(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {

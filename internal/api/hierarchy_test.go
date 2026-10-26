@@ -16,7 +16,7 @@ func createContainer(t *testing.T, h http.Handler, token, project, title string)
 }
 
 // TestCreateTaskRejectsContainerKind pins that no kind declares container-ness
-// at the HTTP edge (WL-REQ-176): container-ness is inferred from child_of edges, so
+// at the HTTP edge (WL-REQ-176): container-ness is inferred from childOf edges, so
 // validKinds admits nothing structural and the create is a 422.
 func TestCreateTaskRejectsContainerKind(t *testing.T) {
 	t.Parallel()

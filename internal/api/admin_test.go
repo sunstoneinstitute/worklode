@@ -875,9 +875,9 @@ func TestBoard(t *testing.T) {
 	}
 
 	// WL-1 becomes a child of the container, so the board must carry its parent.
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-5", "type": "child_of"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-5", "type": "childOf"})
 	if rr.Code != http.StatusCreated {
-		t.Fatalf("add child_of edge status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("add childOf edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{"worktree": "host:/wt-1"})

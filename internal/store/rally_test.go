@@ -49,7 +49,7 @@ func TestRallyNeverInReadySet(t *testing.T) {
 	}
 }
 
-// TestRallyCannotTakeChildren covers both doors into child_of: the edge and
+// TestRallyCannotTakeChildren covers both doors into childOf: the edge and
 // Decompose. A rally's membership is its 'blocks' edges; children would be a
 // second, contradicting set.
 func TestRallyCannotTakeChildren(t *testing.T) {
@@ -58,8 +58,8 @@ func TestRallyCannotTakeChildren(t *testing.T) {
 	rally := createTask(t, s, taskTestNow, rallyInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, child.ID, rally.ID, "child_of"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("child_of onto rally: want ErrInvalidInput, got %v", err)
+	if err := addEdge(t, s, child.ID, rally.ID, "childOf"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("childOf onto rally: want ErrInvalidInput, got %v", err)
 	}
 	if _, err := decompose(t, s, rally.ID, []string{"A"}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("decompose rally: want ErrInvalidInput, got %v", err)

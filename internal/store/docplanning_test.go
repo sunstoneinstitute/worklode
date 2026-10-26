@@ -74,7 +74,7 @@ func TestDocAcceptCoverageOnlyPlanMintsNothing(t *testing.T) {
 // TestDocAcceptPlanMintsTasks: accepting a plan mints one ready task per
 // ## Tasks definition, in the plan's project, carrying plan_doc, title, body,
 // kind, priority and skills from its definition and created_by the accepting
-// actor — and nothing above them: no child_of edge is written for any of
+// actor — and nothing above them: no childOf edge is written for any of
 // them.
 func TestDocAcceptPlanMintsTasks(t *testing.T) {
 	t.Parallel()
@@ -134,16 +134,16 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 		}
 	}
 
-	// Nothing above the minted tasks: no child_of edge involves any of them.
+	// Nothing above the minted tasks: no childOf edge involves any of them.
 	for _, task := range minted {
 		var n int
 		if err := s.db.QueryRow(
-			`SELECT COUNT(*) FROM task_edges WHERE type = 'child_of' AND (from_task = $1 OR to_task = $1)`,
+			`SELECT COUNT(*) FROM task_edges WHERE type = 'childOf' AND (from_task = $1 OR to_task = $1)`,
 			task.ID).Scan(&n); err != nil {
-			t.Fatalf("count child_of edges of %s: %v", task.ID, err)
+			t.Fatalf("count childOf edges of %s: %v", task.ID, err)
 		}
 		if n != 0 {
-			t.Errorf("task %s has %d child_of edges, want none", task.ID, n)
+			t.Errorf("task %s has %d childOf edges, want none", task.ID, n)
 		}
 	}
 }

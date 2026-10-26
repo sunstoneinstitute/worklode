@@ -11,7 +11,7 @@ import (
 // decomposeTask handles POST /api/v1/tasks/{id}/decompose: create one draft
 // child per title under the task, in one transaction. This is the supported
 // way out of the WL-REQ-102 needs_decomposition gate. The parent's kind is not
-// touched — the child_of edges are what make it a container (WL-REQ-88).
+// touched — the childOf edges are what make it a container (WL-REQ-88).
 func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req model.DecomposeInput
