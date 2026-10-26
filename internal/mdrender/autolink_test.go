@@ -192,3 +192,33 @@ func TestProjectKeysFingerprintIsOrderIndependent(t *testing.T) {
 		t.Error("an empty key set must fingerprint like the zero value")
 	}
 }
+
+// TestRuleFragmentAutolink: <doc>#rule-<n> links like a doc ref with a section
+// fragment (WL-REQ-1653).
+func TestRuleFragmentAutolink(t *testing.T) {
+	got := string(Body(ProjectKeys{}, "see WL-SPEC-42#rule-1809, then WL-SPEC-42#rule-7."))
+	for _, want := range []string{
+		`<a class="ref-link" href="/WL-SPEC-42#rule-1809" rel="nofollow">WL-SPEC-42#rule-1809</a>`,
+		`<a class="ref-link" href="/WL-SPEC-42#rule-7" rel="nofollow">WL-SPEC-42#rule-7</a>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
+	}
+}
+
+// TestRuleAnchorSpan: a heading that carries an arranged rule gets an empty
+// span with the id rule-<n> before it, beside its sec- id (WL-REQ-1809).
+func TestRuleAnchorSpan(t *testing.T) {
+	keys := ProjectKeys{}.InPage(map[string]string{"WL-REQ-13": "sec-4"})
+	got := string(DocBody(keys, "## Title {#sec-4}\n\nbody\n\n## Other {#sec-5}\n\nbody"))
+	if want := `<span id="rule-13"></span>` + "\n" + `<h2 id="sec-4">`; !strings.Contains(got, want) {
+		t.Errorf("missing %q in:\n%s", want, got)
+	}
+	if strings.Count(got, "<span id=") != 1 {
+		t.Errorf("want one rule anchor, got:\n%s", got)
+	}
+	if got := string(Body(keys, "## Title {#sec-4}")); strings.Contains(got, "<span") {
+		t.Errorf("a task body must carry no anchors:\n%s", got)
+	}
+}

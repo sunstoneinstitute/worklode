@@ -74,8 +74,8 @@ const taskRefPrefix = "/tasks/"
 // trimmed off a match in code, not in pattern, so "WL-REQ-168." links as
 // "WL-REQ-168".
 var (
-	// WL-SPEC-74, WL-ADR-7, optionally #sec-10 / #sec-3.1a.
-	shorthandRef = regexp.MustCompile(`\b` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Doc) + `)-\d+(?:#sec-[0-9A-Za-z._-]+)?`)
+	// WL-SPEC-74, WL-ADR-7, optionally with a section or #rule-12 fragment.
+	shorthandRef = regexp.MustCompile(`\b` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Doc) + `)-\d+(?:#sec-[0-9A-Za-z._-]+|#rule-\d+)?`)
 	// WL-MILE-2, WL-DEL-4 — every other registered infix. It links to the
 	// root shortcut /<ref>, which redirects to the entity's page.
 	entityRef = regexp.MustCompile(`\b` + refkind.KeyPattern + `-(?:` + refkind.Alternation(refkind.Milestone, refkind.Deliverable) + `)-\d+\b`)
