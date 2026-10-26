@@ -144,3 +144,26 @@ var EdgeLabels = map[string]string{
 	"runs after":     "blockedBy",
 	"subtask of":     "childOf",
 }
+
+// EdgeDefinitions maps each stored edge type to the skos:definition of its
+// property in ns/ontology.ttl (WL-REQ-1857).
+var EdgeDefinitions = map[string]string{
+	"amends":         "amends",
+	"blockedBy":      "is ordered after",
+	"childOf":        "is part of",
+	"conflictsWith":  "conflicts with",
+	"constrains":     "constrains",
+	"covers":         "covers",
+	"defers":         "defers",
+	"dependsOn":      "depends on",
+	"duplicateOf":    "duplicates",
+	"followUpTo":     "follows up on",
+	"governedBy":     "is governed by",
+	"implements":     "implements",
+	"needs":          "needs",
+	"references":     "references",
+	"refines":        "refines",
+	"requires":       "requires",
+	"supersedes":     "supersedes",
+	"wasDerivedFrom": "was derived from",
+}
