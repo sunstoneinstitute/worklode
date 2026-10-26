@@ -47,7 +47,7 @@ type EscalateResult struct {
 // rather than a failed escalation, the same trade MintAcceptDecision makes.
 //
 // The task ends in `ready` rather than a state of its own: 004 has no
-// `blocked` state, blockedness is the 'blocks' edge, and the edge this writes
+// `blocked` state, blockedness is the 'dependsOn' edge, and the edge this writes
 // is what keeps the task out of the ready set until the design task closes.
 //
 // Errors: ErrInvalidInput for a bad To, a missing document or a blank reason;
@@ -115,7 +115,7 @@ func (s *Store) EscalateTask(ctx context.Context, in EscalateInput) (*EscalateRe
 			}
 			// A re-escalation of a gap this task is already blocked on has
 			// nothing left to add, so the existing edge stands.
-			if err := AddEdge(tx, now, joined, in.TaskID, "blocks", eventID); err != nil &&
+			if err := AddEdge(tx, now, in.TaskID, joined, "dependsOn", eventID); err != nil &&
 				!errors.Is(err, ErrEdgeExists) {
 				return err
 			}

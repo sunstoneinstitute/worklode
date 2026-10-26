@@ -943,14 +943,14 @@ func TestProgressRallyMoveNeedsADraft(t *testing.T) {
 // rallyMemberIDs lists the tasks a rally's 'blocks' edges name.
 func rallyMemberIDs(t *testing.T, s *server, rallyID string) []string {
 	t.Helper()
-	_, in, err := s.st.ListEdges(t.Context(), rallyID)
+	edges, _, err := s.st.ListEdges(t.Context(), rallyID)
 	if err != nil {
 		t.Fatalf("list edges of %s: %v", rallyID, err)
 	}
 	var out []string
-	for _, e := range in {
-		if e.Type == "blocks" {
-			out = append(out, e.FromTask)
+	for _, e := range edges {
+		if e.Type == "dependsOn" {
+			out = append(out, e.ToTask)
 		}
 	}
 	return out

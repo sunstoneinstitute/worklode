@@ -159,7 +159,7 @@ func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 //     holds an active lease on another task from this worktree (the
 //     leases_active and leases_active_worktree unique indexes are the
 //     backstop for races).
-//   - ErrBlocked: an open 'blocks' edge points at the task, or a plan
+//   - ErrBlocked: the task has a 'dependsOn' edge to an open task, or a plan
 //     ordered before the task's plan is unfinished (WL-REQ-172).
 //   - ErrBadTransition: the task has children, is a decision (WL-REQ-97 as
 //     amended — use `lode task assign` instead), or is not in state ready

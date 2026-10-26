@@ -572,16 +572,16 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 		}
 	}
 
-	// 5. The intra-plan blockedBy became a task-to-task blocks edge.
+	// 5. The intra-plan blockedBy became a task-to-task dependsOn edge.
 	secondDetail, _, err := planner.GetTask(ctx, second.ID)
 	if err != nil {
 		t.Fatalf("get task %s: %v", second.ID, err)
 	}
-	if !slices.ContainsFunc(secondDetail.Edges.In, func(e model.TaskEdgeIn) bool {
-		return e.Type == "blocks" && e.From == first.ID
+	if !slices.ContainsFunc(secondDetail.Edges.Out, func(e model.TaskEdgeOut) bool {
+		return e.Type == "dependsOn" && e.To == first.ID
 	}) {
-		t.Fatalf("task %s inbound edges = %+v, want a blocks edge from %s",
-			second.ID, secondDetail.Edges.In, first.ID)
+		t.Fatalf("task %s outbound edges = %+v, want a dependsOn edge to %s",
+			second.ID, secondDetail.Edges.Out, first.ID)
 	}
 
 	// 6. Nothing else was created: exactly the three declared tasks, no

@@ -629,7 +629,7 @@ func TestCrossProjectEdgeProjectsBothGraphs(t *testing.T) {
 
 	_, _, err := s.RecordEvent(ctx, "cli", "p4", "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.AddEdge(tx, time.Now().UTC(), a, b, "blocks", eventID)
+			return store.AddEdge(tx, time.Now().UTC(), b, a, "dependsOn", eventID)
 		})
 	if err != nil {
 		t.Fatalf("add edge: %v", err)

@@ -100,8 +100,8 @@ type TaskFilter struct {
 	OmitBody bool
 }
 
-// Edge is a typed, directed link between two tasks. "A blocks B" means B is
-// blocked until A reaches a closed state (see taskClosed); "A childOf B"
+// Edge is a typed, directed link between two tasks. "A dependsOn B" means A
+// is blocked until B reaches a closed state (see taskClosed); "A childOf B"
 // makes B a container.
 type Edge struct {
 	FromTask string
@@ -472,7 +472,7 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 			return fmt.Errorf("task %s is held by %s in %s and a %s is never claimed; release it first: %w", id, lease.ActorID, lease.Worktree, kind, ErrInvalidInput)
 		}
 	}
-	// Rally membership comes only from blocks edges; plan ordering must not
+	// Rally membership comes only from dependsOn edges; plan ordering must not
 	// introduce a second set. PlanMintable governs creation, not retagging.
 	if policy.AllowsDecisions && policy.CanBlock && kind != ns.TaskKindRally {
 		return nil
@@ -481,13 +481,13 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 	var planned bool
 	if err := tx.QueryRow(
 		`SELECT (SELECT count(*) FROM decisions WHERE task_id = $1),
-          (SELECT count(*) FROM task_edges WHERE from_task = $1 AND type = 'blocks'),
+          (SELECT count(*) FROM task_edges WHERE to_task = $1 AND type = 'dependsOn'),
           COALESCE((SELECT plan_doc IS NOT NULL FROM tasks WHERE id = $1), false)`,
 		id).Scan(&decisions, &blocks, &planned); err != nil {
 		return fmt.Errorf("kind retag checks for %s: %w", id, err)
 	}
 	if kind == ns.TaskKindRally && planned {
-		return fmt.Errorf("task %s was minted from a plan, which a rally cannot be (a plan orders its blockers, and a rally's members are its 'blocks' edges): %w", id, ErrInvalidInput)
+		return fmt.Errorf("task %s was minted from a plan, which a rally cannot be (a plan orders its blockers, and a rally's members are its 'dependsOn' edges): %w", id, ErrInvalidInput)
 	}
 	if !policy.AllowsDecisions && decisions > 0 {
 		return fmt.Errorf("task %s carries %d decision row(s), which a %s cannot: %w", id, decisions, kind, ErrInvalidInput)
@@ -1020,19 +1020,24 @@ func taskProjects(tx *sql.Tx, ids ...string) (map[string]string, error) {
 	return out, nil
 }
 
+// storedTaskEdgeTypes is the task_edges.type CHECK, generated from the
+// ontology (WL-REQ-1655).
+var storedTaskEdgeTypes = ns.Set(ns.DeclaredEdges("task_edges"))
+
 // AddEdge inserts a typed edge between two existing tasks inside the given
 // transaction. Self-edges are rejected for all four types. A childOf edge
 // must also satisfy the spec-004 hierarchy invariants (see checkHierarchy):
 // one project, one parent per task, no cycle, and at most maxHierarchyDepth
-// edges. A 'blocks' edge may not start at a rally: a rally's own blockers are
-// its membership, and it blocks nothing in turn; nor may it close a 'blocks'
-// loop, which would deadlock every task on it (ErrCycle). follow_up_to and
-// duplicateOf are unchecked beyond their partial unique indexes: both are
+// edges. A 'dependsOn' edge may not end at a rally: a rally's own
+// prerequisites are its membership, and nothing depends on it in turn; nor may
+// it close a 'dependsOn' loop, which would deadlock every task on it (ErrCycle).
+// 'blocks' is the inverse of 'dependsOn' and is never stored (WL-REQ-1655).
+// followUpTo and duplicateOf are unchecked beyond their partial unique indexes: both are
 // cross-project by design and nothing walks either transitively. A missing
 // endpoint returns ErrNotFound. Appends a state_log row for both endpoints,
 // attributed to eventID, so a cross-project edge dirties both projects.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID int64) error {
-	if typ != "childOf" && typ != "blocks" && typ != "followUpTo" && typ != "duplicateOf" {
+	if !storedTaskEdgeTypes[typ] {
 		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
 	}
 	if fromTask == toTask {
@@ -1056,30 +1061,30 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 			return err
 		}
 	}
-	if typ == "blocks" {
-		// A rally is only ever the to_task of a 'blocks' edge: the edges
-		// pointing at it are its membership. Letting one block something
-		// would make finishing that thing wait on a goal nobody works.
-		var fromKind string
-		if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, fromTask).Scan(&fromKind); err != nil {
-			return fmt.Errorf("kind of %s: %w", fromTask, err)
+	if typ == "dependsOn" {
+		// A rally is only ever the from_task of a 'dependsOn' edge: its own
+		// 'dependsOn' rows are its membership. Letting something depend on
+		// one would make finishing that thing wait on a goal nobody works.
+		var toKind string
+		if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, toTask).Scan(&toKind); err != nil {
+			return fmt.Errorf("kind of %s: %w", toTask, err)
 		}
-		policy, err := taskKindPolicy(fromKind)
+		policy, err := taskKindPolicy(toKind)
 		if err != nil {
 			return err
 		}
 		if !policy.CanBlock {
-			return fmt.Errorf("task %s is a %s and cannot block another task: %w", fromTask, fromKind, ErrInvalidInput)
+			return fmt.Errorf("task %s is a %s and cannot block another task: %w", toTask, toKind, ErrInvalidInput)
 		}
-		// A 'blocks' loop is a deadlock: every task on it waits for the next
-		// one and none can ever be worked. The readers already survive a
+		// A 'dependsOn' loop is a deadlock: every task on it waits for the
+		// next one and none can ever be worked. The readers already survive a
 		// stored cycle, but only the write closing it can refuse it.
-		reaches, err := reachesViaEdge(tx, toTask, fromTask, "blocks")
+		reaches, err := reachesViaEdge(tx, toTask, fromTask, "dependsOn")
 		if err != nil {
 			return err
 		}
 		if reaches {
-			return fmt.Errorf("edge %s blocks %s: %w", fromTask, toTask, ErrCycle)
+			return fmt.Errorf("edge %s dependsOn %s: %w", fromTask, toTask, ErrCycle)
 		}
 	}
 	if _, err := tx.Exec(
@@ -1119,7 +1124,7 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 // edges of type typ in the from_task -> to_task direction. The visited set
 // keeps the walk terminating even if the stored graph already contains a
 // cycle. Used to refuse the edge that would close one: for childOf that
-// direction is child -> parent, for blocks it is blocker -> blocked.
+// direction is child -> parent, for dependsOn it is dependent -> prerequisite.
 func reachesViaEdge(tx *sql.Tx, start, target, typ string) (bool, error) {
 	visited := map[string]bool{start: true}
 	frontier := []string{start}
@@ -1221,26 +1226,27 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 	return out, in, nil
 }
 
-// AllBlockEdges returns every 'blocks' edge, ordered by from_task then
-// to_task, for the overview's critical-path join (007: the DAG spans
-// backbone blocks edges plus KG requires edges, and the deriver needs the
-// whole edge set at once rather than one task's edges via ListEdges).
+// AllDependsOnEdges returns every 'dependsOn' edge as stored (FromTask is
+// the dependent, ToTask its prerequisite), ordered by from_task then to_task,
+// for the overview's critical-path join: the DAG spans backbone dependsOn
+// edges plus KG requires edges, and the deriver needs the whole edge set at
+// once rather than one task's edges via ListEdges.
 //
 // Both ends are filtered to live tasks (WL-REQ-117). Soft delete leaves the
 // task_edges rows in place, so without the joins a deleted task would enter
 // the critical path and inflate a live task's depth — and the same surface
 // reads BlockingFanOut, which does filter, so the two must agree.
-func (s *Store) AllBlockEdges(ctx context.Context) ([]Edge, error) {
+func (s *Store) AllDependsOnEdges(ctx context.Context) ([]Edge, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT e.from_task, e.to_task FROM task_edges e
 		   JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
 		   JOIN tasks b ON b.id = e.to_task   AND b.deleted_at IS NULL
-		  WHERE e.type = 'blocks' ORDER BY e.from_task, e.to_task`)
+		  WHERE e.type = 'dependsOn' ORDER BY e.from_task, e.to_task`)
 	if err != nil {
-		return nil, fmt.Errorf("all block edges: %w", err)
+		return nil, fmt.Errorf("all dependsOn edges: %w", err)
 	}
-	return collectRows(rows, "all block edges", func(r rowScanner) (Edge, error) {
-		e := Edge{Type: "blocks"}
+	return collectRows(rows, "all dependsOn edges", func(r rowScanner) (Edge, error) {
+		e := Edge{Type: "dependsOn"}
 		err := r.Scan(&e.FromTask, &e.ToTask)
 		return e, err
 	})
@@ -1393,13 +1399,13 @@ func taskClosed(alias string) string {
 	                               ` + deliveryRank(`COALESCE(pr.done_state, '`+DefaultDoneState+`')`) + `))))`
 }
 
-// blockedCondition matches 'blocks' edges whose blocker (from_task) is still
-// open, i.e. the edge currently blocks its to_task. The blocker must also be
-// live: a deleted blocker stops blocking without its edge being retracted
+// blockedCondition matches 'dependsOn' edges whose prerequisite (to_task) is
+// still open, i.e. the edge currently blocks its from_task. The prerequisite
+// must also be live: a deleted blocker stops blocking without its edge being retracted
 // (WL-REQ-117), which is why the filter sits here and not in taskClosed.
-var blockedCondition = `e.type = 'blocks'
+var blockedCondition = `e.type = 'dependsOn'
 	 AND EXISTS (SELECT 1 FROM tasks b
-	             WHERE b.id = e.from_task
+	             WHERE b.id = e.to_task
 	               AND b.deleted_at IS NULL
 	               AND NOT ` + taskClosed("b") + `)`
 
@@ -1444,15 +1450,15 @@ var planBlockedCondition = `t.plan_doc IS NOT NULL AND EXISTS (
 	  WHERE de.type = 'blockedBy' AND de.from_doc = t.plan_doc
 	    AND ` + planUnfinished("bd") + `)`
 
-// BlockedTaskIDs returns the ids of tasks that have at least one open
-// 'blocks' edge pointing at them (the blocker is not in a closed state), plus
+// BlockedTaskIDs returns the ids of tasks that have at least one 'dependsOn'
+// edge to an open prerequisite (one not in a closed state), plus
 // the tasks a plan-to-plan ordering edge holds. It answers the same question
 // IsBlocked answers per task, so the two must name the same set: a task shown
 // as pickable that Claim then refuses is worse than no badge at all.
 func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT e.to_task FROM task_edges e
-		   JOIN tasks d ON d.id = e.to_task AND d.deleted_at IS NULL
+		`SELECT DISTINCT e.from_task FROM task_edges e
+		   JOIN tasks d ON d.id = e.from_task AND d.deleted_at IS NULL
 		  WHERE `+blockedCondition+`
 		 UNION
 		 SELECT t.id FROM tasks t WHERE t.deleted_at IS NULL AND `+planBlockedCondition)
@@ -1509,7 +1515,7 @@ func (s *Store) ClosedTaskIDs(ctx context.Context, ids []string) (map[string]boo
 	return out, nil
 }
 
-// IsBlocked reports whether taskID has an open 'blocks' edge pointing at it,
+// IsBlocked reports whether taskID has a 'dependsOn' edge to an open task,
 // or sits in a plan another plan is ordered before (planBlockedCondition). It
 // runs inside the given transaction so lease claims can check it atomically.
 func IsBlocked(tx *sql.Tx, taskID string) (bool, error) {
@@ -1531,7 +1537,7 @@ func (s *Store) IsTaskBlocked(ctx context.Context, taskID string) (bool, error) 
 func blockedByEdgeOrPlan(ctx context.Context, q queryer, taskID string) (bool, error) {
 	var blocked bool
 	err := q.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.to_task = $1 AND `+blockedCondition+`)
+		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.from_task = $1 AND `+blockedCondition+`)
 		     OR EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND `+planBlockedCondition+`)`,
 		taskID,
 	).Scan(&blocked)

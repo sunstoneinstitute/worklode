@@ -150,22 +150,22 @@ SELECT `+taskColumnsT+`,
 
 // attachOpenBlockers fills in OpenBlockers on every fact in facts (keyed by
 // task id) with the open tasks holding a dependent in scope for projectID (""
-// meaning every project): the from_task of a 'blocks' edge, and the open tasks
+// meaning every project): the to_task of a 'dependsOn' edge, and the open tasks
 // of any plan ordered before the dependent's plan (WL-REQ-172). "Open" uses the
 // same predicate as blockedCondition and planBlockedCondition: the blocker is
 // live and has not reached its repo's done_state (taskClosed). The blocker
-// itself need not be in the same project as its dependent — 'blocks' edges,
+// itself need not be in the same project as its dependent — 'dependsOn' edges,
 // unlike childOf, are not project-scoped (see AddEdge).
 //
 // A blocking plan still draft has minted no task and so names none here; it
 // reaches the fact through attachBlockingPlans instead.
 func (s *Store) attachOpenBlockers(ctx context.Context, projectID string, facts map[string]*ProjectWorkFact) error {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT e.to_task, b.id, b.title, b.state
+SELECT e.from_task, b.id, b.title, b.state
   FROM task_edges e
-  JOIN tasks b ON b.id = e.from_task
-  JOIN tasks dep ON dep.id = e.to_task
- WHERE e.type = 'blocks'
+  JOIN tasks b ON b.id = e.to_task
+  JOIN tasks dep ON dep.id = e.from_task
+ WHERE e.type = 'dependsOn'
    AND b.deleted_at IS NULL
    AND NOT `+taskClosed("b")+`
    AND dep.deleted_at IS NULL

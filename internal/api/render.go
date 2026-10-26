@@ -714,8 +714,8 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 	}
 	for _, e := range out {
 		switch e.Type {
-		case "blocks":
-			view.Blocks = append(view.Blocks, e.ToTask)
+		case "dependsOn":
+			view.BlockedBy = append(view.BlockedBy, e.ToTask)
 		case "childOf":
 			view.Parent = e.ToTask
 		case "followUpTo":
@@ -726,8 +726,8 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 	}
 	for _, e := range in {
 		switch e.Type {
-		case "blocks":
-			view.BlockedBy = append(view.BlockedBy, e.FromTask)
+		case "dependsOn":
+			view.Blocks = append(view.Blocks, e.FromTask)
 		case "childOf":
 			view.Children = append(view.Children, e.FromTask)
 		case "followUpTo":

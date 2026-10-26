@@ -27,7 +27,7 @@ func TestTaskBrief(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "blocks"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "dependsOn"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}

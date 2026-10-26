@@ -15,7 +15,7 @@ func TestProjectGraphTriples(t *testing.T) {
 			{ID: "WL-1", Project: "worklode", Title: "One", State: "ready", Kind: "feature", Priority: "high"},
 			{ID: "WL-2", Project: "worklode", Title: "Two", State: "ready", Kind: "feature", Priority: "low"},
 		},
-		TaskEdges: []model.Edge{{From: "WL-1", To: "WL-2", Type: "blocks"}},
+		TaskEdges: []model.Edge{{From: "WL-2", To: "WL-1", Type: "dependsOn"}},
 		Docs: []model.Doc{
 			{ID: 10, Project: "worklode", Kind: "spec", Number: 10, Slug: "010-spec", Title: "Spec", Status: "accepted", Version: 1},
 			{ID: 20, Project: "worklode", Kind: "plan", Number: 20, Slug: "020-plan", Title: "Plan", Status: "accepted", Version: 1, GeneratedByTask: "WL-2"},

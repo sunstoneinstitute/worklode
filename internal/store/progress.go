@@ -514,8 +514,8 @@ func (s *Store) rallyLandedCount(ctx context.Context, rallyID string) (int, erro
 	var landed int
 	if err := s.db.QueryRowContext(ctx, `
 SELECT count(*) FROM task_edges e
-  JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
- WHERE e.to_task = $1 AND e.type = 'blocks'
+  JOIN tasks f ON f.id = e.to_task AND f.deleted_at IS NULL
+ WHERE e.from_task = $1 AND e.type = 'dependsOn'
    AND f.state IN (`+deliveredRankStates+`)`, rallyID).Scan(&landed); err != nil {
 		return 0, fmt.Errorf("rally landed count for %s: %w", rallyID, err)
 	}
@@ -559,8 +559,8 @@ func (s *Store) rallySpecCount(ctx context.Context, rallyID string) (int, error)
 WITH members AS (
   SELECT f.plan_doc, f.about_doc
     FROM task_edges e
-    JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
-   WHERE e.to_task = $1 AND e.type = 'blocks'
+    JOIN tasks f ON f.id = e.to_task AND f.deleted_at IS NULL
+   WHERE e.from_task = $1 AND e.type = 'dependsOn'
 ), plans AS (
   SELECT plan_doc AS doc FROM members WHERE plan_doc IS NOT NULL
   UNION
@@ -762,9 +762,9 @@ type progressRefRallyInfo struct {
 }
 
 // progressRefRallies resolves, for each task, the rally it is either a
-// member of or itself is: one query joining each task to a 'blocks' edge
-// (its membership, if any) and then to whichever of the task itself or that
-// edge's target is a live rally row — a task that is neither drops out of
+// member of or itself is: one query joining each task to a 'dependsOn' edge
+// that ends at it (its membership, if any) and then to whichever of the task
+// itself or that edge's source is a live rally row — a task that is neither drops out of
 // the join. The bands are then built per distinct rally found, a count
 // bounded by how many rallies a project can have (one active, one draft),
 // never by how many tasks were asked about.
@@ -776,8 +776,8 @@ func (s *Store) progressRefRallies(ctx context.Context, taskIDs []string) (map[s
 	rows, err := s.db.QueryContext(ctx, `
 SELECT t.id, r.id, r.title, r.state
   FROM tasks t
-  LEFT JOIN task_edges e ON e.from_task = t.id AND e.type = 'blocks'
-  JOIN tasks r ON r.id = CASE WHEN t.kind = 'rally' THEN t.id ELSE e.to_task END
+  LEFT JOIN task_edges e ON e.to_task = t.id AND e.type = 'dependsOn'
+  JOIN tasks r ON r.id = CASE WHEN t.kind = 'rally' THEN t.id ELSE e.from_task END
               AND r.kind = 'rally' AND r.deleted_at IS NULL
  WHERE t.id = ANY($1) AND t.deleted_at IS NULL`, taskIDs)
 	if err != nil {

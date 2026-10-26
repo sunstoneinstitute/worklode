@@ -120,7 +120,7 @@ func addEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
 }
 
 // insertEdgeRaw writes a task_edges row straight past AddEdge's validation.
-// Only for tests that need a graph AddEdge now refuses — a 'blocks' cycle
+// Only for tests that need a graph AddEdge now refuses — a 'dependsOn' cycle
 // stored before the guard existed — to prove the readers still terminate.
 func insertEdgeRaw(t *testing.T, s *Store, fromTask, toTask, typ string) {
 	t.Helper()
