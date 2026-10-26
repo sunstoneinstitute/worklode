@@ -207,7 +207,7 @@ func (s *Store) CreateIdea(ctx context.Context, caller string, in model.CreateId
 			id, caller, i.Title, i.Body, i.Type, i.StoryType, i.LitmusTestID, now); err != nil {
 			return fmt.Errorf("insert idea %s: %w", id, err)
 		}
-		return deriveIdeaRefs(tx, id)
+		return deriveNodeRefs(tx, model.NodeKindIdea, id, nil)
 	}); err != nil {
 		return nil, err
 	}
@@ -239,6 +239,10 @@ func (s *Store) PatchIdea(ctx context.Context, caller, id string, in model.Patch
 		if err := normalizeIdea(i); err != nil {
 			return err
 		}
+		derive, err := refsBefore(tx, model.NodeKindIdea, id)
+		if err != nil {
+			return err
+		}
 		res, err := tx.ExecContext(ctx, ideaUpdateQuery, caller, id,
 			i.Title, i.Body, i.Type, i.StoryType, i.LitmusTestID, now)
 		if err != nil {
@@ -247,7 +251,7 @@ func (s *Store) PatchIdea(ctx context.Context, caller, id string, in model.Patch
 		if err := requireOneAffected(res, "update idea "+id, fmt.Errorf("idea %s: %w", id, ErrNotFound)); err != nil {
 			return err
 		}
-		if err := deriveIdeaRefs(tx, id); err != nil {
+		if err := derive(); err != nil {
 			return err
 		}
 		if i.Task == "" {

@@ -217,10 +217,10 @@ func DeriveNode(tx *sql.Tx, now time.Time, project string, kind model.NodeKind, 
 		return node, fmt.Errorf("read key of project %q: %w", project, err)
 	}
 	for _, f := range fields {
-		if err := deriveInlineRefs(tx, project, kind, id, f.name, f.version, f.text); err != nil {
+		if err := deriveInlineRefs(tx, project, kind, id, f.name, f.version, f.text, f.text); err != nil {
 			return node, err
 		}
-		_, unresolved, err := resolveHits(tx, project, kind, id, inlineref.Scan(f.text, keys))
+		_, unresolved, err := resolveHits(tx, project, kind, id, inlineref.Scan(f.text, keys), nil)
 		if err != nil {
 			return node, err
 		}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -358,7 +359,7 @@ func InsertDecision(tx *sql.Tx, taskID string, d model.Decision) (*model.Decisio
 		}
 		return nil, fmt.Errorf("pose decision %s/%s: %w", taskID, d.Key, err)
 	}
-	return &out, deriveDecisionRefs(tx, out.ID)
+	return &out, deriveNodeRefs(tx, model.NodeKindDecision, strconv.FormatInt(out.ID, 10), nil)
 }
 
 // AddDecision poses one question on an existing task (WL-REQ-176), recorded
@@ -648,6 +649,10 @@ func updateDecision(tx *sql.Tx, id int64, taskID string, d model.Decision, repos
 		}
 		options = b
 	}
+	derive, err := refsBefore(tx, model.NodeKindDecision, strconv.FormatInt(id, 10))
+	if err != nil {
+		return nil, err
+	}
 	position := "position"
 	if reposition {
 		position = `COALESCE((SELECT max(position) FROM decisions WHERE task_id = $1), 0) + 1`
@@ -666,7 +671,7 @@ func updateDecision(tx *sql.Tx, id int64, taskID string, d model.Decision, repos
 		}
 		return nil, fmt.Errorf("edit decision %s/%s: %w", taskID, d.Key, err)
 	}
-	return &out, deriveDecisionRefs(tx, out.ID)
+	return &out, derive()
 }
 
 // requireLiveTask refuses an unknown or soft-deleted task, the same

@@ -211,7 +211,7 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 			return nil, err
 		}
 	}
-	return d, deriveDeliverableRefs(tx, d.ID)
+	return d, deriveNodeRefs(tx, "deliverable", d.ID, nil)
 }
 
 // scanDeliverable reads one row selected with deliverableSelect. It is the
