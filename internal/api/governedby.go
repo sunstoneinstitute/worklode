@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"strconv"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -28,6 +29,10 @@ func (s *server) govern(w http.ResponseWriter, r *http.Request) {
 		func(tx *sql.Tx, eventID int64) error {
 			ruleID, err := store.RuleIDByRef(tx, ref.Key, ref.Number)
 			if err != nil {
+				return err
+			}
+			if err := store.RepairClassifications(tx, s.st.Now(), "task", id, "rule", strconv.FormatInt(ruleID, 10),
+				"governedBy", false, actorIDFrom(r), eventID); err != nil {
 				return err
 			}
 			return store.Govern(tx, id, ruleID, "manual", req.Pin)
@@ -56,6 +61,10 @@ func (s *server) ungovern(w http.ResponseWriter, r *http.Request) {
 		func(tx *sql.Tx, eventID int64) error {
 			ruleID, err := store.RuleIDByRef(tx, ref.Key, ref.Number)
 			if err != nil {
+				return err
+			}
+			if err := store.RepairClassifications(tx, s.st.Now(), "task", id, "rule", strconv.FormatInt(ruleID, 10),
+				"governedBy", true, actorIDFrom(r), eventID); err != nil {
 				return err
 			}
 			return store.Ungovern(tx, id, ruleID)
