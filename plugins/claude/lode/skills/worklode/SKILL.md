@@ -62,7 +62,7 @@ merged` (→merged). `task start` refuses with a 422 if the task is already
 assigned to someone else's identity ("assigned to X; unassign first") — run
 `task unassign` first, then `start`.
 
-A task with `child_of` children can't itself sit in `in_review` or any
+A task with `childOf` children can't itself sit in `in_review` or any
 delivery state — `task set state merged` on a parent reports the roll-up rule
 instead.
 
@@ -70,7 +70,7 @@ instead.
 
 | Between | Types |
 |---|---|
-| task ↔ task | `child_of` (subtask), `blocks`, `follow_up_to` (spun out of), `duplicate_of` (same request, filed twice) |
+| task ↔ task | `childOf` (subtask), `blocks`, `followUpTo` (spun out of), `duplicateOf` (same request, filed twice) |
 | task → rule | `governedBy` (follows the newest version unless pinned) |
 | spec → rule | Arrangement: rule, version, position, depth and section anchor |
 | rule → rule | `refines`, `constrains`, `conflictsWith`, `references`, `wasDerivedFrom`, `amends`, `supersedes` (new rule → old rule; `amendedBy`/`supersededBy` are read from the far end, never stored) |
@@ -99,7 +99,7 @@ lode project rally <project>            # its members, and which are still open
 ```
 
 A rally is never handed out as work: `lode work next` skips it and `lode task
-claim` refuses it by id. It also takes no `child_of` children, blocks nothing,
+claim` refuses it by id. It also takes no `childOf` children, blocks nothing,
 and carries no decision — the edges pointing at it are its whole content. No
 plan mints one; a rally is assembled by hand.
 

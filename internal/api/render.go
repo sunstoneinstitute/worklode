@@ -696,7 +696,7 @@ func cockpitProject(p model.CockpitProject) ui.CockpitProject {
 
 // taskView maps one task, its edges and its timeline into the task page's
 // view. The edge loops classify by type rather than by direction, so an
-// outgoing child_of names the parent while an incoming one names a child.
+// outgoing childOf names the parent while an incoming one names a child.
 //
 // md may be nil, which renders every body afresh; see the mdcache field.
 func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, project ui.CockpitProject, blocked bool, entries []model.TimelineEntry, out, in []store.Edge) ui.TaskView {
@@ -715,11 +715,11 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 		switch e.Type {
 		case "blocks":
 			view.Blocks = append(view.Blocks, e.ToTask)
-		case "child_of":
+		case "childOf":
 			view.Parent = e.ToTask
-		case "follow_up_to":
+		case "followUpTo":
 			view.FollowUpTo = e.ToTask
-		case "duplicate_of":
+		case "duplicateOf":
 			view.DuplicateOf = e.ToTask
 		}
 	}
@@ -727,11 +727,11 @@ func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, proj
 		switch e.Type {
 		case "blocks":
 			view.BlockedBy = append(view.BlockedBy, e.FromTask)
-		case "child_of":
+		case "childOf":
 			view.Children = append(view.Children, e.FromTask)
-		case "follow_up_to":
+		case "followUpTo":
 			view.FollowUps = append(view.FollowUps, e.FromTask)
-		case "duplicate_of":
+		case "duplicateOf":
 			view.Duplicates = append(view.Duplicates, e.FromTask)
 		}
 	}

@@ -221,7 +221,7 @@ func TestProjectWorkFactsHideDeletedTaskAndParent(t *testing.T) {
 	ctx := t.Context()
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, parent.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, parent.ID, "childOf"); err != nil {
 		t.Fatalf("AddEdge: %v", err)
 	}
 	if err := deleteTask(t, s, parent.ID, "stig", "noise"); err != nil {
@@ -337,7 +337,7 @@ func TestDeletedChildDoesNotMakeAContainer(t *testing.T) {
 	ctx := t.Context()
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, parent.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, parent.ID, "childOf"); err != nil {
 		t.Fatalf("AddEdge: %v", err)
 	}
 	if _, err := s.Claim(ctx, parent.ID, "stig", "host:/wt", 0); !errors.Is(err, ErrBadTransition) {
@@ -532,7 +532,7 @@ func TestListTasksHasChildrenIgnoresDeletedChildren(t *testing.T) {
 	ctx := t.Context()
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, parent.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, parent.ID, "childOf"); err != nil {
 		t.Fatalf("AddEdge: %v", err)
 	}
 
@@ -599,7 +599,7 @@ func TestDeleteChildReResolvesParent(t *testing.T) {
 	started := createTask(t, s, taskTestNow, defaultTaskInput())
 	idle := createTask(t, s, taskTestNow, defaultTaskInput())
 	for _, c := range []string{started.ID, idle.ID} {
-		if err := addEdge(t, s, c, parent.ID, "child_of"); err != nil {
+		if err := addEdge(t, s, c, parent.ID, "childOf"); err != nil {
 			t.Fatalf("AddEdge: %v", err)
 		}
 	}

@@ -36,7 +36,7 @@ func TestKindCheckRejectsUnknownKinds(t *testing.T) {
 }
 
 // TestSingleParentIndex checks that the partial unique index rejects a second
-// child_of edge out of one task, whichever parent it points at.
+// childOf edge out of one task, whichever parent it points at.
 func TestSingleParentIndex(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -45,12 +45,12 @@ func TestSingleParentIndex(t *testing.T) {
 	parentB := createTask(t, s, taskTestNow, containerInput())
 
 	if _, err := s.DBForTests().Exec(
-		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
+		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'childOf', $3)`,
 		child.ID, parentA.ID, taskTestNow); err != nil {
 		t.Fatalf("first parent edge: %v", err)
 	}
 	_, err := s.DBForTests().Exec(
-		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
+		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'childOf', $3)`,
 		child.ID, parentB.ID, taskTestNow)
 	if err == nil {
 		t.Fatal("second parent edge succeeded, want a unique violation")
@@ -61,7 +61,7 @@ func TestSingleParentIndex(t *testing.T) {
 }
 
 // TestAddEdgeFollowUpTo checks the third edge type: it is accepted, it is not
-// project-scoped the way child_of is, and it confers no parent-hood — the
+// project-scoped the way childOf is, and it confers no parent-hood — the
 // origin gains no children and no roll-up.
 func TestAddEdgeFollowUpTo(t *testing.T) {
 	t.Parallel()
@@ -71,9 +71,9 @@ func TestAddEdgeFollowUpTo(t *testing.T) {
 
 	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, taskTestNow, followUp.ID, origin.ID, "follow_up_to", eventID)
+			return AddEdge(tx, taskTestNow, followUp.ID, origin.ID, "followUpTo", eventID)
 		}); err != nil {
-		t.Fatalf("AddEdge follow_up_to: %v", err)
+		t.Fatalf("AddEdge followUpTo: %v", err)
 	}
 
 	progress, err := s.ChildProgress(t.Context(), origin.ID)
@@ -103,9 +103,9 @@ func TestAddEdgeDuplicateOf(t *testing.T) {
 
 	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, taskTestNow, dupe.ID, canonical.ID, "duplicate_of", eventID)
+			return AddEdge(tx, taskTestNow, dupe.ID, canonical.ID, "duplicateOf", eventID)
 		}); err != nil {
-		t.Fatalf("AddEdge duplicate_of: %v", err)
+		t.Fatalf("AddEdge duplicateOf: %v", err)
 	}
 
 	progress, err := s.ChildProgress(t.Context(), canonical.ID)
@@ -136,13 +136,13 @@ func TestSingleCanonicalIndex(t *testing.T) {
 
 	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, taskTestNow, dupe.ID, canonicalA.ID, "duplicate_of", eventID)
+			return AddEdge(tx, taskTestNow, dupe.ID, canonicalA.ID, "duplicateOf", eventID)
 		}); err != nil {
 		t.Fatalf("first canonical: %v", err)
 	}
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, taskTestNow, dupe.ID, canonicalB.ID, "duplicate_of", eventID)
+			return AddEdge(tx, taskTestNow, dupe.ID, canonicalB.ID, "duplicateOf", eventID)
 		})
 	if !errors.Is(err, ErrEdgeExists) {
 		t.Fatalf("second canonical error = %v, want ErrEdgeExists", err)
@@ -160,8 +160,8 @@ func TestDuplicateOfIsNotSingleOrigin(t *testing.T) {
 	canonical := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	for _, e := range []struct{ to, typ string }{
-		{origin.ID, "follow_up_to"},
-		{canonical.ID, "duplicate_of"},
+		{origin.ID, "followUpTo"},
+		{canonical.ID, "duplicateOf"},
 	} {
 		if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
 			func(tx *sql.Tx, eventID int64) error {
@@ -215,13 +215,13 @@ func TestSingleOriginIndex(t *testing.T) {
 
 	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, taskTestNow, followUp.ID, originA.ID, "follow_up_to", eventID)
+			return AddEdge(tx, taskTestNow, followUp.ID, originA.ID, "followUpTo", eventID)
 		}); err != nil {
 		t.Fatalf("first origin: %v", err)
 	}
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, taskTestNow, followUp.ID, originB.ID, "follow_up_to", eventID)
+			return AddEdge(tx, taskTestNow, followUp.ID, originB.ID, "followUpTo", eventID)
 		})
 	if !errors.Is(err, ErrEdgeExists) {
 		t.Fatalf("second origin error = %v, want ErrEdgeExists", err)
@@ -280,7 +280,7 @@ func TestUpMigrationDedupsDuplicateParentEdges(t *testing.T) {
 	}
 
 	rows, err := s.DBForTests().Query(
-		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`, childID)
+		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'childOf'`, childID)
 	if err != nil {
 		t.Fatalf("query surviving edges: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestUpMigrationDedupsDuplicateParentEdges(t *testing.T) {
 		t.Fatalf("rows: %v", err)
 	}
 	if len(survivors) != 1 || survivors[0] != parentBID {
-		t.Fatalf("surviving child_of edges = %v, want [%s] (the later one)", survivors, parentBID)
+		t.Fatalf("surviving childOf edges = %v, want [%s] (the later one)", survivors, parentBID)
 	}
 }
 
@@ -331,7 +331,7 @@ func migrationsThrough(t *testing.T, n int) string {
 
 // containerInput is the shared fixture for a task that will take children.
 // Since WL-REQ-120 there is no kind to declare — an ordinary task becomes a
-// container by acquiring child_of edges — so this differs from
+// container by acquiring childOf edges — so this differs from
 // defaultTaskInput only in its title.
 func containerInput() TaskInput {
 	in := defaultTaskInput()
@@ -347,7 +347,7 @@ func TestAddEdgeAcceptsOrdinaryParent(t *testing.T) {
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, child.ID, parent.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, parent.ID, "childOf"); err != nil {
 		t.Fatalf("ordinary task as parent: %v", err)
 	}
 	got, err := s.GetTask(t.Context(), parent.ID)
@@ -366,15 +366,15 @@ func TestAddEdgeRejectsSecondParent(t *testing.T) {
 	parentA := createTask(t, s, taskTestNow, containerInput())
 	parentB := createTask(t, s, taskTestNow, containerInput())
 
-	if err := addEdge(t, s, child.ID, parentA.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, parentA.ID, "childOf"); err != nil {
 		t.Fatalf("first parent: %v", err)
 	}
-	err := addEdge(t, s, child.ID, parentB.ID, "child_of")
+	err := addEdge(t, s, child.ID, parentB.ID, "childOf")
 	if !errors.Is(err, ErrEdgeExists) {
 		t.Fatalf("error = %v, want ErrEdgeExists", err)
 	}
 	// The baseline duplicate-edge rule still applies to the same pair.
-	if err := addEdge(t, s, child.ID, parentA.ID, "child_of"); !errors.Is(err, ErrEdgeExists) {
+	if err := addEdge(t, s, child.ID, parentA.ID, "childOf"); !errors.Is(err, ErrEdgeExists) {
 		t.Fatalf("duplicate edge error = %v, want ErrEdgeExists", err)
 	}
 }
@@ -390,7 +390,7 @@ func TestAddEdgeRejectsCrossProject(t *testing.T) {
 	otherIn.ProjectID = "other"
 	child := createTask(t, s, taskTestNow, otherIn)
 
-	err := addEdge(t, s, child.ID, container.ID, "child_of")
+	err := addEdge(t, s, child.ID, container.ID, "childOf")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("error = %v, want ErrInvalidInput", err)
 	}
@@ -404,14 +404,14 @@ func TestAddEdgeEnforcesDepthCap(t *testing.T) {
 	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
 	deep := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, mid.ID, container.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, mid.ID, container.ID, "childOf"); err != nil {
 		t.Fatalf("depth 1: %v", err)
 	}
-	if err := addEdge(t, s, leaf.ID, mid.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, leaf.ID, mid.ID, "childOf"); err != nil {
 		t.Fatalf("depth 2: %v", err)
 	}
 	// A third level is one edge too many.
-	err := addEdge(t, s, deep.ID, leaf.ID, "child_of")
+	err := addEdge(t, s, deep.ID, leaf.ID, "childOf")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("error = %v, want ErrInvalidInput", err)
 	}
@@ -427,14 +427,14 @@ func TestAddEdgeDepthCapCountsSubtree(t *testing.T) {
 	sub := createTask(t, s, taskTestNow, containerInput())
 	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, leaf.ID, sub.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, leaf.ID, sub.ID, "childOf"); err != nil {
 		t.Fatalf("leaf under sub: %v", err)
 	}
-	if err := addEdge(t, s, sub.ID, mid.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, sub.ID, mid.ID, "childOf"); err != nil {
 		t.Fatalf("sub under mid: %v", err)
 	}
 	// mid already carries a 2-deep subtree; hanging it under top makes 3.
-	err := addEdge(t, s, mid.ID, top.ID, "child_of")
+	err := addEdge(t, s, mid.ID, top.ID, "childOf")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("error = %v, want ErrInvalidInput", err)
 	}
@@ -448,10 +448,10 @@ func TestAddEdgeStillRejectsCycles(t *testing.T) {
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, containerInput())
 
-	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, container.ID, "childOf"); err != nil {
 		t.Fatalf("child under container: %v", err)
 	}
-	err := addEdge(t, s, container.ID, child.ID, "child_of")
+	err := addEdge(t, s, container.ID, child.ID, "childOf")
 	if !errors.Is(err, ErrCycle) {
 		t.Fatalf("error = %v, want ErrCycle", err)
 	}
@@ -467,7 +467,7 @@ func TestDescendantDepthWideFanOut(t *testing.T) {
 	parent := createTask(t, s, taskTestNow, containerInput())
 	for i := 0; i < 25; i++ {
 		leaf := createTask(t, s, taskTestNow, defaultTaskInput())
-		if err := addEdge(t, s, leaf.ID, parent.ID, "child_of"); err != nil {
+		if err := addEdge(t, s, leaf.ID, parent.ID, "childOf"); err != nil {
 			t.Fatalf("fan-out child %d: %v", i, err)
 		}
 	}
@@ -504,9 +504,9 @@ func TestDescendantDepthStopsAtCap(t *testing.T) {
 		{n1.ID, top.ID}, {n2.ID, n1.ID}, {n3.ID, n2.ID}, {n4.ID, n3.ID},
 	} {
 		if _, err := s.DBForTests().Exec(
-			`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
+			`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'childOf', $3)`,
 			e.child, e.parent, taskTestNow); err != nil {
-			t.Fatalf("insert %s child_of %s: %v", e.child, e.parent, err)
+			t.Fatalf("insert %s childOf %s: %v", e.child, e.parent, err)
 		}
 	}
 
@@ -531,13 +531,13 @@ func TestChildProgress(t *testing.T) {
 	var kids []*model.Task
 	for i := 0; i < 3; i++ {
 		k := createTask(t, s, taskTestNow, defaultTaskInput())
-		if err := addEdge(t, s, k.ID, container.ID, "child_of"); err != nil {
+		if err := addEdge(t, s, k.ID, container.ID, "childOf"); err != nil {
 			t.Fatalf("child %d: %v", i, err)
 		}
 		kids = append(kids, k)
 	}
-	// A blocks edge into the container shares child_of's direction (to_task =
-	// container). It must not be counted: pins the e.type = 'child_of' predicate.
+	// A blocks edge into the container shares childOf's direction (to_task =
+	// container). It must not be counted: pins the e.type = 'childOf' predicate.
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	if err := addEdge(t, s, blocker.ID, container.ID, "blocks"); err != nil {
 		t.Fatalf("blocks: %v", err)
@@ -573,8 +573,8 @@ func TestChildProgressPerRepoDoneState(t *testing.T) {
 
 	container := createTask(t, s, taskTestNow, containerInput())
 	kid := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, kid.ID, container.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+	if err := addEdge(t, s, kid.ID, container.ID, "childOf"); err != nil {
+		t.Fatalf("childOf: %v", err)
 	}
 	landCommit(t, s, kid.ID, "acme/app", "sha-kid")
 
@@ -617,8 +617,8 @@ func TestParentOf(t *testing.T) {
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+	if err := addEdge(t, s, child.ID, container.ID, "childOf"); err != nil {
+		t.Fatalf("childOf: %v", err)
 	}
 
 	got, err := s.ParentOf(t.Context(), child.ID)
@@ -649,8 +649,8 @@ func TestParentMap(t *testing.T) {
 
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+	if err := addEdge(t, s, child.ID, container.ID, "childOf"); err != nil {
+		t.Fatalf("childOf: %v", err)
 	}
 
 	otherParentIn := containerInput()
@@ -659,8 +659,8 @@ func TestParentMap(t *testing.T) {
 	otherChildIn := defaultTaskInput()
 	otherChildIn.ProjectID = "other"
 	otherChild := createTask(t, s, taskTestNow, otherChildIn)
-	if err := addEdge(t, s, otherChild.ID, otherParent.ID, "child_of"); err != nil {
-		t.Fatalf("other child_of: %v", err)
+	if err := addEdge(t, s, otherChild.ID, otherParent.ID, "childOf"); err != nil {
+		t.Fatalf("other childOf: %v", err)
 	}
 
 	scoped, err := s.ParentMap(t.Context(), "horndb")
@@ -686,8 +686,8 @@ func TestListTasksFilterParentAndHasChildren(t *testing.T) {
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 	loose := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+	if err := addEdge(t, s, child.ID, container.ID, "childOf"); err != nil {
+		t.Fatalf("childOf: %v", err)
 	}
 
 	kids, err := s.ListTasks(t.Context(), TaskFilter{Parent: container.ID})
@@ -734,8 +734,8 @@ func TestParentNeverInReadySet(t *testing.T) {
 	kidIn := defaultTaskInput()
 	kidIn.Draft = true
 	kid := createTask(t, s, taskTestNow, kidIn)
-	if err := addEdge(t, s, kid.ID, parent.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+	if err := addEdge(t, s, kid.ID, parent.ID, "childOf"); err != nil {
+		t.Fatalf("childOf: %v", err)
 	}
 	plain := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -907,8 +907,8 @@ func TestResolveHierarchyPerRepoDoneState(t *testing.T) {
 
 	container := createTask(t, s, taskTestNow, containerInput())
 	kid := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, kid.ID, container.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+	if err := addEdge(t, s, kid.ID, container.ID, "childOf"); err != nil {
+		t.Fatalf("childOf: %v", err)
 	}
 	landCommit(t, s, kid.ID, "acme/app", "sha-kid")
 
@@ -940,7 +940,7 @@ func parentWithChildren(t *testing.T, s *Store, n int) (*model.Task, []*model.Ta
 	var kids []*model.Task
 	for i := 0; i < n; i++ {
 		k := createTask(t, s, taskTestNow, defaultTaskInput())
-		if err := addEdge(t, s, k.ID, container.ID, "child_of"); err != nil {
+		if err := addEdge(t, s, k.ID, container.ID, "childOf"); err != nil {
 			t.Fatalf("child %d: %v", i, err)
 		}
 		kids = append(kids, k)
@@ -1087,10 +1087,10 @@ func TestRollUpDepth2Recursion(t *testing.T) {
 	container := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, containerInput())
 	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, mid.ID, container.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, mid.ID, container.ID, "childOf"); err != nil {
 		t.Fatalf("mid under container: %v", err)
 	}
-	if err := addEdge(t, s, leaf.ID, mid.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, leaf.ID, mid.ID, "childOf"); err != nil {
 		t.Fatalf("leaf under mid: %v", err)
 	}
 
@@ -1189,7 +1189,7 @@ func TestDecompose(t *testing.T) {
 		t.Fatalf("GetTask: %v", err)
 	}
 	// WL-REQ-120 / WL-REQ-89: decompose does not touch the parent's kind — the
-	// child_of edges are what make it a container.
+	// childOf edges are what make it a container.
 	if got.Kind != "bug" {
 		t.Fatalf("parent kind = %s, want it untouched at bug", got.Kind)
 	}
@@ -1233,7 +1233,7 @@ func TestDecompose(t *testing.T) {
 
 // TestDecomposeLogsTheFlagOnlyWhenSet pins the provenance row: decompose is
 // legal on a task that was never flagged needs_decomposition, and a change
-// row claiming true -> false there would be a lie. The child_of edges are the
+// row claiming true -> false there would be a lie. The childOf edges are the
 // record that the split happened.
 func TestDecomposeLogsTheFlagOnlyWhenSet(t *testing.T) {
 	t.Parallel()
@@ -1290,7 +1290,7 @@ func TestDecomposeRespectsDepthCap(t *testing.T) {
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, mid.ID, container.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, mid.ID, container.ID, "childOf"); err != nil {
 		t.Fatalf("mid under container: %v", err)
 	}
 	if _, err := decompose(t, s, mid.ID, []string{"A"}); err != nil {
@@ -1346,7 +1346,7 @@ func TestAddEdgeRejectsDecisionParent(t *testing.T) {
 	decision := createTask(t, s, taskTestNow, in)
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	err := addEdge(t, s, child.ID, decision.ID, "child_of")
+	err := addEdge(t, s, child.ID, decision.ID, "childOf")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("error = %v, want ErrInvalidInput", err)
 	}
@@ -1363,7 +1363,7 @@ func TestAddEdgeAcceptsDecisionChild(t *testing.T) {
 	decision := createTask(t, s, taskTestNow, in)
 	parent := createTask(t, s, taskTestNow, containerInput())
 
-	if err := addEdge(t, s, decision.ID, parent.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, decision.ID, parent.ID, "childOf"); err != nil {
 		t.Fatalf("decision as child: %v", err)
 	}
 }
@@ -1420,13 +1420,13 @@ func TestTaskTree(t *testing.T) {
 	done := createTask(t, s, taskTestNow, defaultTaskInput())
 	open := createTask(t, s, taskTestNow, defaultTaskInput())
 	for _, k := range []string{done.ID, open.ID} {
-		if err := addEdge(t, s, k, top.ID, "child_of"); err != nil {
-			t.Fatalf("child_of %s: %v", k, err)
+		if err := addEdge(t, s, k, top.ID, "childOf"); err != nil {
+			t.Fatalf("childOf %s: %v", k, err)
 		}
 	}
 	// A container that is itself a child: it belongs under its own parent,
 	// not as a second root.
-	if err := addEdge(t, s, createTask(t, s, taskTestNow, defaultTaskInput()).ID, open.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, createTask(t, s, taskTestNow, defaultTaskInput()).ID, open.ID, "childOf"); err != nil {
 		t.Fatalf("grandchild: %v", err)
 	}
 	loose := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -1461,8 +1461,8 @@ func TestTaskTreeStatesNarrowContainersNotChildren(t *testing.T) {
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	kid := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, kid.ID, container.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+	if err := addEdge(t, s, kid.ID, container.ID, "childOf"); err != nil {
+		t.Fatalf("childOf: %v", err)
 	}
 	walkTo(t, s, kid.ID, "in_progress")
 
@@ -1494,11 +1494,11 @@ func TestTaskTreeRoot(t *testing.T) {
 	top := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, containerInput())
 	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, mid.ID, top.ID, "child_of"); err != nil {
-		t.Fatalf("mid child_of top: %v", err)
+	if err := addEdge(t, s, mid.ID, top.ID, "childOf"); err != nil {
+		t.Fatalf("mid childOf top: %v", err)
 	}
-	if err := addEdge(t, s, leaf.ID, mid.ID, "child_of"); err != nil {
-		t.Fatalf("leaf child_of mid: %v", err)
+	if err := addEdge(t, s, leaf.ID, mid.ID, "childOf"); err != nil {
+		t.Fatalf("leaf childOf mid: %v", err)
 	}
 
 	nodes, err := s.TaskTree(t.Context(), TaskTreeFilter{Project: "horndb", Root: mid.ID})
@@ -1528,10 +1528,10 @@ func TestChildrenOfIsBulk(t *testing.T) {
 	childless := createTask(t, s, taskTestNow, containerInput())
 	ka := createTask(t, s, taskTestNow, defaultTaskInput())
 	kb := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, ka.ID, a.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, ka.ID, a.ID, "childOf"); err != nil {
 		t.Fatalf("ka: %v", err)
 	}
-	if err := addEdge(t, s, kb.ID, b.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, kb.ID, b.ID, "childOf"); err != nil {
 		t.Fatalf("kb: %v", err)
 	}
 	walkTo(t, s, ka.ID, "merged")
@@ -1568,7 +1568,7 @@ func TestChildrenOfOrderMatchesModelCompareTaskIDs(t *testing.T) {
 	ids := []string{"WL-10", "WL-2", "WL-9", "AB-100", "AB-9", "WL-1"}
 	for _, id := range ids {
 		insertBareTask(t, s, id)
-		if err := addEdge(t, s, id, parent.ID, "child_of"); err != nil {
+		if err := addEdge(t, s, id, parent.ID, "childOf"); err != nil {
 			t.Fatalf("addEdge %s: %v", id, err)
 		}
 	}

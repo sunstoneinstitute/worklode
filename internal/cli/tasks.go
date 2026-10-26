@@ -282,41 +282,41 @@ func (c *Client) Unblock(ctx context.Context, id, by string) ([]byte, error) {
 // Parent calls POST /api/v1/tasks/{id}/edges to file id under a parent.
 func (c *Client) Parent(ctx context.Context, id, parent string) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		model.EdgeInput{To: &parent, Type: "child_of"})
+		model.EdgeInput{To: &parent, Type: "childOf"})
 }
 
 // Unparent calls DELETE /api/v1/tasks/{id}/edges to detach id from its parent.
 func (c *Client) Unparent(ctx context.Context, id, parent string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		model.EdgeInput{To: &parent, Type: "child_of"})
+		model.EdgeInput{To: &parent, Type: "childOf"})
 }
 
 // FollowUp calls POST /api/v1/tasks/{id}/edges to record that id was spun out
 // of the work on origin.
 func (c *Client) FollowUp(ctx context.Context, id, origin string) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		model.EdgeInput{To: &origin, Type: "follow_up_to"})
+		model.EdgeInput{To: &origin, Type: "followUpTo"})
 }
 
 // UnfollowUp calls DELETE /api/v1/tasks/{id}/edges to drop the follow-up edge
 // from id to origin.
 func (c *Client) UnfollowUp(ctx context.Context, id, origin string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		model.EdgeInput{To: &origin, Type: "follow_up_to"})
+		model.EdgeInput{To: &origin, Type: "followUpTo"})
 }
 
 // Duplicate calls POST /api/v1/tasks/{id}/edges to record that id is the same
 // request as canonical, which is the one to work.
 func (c *Client) Duplicate(ctx context.Context, id, canonical string) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		model.EdgeInput{To: &canonical, Type: "duplicate_of"})
+		model.EdgeInput{To: &canonical, Type: "duplicateOf"})
 }
 
 // Unduplicate calls DELETE /api/v1/tasks/{id}/edges to drop the duplicate
 // edge from id to canonical.
 func (c *Client) Unduplicate(ctx context.Context, id, canonical string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		model.EdgeInput{To: &canonical, Type: "duplicate_of"})
+		model.EdgeInput{To: &canonical, Type: "duplicateOf"})
 }
 
 // Decompose calls POST /api/v1/tasks/{id}/decompose: converts id into an

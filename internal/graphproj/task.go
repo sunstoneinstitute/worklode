@@ -31,10 +31,10 @@ const (
 // Edge direction convention (model.Edge{From, To, Type}): "A blocks B" is
 // stored as {From: A, To: B, Type: "blocks"} — read literally, subject
 // blocks object. So for this task's out-edges (From == t.ID), an out
-// child_of means this task is the child (dct:isPartOf the parent in To); an
+// childOf means this task is the child (dct:isPartOf the parent in To); an
 // out blocks means this task blocks To (wl:blocks). For in-edges (To ==
 // t.ID), an in blocks means From blocks this task, i.e. this task depends on
-// it (wl:dependsOn). An in child_of means this task is somebody else's
+// it (wl:dependsOn). An in childOf means this task is somebody else's
 // parent; that triple belongs on the child's own projection (dct:isPartOf
 // with this task as object), not here — subject-completeness requires
 // emitting nothing for it.
@@ -68,13 +68,13 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 
 	for _, e := range out {
 		switch e.Type {
-		case "child_of":
+		case "childOf":
 			triples = append(triples, Triple{S: subj, P: DCTIsPartOf, O: IRIRef(iri.Task(e.To))})
 		case "blocks":
 			triples = append(triples, Triple{S: subj, P: iri.Term("blocks"), O: IRIRef(iri.Task(e.To))})
-		case "follow_up_to":
+		case "followUpTo":
 			triples = append(triples, Triple{S: subj, P: iri.Term("followUpTo"), O: IRIRef(iri.Task(e.To))})
-		case "duplicate_of":
+		case "duplicateOf":
 			triples = append(triples, Triple{S: subj, P: iri.Term("duplicateOf"), O: IRIRef(iri.Task(e.To))})
 		}
 	}
@@ -83,7 +83,7 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 		if e.Type == "blocks" {
 			triples = append(triples, Triple{S: subj, P: iri.Term("dependsOn"), O: IRIRef(iri.Task(e.From))})
 		}
-		// in child_of, in follow_up_to, in duplicate_of: belong to the other task's subject,
+		// in childOf, in follow_up_to, in duplicateOf: belong to the other task's subject,
 		// not this one — emit nothing (subject-completeness).
 	}
 

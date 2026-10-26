@@ -637,12 +637,12 @@ func TestTaskFollowUpCommands(t *testing.T) {
 	}
 	found := false
 	for _, e := range detail.Edges.Out {
-		if e.Type == "follow_up_to" && e.To == origin.ID {
+		if e.Type == "followUpTo" && e.To == origin.ID {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("out edges after add --follow-up-to = %+v, want a follow_up_to edge to %s", detail.Edges.Out, origin.ID)
+		t.Fatalf("out edges after add --follow-up-to = %+v, want a followUpTo edge to %s", detail.Edges.Out, origin.ID)
 	}
 
 	// follow-up --of records the same edge on an already-created task.
@@ -657,12 +657,12 @@ func TestTaskFollowUpCommands(t *testing.T) {
 	}
 	found = false
 	for _, e := range detail.Edges.Out {
-		if e.Type == "follow_up_to" && e.To == other.ID {
+		if e.Type == "followUpTo" && e.To == other.ID {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("out edges after follow-up --of = %+v, want a follow_up_to edge to %s", detail.Edges.Out, other.ID)
+		t.Fatalf("out edges after follow-up --of = %+v, want a followUpTo edge to %s", detail.Edges.Out, other.ID)
 	}
 
 	// unfollow-up reads the origin back and drops the edge.
@@ -674,8 +674,8 @@ func TestTaskFollowUpCommands(t *testing.T) {
 		t.Fatalf("get task after unfollow-up: %v", err)
 	}
 	for _, e := range detail.Edges.Out {
-		if e.Type == "follow_up_to" {
-			t.Fatalf("out edges after unfollow-up = %+v, want no follow_up_to edge", detail.Edges.Out)
+		if e.Type == "followUpTo" {
+			t.Fatalf("out edges after unfollow-up = %+v, want no followUpTo edge", detail.Edges.Out)
 		}
 	}
 
@@ -714,12 +714,12 @@ func TestTaskDuplicateCommands(t *testing.T) {
 	}
 	found := false
 	for _, e := range detail.Edges.Out {
-		if e.Type == "duplicate_of" && e.To == canonical.ID {
+		if e.Type == "duplicateOf" && e.To == canonical.ID {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("out edges after duplicate --of = %+v, want a duplicate_of edge to %s",
+		t.Fatalf("out edges after duplicate --of = %+v, want a duplicateOf edge to %s",
 			detail.Edges.Out, canonical.ID)
 	}
 
@@ -742,8 +742,8 @@ func TestTaskDuplicateCommands(t *testing.T) {
 		t.Fatalf("get task after unduplicate: %v", err)
 	}
 	for _, e := range detail.Edges.Out {
-		if e.Type == "duplicate_of" {
-			t.Fatalf("out edges after unduplicate = %+v, want no duplicate_of edge", detail.Edges.Out)
+		if e.Type == "duplicateOf" {
+			t.Fatalf("out edges after unduplicate = %+v, want no duplicateOf edge", detail.Edges.Out)
 		}
 	}
 

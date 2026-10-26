@@ -68,8 +68,8 @@ func TestFollowUpLoop(t *testing.T) {
 		t.Fatalf("get follow-up: %v", err)
 	}
 	if len(detail.Edges.Out) != 1 ||
-		detail.Edges.Out[0].Type != "follow_up_to" || detail.Edges.Out[0].To != origin.ID {
-		t.Fatalf("follow-up out edges = %+v, want one follow_up_to %s", detail.Edges.Out, origin.ID)
+		detail.Edges.Out[0].Type != "followUpTo" || detail.Edges.Out[0].To != origin.ID {
+		t.Fatalf("follow-up out edges = %+v, want one followUpTo %s", detail.Edges.Out, origin.ID)
 	}
 
 	// 4. Both tasks are claimable while the origin is still open: created

@@ -691,12 +691,12 @@ wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
 wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
     skos:definition "duplicates" ;
     wl:edgeOrigin wlc:declared ;
-    wl:storedAs "task_edges.duplicate_of" ;
+    wl:storedAs "task_edges.duplicateOf" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Task ;
     rdfs:comment """This task is the same request as that task, which is the canonical one
-        (backbone duplicate_of, WL-SPEC-75). Provenance, not scheduling: deliberately NOT
+        (backbone duplicateOf, WL-SPEC-75). Provenance, not scheduling: deliberately NOT
         a subproperty of dct:requires and deliberately not transitive, and it absorbs nothing
         -- the canonical task inherits none of the duplicate's skills, edges or body.
         Functional -- a duplicate names exactly one canonical task, mirroring the
@@ -707,11 +707,11 @@ wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
 wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
     skos:definition "follows up on" ;
     wl:edgeOrigin wlc:declared ;
-    wl:storedAs "task_edges.follow_up_to" ;
+    wl:storedAs "task_edges.followUpTo" ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Task ;
-    rdfs:comment """This task was spun out of the work on that task (backbone follow_up_to,
+    rdfs:comment """This task was spun out of the work on that task (backbone followUpTo,
         WL-SPEC-75). Provenance, not scheduling: deliberately NOT a subproperty of
         dct:requires and deliberately not transitive, because it implies no ordering and
         nothing walks it. Functional -- a task has at most one origin, mirroring the
@@ -905,7 +905,7 @@ dct:isReplacedBy wl:edgeOrigin wlc:inferred ;
 
 dct:isPartOf wl:edgeOrigin wlc:declared ;
     skos:definition "is part of" ;
-    wl:storedAs "task_edges.child_of" ;
+    wl:storedAs "task_edges.childOf" ;
     rdfs:comment "Declared on a child task, pointing at its parent." .
 
 dct:hasPart wl:edgeOrigin wlc:inferred ;

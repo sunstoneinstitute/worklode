@@ -1014,19 +1014,19 @@ func TestEdgesFromDirection(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Child", "priority": "low", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Parent", "priority": "low", "kind": "feature"})
 
-	// "from" on WL-2 means WL-1 -> WL-2 (WL-1 child_of WL-2).
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"from": "WL-1", "type": "child_of"})
+	// "from" on WL-2 means WL-1 -> WL-2 (WL-1 childOf WL-2).
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"from": "WL-1", "type": "childOf"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-1", token, nil)
 	out := decodeMap(t, rr)["edges"].(map[string]any)["out"].([]any)
 	if len(out) != 1 || out[0].(map[string]any)["to"] != "WL-2" {
-		t.Fatalf("WL-1 edges.out = %v, want child_of edge to WL-2", out)
+		t.Fatalf("WL-1 edges.out = %v, want childOf edge to WL-2", out)
 	}
 
-	// child_of cycle: WL-2 child_of WL-1 would close the loop.
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "child_of"})
+	// childOf cycle: WL-2 childOf WL-1 would close the loop.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "childOf"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("cycle status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
@@ -1220,8 +1220,8 @@ func TestCreateTaskWithFollowUpTo(t *testing.T) {
 		t.Fatalf("decode task: %v", err)
 	}
 	if len(got.Edges.Out) != 1 ||
-		got.Edges.Out[0].Type != "follow_up_to" || got.Edges.Out[0].To != "WL-1" {
-		t.Fatalf("out edges = %+v, want one follow_up_to WL-1", got.Edges.Out)
+		got.Edges.Out[0].Type != "followUpTo" || got.Edges.Out[0].To != "WL-1" {
+		t.Fatalf("out edges = %+v, want one followUpTo WL-1", got.Edges.Out)
 	}
 }
 
@@ -1257,12 +1257,12 @@ func TestEdgeEndpointAcceptsFollowUpTo(t *testing.T) {
 	})
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
-		map[string]any{"to": "WL-1", "type": "follow_up_to"})
+		map[string]any{"to": "WL-1", "type": "followUpTo"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token,
-		map[string]any{"to": "WL-1", "type": "follow_up_to"})
+		map[string]any{"to": "WL-1", "type": "followUpTo"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1282,14 +1282,14 @@ func TestEdgeEndpointAcceptsDuplicateOf(t *testing.T) {
 	}
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
-		map[string]any{"to": "WL-1", "type": "duplicate_of"})
+		map[string]any{"to": "WL-1", "type": "duplicateOf"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
 	// A duplicate names exactly one canonical task (WL-REQ-87).
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
-		map[string]any{"to": "WL-3", "type": "duplicate_of"})
+		map[string]any{"to": "WL-3", "type": "duplicateOf"})
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("second canonical status = %d, want 409; body %s", rr.Code, rr.Body.String())
 	}
@@ -1307,12 +1307,12 @@ func TestEdgeEndpointAcceptsDuplicateOf(t *testing.T) {
 		t.Fatalf("decode task: %v", err)
 	}
 	if len(got.Edges.Out) != 1 ||
-		got.Edges.Out[0].Type != "duplicate_of" || got.Edges.Out[0].To != "WL-1" {
-		t.Fatalf("out edges = %+v, want one duplicate_of WL-1", got.Edges.Out)
+		got.Edges.Out[0].Type != "duplicateOf" || got.Edges.Out[0].To != "WL-1" {
+		t.Fatalf("out edges = %+v, want one duplicateOf WL-1", got.Edges.Out)
 	}
 
 	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token,
-		map[string]any{"to": "WL-1", "type": "duplicate_of"})
+		map[string]any{"to": "WL-1", "type": "duplicateOf"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1335,7 +1335,7 @@ func TestEdgeEndpointRejectsUnknownType(t *testing.T) {
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
-	for _, typ := range []string{"blocks", "child_of", "follow_up_to", "duplicate_of"} {
+	for _, typ := range []string{"blocks", "childOf", "followUpTo", "duplicateOf"} {
 		if !strings.Contains(rr.Body.String(), typ) {
 			t.Fatalf("body %s, want it to name %q", rr.Body.String(), typ)
 		}
@@ -1483,9 +1483,9 @@ func TestListTasksDetailExpansion(t *testing.T) {
 	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"}); rr.Code != http.StatusCreated {
 		t.Fatalf("blocks edge: %d %s", rr.Code, rr.Body)
 	}
-	// WL-3 child_of WL-1.
-	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"from": "WL-3", "type": "child_of"}); rr.Code != http.StatusCreated {
-		t.Fatalf("child_of edge: %d %s", rr.Code, rr.Body)
+	// WL-3 childOf WL-1.
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"from": "WL-3", "type": "childOf"}); rr.Code != http.StatusCreated {
+		t.Fatalf("childOf edge: %d %s", rr.Code, rr.Body)
 	}
 
 	list := func(qs string) []listDetailRow {
@@ -1557,8 +1557,8 @@ func TestListTasksDetailExpansion(t *testing.T) {
 	if wl1.Edges == nil || len(wl1.Edges.Out) != 1 || wl1.Edges.Out[0].To != "WL-2" || wl1.Edges.Out[0].Type != "blocks" {
 		t.Errorf("WL-1 edges.out = %+v, want [{WL-2 blocks}]", wl1.Edges)
 	}
-	if wl1.Edges == nil || len(wl1.Edges.In) != 1 || wl1.Edges.In[0].From != "WL-3" || wl1.Edges.In[0].Type != "child_of" {
-		t.Errorf("WL-1 edges.in = %+v, want [{WL-3 child_of}]", wl1.Edges)
+	if wl1.Edges == nil || len(wl1.Edges.In) != 1 || wl1.Edges.In[0].From != "WL-3" || wl1.Edges.In[0].Type != "childOf" {
+		t.Errorf("WL-1 edges.in = %+v, want [{WL-3 childOf}]", wl1.Edges)
 	}
 
 	wl4 := byID["WL-4"]
@@ -1733,5 +1733,33 @@ func TestPatchTaskKind(t *testing.T) {
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "epic"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown kind status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestEdgeEndpointAcceptsLegacyTypeNames checks an older client's snake_case
+// edge type is stored under its ontology name (WL-REQ-1655).
+func TestEdgeEndpointAcceptsLegacyTypeNames(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Parent", "priority": "medium", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Child", "priority": "medium", "kind": "chore",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "child_of"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"childOf"`) {
+		t.Fatalf("edge not stored as childOf: %s", rr.Body.String())
+	}
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "child_of"})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 }

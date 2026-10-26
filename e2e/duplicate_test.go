@@ -14,7 +14,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// TestDuplicateLoop exercises WL-REQ-87's duplicate_of end-to-end through
+// TestDuplicateLoop exercises WL-REQ-87's duplicateOf end-to-end through
 // public surfaces only: a triager marks the second filing of a request as a
 // duplicate of the canonical one, both directions render on the task pages,
 // the marking absorbs nothing and gates nothing, and a duplicate names only
@@ -75,8 +75,8 @@ func TestDuplicateLoop(t *testing.T) {
 		t.Fatalf("get duplicate: %v", err)
 	}
 	if len(detail.Edges.Out) != 1 ||
-		detail.Edges.Out[0].Type != "duplicate_of" || detail.Edges.Out[0].To != canonical.ID {
-		t.Fatalf("duplicate out edges = %+v, want one duplicate_of %s", detail.Edges.Out, canonical.ID)
+		detail.Edges.Out[0].Type != "duplicateOf" || detail.Edges.Out[0].To != canonical.ID {
+		t.Fatalf("duplicate out edges = %+v, want one duplicateOf %s", detail.Edges.Out, canonical.ID)
 	}
 
 	// No absorption: the canonical task's own fields and hierarchy are

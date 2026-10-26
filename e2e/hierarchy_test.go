@@ -17,7 +17,7 @@ import (
 // (the cli.Client HTTP client — no direct store writes): decompose an
 // oversized task into a parent plus children, confirm the parent never
 // reaches the ready set, then close the children and watch it roll up on its
-// own. Since 029 §2 the container is inferred from the child_of edges, so the
+// own. The container is inferred from the childOf edges (WL-REQ-88), so the
 // parent keeps its kind throughout.
 func TestHierarchyLoop(t *testing.T) {
 	ctx := context.Background()

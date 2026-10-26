@@ -648,7 +648,7 @@ func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time
 // TaskCost reports a task's usage and cost per day over [from, to], inclusive
 // on both ends, plus per-currency totals and the number of agent sessions
 // that billed usage in the window. includeChildren widens the scope to the
-// task's child_of descendants (WL-REQ-88) — a container task holds no
+// task's childOf descendants (WL-REQ-88) — a container task holds no
 // lease itself, so without it a container's cost always reads as zero.
 // Returns ErrNotFound when taskID does not exist, so a typo'd id reports as
 // an error rather than a silent zero. The scope is deliberately not filtered on
@@ -671,7 +671,7 @@ func (s *Store) TaskCost(ctx context.Context, taskID string, includeChildren boo
 		scope = `WITH RECURSIVE scope(task) AS (
 			SELECT $1::text
 			UNION
-			SELECT e.from_task FROM task_edges e JOIN scope sc ON e.to_task = sc.task AND e.type = 'child_of'
+			SELECT e.from_task FROM task_edges e JOIN scope sc ON e.to_task = sc.task AND e.type = 'childOf'
 		)`
 	}
 

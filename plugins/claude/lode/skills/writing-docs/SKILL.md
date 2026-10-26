@@ -464,7 +464,7 @@ WL-SPEC-77, as implemented by the document store.
   minted when the plan is accepted. WL-REQ-174 mints no root row above them,
   grouping them by a reference to the plan document instead — never create a
   free-standing container task; container-ness is inferred from a task's
-  `child_of` children (WL-REQ-88).
+  `childOf` children (WL-REQ-88).
 - **Groupings are queries, not rows** (WL-RULE-162): one plan's tasks = the tasks
   referencing it, everything in a repo set = the project. No sprint concept,
   no container above a plan's tasks — order plans with `blockedBy`.

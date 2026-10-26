@@ -588,9 +588,9 @@ func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
 
 	if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, claimNextTestNow, followUp.ID, origin.ID, "follow_up_to", eventID)
+			return AddEdge(tx, claimNextTestNow, followUp.ID, origin.ID, "followUpTo", eventID)
 		}); err != nil {
-		t.Fatalf("AddEdge follow_up_to: %v", err)
+		t.Fatalf("AddEdge followUpTo: %v", err)
 	}
 
 	blocked, err := s.BlockedTaskIDs(ctx)
@@ -598,7 +598,7 @@ func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
 		t.Fatalf("BlockedTaskIDs: %v", err)
 	}
 	if blocked[followUp.ID] {
-		t.Fatal("follow-up reports blocked, want claimable: follow_up_to gates nothing")
+		t.Fatal("follow-up reports blocked, want claimable: followUpTo gates nothing")
 	}
 
 	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/.worktrees/1"})
@@ -610,7 +610,7 @@ func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
 	}
 }
 
-// TestClaimNextIgnoresDuplicateOf pins WL-REQ-87: duplicate_of is provenance,
+// TestClaimNextIgnoresDuplicateOf pins WL-REQ-87: duplicateOf is provenance,
 // not scheduling. Marking a task a duplicate neither blocks nor closes it —
 // closing it is a separate, deliberate act.
 func TestClaimNextIgnoresDuplicateOf(t *testing.T) {
@@ -622,9 +622,9 @@ func TestClaimNextIgnoresDuplicateOf(t *testing.T) {
 
 	if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, claimNextTestNow, dupe.ID, canonical.ID, "duplicate_of", eventID)
+			return AddEdge(tx, claimNextTestNow, dupe.ID, canonical.ID, "duplicateOf", eventID)
 		}); err != nil {
-		t.Fatalf("AddEdge duplicate_of: %v", err)
+		t.Fatalf("AddEdge duplicateOf: %v", err)
 	}
 
 	blocked, err := s.BlockedTaskIDs(ctx)
@@ -632,7 +632,7 @@ func TestClaimNextIgnoresDuplicateOf(t *testing.T) {
 		t.Fatalf("BlockedTaskIDs: %v", err)
 	}
 	if blocked[dupe.ID] {
-		t.Fatal("duplicate reports blocked, want claimable: duplicate_of gates nothing")
+		t.Fatal("duplicate reports blocked, want claimable: duplicateOf gates nothing")
 	}
 
 	got, err := s.GetTask(ctx, dupe.ID)

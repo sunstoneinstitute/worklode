@@ -744,7 +744,7 @@ func TestTaskCostNoSessions(t *testing.T) {
 }
 
 // A container task holds no lease itself; its own cost is empty unless
-// includeChildren widens the scope to its child_of descendants — including a
+// includeChildren widens the scope to its childOf descendants — including a
 // grandchild, which a non-recursive single-hop query would miss.
 func TestTaskCostIncludeChildren(t *testing.T) {
 	t.Parallel()
@@ -758,9 +758,9 @@ func TestTaskCostIncludeChildren(t *testing.T) {
 		t.Helper()
 		if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
 			func(tx *sql.Tx, eventID int64) error {
-				return AddEdge(tx, leaseTestNow, child, parent, "child_of", eventID)
+				return AddEdge(tx, leaseTestNow, child, parent, "childOf", eventID)
 			}); err != nil {
-			t.Fatalf("AddEdge %s child_of %s: %v", child, parent, err)
+			t.Fatalf("AddEdge %s childOf %s: %v", child, parent, err)
 		}
 	}
 	addChildOf(child.TaskID, parent.TaskID)

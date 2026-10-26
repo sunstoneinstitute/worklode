@@ -274,4 +274,4 @@ which is a document status transition, not a task state. A plan's execution
 them — "this plan's tasks" is the query `tasks WHERE plan_doc = <this
 plan>`, not a row you create. Do not create a long-lived umbrella task per
 spec, and do not create a free-standing container task: containment is
-always inferred from `child_of` edges.
+always inferred from `childOf` edges.

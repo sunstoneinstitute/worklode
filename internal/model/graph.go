@@ -9,7 +9,7 @@ type ProjectGraph struct {
 	Project string `json:"project"`
 	Tasks   []Task `json:"tasks"`
 	// TaskEdges are task_edges rows with both ends among Tasks:
-	// blocks, child_of, follow_up_to, duplicate_of.
+	// blocks, childOf, followUpTo, duplicateOf.
 	TaskEdges []Edge `json:"task_edges"`
 	// Docs carry no Body: the graph draws and cites documents, it does not
 	// render them.
