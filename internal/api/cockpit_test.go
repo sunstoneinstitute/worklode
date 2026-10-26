@@ -464,7 +464,7 @@ func TestProjectCockpitBlockedSecondaryConcerns(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Dependent task", "priority": "medium", "kind": "feature",
 	})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add blocking edge status = %d, body %s", rr.Code, rr.Body.String())
 	}

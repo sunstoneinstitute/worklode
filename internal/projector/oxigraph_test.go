@@ -54,12 +54,12 @@ func TestProjectorEndToEnd(t *testing.T) {
 
 	p := projector.New(s, graphserver.New(proxy.URL, nil), nil, 100)
 
-	// 2. Seed tasks a, b, c and edges a blocks b, b blocks c.
+	// 2. Seed tasks a, b, c and edges b dependsOn a, c dependsOn b.
 	a := createTask(t, s, "e2e-a", proj, "task a")
 	b := createTask(t, s, "e2e-b", proj, "task b")
 	c := createTask(t, s, "e2e-c", proj, "task c")
-	addEdge(t, s, "e2e-ab", a, b, "blocks")
-	addEdge(t, s, "e2e-bc", b, c, "blocks")
+	addEdge(t, s, "e2e-ab", b, a, "dependsOn")
+	addEdge(t, s, "e2e-bc", c, b, "dependsOn")
 
 	n, err := p.RunOnce(ctx)
 	if err != nil || n != 1 {

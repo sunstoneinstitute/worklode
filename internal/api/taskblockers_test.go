@@ -20,7 +20,7 @@ func TestBlockerRoutes(t *testing.T) {
 	// WL-3 blocks WL-2 blocks WL-1.
 	for _, e := range [][2]string{{"WL-2", "WL-1"}, {"WL-3", "WL-2"}} {
 		rr := doReq(t, h, "POST", "/api/v1/tasks/"+e[0]+"/edges", token,
-			map[string]any{"to": e[1], "type": "blocks"})
+			map[string]any{"from": e[1], "type": "dependsOn"})
 		if rr.Code != http.StatusCreated {
 			t.Fatalf("add edge %s->%s status = %d, body %s", e[0], e[1], rr.Code, rr.Body.String())
 		}

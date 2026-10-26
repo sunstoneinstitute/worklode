@@ -174,7 +174,7 @@ func TestCriticalPathExcludesFinishedChains(t *testing.T) {
 	}
 	for _, e := range [][2]string{{"WL-1", "WL-2"}, {"WL-2", "WL-3"}, {"WL-3", "WL-4"}} {
 		rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+e[0]+"/edges", token,
-			map[string]any{"type": "blocks", "to": e[1]})
+			map[string]any{"type": "dependsOn", "from": e[1]})
 		if rr.Code != http.StatusCreated && rr.Code != http.StatusOK {
 			t.Fatalf("edge %v: %d %s", e, rr.Code, rr.Body.String())
 		}

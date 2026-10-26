@@ -222,7 +222,7 @@ func TestTaskEdgeCommands(t *testing.T) {
 		if err := json.Unmarshal([]byte(out), &edge); err != nil {
 			t.Fatalf("decode %q: %v", out, err)
 		}
-		want := model.Edge{From: blocker.ID, To: subject.ID, Type: "blocks"}
+		want := model.Edge{From: subject.ID, To: blocker.ID, Type: "dependsOn"}
 		if edge != want {
 			t.Errorf("block --json returned %+v, want %+v", edge, want)
 		}

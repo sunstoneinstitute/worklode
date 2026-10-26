@@ -1544,7 +1544,7 @@ func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
 		"project": "proj", "title": "Blocked", "priority": "medium", "kind": "feature",
 	})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1557,9 +1557,9 @@ func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
 	if strings.Contains(body, "edge set to") {
 		t.Fatalf("task page renders the blank field/old/new fallback for an edge change:\n%s", body)
 	}
-	bodyContains(t, body, "edge added: WL-1 blocks WL-2")
+	bodyContains(t, body, "edge added: WL-2 dependsOn WL-1")
 
-	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1568,7 +1568,7 @@ func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	bodyContains(t, rr.Body.String(), "edge removed: WL-1 blocks WL-2")
+	bodyContains(t, rr.Body.String(), "edge removed: WL-2 dependsOn WL-1")
 }
 
 // TestDriftPageRendersWithoutGraph holds the drift board's two standing

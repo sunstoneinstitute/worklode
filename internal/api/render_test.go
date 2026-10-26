@@ -191,3 +191,18 @@ func TestPRCIState(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// TestTaskViewDependsOnEdges: an out dependsOn edge names a prerequisite
+// (Blocked by), an in dependsOn edge names a dependent (Blocks).
+func TestTaskViewDependsOnEdges(t *testing.T) {
+	task := &model.Task{ID: "WL-2"}
+	out := []store.Edge{{FromTask: "WL-2", ToTask: "WL-1", Type: "dependsOn"}}
+	in := []store.Edge{{FromTask: "WL-3", ToTask: "WL-2", Type: "dependsOn"}}
+	v := taskView(nil, mdrender.ProjectKeys{}, task, ui.CockpitProject{}, true, nil, out, in)
+	if len(v.BlockedBy) != 1 || v.BlockedBy[0] != "WL-1" {
+		t.Errorf("BlockedBy = %v, want [WL-1]", v.BlockedBy)
+	}
+	if len(v.Blocks) != 1 || v.Blocks[0] != "WL-3" {
+		t.Errorf("Blocks = %v, want [WL-3]", v.Blocks)
+	}
+}

@@ -869,7 +869,7 @@ func TestBoard(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "In review", "priority": "low", "kind": "chore"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Container", "priority": "high", "kind": "feature"})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add blocking edge status = %d", rr.Code)
 	}
@@ -1101,7 +1101,7 @@ func TestBoardNamesBothSidesOfABlockerEdge(t *testing.T) {
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Stuck", "priority": "high", "kind": "feature"})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "dependsOn"})
 	if rr.Code != http.StatusCreated && rr.Code != http.StatusOK {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
