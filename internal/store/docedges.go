@@ -491,6 +491,32 @@ func insertDocEdge(tx *sql.Tx, docID int64, e docEdgeRef, row docEdgeRow, owner 
 	return nil
 }
 
+// AddDocEdge writes one whole-document edge, fromDoc typ toDoc, with
+// classification_id set to classificationID (0 for none). It is the classifier's
+// writer (WL-REQ-1853): typ is requires, wasDerivedFrom or blockedBy, the
+// relations a classifier may pick (WL-REQ-1857), and the caller checks that a
+// blockedBy edge joins two plans. A second identical edge is ErrEdgeExists, a
+// self edge or another type ErrInvalidInput, an unknown doc ErrNotFound.
+func AddDocEdge(tx *sql.Tx, fromDoc, toDoc int64, typ string, classificationID int64) error {
+	if typ != "requires" && typ != "wasDerivedFrom" && typ != "blockedBy" {
+		return fmt.Errorf("doc edge type %q is not requires, wasDerivedFrom or blockedBy: %w", typ, ErrInvalidInput)
+	}
+	if fromDoc == toDoc {
+		return fmt.Errorf("doc %d cannot relate to itself: %w", fromDoc, ErrInvalidInput)
+	}
+	_, err := tx.Exec(`INSERT INTO doc_edges (from_doc, type, to_doc, classification_id) VALUES ($1, $2, $3, $4)`,
+		fromDoc, typ, toDoc, nullID(classificationID))
+	switch {
+	case isUniqueViolationOn(err, "doc_edges_unique"):
+		return fmt.Errorf("doc %d already %s doc %d: %w", fromDoc, typ, toDoc, ErrEdgeExists)
+	case pgViolation(err, "23503", "doc_edges_from_doc_fkey"), pgViolation(err, "23503", "doc_edges_to_doc_fkey"):
+		return fmt.Errorf("doc: %w", ErrNotFound)
+	case err != nil:
+		return fmt.Errorf("add doc edge %d %s %d: %w", fromDoc, typ, toDoc, err)
+	}
+	return nil
+}
+
 // repointExternalEdges re-points the project's already-stored unresolved
 // references that name newDocID, in both doc_edges targets and defers
 // owners. rebuildEdges resolves a reference once,

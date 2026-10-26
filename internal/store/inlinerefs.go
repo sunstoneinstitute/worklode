@@ -265,8 +265,10 @@ func readPriorRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, fiel
 // (WL-REQ-1852). version is nil for an unversioned field; prev is the field's
 // text before this write, which decides whether a section ref keeps its
 // earlier resolution (WL-RULE-1849). Manual rows stay; a derived row that
-// duplicates one records its lines on the manual row.
-func deriveInlineRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, field string, version *int, prev, text string) error {
+// duplicates one records its lines on the manual row. The cue classifier then
+// runs over the refs (WL-REQ-1857); eventID is the write's event, 0 for none.
+// The caller prunes classified edges once every field is written.
+func deriveInlineRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, field string, version *int, prev, text string, eventID int64) error {
 	keys, err := projectKeys(tx)
 	if err != nil {
 		return err
@@ -297,17 +299,20 @@ func deriveInlineRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, f
 			return fmt.Errorf("derive inline ref %s %s -> %s %s: %w", from, fromID, r.ToKind, r.ToID, err)
 		}
 	}
-	return nil
+	return cueInlineRefs(tx, from, fromID, field, version, text, refs, eventID)
 }
 
 // deriveRuleInlineRefs re-extracts a rule's heading and body at version; the
 // prev texts are the rule's text before this write.
 func deriveRuleInlineRefs(tx *sql.Tx, project string, ruleID int64, version int, prevHeading, prevBody, heading, body string) error {
 	id := strconv.FormatInt(ruleID, 10)
-	if err := deriveInlineRefs(tx, project, "rule", id, "heading", &version, prevHeading, heading); err != nil {
+	if err := deriveInlineRefs(tx, project, "rule", id, "heading", &version, prevHeading, heading, 0); err != nil {
 		return err
 	}
-	return deriveInlineRefs(tx, project, "rule", id, "body", &version, prevBody, body)
+	if err := deriveInlineRefs(tx, project, "rule", id, "body", &version, prevBody, body, 0); err != nil {
+		return err
+	}
+	return pruneClassifiedEdges(tx, "rule", id, &version)
 }
 
 // markdownWriters names, for every model.Markdown field, the store function
@@ -415,11 +420,11 @@ func deriveNodeRefs(tx *sql.Tx, kind model.NodeKind, id string, prev map[string]
 		return err
 	}
 	for _, f := range storedFields[kind].fields {
-		if err := deriveInlineRefs(tx, project, kind, id, f, nil, prev[f], texts[f]); err != nil {
+		if err := deriveInlineRefs(tx, project, kind, id, f, nil, prev[f], texts[f], 0); err != nil {
 			return err
 		}
 	}
-	return nil
+	return pruneClassifiedEdges(tx, kind, id, nil)
 }
 
 // refsBefore reads a node's Markdown fields before a write and returns what
@@ -443,10 +448,13 @@ func deriveDocRefs(tx *sql.Tx, docID int64, prev map[string]string) error {
 		return fmt.Errorf("read doc %d for inline refs: %w", docID, err)
 	}
 	id := strconv.FormatInt(docID, 10)
-	if err := deriveInlineRefs(tx, project, "doc", id, "title", nil, prev["title"], title); err != nil {
+	if err := deriveInlineRefs(tx, project, "doc", id, "title", nil, prev["title"], title, 0); err != nil {
 		return err
 	}
-	return deriveInlineRefs(tx, project, "doc", id, "body", &version, prev["body"], body)
+	if err := deriveInlineRefs(tx, project, "doc", id, "body", &version, prev["body"], body, 0); err != nil {
+		return err
+	}
+	return pruneClassifiedEdges(tx, "doc", id, nil)
 }
 
 // deriveDocNoteRefs extracts a new doc note, held by its doc as note/<id>.
@@ -459,7 +467,7 @@ func deriveDocNoteRefs(tx *sql.Tx, noteID int64) error {
 		return fmt.Errorf("read doc note %d for inline refs: %w", noteID, err)
 	}
 	return deriveInlineRefs(tx, project, "doc", strconv.FormatInt(docID, 10),
-		"note/"+strconv.FormatInt(noteID, 10), nil, "", body)
+		"note/"+strconv.FormatInt(noteID, 10), nil, "", body, 0)
 }
 
 // deleteInlineRefs removes every inline_refs row on either end of a deleted
