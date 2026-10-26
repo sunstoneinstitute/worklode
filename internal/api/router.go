@@ -357,6 +357,7 @@ var routeGuards = map[string]routeGuard{
 	// Normalizing and re-extracting inline references writes docs, tasks and
 	// rules in bulk: the permission `lode doc edit` needs (WL-REQ-1860).
 	"POST /api/v1/projects/{id}/refs/derive": guardedAny(permDocWrite),
+	"GET /api/v1/projects/{id}/refs/stats":   guardedAny(permDocRead),
 	"GET /api/v1/projects/{id}/terms":        guardedAny(permDocRead),
 	"PUT /api/v1/docs/{id}/body":             guardedAny(permDocWrite),
 	"POST /api/v1/docs/{id}/patch":           guardedAny(permDocWrite),
