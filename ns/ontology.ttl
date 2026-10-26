@@ -198,6 +198,19 @@ wl:DocumentAccepted a owl:Class ;
         wl:fromStatus / wl:toStatus.""" .
 
 
+wl:ReferenceClassified a owl:Class ;
+    skos:definition "reference classification" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A classifier named the relation an inline reference states (WL-REQ-1853). The
+        payload is the ref_classifications row.""" .
+
+wl:ClassificationRepaired a owl:Class ;
+    skos:definition "classification repair" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A person kept, adjusted, rejected or added a classification (WL-REQ-1856).""" .
+
 # ---------------------------------------------------------------------------
 # Layer 3 — runtime · deploy (observed; projected from ingest). Every class is
 # anchored on a PROV-O parent where a truthful anchor exists, so PROV-aware
