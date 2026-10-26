@@ -43,29 +43,133 @@ func recordClassification(tx *sql.Tx, c model.RefClassification, eventID int64) 
 	if err != nil {
 		return 0, 0, fmt.Errorf("insert ref classification: %w", err)
 	}
+	classEvent, err = classificationEvent(tx, c, "wl:ReferenceClassified",
+		fmt.Sprintf("ref_classification:%d", c.ID), eventID, c.CreatedAt)
+	if err != nil {
+		return 0, 0, err
+	}
+	return c.ID, classEvent, nil
+}
+
+// classificationEvent records classification c as its own event of type typ,
+// with the row as payload and prov:wasInformedBy naming eventID when it is
+// non-zero (WL-REQ-1856).
+func classificationEvent(tx *sql.Tx, c model.RefClassification, typ, externalID string, eventID int64, at time.Time) (int64, error) {
 	row, err := json.Marshal(c)
 	if err != nil {
-		return 0, 0, fmt.Errorf("marshal classification event: %w", err)
+		return 0, fmt.Errorf("marshal classification event: %w", err)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(row, &payload); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	payload["@type"] = "wl:ReferenceClassified"
+	payload["@type"] = typ
 	if eventID != 0 {
 		payload["prov:wasInformedBy"] = iri.CURIE(iri.Event(eventID))
 	}
 	b, err := EventPayload(payload)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
+	var id int64
 	if err := tx.QueryRow(
 		`INSERT INTO events (source, external_id, type, payload, received_at)
-		 VALUES ('cli', $1, 'wl:ReferenceClassified', $2, $3) RETURNING id`,
-		fmt.Sprintf("ref_classification:%d", c.ID), b, c.CreatedAt.UTC()).Scan(&classEvent); err != nil {
-		return 0, 0, fmt.Errorf("record classification event: %w", err)
+		 VALUES ('cli', $1, $2, $3, $4) RETURNING id`,
+		externalID, typ, b, at.UTC()).Scan(&id); err != nil {
+		return 0, fmt.Errorf("record %s event: %w", typ, err)
 	}
-	return c.ID, classEvent, nil
+	return id, nil
+}
+
+// classifiedPairs names, per kind pair a classifier writes, the typed table,
+// how one pair's rows match ($1 from, $2 to) and the row's predicate.
+var classifiedPairs = map[[2]model.NodeKind]struct{ table, pair, typ string }{
+	{"task", "task"}: {"task_edges", "from_task = $1 AND to_task = $2", "type"},
+	{"rule", "rule"}: {"rule_edges", "from_rule = $1::bigint AND to_rule = $2::bigint", "type"},
+	{"doc", "doc"}:   {"doc_edges", "from_doc = $1::bigint AND to_doc = $2::bigint", "type"},
+	{"task", "rule"}: {"task_governed_by", "task_id = $1 AND rule_id = $2::bigint", "'governedBy'"},
+}
+
+// RepairClassifications records a person's typed edge write (removed false)
+// or removal (removed true) of fromID predicate toID as an outcome on the
+// classifier's verdicts for that pair (WL-REQ-1858). A person's writer calls
+// it in its own transaction before it writes or removes the edge; the
+// classifier's writes and pruneClassifiedEdges never do.
+//
+//   - Removing a classified edge sets its classification rejected.
+//   - Writing another predicate beside a classified edge sets that
+//     classification adjusted to predicate and clears the edge's
+//     classification_id, so the edge is the person's from then on.
+//   - Writing on a pair whose newest classification says references sets it
+//     missed.
+//
+// actor is the writer's actor and eventID its event, 0 for none.
+func RepairClassifications(tx *sql.Tx, now time.Time, fromKind model.NodeKind, fromID string,
+	toKind model.NodeKind, toID, predicate string, removed bool, actor string, eventID int64) error {
+	p, ok := classifiedPairs[[2]model.NodeKind{fromKind, toKind}]
+	if !ok || predicate == "references" {
+		return nil
+	}
+	op, outcome, adjustedTo := "=", "rejected", ""
+	if !removed {
+		op, outcome, adjustedTo = "<>", "adjusted", predicate
+	}
+	rows, err := tx.Query(`WITH old AS (SELECT ctid, classification_id FROM `+p.table+`
+		   WHERE `+p.pair+` AND `+p.typ+` `+op+` $3 AND classification_id IS NOT NULL FOR UPDATE)
+		 UPDATE `+p.table+` e SET classification_id = NULL FROM old WHERE e.ctid = old.ctid
+		 RETURNING old.classification_id`, fromID, toID, predicate)
+	if err != nil {
+		return fmt.Errorf("clear classification of %s %s %s: %w", fromID, predicate, toID, err)
+	}
+	ids, err := collectRows(rows, "repaired classifications", func(r rowScanner) (int64, error) {
+		var id int64
+		return id, r.Scan(&id)
+	})
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := setClassificationOutcome(tx, now, id, outcome, adjustedTo, actor, eventID); err != nil {
+			return err
+		}
+	}
+	if removed {
+		return nil
+	}
+	var missed int64
+	err = tx.QueryRow(`SELECT id FROM (SELECT id, predicate, outcome FROM ref_classifications
+		 WHERE from_kind = $1 AND from_id = $2 AND to_kind = $3 AND to_id = $4
+		 ORDER BY created_at DESC, id DESC LIMIT 1) n WHERE predicate = 'references' AND outcome = 'kept'`,
+		fromKind, fromID, toKind, toID).Scan(&missed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read newest classification of %s %s: %w", fromID, toID, err)
+	}
+	return setClassificationOutcome(tx, now, missed, "missed", "", actor, eventID)
+}
+
+// setClassificationOutcome sets classification id's outcome, by actor at now,
+// and records its own wl:ClassificationRepaired event with the row as payload
+// (WL-REQ-1856).
+func setClassificationOutcome(tx *sql.Tx, now time.Time, id int64, outcome, adjustedTo, actor string, eventID int64) error {
+	var row []byte
+	if err := tx.QueryRow(`UPDATE ref_classifications c
+		 SET outcome = $2, adjusted_to = NULLIF($3, ''), outcome_by = NULLIF($4, ''), outcome_at = $5
+		 WHERE id = $1 RETURNING to_jsonb(c)`, id, outcome, adjustedTo, actor, now.UTC()).Scan(&row); err != nil {
+		return fmt.Errorf("set outcome of classification %d: %w", id, err)
+	}
+	var c model.RefClassification
+	if err := json.Unmarshal(row, &c); err != nil {
+		return fmt.Errorf("read classification %d: %w", id, err)
+	}
+	if string(c.Probabilities) == "null" {
+		c.Probabilities = nil
+	}
+	_, err := classificationEvent(tx, c, "wl:ClassificationRepaired",
+		fmt.Sprintf("ref_classification:%d:%s", id, outcome), eventID, now)
+	return err
 }
 
 // typedEdgeExists asks whether from already holds a typed edge of predicate
@@ -79,8 +183,9 @@ var typedEdgeExists = map[[2]model.NodeKind]string{
 
 // cueInlineRefs runs the cue classifier over one field's refs (WL-REQ-1857).
 // A hit records a cue classification and writes its typed edge with
-// classification_id set (WL-REQ-1858). A pair that already has that edge is
-// skipped, so re-deriving unchanged text records nothing. A hit the edge's
+// classification_id set (WL-REQ-1858). A pair that already has that edge, or
+// whose newest classification a person repaired, is skipped, so re-deriving
+// unchanged text records nothing and a repair stands. A hit the edge's
 // writer refuses (a second parent, a cycle, a rally target) is dropped with its
 // classification: the text stays a plain reference. eventID is the write's
 // event, 0 when it has none.
@@ -111,11 +216,17 @@ func cueInlineRefs(tx *sql.Tx, from model.NodeKind, fromID, field string, versio
 		if predicate == "" {
 			continue
 		}
-		var exists bool
+		var exists, repaired bool
 		if err := tx.QueryRow(typedEdgeExists[[2]model.NodeKind{from, r.ToKind}], fromID, r.ToID, predicate).Scan(&exists); err != nil {
 			return fmt.Errorf("check %s %s %s %s: %w", from, fromID, predicate, r.ToID, err)
 		}
-		if exists {
+		// A pair a person repaired keeps the person's verdict (WL-REQ-1858).
+		if err := tx.QueryRow(`SELECT coalesce((SELECT outcome <> 'kept' FROM ref_classifications
+			 WHERE from_kind = $1 AND from_id = $2 AND to_kind = $3 AND to_id = $4
+			 ORDER BY created_at DESC, id DESC LIMIT 1), false)`, from, fromID, r.ToKind, r.ToID).Scan(&repaired); err != nil {
+			return fmt.Errorf("check repair of %s %s %s: %w", from, fromID, r.ToID, err)
+		}
+		if exists || repaired {
 			continue
 		}
 		c := model.RefClassification{

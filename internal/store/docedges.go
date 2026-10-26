@@ -88,6 +88,20 @@ func changeDocEdge(tx *sql.Tx, now time.Time, docID int64, in model.DocEdgeInput
 			}
 		}
 	}
+	// A whole-document edge is the shape a classifier writes (WL-REQ-1858).
+	if e.typ != "covers" && e.fromAnchor == "" {
+		base, fragment := designdoc.SplitFragment(e.ref)
+		toDoc, resolved, err := resolveDocRef(tx, d.project, base)
+		if err != nil {
+			return err
+		}
+		if resolved && fragment == "" {
+			if err := RepairClassifications(tx, now, "doc", strconv.FormatInt(docID, 10),
+				"doc", strconv.FormatInt(toDoc, 10), e.typ, !link, actor, eventID); err != nil {
+				return err
+			}
+		}
+	}
 	if link {
 		err = insertEdgeRefs(tx, docID, d.kind, d.project, []docEdgeRef{e}, candidate)
 		if isUniqueViolationOn(err, "doc_edges_unique") || isUniqueViolationOn(err, "doc_revision_edges_unique") {
