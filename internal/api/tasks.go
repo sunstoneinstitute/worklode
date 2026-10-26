@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,6 +180,10 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 					}
 					return err
 				}
+				if err := store.RepairClassifications(tx, now, "task", t.ID, "rule", strconv.FormatInt(ruleID, 10),
+					"governedBy", false, actorID, eventID); err != nil {
+					return err
+				}
 				if err := store.Govern(tx, t.ID, ruleID, "manual", false); err != nil {
 					return err
 				}
@@ -186,12 +191,12 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 			if req.Parent != "" {
 				// Same transaction as the insert: there is no window where
 				// the child exists unparented.
-				if err := store.AddEdge(tx, now, t.ID, req.Parent, "childOf", eventID); err != nil {
+				if err := s.addTaskEdge(tx, now, t.ID, req.Parent, "childOf", actorID, eventID); err != nil {
 					return err
 				}
 			}
 			if req.FollowUpTo != "" {
-				if err := store.AddEdge(tx, now, t.ID, req.FollowUpTo, "followUpTo", eventID); err != nil {
+				if err := s.addTaskEdge(tx, now, t.ID, req.FollowUpTo, "followUpTo", actorID, eventID); err != nil {
 					return err
 				}
 			}
@@ -770,13 +775,22 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 	err := s.recordEvent(r.Context(), "cli", "task.edge_added",
 		map[string]string{"from": from, "to": to, "type": req.Type},
 		func(tx *sql.Tx, eventID int64) error {
-			return store.AddEdge(tx, s.st.Now(), from, to, req.Type, eventID)
+			return s.addTaskEdge(tx, s.st.Now(), from, to, req.Type, actorIDFrom(r), eventID)
 		})
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, model.Edge{From: from, To: to, Type: req.Type})
+}
+
+// addTaskEdge is a person's task edge write: it records the write's outcome on
+// the classifier's verdicts for the pair, then writes the edge (WL-REQ-1858).
+func (s *server) addTaskEdge(tx *sql.Tx, now time.Time, from, to, typ, actor string, eventID int64) error {
+	if err := store.RepairClassifications(tx, now, "task", from, "task", to, typ, false, actor, eventID); err != nil {
+		return err
+	}
+	return store.AddEdge(tx, now, from, to, typ, eventID)
 }
 
 // removeEdge handles DELETE /api/v1/tasks/{id}/edges.
@@ -795,6 +809,10 @@ func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 	err := s.recordEvent(r.Context(), "cli", "task.edge_removed",
 		map[string]string{"from": from, "to": to, "type": req.Type},
 		func(tx *sql.Tx, eventID int64) error {
+			if err := store.RepairClassifications(tx, s.st.Now(), "task", from, "task", to, req.Type,
+				true, actorIDFrom(r), eventID); err != nil {
+				return err
+			}
 			return store.RemoveEdge(tx, from, to, req.Type, eventID)
 		})
 	if err != nil {

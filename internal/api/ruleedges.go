@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"strconv"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -36,13 +37,17 @@ func (s *server) linkRule(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.recordEvent(r.Context(), "cli", "rule.linked",
 		map[string]string{"from": r.PathValue("id"), "to": req.To, "type": req.Type},
-		func(tx *sql.Tx, _ int64) error {
+		func(tx *sql.Tx, eventID int64) error {
 			fromID, err := store.RuleIDByRef(tx, from.Key, from.Number)
 			if err != nil {
 				return err
 			}
 			toID, err := store.RuleIDByRef(tx, to.Key, to.Number)
 			if err != nil {
+				return err
+			}
+			if err := store.RepairClassifications(tx, s.st.Now(), "rule", strconv.FormatInt(fromID, 10),
+				"rule", strconv.FormatInt(toID, 10), req.Type, false, actorIDFrom(r), eventID); err != nil {
 				return err
 			}
 			return store.LinkRules(tx, fromID, toID, req.Type)
@@ -62,13 +67,17 @@ func (s *server) unlinkRule(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.recordEvent(r.Context(), "cli", "rule.unlinked",
 		map[string]string{"from": r.PathValue("id"), "to": req.To, "type": req.Type},
-		func(tx *sql.Tx, _ int64) error {
+		func(tx *sql.Tx, eventID int64) error {
 			fromID, err := store.RuleIDByRef(tx, from.Key, from.Number)
 			if err != nil {
 				return err
 			}
 			toID, err := store.RuleIDByRef(tx, to.Key, to.Number)
 			if err != nil {
+				return err
+			}
+			if err := store.RepairClassifications(tx, s.st.Now(), "rule", strconv.FormatInt(fromID, 10),
+				"rule", strconv.FormatInt(toID, 10), req.Type, true, actorIDFrom(r), eventID); err != nil {
 				return err
 			}
 			return store.UnlinkRules(tx, fromID, toID, req.Type)
