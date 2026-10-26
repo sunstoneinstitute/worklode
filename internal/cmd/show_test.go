@@ -150,7 +150,11 @@ func setupDocServer(t *testing.T, projectKey string, files map[string]string) st
 				continue
 			}
 			d.Body = model.Markdown(bodies[id])
-			writeTestJSON(t, w, model.DocDetail{Doc: d})
+			// One outgoing and one incoming ref, so `show --json` has both to carry.
+			writeTestJSON(t, w, model.DocDetail{Doc: d, InlineRefs: model.InlineRefs{
+				Out: []model.InlineRef{{FromKind: model.NodeKind("doc"), FromID: strconv.FormatInt(id, 10), Field: "body", ToKind: model.NodeKind("rule"), ToID: "1", ToRef: "WL-REQ-1", Lines: []int{3}, Source: "manual"}},
+				In:  []model.InlineRef{{FromKind: model.NodeKind("task"), FromID: "WL-9", Field: "body", ToKind: model.NodeKind("doc"), ToID: strconv.FormatInt(id, 10), Lines: []int{1}, Source: "manual"}},
+			}})
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -312,7 +316,11 @@ func setupCrossProjectDocServer(t *testing.T) {
 		for _, d := range docs {
 			if d.ID == id {
 				d.Body = fixtureSpec
-				writeTestJSON(t, w, model.DocDetail{Doc: d})
+				// One outgoing and one incoming ref, so `show --json` has both to carry.
+				writeTestJSON(t, w, model.DocDetail{Doc: d, InlineRefs: model.InlineRefs{
+					Out: []model.InlineRef{{FromKind: model.NodeKind("doc"), FromID: strconv.FormatInt(id, 10), Field: "body", ToKind: model.NodeKind("rule"), ToID: "1", ToRef: "WL-REQ-1", Lines: []int{3}, Source: "manual"}},
+					In:  []model.InlineRef{{FromKind: model.NodeKind("task"), FromID: "WL-9", Field: "body", ToKind: model.NodeKind("doc"), ToID: strconv.FormatInt(id, 10), Lines: []int{1}, Source: "manual"}},
+				}})
 				return
 			}
 		}
@@ -466,9 +474,14 @@ func TestDocShowJSON(t *testing.T) {
 		Slug    string `json:"slug"`
 		Section string `json:"section"`
 		Content string `json:"content"`
+		model.InlineRefs
 	}
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("decode %q: %v", out, err)
+	}
+	// The whole doc's refs, though --section narrowed the content (WL-REQ-1852).
+	if len(got.Out) != 1 || len(got.In) != 1 {
+		t.Fatalf("inline refs out/in = %d/%d; want 1/1\noutput: %s", len(got.Out), len(got.In), out)
 	}
 	if got.Section != "sec-2" {
 		t.Fatalf("section = %q; want sec-2", got.Section)

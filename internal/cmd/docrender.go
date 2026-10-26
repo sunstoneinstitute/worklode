@@ -82,7 +82,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 	if err != nil {
 		return err
 	}
-	return writeDocShow(cmd, doc, section, []byte(text))
+	return writeDocShow(cmd, doc, detail.InlineRefs, section, []byte(text))
 }
 
 // resolveDocRefTiers resolves ref through WL-REQ-199's tiers 1 and 2: the pure
@@ -163,6 +163,9 @@ type docShowResult struct {
 	Slug    string `json:"slug"`
 	Section string `json:"section"`
 	Content string `json:"content"`
+	// InlineRefs are the doc's own, in full even when Section narrows the
+	// content (WL-REQ-1852).
+	model.InlineRefs
 }
 
 // writeUnresolved prints a tier-3 UnresolvedError: the bare message on
@@ -181,12 +184,12 @@ func writeUnresolved(cmd *cobra.Command, err error) error {
 // on a terminal — including through --pager, since its writer reports the
 // real terminal's fd), or, under --json, as docShowResult with content set to
 // exactly what the non-JSON path would have printed.
-func writeDocShow(cmd *cobra.Command, doc model.Doc, section string, content []byte) error {
+func writeDocShow(cmd *cobra.Command, doc model.Doc, refs model.InlineRefs, section string, content []byte) error {
 	if !jsonOut(cmd) {
 		cli.Markdown(cmd.OutOrStdout(), string(content))
 		return nil
 	}
 	return printJSON(cmd, docShowResult{
-		Doc: doc.ID, Slug: doc.Slug, Section: section, Content: string(content),
+		Doc: doc.ID, Slug: doc.Slug, Section: section, Content: string(content), InlineRefs: refs,
 	})
 }
