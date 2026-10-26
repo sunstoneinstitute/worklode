@@ -108,7 +108,8 @@ func (s *server) blobOrigin() string {
 //   - script-src 'self': layout.templ's /assets/theme.js, /assets/nav.js,
 //     /assets/ching.js and /assets/htmx.min.js, cliauth.templ's
 //     /assets/copy.js, task.templ /
-//     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js,
+//     docs.templ's /assets/mermaid.min.js, /assets/mermaid-init.js and
+//     /assets/rule-notice.js,
 //     task.templ's /assets/activity.js, progress.templ's
 //     /assets/progress.js and /assets/act.js, and graph.templ's
 //     /assets/d3.min.js and /assets/graph.js. No page has an inline script.

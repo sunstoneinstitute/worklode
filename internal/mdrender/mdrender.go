@@ -95,6 +95,10 @@ var linkHref = regexp.MustCompile(`\A[\t\n\f\r ]*(?i:https?:|mailto:|[#?]|/(?:[^
 // drift apart. \A and \z rather than ^ and $ for the reason blobSrc gives.
 var sectionAnchor = regexp.MustCompile(`\Asec-[a-z0-9][a-z0-9.-]*\z`)
 
+// ruleAnchorID is the id of the empty span ruleanchor.go puts before an
+// arranged rule's heading.
+var ruleAnchorID = regexp.MustCompile(`\Arule-[0-9]+\z`)
+
 // emojiExt renders ":emoji:" shortcodes as the literal Unicode character
 // rather than the extension's default <img> tag. An <img> would point at a
 // CDN, which buildPolicy's img[src] rule (blobSrc only) would strip anyway —
@@ -131,7 +135,7 @@ var md = goldmark.New(
 // WithAttribute lets an author write any attribute, not just id — the
 // allowlist, not the parser, is what keeps that harmless.
 var mdDoc = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt, calloutExt, highlightExt),
+	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt, calloutExt, highlightExt, ruleAnchorExt),
 	goldmark.WithParserOptions(parser.WithAttribute(), withDocRefLinks),
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
 )
@@ -256,6 +260,7 @@ func buildPolicy() *bluemonday.Policy {
 func buildDocPolicy() *bluemonday.Policy {
 	p := buildPolicy()
 	p.AllowAttrs("id").Matching(sectionAnchor).OnElements("h1", "h2", "h3", "h4", "h5", "h6")
+	p.AllowAttrs("id").Matching(ruleAnchorID).OnElements("span")
 	return p
 }
 
