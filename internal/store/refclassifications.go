@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// recordClassification inserts c as a ref_classifications row and makes the
-// already-inserted event eventID (type wl:ReferenceClassified) carry the row as
-// its payload, in the caller's transaction (WL-REQ-1853, WL-REQ-1655).
-// It returns the new row id. c.Outcome defaults to "kept".
+// recordClassification inserts c as a ref_classifications row and records its
+// own wl:ReferenceClassified event, with the row as payload, in the caller's
+// transaction (WL-REQ-1853, WL-REQ-1856, WL-REQ-1655). eventID is the event
+// that caused the classification (a derive run, say): it stays untouched and the
+// new event names it under prov:wasInformedBy. It returns the new row id.
+// c.Outcome defaults to "kept".
 func recordClassification(tx *sql.Tx, c model.RefClassification, eventID int64) (int64, error) {
 	if c.Outcome == "" {
 		c.Outcome = "kept"
@@ -34,15 +37,25 @@ func recordClassification(tx *sql.Tx, c model.RefClassification, eventID int64) 
 	if err != nil {
 		return 0, fmt.Errorf("insert ref classification: %w", err)
 	}
-	payload, err := json.Marshal(struct {
-		Type string `json:"@type"`
-		model.RefClassification
-	}{"wl:ReferenceClassified", c})
+	row, err := json.Marshal(c)
 	if err != nil {
 		return 0, fmt.Errorf("marshal classification event: %w", err)
 	}
-	if err := SetEventPayload(tx, eventID, payload); err != nil {
+	var payload map[string]any
+	if err := json.Unmarshal(row, &payload); err != nil {
 		return 0, err
+	}
+	payload["@type"] = "wl:ReferenceClassified"
+	payload["prov:wasInformedBy"] = iri.CURIE(iri.Event(eventID))
+	b, err := EventPayload(payload)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO events (source, external_id, type, payload, received_at)
+		 VALUES ('cli', $1, 'wl:ReferenceClassified', $2, $3)`,
+		fmt.Sprintf("ref_classification:%d", c.ID), b, c.CreatedAt.UTC()); err != nil {
+		return 0, fmt.Errorf("record classification event: %w", err)
 	}
 	return c.ID, nil
 }

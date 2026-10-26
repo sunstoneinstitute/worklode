@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -40,15 +42,25 @@ func TestRecordClassification(t *testing.T) {
 	if outcome != "kept" || predicate != "blockedBy" {
 		t.Errorf("row = %q %q", outcome, predicate)
 	}
+	var caller []byte
+	if err := s.db.QueryRowContext(ctx, `SELECT payload FROM events WHERE id = $1`, eventID).Scan(&caller); err != nil {
+		t.Fatal(err)
+	}
+	if caller != nil {
+		t.Errorf("caller's event payload changed: %s", caller)
+	}
 	var raw []byte
-	if err := s.db.QueryRowContext(ctx, `SELECT payload FROM events WHERE id = $1`, eventID).Scan(&raw); err != nil {
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT payload FROM events WHERE type = 'wl:ReferenceClassified' AND external_id = $1`,
+		fmt.Sprintf("ref_classification:%d", id)).Scan(&raw); err != nil {
 		t.Fatal(err)
 	}
 	var p map[string]any
 	if err := json.Unmarshal(raw, &p); err != nil {
 		t.Fatal(err)
 	}
-	if p["@type"] != "wl:ReferenceClassified" || p["id"] != float64(id) || p["predicate"] != "blockedBy" {
+	if p["@type"] != "wl:ReferenceClassified" || p["id"] != float64(id) || p["predicate"] != "blockedBy" ||
+		p["prov:wasInformedBy"] != iri.CURIE(iri.Event(eventID)) {
 		t.Errorf("payload = %s", raw)
 	}
 }
