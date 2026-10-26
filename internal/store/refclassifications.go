@@ -154,7 +154,20 @@ func classifiedEdge(tx *sql.Tx, c model.RefClassification, eventID int64) error 
 }
 
 func writeClassifiedEdge(tx *sql.Tx, c model.RefClassification, eventID int64) error {
-	id, classEvent, err := recordClassification(tx, c, eventID)
+	// A write that cleared the edge (a doc's frontmatter rebuild) reuses the
+	// newest kept classification of the same verdict instead of counting it
+	// again.
+	var id, classEvent int64
+	err := tx.QueryRow(
+		`SELECT c.id, e.id FROM ref_classifications c
+		   JOIN events e ON e.type = 'wl:ReferenceClassified' AND e.external_id = 'ref_classification:' || c.id
+		  WHERE c.from_kind = $1 AND c.from_id = $2 AND c.to_kind = $3 AND c.to_id = $4 AND c.classifier = $5
+		    AND c.classifier_version = $6 AND c.predicate = $7 AND c.outcome = 'kept'
+		  ORDER BY c.created_at DESC, c.id DESC LIMIT 1`,
+		c.FromKind, c.FromID, c.ToKind, c.ToID, c.Classifier, c.ClassifierVersion, c.Predicate).Scan(&id, &classEvent)
+	if errors.Is(err, sql.ErrNoRows) {
+		id, classEvent, err = recordClassification(tx, c, eventID)
+	}
 	if err != nil {
 		return err
 	}

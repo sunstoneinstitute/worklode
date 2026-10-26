@@ -318,6 +318,39 @@ func TestCueDocBlockedBy(t *testing.T) {
 	}
 }
 
+// TestCueDocFrontmatterRebuild: a write that rebuilds a doc's frontmatter
+// edges clears the classified edge, and the derive after it puts the edge back
+// under the kept classification, so there is still exactly one row.
+func TestCueDocFrontmatterRebuild(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	ctx := context.Background()
+	b := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "b", Body: planTaskBody("", "B"), CreatedBy: "stig"})
+	body := fmt.Sprintf("---\nstatus: draft\n---\n\n# A\n\nThis runs after P1-PLAN-%d.\n", b.Number)
+	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "a", Body: body, CreatedBy: "stig"})
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		if err := ReplaceDocEdges(tx, s.Now(), a.ID, nil, seedEvent(t, tx)); err != nil {
+			return err
+		}
+		return deriveDocRefs(tx, a.ID, nil)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var classes, edges int
+	var marked bool
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT (SELECT count(*) FROM ref_classifications WHERE from_kind = 'doc' AND from_id = $1),
+		        (SELECT count(*) FROM doc_edges WHERE from_doc = $1::bigint AND type = 'blockedBy'),
+		        (SELECT bool_and(e.classification_id = c.id) FROM doc_edges e, ref_classifications c
+		          WHERE e.from_doc = $1::bigint AND e.type = 'blockedBy' AND c.from_id = $1)`,
+		strconv.FormatInt(a.ID, 10)).Scan(&classes, &edges, &marked); err != nil {
+		t.Fatal(err)
+	}
+	if classes != 1 || edges != 1 || !marked {
+		t.Errorf("classifications = %d, blockedBy edges = %d, marked = %t; want 1, 1, true", classes, edges, marked)
+	}
+}
+
 // TestAddDocEdge: the single-row doc edge writer sets classification_id and
 // maps each refusal to its sentinel.
 func TestAddDocEdge(t *testing.T) {
