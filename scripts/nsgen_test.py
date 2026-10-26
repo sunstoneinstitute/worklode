@@ -351,6 +351,28 @@ class TestEdgeLabels(unittest.TestCase):
         self.assertEqual(labels["governed by"], "governedBy")
 
 
+class TestEdgeDefinitions(unittest.TestCase):
+    PRE = TestEdgeLabels.PRE
+    BODY = (
+        'wl:a wl:storedAs "task_edges.a" ; skos:definition "alpha" .\n'
+        'wl:b wl:storedAs "doc_edges.b", "rule_edges.b" ; skos:definition "beta" .\n'
+        'wl:c skos:definition "not stored" .\n'
+    )
+
+    def test_definitions_map_to_stored_types(self):
+        self.assertEqual(nsgen.extract_edge_definitions(self.PRE + self.BODY), {"a": "alpha", "b": "beta"})
+
+    def test_type_with_two_definitions_is_refused(self):
+        with self.assertRaises(nsgen.TurtleError):
+            nsgen.extract_edge_definitions(self.PRE + self.BODY + 'wl:d wl:storedAs "task_edges.a" ; skos:definition "other" .\n')
+
+    def test_real_ontology_defines_every_candidate(self):
+        defs = nsgen.extract_edge_definitions(ONTOLOGY_TTL.read_text(encoding="utf-8"))
+        for typ in ("dependsOn", "childOf", "followUpTo", "duplicateOf", "refines", "needs", "constrains",
+                    "conflictsWith", "amends", "wasDerivedFrom", "requires", "blockedBy", "governedBy"):
+            self.assertIn(typ, defs)
+
+
 class TestCli(unittest.TestCase):
     def run_nsgen(self, *args):
         return subprocess.run(
@@ -375,6 +397,7 @@ class TestCli(unittest.TestCase):
                 nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8"))[0]["TaskKind"],
             ),
             nsgen.extract_edge_labels(ONTOLOGY_TTL.read_text(encoding="utf-8")),
+            nsgen.extract_edge_definitions(ONTOLOGY_TTL.read_text(encoding="utf-8")),
         )
         self.assertEqual((ROOT / "internal" / "ns" / "gen.go").read_text(encoding="utf-8"), want)
 

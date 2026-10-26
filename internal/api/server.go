@@ -4,6 +4,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -36,6 +37,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/indexer"
+	"github.com/sunstoneinstitute/worklode/internal/inlineref"
 	"github.com/sunstoneinstitute/worklode/internal/mcp"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -48,6 +50,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/storederive"
 	"github.com/sunstoneinstitute/worklode/internal/tokencrypt"
+	"github.com/sunstoneinstitute/worklode/internal/typesafe"
 	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
 
@@ -203,6 +206,12 @@ type Config struct {
 	// self-hosted gateways; empty means https://api.elevenlabs.io.
 	SpeechToTextAPIKey string `env:"LODE_ELEVENLABS_API_KEY"`
 	SpeechToTextURL    string `env:"LODE_ELEVENLABS_URL"`
+
+	// TypeSafe for the jev classifier (WL-REQ-1857). Without TypeSafeAPIKey
+	// a classify request fails as unconfigured and nothing else changes.
+	// TypeSafeModel empty means inlineref.JevModel.
+	TypeSafeAPIKey string `env:"LODE_TYPESAFE_API_KEY"`
+	TypeSafeModel  string `env:"LODE_TYPESAFE_MODEL"`
 
 	// Blob storage (WL-SPEC-78). Off unless BlobEndpoint and BlobBucket are
 	// both set: uploads then return 501 and every other surface behaves
@@ -369,6 +378,9 @@ type server struct {
 	// once more instead of silently dropping it (see runSkillSync).
 	embedder      embed.Provider
 	queryEmbedder embed.Provider
+	// typesafe and typesafeModel serve the jev classifier (WL-REQ-1857).
+	typesafe      *typesafe.Client
+	typesafeModel string
 	// chunkBudget is the chunk sizing derived from EmbeddingContextTokens
 	// (WL-REQ-257), passed to the indexer.
 	chunkBudget      corpusindex.Budget
@@ -1368,6 +1380,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			}
 		}
 	}
+	s.typesafe = &typesafe.Client{APIKey: cfg.TypeSafeAPIKey, Metrics: typesafe.NewMetrics(reg)}
+	s.typesafeModel = cmp.Or(cfg.TypeSafeModel, inlineref.JevModel)
 	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
 	if err != nil {
 		return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES: %w", err)
