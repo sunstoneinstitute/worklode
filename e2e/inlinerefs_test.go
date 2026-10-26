@@ -4,9 +4,12 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
@@ -139,5 +142,93 @@ func TestRuleShowInlineRefsEndToEnd(t *testing.T) {
 				t.Errorf("%v output lacks %s:\n%s", args, want, out)
 			}
 		}
+	}
+}
+
+// TestTaskDeriveClassifyEndToEnd: `lode task derive --classify` against a
+// stub TypeSafe server: --dry-run reports the classified edge and writes
+// nothing, a real run writes the dependsOn edge, and --reclassify re-asks
+// nothing while the classifier version is current (WL-REQ-1857, WL-REQ-1858,
+// WL-REQ-1860).
+func TestTaskDeriveClassifyEndToEnd(t *testing.T) {
+	ctx := context.Background()
+	var calls atomic.Int32
+	jev := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var req struct {
+			Questions map[string]any `json:"questions"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || r.Header.Get("Authorization") != "Bearer ts-key" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		answers := map[string]any{}
+		for id := range req.Questions {
+			answers[id] = map[string]any{"choice": "dependsOn", "confidence": 0.9, "probabilities": map[string]float64{"dependsOn": 0.9, "references": 0.1}}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"answers": answers})
+	}))
+	defer jev.Close()
+	st := store.OpenTestStore(t)
+	handler, _, err := api.NewServer(st, api.Config{BootstrapToken: bootstrapToken, TypeSafeAPIKey: "ts-key", TypeSafeURL: jev.URL})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{ID: "jc", Name: "Classify", Key: "JC"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	target, _, err := admin.CreateTask(ctx, model.CreateTaskInput{Project: "jc", Title: "Target", Priority: "high", Kind: "feature"})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	src, _, err := admin.CreateTask(ctx, model.CreateTaskInput{Project: "jc", Title: "Source", Priority: "high", Kind: "feature",
+		Body: model.Markdown("We need " + target.ID + " done first.")})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", bootstrapToken)
+	edgesOut := func() []model.TaskEdgeOut {
+		t.Helper()
+		d, _, err := admin.GetTask(ctx, src.ID)
+		if err != nil {
+			t.Fatalf("get task: %v", err)
+		}
+		return d.Edges.Out
+	}
+
+	out, err := runLodeCLI(t, "task", "derive", src.ID, "--project", "jc", "--classify", "--dry-run", "--json")
+	if err != nil {
+		t.Fatalf("derive --classify --dry-run: %v\n%s", err, out)
+	}
+	var rep model.RefDeriveReport
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || len(rep.Nodes) != 1 || len(rep.Nodes[0].Classified) != 1 ||
+		rep.Nodes[0].Classified[0].Predicate != "dependsOn" || rep.Nodes[0].Classified[0].Classifier != "jev" {
+		t.Fatalf("dry-run report = %s (%v)", out, err)
+	}
+	if e := edgesOut(); len(e) != 0 {
+		t.Fatalf("dry run wrote edges %+v", e)
+	}
+
+	out, err = runLodeCLI(t, "task", "derive", src.ID, "--project", "jc", "--classify", "--dry-run=false", "--json=false")
+	if err != nil {
+		t.Fatalf("derive --classify: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "1 classified") {
+		t.Errorf("derive output = %q", out)
+	}
+	if e := edgesOut(); len(e) != 1 || e[0].Type != "dependsOn" {
+		t.Errorf("edges after classify = %+v", e)
+	}
+
+	out, err = runLodeCLI(t, "task", "derive", src.ID, "--project", "jc", "--classify", "--reclassify")
+	if err != nil {
+		t.Fatalf("derive --reclassify: %v\n%s", err, out)
+	}
+	if calls.Load() != 2 {
+		t.Errorf("TypeSafe calls = %d, want 2", calls.Load())
 	}
 }

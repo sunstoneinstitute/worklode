@@ -18,16 +18,22 @@ func newDeriveCmd(kind model.NodeKind) *cobra.Command {
 	var scope scopeFlags
 	var statuses []string
 	var nodeKind string
-	var all, dryRun, diff bool
+	var all, dryRun, diff, classify, reclassify bool
 	cmd := &cobra.Command{
 		Use:   "derive [<ref>...]",
 		Short: fmt.Sprintf("Normalize and re-extract the inline references of %ss", kind),
 		Long: fmt.Sprintf(`Rewrite the inline references in the text of the selected %ss into plain
 form, then re-derive their reference rows. Name refs, give a filter, or pass
---all. --dry-run and --diff report what would change and write nothing.`, kind),
+--all. --dry-run and --diff report what would change and write nothing.
+--classify also asks the jev classifier which relation each unclassified
+reference states, and writes the typed edge it picks; --reclassify re-asks
+those an older classifier version answered.`, kind),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 && len(statuses) == 0 && nodeKind == "" && !all {
 				return errors.New("select nodes: name refs, or pass --status, --kind or --all")
+			}
+			if reclassify && !classify {
+				return errors.New("--reclassify needs --classify")
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -40,7 +46,8 @@ form, then re-derive their reference rows. Name refs, give a filter, or pass
 			if sc.Project == "" {
 				return errNoProject
 			}
-			in := model.RefDeriveParams{Kind: kind, Refs: args, Status: statuses, All: all, DryRun: dryRun, Diff: diff}
+			in := model.RefDeriveParams{Kind: kind, Refs: args, Status: statuses, All: all, DryRun: dryRun, Diff: diff,
+				Classify: classify, Reclassify: reclassify}
 			switch kind {
 			case "doc":
 				in.DocKind = nodeKind
@@ -78,6 +85,8 @@ form, then re-derive their reference rows. Name refs, give a filter, or pass
 	cmd.Flags().BoolVar(&all, "all", false, fmt.Sprintf("every %s in the project", kind))
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would change, write nothing")
 	cmd.Flags().BoolVar(&diff, "diff", false, "print the text and reference changes, write nothing")
+	cmd.Flags().BoolVar(&classify, "classify", false, "also run the jev classifier on references it has not classified")
+	cmd.Flags().BoolVar(&reclassify, "reclassify", false, "with --classify: also re-run references an older classifier version answered")
 	addScopeFlags(cmd, &scope, "project id")
 	return cmd
 }
