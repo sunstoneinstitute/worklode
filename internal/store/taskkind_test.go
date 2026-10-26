@@ -57,7 +57,7 @@ func TestTaskKindPolicy(t *testing.T) {
 					t.Fatalf("pose: %v", err)
 				}
 			case "block":
-				if err := addEdge(t, s, task.ID, other.ID, "blocks"); !errors.Is(err, ErrInvalidInput) {
+				if err := addEdge(t, s, other.ID, task.ID, "dependsOn"); !errors.Is(err, ErrInvalidInput) {
 					t.Fatalf("block: %v", err)
 				}
 			case "close":

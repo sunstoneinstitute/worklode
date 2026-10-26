@@ -269,14 +269,14 @@ func (c *Client) taskAction(ctx context.Context, id, action string) (model.Task,
 	return doJSON[model.Task](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/"+action, nil, "task")
 }
 
-// Block calls POST /api/v1/tasks/{id}/edges to record that by blocks id.
+// Block calls POST /api/v1/tasks/{id}/edges to record that id dependsOn by.
 func (c *Client) Block(ctx context.Context, id, by string) ([]byte, error) {
-	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", model.EdgeInput{From: &by, Type: "blocks"})
+	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", model.EdgeInput{To: &by, Type: "dependsOn"})
 }
 
-// Unblock calls DELETE /api/v1/tasks/{id}/edges to remove the "by blocks id" edge.
+// Unblock calls DELETE /api/v1/tasks/{id}/edges to remove the "id dependsOn by" edge.
 func (c *Client) Unblock(ctx context.Context, id, by string) ([]byte, error) {
-	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", model.EdgeInput{From: &by, Type: "blocks"})
+	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", model.EdgeInput{To: &by, Type: "dependsOn"})
 }
 
 // Parent calls POST /api/v1/tasks/{id}/edges to file id under a parent.

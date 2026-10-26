@@ -178,8 +178,8 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 	return pinned, warnings, nil
 }
 
-// openBlockers returns the open tasks holding taskID: the from_task of a
-// 'blocks' edge pointing at it, and the open tasks of any plan ordered before
+// openBlockers returns the open tasks holding taskID: the to_task of each of
+// its 'dependsOn' edges, and the open tasks of any plan ordered before
 // its plan (WL-REQ-172). "Open" uses the same predicate as blockedCondition and
 // planBlockedCondition: the blocker is live and has not reached its repo's
 // done_state (taskClosed). Only ID, Title, and State are populated (the brief
@@ -192,9 +192,9 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, 
 		`SELECT id, title, state FROM (
 		   SELECT b.id, b.title, b.state
 		     FROM task_edges e
-		     JOIN tasks b ON b.id = e.from_task
-		    WHERE e.to_task = $1
-		      AND e.type = 'blocks'
+		     JOIN tasks b ON b.id = e.to_task
+		    WHERE e.from_task = $1
+		      AND e.type = 'dependsOn'
 		      AND b.deleted_at IS NULL
 		      AND NOT `+taskClosed("b")+`
 		   UNION

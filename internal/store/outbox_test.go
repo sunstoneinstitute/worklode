@@ -63,7 +63,7 @@ func TestEdgeChangesWriteStateLogForBothTasks(t *testing.T) {
 
 	_, _, err := s.RecordEvent(t.Context(), "cli", "e4", "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, time.Now().UTC(), a.ID, b.ID, "blocks", eventID)
+			return AddEdge(tx, time.Now().UTC(), b.ID, a.ID, "dependsOn", eventID)
 		})
 	if err != nil {
 		t.Fatalf("add edge: %v", err)
@@ -80,7 +80,7 @@ func TestEdgeChangesWriteStateLogForBothTasks(t *testing.T) {
 
 	_, _, err = s.RecordEvent(t.Context(), "cli", "e5", "task.edge_removed", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return RemoveEdge(tx, a.ID, b.ID, "blocks", eventID)
+			return RemoveEdge(tx, b.ID, a.ID, "dependsOn", eventID)
 		})
 	if err != nil {
 		t.Fatalf("remove edge: %v", err)

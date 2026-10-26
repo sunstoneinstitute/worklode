@@ -20,13 +20,13 @@ func TestBlockingFanOutChainAndBranch(t *testing.T) {
 	c := createTask(t, s, taskTestNow, defaultTaskInput())
 	d := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, a.ID, b.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, b.ID, a.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge a blocks b: %v", err)
 	}
-	if err := addEdge(t, s, b.ID, c.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, c.ID, b.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge b blocks c: %v", err)
 	}
-	if err := addEdge(t, s, a.ID, d.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, d.ID, a.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge a blocks d: %v", err)
 	}
 
@@ -58,10 +58,10 @@ func TestBlockingFanOutCycleTerminates(t *testing.T) {
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
 	b := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, a.ID, b.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, b.ID, a.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge a blocks b: %v", err)
 	}
-	insertEdgeRaw(t, s, b.ID, a.ID, "blocks")
+	insertEdgeRaw(t, s, a.ID, b.ID, "dependsOn")
 
 	got, err := s.BlockingFanOut(t.Context())
 	if err != nil {
@@ -83,16 +83,16 @@ func TestBlockingFanOutDiamond(t *testing.T) {
 	c := createTask(t, s, taskTestNow, defaultTaskInput())
 	d := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, a.ID, b.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, b.ID, a.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge a blocks b: %v", err)
 	}
-	if err := addEdge(t, s, a.ID, c.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, c.ID, a.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge a blocks c: %v", err)
 	}
-	if err := addEdge(t, s, b.ID, d.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, d.ID, b.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge b blocks d: %v", err)
 	}
-	if err := addEdge(t, s, c.ID, d.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, d.ID, c.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge c blocks d: %v", err)
 	}
 
@@ -257,8 +257,8 @@ func openClaimNextStore(t *testing.T) *Store {
 	return s
 }
 
-// workedExampleFiller creates n draft filler tasks and adds a "blocks" edge
-// from task to each, giving task the desired blocking fan-out without
+// workedExampleFiller creates n draft filler tasks and adds a "dependsOn" edge
+// from each to task, giving task the desired blocking fan-out without
 // affecting task's own ready-set membership (a draft filler is never a
 // candidate, and blocking a filler does not block the blocker).
 func workedExampleFiller(t *testing.T, s *Store, task *model.Task, n int) {
@@ -267,7 +267,7 @@ func workedExampleFiller(t *testing.T, s *Store, task *model.Task, n int) {
 		in := defaultTaskInput()
 		in.Draft = true
 		filler := createTask(t, s, claimNextTestNow, in)
-		if err := addEdge(t, s, task.ID, filler.ID, "blocks"); err != nil {
+		if err := addEdge(t, s, filler.ID, task.ID, "dependsOn"); err != nil {
 			t.Fatalf("addEdge filler for %s: %v", task.ID, err)
 		}
 	}
@@ -838,7 +838,7 @@ func TestBlockingFanOutCountsOnlyOpenTasks(t *testing.T) {
 	b := createTask(t, s, taskTestNow, defaultTaskInput())
 	c := createTask(t, s, taskTestNow, defaultTaskInput())
 	for _, e := range [][2]string{{a.ID, b.ID}, {b.ID, c.ID}} {
-		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
+		if err := addEdge(t, s, e[1], e[0], "dependsOn"); err != nil {
 			t.Fatalf("AddEdge: %v", err)
 		}
 	}

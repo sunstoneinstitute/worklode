@@ -87,7 +87,7 @@ func TestMigrateRoundTrip(t *testing.T) {
 
 // TestMigrateRoundTripWithLiveRally is TestMigrateRoundTrip with a rally
 // that has done its job still in the database, one row in every table
-// 0069's down migration must clear before DELETE FROM tasks: a blocks edge
+// 0069's down migration must clear before DELETE FROM tasks: a dependsOn edge
 // (task_edges), a lease (leases), a document it authored
 // (docs.generated_by_task), a note raised against it (doc_notes.task_id), a
 // promoted issue and PR pointing at it (issues.task_id,
@@ -110,9 +110,9 @@ func TestMigrateRoundTripWithLiveRally(t *testing.T) {
 	target := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	if _, err := s.db.ExecContext(t.Context(),
-		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'blocks', $3)`,
-		rally.ID, target.ID, taskTestNow); err != nil {
-		t.Fatalf("insert blocks edge from the rally: %v", err)
+		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'dependsOn', $3)`,
+		target.ID, rally.ID, taskTestNow); err != nil {
+		t.Fatalf("insert dependsOn edge to the rally: %v", err)
 	}
 	if _, err := s.db.ExecContext(t.Context(),
 		`INSERT INTO leases (task_id, actor_id, worktree, acquired_at, renewed_at, expires_at)

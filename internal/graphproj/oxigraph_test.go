@@ -78,12 +78,12 @@ func TestProjectGraphReplaceRoundTrip(t *testing.T) {
 	alphaGraph := iri.ProjectGraph(alpha)
 	betaGraph := iri.ProjectGraph(beta)
 
-	blocks := model.Edge{From: "WL-101", To: "WL-102", Type: "blocks"}
+	dependsOn := model.Edge{From: "WL-102", To: "WL-101", Type: "dependsOn"}
 	render := func(secondState string) []byte {
 		first := testTask("WL-101", alpha, "ready")
 		second := testTask("WL-102", alpha, secondState)
-		triples := TaskTriples(first, []model.Edge{blocks}, nil)
-		triples = append(triples, TaskTriples(second, nil, []model.Edge{blocks})...)
+		triples := TaskTriples(first, nil, []model.Edge{dependsOn})
+		triples = append(triples, TaskTriples(second, []model.Edge{dependsOn}, nil)...)
 		return Document(append(triples, ProjectTriples(model.Project{ID: alpha, Name: "Alpha"})...))
 	}
 
@@ -132,13 +132,13 @@ func TestDependsOnPath(t *testing.T) {
 
 	project := uniqueID("chain")
 	graph := iri.ProjectGraph(project)
-	first := model.Edge{From: "WL-1", To: "WL-2", Type: "blocks"}
-	second := model.Edge{From: "WL-2", To: "WL-3", Type: "blocks"}
+	first := model.Edge{From: "WL-2", To: "WL-1", Type: "dependsOn"}
+	second := model.Edge{From: "WL-3", To: "WL-2", Type: "dependsOn"}
 
 	var triples []Triple
-	triples = append(triples, TaskTriples(testTask("WL-1", project, "ready"), []model.Edge{first}, nil)...)
-	triples = append(triples, TaskTriples(testTask("WL-2", project, "ready"), []model.Edge{second}, []model.Edge{first})...)
-	triples = append(triples, TaskTriples(testTask("WL-3", project, "ready"), nil, []model.Edge{second})...)
+	triples = append(triples, TaskTriples(testTask("WL-1", project, "ready"), nil, []model.Edge{first})...)
+	triples = append(triples, TaskTriples(testTask("WL-2", project, "ready"), []model.Edge{first}, []model.Edge{second})...)
+	triples = append(triples, TaskTriples(testTask("WL-3", project, "ready"), []model.Edge{second}, nil)...)
 	graphtest.PutGraph(t, base, graph, Document(triples))
 
 	rows := graphtest.Select(t, base, fmt.Sprintf(

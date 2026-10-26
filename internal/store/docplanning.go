@@ -17,7 +17,7 @@ import (
 // acceptPlanDoc is AcceptDoc's plan branch (WL-REQ-172): parse the plan body's
 // ## Tasks declarations, mint one draft task per declaration that has no row
 // yet with plan_doc set to id, wire the newly minted tasks' blockedBy numbers
-// as blocks edges, then flip the document to accepted — all inside the
+// as dependsOn edges, then flip the document to accepted — all inside the
 // caller's transaction, so accept and mint are one commit and a failed mint
 // leaves the document as it was.
 //
@@ -113,9 +113,9 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 			continue
 		}
 		for _, blocker := range def.BlockedBy {
-			if err := AddEdge(tx, now, taskID[blocker], taskID[def.Number], "blocks", eventID); err != nil {
+			if err := AddEdge(tx, now, taskID[def.Number], taskID[blocker], "dependsOn", eventID); err != nil {
 				return nil, nil, fmt.Errorf(
-					"wire blocks edge task %d -> %d of plan %d: %w", blocker, def.Number, id, err)
+					"wire dependsOn edge task %d -> %d of plan %d: %w", def.Number, blocker, id, err)
 			}
 		}
 	}

@@ -15,7 +15,7 @@ func TestBlocksEdgeAndBlockedTaskIDs(t *testing.T) {
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput()) // HDB-1
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput()) // HDB-2
 
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func TestIsTaskBlockedAgreesWithBlockedTaskIDs(t *testing.T) {
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput()) // HDB-2
 	loose := createTask(t, s, taskTestNow, defaultTaskInput())   // HDB-3
 
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 
@@ -120,7 +120,7 @@ func TestBlockedTaskIDsDeliveredBlocker(t *testing.T) {
 
 			blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 			blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-			if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+			if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 				t.Fatalf("AddEdge blocks: %v", err)
 			}
 			walkTo(t, s, blocker.ID, state)
@@ -146,7 +146,7 @@ func TestBlockedTaskIDsAbandonedBlocker(t *testing.T) {
 
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge: %v", err)
 	}
 	if err := transition(t, s, taskTestNow, blocker.ID, "ready", "abandoned"); err != nil {
@@ -194,7 +194,7 @@ func TestBlockedTaskIDsPerRepoDoneState(t *testing.T) {
 
 			blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 			blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-			if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+			if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 				t.Fatalf("AddEdge blocks: %v", err)
 			}
 			landCommit(t, s, blocker.ID, repo, "sha-"+blocker.ID)
@@ -227,7 +227,7 @@ func TestBlockedTaskIDsMultiRepoBlocker(t *testing.T) {
 
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 	landCommit(t, s, blocker.ID, "acme/lib", "sha-lib")
@@ -260,7 +260,7 @@ func TestBlockedTaskIDsContainerBlocker(t *testing.T) {
 	if err := addEdge(t, s, child.ID, parent.ID, "childOf"); err != nil {
 		t.Fatalf("AddEdge childOf: %v", err)
 	}
-	if err := addEdge(t, s, parent.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, parent.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 	landCommit(t, s, child.ID, "acme/app", "sha-child")
@@ -281,7 +281,7 @@ func TestBlockedTaskIDsUnmappedRepoBlocker(t *testing.T) {
 
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 	landCommit(t, s, blocker.ID, "acme/unmapped", "sha-unmapped")
@@ -306,7 +306,7 @@ func TestBlockedTaskIDsUnlandedCommitBlocker(t *testing.T) {
 
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 	pushBranchCommit(t, s, blocker.ID, "acme/app", "sha-abandoned")
@@ -330,7 +330,7 @@ func TestBlockedTaskIDsContainerWithOwnCommits(t *testing.T) {
 
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, parent.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, parent.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 	landCommit(t, s, parent.ID, "acme/app", "sha-parent")
@@ -357,7 +357,7 @@ func TestBlockedTaskIDsDoneStateFlipAfterDelivery(t *testing.T) {
 
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 	landCommit(t, s, blocker.ID, "acme/app", "sha-app")
@@ -380,7 +380,7 @@ func TestBlockedTaskIDsDoneStateFlipAfterDelivery(t *testing.T) {
 // alias collision or a mis-parenthesised predicate shows up here rather than
 // only in IsBlocked. The blocker's repo belongs to a *second* project, which
 // is what the deliberately project-unscoped repo join has to tolerate:
-// 'blocks' edges are not project-scoped.
+// 'dependsOn' edges are not project-scoped.
 func TestOpenBlockersPerRepoDoneState(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -388,7 +388,7 @@ func TestOpenBlockersPerRepoDoneState(t *testing.T) {
 
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 	landCommit(t, s, blocker.ID, "acme/app", "sha-app")

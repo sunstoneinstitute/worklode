@@ -42,10 +42,10 @@ func TestAddEdgeDuplicateRejected(t *testing.T) {
 	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
 	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, t2.ID, t1.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge: %v", err)
 	}
-	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); !errors.Is(err, ErrEdgeExists) {
+	if err := addEdge(t, s, t2.ID, t1.ID, "dependsOn"); !errors.Is(err, ErrEdgeExists) {
 		t.Fatalf("duplicate edge: want ErrEdgeExists, got %v", err)
 	}
 }
@@ -55,7 +55,7 @@ func TestAddEdgeSelfRejected(t *testing.T) {
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
-	for _, typ := range []string{"childOf", "blocks"} {
+	for _, typ := range []string{"childOf", "dependsOn"} {
 		if err := addEdge(t, s, task.ID, task.ID, typ); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("self-edge %s: want ErrInvalidInput, got %v", typ, err)
 		}
@@ -67,10 +67,10 @@ func TestAddEdgeUnknownTask(t *testing.T) {
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, task.ID, "HDB-999", "blocks"); !errors.Is(err, ErrNotFound) {
+	if err := addEdge(t, s, "HDB-999", task.ID, "dependsOn"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("AddEdge to unknown task: want ErrNotFound, got %v", err)
 	}
-	if err := addEdge(t, s, "HDB-999", task.ID, "blocks"); !errors.Is(err, ErrNotFound) {
+	if err := addEdge(t, s, task.ID, "HDB-999", "dependsOn"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("AddEdge from unknown task: want ErrNotFound, got %v", err)
 	}
 }
@@ -83,7 +83,7 @@ func TestRemoveEdgeAndListEdges(t *testing.T) {
 	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
 	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, t1.ID, t2.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge: %v", err)
 	}
 
@@ -91,7 +91,7 @@ func TestRemoveEdgeAndListEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListEdges %s: %v", t1.ID, err)
 	}
-	wantOut := []Edge{{FromTask: t1.ID, ToTask: t2.ID, Type: "blocks"}}
+	wantOut := []Edge{{FromTask: t1.ID, ToTask: t2.ID, Type: "dependsOn"}}
 	if !reflect.DeepEqual(out, wantOut) || len(in) != 0 {
 		t.Fatalf("ListEdges %s: out=%v in=%v, want out=%v in=[]", t1.ID, out, in, wantOut)
 	}
@@ -103,7 +103,7 @@ func TestRemoveEdgeAndListEdges(t *testing.T) {
 		t.Fatalf("ListEdges %s: out=%v in=%v, want out=[] in=%v", t2.ID, out, in, wantOut)
 	}
 
-	if err := removeEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
+	if err := removeEdge(t, s, t1.ID, t2.ID, "dependsOn"); err != nil {
 		t.Fatalf("RemoveEdge: %v", err)
 	}
 	out, in, err = s.ListEdges(ctx, t1.ID)
@@ -114,7 +114,7 @@ func TestRemoveEdgeAndListEdges(t *testing.T) {
 		t.Fatalf("ListEdges after remove: out=%v in=%v, want both empty", out, in)
 	}
 
-	if err := removeEdge(t, s, t1.ID, t2.ID, "blocks"); !errors.Is(err, ErrNotFound) {
+	if err := removeEdge(t, s, t1.ID, t2.ID, "dependsOn"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("RemoveEdge absent: want ErrNotFound, got %v", err)
 	}
 }
@@ -131,14 +131,14 @@ func TestListEdgesForTasks(t *testing.T) {
 	t5 := createTask(t, s, taskTestNow, defaultTaskInput())
 	tNoEdges := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
-		t.Fatalf("AddEdge t1->t2 blocks: %v", err)
+	if err := addEdge(t, s, t1.ID, t2.ID, "dependsOn"); err != nil {
+		t.Fatalf("AddEdge t1->t2 dependsOn: %v", err)
 	}
 	if err := addEdge(t, s, t3.ID, t1.ID, "childOf"); err != nil {
 		t.Fatalf("AddEdge t3->t1 childOf: %v", err)
 	}
-	if err := addEdge(t, s, t4.ID, t5.ID, "blocks"); err != nil {
-		t.Fatalf("AddEdge t4->t5 blocks: %v", err)
+	if err := addEdge(t, s, t4.ID, t5.ID, "dependsOn"); err != nil {
+		t.Fatalf("AddEdge t4->t5 dependsOn: %v", err)
 	}
 
 	// t5 is deliberately left out of the requested set.
@@ -148,7 +148,7 @@ func TestListEdgesForTasks(t *testing.T) {
 	}
 
 	want1 := TaskEdges{
-		Out: []Edge{{FromTask: t1.ID, ToTask: t2.ID, Type: "blocks"}},
+		Out: []Edge{{FromTask: t1.ID, ToTask: t2.ID, Type: "dependsOn"}},
 		In:  []Edge{{FromTask: t3.ID, ToTask: t1.ID, Type: "childOf"}},
 	}
 	if got := m[t1.ID]; !reflect.DeepEqual(got, want1) {
@@ -156,14 +156,14 @@ func TestListEdgesForTasks(t *testing.T) {
 	}
 
 	want2 := TaskEdges{
-		In: []Edge{{FromTask: t1.ID, ToTask: t2.ID, Type: "blocks"}},
+		In: []Edge{{FromTask: t1.ID, ToTask: t2.ID, Type: "dependsOn"}},
 	}
 	if got := m[t2.ID]; !reflect.DeepEqual(got, want2) {
 		t.Fatalf("m[t2] = %+v, want %+v", got, want2)
 	}
 
 	want4 := TaskEdges{
-		Out: []Edge{{FromTask: t4.ID, ToTask: t5.ID, Type: "blocks"}},
+		Out: []Edge{{FromTask: t4.ID, ToTask: t5.ID, Type: "dependsOn"}},
 	}
 	if got := m[t4.ID]; !reflect.DeepEqual(got, want4) {
 		t.Fatalf("m[t4] = %+v, want %+v", got, want4)
@@ -208,7 +208,7 @@ func TestListEdgesForTasksEmpty(t *testing.T) {
 	}
 }
 
-// TestAddEdgeBlocksCycleRejected: a 'blocks' loop deadlocks every task on it,
+// TestAddEdgeBlocksCycleRejected: a 'dependsOn' loop deadlocks every task on it,
 // so the write that closes one is refused, direct or transitive.
 func TestAddEdgeBlocksCycleRejected(t *testing.T) {
 	t.Parallel()
@@ -218,16 +218,77 @@ func TestAddEdgeBlocksCycleRejected(t *testing.T) {
 	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
 	t3 := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
-		t.Fatalf("AddEdge %s blocks %s: %v", t1.ID, t2.ID, err)
+	if err := addEdge(t, s, t2.ID, t1.ID, "dependsOn"); err != nil {
+		t.Fatalf("AddEdge %s dependsOn %s: %v", t2.ID, t1.ID, err)
 	}
-	if err := addEdge(t, s, t2.ID, t1.ID, "blocks"); !errors.Is(err, ErrCycle) {
+	if err := addEdge(t, s, t1.ID, t2.ID, "dependsOn"); !errors.Is(err, ErrCycle) {
 		t.Fatalf("direct cycle: want ErrCycle, got %v", err)
 	}
-	if err := addEdge(t, s, t2.ID, t3.ID, "blocks"); err != nil {
-		t.Fatalf("AddEdge %s blocks %s: %v", t2.ID, t3.ID, err)
+	if err := addEdge(t, s, t3.ID, t2.ID, "dependsOn"); err != nil {
+		t.Fatalf("AddEdge %s dependsOn %s: %v", t3.ID, t2.ID, err)
 	}
-	if err := addEdge(t, s, t3.ID, t1.ID, "blocks"); !errors.Is(err, ErrCycle) {
+	if err := addEdge(t, s, t1.ID, t3.ID, "dependsOn"); !errors.Is(err, ErrCycle) {
 		t.Fatalf("transitive cycle: want ErrCycle, got %v", err)
 	}
+}
+
+// TestAddEdgeRefusesBlocks: blocks is the inverse of dependsOn and is never
+// stored (WL-REQ-1655).
+func TestAddEdgeRefusesBlocks(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
+	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("AddEdge blocks: want ErrInvalidInput, got %v", err)
+	}
+}
+
+// TestTaskEdgesCheckRefusesBlocks: the CHECK constraint refuses a blocks row
+// written past AddEdge.
+func TestTaskEdgesCheckRefusesBlocks(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
+	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
+	_, err := s.db.Exec(
+		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'blocks', now())`,
+		t1.ID, t2.ID)
+	if !isCheckViolationOn(err, "task_edges_type_check") {
+		t.Fatalf("raw blocks insert: want task_edges_type_check violation, got %v", err)
+	}
+}
+
+// TestDependsOnMigrationRoundTrip: the migration rewrites "A blocks B" as
+// "B dependsOn A", and its down migration restores the blocks row.
+func TestDependsOnMigrationRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	db := s.DBForTests()
+	a := createTask(t, s, taskTestNow, defaultTaskInput())
+	b := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	edge := func(from, to, typ string) bool {
+		t.Helper()
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM task_edges WHERE from_task = $1 AND to_task = $2 AND type = $3`,
+			from, to, typ).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	}
+
+	migrateSteps(t, s, -1)
+	insertEdgeRaw(t, s, a.ID, b.ID, "blocks")
+	migrateSteps(t, s, 1)
+	if !edge(b.ID, a.ID, "dependsOn") || edge(a.ID, b.ID, "blocks") {
+		t.Fatalf("after up: want only %s dependsOn %s", b.ID, a.ID)
+	}
+	migrateSteps(t, s, -1)
+	if !edge(a.ID, b.ID, "blocks") || edge(b.ID, a.ID, "dependsOn") {
+		t.Fatalf("after down: want only %s blocks %s", a.ID, b.ID)
+	}
+	migrateSteps(t, s, 1)
 }

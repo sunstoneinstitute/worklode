@@ -27,9 +27,9 @@ func TestProjectRallyRoute(t *testing.T) {
 		"project": "proj", "title": "finish the cockpit", "priority": "high", "kind": "rally",
 	})
 	rr = doReq(t, h, "POST", "/api/v1/tasks/"+blocker["id"].(string)+"/edges", token,
-		map[string]any{"to": rally["id"], "type": "blocks"})
+		map[string]any{"from": rally["id"], "type": "dependsOn"})
 	if rr.Code != http.StatusCreated {
-		t.Fatalf("add blocks edge: status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("add dependsOn edge: status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
 	rr = doReq(t, h, "GET", "/api/v1/projects/proj/rally", token, nil)

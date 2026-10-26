@@ -343,7 +343,7 @@ func TestStartTaskBlockedRejected(t *testing.T) {
 	s := openTaskStore(t)
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 

@@ -44,33 +44,33 @@ func TestTaskPRs(t *testing.T) {
 	}
 }
 
-func TestAllBlockEdges(t *testing.T) {
+func TestAllDependsOnEdges(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
 	b := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, a.ID, b.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, b.ID, a.ID, "dependsOn"); err != nil {
 		t.Fatalf("addEdge blocks: %v", err)
 	}
 	if err := addEdge(t, s, b.ID, a.ID, "childOf"); err != nil {
 		t.Fatalf("addEdge childOf: %v", err)
 	}
 
-	edges, err := s.AllBlockEdges(context.Background())
+	edges, err := s.AllDependsOnEdges(context.Background())
 	if err != nil {
-		t.Fatalf("AllBlockEdges: %v", err)
+		t.Fatalf("AllDependsOnEdges: %v", err)
 	}
-	if len(edges) != 1 || edges[0].FromTask != a.ID || edges[0].ToTask != b.ID || edges[0].Type != "blocks" {
-		t.Fatalf("AllBlockEdges = %+v; want exactly %s blocks %s", edges, a.ID, b.ID)
+	if len(edges) != 1 || edges[0].FromTask != b.ID || edges[0].ToTask != a.ID || edges[0].Type != "dependsOn" {
+		t.Fatalf("AllDependsOnEdges = %+v; want exactly %s dependsOn %s", edges, b.ID, a.ID)
 	}
 }
 
-// TestAllBlockEdgesExcludesDeletedEndpoints: soft delete leaves task_edges
+// TestAllDependsOnEdgesExcludesDeletedEndpoints: soft delete leaves task_edges
 // alone (WL-REQ-117), so the filter has to be in the read. Otherwise a deleted
-// task enters the overview's critical path, and AllBlockEdges disagrees with
+// task enters the overview's critical path, and AllDependsOnEdges disagrees with
 // BlockingFanOut on the same screen.
-func TestAllBlockEdgesExcludesDeletedEndpoints(t *testing.T) {
+func TestAllDependsOnEdgesExcludesDeletedEndpoints(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
 	ctx := context.Background()
@@ -79,7 +79,7 @@ func TestAllBlockEdgesExcludesDeletedEndpoints(t *testing.T) {
 	c := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	for _, e := range [][2]string{{a.ID, b.ID}, {b.ID, c.ID}} {
-		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
+		if err := addEdge(t, s, e[1], e[0], "dependsOn"); err != nil {
 			t.Fatalf("addEdge blocks %s->%s: %v", e[0], e[1], err)
 		}
 	}
@@ -89,12 +89,12 @@ func TestAllBlockEdgesExcludesDeletedEndpoints(t *testing.T) {
 		t.Fatalf("deleteTask: %v", err)
 	}
 
-	edges, err := s.AllBlockEdges(ctx)
+	edges, err := s.AllDependsOnEdges(ctx)
 	if err != nil {
-		t.Fatalf("AllBlockEdges: %v", err)
+		t.Fatalf("AllDependsOnEdges: %v", err)
 	}
 	if len(edges) != 0 {
-		t.Fatalf("AllBlockEdges = %+v; want no edge touching the deleted task", edges)
+		t.Fatalf("AllDependsOnEdges = %+v; want no edge touching the deleted task", edges)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestFrontierMirrorsClaimNextOrder(t *testing.T) {
 
 	// Give low a blocking fan-out so the fan-out map has something to assert on.
 	filler := createTask(t, s, claimNextTestNow, defaultTaskInput())
-	if err := addEdge(t, s, low.ID, filler.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, filler.ID, low.ID, "dependsOn"); err != nil {
 		t.Fatalf("addEdge: %v", err)
 	}
 

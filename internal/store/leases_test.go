@@ -226,7 +226,7 @@ func TestClaimRequiresReady(t *testing.T) {
 
 	blocker := createTask(t, s, leaseTestNow, defaultTaskInput()) // stays ready
 	blocked := createTask(t, s, leaseTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
 	}
 	if _, err := s.Claim(ctx, blocked.ID, "stig", "host:/wt", 0); !errors.Is(err, ErrBlocked) {

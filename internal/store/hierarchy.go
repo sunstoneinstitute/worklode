@@ -137,8 +137,8 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 // declare, and the edge itself is what makes the parent a container — except
 // a decision, which never is (WL-REQ-97 as amended): a decision closes by its
 // recorded answer in one transaction, a parent closes by roll-up, and the two
-// cannot both hold. A rally is never a parent either: its members are the
-// 'blocks' edges pointing at it, and children would be a second, contradicting
+// cannot both hold. A rally is never a parent either: its members are its
+// own 'dependsOn' edges, and children would be a second, contradicting
 // set. Either kind as a child stays legal, a leaf like any other.
 func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string) error {
 	if project[child] != project[parent] {

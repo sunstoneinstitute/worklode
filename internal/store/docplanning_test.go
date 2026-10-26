@@ -205,13 +205,13 @@ func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
 
 	var edgeType string
 	err = s.db.QueryRow(
-		`SELECT type FROM task_edges WHERE from_task = $1 AND to_task = $2`, task1, task2,
+		`SELECT type FROM task_edges WHERE from_task = $1 AND to_task = $2`, task2, task1,
 	).Scan(&edgeType)
 	if err != nil {
-		t.Fatalf("read edge %s -> %s: %v", task1, task2, err)
+		t.Fatalf("read edge %s -> %s: %v", task2, task1, err)
 	}
-	if edgeType != "blocks" {
-		t.Fatalf("edge %s -> %s type = %q, want blocks", task1, task2, edgeType)
+	if edgeType != "dependsOn" {
+		t.Fatalf("edge %s -> %s type = %q, want dependsOn", task2, task1, edgeType)
 	}
 
 	// Minted tasks start ready (WL-REQ-172), so the ready-set check below already
@@ -309,12 +309,12 @@ func TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations(t *testing.T) {
 	// edge crosses the two accepts.
 	var edgeType string
 	err = s.db.QueryRow(`SELECT type FROM task_edges WHERE from_task = $1 AND to_task = $2`,
-		minted[0].ID, again[0].ID).Scan(&edgeType)
+		again[0].ID, minted[0].ID).Scan(&edgeType)
 	if err != nil {
-		t.Fatalf("read edge %s -> %s: %v", minted[0].ID, again[0].ID, err)
+		t.Fatalf("read edge %s -> %s: %v", again[0].ID, minted[0].ID, err)
 	}
-	if edgeType != "blocks" {
-		t.Errorf("edge type = %q, want blocks", edgeType)
+	if edgeType != "dependsOn" {
+		t.Errorf("edge type = %q, want dependsOn", edgeType)
 	}
 }
 
