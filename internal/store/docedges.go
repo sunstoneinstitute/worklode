@@ -951,6 +951,8 @@ func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFi
 		    AND ($1 = '' OR d.project_id = $1)
 		    AND NOT EXISTS (SELECT 1 FROM doc_sections sec
 		                      WHERE sec.doc_id = e.to_doc AND sec.anchor = e.to_anchor)
+		    AND NOT EXISTS (SELECT 1 FROM doc_rules dr JOIN rules r ON r.id = dr.rule_id
+		                      WHERE dr.doc_id = e.to_doc AND 'rule-' || r.number = e.to_anchor)
 
 		  ORDER BY 3, 4, 5, 1, 7, 8, 9`, project)
 	if err != nil {

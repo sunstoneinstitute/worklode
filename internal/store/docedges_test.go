@@ -1403,3 +1403,37 @@ covers:
 		}
 	}
 }
+
+// TestLintDocsRuleFragment: a #rule-<n> reference is broken when the target
+// does not arrange rule n, as a missing section anchor is (WL-REQ-1653).
+func TestLintDocsRuleFragment(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-documents-in-the-backbone",
+		Body: specBody, CreatedBy: "stig",
+	})
+	var arranged int64
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT r.number FROM doc_rules dr JOIN rules r ON r.id = dr.rule_id
+		  WHERE dr.doc_id = $1 ORDER BY dr.position LIMIT 1`, spec.ID).Scan(&arranged); err != nil {
+		t.Fatalf("read an arranged rule: %v", err)
+	}
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "rule-fragment-plan", CreatedBy: "stig",
+		Body: fmt.Sprintf("---\nstatus: draft\nrequires:\n  - 025-documents-in-the-backbone.md#rule-%d\n  - 025-documents-in-the-backbone.md#rule-999999\n---\n\n# Plan\n", arranged),
+	})
+	findings, err := s.LintDocs(t.Context(), "p1")
+	if err != nil {
+		t.Fatalf("LintDocs: %v", err)
+	}
+	var got []string
+	for _, f := range findings {
+		if f.Doc == plan.ID {
+			got = append(got, f.Kind+" "+f.ToAnchor)
+		}
+	}
+	if want := []string{"missing-anchor rule-999999"}; !slices.Equal(got, want) {
+		t.Errorf("plan findings = %v, want %v", got, want)
+	}
+}
