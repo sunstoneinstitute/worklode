@@ -209,9 +209,11 @@ type Config struct {
 
 	// TypeSafe for the jev classifier (WL-REQ-1857). Without TypeSafeAPIKey
 	// a classify request fails as unconfigured and nothing else changes.
-	// TypeSafeModel empty means inlineref.JevModel.
+	// TypeSafeModel empty means inlineref.JevModel; TypeSafeURL overrides the
+	// API base for tests, empty means typesafe.DefaultBaseURL.
 	TypeSafeAPIKey string `env:"LODE_TYPESAFE_API_KEY"`
 	TypeSafeModel  string `env:"LODE_TYPESAFE_MODEL"`
+	TypeSafeURL    string `env:"LODE_TYPESAFE_URL"`
 
 	// Blob storage (WL-SPEC-78). Off unless BlobEndpoint and BlobBucket are
 	// both set: uploads then return 501 and every other surface behaves
@@ -1380,7 +1382,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			}
 		}
 	}
-	s.typesafe = &typesafe.Client{APIKey: cfg.TypeSafeAPIKey, Metrics: typesafe.NewMetrics(reg)}
+	// A hung Jev call fails its node instead of the whole derive request.
+	s.typesafe = &typesafe.Client{BaseURL: cfg.TypeSafeURL, APIKey: cfg.TypeSafeAPIKey, HTTP: &http.Client{Timeout: 20 * time.Second}, Metrics: typesafe.NewMetrics(reg)}
 	s.typesafeModel = cmp.Or(cfg.TypeSafeModel, inlineref.JevModel)
 	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
 	if err != nil {

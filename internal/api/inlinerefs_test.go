@@ -1,10 +1,14 @@
 package api_test
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -127,5 +131,75 @@ func TestDeriveRefsRoute(t *testing.T) {
 		if rr := doReq(t, h, "POST", path, token, bad); rr.Code != http.StatusBadRequest {
 			t.Errorf("%+v: status %d, want 400", bad, rr.Code)
 		}
+	}
+}
+
+// TestDeriveRefsClassify: without a TypeSafe key --classify fails before any
+// node is touched; with one, a dry run asks Jev and reports the edge but
+// writes nothing, a real run writes it, and a second run asks nothing
+// (WL-REQ-1857, WL-REQ-1858, WL-REQ-1860).
+func TestDeriveRefsClassify(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	jev := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var req struct {
+			Questions map[string]any `json:"questions"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		answers := map[string]any{}
+		for id := range req.Questions {
+			answers[id] = map[string]any{"choice": "dependsOn", "confidence": 0.9, "probabilities": map[string]float64{"dependsOn": 0.9}}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"answers": answers})
+	}))
+	defer jev.Close()
+
+	_, unconf, utok := newTestServer(t)
+	rr := doReq(t, unconf, "POST", "/api/v1/projects/proj/refs/derive", utok, model.RefDeriveParams{Kind: "task", All: true, Classify: true})
+	if rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), "classification not configured") {
+		t.Errorf("unconfigured: %d %s", rr.Code, rr.Body.String())
+	}
+
+	st, h, token := newTestServerWithConfig(t, api.Config{WebOpen: true, TypeSafeAPIKey: "k", TypeSafeURL: jev.URL})
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Target", "priority": "medium", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Source", "priority": "medium", "kind": "feature", "body": "We need WL-1 first.\n"})
+	derive := func(req model.RefDeriveParams) model.RefDeriveNode {
+		t.Helper()
+		rr := doReq(t, h, "POST", "/api/v1/projects/proj/refs/derive", token, req)
+		var rep model.RefDeriveReport
+		if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &rep) != nil || len(rep.Nodes) != 1 {
+			t.Fatalf("derive: %d %s", rr.Code, rr.Body.String())
+		}
+		return rep.Nodes[0]
+	}
+	edges := func() int {
+		t.Helper()
+		edges, _ := decodeMap(t, doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil))["edges"].(map[string]any)
+		out, _ := edges["out"].([]any)
+		return len(out)
+	}
+	if rr := doReq(t, h, "POST", "/api/v1/projects/proj/refs/derive", token, model.RefDeriveParams{Kind: "task", All: true, Reclassify: true}); rr.Code != http.StatusBadRequest {
+		t.Errorf("reclassify alone: %d", rr.Code)
+	}
+
+	n := derive(model.RefDeriveParams{Kind: "task", Refs: []string{"WL-2"}, Classify: true, DryRun: true})
+	if len(n.Classified) != 1 || n.Classified[0].Predicate != "dependsOn" || n.Classified[0].Classifier != "jev" || calls.Load() != 1 {
+		t.Fatalf("dry run: %+v, calls %d", n, calls.Load())
+	}
+	if got := edges(); got != 0 {
+		t.Errorf("dry run wrote %d edges", got)
+	}
+	n = derive(model.RefDeriveParams{Kind: "task", Refs: []string{"WL-2"}, Classify: true})
+	if len(n.Classified) != 1 || n.Error != "" {
+		t.Fatalf("run: %+v", n)
+	}
+	if got := edges(); got != 1 {
+		t.Errorf("edges after run = %d, want 1", got)
+	}
+	n = derive(model.RefDeriveParams{Kind: "task", Refs: []string{"WL-2"}, Classify: true})
+	if len(n.Classified) != 0 || calls.Load() != 2 {
+		t.Errorf("second run: %+v, calls %d", n, calls.Load())
 	}
 }

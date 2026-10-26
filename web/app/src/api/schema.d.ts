@@ -10004,8 +10004,35 @@ export interface components {
             replay?: components["schemas"]["ReplayResult"];
             run_id?: string;
         };
+        RefClassification: {
+            adjusted_to?: string;
+            classifier?: string;
+            classifier_version?: number;
+            /** Format: double */
+            confidence?: number;
+            /** Format: date-time */
+            created_at?: string;
+            field?: string;
+            from_id?: string;
+            from_kind?: string;
+            from_version?: null | number;
+            /** Format: int64 */
+            id?: number;
+            line?: number;
+            line_text?: string;
+            model?: string;
+            outcome?: string;
+            /** Format: date-time */
+            outcome_at?: null | string;
+            outcome_by?: string;
+            predicate?: string;
+            probabilities?: unknown;
+            to_id?: string;
+            to_kind?: string;
+        };
         RefDeriveNode: {
             added?: components["schemas"]["InlineRef"][] | null;
+            classified?: components["schemas"]["RefClassification"][] | null;
             diff?: string;
             error?: string;
             ref?: string;
@@ -10016,11 +10043,13 @@ export interface components {
         RefDeriveParams: {
             after?: string;
             all?: boolean;
+            classify?: boolean;
             diff?: boolean;
             doc_kind?: string;
             dry_run?: boolean;
             kind?: string;
             limit?: number;
+            reclassify?: boolean;
             refs?: string[];
             status?: string[];
             task_kind?: string;

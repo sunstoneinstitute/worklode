@@ -17,7 +17,8 @@ import (
 type Option func(*Store)
 
 // WithMetrics registers the store's Prometheus instruments on reg: claim and
-// lease counters, the active-lease gauge, and database/sql pool stats.
+// lease counters, the active-lease gauge, the inline reference classification
+// counters, and database/sql pool stats.
 // Without this option the store records nothing.
 func WithMetrics(reg prometheus.Registerer) Option {
 	return func(s *Store) {
@@ -25,6 +26,7 @@ func WithMetrics(reg prometheus.Registerer) Option {
 		s.db.m = s.metrics
 		reg.MustRegister(collectors.NewDBStatsCollector(s.db.DB, "worklode"))
 		reg.MustRegister(&leaseCollector{db: s.db.DB, now: s.Now})
+		reg.MustRegister(&refClassificationCollector{db: s.db.DB})
 	}
 }
 
@@ -696,4 +698,64 @@ func (c *leaseCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 	ch <- prometheus.MustNewConstMetric(leasesActiveDesc, prometheus.GaugeValue, n)
+}
+
+var (
+	refClassificationsDesc = prometheus.NewDesc(
+		"worklode_ref_classifications_total",
+		"Inline reference classifications recorded (WL-REQ-1861), by classifier (cue, jev) and predicate, counted from ref_classifications at scrape time.",
+		[]string{"classifier", "predicate"}, nil)
+	refOutcomesDesc = prometheus.NewDesc(
+		"worklode_ref_outcomes_total",
+		"Inline reference classification outcomes (WL-REQ-1861), by classifier and outcome, counted from ref_classifications at scrape time. "+
+			"Every classification starts kept, so kept counts all of them; adjusted, rejected and missed are final and count the rows that reached them.",
+		[]string{"classifier", "outcome"}, nil)
+)
+
+// refClassificationCollector counts ref_classifications at scrape time. Rows
+// are never deleted and a repaired outcome never changes again
+// (WL-REQ-1856), so both series only grow, as counters must, and survive a
+// restart.
+type refClassificationCollector struct{ db *sql.DB }
+
+func (c *refClassificationCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- refClassificationsDesc
+	ch <- refOutcomesDesc
+}
+
+func (c *refClassificationCollector) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rows, err := c.db.QueryContext(ctx,
+		`SELECT classifier, predicate, outcome, count(*) FROM ref_classifications GROUP BY 1, 2, 3`)
+	if err != nil {
+		ch <- prometheus.NewInvalidMetric(refClassificationsDesc, err)
+		return
+	}
+	defer rows.Close()
+	byPredicate := map[[2]string]float64{}
+	byOutcome := map[[2]string]float64{}
+	for rows.Next() {
+		var classifier, predicate, outcome string
+		var n float64
+		if err := rows.Scan(&classifier, &predicate, &outcome, &n); err != nil {
+			ch <- prometheus.NewInvalidMetric(refClassificationsDesc, err)
+			return
+		}
+		byPredicate[[2]string{classifier, predicate}] += n
+		byOutcome[[2]string{classifier, "kept"}] += n
+		if outcome != "kept" {
+			byOutcome[[2]string{classifier, outcome}] += n
+		}
+	}
+	if err := rows.Err(); err != nil {
+		ch <- prometheus.NewInvalidMetric(refClassificationsDesc, err)
+		return
+	}
+	for k, n := range byPredicate {
+		ch <- prometheus.MustNewConstMetric(refClassificationsDesc, prometheus.CounterValue, n, k[0], k[1])
+	}
+	for k, n := range byOutcome {
+		ch <- prometheus.MustNewConstMetric(refOutcomesDesc, prometheus.CounterValue, n, k[0], k[1])
+	}
 }

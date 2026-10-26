@@ -24,7 +24,8 @@ func TestDeriveCommand(t *testing.T) {
 			t.Fatalf("decode POST body: %v", err)
 		}
 		node := model.RefDeriveNode{Ref: "WL-1", Rewrites: 1, Unresolved: []string{"WL-9"}, Diff: "WL-1 body line 1\n-/WL-2\n+WL-2\n",
-			Added: []model.InlineRef{{Field: "body", ToRef: "WL-2"}}}
+			Added:      []model.InlineRef{{Field: "body", ToRef: "WL-2"}},
+			Classified: []model.RefClassification{{ToKind: "task", ToID: "WL-2", Field: "body", Line: 1, Classifier: "jev", Predicate: "dependsOn", Confidence: 0.8}}}
 		if len(posted.Refs) > 0 && posted.Refs[0] == "BAD" {
 			node.Error = "boom"
 		}
@@ -53,7 +54,7 @@ func TestDeriveCommand(t *testing.T) {
 	if posted.Kind != "rule" || !posted.All || !posted.Diff {
 		t.Errorf("posted %+v", posted)
 	}
-	if !strings.Contains(out, "+WL-2\n+ WL-1 body -> WL-2\n") {
+	if !strings.Contains(out, "+WL-2\n+ WL-1 body -> WL-2\n? WL-1 WL-9\n~ WL-1 dependsOn task WL-2 body:1 (jev 0.80)\n") {
 		t.Errorf("diff = %q", out)
 	}
 
@@ -69,6 +70,18 @@ func TestDeriveCommand(t *testing.T) {
 	}
 	if _, err = runLode(t, "doc", "derive", "--project", "cow"); err == nil {
 		t.Error("selecting nothing succeeded")
+	}
+
+	// --classify and --reclassify reach the server (WL-REQ-1860).
+	out, err = runLode(t, "task", "derive", "WL-1", "--project", "cow", "--classify", "--reclassify")
+	if err != nil {
+		t.Fatalf("task derive --classify: %v\n%s", err, out)
+	}
+	if !posted.Classify || !posted.Reclassify || !strings.Contains(out, ", 1 classified") {
+		t.Errorf("posted %+v, table %q", posted, out)
+	}
+	if _, err = runLode(t, "task", "derive", "WL-1", "--project", "cow", "--classify=false", "--reclassify"); err == nil {
+		t.Error("--reclassify without --classify succeeded")
 	}
 }
 
