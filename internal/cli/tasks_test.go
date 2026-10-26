@@ -287,12 +287,12 @@ func TestClientFollowUpUnfollow(t *testing.T) {
 	}
 	found := false
 	for _, e := range detail.Edges.Out {
-		if e.Type == "follow_up_to" && e.To == origin.ID {
+		if e.Type == "followUpTo" && e.To == origin.ID {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("out edges = %+v, want a follow_up_to edge to %s", detail.Edges.Out, origin.ID)
+		t.Fatalf("out edges = %+v, want a followUpTo edge to %s", detail.Edges.Out, origin.ID)
 	}
 
 	if _, err := c.UnfollowUp(ctx, followUp.ID, origin.ID); err != nil {
@@ -303,14 +303,14 @@ func TestClientFollowUpUnfollow(t *testing.T) {
 		t.Fatalf("GetTask after unfollow: %v", err)
 	}
 	for _, e := range detail.Edges.Out {
-		if e.Type == "follow_up_to" {
-			t.Fatalf("out edges = %+v, want no follow_up_to edge after UnfollowUp", detail.Edges.Out)
+		if e.Type == "followUpTo" {
+			t.Fatalf("out edges = %+v, want no followUpTo edge after UnfollowUp", detail.Edges.Out)
 		}
 	}
 }
 
 // TestClientDuplicateUnduplicate checks Duplicate issues POST
-// /api/v1/tasks/WL-2/edges with body {"to":"WL-1","type":"duplicate_of"} and
+// /api/v1/tasks/WL-2/edges with body {"to":"WL-1","type":"duplicateOf"} and
 // Unduplicate issues the same body with DELETE. It also pins the "no
 // absorption" rule of WL-REQ-87 at the surface an agent actually calls: the
 // canonical task is untouched by the marking.
@@ -341,12 +341,12 @@ func TestClientDuplicateUnduplicate(t *testing.T) {
 	}
 	found := false
 	for _, e := range detail.Edges.Out {
-		if e.Type == "duplicate_of" && e.To == canonical.ID {
+		if e.Type == "duplicateOf" && e.To == canonical.ID {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("out edges = %+v, want a duplicate_of edge to %s", detail.Edges.Out, canonical.ID)
+		t.Fatalf("out edges = %+v, want a duplicateOf edge to %s", detail.Edges.Out, canonical.ID)
 	}
 
 	// No absorption: the canonical task gains an in-edge and nothing else.
@@ -356,7 +356,7 @@ func TestClientDuplicateUnduplicate(t *testing.T) {
 	}
 	if canon.Task.State != canonical.State || canon.Task.Priority != canonical.Priority ||
 		canon.Task.Body != canonical.Body || len(canon.Task.Skills) != len(canonical.Skills) {
-		t.Fatalf("canonical = %+v, want %+v unchanged: duplicate_of absorbs nothing",
+		t.Fatalf("canonical = %+v, want %+v unchanged: duplicateOf absorbs nothing",
 			canon.Task, canonical)
 	}
 	if canon.Hierarchy.Progress.Total != 0 {
@@ -372,8 +372,8 @@ func TestClientDuplicateUnduplicate(t *testing.T) {
 		t.Fatalf("GetTask after unduplicate: %v", err)
 	}
 	for _, e := range detail.Edges.Out {
-		if e.Type == "duplicate_of" {
-			t.Fatalf("out edges = %+v, want no duplicate_of edge after Unduplicate", detail.Edges.Out)
+		if e.Type == "duplicateOf" {
+			t.Fatalf("out edges = %+v, want no duplicateOf edge after Unduplicate", detail.Edges.Out)
 		}
 	}
 }
@@ -743,7 +743,7 @@ func TestClientHierarchyCalls(t *testing.T) {
 	if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-2/edges" {
 		t.Fatalf("Parent hit %s %s", gotMethod, gotPath)
 	}
-	if !strings.Contains(gotBody, `"child_of"`) || !strings.Contains(gotBody, `"to":"WL-1"`) {
+	if !strings.Contains(gotBody, `"childOf"`) || !strings.Contains(gotBody, `"to":"WL-1"`) {
 		t.Fatalf("Parent body = %s", gotBody)
 	}
 

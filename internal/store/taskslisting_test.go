@@ -349,7 +349,7 @@ func TestListTasksByRepo(t *testing.T) {
 }
 
 // TestListTasksFilterByMilestone: the milestone filter returns the tasks
-// attached to it and every child_of descendant of those, which carry no
+// attached to it and every childOf descendant of those, which carry no
 // milestone of their own, and nothing outside it.
 func TestListTasksFilterByMilestone(t *testing.T) {
 	t.Parallel()
@@ -371,9 +371,9 @@ func TestListTasksFilterByMilestone(t *testing.T) {
 	}
 	for _, e := range [][2]string{{child.ID, attached.ID}, {grandchild.ID, child.ID}} {
 		if _, err := s.DBForTests().Exec(
-			`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
+			`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'childOf', $3)`,
 			e[0], e[1], taskTestNow); err != nil {
-			t.Fatalf("child_of edge: %v", err)
+			t.Fatalf("childOf edge: %v", err)
 		}
 	}
 

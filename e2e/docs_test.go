@@ -377,7 +377,7 @@ func hasDocEdge(edges []model.DocEdge, typ string, doc int64) bool {
 	})
 }
 
-// assertNoChildEdges fails if the task has a parent or any child_of edge in
+// assertNoChildEdges fails if the task has a parent or any childOf edge in
 // either direction: plan acceptance mints a flat set with no row above it
 // (WL-REQ-172).
 func assertNoChildEdges(ctx context.Context, t *testing.T, c *cli.Client, id string) {
@@ -390,13 +390,13 @@ func assertNoChildEdges(ctx context.Context, t *testing.T, c *cli.Client, id str
 		t.Fatalf("task %s parent = %+v, want none", id, d.Hierarchy.Parent)
 	}
 	for _, e := range d.Edges.Out {
-		if e.Type == "child_of" {
-			t.Fatalf("task %s has a child_of edge to %s, want none", id, e.To)
+		if e.Type == "childOf" {
+			t.Fatalf("task %s has a childOf edge to %s, want none", id, e.To)
 		}
 	}
 	for _, e := range d.Edges.In {
-		if e.Type == "child_of" {
-			t.Fatalf("task %s has a child_of edge from %s, want none", id, e.From)
+		if e.Type == "childOf" {
+			t.Fatalf("task %s has a childOf edge from %s, want none", id, e.From)
 		}
 	}
 }
@@ -585,7 +585,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	}
 
 	// 6. Nothing else was created: exactly the three declared tasks, no
-	// container above them, no child_of anywhere.
+	// container above them, no childOf anywhere.
 	all, _, err := planner.ListTasks(ctx, model.TaskListParams{Project: "plans"})
 	if err != nil {
 		t.Fatalf("list tasks: %v", err)

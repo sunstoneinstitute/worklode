@@ -257,8 +257,8 @@ func TestBlockedTaskIDsContainerBlocker(t *testing.T) {
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, parent.ID, "child_of"); err != nil {
-		t.Fatalf("AddEdge child_of: %v", err)
+	if err := addEdge(t, s, child.ID, parent.ID, "childOf"); err != nil {
+		t.Fatalf("AddEdge childOf: %v", err)
 	}
 	if err := addEdge(t, s, parent.ID, blocked.ID, "blocks"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
@@ -337,8 +337,8 @@ func TestBlockedTaskIDsContainerWithOwnCommits(t *testing.T) {
 	walkTo(t, s, parent.ID, "merged")
 
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, parent.ID, "child_of"); err != nil {
-		t.Fatalf("AddEdge child_of: %v", err)
+	if err := addEdge(t, s, child.ID, parent.ID, "childOf"); err != nil {
+		t.Fatalf("AddEdge childOf: %v", err)
 	}
 	if isBlocked(t, s, blocked.ID) {
 		t.Fatalf("IsBlocked: a container at merged must not block, even carrying its own commits")

@@ -69,7 +69,7 @@ func (f ProjectWorkFact) Blocked() bool {
 // are out, and a tombstoned parent is not named (WL-REQ-117).
 //
 // Parent, Lease, and StateEvent come from a single joined query (a task has
-// at most one child_of parent — task_edges_single_parent — at most one
+// at most one childOf parent — task_edges_single_parent — at most one
 // active lease — leases_active — and the state-log lookup is bounded to its
 // newest row), so that part needs no fan-out. OpenBlockers and BlockingPlans
 // are two further queries (fan-outs the first query cannot express without
@@ -89,7 +89,7 @@ SELECT `+taskColumnsT+`,
        se.id, se.source, se.type, se.at
   FROM tasks t
   LEFT JOIN task_edges pe
-    ON pe.from_task = t.id AND pe.type = 'child_of'
+    ON pe.from_task = t.id AND pe.type = 'childOf'
   LEFT JOIN tasks parent ON parent.id = pe.to_task AND parent.deleted_at IS NULL
   LEFT JOIN leases l ON l.task_id = t.id AND l.released_at IS NULL
   LEFT JOIN LATERAL (
@@ -155,7 +155,7 @@ SELECT `+taskColumnsT+`,
 // same predicate as blockedCondition and planBlockedCondition: the blocker is
 // live and has not reached its repo's done_state (taskClosed). The blocker
 // itself need not be in the same project as its dependent — 'blocks' edges,
-// unlike child_of, are not project-scoped (see AddEdge).
+// unlike childOf, are not project-scoped (see AddEdge).
 //
 // A blocking plan still draft has minted no task and so names none here; it
 // reaches the fact through attachBlockingPlans instead.

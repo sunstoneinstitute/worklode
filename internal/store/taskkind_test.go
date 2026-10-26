@@ -46,7 +46,7 @@ func TestTaskKindPolicy(t *testing.T) {
 					t.Fatalf("claim: %v", err)
 				}
 			case "children":
-				if err := addEdge(t, s, other.ID, task.ID, "child_of"); !errors.Is(err, ErrInvalidInput) {
+				if err := addEdge(t, s, other.ID, task.ID, "childOf"); !errors.Is(err, ErrInvalidInput) {
 					t.Fatalf("child edge: %v", err)
 				}
 				if _, err := decompose(t, s, task.ID, []string{"child"}); !errors.Is(err, ErrInvalidInput) {

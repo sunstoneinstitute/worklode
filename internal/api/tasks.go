@@ -56,7 +56,13 @@ var validKinds = ns.Set(ns.TaskKinds)
 var invalidKindMsg = "invalid kind: must be " + ns.OrList(ns.TaskKinds)
 
 var validEdgeTypes = map[string]bool{
-	"blocks": true, "child_of": true, "follow_up_to": true, "duplicate_of": true,
+	"blocks": true, "childOf": true, "followUpTo": true, "duplicateOf": true,
+}
+
+// legacyEdgeTypes maps the pre-WL-REQ-1655 stored names to the ontology
+// names, so an older lode binary keeps working against this server.
+var legacyEdgeTypes = map[string]string{
+	"child_of": "childOf", "follow_up_to": "followUpTo", "duplicate_of": "duplicateOf",
 }
 
 // createTask handles POST /api/v1/tasks.
@@ -179,12 +185,12 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 			if req.Parent != "" {
 				// Same transaction as the insert: there is no window where
 				// the child exists unparented.
-				if err := store.AddEdge(tx, now, t.ID, req.Parent, "child_of", eventID); err != nil {
+				if err := store.AddEdge(tx, now, t.ID, req.Parent, "childOf", eventID); err != nil {
 					return err
 				}
 			}
 			if req.FollowUpTo != "" {
-				if err := store.AddEdge(tx, now, t.ID, req.FollowUpTo, "follow_up_to", eventID); err != nil {
+				if err := store.AddEdge(tx, now, t.ID, req.FollowUpTo, "followUpTo", eventID); err != nil {
 					return err
 				}
 			}
@@ -317,7 +323,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 // getTaskCost handles
 // GET /api/v1/tasks/{id}/cost?from=&to=&children=: a task's accounted usage
 // and cost (WL-RULE-179). children=true widens the scope to the
-// task's child_of descendants, so a container task's own report is not
+// task's childOf descendants, so a container task's own report is not
 // always zero. No dedicated metric: this is an ordinary read with no derived
 // outcome, so the generic http_requests_total / http_request_duration_seconds
 // middleware (WL-REQ-32) is sufficient and WL-REQ-32's add-a-metric rule is
@@ -713,15 +719,19 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveEdge validates an edge request against the {id} path task and
-// returns the (from, to) endpoints. A written response means failure.
-func resolveEdge(w http.ResponseWriter, id string, req model.EdgeInput) (from, to string, ok bool) {
+// returns the (from, to) endpoints, rewriting a legacy type name in req.
+// A written response means failure.
+func resolveEdge(w http.ResponseWriter, id string, req *model.EdgeInput) (from, to string, ok bool) {
+	if t, ok := legacyEdgeTypes[req.Type]; ok {
+		req.Type = t
+	}
 	if (req.To == nil) == (req.From == nil) {
 		writeErr(w, http.StatusUnprocessableEntity, "exactly one of to/from must be set")
 		return "", "", false
 	}
 	if !validEdgeTypes[req.Type] {
 		writeErr(w, http.StatusUnprocessableEntity,
-			"invalid edge type: must be blocks, child_of, follow_up_to, or duplicate_of")
+			"invalid edge type: must be blocks, childOf, followUpTo, or duplicateOf")
 		return "", "", false
 	}
 	if req.To != nil {
@@ -744,7 +754,7 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	from, to, ok := resolveEdge(w, id, req)
+	from, to, ok := resolveEdge(w, id, &req)
 	if !ok {
 		return
 	}
@@ -769,7 +779,7 @@ func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	from, to, ok := resolveEdge(w, id, req)
+	from, to, ok := resolveEdge(w, id, &req)
 	if !ok {
 		return
 	}

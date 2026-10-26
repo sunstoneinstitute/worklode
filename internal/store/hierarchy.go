@@ -1,5 +1,5 @@
 // Task hierarchy (WL-REQ-88): a container is
-// inferred — a task that has child_of children — a task has at most one
+// inferred — a task that has childOf children — a task has at most one
 // parent, and a chain is at most maxHierarchyDepth edges deep. Progress is
 // derived on read; closure is stored as real transitions, attributed to the
 // triggering event, by ResolveHierarchy.
@@ -17,12 +17,12 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// maxHierarchyDepth caps a child_of chain at two edges, now spanning task ->
+// maxHierarchyDepth caps a childOf chain at two edges, now spanning task ->
 // subtask only (WL-REQ-88). The brief is a bounded payload and the walks
 // that feed roll-up and breadcrumbs are unbounded without a cap.
 const maxHierarchyDepth = 2
 
-// hasChildren reports whether id has any child_of children. It is the
+// hasChildren reports whether id has any childOf children. It is the
 // container predicate every guard keys off, container-ness being inferred
 // rather than declared: with decompose creating parent-hood and its children
 // in one transaction, "has children" is exactly as sharp as a column
@@ -34,7 +34,7 @@ func hasChildren(tx *sql.Tx, id string) (bool, error) {
 	var one int
 	err := tx.QueryRow(
 		`SELECT 1 FROM task_edges e JOIN tasks c ON c.id = e.from_task
-		  WHERE e.to_task = $1 AND e.type = 'child_of' AND c.deleted_at IS NULL LIMIT 1`,
+		  WHERE e.to_task = $1 AND e.type = 'childOf' AND c.deleted_at IS NULL LIMIT 1`,
 		id).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -45,12 +45,12 @@ func hasChildren(tx *sql.Tx, id string) (bool, error) {
 	return true, nil
 }
 
-// parentOf returns id's parent via its child_of edge. The single-parent index
+// parentOf returns id's parent via its childOf edge. The single-parent index
 // makes that at most one row, so ok reports whether id has a parent at all —
 // every walk over the hierarchy goes through here.
 func parentOf(tx *sql.Tx, id string) (parent string, ok bool, err error) {
 	err = tx.QueryRow(
-		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`,
+		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'childOf'`,
 		id).Scan(&parent)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
@@ -61,7 +61,7 @@ func parentOf(tx *sql.Tx, id string) (parent string, ok bool, err error) {
 	return parent, true, nil
 }
 
-// ancestorHops returns the number of child_of edges between id and the root of
+// ancestorHops returns the number of childOf edges between id and the root of
 // its hierarchy (0 for a task with no parent). The visited set keeps the walk
 // terminating even if the stored graph already contains a cycle.
 func ancestorHops(tx *sql.Tx, id string) (int, error) {
@@ -84,12 +84,12 @@ func ancestorHops(tx *sql.Tx, id string) (int, error) {
 	}
 }
 
-// descendantDepth returns the length of the longest child_of chain below id
+// descendantDepth returns the length of the longest childOf chain below id
 // (0 for a task with no children). It queries one level at a time (all of a
 // level's children in a single ANY($1) round trip) and stops as soon as the
 // chain is known to exceed maxHierarchyDepth, since checkHierarchy only needs
 // to know the cap is blown, not by how much. The single-parent index makes
-// child_of a forest, which is what lets a shared-visited BFS return the
+// childOf a forest, which is what lets a shared-visited BFS return the
 // longest chain rather than just the level of first reachability.
 func descendantDepth(tx *sql.Tx, id string) (int, error) {
 	visited := map[string]bool{id: true}
@@ -97,7 +97,7 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 	frontier := []string{id}
 	for len(frontier) > 0 {
 		rows, err := tx.Query(
-			`SELECT from_task FROM task_edges WHERE to_task = ANY($1) AND type = 'child_of'`,
+			`SELECT from_task FROM task_edges WHERE to_task = ANY($1) AND type = 'childOf'`,
 			frontier)
 		if err != nil {
 			return 0, fmt.Errorf("walk children below %s: %w", id, err)
@@ -131,7 +131,7 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 	return depth, nil
 }
 
-// checkHierarchy validates a proposed "child child_of parent" edge against the
+// checkHierarchy validates a proposed "child childOf parent" edge against the
 // spec-004 invariants. project carries both endpoints' project_id, already
 // read by AddEdge. Any ordinary task may be a parent — WL-REQ-120 left no kind to
 // declare, and the edge itself is what makes the parent a container — except
@@ -142,7 +142,7 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 // set. Either kind as a child stays legal, a leaf like any other.
 func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string) error {
 	if project[child] != project[parent] {
-		return fmt.Errorf("cross-project edge %s (%s) child_of %s (%s): %w",
+		return fmt.Errorf("cross-project edge %s (%s) childOf %s (%s): %w",
 			child, project[child], parent, project[parent], ErrInvalidInput)
 	}
 
@@ -166,12 +166,12 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string)
 		return fmt.Errorf("task %s already has parent %s: %w", child, existing, ErrEdgeExists)
 	}
 
-	reaches, err := reachesViaEdge(tx, parent, child, "child_of")
+	reaches, err := reachesViaEdge(tx, parent, child, "childOf")
 	if err != nil {
 		return err
 	}
 	if reaches {
-		return fmt.Errorf("edge %s child_of %s: %w", child, parent, ErrCycle)
+		return fmt.Errorf("edge %s childOf %s: %w", child, parent, ErrCycle)
 	}
 
 	above, err := ancestorHops(tx, parent)
@@ -183,7 +183,7 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string)
 		return err
 	}
 	if depth := above + 1 + below; depth > maxHierarchyDepth {
-		return fmt.Errorf("edge %s child_of %s would make a %d-edge chain (max %d): %w",
+		return fmt.Errorf("edge %s childOf %s would make a %d-edge chain (max %d): %w",
 			child, parent, depth, maxHierarchyDepth, ErrInvalidInput)
 	}
 	return nil
@@ -199,7 +199,7 @@ func (s *Store) ChildProgress(ctx context.Context, taskID string) (model.TaskPro
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), COUNT(*) FILTER (WHERE `+taskClosed("t")+`)
 		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
-		  WHERE e.to_task = $1 AND e.type = 'child_of'
+		  WHERE e.to_task = $1 AND e.type = 'childOf'
 		    AND t.deleted_at IS NULL`, taskID).Scan(&p.Total, &p.Closed)
 	if err != nil {
 		return model.TaskProgress{}, fmt.Errorf("child progress of %s: %w", taskID, err)
@@ -215,7 +215,7 @@ func (s *Store) ParentOf(ctx context.Context, taskID string) (*model.Task, error
 	err := s.db.QueryRowContext(ctx,
 		`SELECT t.id, t.title, t.state
 		   FROM task_edges e JOIN tasks t ON t.id = e.to_task
-		  WHERE e.from_task = $1 AND e.type = 'child_of'
+		  WHERE e.from_task = $1 AND e.type = 'childOf'
 		    AND t.deleted_at IS NULL`, taskID).Scan(&p.ID, &p.Title, &p.State)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -226,7 +226,7 @@ func (s *Store) ParentOf(ctx context.Context, taskID string) (*model.Task, error
 	return &p, nil
 }
 
-// ParentMap returns child id -> parent id for every child_of edge in a project
+// ParentMap returns child id -> parent id for every childOf edge in a project
 // (every project when projectID is ""). One query, so a board can group a
 // parent's children under it without a lookup per task.
 func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]string, error) {
@@ -235,7 +235,7 @@ func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]str
 		   FROM task_edges e
 		   JOIN tasks t ON t.id = e.from_task
 		   JOIN tasks p ON p.id = e.to_task
-		  WHERE e.type = 'child_of' AND ($1 = '' OR t.project_id = $1)
+		  WHERE e.type = 'childOf' AND ($1 = '' OR t.project_id = $1)
 		    AND t.deleted_at IS NULL AND p.deleted_at IS NULL`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("parent map: %w", err)
@@ -269,7 +269,7 @@ func (s *Store) ChildrenOf(ctx context.Context, ids []string) (map[string][]mode
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+taskColumnsT+`, e.to_task
 		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
-		  WHERE e.to_task = ANY($1) AND e.type = 'child_of'
+		  WHERE e.to_task = ANY($1) AND e.type = 'childOf'
 		    AND t.deleted_at IS NULL`+taskListOrder("t"), ids)
 	if err != nil {
 		return nil, fmt.Errorf("children of tasks: %w", err)
@@ -382,7 +382,7 @@ func (s *Store) TaskTree(ctx context.Context, f TaskTreeFilter) ([]model.TaskTre
 // Decompose creates parentID's children in one transaction: needs_decomposition
 // clears and each title becomes a draft child inheriting the parent's project,
 // priority, concern, and kind. The parent's kind is not touched (WL-REQ-89) —
-// it is the child_of edges that make it a container. This is what makes the
+// it is the childOf edges that make it a container. This is what makes the
 // spec-005 needs_decomposition gate actionable — an oversized task becomes its
 // own tracking task plus the pieces, in place, keeping its id and every
 // reference to it.
@@ -470,7 +470,7 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 	}
 	// Only when the flag was actually set: decompose is legal on an unflagged
 	// task, and a change row claiming true -> false there would be a lie. The
-	// child_of edges are the record that the split happened.
+	// childOf edges are the record that the split happened.
 	if wasFlagged {
 		if err := LogChange(tx, "task", parentID, eventID,
 			map[string]string{"field": "needs_decomposition", "old": "true", "new": "false"}); err != nil {
@@ -492,7 +492,7 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 		if err != nil {
 			return nil, err
 		}
-		if err := AddEdge(tx, now, child.ID, parentID, "child_of", eventID); err != nil {
+		if err := AddEdge(tx, now, child.ID, parentID, "childOf", eventID); err != nil {
 			return nil, err
 		}
 		children = append(children, *child)

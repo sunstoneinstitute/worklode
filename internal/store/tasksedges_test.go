@@ -10,26 +10,26 @@ func TestChildOfCycleRejected(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
 
-	// t1, t2, and t3 each stand in as a child_of parent below; since WL-REQ-120
+	// t1, t2, and t3 each stand in as a childOf parent below; since WL-REQ-120
 	// any ordinary task may be one.
 	t1 := createTask(t, s, taskTestNow, containerInput())
 	t2 := createTask(t, s, taskTestNow, containerInput())
 	t3 := createTask(t, s, taskTestNow, containerInput())
 
-	if err := addEdge(t, s, t1.ID, t2.ID, "child_of"); err != nil {
-		t.Fatalf("AddEdge %s child_of %s: %v", t1.ID, t2.ID, err)
+	if err := addEdge(t, s, t1.ID, t2.ID, "childOf"); err != nil {
+		t.Fatalf("AddEdge %s childOf %s: %v", t1.ID, t2.ID, err)
 	}
-	err := addEdge(t, s, t2.ID, t1.ID, "child_of")
+	err := addEdge(t, s, t2.ID, t1.ID, "childOf")
 	if !errors.Is(err, ErrCycle) {
 		t.Fatalf("direct cycle: want ErrCycle, got %v", err)
 	}
 
-	// Transitive cycle: t2 child_of t3 makes the chain t1 -> t2 -> t3;
-	// t3 child_of t1 would close the loop.
-	if err := addEdge(t, s, t2.ID, t3.ID, "child_of"); err != nil {
-		t.Fatalf("AddEdge %s child_of %s: %v", t2.ID, t3.ID, err)
+	// Transitive cycle: t2 childOf t3 makes the chain t1 -> t2 -> t3;
+	// t3 childOf t1 would close the loop.
+	if err := addEdge(t, s, t2.ID, t3.ID, "childOf"); err != nil {
+		t.Fatalf("AddEdge %s childOf %s: %v", t2.ID, t3.ID, err)
 	}
-	err = addEdge(t, s, t3.ID, t1.ID, "child_of")
+	err = addEdge(t, s, t3.ID, t1.ID, "childOf")
 	if !errors.Is(err, ErrCycle) {
 		t.Fatalf("transitive cycle: want ErrCycle, got %v", err)
 	}
@@ -55,7 +55,7 @@ func TestAddEdgeSelfRejected(t *testing.T) {
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
-	for _, typ := range []string{"child_of", "blocks"} {
+	for _, typ := range []string{"childOf", "blocks"} {
 		if err := addEdge(t, s, task.ID, task.ID, typ); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("self-edge %s: want ErrInvalidInput, got %v", typ, err)
 		}
@@ -134,8 +134,8 @@ func TestListEdgesForTasks(t *testing.T) {
 	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
 		t.Fatalf("AddEdge t1->t2 blocks: %v", err)
 	}
-	if err := addEdge(t, s, t3.ID, t1.ID, "child_of"); err != nil {
-		t.Fatalf("AddEdge t3->t1 child_of: %v", err)
+	if err := addEdge(t, s, t3.ID, t1.ID, "childOf"); err != nil {
+		t.Fatalf("AddEdge t3->t1 childOf: %v", err)
 	}
 	if err := addEdge(t, s, t4.ID, t5.ID, "blocks"); err != nil {
 		t.Fatalf("AddEdge t4->t5 blocks: %v", err)
@@ -149,7 +149,7 @@ func TestListEdgesForTasks(t *testing.T) {
 
 	want1 := TaskEdges{
 		Out: []Edge{{FromTask: t1.ID, ToTask: t2.ID, Type: "blocks"}},
-		In:  []Edge{{FromTask: t3.ID, ToTask: t1.ID, Type: "child_of"}},
+		In:  []Edge{{FromTask: t3.ID, ToTask: t1.ID, Type: "childOf"}},
 	}
 	if got := m[t1.ID]; !reflect.DeepEqual(got, want1) {
 		t.Fatalf("m[t1] = %+v, want %+v", got, want1)
