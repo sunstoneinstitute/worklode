@@ -56,32 +56,42 @@ type DeliverableDetail struct {
 // selecting nothing is a 400. DryRun and Diff compute the report and write
 // nothing. Limit pages the selection: the nodes sort by id, After skips
 // those up to and including it, and the report's Next resumes the rest.
+// Classify also runs the jev classifier on references with candidates, no cue
+// hit and no classification yet; Reclassify, which needs Classify, also
+// re-runs those whose newest classification has an older classifier_version
+// (WL-REQ-1857, WL-REQ-1858).
 type RefDeriveParams struct {
-	Kind     NodeKind `json:"kind"`
-	Refs     []string `json:"refs,omitempty"`
-	Status   []string `json:"status,omitempty"`
-	DocKind  string   `json:"doc_kind,omitempty"`
-	TaskKind string   `json:"task_kind,omitempty"`
-	All      bool     `json:"all,omitempty"`
-	DryRun   bool     `json:"dry_run,omitempty"`
-	Diff     bool     `json:"diff,omitempty"`
-	After    string   `json:"after,omitempty"`
-	Limit    int      `json:"limit,omitempty"`
+	Kind       NodeKind `json:"kind"`
+	Refs       []string `json:"refs,omitempty"`
+	Status     []string `json:"status,omitempty"`
+	DocKind    string   `json:"doc_kind,omitempty"`
+	TaskKind   string   `json:"task_kind,omitempty"`
+	All        bool     `json:"all,omitempty"`
+	DryRun     bool     `json:"dry_run,omitempty"`
+	Diff       bool     `json:"diff,omitempty"`
+	Classify   bool     `json:"classify,omitempty"`
+	Reclassify bool     `json:"reclassify,omitempty"`
+	After      string   `json:"after,omitempty"`
+	Limit      int      `json:"limit,omitempty"`
 }
 
 // RefDeriveNode is what deriving one node did, or would do under DryRun.
 // Added and Removed are its outgoing inline references that appeared and
 // disappeared, Unresolved the references in its text that name nothing, and
-// Rewrites the lines normalization rewrote. Error is set when the node failed
-// and nothing of it was written.
+// Rewrites the lines normalization rewrote. Classified holds the
+// classifications the run recorded, cue and jev, whose predicate other than
+// references is a typed edge written. Error is set when the node failed;
+// the derive is written in one transaction and the jev classifications in a
+// second, so a jev failure leaves the derive written.
 type RefDeriveNode struct {
-	Ref        string      `json:"ref"`
-	Added      []InlineRef `json:"added"`
-	Removed    []InlineRef `json:"removed"`
-	Unresolved []string    `json:"unresolved"`
-	Rewrites   int         `json:"rewrites"`
-	Diff       string      `json:"diff,omitempty"`
-	Error      string      `json:"error,omitempty"`
+	Ref        string              `json:"ref"`
+	Added      []InlineRef         `json:"added"`
+	Removed    []InlineRef         `json:"removed"`
+	Unresolved []string            `json:"unresolved"`
+	Rewrites   int                 `json:"rewrites"`
+	Classified []RefClassification `json:"classified"`
+	Diff       string              `json:"diff,omitempty"`
+	Error      string              `json:"error,omitempty"`
 }
 
 // RefDeriveReport is the response of POST /api/v1/projects/{id}/refs/derive.

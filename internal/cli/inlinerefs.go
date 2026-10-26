@@ -39,6 +39,10 @@ func InlineRefsRender(w io.Writer, refs model.InlineRefs) {
 // about 275ms; 50 of the slowest kind stay near 14s.
 const deriveBatch = 50
 
+// classifyBatch is the page size under Classify: each node may wait on one
+// Jev request, budgeted at up to 5s, so 5 nodes stay near 25s.
+const classifyBatch = 5
+
 // DeriveRefs calls POST /api/v1/projects/{id}/refs/derive (WL-REQ-1860). A
 // selection by filter or All is paged deriveBatch nodes per request, so no
 // request outlives the client or ingress timeout; the pages merge into one
@@ -49,6 +53,9 @@ func (c *Client) DeriveRefs(ctx context.Context, project string, in model.RefDer
 		return doJSON[model.RefDeriveReport](ctx, c, http.MethodPost, path, in, "derive refs")
 	}
 	in.Limit = deriveBatch
+	if in.Classify {
+		in.Limit = classifyBatch
+	}
 	rep := model.RefDeriveReport{Nodes: []model.RefDeriveNode{}}
 	for {
 		page, _, err := doJSON[model.RefDeriveReport](ctx, c, http.MethodPost, path, in, "derive refs")
@@ -65,7 +72,8 @@ func (c *Client) DeriveRefs(ctx context.Context, project string, in model.RefDer
 }
 
 // RefDeriveTable prints one line per node: the references it gained and lost,
-// the lines rewritten, what resolved to nothing, and its error if it failed.
+// the lines rewritten, what resolved to nothing, the classifications recorded,
+// and its error if it failed.
 func RefDeriveTable(w io.Writer, rep model.RefDeriveReport) {
 	if len(rep.Nodes) == 0 {
 		fmt.Fprintln(w, "No nodes selected.")
@@ -76,6 +84,9 @@ func RefDeriveTable(w io.Writer, rep model.RefDeriveReport) {
 		if len(n.Unresolved) > 0 {
 			fmt.Fprintf(w, ", unresolved: %s", strings.Join(n.Unresolved, ", "))
 		}
+		if len(n.Classified) > 0 {
+			fmt.Fprintf(w, ", %d classified", len(n.Classified))
+		}
 		if n.Error != "" {
 			fmt.Fprintf(w, "  ERROR: %s", n.Error)
 		}
@@ -84,7 +95,7 @@ func RefDeriveTable(w io.Writer, rep model.RefDeriveReport) {
 }
 
 // RefDeriveDiff prints each node's text changes, then its reference changes
-// as + and - lines.
+// as + and - lines and its classifications as ~ lines.
 func RefDeriveDiff(w io.Writer, rep model.RefDeriveReport) {
 	for _, n := range rep.Nodes {
 		fmt.Fprintf(w, "== %s\n", n.Ref)
@@ -100,6 +111,9 @@ func RefDeriveDiff(w io.Writer, rep model.RefDeriveReport) {
 		}
 		for _, u := range n.Unresolved {
 			fmt.Fprintf(w, "? %s %s\n", n.Ref, u)
+		}
+		for _, c := range n.Classified {
+			fmt.Fprintf(w, "~ %s %s %s %s %s:%d (%s %.2f)\n", n.Ref, c.Predicate, c.ToKind, c.ToID, c.Field, c.Line, c.Classifier, c.Confidence)
 		}
 	}
 }

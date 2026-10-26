@@ -185,14 +185,20 @@ func notFoundIfNoRows(err error, what string) error {
 }
 
 // DeriveNode normalizes one doc, rule or task of project (WL-REQ-1854), then
-// re-extracts its inline references (WL-REQ-1851) and reports what changed.
+// re-extracts its inline references (WL-REQ-1851) and reports what changed,
+// the cue classifications it recorded included.
 // The caller commits or rolls back the transaction, which is how a dry run
 // reports without writing.
 func DeriveNode(tx *sql.Tx, now time.Time, project string, kind model.NodeKind, id string, eventID int64) (model.RefDeriveNode, error) {
 	ctx := context.Background()
-	node := model.RefDeriveNode{Added: []model.InlineRef{}, Removed: []model.InlineRef{}, Unresolved: []string{}}
+	node := model.RefDeriveNode{Added: []model.InlineRef{}, Removed: []model.InlineRef{}, Unresolved: []string{},
+		Classified: []model.RefClassification{}}
 	ref, _, err := nodeFields(tx, project, kind, id)
 	node.Ref = ref
+	if err != nil {
+		return node, err
+	}
+	since, err := maxClassificationID(tx)
 	if err != nil {
 		return node, err
 	}
@@ -240,7 +246,8 @@ func DeriveNode(tx *sql.Tx, now time.Time, project string, kind model.NodeKind, 
 	edge := func(r model.InlineRef) string { return r.Field + "|" + string(r.ToKind) + "|" + r.ToID }
 	node.Added = refsMissingFrom(after, before, edge)
 	node.Removed = refsMissingFrom(before, after, edge)
-	return node, nil
+	node.Classified, err = classificationsSince(tx, kind, id, since)
+	return node, err
 }
 
 // refsMissingFrom lists the rows of a whose key b does not have; never nil.

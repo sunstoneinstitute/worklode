@@ -1,10 +1,12 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/inlineref"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/typesafe"
 )
 
 // recordClassification inserts c as a ref_classifications row and records its
@@ -347,4 +350,195 @@ func pruneClassifiedEdges(tx *sql.Tx, kind model.NodeKind, id string, version *i
 		}
 	}
 	return nil
+}
+
+// JevBatch is one node's references the jev classifier is to answer
+// (WL-REQ-1857): Node and Refs go to inlineref.JevQuestions, whose question
+// "r<i>" asks about Refs[i]. Node.Text is the node's fields joined by blank
+// lines, so a Refs line counts into that text.
+type JevBatch struct {
+	Node inlineref.JevNode
+	Refs []inlineref.JevRef
+	refs []jevRef
+}
+
+// jevRef is where one JevBatch ref sits in its field.
+type jevRef struct {
+	field      string
+	version    *int
+	line       int
+	lineText   string
+	toKind     model.NodeKind
+	toID       string
+	candidates []string
+}
+
+// JevPending collects the references of node kind/id the jev classifier is to
+// answer: those whose pair has candidates, no cue phrase on any of their
+// lines, and no classification yet. With reclassify it also takes a pair whose
+// newest classification is a kept jev row of an older classifier_version; a
+// pair a person repaired is never taken (WL-REQ-1858). A target named in
+// several fields is asked about once, at its first line. It only reads, so it
+// runs in the derive's transaction and the Jev call happens after.
+func JevPending(tx *sql.Tx, project string, kind model.NodeKind, id string, reclassify bool) (JevBatch, error) {
+	ctx := context.Background()
+	b := JevBatch{Node: inlineref.JevNode{Kind: kind}}
+	_, fields, err := nodeFields(tx, project, kind, id)
+	if err != nil {
+		return b, err
+	}
+	b.Node.Title = fields[0].text
+	if kind == "doc" {
+		if err := tx.QueryRow(`SELECT kind FROM docs WHERE id = $1::bigint`, id).Scan(&b.Node.DocKind); err != nil {
+			return b, fmt.Errorf("read kind of doc %s: %w", id, err)
+		}
+	}
+	offset := map[string]int{}
+	texts := make([]string, len(fields))
+	n := 0
+	for i, f := range fields {
+		offset[f.name], texts[i] = n, f.text
+		n += strings.Count(f.text, "\n") + 2
+	}
+	b.Node.Text = strings.Join(texts, "\n\n")
+	all := strings.Split(b.Node.Text, "\n")
+	out, err := listInlineRefs(ctx, tx, kind, id, "out")
+	if err != nil {
+		return b, err
+	}
+	seen := map[string]bool{}
+	for _, r := range out {
+		if len(r.Lines) == 0 || seen[string(r.ToKind)+"|"+r.ToID] {
+			continue
+		}
+		var toDocKind string
+		if r.ToKind == "doc" {
+			if err := tx.QueryRow(`SELECT kind FROM docs WHERE id = $1::bigint`, r.ToID).Scan(&toDocKind); err != nil {
+				return b, fmt.Errorf("read kind of doc %s: %w", r.ToID, err)
+			}
+		}
+		cands := inlineref.Candidates(kind, r.ToKind, b.Node.DocKind, toDocKind)
+		if cands == nil {
+			continue
+		}
+		cued := false
+		for _, l := range r.Lines {
+			if at := offset[r.Field] + l; at <= len(all) && inlineref.Cue(all[at-1], cands) != "" {
+				cued = true
+			}
+		}
+		if cued {
+			continue
+		}
+		var take bool
+		err := tx.QueryRow(`SELECT $5 AND classifier = 'jev' AND classifier_version < $6 AND outcome = 'kept'
+			 FROM ref_classifications WHERE from_kind = $1 AND from_id = $2 AND to_kind = $3 AND to_id = $4
+			 ORDER BY created_at DESC, id DESC LIMIT 1`,
+			kind, id, r.ToKind, r.ToID, reclassify, inlineref.JevVersion).Scan(&take)
+		if errors.Is(err, sql.ErrNoRows) {
+			take, err = true, nil
+		}
+		if err != nil {
+			return b, fmt.Errorf("read newest classification of %s %s %s: %w", kind, id, r.ToID, err)
+		}
+		at := offset[r.Field] + r.Lines[0]
+		if !take || at > len(all) {
+			continue
+		}
+		seen[string(r.ToKind)+"|"+r.ToID] = true
+		b.Refs = append(b.Refs, inlineref.JevRef{Kind: r.ToKind, Title: r.ToTitle, DocKind: toDocKind, Line: at})
+		b.refs = append(b.refs, jevRef{field: r.Field, version: r.FromVersion, line: r.Lines[0],
+			lineText: all[at-1], toKind: r.ToKind, toID: r.ToID, candidates: cands})
+	}
+	return b, nil
+}
+
+// ClassifyNode records the jev answers to b's questions, keyed as
+// inlineref.JevQuestions keys them, and writes their typed edges
+// (WL-REQ-1858). An answer replaces the pair's typed edges that still carry a
+// classification_id; an edge a person wrote or repaired stays. A references
+// answer is recorded and writes no edge; so is an answer whose edge a person
+// already wrote. It returns the classifications recorded.
+func ClassifyNode(tx *sql.Tx, now time.Time, kind model.NodeKind, id string, b JevBatch,
+	answers map[string]typesafe.Answer, modelName string, eventID int64) ([]model.RefClassification, error) {
+	since, err := maxClassificationID(tx)
+	if err != nil {
+		return nil, err
+	}
+	for i, r := range b.refs {
+		a, ok := answers[fmt.Sprintf("r%d", i)]
+		if !ok {
+			return nil, fmt.Errorf("jev gave no answer for %s %s", r.toKind, r.toID)
+		}
+		if a.Choice != "references" && !slices.Contains(r.candidates, a.Choice) {
+			return nil, fmt.Errorf("jev chose %q for %s %s, not a candidate", a.Choice, r.toKind, r.toID)
+		}
+		probs, err := json.Marshal(a.Probabilities)
+		if err != nil {
+			return nil, fmt.Errorf("marshal probabilities: %w", err)
+		}
+		c := model.RefClassification{
+			FromKind: kind, FromID: id, Field: r.field, FromVersion: r.version, Line: r.line,
+			LineText: r.lineText, ToKind: r.toKind, ToID: r.toID, Classifier: "jev",
+			ClassifierVersion: inlineref.JevVersion, Model: modelName, Predicate: a.Choice,
+			Confidence: a.Confidence, Probabilities: probs, CreatedAt: now.UTC(),
+		}
+		p := classifiedPairs[[2]model.NodeKind{kind, r.toKind}]
+		if _, err := tx.Exec(`DELETE FROM `+p.table+` WHERE `+p.pair+` AND classification_id IS NOT NULL`, id, r.toID); err != nil {
+			return nil, fmt.Errorf("replace classified edges of %s %s %s: %w", kind, id, r.toID, err)
+		}
+		exists := false
+		if c.Predicate != "references" {
+			if err := tx.QueryRow(typedEdgeExists[[2]model.NodeKind{kind, r.toKind}], id, r.toID, c.Predicate).Scan(&exists); err != nil {
+				return nil, fmt.Errorf("check %s %s %s %s: %w", kind, id, c.Predicate, r.toID, err)
+			}
+		}
+		if c.Predicate == "references" || exists {
+			_, _, err = recordClassification(tx, c, eventID)
+		} else {
+			err = classifiedEdge(tx, c, eventID)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return classificationsSince(tx, kind, id, since)
+}
+
+// maxClassificationID is the newest ref_classifications id, 0 for none, so
+// classificationsSince can list what a run recorded after it.
+func maxClassificationID(tx *sql.Tx) (int64, error) {
+	var id int64
+	if err := tx.QueryRow(`SELECT coalesce(max(id), 0) FROM ref_classifications`).Scan(&id); err != nil {
+		return 0, fmt.Errorf("read newest classification id: %w", err)
+	}
+	return id, nil
+}
+
+// classificationsSince lists node kind/id's classifications with an id after
+// since, oldest first; never nil.
+func classificationsSince(tx *sql.Tx, kind model.NodeKind, id string, since int64) ([]model.RefClassification, error) {
+	rows, err := tx.Query(`SELECT to_jsonb(c) FROM ref_classifications c
+		 WHERE from_kind = $1 AND from_id = $2 AND id > $3 ORDER BY id`, kind, id, since)
+	if err != nil {
+		return nil, fmt.Errorf("list classifications of %s %s: %w", kind, id, err)
+	}
+	out, err := collectRows(rows, "classifications of "+id, func(r rowScanner) (model.RefClassification, error) {
+		var raw []byte
+		var c model.RefClassification
+		if err := r.Scan(&raw); err != nil {
+			return c, err
+		}
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return c, err
+		}
+		if string(c.Probabilities) == "null" {
+			c.Probabilities = nil
+		}
+		return c, nil
+	})
+	if out == nil {
+		out = []model.RefClassification{}
+	}
+	return out, err
 }
