@@ -4633,6 +4633,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/refs/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count the classifications of the selected nodes by classifier version, predicate and confidence bucket */
+        get: {
+            parameters: {
+                query?: {
+                    kind?: string;
+                    ref?: string[];
+                    status?: string[];
+                    doc_kind?: string;
+                    task_kind?: string;
+                    all?: boolean;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RefStats"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/repos": {
         parameters: {
             query?: never;
@@ -10057,6 +10111,28 @@ export interface components {
         RefDeriveReport: {
             next?: string;
             nodes?: components["schemas"]["RefDeriveNode"][] | null;
+        };
+        RefStats: {
+            rows?: components["schemas"]["RefStatsRow"][] | null;
+        };
+        RefStatsRow: {
+            adjusted?: number;
+            /** Format: double */
+            adjusted_rate?: number;
+            classifier?: string;
+            classifier_version?: number;
+            /** Format: double */
+            confidence_bucket?: number;
+            kept?: number;
+            /** Format: double */
+            kept_rate?: number;
+            missed?: number;
+            /** Format: double */
+            missed_rate?: number;
+            predicate?: string;
+            rejected?: number;
+            /** Format: double */
+            rejected_rate?: number;
         };
         ReferenceListResponse: {
             references?: components["schemas"]["EntityEdge"][] | null;

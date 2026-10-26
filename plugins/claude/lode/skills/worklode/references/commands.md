@@ -55,7 +55,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
 - `lode doc derive` — Normalize and re-extract the inline references of docs
-  Flags: --all, --classify, --diff, --dry-run, --kind, --project, --reclassify, --repo, --status
+  Flags: --all, --classify, --diff, --dry-run, --kind, --project, --reclassify, --repo, --stats, --status
 - `lode doc edit` — Replace a document's body (a draft or plan in place, an accepted spec as an amendment) or set its title and issued date
   Flags: --file, --if-version, --issued, --note, --substantive, --title, --update-section-anchors
 - `lode doc import` — Import a git corpus of design documents into the backbone
@@ -196,7 +196,7 @@ Flags: --server
 - `lode rule arrange` — Place an existing rule in a spec; an accepted spec gets it in its candidate revision
   Flags: --after, --under
 - `lode rule derive` — Normalize and re-extract the inline references of rules
-  Flags: --all, --classify, --diff, --dry-run, --project, --reclassify, --repo, --status
+  Flags: --all, --classify, --diff, --dry-run, --project, --reclassify, --repo, --stats, --status
 - `lode rule edit` — Write a rule's next draft version (body and heading) from a file
   Flags: --file, --heading
 - `lode rule link` — Relate a rule to another: --refines, --needs, --constrains, --conflicts-with, --references, --amends or --derived-from <ref>
@@ -273,7 +273,7 @@ Flags: --closure, --deliverable, --inline, --kind, --milestone, --pager, --plan,
 - `lode task delete` — Delete a task: hide a row that should not have existed
   Flags: --justification
 - `lode task derive` — Normalize and re-extract the inline references of tasks
-  Flags: --all, --classify, --diff, --dry-run, --kind, --project, --reclassify, --repo, --status
+  Flags: --all, --classify, --diff, --dry-run, --kind, --project, --reclassify, --repo, --stats, --status
 - `lode task detach` — Remove an attached blob from a task
 - `lode task duplicate` — Mark a task as a duplicate of the canonical task for the same request
   Flags: --of

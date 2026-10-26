@@ -99,6 +99,37 @@ func (s *server) deriveRefs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
+// refStats handles GET /api/v1/projects/{id}/refs/stats (WL-REQ-1859): the
+// quality report over the classifications of the selected nodes.
+func (s *server) refStats(w http.ResponseWriter, r *http.Request) {
+	var p model.RefStatsParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	switch p.Kind {
+	case "doc", "task", "rule":
+	default:
+		writeErr(w, http.StatusBadRequest, "kind must be doc, task or rule")
+		return
+	}
+	if len(p.Refs) == 0 && len(p.Status) == 0 && p.DocKind == "" && p.TaskKind == "" && !p.All {
+		writeErr(w, http.StatusBadRequest, "select nodes: give refs, a filter or all")
+		return
+	}
+	project := r.PathValue("id")
+	if _, err := s.st.GetProject(r.Context(), project); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	stats, err := s.st.RefStats(r.Context(), project, p)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
 // classifyNode asks Jev about batch in one request outside any transaction,
 // then records the answers and writes their typed edges in the node's own
 // transaction, rolled back unless write (WL-REQ-1857, WL-REQ-1858). The
@@ -157,5 +188,10 @@ var inlinerefsRouteDocs = map[string]routeDoc{
 		summary:   "Normalize and re-extract the inline references of the selected docs, tasks or rules",
 		request:   model.RefDeriveParams{},
 		responses: map[int]any{http.StatusOK: model.RefDeriveReport{}},
+	},
+	"GET /api/v1/projects/{id}/refs/stats": {
+		summary:   "Count the classifications of the selected nodes by classifier version, predicate and confidence bucket",
+		responses: map[int]any{http.StatusOK: model.RefStats{}},
+		params:    model.RefStatsParams{},
 	},
 }

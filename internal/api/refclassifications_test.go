@@ -161,3 +161,30 @@ func TestRejectedEdgeStaysRemoved(t *testing.T) {
 		t.Errorf("edges = %d, classifications = %d; want 0, 1", edges, rows)
 	}
 }
+
+// TestRefStatsRoute: the report counts the selected nodes' classifications,
+// and a request that selects nothing is a 400 (WL-REQ-1859).
+func TestRefStatsRoute(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	createTaskViaAPI(t, h, token, map[string]any{"project": projID, "title": "Target", "kind": "feature", "priority": "medium"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": projID, "title": "Source", "kind": "feature", "priority": "medium", "body": "Depends on WL-1.\n"})
+	if rr := doReq(t, h, "POST", "/api/v1/projects/wl/refs/derive", token, model.RefDeriveParams{Kind: "task", Refs: []string{"WL-2"}}); rr.Code != 200 {
+		t.Fatalf("derive: %d %s", rr.Code, rr.Body)
+	}
+	rr := doReq(t, h, "GET", "/api/v1/projects/wl/refs/stats?kind=task&ref=WL-2", token, nil)
+	if rr.Code != 200 {
+		t.Fatalf("stats: %d %s", rr.Code, rr.Body)
+	}
+	var got model.RefStats
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rows) != 1 || got.Rows[0].Classifier != "cue" || got.Rows[0].Kept != 1 || got.Rows[0].KeptRate != 1 {
+		t.Errorf("rows = %+v", got.Rows)
+	}
+	if rr := doReq(t, h, "GET", "/api/v1/projects/wl/refs/stats?kind=task", token, nil); rr.Code != 400 {
+		t.Errorf("no selection: %d", rr.Code)
+	}
+}
