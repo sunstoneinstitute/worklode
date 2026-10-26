@@ -87,7 +87,7 @@ func recordStateEvent(t *testing.T, s *Store, source, externalID, taskID string,
 // project-a has exactly 3 tasks: the critical-priority task (claimed by
 // agent-x, with a github-sourced state event), a parent's high-priority
 // child, and the parent itself (medium priority, blocked by a task in
-// project-b — 'blocks' edges are not project-scoped, unlike childOf).
+// project-b — 'dependsOn' edges are not project-scoped, unlike childOf).
 func TestListProjectWorkFacts(t *testing.T) {
 	t.Parallel()
 	s := openProjectWorkStore(t)
@@ -101,7 +101,7 @@ func TestListProjectWorkFacts(t *testing.T) {
 	if err := addEdge(t, s, child.ID, container.ID, "childOf"); err != nil {
 		t.Fatalf("childOf edge: %v", err)
 	}
-	if err := addEdge(t, s, blocker.ID, container.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, container.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("blocks edge: %v", err)
 	}
 
@@ -248,7 +248,7 @@ func TestListProjectWorkFactsClosedBlockerDisappears(t *testing.T) {
 
 	dependent := createTask(t, s, taskTestNow, projectWorkTaskInput("project-a", "medium", "feature", "Dependent"))
 	blocker := createTask(t, s, taskTestNow, projectWorkTaskInput("project-a", "medium", "feature", "Blocker"))
-	if err := addEdge(t, s, blocker.ID, dependent.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, dependent.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("blocks edge: %v", err)
 	}
 

@@ -73,7 +73,7 @@ func TestDirtyProjects(t *testing.T) {
 	}
 	_, _, err = s.RecordEvent(ctx, "cli", "d-edge", "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, time.Now().UTC(), c.ID, a.ID, "blocks", eventID)
+			return AddEdge(tx, time.Now().UTC(), a.ID, c.ID, "dependsOn", eventID)
 		})
 	if err != nil {
 		t.Fatalf("add edge: %v", err)

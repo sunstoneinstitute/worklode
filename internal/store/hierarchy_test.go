@@ -192,7 +192,7 @@ func TestAddEdgeMissingEndpoint(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
 				func(tx *sql.Tx, eventID int64) error {
-					return AddEdge(tx, taskTestNow, tc.from, tc.to, "blocks", eventID)
+					return AddEdge(tx, taskTestNow, tc.from, tc.to, "dependsOn", eventID)
 				})
 			if !errors.Is(err, ErrNotFound) {
 				t.Fatalf("AddEdge error = %v, want ErrNotFound", err)
@@ -539,7 +539,7 @@ func TestChildProgress(t *testing.T) {
 	// A blocks edge into the container shares childOf's direction (to_task =
 	// container). It must not be counted: pins the e.type = 'childOf' predicate.
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, container.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, container.ID, blocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("blocks: %v", err)
 	}
 
@@ -1154,12 +1154,12 @@ func TestDecompose(t *testing.T) {
 		t.Fatalf("set needs_decomposition: %v", err)
 	}
 
-	// A blocks edge into the parent is a reference that must survive the
+	// A dependsOn edge out of the parent is a reference that must survive the
 	// split: the task on the other end of it must still resolve to the same
 	// id, in place, once the parent takes children.
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, parent.ID, "blocks"); err != nil {
-		t.Fatalf("blocks edge into parent: %v", err)
+	if err := addEdge(t, s, parent.ID, blocker.ID, "dependsOn"); err != nil {
+		t.Fatalf("dependsOn edge out of parent: %v", err)
 	}
 
 	kids, err := decompose(t, s, parent.ID, []string{" Phase one ", "Phase two"})
@@ -1211,15 +1211,15 @@ func TestDecompose(t *testing.T) {
 		t.Fatalf("parent id changed to %s, want %s", got.ID, parent.ID)
 	}
 
-	// The reference-survival check: the pre-existing blocks edge into the
-	// parent must still resolve to the same task, split in place.
-	_, inEdges, err := s.ListEdges(t.Context(), parent.ID)
+	// The reference-survival check: the pre-existing dependsOn edge out of
+	// the parent must still resolve to the same task, split in place.
+	outEdges, _, err := s.ListEdges(t.Context(), parent.ID)
 	if err != nil {
 		t.Fatalf("ListEdges: %v", err)
 	}
-	wantBlock := Edge{FromTask: blocker.ID, ToTask: parent.ID, Type: "blocks"}
-	if !slices.Contains(inEdges, wantBlock) {
-		t.Fatalf("blocks edge into %s did not survive decomposition: in=%v", parent.ID, inEdges)
+	wantBlock := Edge{FromTask: parent.ID, ToTask: blocker.ID, Type: "dependsOn"}
+	if !slices.Contains(outEdges, wantBlock) {
+		t.Fatalf("dependsOn edge out of %s did not survive decomposition: out=%v", parent.ID, outEdges)
 	}
 
 	children, err := s.ListTasks(t.Context(), TaskFilter{Parent: parent.ID})

@@ -24,7 +24,7 @@ func TestBrief(t *testing.T) {
 	}
 
 	openBlocker := createTask(t, s, leaseTestNow, defaultTaskInput()) // stays ready = open
-	if err := addEdge(t, s, openBlocker.ID, task.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, task.ID, openBlocker.ID, "dependsOn"); err != nil {
 		t.Fatalf("add open blocks edge: %v", err)
 	}
 	// Blockers in a closed state (see taskClosed) no longer block, so they
@@ -32,7 +32,7 @@ func TestBrief(t *testing.T) {
 	for _, state := range []string{"merged", "deployed_dev", "deployed_prod", "released"} {
 		closedBlocker := createTask(t, s, leaseTestNow, defaultTaskInput())
 		walkTo(t, s, closedBlocker.ID, state)
-		if err := addEdge(t, s, closedBlocker.ID, task.ID, "blocks"); err != nil {
+		if err := addEdge(t, s, task.ID, closedBlocker.ID, "dependsOn"); err != nil {
 			t.Fatalf("add %s blocks edge: %v", state, err)
 		}
 	}
@@ -98,10 +98,10 @@ func TestBriefOpenBlockersMultiCharKey(t *testing.T) {
 	blocker1 := createTask(t, s, leaseTestNow, demoInput) // DEMO-2
 	blocker2 := createTask(t, s, leaseTestNow, demoInput) // DEMO-3
 
-	if err := addEdge(t, s, blocker1.ID, target.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, target.ID, blocker1.ID, "dependsOn"); err != nil {
 		t.Fatalf("add blocks edge %s -> %s: %v", blocker1.ID, target.ID, err)
 	}
-	if err := addEdge(t, s, blocker2.ID, target.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, target.ID, blocker2.ID, "dependsOn"); err != nil {
 		t.Fatalf("add blocks edge %s -> %s: %v", blocker2.ID, target.ID, err)
 	}
 

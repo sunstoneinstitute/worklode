@@ -24,18 +24,17 @@ type Service struct {
 	Graph *graphserver.Client
 }
 
-// taskDAG joins backbone blocks edges with KG wl:dependsOn edges into
-// (before, after) pairs. A dependsOn edge reverses: the dependency comes
-// first. With no graph configured the KG half is empty, not an error — the
+// taskDAG joins backbone dependsOn edges with KG wl:dependsOn edges into
+// (before, after) pairs. Both reverse: the dependency comes first. With no graph configured the KG half is empty, not an error — the
 // backbone half alone is still meaningful.
 func (s *Service) taskDAG(ctx context.Context) ([][2]string, error) {
-	edges, err := s.Store.AllBlockEdges(ctx)
+	edges, err := s.Store.AllDependsOnEdges(ctx)
 	if err != nil {
 		return nil, err
 	}
 	pairs := make([][2]string, 0, len(edges))
 	for _, e := range edges {
-		pairs = append(pairs, [2]string{e.FromTask, e.ToTask})
+		pairs = append(pairs, [2]string{e.ToTask, e.FromTask}) // dependency precedes dependent
 	}
 	if s.Graph != nil {
 		rows, err := s.Graph.Select(ctx, taskRequiresQuery)

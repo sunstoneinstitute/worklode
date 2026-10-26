@@ -11,8 +11,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// blockerRelation is "(blocked, blocker)" over open blockers: the from_task of
-// a 'blocks' edge, and the open tasks of a plan ordered before the blocked
+// blockerRelation is "(blocked, blocker)" over open blockers: the to_task of
+// a 'dependsOn' edge, and the open tasks of a plan ordered before the blocked
 // task's plan (WL-REQ-172). It is openBlockers' body with the blocked task left
 // free instead of bound to one id, so the two surfaces cannot disagree about
 // what blocks what — including on what "open" means, which is taskClosed in
@@ -20,10 +20,10 @@ import (
 //
 // It binds `e`, `b`, `dep` and `de` on top of the aliases taskClosed binds.
 var blockerRelation = `
-	SELECT e.to_task AS blocked, b.id, b.title, b.state, b.project_id
+	SELECT e.from_task AS blocked, b.id, b.title, b.state, b.project_id
 	  FROM task_edges e
-	  JOIN tasks b ON b.id = e.from_task
-	 WHERE e.type = 'blocks'
+	  JOIN tasks b ON b.id = e.to_task
+	 WHERE e.type = 'dependsOn'
 	   AND b.deleted_at IS NULL
 	   AND NOT ` + taskClosed("b") + `
 	UNION
@@ -44,13 +44,13 @@ var blockerRelation = `
 // two routes appears once per route — that is the tree, not a duplicate — but
 // only once per (blocker, blocked) pair, which is why the rows are grouped:
 // the same edge reached by two paths would otherwise print its whole subtree
-// twice. A cycle stops at its repeat, marked Cycle: 'blocks' edges are not
-// validated against cycles on write, so this query must survive one, and a
-// renderer must not expand a node it marks.
+// twice. A cycle stops at its repeat, marked Cycle: AddEdge refuses a new
+// 'dependsOn' cycle, but rows written before that check may hold one, so this
+// query must survive one, and a renderer must not expand a node it marks.
 //
 // The blocker relation is computed whole (Postgres materialises a CTE that is
 // referenced twice), not narrowed to the tree. That is the same shape and
-// cost class as AllBlockEdges + ClosedTaskIDs, which /frontier pays on every
+// cost class as AllDependsOnEdges + ClosedTaskIDs, which /frontier pays on every
 // call; narrow it only if the edge set ever grows enough to measure.
 func (s *Store) BlockerTree(ctx context.Context, rootID string) (model.BlockerTree, error) {
 	out := model.BlockerTree{
@@ -197,7 +197,7 @@ func (s *Store) blockedTaskIDsIn(ctx context.Context, projectID string) ([]strin
 		  WHERE t.deleted_at IS NULL
 		    AND ($1 = '' OR t.project_id = $1)
 		    AND (EXISTS (SELECT 1 FROM task_edges e
-		                  WHERE e.to_task = t.id AND `+blockedCondition+`)
+		                  WHERE e.from_task = t.id AND `+blockedCondition+`)
 		         OR `+planBlockedCondition+`)`+
 			taskListOrder("t"), projectID)
 	if err != nil {

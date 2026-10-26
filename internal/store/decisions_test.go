@@ -392,7 +392,7 @@ func TestRecordDecisionRefusals(t *testing.T) {
 		task := decisionTask(t, s)
 		poseOn(t, s, task.ID, "q1", "yes_no")
 		blocker := createTask(t, s, taskTestNow, defaultTaskInput())
-		if err := addEdge(t, s, blocker.ID, task.ID, "blocks"); err != nil {
+		if err := addEdge(t, s, task.ID, blocker.ID, "dependsOn"); err != nil {
 			t.Fatalf("add blocking edge: %v", err)
 		}
 		recordAndExpectRefusal(t, s, task.ID, "q1", "stig", ErrInvalidInput)

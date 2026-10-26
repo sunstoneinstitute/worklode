@@ -26,7 +26,7 @@ func TestProjectGraph(t *testing.T) {
 
 	// A standalone task blocked by a minted one.
 	loose := createTask(t, s, time.Now(), TaskInput{ProjectID: "p1", Title: "Loose", Priority: "low", Kind: "chore", CreatedBy: "stig"})
-	if err := addEdge(t, s, taskIDs[0], loose.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, loose.ID, taskIDs[0], "dependsOn"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -77,7 +77,7 @@ func TestProjectGraph(t *testing.T) {
 		}
 	}
 	for _, e := range g.TaskEdges {
-		if e.Type == "blocks" && e.From == taskIDs[0] && e.To == loose.ID {
+		if e.Type == "dependsOn" && e.From == loose.ID && e.To == taskIDs[0] {
 			sawBlocks = true
 		}
 	}
