@@ -53,6 +53,7 @@ var EdgeTerms = []EdgeTerm{
 	{Table: "task_edges", Type: "dependsOn", Property: "https://worklode.io/ns/ontology#dependsOn", Inverse: "https://worklode.io/ns/ontology#blocks", Symmetric: false},
 	{Table: "task_edges", Type: "duplicateOf", Property: "https://worklode.io/ns/ontology#duplicateOf", Inverse: "", Symmetric: false},
 	{Table: "task_edges", Type: "followUpTo", Property: "https://worklode.io/ns/ontology#followUpTo", Inverse: "", Symmetric: false},
+	{Table: "task_governed_by", Type: "governedBy", Property: "https://worklode.io/ns/ontology#governedBy", Inverse: "", Symmetric: false},
 }
 
 // One constant per wlc:TaskKind member, for code that names a kind.
@@ -116,4 +117,30 @@ var TaskKindAliases = map[string]string{
 	"spike":         "spike",
 	"story":         "feature",
 	"upgrade":       "chore",
+}
+
+// EdgeLabels maps each cue phrase of ns/ontology.ttl (skos:prefLabel and
+// skos:altLabel) to its stored edge type (WL-REQ-1857).
+var EdgeLabels = map[string]string{
+	"amends":         "amends",
+	"blocked by":     "dependsOn",
+	"child of":       "childOf",
+	"conflicts with": "conflictsWith",
+	"constrains":     "constrains",
+	"depends on":     "dependsOn",
+	"derived from":   "wasDerivedFrom",
+	"duplicate of":   "duplicateOf",
+	"duplicates":     "duplicateOf",
+	"follow-up to":   "followUpTo",
+	"follows up on":  "followUpTo",
+	"governed by":    "governedBy",
+	"narrows":        "refines",
+	"needs":          "needs",
+	"part of":        "childOf",
+	"refines":        "refines",
+	"relies on":      "needs",
+	"requires":       "requires",
+	"requires task":  "dependsOn",
+	"runs after":     "blockedBy",
+	"subtask of":     "childOf",
 }

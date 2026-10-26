@@ -356,8 +356,8 @@ def extract(ttl: str) -> tuple[dict[str, list[str]], list[str]]:
     return schemes, statuses
 
 
-EDGE_TABLES = ("doc_edges", "rule_edges", "task_edges", "inline_refs")
-_STORED_AS_RE = re.compile(r"^(doc_edges|rule_edges|task_edges|inline_refs)\.[A-Za-z_]+$")
+EDGE_TABLES = ("doc_edges", "rule_edges", "task_edges", "task_governed_by", "inline_refs")
+_STORED_AS_RE = re.compile(r"^(doc_edges|rule_edges|task_edges|task_governed_by|inline_refs)\.[A-Za-z_]+$")
 
 
 def extract_edges(ttl: str) -> list[tuple[str, str, str, str, bool]]:
@@ -411,6 +411,32 @@ def extract_edges(ttl: str) -> list[tuple[str, str, str, str, bool]]:
                 raise TurtleError(f"{table}.{typ} is stored by both {edges[table, typ][2]} and {prop}")
             edges[table, typ] = (table, typ, prop, inverses.get(prop, ""), prop in symmetric)
     return [edges[k] for k in sorted(edges)]
+
+
+def extract_edge_labels(ttl: str) -> dict[str, str]:
+    """Map each skos:prefLabel/altLabel phrase of a stored property to its type.
+
+    A property with several `wl:storedAs` literals must share one type string.
+    A phrase may label one stored type only (WL-REQ-1857).
+    """
+    triples = Parser(ttl).parse()
+    types: dict[str, set[str]] = {}
+    for s, p, o in triples:
+        if p == WL + "storedAs":
+            types.setdefault(s, set()).add(o.strip('"').partition(".")[2])
+    labels: dict[str, str] = {}
+    for s, p, o in triples:
+        if p not in (SKOS + "prefLabel", SKOS + "altLabel") or s not in types:
+            continue
+        if not isinstance(o, str) or not o.startswith('"'):
+            raise TurtleError(f"{s}: {p} must be a string")
+        if len(types[s]) != 1:
+            raise TurtleError(f"{s}: labelled but stored under several types {sorted(types[s])}")
+        (typ,) = types[s]
+        phrase = o.strip('"')
+        if labels.setdefault(phrase, typ) != typ:
+            raise TurtleError(f"phrase {phrase!r} labels both {labels[phrase]} and {typ}")
+    return labels
 
 
 TASK_KIND_PROPERTIES = (
@@ -497,7 +523,7 @@ var EdgeTerms = []EdgeTerm{
 '''
 
 
-def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds, aliases) -> str:
+def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds, aliases, edge_labels) -> str:
     def lit(values: list[str]) -> str:
         return ", ".join(f'"{v}"' for v in values)
 
@@ -539,6 +565,12 @@ def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds
     for word, kind in sorted(aliases.items()):
         descriptors += f'\t{(chr(34) + word + chr(34) + ":").ljust(width)} "{kind}",\n'
     descriptors += "}\n"
+    descriptors += "\n// EdgeLabels maps each cue phrase of ns/ontology.ttl (skos:prefLabel and\n"
+    descriptors += "// skos:altLabel) to its stored edge type (WL-REQ-1857).\nvar EdgeLabels = map[string]string{\n"
+    width = max(map(len, edge_labels), default=0) + 3
+    for phrase, typ in sorted(edge_labels.items()):
+        descriptors += f'\t{(chr(34) + phrase + chr(34) + ":").ljust(width)} "{typ}",\n'
+    descriptors += "}\n"
     return TEMPLATE % (table, lit(statuses), terms) + descriptors
 
 
@@ -558,6 +590,7 @@ def main() -> int:
         return 1
     try:
         edges = extract_edges(ONTOLOGY_TTL.read_text(encoding="utf-8"))
+        edge_labels = extract_edge_labels(ONTOLOGY_TTL.read_text(encoding="utf-8"))
     except (TurtleError, OSError) as exc:
         print(f"{ONTOLOGY_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
@@ -568,7 +601,7 @@ def main() -> int:
     except (TurtleError, OSError) as exc:
         print(f"{TASK_KINDS_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
-    want = render(schemes, statuses, edges, task_kinds, aliases)
+    want = render(schemes, statuses, edges, task_kinds, aliases, edge_labels)
 
     if not args.check:
         GEN_GO.parent.mkdir(parents=True, exist_ok=True)

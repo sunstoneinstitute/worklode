@@ -325,6 +325,32 @@ wlc:bug wl:claimable true ; wl:allowsChildren true ;
                 nsgen.extract_task_kind_aliases(prefixes + bad, ["bug", "chore"])
 
 
+class TestEdgeLabels(unittest.TestCase):
+    PRE = (
+        "@prefix wl: <https://worklode.io/ns/ontology#> .\n"
+        "@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n"
+    )
+    BODY = (
+        'wl:a wl:storedAs "task_edges.a" ; skos:prefLabel "alpha" ; skos:altLabel "first", "one" .\n'
+        'wl:b wl:storedAs "doc_edges.b", "rule_edges.b" ; skos:prefLabel "beta" .\n'
+    )
+
+    def test_phrases_map_to_stored_types(self):
+        self.assertEqual(
+            nsgen.extract_edge_labels(self.PRE + self.BODY),
+            {"alpha": "a", "first": "a", "one": "a", "beta": "b"},
+        )
+
+    def test_phrase_on_two_properties_is_refused(self):
+        with self.assertRaises(nsgen.TurtleError):
+            nsgen.extract_edge_labels(self.PRE + self.BODY + 'wl:c wl:storedAs "task_edges.c" ; skos:altLabel "one" .\n')
+
+    def test_real_ontology_has_cue_phrases(self):
+        labels = nsgen.extract_edge_labels(ONTOLOGY_TTL.read_text(encoding="utf-8"))
+        self.assertEqual(labels["child of"], "childOf")
+        self.assertEqual(labels["governed by"], "governedBy")
+
+
 class TestCli(unittest.TestCase):
     def run_nsgen(self, *args):
         return subprocess.run(
@@ -348,6 +374,7 @@ class TestCli(unittest.TestCase):
                 nsgen.TASK_KINDS_TTL.read_text(encoding="utf-8"),
                 nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8"))[0]["TaskKind"],
             ),
+            nsgen.extract_edge_labels(ONTOLOGY_TTL.read_text(encoding="utf-8")),
         )
         self.assertEqual((ROOT / "internal" / "ns" / "gen.go").read_text(encoding="utf-8"), want)
 
