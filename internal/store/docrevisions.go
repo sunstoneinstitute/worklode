@@ -180,6 +180,10 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
+	deriveDoc, err := refsBefore(tx, "doc", strconv.FormatInt(id, 10))
+	if err != nil {
+		return nil, err
+	}
 	if err := checkDocOwner(id, d.owner, actorID); err != nil {
 		return nil, err
 	}
@@ -308,7 +312,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		}); err != nil {
 		return nil, err
 	}
-	if err := deriveDocRefs(tx, id); err != nil {
+	if err := deriveDoc(); err != nil {
 		return nil, err
 	}
 	return getDocTx(tx, id)

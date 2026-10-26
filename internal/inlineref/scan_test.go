@@ -23,6 +23,11 @@ func TestScan(t *testing.T) {
 		{"anchor on doc", "WL-SPEC-7#sec-3.1", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Anchor: "sec-3.1", Raw: "WL-SPEC-7#sec-3.1"}}},
 		{"anchor before full stop", "See WL-SPEC-7#sec-3.1.", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Anchor: "sec-3.1", Raw: "WL-SPEC-7#sec-3.1", Start: 4, End: 21}}},
 		{"anchor dropped on rule", "WL-REQ-7#sec-3", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "REQ", Number: 7, Raw: "WL-REQ-7"}}},
+		{"rule fragment on doc", "see WL-SPEC-7#rule-12.", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, RuleFragment: 12, Raw: "WL-SPEC-7#rule-12"}}},
+		{"rule fragment dropped on rule", "WL-REQ-7#rule-3", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "REQ", Number: 7, Raw: "WL-REQ-7"}}},
+		{"rule fragment needs digits", "WL-SPEC-7#rule-x", wl, []Hit{{Form: FormNode, Key: "WL", Infix: "SPEC", Number: 7, Raw: "WL-SPEC-7"}}},
+		{"url rule fragment", "https://x.io/WL-SPEC-7#rule-12", wl, []Hit{{Form: FormURL, Key: "WL", Infix: "SPEC", Number: 7, RuleFragment: 12, Raw: "https://x.io/WL-SPEC-7#rule-12"}}},
+		{"url spec rule fragment", "https://x.io/projects/worklode/spec/77#rule-4", wl, []Hit{{Form: FormURL, Key: "worklode", Infix: "SPEC", Number: 77, RuleFragment: 4, Raw: "https://x.io/projects/worklode/spec/77#rule-4"}}},
 		{"keyword spec", "see spec 42 §3.", wl, []Hit{{Form: FormKeyword, Infix: "SPEC", Number: 42, Anchor: "sec-3", Raw: "spec 42 §3"}}},
 		{"keyword adr", "per ADR 7 here", wl, []Hit{{Form: FormKeyword, Infix: "ADR", Number: 7, Raw: "ADR 7"}}},
 		{"url task", "http://h:8080/tasks/WL-5.", wl, []Hit{{Form: FormURL, Key: "WL", Number: 5, Raw: "http://h:8080/tasks/WL-5"}}},
@@ -71,7 +76,7 @@ func TestScan(t *testing.T) {
 					w.Line = 1
 				}
 				if g.Raw != w.Raw || g.Line != w.Line || g.Form != w.Form || g.Key != w.Key || g.Infix != w.Infix ||
-					g.Number != w.Number || g.Anchor != w.Anchor || g.LinkText != w.LinkText || g.Literal != w.Literal {
+					g.Number != w.Number || g.Anchor != w.Anchor || g.RuleFragment != w.RuleFragment || g.LinkText != w.LinkText || g.Literal != w.Literal {
 					t.Errorf("hit %d:\n got %+v\nwant %+v", i, g, w)
 				}
 			}

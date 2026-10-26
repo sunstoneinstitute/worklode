@@ -25,16 +25,19 @@ const (
 
 // Hit is one candidate reference.
 type Hit struct {
-	Line     int    // 1-based
-	Start    int    // byte offset in the line
-	End      int    // exclusive
-	Raw      string // the matched text, link syntax included
-	Form     Form
-	Key      string // project key; "" for the keyword form
-	Infix    string // "" for a task id, else a refkind infix
-	Number   int64
-	Anchor   string // "sec-3" without '#', or ""
-	LinkText string // text of [text](url) when the hit is a Markdown link
+	Line   int    // 1-based
+	Start  int    // byte offset in the line
+	End    int    // exclusive
+	Raw    string // the matched text, link syntax included
+	Form   Form
+	Key    string // project key; "" for the keyword form
+	Infix  string // "" for a task id, else a refkind infix
+	Number int64
+	Anchor string // "sec-3" without '#', or ""
+	// RuleFragment is n in a doc ref's #rule-<n> fragment, else 0
+	// (WL-REQ-1653).
+	RuleFragment int64
+	LinkText     string // text of [text](url) when the hit is a Markdown link
 	// Absolute is set on a URL with scheme and host. A bare path such as
 	// /<ref> is a short form: it yields an edge but is never rewritten
 	// (WL-REQ-1854).
@@ -56,8 +59,8 @@ var (
 
 	anchorPat = `sec-[0-9A-Za-z._-]*[0-9A-Za-z]`
 	// A trailing anchor is part of the match only when it ends on an
-	// alphanumeric; the digit alternative keeps "WL-SPEC-12abc" out.
-	nodeRef = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(` + allInfixes + `)-(?:(\d+)#(` + anchorPat + `)|(\d+)\b)`)
+	// alphanumeric; the word boundary keeps "WL-SPEC-12abc" out.
+	nodeRef = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(` + allInfixes + `)-(\d+)(?:#(` + anchorPat + `)|#rule-(\d+)\b|\b)`)
 	taskRef = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(\d+)\b`)
 	// spec 042 §10, ADR 48, as internal/mdrender/autolink.go reads them. spec-gate:ignore
 	keywordRef = regexp.MustCompile(`\b([Ss]pec|ADR|[Aa]dr)\s(\d{1,4})(?:\s?§\s?([0-9][0-9A-Za-z.]*))?`)
@@ -184,17 +187,19 @@ func scanLine(line string, keys map[string]bool, code [][2]int) []Hit {
 		}
 	}
 	for _, m := range nodeRef.FindAllStringSubmatchIndex(line, -1) {
-		n, err := strconv.ParseInt(line[max(m[6], m[10]):max(m[7], m[11])], 10, 64)
+		n, err := strconv.ParseInt(line[m[6]:m[7]], 10, 64)
 		if err != nil {
 			continue
 		}
 		h := Hit{Form: FormNode, Key: line[m[2]:m[3]], Infix: line[m[4]:m[5]], Number: n}
 		end := m[1]
-		if m[8] >= 0 {
-			if t, _ := refkind.Lookup(h.Infix); t == refkind.Doc {
+		if m[8] >= 0 || m[10] >= 0 {
+			if t, _ := refkind.Lookup(h.Infix); t != refkind.Doc {
+				end = m[7] // a fragment is a doc-ref feature
+			} else if m[8] >= 0 {
 				h.Anchor = line[m[8]:m[9]]
-			} else {
-				end = m[7] // an anchor is a doc-ref feature
+			} else if h.RuleFragment, err = strconv.ParseInt(line[m[10]:m[11]], 10, 64); err != nil {
+				continue
 			}
 		}
 		add(h, []int{m[0], end})
@@ -345,12 +350,22 @@ func parseURL(u string) (Hit, bool) {
 		default:
 			return Hit{}, false
 		}
-		if t, _ := refkind.Lookup(h.Infix); t == refkind.Doc && strings.HasPrefix(anchor, "sec-") {
-			h.Anchor = anchor
-		}
+		docFragment(&h, anchor)
 		return h, true
 	}
 	return Hit{}, false
+}
+
+// docFragment sets h's section or rule fragment when h is a doc ref.
+func docFragment(h *Hit, fragment string) {
+	if t, _ := refkind.Lookup(h.Infix); t != refkind.Doc {
+		return
+	}
+	if strings.HasPrefix(fragment, "sec-") {
+		h.Anchor = fragment
+	} else if n, ok := strings.CutPrefix(fragment, "rule-"); ok && allDigits(n) {
+		h.RuleFragment, _ = strconv.ParseInt(n, 10, 64)
+	}
 }
 
 func allDigits(s string) bool {
@@ -366,9 +381,7 @@ func ref(h Hit, s, anchor string) (Hit, bool) {
 			return Hit{}, false
 		}
 		h.Key, h.Infix, h.Number = m[1], m[2], n
-		if t, _ := refkind.Lookup(h.Infix); t == refkind.Doc && strings.HasPrefix(anchor, "sec-") {
-			h.Anchor = anchor
-		}
+		docFragment(&h, anchor)
 		return h, true
 	}
 	if m := taskFull.FindStringSubmatch(s); m != nil {

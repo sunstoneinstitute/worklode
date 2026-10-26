@@ -102,7 +102,7 @@ func CreateMilestone(tx *sql.Tx, now time.Time, projectID, title string, positio
 	); err != nil {
 		return nil, fmt.Errorf("insert milestone %s: %w", m.ID, err)
 	}
-	return m, deriveMilestoneRefs(tx, m.ID)
+	return m, deriveNodeRefs(tx, "milestone", m.ID, nil)
 }
 
 // scanMilestone reads one row selected with milestoneColumns. Progress is not

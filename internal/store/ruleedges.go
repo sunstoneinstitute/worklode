@@ -198,7 +198,8 @@ func linkReference(tx *sql.Tx, fromID, toID int64) error {
 	res, err := tx.Exec(
 		`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, lines, source)
 		 VALUES ('rule', $1, 'body', $2, 'rule', $3, '{}', 'manual')
-		 ON CONFLICT (from_kind, from_id, field, COALESCE(from_version, -1), to_kind, to_id)
+		 ON CONFLICT (from_kind, from_id, field, COALESCE(from_version, -1), to_kind, to_id,
+		              COALESCE(via_doc, ''), COALESCE(via_anchor, ''))
 		 DO UPDATE SET source = 'manual' WHERE inline_refs.source = 'derived'`,
 		strconv.FormatInt(fromID, 10), version, strconv.FormatInt(toID, 10))
 	if err != nil {

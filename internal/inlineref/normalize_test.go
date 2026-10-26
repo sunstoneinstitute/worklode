@@ -48,6 +48,7 @@ func TestNormalize(t *testing.T) {
 		{"link text with scheme, path target", "see [http://x](/WL-7) now", "see [http://x](/WL-7) now"},
 		{"section with rule", "see WL-SPEC-77#sec-4 now", "see WL-REQ-12 now"},
 		{"section without rule", "see WL-SPEC-77#sec-9 now", "see WL-SPEC-77#sec-9 now"},
+		{"rule fragment is plain", "see WL-SPEC-1#rule-12 now", "see WL-SPEC-1#rule-12 now"},
 		{"wrong infix", "see WL-RULE-12 now", "see WL-REQ-12 now"},
 		{"in code", "see `/tasks/WL-7` now", "see `/tasks/WL-7` now"},
 		{"in code across lines", "see `a\n/tasks/WL-7` now", "see `a\n/tasks/WL-7` now"},
