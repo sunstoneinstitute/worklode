@@ -5369,7 +5369,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a rule by ref */
+        /** Get a rule by ref, with its inline references */
         get: {
             parameters: {
                 query?: never;
@@ -5387,7 +5387,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["Rule"];
+                        "application/json": components["schemas"]["RuleDetail"];
                     };
                 };
                 /** @description Any non-2xx answer */
@@ -10149,6 +10149,34 @@ export interface components {
             kind?: string;
             ref?: string;
             words?: number;
+        };
+        RuleDetail: {
+            arranged_in?: components["schemas"]["RuleArrangement"][] | null;
+            body?: string;
+            change?: string;
+            concept_iri?: string;
+            covered_by?: components["schemas"]["RulePlan"][] | null;
+            /** Format: date-time */
+            created_at?: string;
+            edges?: components["schemas"]["RuleEdge"][] | null;
+            governed_tasks?: components["schemas"]["RuleTask"][] | null;
+            heading?: string;
+            /** Format: int64 */
+            id?: number;
+            inline_refs_in?: components["schemas"]["InlineRef"][] | null;
+            inline_refs_out?: components["schemas"]["InlineRef"][] | null;
+            kind?: string;
+            /** Format: int64 */
+            number?: number;
+            owner?: string;
+            project?: string;
+            project_key?: string;
+            ref?: string;
+            status?: string;
+            tags?: string[] | null;
+            /** Format: date-time */
+            updated_at?: string;
+            version?: number;
         };
         RuleEdge: {
             /** Format: date-time */
