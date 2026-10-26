@@ -475,13 +475,23 @@ func deleteInlineRefs(tx *sql.Tx, kind model.NodeKind, id string) error {
 
 // normalizer rewrites a project's inline references into their plain form
 // (WL-REQ-1854). The first resolution error is kept in err, because
-// inlineref.Verify's resolver cannot return one.
+// inlineref.Verify's resolver cannot return one. prior holds the stored rows
+// of the field being normalized, set by field.
 type normalizer struct {
 	tx      *sql.Tx
 	project string
 	key     string
 	keys    map[string]bool
+	prior   *priorRefs
 	err     error
+}
+
+// field points the normalizer at one stored field whose current text is
+// text, so a section ref in it resolves from its stored row (WL-REQ-1854).
+func (n *normalizer) field(from model.NodeKind, fromID, field string, version *int, text string) error {
+	p, err := readPriorRefs(n.tx, n.project, from, fromID, field, version, text, n.keys)
+	n.prior = p
+	return err
 }
 
 func newNormalizer(tx *sql.Tx, project string) (*normalizer, error) {
@@ -501,7 +511,7 @@ func (n *normalizer) target(h inlineref.Hit) *inlineref.Target {
 	if n.err != nil {
 		return nil
 	}
-	r, ok, err := resolveHit(n.tx, n.project, n.key, h, nil)
+	r, ok, err := resolveHit(n.tx, n.project, n.key, h, n.prior)
 	if err != nil || !ok {
 		n.err = err
 		return nil
@@ -510,8 +520,22 @@ func (n *normalizer) target(h inlineref.Hit) *inlineref.Target {
 	switch {
 	case h.Anchor != "":
 		// A section ref is rewritten only from its stored row, never by
-		// resolving its anchor again (WL-REQ-1854), so it stays as written.
-		return &inlineref.Target{Ref: "doc:" + cmp.Or(r.viaDoc, r.id), DocAnchor: true}
+		// resolving its anchor again (WL-REQ-1854): a row targeting a rule
+		// of the doc's project becomes <doc>#rule-<n>, which resolves to the
+		// same rule; anything else stays as written.
+		var number int64
+		if row, stored := n.storedRow(r.viaDoc, h.Anchor); stored && row.kind == "rule" {
+			err = n.tx.QueryRow(`SELECT r.number FROM rules r JOIN docs d ON d.project_id = r.project_id
+			  WHERE r.id = $1::bigint AND d.id = $2::bigint`, row.id, row.viaDoc).Scan(&number)
+		}
+		if number == 0 {
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				n.err = fmt.Errorf("rule number of %s: %w", r.id, err)
+				return nil
+			}
+			return &inlineref.Target{Ref: "doc:" + cmp.Or(r.viaDoc, r.id), DocAnchor: true}
+		}
+		kind, id, suffix = "doc", r.viaDoc, "#rule-"+strconv.FormatInt(number, 10)
 	case h.RuleFragment != 0 && r.kind == "rule":
 		// <doc>#rule-<n> is already plain; a URL to it becomes that form.
 		kind, id, suffix = "doc", r.viaDoc, "#rule-"+strconv.FormatInt(h.RuleFragment, 10)
@@ -535,6 +559,15 @@ func (n *normalizer) target(h inlineref.Hit) *inlineref.Target {
 		return nil
 	}
 	return &inlineref.Target{Ref: ref.String + suffix}
+}
+
+// storedRow is the field's stored row for (doc, anchor), if it has one.
+func (n *normalizer) storedRow(doc, anchor string) (resolved, bool) {
+	if n.prior == nil {
+		return resolved{}, false
+	}
+	r, ok := n.prior.rows[[2]string{doc, anchor}]
+	return r, ok
 }
 
 // text is text with every resolvable reference outside code in plain form.
@@ -617,6 +650,9 @@ func normalizeTask(tx *sql.Tx, now time.Time, n *normalizer, id string, b *strin
 		old  string
 		dst  **model.Markdown
 	}{{"title", title, &newTitle}, {"body", body, &newBody}} {
+		if err := n.field("task", id, f.name, nil, f.old); err != nil {
+			return err
+		}
 		t, err := n.text(f.old)
 		if err != nil {
 			return err
@@ -639,17 +675,24 @@ func normalizeRuleNode(tx *sql.Tx, n *normalizer, id string, b *strings.Builder)
 		return fmt.Errorf("rule id %q: %w", id, ErrInvalidInput)
 	}
 	var heading, body string
+	var version int
 	err = tx.QueryRow(
-		`SELECT v.heading, v.body FROM rules r JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
-		  WHERE r.id = $1 AND r.project_id = $2`, ruleID, n.project).Scan(&heading, &body)
+		`SELECT v.heading, v.body, r.version FROM rules r JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+		  WHERE r.id = $1 AND r.project_id = $2`, ruleID, n.project).Scan(&heading, &body, &version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("rule %s in %s: %w", id, n.project, ErrNotFound)
 	}
 	if err != nil {
 		return fmt.Errorf("read rule %s: %w", id, err)
 	}
+	if err := n.field("rule", id, "heading", &version, heading); err != nil {
+		return err
+	}
 	newHeading, err := n.text(heading)
 	if err != nil {
+		return err
+	}
+	if err := n.field("rule", id, "body", &version, body); err != nil {
 		return err
 	}
 	newBody, err := n.text(body)
@@ -672,9 +715,10 @@ func normalizeRuleNode(tx *sql.Tx, n *normalizer, id string, b *strings.Builder)
 // (WL-REQ-1298, WL-REQ-1855).
 func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body string) error {
 	var status, oldHeading, oldBody string
+	var oldVersion int
 	if err := tx.QueryRow(
-		`SELECT r.status, v.heading, v.body FROM rules r JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
-		  WHERE r.id = $1 FOR NO KEY UPDATE OF r`, ruleID).Scan(&status, &oldHeading, &oldBody); err != nil {
+		`SELECT r.status, v.heading, v.body, r.version FROM rules r JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+		  WHERE r.id = $1 FOR NO KEY UPDATE OF r`, ruleID).Scan(&status, &oldHeading, &oldBody, &oldVersion); err != nil {
 		return fmt.Errorf("read rule %d: %w", ruleID, err)
 	}
 	ref := ruleRefOf(tx, ruleID)
@@ -692,7 +736,14 @@ func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body strin
 		if err != nil {
 			return err
 		}
+		id := strconv.FormatInt(ruleID, 10)
+		if err := n.field("rule", id, "heading", &oldVersion, oldHeading); err != nil {
+			return err
+		}
 		if err := n.verify(ref, "heading", oldHeading, heading); err != nil {
+			return err
+		}
+		if err := n.field("rule", id, "body", &oldVersion, oldBody); err != nil {
 			return err
 		}
 		if err := n.verify(ref, "body", oldBody, body); err != nil {
@@ -721,19 +772,26 @@ func normalizeDoc(tx *sql.Tx, now time.Time, n *normalizer, id string, eventID i
 		return fmt.Errorf("doc id %q: %w", id, ErrInvalidInput)
 	}
 	var kind, status, ref, title, body string
+	var version int
 	err = tx.QueryRow(
-		`SELECT d.kind, d.status, coalesce(`+docRefSQL("p", "d")+`, d.slug), d.title, d.body
+		`SELECT d.kind, d.status, coalesce(`+docRefSQL("p", "d")+`, d.slug), d.title, d.body, d.version
 		   FROM docs d JOIN projects p ON p.id = d.project_id
 		  WHERE d.id = $1 AND d.project_id = $2 AND d.deleted_at IS NULL FOR UPDATE OF d`, docID, n.project).
-		Scan(&kind, &status, &ref, &title, &body)
+		Scan(&kind, &status, &ref, &title, &body, &version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("doc %s in %s: %w", id, n.project, ErrNotFound)
 	}
 	if err != nil {
 		return fmt.Errorf("read doc %s: %w", id, err)
 	}
+	if err := n.field("doc", id, "title", nil, title); err != nil {
+		return err
+	}
 	newTitle, err := n.text(title)
 	if err != nil {
+		return err
+	}
+	if err := n.field("doc", id, "body", &version, body); err != nil {
 		return err
 	}
 	newBody, err := n.text(body)
