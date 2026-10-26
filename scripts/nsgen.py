@@ -439,6 +439,29 @@ def extract_edge_labels(ttl: str) -> dict[str, str]:
     return labels
 
 
+def extract_edge_definitions(ttl: str) -> dict[str, str]:
+    """Map each stored edge type to its property's skos:definition.
+
+    A type stored by two properties must share one definition (WL-REQ-1857).
+    """
+    triples = Parser(ttl).parse()
+    types: dict[str, set[str]] = {}
+    for s, p, o in triples:
+        if p == WL + "storedAs":
+            types.setdefault(s, set()).add(o.strip('"').partition(".")[2])
+    defs: dict[str, str] = {}
+    for s, p, o in triples:
+        if p != SKOS + "definition" or s not in types:
+            continue
+        if not isinstance(o, str) or not o.startswith('"'):
+            raise TurtleError(f"{s}: {p} must be a string")
+        text = o.strip('"')
+        for typ in types[s]:
+            if defs.setdefault(typ, text) != text:
+                raise TurtleError(f"type {typ!r} has two definitions: {defs[typ]!r} and {text!r}")
+    return defs
+
+
 TASK_KIND_PROPERTIES = (
     "claimable", "allowsChildren", "planMintable", "allowsDecisions",
     "canBlock", "kindMutable", "closesOnAnswers",
@@ -523,7 +546,7 @@ var EdgeTerms = []EdgeTerm{
 '''
 
 
-def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds, aliases, edge_labels) -> str:
+def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds, aliases, edge_labels, edge_definitions) -> str:
     def lit(values: list[str]) -> str:
         return ", ".join(f'"{v}"' for v in values)
 
@@ -571,6 +594,12 @@ def render(schemes: dict[str, list[str]], statuses: list[str], edges, task_kinds
     for phrase, typ in sorted(edge_labels.items()):
         descriptors += f'\t{(chr(34) + phrase + chr(34) + ":").ljust(width)} "{typ}",\n'
     descriptors += "}\n"
+    descriptors += "\n// EdgeDefinitions maps each stored edge type to the skos:definition of its\n"
+    descriptors += "// property in ns/ontology.ttl (WL-REQ-1857).\nvar EdgeDefinitions = map[string]string{\n"
+    width = max(map(len, edge_definitions), default=0) + 3
+    for typ, text in sorted(edge_definitions.items()):
+        descriptors += f'\t{(chr(34) + typ + chr(34) + ":").ljust(width)} "{text}",\n'
+    descriptors += "}\n"
     return TEMPLATE % (table, lit(statuses), terms) + descriptors
 
 
@@ -591,6 +620,7 @@ def main() -> int:
     try:
         edges = extract_edges(ONTOLOGY_TTL.read_text(encoding="utf-8"))
         edge_labels = extract_edge_labels(ONTOLOGY_TTL.read_text(encoding="utf-8"))
+        edge_definitions = extract_edge_definitions(ONTOLOGY_TTL.read_text(encoding="utf-8"))
     except (TurtleError, OSError) as exc:
         print(f"{ONTOLOGY_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
@@ -601,7 +631,7 @@ def main() -> int:
     except (TurtleError, OSError) as exc:
         print(f"{TASK_KINDS_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
-    want = render(schemes, statuses, edges, task_kinds, aliases, edge_labels)
+    want = render(schemes, statuses, edges, task_kinds, aliases, edge_labels, edge_definitions)
 
     if not args.check:
         GEN_GO.parent.mkdir(parents=True, exist_ok=True)

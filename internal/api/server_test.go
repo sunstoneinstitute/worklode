@@ -490,3 +490,20 @@ func TestNewServerValidatesIntakeProject(t *testing.T) {
 		t.Fatalf("NewServer with an existing intake project: %v", err)
 	}
 }
+
+// TestTypeSafeMetricsRegistered checks NewServer registers the TypeSafe
+// instruments whether or not a key is configured (WL-REQ-32).
+func TestTypeSafeMetricsRegistered(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	newTestServerWithConfig(t, api.Config{Metrics: reg})
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_typesafe_request_seconds" {
+			return
+		}
+	}
+	t.Fatal("worklode_typesafe_request_seconds is not registered")
+}
