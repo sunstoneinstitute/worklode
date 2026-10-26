@@ -59,6 +59,12 @@ var validEdgeTypes = map[string]bool{
 	"blocks": true, "childOf": true, "followUpTo": true, "duplicateOf": true,
 }
 
+// legacyEdgeTypes maps the pre-WL-REQ-1655 stored names to the ontology
+// names, so an older lode binary keeps working against this server.
+var legacyEdgeTypes = map[string]string{
+	"child_of": "childOf", "follow_up_to": "followUpTo", "duplicate_of": "duplicateOf",
+}
+
 // createTask handles POST /api/v1/tasks.
 func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	var req model.CreateTaskInput
@@ -713,8 +719,12 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveEdge validates an edge request against the {id} path task and
-// returns the (from, to) endpoints. A written response means failure.
-func resolveEdge(w http.ResponseWriter, id string, req model.EdgeInput) (from, to string, ok bool) {
+// returns the (from, to) endpoints, rewriting a legacy type name in req.
+// A written response means failure.
+func resolveEdge(w http.ResponseWriter, id string, req *model.EdgeInput) (from, to string, ok bool) {
+	if t, ok := legacyEdgeTypes[req.Type]; ok {
+		req.Type = t
+	}
 	if (req.To == nil) == (req.From == nil) {
 		writeErr(w, http.StatusUnprocessableEntity, "exactly one of to/from must be set")
 		return "", "", false
@@ -744,7 +754,7 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	from, to, ok := resolveEdge(w, id, req)
+	from, to, ok := resolveEdge(w, id, &req)
 	if !ok {
 		return
 	}
@@ -769,7 +779,7 @@ func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	from, to, ok := resolveEdge(w, id, req)
+	from, to, ok := resolveEdge(w, id, &req)
 	if !ok {
 		return
 	}

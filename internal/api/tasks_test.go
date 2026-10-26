@@ -1735,3 +1735,31 @@ func TestPatchTaskKind(t *testing.T) {
 		t.Fatalf("unknown kind status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 }
+
+// TestEdgeEndpointAcceptsLegacyTypeNames checks an older client's snake_case
+// edge type is stored under its ontology name (WL-REQ-1655).
+func TestEdgeEndpointAcceptsLegacyTypeNames(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Parent", "priority": "medium", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Child", "priority": "medium", "kind": "chore",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "child_of"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"childOf"`) {
+		t.Fatalf("edge not stored as childOf: %s", rr.Body.String())
+	}
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "child_of"})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+}
