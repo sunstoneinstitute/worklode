@@ -61,7 +61,7 @@ func TestDeriveInlineRefs(t *testing.T) {
 	derive := func(version int, text string) {
 		t.Helper()
 		if err := s.Tx(ctx, func(tx *sql.Tx) error {
-			return deriveInlineRefs(tx, "p1", "rule", self, "body", &version, text)
+			return deriveInlineRefs(tx, "p1", "rule", self, "body", &version, "", text)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +105,7 @@ func TestDeriveInlineRefs(t *testing.T) {
 	if got, want := inlineRefRows(t, s, self, "body", 2), []string{"rule:" + leaf + " manual {}"}; !slices.Equal(got, want) {
 		t.Errorf("manual after unrelated derive: got %q, want %q", got, want)
 	}
-	derive(2, "x\nP1-SPEC-1#sec-1.1\n")
+	derive(2, "x\nP1-REQ-1\n")
 	if got, want := inlineRefRows(t, s, self, "body", 2), []string{"rule:" + leaf + " manual {2}"}; !slices.Equal(got, want) {
 		t.Errorf("manual after naming derive: got %q, want %q", got, want)
 	}
@@ -487,5 +487,138 @@ func TestDeriveTargetsPages(t *testing.T) {
 	}
 	if pages != 2 || !slices.Equal(got, []string{"P1-7", "P1-8", "P1-9"}) {
 		t.Errorf("pages = %d, ids = %v", pages, got)
+	}
+}
+
+// viaRows reads one field's rows as "kind:id via_doc via_anchor lines";
+// version nil reads the unversioned rows.
+func viaRows(t *testing.T, s *Store, kind model.NodeKind, id, field string, version *int) []string {
+	t.Helper()
+	rows, err := s.db.QueryContext(t.Context(),
+		`SELECT to_kind, to_id, coalesce(via_doc, ''), coalesce(via_anchor, ''), lines::text FROM inline_refs
+		  WHERE from_kind = $1 AND from_id = $2 AND field = $3 AND from_version IS NOT DISTINCT FROM $4::int
+		  ORDER BY to_kind, to_id, via_anchor`, kind, id, field, version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k, i, d, a, l string
+		if err := rows.Scan(&k, &i, &d, &a, &l); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, fmt.Sprintf("%s:%s %s %s %s", k, i, d, a, l))
+	}
+	return out
+}
+
+// TestSectionRefKeepsResolution: a rule fragment targets the rule; a section
+// fragment new in a write resolves against the arrangement; a later write
+// keeps that resolution after the arrangement moves; a ref removed and added
+// back resolves afresh; a section fragment that predates resolution targets the
+// doc (WL-RULE-1849, WL-REQ-1852).
+func TestSectionRefKeepsResolution(t *testing.T) {
+	s := openDocStore(t)
+	ctx := t.Context()
+	body := "---\nstatus: draft\n---\n# A\n\n## 1. Group {#sec-1}\n\n### 1.1 Leaf {#sec-1.1}\n\nX.\n\n### 1.2 Other {#sec-1.2}\n\nY.\n"
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: body, CreatedBy: "stig"})
+	if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "Moved", Body: "Z."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	seedDocNoteTask(t, s, "P1-7")
+	doc := strconv.FormatInt(d.ID, 10)
+	leaf := strconv.FormatInt(ruleID(t, s, "P1", 1), 10)
+	moved := strconv.FormatInt(ruleID(t, s, "P1", 3), 10)
+	setBody := func(text string) {
+		t.Helper()
+		m := model.Markdown(text)
+		if err := s.Tx(ctx, func(tx *sql.Tx) error {
+			return UpdateTaskFields(tx, s.Now(), "P1-7", nil, &m, nil, nil, nil, nil, nil, nil, nil, nil)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(step string, want ...string) {
+		t.Helper()
+		if got := viaRows(t, s, "task", "P1-7", "body", nil); !slices.Equal(got, want) {
+			t.Errorf("%s:\n got %q\nwant %q", step, got, want)
+		}
+	}
+
+	// A rule fragment targets the rule, even one the doc does not arrange.
+	setBody("See P1-SPEC-1#rule-3.")
+	check("rule fragment", "rule:"+moved+" "+doc+"  {1}")
+
+	// New section refs resolve against the arrangement.
+	setBody("See P1-SPEC-1#sec-1.1 and P1-SPEC-1#sec-1.")
+	check("new section refs", "doc:"+doc+"  sec-1 {1}", "rule:"+leaf+" "+doc+" sec-1.1 {1}")
+
+	// The arrangement moves: sec-1.1 now holds another rule.
+	if _, err := s.db.ExecContext(ctx, `UPDATE doc_rules SET rule_id = $2 WHERE doc_id = $1 AND rule_id = $3`, d.ID, moved, leaf); err != nil {
+		t.Fatal(err)
+	}
+	setBody("Unrelated.\nSee P1-SPEC-1#sec-1.1 and P1-SPEC-1#sec-1.")
+	check("after unrelated edit", "doc:"+doc+"  sec-1 {2}", "rule:"+leaf+" "+doc+" sec-1.1 {2}")
+
+	// Removed, then added back: resolved afresh.
+	setBody("Nothing.")
+	check("removed")
+	setBody("See P1-SPEC-1#sec-1.1.")
+	check("added back", "rule:"+moved+" "+doc+" sec-1.1 {1}")
+
+	// Text from before resolution (a legacy row with no via) keeps its
+	// section ref on the doc through an unrelated edit and through derive.
+	for _, q := range []string{
+		`DELETE FROM inline_refs WHERE from_kind = 'task' AND from_id = 'P1-7'`,
+		`UPDATE tasks SET body = 'See P1-SPEC-1#sec-1.2.' WHERE id = 'P1-7'`,
+	} {
+		if _, err := s.db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := deriveNode(t, s, "task", "P1-7"); err != nil {
+		t.Fatal(err)
+	}
+	check("derive on legacy text", "doc:"+doc+"  sec-1.2 {1}")
+	if _, err := s.db.ExecContext(ctx, `UPDATE inline_refs SET via_anchor = NULL WHERE from_kind = 'task' AND from_id = 'P1-7'`); err != nil {
+		t.Fatal(err)
+	}
+	setBody("Edited.\nSee P1-SPEC-1#sec-1.2.")
+	check("edit of legacy text", "doc:"+doc+"  sec-1.2 {2}")
+}
+
+// TestSectionRefKeepsResolutionAcrossVersions: a versioned field's next
+// version keeps the resolution its previous version's rows hold.
+func TestSectionRefKeepsResolutionAcrossVersions(t *testing.T) {
+	s := openDocStore(t)
+	ctx := t.Context()
+	body := "---\nstatus: draft\n---\n# A\n\n## 1. Leaf {#sec-1}\n\nX.\n"
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: body, CreatedBy: "stig"})
+	for _, h := range []string{"Moved", "Citer"} {
+		if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: model.Markdown(h), Body: "Z."}, "stig"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := strconv.FormatInt(d.ID, 10)
+	leaf := strconv.FormatInt(ruleID(t, s, "P1", 1), 10)
+	moved := strconv.FormatInt(ruleID(t, s, "P1", 2), 10)
+	citer := strconv.FormatInt(ruleID(t, s, "P1", 3), 10)
+	derive := func(version int, prev, text string) {
+		t.Helper()
+		if err := s.Tx(ctx, func(tx *sql.Tx) error {
+			return deriveInlineRefs(tx, "p1", "rule", citer, "body", &version, prev, text)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	derive(1, "", "P1-SPEC-1#sec-1")
+	if _, err := s.db.ExecContext(ctx, `UPDATE doc_rules SET rule_id = $2 WHERE doc_id = $1 AND rule_id = $3`, d.ID, moved, leaf); err != nil {
+		t.Fatal(err)
+	}
+	derive(2, "P1-SPEC-1#sec-1", "Edited P1-SPEC-1#sec-1")
+	v := 2
+	if got, want := viaRows(t, s, "rule", citer, "body", &v), []string{"rule:" + leaf + " " + doc + " sec-1 {1}"}; !slices.Equal(got, want) {
+		t.Errorf("v2: got %q, want %q", got, want)
 	}
 }

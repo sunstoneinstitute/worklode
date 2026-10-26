@@ -26,8 +26,12 @@ type InlineRef struct {
 	ToID        string   `json:"to_id"`
 	ToRef       string   `json:"to_ref"`
 	ToTitle     string   `json:"to_title,omitempty"`
-	Lines       []int    `json:"lines"`
-	Source      string   `json:"source"` // manual | derived
+	// ViaDoc is the doc id a rule was reached through by a doc fragment,
+	// ViaAnchor the section anchor as written (WL-REQ-1852).
+	ViaDoc    string `json:"via_doc,omitempty"`
+	ViaAnchor string `json:"via_anchor,omitempty"`
+	Lines     []int  `json:"lines"`
+	Source    string `json:"source"` // manual | derived
 }
 
 // InlineRefs is the inline references a node shows (WL-REQ-1852): Out are the

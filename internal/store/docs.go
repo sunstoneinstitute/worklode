@@ -254,7 +254,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		map[string]string{"field": "status", "new": status}); err != nil {
 		return nil, err
 	}
-	if err := deriveDocRefs(tx, id); err != nil {
+	if err := deriveDocRefs(tx, id, nil); err != nil {
 		return nil, err
 	}
 	return getDocTx(tx, id)
@@ -326,6 +326,10 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 	// too: the acceptance event's external id is derived from the document's
 	// IRI and version (WL-RULE-179), so a re-accept at an unchanged version
 	// collapses at the log.
+	deriveDoc, err := refsBefore(tx, "doc", strconv.FormatInt(id, 10))
+	if err != nil {
+		return nil, err
+	}
 	if version, err = bumpDocVersion(tx, id, "edit"); err != nil {
 		return nil, err
 	}
@@ -348,7 +352,7 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 		map[string]string{"field": "body"}); err != nil {
 		return nil, err
 	}
-	if err := deriveDocRefs(tx, id); err != nil {
+	if err := deriveDoc(); err != nil {
 		return nil, err
 	}
 	return getDocTx(tx, id)
@@ -371,6 +375,10 @@ func SetDocColumns(tx *sql.Tx, now time.Time, id int64, in model.DocColumnsInput
 		return nil, fmt.Errorf("doc %d is %s: its metadata no longer changes: %w", id, d.status, ErrInvalidInput)
 	}
 	cur, err := getDocTx(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	deriveDoc, err := refsBefore(tx, "doc", strconv.FormatInt(id, 10))
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +409,7 @@ func SetDocColumns(tx *sql.Tx, now time.Time, id int64, in model.DocColumnsInput
 			return nil, err
 		}
 	}
-	if err := deriveDocRefs(tx, id); err != nil {
+	if err := deriveDoc(); err != nil {
 		return nil, err
 	}
 	return getDocTx(tx, id)

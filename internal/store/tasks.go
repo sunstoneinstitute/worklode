@@ -262,7 +262,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		map[string]string{"field": "state", "new": state}); err != nil {
 		return nil, err
 	}
-	if err := deriveTaskRefs(tx, id); err != nil {
+	if err := deriveNodeRefs(tx, "task", id, nil); err != nil {
 		return nil, err
 	}
 	created := &model.Task{
@@ -630,6 +630,13 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body *model.M
 	}
 	set("updated_at", now.UTC())
 	args = append(args, id)
+	derive := func() error { return nil }
+	if title != nil || body != nil {
+		var err error
+		if derive, err = refsBefore(tx, "task", id); err != nil {
+			return err
+		}
+	}
 
 	res, err := tx.Exec(
 		fmt.Sprintf(`UPDATE tasks SET %s WHERE id = $%d`, strings.Join(sets, `, `), len(args)),
@@ -644,10 +651,7 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body *model.M
 		fmt.Errorf("task %s: %w", id, ErrNotFound)); err != nil {
 		return err
 	}
-	if title == nil && body == nil {
-		return nil
-	}
-	return deriveTaskRefs(tx, id)
+	return derive()
 }
 
 // taskColumns is the SELECT list scanTask expects, in order. skills,

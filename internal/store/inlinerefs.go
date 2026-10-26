@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -35,20 +36,47 @@ func projectKeys(tx *sql.Tx) (map[string]bool, error) {
 	return out, nil
 }
 
-// resolveHits turns scanner hits into targets; unresolved hits are returned
-// separately for --dry-run (WL-REQ-1851). Rows are grouped by target with
-// one line entry per hit. A hit naming the node itself is dropped.
-func resolveHits(tx *sql.Tx, project string, from model.NodeKind, fromID string, hits []inlineref.Hit) (refs []model.InlineRef, unresolved []inlineref.Hit, err error) {
-	// An unshared idea has no project, so a keyless hit cannot resolve.
+// resolved is what one hit resolves to (WL-RULE-1849): the target, and for
+// a doc fragment the doc it was cited in (when the target is a rule) and the
+// section anchor as written.
+type resolved struct {
+	kind              model.NodeKind
+	id                string
+	viaDoc, viaAnchor string
+}
+
+// priorRefs is what a field's previous text says about its section refs
+// (WL-REQ-1852): the (doc id, anchor) pairs it cited, and the target each
+// pair's stored row holds.
+type priorRefs struct {
+	cited map[[2]string]bool
+	rows  map[[2]string]resolved
+}
+
+// projectKey reads a project's key; "" for no project (an unshared idea).
+func projectKey(tx *sql.Tx, project string) (string, error) {
 	var key string
-	if project != "" {
-		if err := tx.QueryRow(`SELECT key FROM projects WHERE id = $1`, project).Scan(&key); err != nil {
-			return nil, nil, fmt.Errorf("read key of project %q: %w", project, err)
-		}
+	if project == "" {
+		return "", nil
 	}
-	at := map[[2]string]int{}
+	if err := tx.QueryRow(`SELECT key FROM projects WHERE id = $1`, project).Scan(&key); err != nil {
+		return "", fmt.Errorf("read key of project %q: %w", project, err)
+	}
+	return key, nil
+}
+
+// resolveHits turns scanner hits into targets; unresolved hits are returned
+// separately for --dry-run (WL-REQ-1851). Rows are grouped by target and via
+// with one line entry per hit. A hit naming the node itself is dropped. prior
+// is the field's previous text; nil resolves every section ref afresh.
+func resolveHits(tx *sql.Tx, project string, from model.NodeKind, fromID string, hits []inlineref.Hit, prior *priorRefs) (refs []model.InlineRef, unresolved []inlineref.Hit, err error) {
+	key, err := projectKey(tx, project)
+	if err != nil {
+		return nil, nil, err
+	}
+	at := map[resolved]int{}
 	for _, h := range hits {
-		kind, id, ok, err := resolveHit(tx, project, key, h)
+		r, ok, err := resolveHit(tx, project, key, h, prior)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -56,15 +84,15 @@ func resolveHits(tx *sql.Tx, project string, from model.NodeKind, fromID string,
 			unresolved = append(unresolved, h)
 			continue
 		}
-		if kind == from && id == fromID {
+		if r.kind == from && r.id == fromID {
 			continue
 		}
-		k := [2]string{string(kind), id}
-		i, seen := at[k]
+		i, seen := at[r]
 		if !seen {
 			i = len(refs)
-			at[k] = i
-			refs = append(refs, model.InlineRef{FromKind: from, FromID: fromID, ToKind: kind, ToID: id, ToRef: hitRef(h, key), Source: "derived"})
+			at[r] = i
+			refs = append(refs, model.InlineRef{FromKind: from, FromID: fromID, ToKind: r.kind, ToID: r.id,
+				ToRef: hitRef(h, key), ViaDoc: r.viaDoc, ViaAnchor: r.viaAnchor, Source: "derived"})
 		}
 		refs[i].Lines = append(refs[i].Lines, h.Line)
 	}
@@ -83,27 +111,46 @@ func hitRef(h inlineref.Hit, key string) string {
 	if h.Anchor != "" {
 		ref += "#" + h.Anchor
 	}
+	if h.RuleFragment != 0 {
+		ref += "#rule-" + strconv.FormatInt(h.RuleFragment, 10)
+	}
 	return ref
 }
 
-// resolveHit resolves one hit (WL-REQ-1357). A section ref resolves to the
-// rule arranged at that anchor, else to the document; a plan arranges no
-// rules of its own, so its anchors resolve to the plan (WL-REQ-1295).
-func resolveHit(tx *sql.Tx, project, key string, h inlineref.Hit) (model.NodeKind, string, bool, error) {
+// hitDoc resolves the doc a doc-ref hit names; ok is false for a hit that
+// names no doc or one that does not resolve.
+func hitDoc(tx *sql.Tx, project, key string, h inlineref.Hit) (docID int64, k string, ok bool, err error) {
+	if t, _ := refkind.Lookup(h.Infix); t != refkind.Doc || (h.Key == "" && key == "") {
+		return 0, "", false, nil
+	}
+	k = h.Key
+	if k == "" {
+		k = key
+	}
+	docID, ok, err = resolveDocRef(tx, project, k+"-"+h.Infix+"-"+strconv.FormatInt(h.Number, 10))
+	return docID, k, ok, err
+}
+
+// resolveHit resolves one hit (WL-REQ-1357). A #rule-<n> fragment resolves
+// to that rule. A section fragment the previous text cited keeps the target
+// its row holds, or the doc when it never had one; a new one resolves to the
+// rule arranged at that anchor, else to the doc (WL-RULE-1849). A plan
+// arranges no rules of its own, so its anchors resolve to the plan
+// (WL-REQ-1295).
+func resolveHit(tx *sql.Tx, project, key string, h inlineref.Hit, prior *priorRefs) (resolved, bool, error) {
 	if h.Key == "" && key == "" {
-		return "", "", false, nil
+		return resolved{}, false, nil
 	}
 	if h.Infix == "" {
 		var id string
 		err := tx.QueryRow(`SELECT id FROM tasks WHERE id = $1`, hitRef(h, key)).Scan(&id)
 		return found("task", id, err)
 	}
-	target, _ := refkind.Lookup(h.Infix)
-	switch target {
+	switch target, _ := refkind.Lookup(h.Infix); target {
 	case refkind.Rule:
 		id, err := RuleIDByRef(tx, h.Key, h.Number)
 		if errors.Is(err, ErrNotFound) {
-			return "", "", false, nil
+			return resolved{}, false, nil
 		}
 		return found("rule", strconv.FormatInt(id, 10), err)
 	case refkind.Milestone:
@@ -115,50 +162,120 @@ func resolveHit(tx *sql.Tx, project, key string, h inlineref.Hit) (model.NodeKin
 		err := tx.QueryRow(`SELECT id FROM deliverables WHERE id = $1`, hitRef(h, key)).Scan(&id)
 		return found("deliverable", id, err)
 	}
-	k := h.Key
-	if k == "" {
-		k = key
-	}
-	docID, ok, err := resolveDocRef(tx, project, k+"-"+h.Infix+"-"+strconv.FormatInt(h.Number, 10))
+	docID, k, ok, err := hitDoc(tx, project, key, h)
 	if err != nil || !ok {
-		return "", "", false, err
+		return resolved{}, false, err
 	}
-	if h.Anchor != "" {
-		var ruleID int64
-		err := tx.QueryRow(
-			`SELECT dc.rule_id FROM doc_entries dc JOIN docs d ON d.id = dc.doc_id
-			  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan' AND dc.rule_id IS NOT NULL`,
-			docID, h.Anchor).Scan(&ruleID)
+	doc := strconv.FormatInt(docID, 10)
+	if h.RuleFragment != 0 {
+		id, err := RuleIDByRef(tx, k, h.RuleFragment)
 		if err == nil {
-			return "rule", strconv.FormatInt(ruleID, 10), true, nil
+			return resolved{kind: "rule", id: strconv.FormatInt(id, 10), viaDoc: doc}, true, nil
 		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return "", "", false, fmt.Errorf("resolve %s: %w", hitRef(h, k), err)
+		if !errors.Is(err, ErrNotFound) {
+			return resolved{}, false, err
 		}
 	}
-	return "doc", strconv.FormatInt(docID, 10), true, nil
+	if h.Anchor == "" {
+		return resolved{kind: "doc", id: doc}, true, nil
+	}
+	if pair := [2]string{doc, h.Anchor}; prior != nil && prior.cited[pair] {
+		if r, ok := prior.rows[pair]; ok {
+			return r, true, nil
+		}
+		return resolved{kind: "doc", id: doc, viaAnchor: h.Anchor}, true, nil
+	}
+	var ruleID int64
+	err = tx.QueryRow(
+		`SELECT dc.rule_id FROM doc_entries dc JOIN docs d ON d.id = dc.doc_id
+		  WHERE dc.doc_id = $1 AND dc.anchor = $2 AND d.kind <> 'plan' AND dc.rule_id IS NOT NULL`,
+		docID, h.Anchor).Scan(&ruleID)
+	if err == nil {
+		return resolved{kind: "rule", id: strconv.FormatInt(ruleID, 10), viaDoc: doc, viaAnchor: h.Anchor}, true, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return resolved{}, false, fmt.Errorf("resolve %s: %w", hitRef(h, k), err)
+	}
+	return resolved{kind: "doc", id: doc, viaAnchor: h.Anchor}, true, nil
 }
 
 // found maps a single-row lookup to resolveHit's result.
-func found(kind model.NodeKind, id string, err error) (model.NodeKind, string, bool, error) {
+func found(kind model.NodeKind, id string, err error) (resolved, bool, error) {
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", false, nil
+		return resolved{}, false, nil
 	}
 	if err != nil {
-		return "", "", false, fmt.Errorf("resolve %s %s: %w", kind, id, err)
+		return resolved{}, false, fmt.Errorf("resolve %s %s: %w", kind, id, err)
 	}
-	return kind, id, true, nil
+	return resolved{kind: kind, id: id}, true, nil
+}
+
+// readPriorRefs reads what a field's previous text prev cited by section, and
+// the rows that text left: the rows at version when it is rewritten in place,
+// else at the newest older version, or the unversioned rows (WL-REQ-1852).
+func readPriorRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, field string, version *int, prev string, keys map[string]bool) (*priorRefs, error) {
+	key, err := projectKey(tx, project)
+	if err != nil {
+		return nil, err
+	}
+	p := &priorRefs{cited: map[[2]string]bool{}, rows: map[[2]string]resolved{}}
+	for _, h := range inlineref.Scan(prev, keys) {
+		if h.Anchor == "" {
+			continue
+		}
+		docID, _, ok, err := hitDoc(tx, project, key, h)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			p.cited[[2]string{strconv.FormatInt(docID, 10), h.Anchor}] = true
+		}
+	}
+	if len(p.cited) == 0 {
+		return p, nil
+	}
+	rows, err := tx.Query(
+		`SELECT to_kind, to_id, coalesce(via_doc, ''), coalesce(via_doc, to_id), via_anchor FROM inline_refs
+		  WHERE from_kind = $1 AND from_id = $2 AND field = $3 AND via_anchor IS NOT NULL
+		    AND from_version IS NOT DISTINCT FROM (SELECT max(from_version) FROM inline_refs
+		         WHERE from_kind = $1 AND from_id = $2 AND field = $3 AND from_version <= $4::int)`,
+		from, fromID, field, version)
+	if err != nil {
+		return nil, fmt.Errorf("read prior inline refs of %s %s %s: %w", from, fromID, field, err)
+	}
+	type row struct {
+		r    resolved
+		pair [2]string
+	}
+	rs, err := collectRows(rows, "read prior inline refs", func(sc rowScanner) (row, error) {
+		var x row
+		return x, sc.Scan(&x.r.kind, &x.r.id, &x.r.viaDoc, &x.pair[0], &x.r.viaAnchor)
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, x := range rs {
+		x.pair[1] = x.r.viaAnchor
+		p.rows[x.pair] = x.r
+	}
+	return p, nil
 }
 
 // deriveInlineRefs re-extracts one field and replaces its derived rows
-// (WL-REQ-1852). version is nil for an unversioned field. Manual rows stay;
-// a derived row that duplicates one records its lines on the manual row.
-func deriveInlineRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, field string, version *int, text string) error {
+// (WL-REQ-1852). version is nil for an unversioned field; prev is the field's
+// text before this write, which decides whether a section ref keeps its
+// earlier resolution (WL-RULE-1849). Manual rows stay; a derived row that
+// duplicates one records its lines on the manual row.
+func deriveInlineRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, field string, version *int, prev, text string) error {
 	keys, err := projectKeys(tx)
 	if err != nil {
 		return err
 	}
-	refs, _, err := resolveHits(tx, project, from, fromID, inlineref.Scan(text, keys))
+	prior, err := readPriorRefs(tx, project, from, fromID, field, version, prev, keys)
+	if err != nil {
+		return err
+	}
+	refs, _, err := resolveHits(tx, project, from, fromID, inlineref.Scan(text, keys), prior)
 	if err != nil {
 		return err
 	}
@@ -171,24 +288,26 @@ func deriveInlineRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, f
 	}
 	for _, r := range refs {
 		if _, err := tx.Exec(
-			`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, lines, source)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, 'derived')
-			 ON CONFLICT (from_kind, from_id, field, COALESCE(from_version, -1), to_kind, to_id)
+			`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, via_doc, via_anchor, lines, source)
+			 VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, ''), $9, 'derived')
+			 ON CONFLICT (from_kind, from_id, field, COALESCE(from_version, -1), to_kind, to_id,
+			              COALESCE(via_doc, ''), COALESCE(via_anchor, ''))
 			 DO UPDATE SET lines = EXCLUDED.lines`,
-			from, fromID, field, version, r.ToKind, r.ToID, r.Lines); err != nil {
+			from, fromID, field, version, r.ToKind, r.ToID, r.ViaDoc, r.ViaAnchor, r.Lines); err != nil {
 			return fmt.Errorf("derive inline ref %s %s -> %s %s: %w", from, fromID, r.ToKind, r.ToID, err)
 		}
 	}
 	return nil
 }
 
-// deriveRuleInlineRefs re-extracts a rule's heading and body at version.
-func deriveRuleInlineRefs(tx *sql.Tx, project string, ruleID int64, version int, heading, body string) error {
+// deriveRuleInlineRefs re-extracts a rule's heading and body at version; the
+// prev texts are the rule's text before this write.
+func deriveRuleInlineRefs(tx *sql.Tx, project string, ruleID int64, version int, prevHeading, prevBody, heading, body string) error {
 	id := strconv.FormatInt(ruleID, 10)
-	if err := deriveInlineRefs(tx, project, "rule", id, "heading", &version, heading); err != nil {
+	if err := deriveInlineRefs(tx, project, "rule", id, "heading", &version, prevHeading, heading); err != nil {
 		return err
 	}
-	return deriveInlineRefs(tx, project, "rule", id, "body", &version, body)
+	return deriveInlineRefs(tx, project, "rule", id, "body", &version, prevBody, body)
 }
 
 // markdownWriters names, for every model.Markdown field, the store function
@@ -233,29 +352,90 @@ var markdownWriters = map[string]string{
 	"Approval.Note":                      "SetImpactNote",
 }
 
-// deriveStored re-extracts the unversioned Markdown fields of one node from
-// its stored row. query takes the id and returns the node's project, then one
-// text per field.
-func deriveStored(tx *sql.Tx, from model.NodeKind, id, query string, fields ...string) error {
-	vals := make([]string, len(fields)+1)
+// storedFields names, per node kind, the query that reads a node's project
+// and then its Markdown fields, and those fields in order. A doc's body is
+// versioned; deriveDocRefs reads its version.
+var storedFields = map[model.NodeKind]struct {
+	query  string
+	fields []string
+}{
+	"doc":         {`SELECT project_id, title, body FROM docs WHERE id = $1::bigint`, []string{"title", "body"}},
+	"task":        {`SELECT project_id, title, coalesce(body, '') FROM tasks WHERE id = $1`, []string{"title", "body"}},
+	"milestone":   {`SELECT project_id, title FROM milestones WHERE id = $1`, []string{"title"}},
+	"deliverable": {`SELECT project_id, coalesce(description, '') FROM deliverables WHERE id = $1`, []string{"description"}},
+	// An idea has a project only once shared.
+	model.NodeKindIdea: {`SELECT coalesce(t.project_id, ''), i.title, i.body
+		   FROM ideas i LEFT JOIN tasks t ON t.id = i.task WHERE i.id = $1`, []string{"title", "body"}},
+	model.NodeKindDecision: {`SELECT t.project_id, d.question, d.context
+		   FROM decisions d JOIN tasks t ON t.id = d.task_id WHERE d.id = $1::bigint`, []string{"question", "context"}},
+	// An approval's note resolves in the project of the entity it governs
+	// ("" for a PR).
+	model.NodeKindApproval: {`SELECT coalesce(CASE a.entity_kind
+		            WHEN 'doc' THEN (SELECT project_id FROM docs WHERE 'doc:' || id = a.entity_id)
+		            WHEN 'task' THEN (SELECT project_id FROM tasks WHERE id = a.entity_id)
+		            WHEN 'deliverable' THEN (SELECT project_id FROM deliverables WHERE id = a.entity_id)
+		        END, ''), coalesce(a.note, '')
+		   FROM approvals a WHERE a.id = $1::bigint`, []string{"note"}},
+}
+
+// storedTexts reads a node's project and its Markdown fields by name.
+func storedTexts(tx *sql.Tx, kind model.NodeKind, id string) (string, map[string]string, error) {
+	sf := storedFields[kind]
+	vals := make([]string, len(sf.fields)+1)
 	dst := make([]any, len(vals))
 	for i := range vals {
 		dst[i] = &vals[i]
 	}
-	if err := tx.QueryRow(query, id).Scan(dst...); err != nil {
-		return fmt.Errorf("read %s %s for inline refs: %w", from, id, err)
+	err := tx.QueryRow(sf.query, id).Scan(dst...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil, fmt.Errorf("%s %s: %w", kind, id, ErrNotFound)
 	}
-	for i, f := range fields {
-		if err := deriveInlineRefs(tx, vals[0], from, id, f, nil, vals[i+1]); err != nil {
+	if err != nil {
+		return "", nil, fmt.Errorf("read %s %s for inline refs: %w", kind, id, err)
+	}
+	texts := make(map[string]string, len(sf.fields))
+	for i, f := range sf.fields {
+		texts[f] = vals[i+1]
+	}
+	return vals[0], texts, nil
+}
+
+// deriveNodeRefs re-extracts every Markdown field of one node from its stored
+// row. prev holds the fields' text before this write; nil for a new node.
+func deriveNodeRefs(tx *sql.Tx, kind model.NodeKind, id string, prev map[string]string) error {
+	if kind == "doc" {
+		docID, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			return fmt.Errorf("doc id %q: %w", id, ErrInvalidInput)
+		}
+		return deriveDocRefs(tx, docID, prev)
+	}
+	project, texts, err := storedTexts(tx, kind, id)
+	if err != nil {
+		return err
+	}
+	for _, f := range storedFields[kind].fields {
+		if err := deriveInlineRefs(tx, project, kind, id, f, nil, prev[f], texts[f]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// refsBefore reads a node's Markdown fields before a write and returns what
+// re-extracts them after it, so section refs the old text held keep their
+// resolution (WL-RULE-1849). An unknown node is ErrNotFound.
+func refsBefore(tx *sql.Tx, kind model.NodeKind, id string) (func() error, error) {
+	_, prev, err := storedTexts(tx, kind, id)
+	if err != nil {
+		return nil, err
+	}
+	return func() error { return deriveNodeRefs(tx, kind, id, prev) }, nil
+}
+
 // deriveDocRefs re-extracts a doc's title (unversioned) and its stored body
-// at the current version.
-func deriveDocRefs(tx *sql.Tx, docID int64) error {
+// at the current version; prev holds them before this write.
+func deriveDocRefs(tx *sql.Tx, docID int64, prev map[string]string) error {
 	var project, title, body string
 	var version int
 	if err := tx.QueryRow(`SELECT project_id, title, body, version FROM docs WHERE id = $1`, docID).
@@ -263,13 +443,13 @@ func deriveDocRefs(tx *sql.Tx, docID int64) error {
 		return fmt.Errorf("read doc %d for inline refs: %w", docID, err)
 	}
 	id := strconv.FormatInt(docID, 10)
-	if err := deriveInlineRefs(tx, project, "doc", id, "title", nil, title); err != nil {
+	if err := deriveInlineRefs(tx, project, "doc", id, "title", nil, prev["title"], title); err != nil {
 		return err
 	}
-	return deriveInlineRefs(tx, project, "doc", id, "body", &version, body)
+	return deriveInlineRefs(tx, project, "doc", id, "body", &version, prev["body"], body)
 }
 
-// deriveDocNoteRefs re-extracts one doc note, held by its doc as note/<id>.
+// deriveDocNoteRefs extracts a new doc note, held by its doc as note/<id>.
 func deriveDocNoteRefs(tx *sql.Tx, noteID int64) error {
 	var project, body string
 	var docID int64
@@ -279,46 +459,7 @@ func deriveDocNoteRefs(tx *sql.Tx, noteID int64) error {
 		return fmt.Errorf("read doc note %d for inline refs: %w", noteID, err)
 	}
 	return deriveInlineRefs(tx, project, "doc", strconv.FormatInt(docID, 10),
-		"note/"+strconv.FormatInt(noteID, 10), nil, body)
-}
-
-func deriveTaskRefs(tx *sql.Tx, id string) error {
-	return deriveStored(tx, "task", id,
-		`SELECT project_id, title, coalesce(body, '') FROM tasks WHERE id = $1`, "title", "body")
-}
-
-func deriveMilestoneRefs(tx *sql.Tx, id string) error {
-	return deriveStored(tx, "milestone", id, `SELECT project_id, title FROM milestones WHERE id = $1`, "title")
-}
-
-func deriveDeliverableRefs(tx *sql.Tx, id string) error {
-	return deriveStored(tx, "deliverable", id,
-		`SELECT project_id, coalesce(description, '') FROM deliverables WHERE id = $1`, "description")
-}
-
-// deriveIdeaRefs re-extracts an idea; it has a project only once shared.
-func deriveIdeaRefs(tx *sql.Tx, id string) error {
-	return deriveStored(tx, model.NodeKindIdea, id,
-		`SELECT coalesce(t.project_id, ''), i.title, i.body
-		   FROM ideas i LEFT JOIN tasks t ON t.id = i.task WHERE i.id = $1`, "title", "body")
-}
-
-func deriveDecisionRefs(tx *sql.Tx, id int64) error {
-	return deriveStored(tx, model.NodeKindDecision, strconv.FormatInt(id, 10),
-		`SELECT t.project_id, d.question, d.context
-		   FROM decisions d JOIN tasks t ON t.id = d.task_id WHERE d.id = $1::bigint`, "question", "context")
-}
-
-// deriveApprovalRefs re-extracts an approval's note, resolved in the project
-// of the entity it governs ("" for a PR).
-func deriveApprovalRefs(tx *sql.Tx, id int64) error {
-	return deriveStored(tx, model.NodeKindApproval, strconv.FormatInt(id, 10),
-		`SELECT coalesce(CASE a.entity_kind
-		            WHEN 'doc' THEN (SELECT project_id FROM docs WHERE 'doc:' || id = a.entity_id)
-		            WHEN 'task' THEN (SELECT project_id FROM tasks WHERE id = a.entity_id)
-		            WHEN 'deliverable' THEN (SELECT project_id FROM deliverables WHERE id = a.entity_id)
-		        END, ''), coalesce(a.note, '')
-		   FROM approvals a WHERE a.id = $1::bigint`, "note")
+		"note/"+strconv.FormatInt(noteID, 10), nil, "", body)
 }
 
 // deleteInlineRefs removes every inline_refs row on either end of a deleted
@@ -360,10 +501,20 @@ func (n *normalizer) target(h inlineref.Hit) *inlineref.Target {
 	if n.err != nil {
 		return nil
 	}
-	kind, id, ok, err := resolveHit(n.tx, n.project, n.key, h)
+	r, ok, err := resolveHit(n.tx, n.project, n.key, h, nil)
 	if err != nil || !ok {
 		n.err = err
 		return nil
+	}
+	kind, id, suffix := r.kind, r.id, ""
+	switch {
+	case h.Anchor != "":
+		// A section ref is rewritten only from its stored row, never by
+		// resolving its anchor again (WL-REQ-1854), so it stays as written.
+		return &inlineref.Target{Ref: "doc:" + cmp.Or(r.viaDoc, r.id), DocAnchor: true}
+	case h.RuleFragment != 0 && r.kind == "rule":
+		// <doc>#rule-<n> is already plain; a URL to it becomes that form.
+		kind, id, suffix = "doc", r.viaDoc, "#rule-"+strconv.FormatInt(h.RuleFragment, 10)
 	}
 	var ref sql.NullString
 	switch kind {
@@ -371,9 +522,6 @@ func (n *normalizer) target(h inlineref.Hit) *inlineref.Target {
 		err = n.tx.QueryRow(`SELECT `+ruleRefSQL("p", "r")+` FROM rules r JOIN projects p ON p.id = r.project_id
 		  WHERE r.id = $1::bigint`, id).Scan(&ref)
 	case "doc":
-		if h.Anchor != "" {
-			return &inlineref.Target{Ref: "doc:" + id, DocAnchor: true}
-		}
 		err = n.tx.QueryRow(`SELECT `+docRefSQL("p", "d")+` FROM docs d JOIN projects p ON p.id = d.project_id
 		  WHERE d.id = $1::bigint`, id).Scan(&ref)
 	default:
@@ -386,7 +534,7 @@ func (n *normalizer) target(h inlineref.Hit) *inlineref.Target {
 	if !ref.Valid { // a doc with no number has no shorthand
 		return nil
 	}
-	return &inlineref.Target{Ref: ref.String}
+	return &inlineref.Target{Ref: ref.String + suffix}
 }
 
 // text is text with every resolvable reference outside code in plain form.
@@ -538,7 +686,7 @@ func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body strin
 		if err != nil {
 			return err
 		}
-		return deriveRuleInlineRefs(tx, project, ruleID, version, heading, body)
+		return deriveRuleInlineRefs(tx, project, ruleID, version, oldHeading, oldBody, heading, body)
 	case "accepted":
 		n, err := newNormalizer(tx, project)
 		if err != nil {
@@ -553,7 +701,7 @@ func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body strin
 		if version, err = bumpRuleVersion(tx, ruleID, heading, body, "normalize"); err != nil {
 			return err
 		}
-		if err := deriveRuleInlineRefs(tx, project, ruleID, version, heading, body); err != nil {
+		if err := deriveRuleInlineRefs(tx, project, ruleID, version, oldHeading, oldBody, heading, body); err != nil {
 			return err
 		}
 		_, err = moveSpecsToAcceptedRules(tx, []int64{ruleID}, 0, "normalize")
@@ -627,7 +775,7 @@ func normalizeDoc(tx *sql.Tx, now time.Time, n *normalizer, id string, eventID i
 		if err := logDocChange(tx, docID, eventID, map[string]string{"field": "body", "change": "normalize"}); err != nil {
 			return err
 		}
-		return deriveDocRefs(tx, docID)
+		return deriveDocRefs(tx, docID, map[string]string{"title": newTitle, "body": body})
 	}
 	return fmt.Errorf("doc %s is %s; only a draft, an accepted doc or a plan is normalized: %w", ref, status, ErrBadTransition)
 }
@@ -658,8 +806,9 @@ func listInlineRefs(ctx context.Context, db rowsQueryer, kind model.NodeKind, id
 		return nil, fmt.Errorf("inline ref direction %q must be out or in: %w", dir, ErrInvalidInput)
 	}
 	rows, err := db.QueryContext(ctx,
-		`SELECT from_kind, from_id, field, from_version, to_kind, to_id, lines::text, source
-		   FROM inline_refs WHERE `+where+` ORDER BY from_kind, from_id, field, to_kind, to_id`, kind, id)
+		`SELECT from_kind, from_id, field, from_version, to_kind, to_id, coalesce(via_doc, ''), coalesce(via_anchor, ''),
+		        lines::text, source
+		   FROM inline_refs WHERE `+where+` ORDER BY from_kind, from_id, field, to_kind, to_id, via_doc, via_anchor`, kind, id)
 	if err != nil {
 		return nil, fmt.Errorf("list inline refs of %s %s: %w", kind, id, err)
 	}
@@ -667,7 +816,7 @@ func listInlineRefs(ctx context.Context, db rowsQueryer, kind model.NodeKind, id
 		var x model.InlineRef
 		var v sql.NullInt64
 		var lines string
-		if err := r.Scan(&x.FromKind, &x.FromID, &x.Field, &v, &x.ToKind, &x.ToID, &lines, &x.Source); err != nil {
+		if err := r.Scan(&x.FromKind, &x.FromID, &x.Field, &v, &x.ToKind, &x.ToID, &x.ViaDoc, &x.ViaAnchor, &lines, &x.Source); err != nil {
 			return x, err
 		}
 		if v.Valid {
