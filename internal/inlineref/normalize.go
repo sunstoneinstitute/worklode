@@ -9,7 +9,7 @@ import (
 // Target is what one Hit resolved to.
 type Target struct {
 	Ref       string // plain form: WL-7, WL-REQ-12, WL-SPEC-77
-	DocAnchor bool   // section with no rule: leave the text as written
+	DocAnchor bool   // section ref whose stored row targets no rule: leave the text as written
 }
 
 // rewritable reports whether Normalize may rewrite the hit. A keyword form is
