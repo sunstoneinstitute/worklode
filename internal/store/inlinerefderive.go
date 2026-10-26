@@ -217,7 +217,7 @@ func DeriveNode(tx *sql.Tx, now time.Time, project string, kind model.NodeKind, 
 		return node, fmt.Errorf("read key of project %q: %w", project, err)
 	}
 	for _, f := range fields {
-		if err := deriveInlineRefs(tx, project, kind, id, f.name, f.version, f.text, f.text); err != nil {
+		if err := deriveInlineRefs(tx, project, kind, id, f.name, f.version, f.text, f.text, eventID); err != nil {
 			return node, err
 		}
 		_, unresolved, err := resolveHits(tx, project, kind, id, inlineref.Scan(f.text, keys), nil)
@@ -229,6 +229,9 @@ func DeriveNode(tx *sql.Tx, now time.Time, project string, kind model.NodeKind, 
 				node.Unresolved = append(node.Unresolved, r)
 			}
 		}
+	}
+	if err := pruneClassifiedEdges(tx, kind, id, fields[len(fields)-1].version); err != nil {
+		return node, err
 	}
 	after, err := listInlineRefs(ctx, tx, kind, id, "out")
 	if err != nil {
