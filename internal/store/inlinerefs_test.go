@@ -622,3 +622,115 @@ func TestSectionRefKeepsResolutionAcrossVersions(t *testing.T) {
 		t.Errorf("v2: got %q, want %q", got, want)
 	}
 }
+
+// normalizeSetup makes a spec P1-SPEC-1 whose sec-1.1 arranges P1-REQ-1 and
+// whose group sec-1 arranges no rule, a third rule P1-REQ-3, and task P1-7.
+// setBody writes the task body through its write path, which stores its rows.
+func normalizeSetup(t *testing.T) (s *Store, docID int64, setBody func(string), body func() string) {
+	t.Helper()
+	s = openDocStore(t)
+	ctx := t.Context()
+	text := "---\nstatus: draft\n---\n# A\n\n## 1. Group {#sec-1}\n\n### 1.1 Leaf {#sec-1.1}\n\nX.\n\n### 1.2 Other {#sec-1.2}\n\nY.\n"
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: text, CreatedBy: "stig"})
+	if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "Moved", Body: "Z."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	seedDocNoteTask(t, s, "P1-7")
+	setBody = func(text string) {
+		t.Helper()
+		m := model.Markdown(text)
+		if err := s.Tx(ctx, func(tx *sql.Tx) error {
+			return UpdateTaskFields(tx, s.Now(), "P1-7", nil, &m, nil, nil, nil, nil, nil, nil, nil, nil)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body = func() string {
+		t.Helper()
+		var b string
+		if err := s.db.QueryRowContext(ctx, `SELECT body FROM tasks WHERE id = 'P1-7'`).Scan(&b); err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	return s, d.ID, setBody, body
+}
+
+// TestNormalizeSectionRefFromRuleRow: a section ref whose stored row targets
+// a rule is rewritten to the spec's #rule-<n> form, and its row still targets
+// that rule (WL-REQ-1854).
+func TestNormalizeSectionRefFromRuleRow(t *testing.T) {
+	s, docID, setBody, body := normalizeSetup(t)
+	setBody("See P1-SPEC-1#sec-1.1.")
+	if changed, _, err := normalizeNode(t, s, "task", "P1-7"); err != nil || !changed {
+		t.Fatalf("changed %v, err %v", changed, err)
+	}
+	if got, want := body(), "See P1-SPEC-1#rule-1."; got != want {
+		t.Errorf("body %q, want %q", got, want)
+	}
+	leaf := strconv.FormatInt(ruleID(t, s, "P1", 1), 10)
+	if got, want := viaRows(t, s, "task", "P1-7", "body", nil), []string{"rule:" + leaf + " " + strconv.FormatInt(docID, 10) + "  {1}"}; !slices.Equal(got, want) {
+		t.Errorf("rows %q, want %q", got, want)
+	}
+}
+
+// TestNormalizeSectionRefFromDocRow: a section ref whose stored row targets
+// the doc is left as written (WL-REQ-1854).
+func TestNormalizeSectionRefFromDocRow(t *testing.T) {
+	s, _, setBody, body := normalizeSetup(t)
+	setBody("See P1-SPEC-1#sec-1.")
+	if changed, _, err := normalizeNode(t, s, "task", "P1-7"); err != nil || changed {
+		t.Fatalf("changed %v, err %v", changed, err)
+	}
+	if got, want := body(), "See P1-SPEC-1#sec-1."; got != want {
+		t.Errorf("body %q, want %q", got, want)
+	}
+}
+
+// TestNormalizeSectionRefAfterMove: when the arrangement moved since the row
+// was written, the rewrite names the stored rule, not the one arranged at the
+// anchor today (WL-REQ-1854).
+func TestNormalizeSectionRefAfterMove(t *testing.T) {
+	s, docID, setBody, body := normalizeSetup(t)
+	setBody("See P1-SPEC-1#sec-1.1.")
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE doc_rules SET rule_id = $2 WHERE doc_id = $1 AND rule_id = $3`,
+		docID, ruleID(t, s, "P1", 3), ruleID(t, s, "P1", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := normalizeNode(t, s, "task", "P1-7"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := body(), "See P1-SPEC-1#rule-1."; got != want {
+		t.Errorf("body %q, want %q", got, want)
+	}
+}
+
+// TestNormalizeAcceptedRuleSectionRef: inlineref.Verify refuses a section
+// ref rewritten to another rule, and accepts the rewrite to the rule its
+// stored row targets, because #rule-<n> resolves to that rule (WL-REQ-1854,
+// WL-REQ-1855).
+func TestNormalizeAcceptedRuleSectionRef(t *testing.T) {
+	s, _, _, _ := normalizeSetup(t)
+	ctx := t.Context()
+	if _, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "Cites", Body: "See P1-SPEC-1#sec-1.1."}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AcceptRule(ctx, "P1", 4, false, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return normalizeRule(tx, "p1", ruleID(t, s, "P1", 4), "Cites", "\nSee P1-SPEC-1#rule-3.\n")
+	}); err == nil || !strings.Contains(err.Error(), "referenced targets changed") {
+		t.Fatalf("rewrite to another rule: err = %v, want targets changed", err)
+	}
+	if changed, _, err := normalizeNode(t, s, "rule", strconv.FormatInt(ruleID(t, s, "P1", 4), 10)); err != nil || !changed {
+		t.Fatalf("changed %v, err %v", changed, err)
+	}
+	r, err := s.GetRule(ctx, "P1", 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Version != 2 || r.Change != "normalize" || !strings.Contains(string(r.Body), "See P1-SPEC-1#rule-1.") {
+		t.Errorf("v%d %q body %q", r.Version, r.Change, r.Body)
+	}
+}
