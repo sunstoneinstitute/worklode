@@ -61,7 +61,7 @@ func TestDeriveInlineRefs(t *testing.T) {
 	derive := func(version int, text string) {
 		t.Helper()
 		if err := s.Tx(ctx, func(tx *sql.Tx) error {
-			return deriveInlineRefs(tx, "p1", "rule", self, "body", &version, "", text)
+			return deriveInlineRefs(tx, "p1", "rule", self, "body", &version, "", text, 0)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -607,7 +607,7 @@ func TestSectionRefKeepsResolutionAcrossVersions(t *testing.T) {
 	derive := func(version int, prev, text string) {
 		t.Helper()
 		if err := s.Tx(ctx, func(tx *sql.Tx) error {
-			return deriveInlineRefs(tx, "p1", "rule", citer, "body", &version, prev, text)
+			return deriveInlineRefs(tx, "p1", "rule", citer, "body", &version, prev, text, 0)
 		}); err != nil {
 			t.Fatal(err)
 		}
