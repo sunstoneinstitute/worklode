@@ -477,6 +477,7 @@ func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail, 
 		// addressable anchors, and the Sections table links at them.
 		BodyHTML:        md.DocBody(keys, body),
 		Ref:             docRef(d.Doc),
+		ProjectKey:      keys.Home(),
 		Sections:        d.Sections,
 		Edges:           docEdgeRows(d.Edges, keys),
 		EdgesIn:         docEdgeRows(d.EdgesIn, keys),

@@ -133,6 +133,10 @@ templ Doc(v DocView) {
 						{ " · written by " }<a href={ "/tasks/" + v.Doc.GeneratedByTask }>{ v.Doc.GeneratedByTask }</a>
 					}
 				</p>
+				// Filled by rule-notice.js when the URL fragment is a #rule-<n>
+				// this document does not arrange (WL-REQ-1809).
+				<p id="rule-notice" class="muted" data-key={ v.ProjectKey } hidden></p>
+				<script src={ assetURL("rule-notice.js") } defer></script>
 				if v.Revision != nil {
 					<p><strong>A candidate revision is open</strong>, by { v.Revision.CreatedBy } ({ fmtTime(v.Revision.CreatedAt) }). The accepted version below stays authoritative until it lands.</p>
 				}

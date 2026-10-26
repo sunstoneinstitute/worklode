@@ -729,10 +729,13 @@ type DocView struct {
 	// applies.
 	BodyHTML template.HTML
 	Ref      string
-	Sections []model.DocSection
-	Edges    []DocEdgeRow
-	EdgesIn  []DocEdgeRow
-	Revision *model.DocRevision
+	// ProjectKey is the document's project key ("WL"), "" when unknown. The
+	// not-arranged rule notice builds its link from it (WL-REQ-1809).
+	ProjectKey string
+	Sections   []model.DocSection
+	Edges      []DocEdgeRow
+	EdgesIn    []DocEdgeRow
+	Revision   *model.DocRevision
 	// Versions is the document's version history (WL-REQ-164), newest first —
 	// its live row and every version it has superseded — rendered as the
 	// Versions table at the bottom of the page.

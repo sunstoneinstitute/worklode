@@ -230,3 +230,34 @@ func TestRefShortcutBareNumberAcrossProjects(t *testing.T) {
 		}
 	}
 }
+
+// TestRuleFragmentOnDocPage: the doc page puts an element with the id
+// rule-<n> before each arranged rule's heading, ships the script that
+// reports a rule the page does not arrange, and a /<ref> redirect leaves the
+// fragment to the browser, which keeps the one it was opened with
+// (WL-REQ-1809, WL-REQ-1653).
+func TestRuleFragmentOnDocPage(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 45, Slug: "per-project-workflows",
+		Body: "---\nstatus: draft\n---\n# Spec 45 — Workflows\n\n## 1. One {#sec-1}\n\nText.\n",
+	})
+
+	page := getCanonical(t, h, "/docs/WL-SPEC-45").Body.String()
+	if !regexp.MustCompile(`<span id="rule-\d+"></span>\s*<h2 id="sec-1">`).MatchString(page) {
+		t.Errorf("no rule-<n> anchor before the section heading:\n%s", page)
+	}
+	for _, want := range []string{`src="/assets/rule-notice.js`, `id="rule-notice"`, `data-key="WL"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("doc page lacks %s", want)
+		}
+	}
+
+	rr := doReq(t, h, "GET", "/WL-SPEC-45", "", nil)
+	if rr.Code != http.StatusFound || rr.Header().Get("Location") != "/projects/proj/spec/45" {
+		t.Errorf("redirect = %d %q, want 302 at the bare page URL so the browser keeps #rule-<n>",
+			rr.Code, rr.Header().Get("Location"))
+	}
+}
