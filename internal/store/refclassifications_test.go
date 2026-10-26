@@ -396,3 +396,49 @@ func TestAddDocEdge(t *testing.T) {
 		}
 	}
 }
+
+// TestRefStats: rows group by classifier version, predicate and confidence
+// tenth, 1.0 lands in the 0.9 bucket, rates divide by the row's total, and
+// only the selected nodes count (WL-REQ-1859).
+func TestRefStats(t *testing.T) {
+	s := openDocStore(t)
+	seedDocNoteTask(t, s, "P1-7")
+	seedDocNoteTask(t, s, "P1-8")
+	ins := func(from, classifier string, version int, predicate string, conf float64, outcome string) {
+		t.Helper()
+		if _, err := s.db.ExecContext(t.Context(), `INSERT INTO ref_classifications
+			(from_kind, from_id, field, line, line_text, to_kind, to_id, classifier, classifier_version,
+			 predicate, confidence, outcome, created_at)
+			VALUES ('task', $1, 'body', 1, 'x', 'task', 'P1-9', $2, $3, $4, $5, $6, now())`,
+			from, classifier, version, predicate, conf, outcome); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ins("P1-7", "jev", 1, "blockedBy", 0.75, "kept")
+	ins("P1-7", "jev", 1, "blockedBy", 0.71, "rejected")
+	ins("P1-7", "jev", 1, "blockedBy", 0.79, "kept")
+	ins("P1-7", "jev", 2, "blockedBy", 0.75, "adjusted")
+	ins("P1-7", "cue", 1, "references", 1, "missed")
+	ins("P1-8", "cue", 1, "references", 1, "kept")
+	ins("P1-8", "jev", 1, "blockedBy", 0.75, "kept")
+
+	got, err := s.RefStats(t.Context(), "p1", model.RefStatsParams{Kind: "task", Refs: []string{"P1-7"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.RefStatsRow{
+		{Classifier: "cue", ClassifierVersion: 1, Predicate: "references", ConfidenceBucket: 0.9, Missed: 1, MissedRate: 1},
+		{Classifier: "jev", ClassifierVersion: 1, Predicate: "blockedBy", ConfidenceBucket: 0.7, Kept: 2, Rejected: 1, KeptRate: 2.0 / 3, RejectedRate: 1.0 / 3},
+		{Classifier: "jev", ClassifierVersion: 2, Predicate: "blockedBy", ConfidenceBucket: 0.7, Adjusted: 1, AdjustedRate: 1},
+	}
+	if !slices.Equal(got.Rows, want) {
+		t.Errorf("rows = %+v\nwant   %+v", got.Rows, want)
+	}
+	all, err := s.RefStats(t.Context(), "p1", model.RefStatsParams{Kind: "task", All: true})
+	if err != nil || len(all.Rows) != 3 || all.Rows[0].Kept != 1 || all.Rows[0].Missed != 1 {
+		t.Errorf("all = %+v, %v", all.Rows, err)
+	}
+	if _, err := s.RefStats(t.Context(), "p1", model.RefStatsParams{Kind: "task"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("nothing selected: %v", err)
+	}
+}

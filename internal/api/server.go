@@ -1039,6 +1039,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("DELETE /api/v1/rules/{id}/edges", s.unlinkRule)
 	r.api("POST /api/v1/projects/{id}/rules/supersede", s.supersedeRules)
 	r.api("POST /api/v1/projects/{id}/refs/derive", s.deriveRefs)
+	r.api("GET /api/v1/projects/{id}/refs/stats", s.refStats)
 	r.api("GET /api/v1/projects/{id}/terms", s.listTerms)
 	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
 	r.api("POST /api/v1/docs/{id}/patch", s.patchDoc)

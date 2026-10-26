@@ -542,3 +542,42 @@ func classificationsSince(tx *sql.Tx, kind model.NodeKind, id string, since int6
 	}
 	return out, err
 }
+
+// RefStats counts the classifications of the nodes p selects, one row per
+// (classifier, classifier_version, predicate, confidence bucket)
+// (WL-REQ-1859). The bucket is the lower bound floor(confidence*10)/10, with
+// confidence 1 clamped into 0.9. Each rate is the outcome's count over the
+// row's total.
+func (s *Store) RefStats(ctx context.Context, project string, p model.RefStatsParams) (model.RefStats, error) {
+	ids, _, err := s.DeriveTargets(ctx, project, model.RefDeriveParams{
+		Kind: p.Kind, Refs: p.Refs, Status: p.Status, DocKind: p.DocKind, TaskKind: p.TaskKind, All: p.All})
+	if err != nil {
+		return model.RefStats{}, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT classifier, classifier_version, predicate, LEAST(floor(confidence * 10)::int, 9),
+		       count(*) FILTER (WHERE outcome = 'kept'), count(*) FILTER (WHERE outcome = 'adjusted'),
+		       count(*) FILTER (WHERE outcome = 'rejected'), count(*) FILTER (WHERE outcome = 'missed')
+		  FROM ref_classifications
+		 WHERE from_kind = $1 AND from_id = ANY($2)
+		 GROUP BY 1, 2, 3, 4
+		 ORDER BY 1, 2, 3, 4`, string(p.Kind), ids)
+	if err != nil {
+		return model.RefStats{}, fmt.Errorf("ref stats: %w", err)
+	}
+	defer rows.Close()
+	out := model.RefStats{Rows: []model.RefStatsRow{}}
+	for rows.Next() {
+		var r model.RefStatsRow
+		var tenth int
+		if err := rows.Scan(&r.Classifier, &r.ClassifierVersion, &r.Predicate, &tenth, &r.Kept, &r.Adjusted, &r.Rejected, &r.Missed); err != nil {
+			return model.RefStats{}, fmt.Errorf("scan ref stats: %w", err)
+		}
+		r.ConfidenceBucket = float64(tenth) / 10
+		total := float64(r.Kept + r.Adjusted + r.Rejected + r.Missed)
+		r.KeptRate, r.AdjustedRate = float64(r.Kept)/total, float64(r.Adjusted)/total
+		r.RejectedRate, r.MissedRate = float64(r.Rejected)/total, float64(r.Missed)/total
+		out.Rows = append(out.Rows, r)
+	}
+	return out, rows.Err()
+}
