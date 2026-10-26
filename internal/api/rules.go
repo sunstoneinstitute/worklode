@@ -35,7 +35,12 @@ func (s *server) getRule(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, c)
+	refs, err := s.st.InlineRefsOf(r.Context(), "rule", strconv.FormatInt(c.ID, 10))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.RuleDetail{Rule: *c, InlineRefs: refs})
 }
 
 // editRule handles PUT /api/v1/rules/{id}: the rule's next draft text
@@ -320,8 +325,8 @@ var ruleRouteDocs = map[string]routeDoc{
 		responses: map[int]any{http.StatusOK: model.Rule{}},
 	},
 	"GET /api/v1/rules/{id}": {
-		summary:   "Get a rule by ref",
-		responses: map[int]any{http.StatusOK: model.Rule{}},
+		summary:   "Get a rule by ref, with its inline references",
+		responses: map[int]any{http.StatusOK: model.RuleDetail{}},
 	},
 	"PUT /api/v1/rules/{id}": {
 		summary:   "Write a rule's heading and body as its next draft version",

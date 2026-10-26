@@ -388,13 +388,13 @@ func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline
 		return err
 	}
 	var (
-		rule model.Rule
+		rule model.RuleDetail
 		raw  []byte
 	)
 	if versionSet {
-		rule, raw, err = c.GetRuleVersion(cmd.Context(), ref, version)
+		rule.Rule, raw, err = c.GetRuleVersion(cmd.Context(), ref, version)
 	} else {
-		rule, raw, err = c.GetRule(cmd.Context(), ref)
+		rule, raw, err = c.GetRuleDetail(cmd.Context(), ref)
 	}
 	if err != nil {
 		return err
@@ -403,13 +403,13 @@ func runRuleShow(cmd *cobra.Command, ref string, version int, versionSet, inline
 		printRaw(cmd, raw)
 		return nil
 	}
-	cli.RuleRender(cmd.OutOrStdout(), rule)
+	cli.RuleDetailRender(cmd.OutOrStdout(), rule)
 	if !inline {
 		return nil
 	}
 	// The rule's in-force amendments, folded in beneath its text
 	// (WL-REQ-165).
-	blocks, pending, err := designdoc.NewInliner(cli.RuleFetcher(cmd.Context(), c)).RuleAmendments(&rule)
+	blocks, pending, err := designdoc.NewInliner(cli.RuleFetcher(cmd.Context(), c)).RuleAmendments(&rule.Rule)
 	if err != nil {
 		return err
 	}

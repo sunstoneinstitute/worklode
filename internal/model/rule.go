@@ -44,6 +44,13 @@ type Rule struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// RuleDetail is the wire form of GET /api/v1/rules/{id}: the rule plus the
+// inline references it makes and receives, of every node kind (WL-REQ-1852).
+type RuleDetail struct {
+	Rule
+	InlineRefs
+}
+
 // RuleArrangement is one document's placement of a rule.
 type RuleArrangement struct {
 	Doc         int64  `json:"doc"`

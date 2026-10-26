@@ -19,6 +19,12 @@ func (c *Client) GetRule(ctx context.Context, ref string) (model.Rule, []byte, e
 	return doJSON[model.Rule](ctx, c, http.MethodGet, "/api/v1/rules/"+url.PathEscape(ref), nil, "rule")
 }
 
+// GetRuleDetail calls GET /api/v1/rules/{ref}: the rule plus its inline
+// references (WL-REQ-1852).
+func (c *Client) GetRuleDetail(ctx context.Context, ref string) (model.RuleDetail, []byte, error) {
+	return doJSON[model.RuleDetail](ctx, c, http.MethodGet, "/api/v1/rules/"+url.PathEscape(ref), nil, "rule")
+}
+
 // ListRules calls GET /api/v1/rules: rules without their text, in
 // arrangement order when Doc is set, by number otherwise.
 func (c *Client) ListRules(ctx context.Context, p model.RuleListParams) ([]model.Rule, []byte, error) {
@@ -94,6 +100,26 @@ func RuleRender(w io.Writer, c model.Rule) {
 		fmt.Fprintln(w)
 		Markdown(w, string(c.Body))
 	}
+}
+
+// RuleDetailRender is RuleRender plus the inline references the rule's own
+// text makes to nodes other than rules, in the `references:` line format, and
+// the "Referenced by" block for the nodes other than rules that name it. Rule
+// to rule references already show as edges (WL-REQ-1852).
+func RuleDetailRender(w io.Writer, d model.RuleDetail) {
+	RuleRender(w, d.Rule)
+	for _, r := range d.Out {
+		if r.ToKind != "rule" {
+			fmt.Fprintf(w, "  %-9s %s %s (%s)\n", "references:", r.ToRef, r.ToTitle, r.Source)
+		}
+	}
+	in := model.InlineRefs{}
+	for _, r := range d.In {
+		if r.FromKind != "rule" {
+			in.In = append(in.In, r)
+		}
+	}
+	InlineRefsRender(w, in)
 }
 
 // RuleAmendmentsRender prints a rule's folded amendments beneath its text:
