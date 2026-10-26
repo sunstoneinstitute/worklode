@@ -1382,7 +1382,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			}
 		}
 	}
-	s.typesafe = &typesafe.Client{BaseURL: cfg.TypeSafeURL, APIKey: cfg.TypeSafeAPIKey, Metrics: typesafe.NewMetrics(reg)}
+	// A hung Jev call fails its node instead of the whole derive request.
+	s.typesafe = &typesafe.Client{BaseURL: cfg.TypeSafeURL, APIKey: cfg.TypeSafeAPIKey, HTTP: &http.Client{Timeout: 20 * time.Second}, Metrics: typesafe.NewMetrics(reg)}
 	s.typesafeModel = cmp.Or(cfg.TypeSafeModel, inlineref.JevModel)
 	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
 	if err != nil {
