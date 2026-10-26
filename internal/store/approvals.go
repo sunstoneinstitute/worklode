@@ -1467,10 +1467,14 @@ func SetImpactNote(tx *sql.Tx, id int64, note string) error {
 	if state != "awaiting" && state != "changes_requested" {
 		return ErrApprovalResolved
 	}
+	derive, err := refsBefore(tx, model.NodeKindApproval, strconv.FormatInt(id, 10))
+	if err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`UPDATE approvals SET note = $1 WHERE id = $2`, note, id); err != nil {
 		return fmt.Errorf("set impact note on approval %d: %w", id, err)
 	}
-	return deriveApprovalRefs(tx, id)
+	return derive()
 }
 
 // GovernedRef is one revision-bound reference a designation recorded:

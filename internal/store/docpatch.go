@@ -86,6 +86,10 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 	if err != nil {
 		return nil, nil, err
 	}
+	deriveDoc, err := refsBefore(tx, "doc", strconv.FormatInt(in.ID, 10))
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := checkDocVersion(in.ID, in.IfVersion, d.version); err != nil {
 		return nil, nil, err
 	}
@@ -161,7 +165,7 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 	} else if err := patchNote(tx, now, in, next, changed, eventID); err != nil {
 		return nil, nil, err
 	}
-	if err := deriveDocRefs(tx, in.ID); err != nil {
+	if err := deriveDoc(); err != nil {
 		return nil, nil, err
 	}
 

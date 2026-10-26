@@ -9587,6 +9587,8 @@ export interface components {
             to_kind?: string;
             to_ref?: string;
             to_title?: string;
+            via_anchor?: string;
+            via_doc?: string;
         };
         Instruction: {
             body?: string;
