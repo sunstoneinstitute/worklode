@@ -254,5 +254,5 @@ configMapGenerator:
       - migrations/0120_task-edges-depends-on.down.sql
       - migrations/0121_github-tables.up.sql
       - migrations/0121_github-tables.down.sql
-      - migrations/NEW-github-tables-2.up.sql
-      - migrations/NEW-github-tables-2.down.sql
+      - migrations/0122_github-tables-2.up.sql
+      - migrations/0122_github-tables-2.down.sql
