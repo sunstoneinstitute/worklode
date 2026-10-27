@@ -203,22 +203,25 @@ function SummaryCard({ name, summary, crew }: { name: string; summary: Summary; 
       <div data-summary-view="summary" className="flex flex-col gap-2.5 group-data-[view=crew]/summary:hidden">
         <p className="pb-2.5 text-2xl font-extrabold">{name}</p>
 
+        {/* The toggle sits right under the name, where the crew view has its
+            own button, so it doesn't move when the view switches. */}
+        <Button
+          data-project-summary-toggle
+          ref={summaryToggle}
+          onClick={switchView}
+          variant="outline"
+          size="sm"
+          className={`self-start ${TOGGLE_CLASSES}`}
+        >
+          <span className="lg:hidden">Crew Overview</span>
+          <span className="hidden lg:inline">What is the crew working on?</span>
+        </Button>
+
         {/* The design's progress bar and days remaining are left out: the
-            backbone records neither for a project. */}
-        <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12.5">
-          <div className="flex items-start lg:flex-1">
-            <Button
-              data-project-summary-toggle
-              ref={summaryToggle}
-              onClick={switchView}
-              variant="outline"
-              size="sm"
-              className={TOGGLE_CLASSES}
-            >
-              <span className="lg:hidden">Crew Overview</span>
-              <span className="hidden lg:inline">What is the crew working on?</span>
-            </Button>
-          </div>
+            backbone records neither for a project. Their column stays empty
+            on desktop so the lists keep the right half. */}
+        <div className="flex flex-col gap-10 pt-2 lg:flex-row lg:items-start lg:gap-12.5">
+          <div className="hidden lg:block lg:flex-1" />
 
           <div className="flex flex-col gap-10 lg:flex-1 lg:gap-6">
             <SummaryList title="Past Due Tasks" items={summary.past_due} />
