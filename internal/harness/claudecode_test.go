@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -217,36 +218,10 @@ func seedClaudeSettings(t *testing.T, path string, statusLine bool) {
 	}
 }
 
-// writeCurrentProjectConfig writes a repo-local .worklode/config.toml pinning
-// current_project, so cli.CurrentProjectFrom resolves it for repo (and for
-// anything nested under it, worktrees included) without a server round trip.
-func writeCurrentProjectConfig(t *testing.T, repo, project string) {
-	t.Helper()
-	dir := filepath.Join(repo, ".worklode")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", dir, err)
-	}
-	content := "current_project = \"" + project + "\"\n"
-	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(content), 0o644); err != nil {
-		t.Fatalf("write config.toml: %v", err)
-	}
-}
-
-// resourceAttributes reads OTEL_RESOURCE_ATTRIBUTES out of an already-read
-// settings object, or "" when there is no env block or no such key.
-func resourceAttributes(settings map[string]any) string {
-	env, _ := settings["env"].(map[string]any)
-	attrs, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string)
-	return attrs
-}
-
 func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
 	root := initGitRepo(t)
-	writeCurrentProjectConfig(t, root, "worklode")
 
-	// Simulate `lode install` at the main checkout: it resolves the project
-	// from local config, but the main checkout is never task-stamped, so its
-	// own telemetry carries no task attribute.
+	// Simulate `lode install` at the main checkout.
 	if _, err := (ClaudeCode{}).InstallWithStatusLine(root, ScopeLocal); err != nil {
 		t.Fatalf("install at root: %v", err)
 	}
@@ -275,18 +250,8 @@ func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
 	if !ok || !isLodeStatusLine(sl) {
 		t.Fatalf("statusLine in worktree = %v, want the mirrored lode statusline", sl)
 	}
-	wantAttrs := "worklode.project.id=worklode,worklode.task.id=WL-654"
-	if got := resourceAttributes(settings); got != wantAttrs {
-		t.Fatalf("worktree OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, wantAttrs)
-	}
-
-	// Converse: the main checkout's own install must not carry a task
-	// attribute -- only the propagated worktree is bound to WL-654.
-	rootPath := filepath.Join(root, ".claude", "settings.local.json")
-	rootSettings := readSettings(t, rootPath)
-	wantRootAttrs := "worklode.project.id=worklode"
-	if got := resourceAttributes(rootSettings); got != wantRootAttrs {
-		t.Fatalf("root OTEL_RESOURCE_ATTRIBUTES = %q, want %q (no task attribute)", got, wantRootAttrs)
+	if env, _ := settings["env"].(map[string]any); env["OTEL_METRICS_INCLUDE_REPOSITORY"] != "true" {
+		t.Fatalf("worktree env = %v, want OTEL_METRICS_INCLUDE_REPOSITORY=true", env)
 	}
 }
 
@@ -972,71 +937,83 @@ func TestBoundNamesMatchEvents(t *testing.T) {
 
 // --- Claude Code usage telemetry (WL-655) ---------------------------------
 
-func TestApplyClaudeTelemetryKeepsForeignAttributes(t *testing.T) {
-	settings := map[string]any{"env": map[string]any{
-		"OTEL_RESOURCE_ATTRIBUTES": "team.id=platform,worklode.task.id=WL-OLD",
-	}}
-	applyClaudeTelemetry(settings, "worklode", "WL-654", "")
+// legacyInstalledEnv is the env block an install before Claude Code
+// v2.1.282's project-scope restriction wrote, with a server and a stamped
+// task, for the cleanup tests.
+func legacyInstalledEnv() map[string]any {
+	env := map[string]any{
+		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://lode.example.com/otlp/v1/logs",
+		"OTEL_RESOURCE_ATTRIBUTES":         "worklode.project.id=worklode,worklode.task.id=WL-654",
+	}
+	for k, v := range legacyTelemetryEnv {
+		env[k] = v
+	}
+	return env
+}
+
+// The exporters, endpoints and headers come from MDM-managed settings, so
+// install writes only the repository attribute switch, even when a server
+// resolves.
+func TestInstallHooksWritesRepositoryAttributeOnly(t *testing.T) {
+	root := initGitRepo(t)
+	t.Setenv("LODE_SERVER", "https://lode.example.com")
+
+	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	settings := readSettings(t, filepath.Join(root, ".claude", "settings.local.json"))
 	env := settings["env"].(map[string]any)
-	if got := env["OTEL_METRICS_EXPORTER"]; got != "otlp" {
-		t.Fatalf("OTEL_METRICS_EXPORTER = %v, want otlp", got)
-	}
-	want := "team.id=platform,worklode.project.id=worklode,worklode.task.id=WL-654"
-	if got := env["OTEL_RESOURCE_ATTRIBUTES"]; got != want {
-		t.Fatalf("resource attributes = %q, want %q", got, want)
-	}
-	for k := range claudeLogsEnv {
-		if _, ok := env[k]; ok {
-			t.Errorf("env[%s] set with no server URL, want none of the logs keys", k)
-		}
-	}
-	if _, ok := env[otelLogsEndpointKey]; ok {
-		t.Errorf("%s set with no server URL, want it absent", otelLogsEndpointKey)
+	if len(env) != 1 || env["OTEL_METRICS_INCLUDE_REPOSITORY"] != "true" {
+		t.Fatalf("env = %v, want only OTEL_METRICS_INCLUDE_REPOSITORY=true", env)
 	}
 	if _, ok := settings["otelHeadersHelper"]; ok {
-		t.Error("otelHeadersHelper set with no server URL, want it absent")
+		t.Errorf("otelHeadersHelper = %v, want it absent", settings["otelHeadersHelper"])
 	}
 }
 
-// A resolved server URL turns on the log exporter: the three logs env keys
-// plus otelHeadersHelper, alongside the metrics keys that are written either
-// way.
-func TestApplyClaudeTelemetryWritesLogsKeysWhenServerResolves(t *testing.T) {
-	settings := map[string]any{}
-	applyClaudeTelemetry(settings, "worklode", "WL-654", "https://lode.example.com")
-	env := settings["env"].(map[string]any)
-	for k, want := range claudeLogsEnv {
-		if got := env[k]; got != want {
-			t.Errorf("env[%s] = %v, want %q", k, got, want)
-		}
+// Re-running install over an older install's settings removes every var
+// Claude Code now ignores there, but only where it still holds Worklode's
+// value, and only the worklode.* resource attributes.
+func TestApplyClaudeTelemetryStripsLegacyKeepsForeign(t *testing.T) {
+	env := legacyInstalledEnv()
+	env["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://my-collector:4317"
+	env["OTEL_RESOURCE_ATTRIBUTES"] = "team.id=platform," + env["OTEL_RESOURCE_ATTRIBUTES"].(string)
+	env["MY_OWN_VAR"] = "keep-me"
+	settings := map[string]any{"env": env}
+
+	applyClaudeTelemetry(settings)
+
+	want := map[string]any{
+		"OTEL_EXPORTER_OTLP_ENDPOINT":     "http://my-collector:4317",
+		"OTEL_RESOURCE_ATTRIBUTES":        "team.id=platform",
+		"MY_OWN_VAR":                      "keep-me",
+		"OTEL_METRICS_INCLUDE_REPOSITORY": "true",
 	}
-	wantEndpoint := "https://lode.example.com/otlp/v1/logs"
-	if got := env[otelLogsEndpointKey]; got != wantEndpoint {
-		t.Errorf("%s = %v, want %q", otelLogsEndpointKey, got, wantEndpoint)
-	}
-	if got := settings["otelHeadersHelper"]; got != otelHeadersHelperCommand {
-		t.Errorf("otelHeadersHelper = %v, want %q", got, otelHeadersHelperCommand)
+	if got := settings["env"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("env = %v, want %v", got, want)
 	}
 }
 
-// A developer's own otelHeadersHelper is a single-command slot, exactly like
-// statusLine: applyClaudeTelemetry must not steal it just because a server
-// URL resolved.
-func TestApplyClaudeTelemetryKeepsAForeignOTelHeadersHelper(t *testing.T) {
-	settings := map[string]any{"otelHeadersHelper": "my-own-helper"}
-	applyClaudeTelemetry(settings, "worklode", "WL-654", "https://lode.example.com")
-	if got := settings["otelHeadersHelper"]; got != "my-own-helper" {
+// Install removes the otelHeadersHelper earlier installs wrote and leaves a
+// developer's own in place.
+func TestApplyClaudeTelemetryRemovesOnlyOurOTelHeadersHelper(t *testing.T) {
+	ours := map[string]any{"otelHeadersHelper": otelHeadersHelperCommand}
+	applyClaudeTelemetry(ours)
+	if _, ok := ours["otelHeadersHelper"]; ok {
+		t.Errorf("otelHeadersHelper = %v, want it removed", ours["otelHeadersHelper"])
+	}
+	foreign := map[string]any{"otelHeadersHelper": "my-own-helper"}
+	applyClaudeTelemetry(foreign)
+	if got := foreign["otelHeadersHelper"]; got != "my-own-helper" {
 		t.Errorf("otelHeadersHelper = %v, want the foreign helper untouched", got)
 	}
 }
 
-// A developer who repointed OTEL_EXPORTER_OTLP_ENDPOINT, added their own env
-// vars, or carries a foreign resource attribute keeps all of it: uninstall
-// only removes the four exact Worklode telemetry vars where they still hold
-// Worklode's own values, and only the two worklode.* resource keys.
-func TestUninstallHooksRemovesClaudeTelemetryKeepsForeignEnv(t *testing.T) {
+// Uninstall removes what install writes and what older installs wrote, and
+// keeps a developer's own env vars and helper.
+func TestUninstallHooksRemovesClaudeTelemetryKeepsForeign(t *testing.T) {
 	root := initGitRepo(t)
-	writeCurrentProjectConfig(t, root, "worklode")
+	t.Setenv("LODE_SERVER", "https://lode.example.com")
 	path := filepath.Join(root, ".claude", "settings.local.json")
 
 	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
@@ -1044,104 +1021,13 @@ func TestUninstallHooksRemovesClaudeTelemetryKeepsForeignEnv(t *testing.T) {
 	}
 	settings := readSettings(t, path)
 	env := settings["env"].(map[string]any)
+	for k, v := range legacyInstalledEnv() {
+		env[k] = v
+	}
 	env["MY_OWN_VAR"] = "keep-me"
-	attrs, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string)
-	env["OTEL_RESOURCE_ATTRIBUTES"] = attrs + ",team.id=platform"
-	if err := writeJSONFile(path, settings); err != nil {
-		t.Fatalf("seed foreign env: %v", err)
-	}
-
-	hu, err := (ClaudeCode{}).UninstallHooks(root, ScopeLocal)
-	if err != nil {
-		t.Fatalf("uninstall: %v", err)
-	}
-	if hu.Action != ActionRemoved {
-		t.Fatalf("action = %q, want %q", hu.Action, ActionRemoved)
-	}
-
-	settings = readSettings(t, path)
-	env, _ = settings["env"].(map[string]any)
-	for k := range claudeTelemetryEnv {
-		if _, ok := env[k]; ok {
-			t.Errorf("env[%s] survived uninstall, want it removed", k)
-		}
-	}
-	if got := env["MY_OWN_VAR"]; got != "keep-me" {
-		t.Fatalf("MY_OWN_VAR = %v, want it preserved", got)
-	}
-	wantAttrs := "team.id=platform"
-	if got, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string); got != wantAttrs {
-		t.Fatalf("OTEL_RESOURCE_ATTRIBUTES = %q, want %q (worklode.project.id gone, team.id kept)", got, wantAttrs)
-	}
-}
-
-// Sec-5: a resolved server URL turns the log exporter on at install time.
-func TestInstallHooksWritesLogsKeysAndHeadersHelperWhenServerResolves(t *testing.T) {
-	root := initGitRepo(t)
-	t.Setenv("LODE_SERVER", "https://lode.example.com")
-
-	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	path := filepath.Join(root, ".claude", "settings.local.json")
-	settings := readSettings(t, path)
-	env := settings["env"].(map[string]any)
-	for k, want := range claudeLogsEnv {
-		if got := env[k]; got != want {
-			t.Errorf("env[%s] = %v, want %q", k, got, want)
-		}
-	}
-	wantEndpoint := "https://lode.example.com/otlp/v1/logs"
-	if got := env[otelLogsEndpointKey]; got != wantEndpoint {
-		t.Errorf("%s = %v, want %q", otelLogsEndpointKey, got, wantEndpoint)
-	}
-	if got := settings["otelHeadersHelper"]; got != otelHeadersHelperCommand {
-		t.Errorf("otelHeadersHelper = %v, want %q", got, otelHeadersHelperCommand)
-	}
-}
-
-// Sec-5: with no server URL resolved, install writes none of the three logs
-// keys or otelHeadersHelper -- only the pre-existing metrics keys.
-func TestInstallHooksWritesNoLogsKeysWithoutServer(t *testing.T) {
-	root := initGitRepo(t)
-
-	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	path := filepath.Join(root, ".claude", "settings.local.json")
-	settings := readSettings(t, path)
-	env := settings["env"].(map[string]any)
-	if got := env["OTEL_METRICS_EXPORTER"]; got != "otlp" {
-		t.Fatalf("OTEL_METRICS_EXPORTER = %v, want otlp", got)
-	}
-	for k := range claudeLogsEnv {
-		if _, ok := env[k]; ok {
-			t.Errorf("env[%s] set with no server URL, want none of the logs keys", k)
-		}
-	}
-	if _, ok := env[otelLogsEndpointKey]; ok {
-		t.Errorf("%s set with no server URL, want it absent", otelLogsEndpointKey)
-	}
-	if _, ok := settings["otelHeadersHelper"]; ok {
-		t.Error("otelHeadersHelper set with no server URL, want it absent")
-	}
-}
-
-// Uninstall's counterpart to the two tests above: the logs keys and
-// otelHeadersHelper are removed only while they hold Worklode's own values,
-// and a developer's own helper (repointed after install) survives.
-func TestUninstallHooksRemovesLogsKeysKeepsForeignHelper(t *testing.T) {
-	root := initGitRepo(t)
-	t.Setenv("LODE_SERVER", "https://lode.example.com")
-	path := filepath.Join(root, ".claude", "settings.local.json")
-
-	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	settings := readSettings(t, path)
 	settings["otelHeadersHelper"] = "my-own-helper"
 	if err := writeJSONFile(path, settings); err != nil {
-		t.Fatalf("repoint helper: %v", err)
+		t.Fatalf("seed: %v", err)
 	}
 
 	hu, err := (ClaudeCode{}).UninstallHooks(root, ScopeLocal)
@@ -1151,19 +1037,12 @@ func TestUninstallHooksRemovesLogsKeysKeepsForeignHelper(t *testing.T) {
 	if hu.Action != ActionRemoved {
 		t.Fatalf("action = %q, want %q", hu.Action, ActionRemoved)
 	}
-
 	settings = readSettings(t, path)
-	env, _ := settings["env"].(map[string]any)
-	for k := range claudeLogsEnv {
-		if _, ok := env[k]; ok {
-			t.Errorf("env[%s] survived uninstall, want it removed", k)
-		}
-	}
-	if _, ok := env[otelLogsEndpointKey]; ok {
-		t.Errorf("%s survived uninstall, want it removed", otelLogsEndpointKey)
+	if got, want := settings["env"], map[string]any{"MY_OWN_VAR": "keep-me"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("env = %v, want %v", got, want)
 	}
 	if got := settings["otelHeadersHelper"]; got != "my-own-helper" {
-		t.Fatalf("otelHeadersHelper = %v, want the repointed foreign helper kept", got)
+		t.Fatalf("otelHeadersHelper = %v, want the foreign helper kept", got)
 	}
 }
 
@@ -1184,22 +1063,16 @@ func TestStripClaudeTelemetryKeepsAnEmptyEnvItDidNotEmpty(t *testing.T) {
 		t.Errorf("otelHeadersHelper survived, want it removed")
 	}
 	env, ok := settings["env"].(map[string]any)
-	if !ok {
+	if !ok || len(env) != 0 {
 		t.Fatalf("env = %v, want the empty object it came in with", settings["env"])
-	}
-	if len(env) != 0 {
-		t.Errorf("env = %v, want it still empty", env)
 	}
 }
 
 // The counterpart: an env this strip did empty is dropped, so an uninstall
 // leaves no bare "env": {} behind that the install did not find there.
 func TestStripClaudeTelemetryDropsAnEnvItEmptied(t *testing.T) {
-	settings := map[string]any{"env": map[string]any{}}
-	env := settings["env"].(map[string]any)
-	for k, v := range claudeTelemetryEnv {
-		env[k] = v
-	}
+	settings := map[string]any{"env": legacyInstalledEnv()}
+	settings["env"].(map[string]any)["OTEL_METRICS_INCLUDE_REPOSITORY"] = "true"
 
 	if got := stripClaudeTelemetry(settings); got != ActionRemoved {
 		t.Fatalf("action = %q, want %q", got, ActionRemoved)
@@ -1209,36 +1082,22 @@ func TestStripClaudeTelemetryDropsAnEnvItEmptied(t *testing.T) {
 	}
 }
 
-// Determinism matters here: a settings file must diff clean across repeat
-// installs, or every re-run of `lode install` looks like a change. Runs
-// through InstallWithStatusLine, the fullest surface (hooks, status line and
-// telemetry all in one write), with both a project and a stamped task in
-// play so the merged OTEL_RESOURCE_ATTRIBUTES has two keys to sort.
+// A settings file must diff clean across repeat installs, or every re-run of
+// `lode install` looks like a change. Runs through InstallWithStatusLine, the
+// fullest surface (hooks, status line and telemetry in one write).
 func TestInstallWithStatusLineIsByteIdenticalAcrossRepeatInstalls(t *testing.T) {
 	root := initGitRepo(t)
-	writeCurrentProjectConfig(t, root, "worklode")
 	t.Setenv("LODE_SERVER", "https://lode.example.com")
-	if err := worktree.EnableWorktreeConfigExtension(root); err != nil {
-		t.Fatalf("enable worktree config extension: %v", err)
-	}
-	dir := filepath.Join(root, worktree.DefaultBase, "WL-654-repeat-install")
-	if out, err := exec.Command("git", "-C", root, "worktree", "add", "-b", "WL-654-repeat-install", dir).CombinedOutput(); err != nil {
-		t.Fatalf("git worktree add: %v\n%s", err, out)
-	}
-	if err := worktree.SetTaskID(dir, "WL-654"); err != nil {
-		t.Fatalf("stamp task id: %v", err)
-	}
+	path := filepath.Join(root, ".claude", "settings.local.json")
 
-	if _, err := (ClaudeCode{}).InstallWithStatusLine(dir, ScopeLocal); err != nil {
+	if _, err := (ClaudeCode{}).InstallWithStatusLine(root, ScopeLocal); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
-	path := filepath.Join(dir, ".claude", "settings.local.json")
 	first, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read after first install: %v", err)
 	}
-
-	if _, err := (ClaudeCode{}).InstallWithStatusLine(dir, ScopeLocal); err != nil {
+	if _, err := (ClaudeCode{}).InstallWithStatusLine(root, ScopeLocal); err != nil {
 		t.Fatalf("second install: %v", err)
 	}
 	second, err := os.ReadFile(path)
@@ -1247,43 +1106,5 @@ func TestInstallWithStatusLineIsByteIdenticalAcrossRepeatInstalls(t *testing.T) 
 	}
 	if string(first) != string(second) {
 		t.Fatalf("install is not byte-identical on repeat:\nfirst:\n%s\nsecond:\n%s", first, second)
-	}
-
-	settings := readSettings(t, path)
-	wantAttrs := "worklode.project.id=worklode,worklode.task.id=WL-654"
-	if got := resourceAttributes(settings); got != wantAttrs {
-		t.Fatalf("OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, wantAttrs)
-	}
-	env := settings["env"].(map[string]any)
-	wantEndpoint := "https://lode.example.com/otlp/v1/logs"
-	if got := env[otelLogsEndpointKey]; got != wantEndpoint {
-		t.Fatalf("%s = %v, want %q", otelLogsEndpointKey, got, wantEndpoint)
-	}
-	if got := settings["otelHeadersHelper"]; got != otelHeadersHelperCommand {
-		t.Fatalf("otelHeadersHelper = %v, want %q", got, otelHeadersHelperCommand)
-	}
-}
-
-// Sec-5: Worklode stores event metadata only, so the install never turns on
-// Claude Code's content flags -- the OTEL_LOG_ family (OTEL_LOG_USER_PROMPTS,
-// OTEL_LOG_ASSISTANT_RESPONSES, OTEL_LOG_TOOL_DETAILS, OTEL_LOG_TOOL_CONTENT,
-// OTEL_LOG_RAW_API_BODIES), each of which would put prompt, response or tool
-// text on the wire. OTEL_LOGS_EXPORTER is a different key and is written.
-func TestInstallHooksWritesNoOTelContentFlags(t *testing.T) {
-	root := initGitRepo(t)
-	t.Setenv("LODE_SERVER", "https://lode.example.com")
-
-	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	settings := readSettings(t, filepath.Join(root, ".claude", "settings.local.json"))
-	env, _ := settings["env"].(map[string]any)
-	for k := range env {
-		if strings.HasPrefix(k, "OTEL_LOG_") {
-			t.Errorf("install wrote env[%s]; the OTEL_LOG_ content flags must never be set", k)
-		}
-	}
-	if got := env["OTEL_LOGS_EXPORTER"]; got != "otlp" {
-		t.Errorf("OTEL_LOGS_EXPORTER = %v, want otlp", got)
 	}
 }
