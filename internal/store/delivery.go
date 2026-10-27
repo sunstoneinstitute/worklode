@@ -108,7 +108,7 @@ func LatestMainID(tx *sql.Tx, repo string) (*int64, error) {
 // main-sha: trailer names; duplicates are no-ops.
 func MapDeploySHA(tx *sql.Tx, repo, sha string, mainID int64) error {
 	_, err := tx.Exec(
-		`INSERT INTO deploy_shas (repo, sha, main_id) VALUES ($1, $2, $3)
+		`INSERT INTO github_deploy_shas (repo, sha, main_id) VALUES ($1, $2, $3)
 		 ON CONFLICT DO NOTHING`, repo, sha, mainID)
 	if err != nil {
 		return fmt.Errorf("map deploy_sha %s %s: %w", repo, sha, err)
@@ -123,7 +123,7 @@ func MainIDForSHA(tx *sql.Tx, repo, sha string) (*int64, error) {
 	err := tx.QueryRow(`SELECT id FROM main_commits WHERE repo = $1 AND sha = $2`,
 		repo, sha).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = tx.QueryRow(`SELECT main_id FROM deploy_shas WHERE repo = $1 AND sha = $2`,
+		err = tx.QueryRow(`SELECT main_id FROM github_deploy_shas WHERE repo = $1 AND sha = $2`,
 			repo, sha).Scan(&id)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
@@ -160,7 +160,7 @@ func MainIDForSHAAnyRepo(tx *sql.Tx, sha string) (string, *int64, error) {
 	err := tx.QueryRow(`SELECT repo, id FROM main_commits WHERE sha = $1 ORDER BY id DESC LIMIT 1`,
 		sha).Scan(&repo, &id)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = tx.QueryRow(`SELECT repo, main_id FROM deploy_shas WHERE sha = $1 ORDER BY main_id DESC LIMIT 1`,
+		err = tx.QueryRow(`SELECT repo, main_id FROM github_deploy_shas WHERE sha = $1 ORDER BY main_id DESC LIMIT 1`,
 			sha).Scan(&repo, &id)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
@@ -283,13 +283,13 @@ func confirmedFrontierFrom(gh, flux sql.NullInt64, fluxSeen bool) *int64 {
 // newer frontier.
 func SetReleaseFrontier(tx *sql.Tx, repo, tag string, mainID int64, publishedAt time.Time) error {
 	_, err := tx.Exec(
-		`INSERT INTO release_frontiers (repo, tag, main_id, published_at)
+		`INSERT INTO github_release_frontiers (repo, tag, main_id, published_at)
 		 VALUES ($1, $2, $3, $4)
 		 ON CONFLICT (repo, tag) DO UPDATE SET
-		   main_id = greatest(release_frontiers.main_id, excluded.main_id),
-		   published_at = CASE WHEN excluded.main_id > release_frontiers.main_id
+		   main_id = greatest(github_release_frontiers.main_id, excluded.main_id),
+		   published_at = CASE WHEN excluded.main_id > github_release_frontiers.main_id
 		                       THEN excluded.published_at
-		                       ELSE release_frontiers.published_at END`,
+		                       ELSE github_release_frontiers.published_at END`,
 		repo, tag, mainID, publishedAt.UTC())
 	if err != nil {
 		return fmt.Errorf("set release frontier %s %s: %w", repo, tag, err)
@@ -410,7 +410,7 @@ func attachReleaseFact(tx *sql.Tx, f *DeliveryFacts, landedID int64) error {
 	var tag string
 	var publishedAt time.Time
 	err := tx.QueryRow(
-		`SELECT tag, published_at FROM release_frontiers
+		`SELECT tag, published_at FROM github_release_frontiers
 		 WHERE repo = $1 AND main_id >= $2 ORDER BY main_id LIMIT 1`,
 		f.Repo, landedID).Scan(&tag, &publishedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -428,7 +428,7 @@ func attachReleaseFact(tx *sql.Tx, f *DeliveryFacts, landedID int64) error {
 // nil if the repo has no releases recorded.
 func ReleaseFrontier(tx *sql.Tx, repo string) (*int64, error) {
 	var id sql.NullInt64
-	err := tx.QueryRow(`SELECT max(main_id) FROM release_frontiers WHERE repo = $1`,
+	err := tx.QueryRow(`SELECT max(main_id) FROM github_release_frontiers WHERE repo = $1`,
 		repo).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("release frontier %s: %w", repo, err)
@@ -450,7 +450,7 @@ type ReleaseFrontierRow struct {
 func (s *Store) AllReleaseFrontiers(ctx context.Context) ([]ReleaseFrontierRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT rf.repo, rf.tag, mc.sha
-		FROM release_frontiers rf JOIN main_commits mc ON mc.id = rf.main_id
+		FROM github_release_frontiers rf JOIN main_commits mc ON mc.id = rf.main_id
 		ORDER BY rf.repo, rf.tag`)
 	if err != nil {
 		return nil, fmt.Errorf("all release frontiers: %w", err)

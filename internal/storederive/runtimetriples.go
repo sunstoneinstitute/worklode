@@ -129,9 +129,9 @@ func CommitTriples(host, repo, sha string) []graphproj.Triple {
 	}
 }
 
-// ReleaseCutFromTriples projects one release_frontiers row joined to its
+// ReleaseCutFromTriples projects one github_release_frontiers row joined to its
 // main_commits sha: the release's git_tag artifact wl:cutFrom the frontier
-// commit (WL-REQ-251 — release_frontiers projects as an edge, not a node;
+// commit (WL-REQ-251 — github_release_frontiers projects as an edge, not a node;
 // the property was spelled wl:covers until WL-REQ-208 took that name for the
 // Plan→Section undertaking). repo is "owner/name" (GitHub full_name); a
 // malformed repo projects nothing.
