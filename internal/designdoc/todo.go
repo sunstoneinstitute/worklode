@@ -378,7 +378,7 @@ func (w *todoWalk) emitSection(docPath string, sec SectionMeta) bool {
 		case "accepted":
 			w.emitAcceptedPlan(docPath, sec, plan)
 		}
-		// A superseded or spent plan is done: the work it covered is done.
+		// A superseded or executed plan is done: the work it covered is done.
 	}
 	return outcome == Unplanned && len(covering) == 0
 }
@@ -556,7 +556,7 @@ func (w *todoWalk) notePlanCycles(planPath string) {
 	}
 }
 
-// planDischarged reports whether a required plan is done: superseded or spent,
+// planDischarged reports whether a required plan is done: superseded or executed,
 // or accepted with a closed execution task. A plan outside the corpus cannot
 // be judged and is not treated as a blocker.
 func (w *todoWalk) planDischarged(planPath string) bool {
@@ -565,7 +565,7 @@ func (w *todoWalk) planDischarged(planPath string) bool {
 		return true
 	}
 	switch d.Status {
-	case "superseded", "spent":
+	case "superseded", "executed":
 		return true
 	case "accepted":
 		return w.executed(w.tasksOf(planPath))

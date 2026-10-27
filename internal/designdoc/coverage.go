@@ -87,7 +87,7 @@ func canonDir(dir, fallback string) string {
 // CoveringPlan is one plan covering a section.
 type CoveringPlan struct {
 	Path   string // repo-relative
-	Status string // "accepted" | "superseded" | "spent" | "draft"
+	Status string // "accepted" | "superseded" | "executed" | "draft"
 }
 
 // claim is one plan's covers edge onto one spec section, resolved once at
@@ -107,11 +107,11 @@ type deferral struct {
 }
 
 // discharges reports whether status is in WL-REQ-187's discharging set:
-// accepted, superseded or spent. A superseded or spent plan is done
+// accepted, superseded or executed. A superseded or executed plan is done
 // (accepted, then executed) and discharges what it covered exactly as an
 // accepted plan does.
 func discharges(status string) bool {
-	return status == "accepted" || status == "superseded" || status == "spent"
+	return status == "accepted" || status == "superseded" || status == "executed"
 }
 
 // sectionKey identifies a spec section by its repo-relative spec path (a

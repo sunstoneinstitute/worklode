@@ -16,7 +16,7 @@ var Schemes = map[string][]string{
 	"ArtifactKind":     {"binary", "docker_image", "git_tag", "pypi"},
 	"DeployTargetKind": {"flux_kustomization", "manual", "pypi_target"},
 	"DeploymentStatus": {"deployed", "failed", "pending", "reconciling"},
-	"DesignDocStatus":  {"accepted", "draft", "spent", "stale", "superseded", "withdrawn"},
+	"DesignDocStatus":  {"accepted", "draft", "executed", "stale", "superseded", "withdrawn"},
 	"EdgeOrigin":       {"declared", "inferred"},
 	"ModelLayer":       {"execution", "intent", "runtime"},
 	"RuleKind":         {"capability", "catalogue", "definition", "informative", "invariant", "principle", "requirement"},
@@ -30,7 +30,7 @@ var TaskKinds = Schemes["TaskKind"]
 
 // DesignDocStatuses mirrors wlc:DesignDocStatus and the docs.status CHECK
 // constraint, in the lifecycle order of wlc:DesignDocStatusOrder.
-var DesignDocStatuses = []string{"draft", "accepted", "stale", "superseded", "withdrawn", "spent"}
+var DesignDocStatuses = []string{"draft", "accepted", "stale", "superseded", "withdrawn", "executed"}
 
 // EdgeTerms is every stored edge type of ns/ontology.ttl, sorted by table
 // then type.
