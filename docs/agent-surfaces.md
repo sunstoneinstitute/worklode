@@ -66,10 +66,10 @@ last checked against; bump the stamp whenever you touch it.
 `lode-hook <event>` and `lode-statusline`. The old subcommand spellings were
 removed with the WL-319 shim cleanup; `lode install` still recognises them in
 existing settings files so upgrades replace pre-split bindings. For Claude
-Code, install also points the OTel log exporter at Worklode (WL-REQ-1726):
-when a server URL resolves, it sets the three `OTEL_*_LOGS_*` env keys and
-Claude Code's top-level `otelHeadersHelper` setting to `lode-hook
-otel-headers`, the credential helper that supplies the bearer token.
+Code, install sets `OTEL_METRICS_INCLUDE_REPOSITORY=true` (WL-REQ-36). The OTel
+exporters, endpoints and headers come from MDM-managed settings; install
+removes the exporter variables, `worklode.*` resource attributes and
+`otelHeadersHelper` that earlier installs wrote.
 
 `lode install` writes the shared Worklode block to
 `.worklode/agent-instructions.md` and adds a plain-language read instruction
