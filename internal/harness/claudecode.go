@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -94,8 +93,7 @@ func (ClaudeCode) InstallHooks(repoDir, scope string) (HookInstall, error) {
 		return HookInstall{}, err
 	}
 	applyGroupedHooks(settings, claudeBindings)
-	projectID, taskID := resolveClaudeTelemetryIDs(repoDir)
-	applyClaudeTelemetry(settings, projectID, taskID, cli.ServerURLFrom(repoDir))
+	applyClaudeTelemetry(settings)
 	if err := writeJSONFile(path, settings); err != nil {
 		return HookInstall{}, err
 	}
@@ -103,9 +101,8 @@ func (ClaudeCode) InstallHooks(repoDir, scope string) (HookInstall, error) {
 }
 
 // UninstallHooks removes Worklode's bindings from the scope's settings file
-// for the repo containing repoDir, plus the telemetry env vars and resource
-// attributes InstallHooks writes -- the same single read-modify-write
-// InstallHooks uses to write them.
+// for the repo containing repoDir, plus the telemetry settings InstallHooks
+// writes -- the same single read-modify-write InstallHooks uses to write them.
 func (ClaudeCode) UninstallHooks(repoDir, scope string) (HookUninstall, error) {
 	path, err := settingsPathForScope(repoDir, scope)
 	if err != nil {
@@ -143,8 +140,7 @@ func (ClaudeCode) InstallWithStatusLine(repoDir, scope string) (HookInstall, err
 	}
 	applyGroupedHooks(settings, claudeBindings)
 	action := applyStatusLine(settings)
-	projectID, taskID := resolveClaudeTelemetryIDs(repoDir)
-	applyClaudeTelemetry(settings, projectID, taskID, cli.ServerURLFrom(repoDir))
+	applyClaudeTelemetry(settings)
 	if err := writeJSONFile(path, settings); err != nil {
 		return HookInstall{}, err
 	}
@@ -254,7 +250,7 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 		return err
 	}
 	// Everything else root sets locally — permissions, enabled plugins, env,
-	// the developer's own hooks, their status line and otelHeadersHelper — is
+	// the developer's own hooks and their status line — is
 	// what an agent in the worktree would otherwise be missing. Copied only
 	// where the worktree is silent, so its own edits survive. That includes
 	// both single-command slots: mirroring the command the developer chose at
@@ -272,8 +268,7 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 	if sl, ok := rootSettings["statusLine"]; ok && isLodeStatusLine(sl) {
 		applyStatusLine(settings)
 	}
-	projectID, taskID := resolveClaudeTelemetryIDs(dir)
-	applyClaudeTelemetry(settings, projectID, taskID, cli.ServerURLFrom(dir))
+	applyClaudeTelemetry(settings)
 	return writeJSONFile(dirPath, settings)
 }
 
@@ -335,50 +330,43 @@ func isLodeStatusLine(v any) bool {
 	return len(fields) > 1 && filepath.Base(fields[0]) == "lode" && fields[1] == "statusline"
 }
 
-// claudeTelemetryEnv is the fixed set of environment variables a Claude Code
-// install writes to turn on OTel-based usage telemetry: metrics go to the
-// local Edge Agent collector at OTEL_EXPORTER_OTLP_ENDPOINT, not lode-server.
-// Log events go to Worklode instead, over the separate keys claudeLogsEnv and
-// applyClaudeTelemetry's serverURL parameter write. The values never vary by
-// project or scope, so there is nothing here for a caller to configure.
+// claudeTelemetryEnv is what a Claude Code install writes into the settings'
+// env block: the vcs.* repository attributes on every metric and event, which
+// is how telemetry is attributed to a repo. The exporters, endpoints and
+// headers arrive through MDM-managed settings, and Claude Code ignores them in
+// project and local settings anyway (v2.1.282). OTEL_RESOURCE_ATTRIBUTES is
+// left alone: managed settings are likely to set it, and a project value
+// would replace theirs.
 var claudeTelemetryEnv = map[string]string{
-	"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
-	"OTEL_METRICS_EXPORTER":        "otlp",
-	"OTEL_EXPORTER_OTLP_PROTOCOL":  "grpc",
-	"OTEL_EXPORTER_OTLP_ENDPOINT":  "http://127.0.0.1:4317",
+	"OTEL_METRICS_INCLUDE_REPOSITORY": "true",
 }
 
-// claudeLogsEnv is the fixed half of the env vars that turn on Claude Code's
-// OTel log exporter and point it at Worklode. The endpoint is the other half
-// -- it varies by server URL, so applyClaudeTelemetry computes and writes it
-// separately, and both apply and strip are written only when a server URL
-// resolves: a logs exporter with no endpoint would spam errors on every
-// export attempt.
-var claudeLogsEnv = map[string]string{
+// legacyTelemetryEnv is what earlier installs wrote into project and local
+// settings and Claude Code now ignores there. Install and uninstall both
+// strip each var while it still holds the value Worklode wrote.
+var legacyTelemetryEnv = map[string]string{
+	"CLAUDE_CODE_ENABLE_TELEMETRY":     "1",
+	"OTEL_METRICS_EXPORTER":            "otlp",
+	"OTEL_EXPORTER_OTLP_PROTOCOL":      "grpc",
+	"OTEL_EXPORTER_OTLP_ENDPOINT":      "http://127.0.0.1:4317",
 	"OTEL_LOGS_EXPORTER":               "otlp",
 	"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/json",
 }
 
-// otelLogsEndpointKey is the env var holding the logs exporter's endpoint;
-// its value is always serverURL + otelLogsPath.
-const otelLogsEndpointKey = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
-
-const otelLogsPath = "/otlp/v1/logs"
-
-// otelHeadersHelperCommand is the value ClaudeCode.InstallHooks writes into
-// Claude Code's top-level otelHeadersHelper setting -- the credential helper
-// Claude Code runs before every OTLP export to get the bearer token for the
-// log exporter, since the token itself never lands in a settings file. Also
-// how uninstall recognizes its own entry.
-const otelHeadersHelperCommand = "lode-hook otel-headers"
-
-// The two OTEL_RESOURCE_ATTRIBUTES keys Worklode owns. Every other key=value
-// entry in that comma-separated string belongs to someone else and is
-// preserved untouched by both apply and strip.
+// legacyLogsEndpointKey held serverURL + legacyLogsPath in earlier installs;
+// the value is Worklode's iff it ends with legacyLogsPath.
 const (
-	resourceProjectKey = "worklode.project.id"
-	resourceTaskKey    = "worklode.task.id"
+	legacyLogsEndpointKey = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
+	legacyLogsPath        = "/otlp/v1/logs"
 )
+
+// legacyResourceKeys are the OTEL_RESOURCE_ATTRIBUTES entries earlier
+// installs stamped. Every other key=value entry belongs to someone else.
+var legacyResourceKeys = []string{"worklode.project.id", "worklode.task.id"}
+
+// otelHeadersHelperCommand is the otelHeadersHelper earlier installs wrote.
+// Install and uninstall remove it while it still holds this value.
+const otelHeadersHelperCommand = "lode-hook otel-headers"
 
 // settingsEnv returns the settings' "env" object, or an empty one when it is
 // absent or not an object -- the same convention settingsHooks uses.
@@ -390,181 +378,97 @@ func settingsEnv(settings map[string]any) map[string]any {
 	return env
 }
 
-// resolveClaudeTelemetryIDs resolves the project and task identity a Claude
-// Code install stamps into OTEL_RESOURCE_ATTRIBUTES. The project comes from
-// local config only -- the same cheap, no-server-round-trip contract
-// CurrentProjectFrom promises internal/hookrun -- and the task comes only
-// from the enclosing worktree's own git-config stamp, never the directory
-// name. A main checkout is never stamped, which is what makes its own
-// install carry no task attribute rather than copying one from wherever the
-// process happens to be invoked.
-func resolveClaudeTelemetryIDs(repoDir string) (projectID, taskID string) {
-	projectID = cli.CurrentProjectFrom(repoDir)
-	if root, ok := worktree.Root(repoDir); ok {
-		taskID, _ = worktree.StampedTaskID(root)
-	}
-	return projectID, taskID
-}
-
-// mergeResourceAttributes merges Worklode's project and task identity into an
-// existing OTEL_RESOURCE_ATTRIBUTES value, keeping every other key=value
-// entry untouched. Entries are sorted so a second install with the same
-// inputs writes the exact same string. An empty id is left out rather than
-// written as "worklode.task.id=" -- that is both how a main checkout's
-// install ends up with no task attribute, and how a strip (called with "",
-// "") removes both keys while leaving the rest alone.
-func mergeResourceAttributes(existing, projectID, taskID string) string {
-	attrs := map[string]string{}
-	for _, part := range strings.Split(existing, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		k, v, ok := strings.Cut(part, "=")
-		if !ok {
-			continue
-		}
-		attrs[strings.TrimSpace(k)] = strings.TrimSpace(v)
-	}
-	delete(attrs, resourceProjectKey)
-	delete(attrs, resourceTaskKey)
-	if projectID != "" {
-		attrs[resourceProjectKey] = projectID
-	}
-	if taskID != "" {
-		attrs[resourceTaskKey] = taskID
-	}
-	if len(attrs) == 0 {
-		return ""
-	}
-	keys := make([]string, 0, len(attrs))
-	for k := range attrs {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, k+"="+attrs[k])
-	}
-	return strings.Join(parts, ",")
-}
-
-// hasResourceKey reports whether an OTEL_RESOURCE_ATTRIBUTES value carries
-// key among its comma-separated key=value entries.
-func hasResourceKey(attrs, key string) bool {
-	for _, part := range strings.Split(attrs, ",") {
-		k, _, ok := strings.Cut(strings.TrimSpace(part), "=")
-		if ok && strings.TrimSpace(k) == key {
-			return true
-		}
-	}
-	return false
-}
-
-// applyClaudeTelemetry sets Worklode's telemetry env vars on an already-read
-// settings object and merges the project/task resource attributes into
-// OTEL_RESOURCE_ATTRIBUTES, preserving every foreign env key and resource
-// attribute. It mutates settings in place and never touches the filesystem --
-// the same contract applyGroupedHooks has, so a caller with more than one
-// surface in the file folds this into its own single read-modify-write.
-//
-// When serverURL is non-empty it also turns on the log exporter (claudeLogsEnv
-// plus the computed endpoint) and points otelHeadersHelper at lode-hook.
-// serverURL == "" writes none of that -- an unresolved server means no place
-// to send logs -- and leaves the metrics keys above as the only telemetry
-// this install turns on.
-func applyClaudeTelemetry(settings map[string]any, projectID, taskID, serverURL string) {
+// applyClaudeTelemetry writes claudeTelemetryEnv into an already-read
+// settings object and strips what earlier installs left behind, preserving
+// every foreign env key and a developer's own otelHeadersHelper. It mutates
+// settings in place and never touches the filesystem, so a caller folds it
+// into its own single read-modify-write.
+func applyClaudeTelemetry(settings map[string]any) {
+	stripTelemetryEnv(settings, false)
+	stripOTelHeadersHelper(settings)
 	env := settingsEnv(settings)
 	for k, v := range claudeTelemetryEnv {
 		env[k] = v
 	}
-	existing, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string)
-	if merged := mergeResourceAttributes(existing, projectID, taskID); merged != "" {
-		env["OTEL_RESOURCE_ATTRIBUTES"] = merged
-	} else {
-		delete(env, "OTEL_RESOURCE_ATTRIBUTES")
-	}
-	if serverURL != "" {
-		for k, v := range claudeLogsEnv {
-			env[k] = v
-		}
-		env[otelLogsEndpointKey] = serverURL + otelLogsPath
-		applyOTelHeadersHelper(settings)
-	}
 	settings["env"] = env
 }
 
-// applyOTelHeadersHelper points Claude Code's otelHeadersHelper setting at
-// lode-hook, mirroring applyStatusLine's rule for its own single-command
-// slot: claim it only when it is empty or already Worklode's, so a developer's
-// own helper is never overwritten.
-func applyOTelHeadersHelper(settings map[string]any) {
-	if existing, ok := settings["otelHeadersHelper"]; ok && existing != otelHeadersHelperCommand {
-		return
-	}
-	settings["otelHeadersHelper"] = otelHeadersHelperCommand
-}
-
-// stripClaudeTelemetry removes Worklode's telemetry env vars from an
-// already-read settings object, but only the exact vars and only where they
-// still hold Worklode's own values -- a developer who repointed one elsewhere
-// keeps their own value. The logs endpoint is checked by suffix rather than
-// exact match, since its value carries the server URL: it is Worklode's iff
-// it ends with otelLogsPath. It always drops the two worklode.* resource
-// attributes it owns when present, and the otelHeadersHelper entry when it is
-// still lode-hook's, preserving every other env key, resource attribute and
-// foreign helper. Returns ActionRemoved or ActionNone, stripGroupedHooks'
-// vocabulary, so a caller with more than one surface can OR the results
-// together to decide whether to write.
+// stripClaudeTelemetry removes everything applyClaudeTelemetry and earlier
+// installs wrote, but only where it still holds Worklode's value, plus
+// otelHeadersHelper while it is still lode-hook's. Returns ActionRemoved or
+// ActionNone, stripGroupedHooks' vocabulary, so a caller with more than one
+// surface can OR the results together to decide whether to write.
 func stripClaudeTelemetry(settings map[string]any) (action string) {
-	changed := false
-
-	if env, ok := settings["env"].(map[string]any); ok {
-		before := len(env)
-		for k, want := range claudeTelemetryEnv {
-			if got, ok := env[k].(string); ok && got == want {
-				delete(env, k)
-				changed = true
-			}
-		}
-		for k, want := range claudeLogsEnv {
-			if got, ok := env[k].(string); ok && got == want {
-				delete(env, k)
-				changed = true
-			}
-		}
-		if got, ok := env[otelLogsEndpointKey].(string); ok && strings.HasSuffix(got, otelLogsPath) {
-			delete(env, otelLogsEndpointKey)
-			changed = true
-		}
-		if existing, ok := env["OTEL_RESOURCE_ATTRIBUTES"].(string); ok {
-			if hasResourceKey(existing, resourceProjectKey) || hasResourceKey(existing, resourceTaskKey) {
-				changed = true
-				if merged := mergeResourceAttributes(existing, "", ""); merged == "" {
-					delete(env, "OTEL_RESOURCE_ATTRIBUTES")
-				} else {
-					env["OTEL_RESOURCE_ATTRIBUTES"] = merged
-				}
-			}
-		}
-		// Only an env this strip emptied goes away. A settings file that
-		// already carried "env": {} keeps it, since an uninstall writing for
-		// some other reason must not drop a key it did not touch.
-		if len(env) == 0 && before > 0 {
-			delete(settings, "env")
-		} else {
-			settings["env"] = env
-		}
-	}
-
+	changed := stripTelemetryEnv(settings, true)
 	if stripOTelHeadersHelper(settings) {
 		changed = true
 	}
-
 	if !changed {
 		return ActionNone
 	}
 	return ActionRemoved
+}
+
+// stripTelemetryEnv deletes what earlier installs wrote into env -- each
+// legacyTelemetryEnv var still holding Worklode's value, the logs endpoint
+// and the legacyResourceKeys -- and, when current is set, the
+// claudeTelemetryEnv vars too. Only an env this strip emptied goes away: a
+// settings file that already carried "env": {} keeps it.
+func stripTelemetryEnv(settings map[string]any, current bool) bool {
+	env, ok := settings["env"].(map[string]any)
+	if !ok {
+		return false
+	}
+	before := len(env)
+	changed := false
+	drop := func(vars map[string]string) {
+		for k, want := range vars {
+			if got, ok := env[k].(string); ok && got == want {
+				delete(env, k)
+				changed = true
+			}
+		}
+	}
+	drop(legacyTelemetryEnv)
+	if current {
+		drop(claudeTelemetryEnv)
+	}
+	if got, ok := env[legacyLogsEndpointKey].(string); ok && strings.HasSuffix(got, legacyLogsPath) {
+		delete(env, legacyLogsEndpointKey)
+		changed = true
+	}
+	if attrs, ok := env["OTEL_RESOURCE_ATTRIBUTES"].(string); ok {
+		if kept, removed := dropResourceKeys(attrs, legacyResourceKeys); removed {
+			changed = true
+			if kept == "" {
+				delete(env, "OTEL_RESOURCE_ATTRIBUTES")
+			} else {
+				env["OTEL_RESOURCE_ATTRIBUTES"] = kept
+			}
+		}
+	}
+	if len(env) == 0 && before > 0 {
+		delete(settings, "env")
+	}
+	return changed
+}
+
+// dropResourceKeys removes keys from a comma-separated key=value
+// OTEL_RESOURCE_ATTRIBUTES value, keeping every other entry in order, and
+// reports whether it removed any.
+func dropResourceKeys(attrs string, keys []string) (kept string, removed bool) {
+	var parts []string
+	for _, part := range strings.Split(attrs, ",") {
+		k, _, _ := strings.Cut(strings.TrimSpace(part), "=")
+		if slices.Contains(keys, strings.TrimSpace(k)) {
+			removed = true
+			continue
+		}
+		if strings.TrimSpace(part) != "" {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, ","), removed
 }
 
 // stripOTelHeadersHelper removes settings' otelHeadersHelper entry, but only
