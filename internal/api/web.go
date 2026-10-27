@@ -747,7 +747,7 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
 	f := docFilterFrom(r)
 	// The page's own default: with no status chosen, withdrawn, superseded
-	// and spent documents are hidden; ?status=all shows them (12 S5).
+	// and executed documents are hidden; ?status=all shows them (WL-REQ-1664).
 	f.HideTerminal = !r.URL.Query().Has("status")
 	docs, err := s.st.ListDocs(r.Context(), f)
 	if err != nil {

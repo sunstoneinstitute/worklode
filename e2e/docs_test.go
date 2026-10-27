@@ -481,7 +481,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 
 	// 1. Both plans, in the order a numbered series is actually written:
 	// alpha, then beta declaring `blockedBy: [plan-alpha]`. The later plan
-	// names the earlier one, so an accepted and spent plan is never amended
+	// names the earlier one, so an accepted and executed plan is never amended
 	// to state the ordering (WL-REQ-164).
 	alpha, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
 		Project: "plans", Kind: "plan", Slug: "plan-alpha",

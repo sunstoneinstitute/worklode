@@ -69,7 +69,7 @@ func TestRallyMembers(t *testing.T) {
 		},
 		want: Members{},
 	}, {
-		name: "a superseded plan is spent, open task or not",
+		name: "a superseded plan is executed, open task or not",
 		spec: model.ProgressSpec{
 			Sections: covered,
 			Plans: []model.ProgressPlan{rallyPlan("P-PLAN-4", 4, "superseded", "built",

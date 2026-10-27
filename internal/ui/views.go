@@ -888,7 +888,7 @@ func docStatusChip(status string) string {
 		return "plain"
 	case "withdrawn":
 		return "crit"
-	case "spent":
+	case "executed":
 		return "declared"
 	default:
 		return "info"

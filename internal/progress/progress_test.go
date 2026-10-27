@@ -18,8 +18,8 @@ func TestPlanState(t *testing.T) {
 		want         string
 	}{
 		{"draft", "draft", []Task{landed}, "draft"},
-		{"superseded is spent", "superseded", nil, "built"},
-		{"spent is built", "spent", []Task{landed, unstarted}, "built"},
+		{"superseded is built", "superseded", nil, "built"},
+		{"executed is built", "executed", []Task{landed, unstarted}, "built"},
 		{"accepted, all landed", "accepted", []Task{landed, landed}, "built"},
 		{"accepted, one unstarted", "accepted", []Task{landed, unstarted}, "in_progress"},
 		{"accepted, active only", "accepted", []Task{active}, "in_progress"},

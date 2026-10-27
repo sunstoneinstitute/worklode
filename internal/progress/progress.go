@@ -63,7 +63,7 @@ type Plan struct {
 	Doc      int64
 	Ref      string
 	Title    string
-	Status   string // draft | accepted | stale | withdrawn | superseded | spent
+	Status   string // draft | accepted | stale | withdrawn | superseded | executed
 	Owner    string // WL-REQ-1783: the only actor who may accept it
 	Covers   []Cover
 	Requires []string
@@ -128,8 +128,8 @@ func PlanState(status string, tasks []Task) string {
 	switch status {
 	case "draft":
 		return "draft"
-	case "superseded", "spent":
-		return "built" // WL-REQ-186; spent is increment 3 R4's finished plan
+	case "superseded", "executed":
+		return "built" // WL-REQ-186; executed is increment 3 R4's finished plan
 	}
 	var landed, active, unstarted int
 	for _, t := range tasks {

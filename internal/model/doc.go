@@ -607,7 +607,7 @@ type DocListParams struct {
 	// (WL-REQ-171). The server answers it with one EXISTS; nothing here
 	// filters a listing client-side.
 	HasNotes bool `query:"has_notes,omitempty"`
-	// HideTerminal hides withdrawn, superseded and spent documents (12 S5).
+	// HideTerminal hides withdrawn, superseded and executed documents (WL-REQ-1664).
 	// Only `lode doc list` with no --status sets it; every other caller
 	// needs the whole corpus.
 	HideTerminal bool `query:"hide_terminal,omitempty"`

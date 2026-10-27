@@ -260,7 +260,7 @@ func replaceExternalCover(tx *sql.Tx, edgeID, fromDoc int64, rules []int64) erro
 // CapabilityCovered reports whether a capability rule is covered
 // (WL-REQ-1642): at least one live requirement or catalogue refines it,
 // directly or through other refiners, and every one of them is covered by an
-// accepted, superseded or spent plan. A capability nothing builds is not covered.
+// accepted, superseded or executed plan. A capability nothing builds is not covered.
 func (s *Store) CapabilityCovered(ctx context.Context, ruleID int64) (bool, error) {
 	var covered bool
 	err := s.db.QueryRowContext(ctx,
@@ -279,7 +279,7 @@ func (s *Store) CapabilityCovered(ctx context.Context, ruleID int64) (bool, erro
 		     SELECT 1 FROM builder b
 		      WHERE NOT EXISTS (SELECT 1 FROM covered_rules c JOIN docs d ON d.id = c.plan_id
 		                         WHERE c.rule_id = b.id AND d.deleted_at IS NULL
-		                           AND d.status IN ('accepted', 'superseded', 'spent')))`,
+		                           AND d.status IN ('accepted', 'superseded', 'executed')))`,
 		ruleID).Scan(&covered)
 	if err != nil {
 		return false, fmt.Errorf("coverage of capability %d: %w", ruleID, err)

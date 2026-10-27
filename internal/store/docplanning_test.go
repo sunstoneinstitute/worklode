@@ -968,7 +968,7 @@ func TestDocNeedsPlanningDraftPlanDeferralIgnored(t *testing.T) {
 
 // TestDocNeedsPlanningSupersededPlanDeferralCounts: the deferring set is
 // accepted or superseded, never draft (WL-RULE-202) — a superseded plan's
-// deferral stands, being spent does not deliver a handoff the plan never
+// deferral stands, being executed does not deliver a handoff the plan never
 // made.
 func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
 	t.Parallel()
@@ -1058,14 +1058,14 @@ func TestDocNeedsExecutionDraftPlanOmitted(t *testing.T) {
 }
 
 // TestDocNeedsExecutionUnmintedAcceptedPlanOmitted: the only accepted plans
-// with no task set are the importer's spent plans, which are not pending work
+// with no task set are the importer's executed plans, which are not pending work
 // — the deliberate departure from WL-REQ-182's "unminted or unfinished".
 func TestDocNeedsExecutionUnmintedAcceptedPlanOmitted(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "spent-plan", Status: "accepted", CreatedBy: "stig",
-		Body: "---\nstatus: accepted\n---\n\n# A spent plan\n\nAll done long ago.\n",
+		Project: "p1", Kind: "plan", Slug: "executed-plan", Status: "accepted", CreatedBy: "stig",
+		Body: "---\nstatus: accepted\n---\n\n# A executed plan\n\nAll done long ago.\n",
 	})
 
 	if got := needsExecutionSlugs(t, s, "p1"); len(got) != 0 {

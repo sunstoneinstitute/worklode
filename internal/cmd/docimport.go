@@ -90,7 +90,7 @@ func newDocImportCmd() *cobra.Command {
 
 Walks <docs>/specs/*.md and <docs>/plans/*.md — the top level of each, never a
 subdirectory — and creates one document per file, keeping the frontmatter's
-status verbatim. A plan with no status is imported accepted: the corpus's spent
+status verbatim. A plan with no status is imported accepted: the corpus's executed
 plans predate the status key, and importing them as draft would list shipped
 work as pending review. Importing an accepted plan does not mint tasks, because
 the import states the status directly instead of going through the accept gate.

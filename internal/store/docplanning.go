@@ -384,7 +384,7 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 //
 // A covers edge means the plan builds the whole rule, so a section is planned
 // when some accepted or superseded plan covers it and no draft plan also
-// does. A superseded plan is spent (accepted, then executed) and discharges
+// does. A superseded plan is done (accepted, then executed) and discharges
 // what it covered. A covers edge runs from the plan to a rule and claims
 // every section arranging the rule or a rule superseding it (the
 // covered_sections view, WL-REQ-165). Only a section whose rule is a
@@ -401,7 +401,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 	rows, err := s.db.QueryContext(ctx,
 		`WITH cov AS (
 		     SELECT cs.doc_id, cs.anchor,
-		            bool_or(p.status IN ('accepted','superseded','spent')) AS discharging,
+		            bool_or(p.status IN ('accepted','superseded','executed')) AS discharging,
 		            bool_or(p.status = 'draft')                           AS draft
 		       FROM covered_sections cs
 		       JOIN docs p ON p.id = cs.plan_id
@@ -420,7 +420,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		       LEFT JOIN projects op ON op.id = o.project_id
 		      WHERE e.type = 'defers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
-		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded','spent')
+		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded','executed')
 		        AND p.deleted_at IS NULL
 		      GROUP BY e.to_doc, e.to_anchor
 		 )
@@ -482,7 +482,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 //
 // This departs from WL-REQ-182's "unminted or unfinished" deliberately, as the
 // 2026-08-03 plan-acceptance plan records: the accepted plans with no task set
-// at all are the importer's *spent* plans, which must not be reported as
+// at all are the importer's *executed* plans, which must not be reported as
 // pending work. The ordering need WL-REQ-182's "unminted" arm served is covered by
 // the plan-to-plan blocks predicate (planBlockedCondition).
 //

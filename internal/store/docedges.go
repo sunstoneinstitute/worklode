@@ -47,7 +47,7 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id int64, edges []model.DocEdgeInp
 // (bumpDocVersion) and writes doc_edges; a draft spec or ADR writes doc_edges
 // in place; an accepted one writes its candidate revision's edge set, opening
 // a candidate authored by actor when none is open. A superseded, withdrawn or
-// spent document is ErrInvalidInput, and an edge it already holds is
+// executed document is ErrInvalidInput, and an edge it already holds is
 // ErrEdgeExists.
 func LinkDocEdge(tx *sql.Tx, now time.Time, docID int64, in model.DocEdgeInput, actor string, eventID int64) error {
 	return changeDocEdge(tx, now, docID, in, actor, eventID, true)
@@ -70,7 +70,7 @@ func changeDocEdge(tx *sql.Tx, now time.Time, docID int64, in model.DocEdgeInput
 	}
 	candidate := false
 	switch {
-	case d.status == "superseded" || d.status == "withdrawn" || d.status == "spent":
+	case d.status == "superseded" || d.status == "withdrawn" || d.status == "executed":
 		return fmt.Errorf("doc %d is %s: its edges no longer change: %w", docID, d.status, ErrInvalidInput)
 	case d.kind == "plan":
 		if _, err := bumpDocVersion(tx, docID, "edit"); err != nil {
@@ -714,7 +714,7 @@ func repointCovers(tx *sql.Tx, project string, edgeID, fromDoc int64, ref string
 //
 // Plan ordering is `blockedBy`, written by the later plan: a numbered plan
 // series is authored forward, so part 3 knows it follows part 2 while part 2
-// may be accepted and spent by then (WL-REQ-169).
+// may be accepted and executed by then (WL-REQ-169).
 //
 // covers reads the retired `implements` spelling too (WL-RULE-202).
 //
