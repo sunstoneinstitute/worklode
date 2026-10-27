@@ -130,7 +130,7 @@ func DefaultSubjectRevision(tx *sql.Tx, kind, entityID string) (string, error) {
 	case "task":
 		query = `SELECT 1 FROM tasks WHERE id = $1`
 	case "pr":
-		query = `SELECT 1 FROM pull_requests WHERE ` + prEntityIDSQL + ` = $1`
+		query = `SELECT 1 FROM github_pull_requests WHERE ` + prEntityIDSQL + ` = $1`
 	default:
 		return "", fmt.Errorf("%w: entity_kind %q is not one of %v",
 			ErrInvalidInput, kind, model.ApprovalEntityKinds)
@@ -696,7 +696,7 @@ const prEntityIDSQL = `repo || '#' || number`
 func prAuthorForEntity(tx *sql.Tx, entityID string) (string, error) {
 	var author string
 	err := tx.QueryRow(
-		`SELECT coalesce(author, '') FROM pull_requests WHERE `+prEntityIDSQL+` = $1`,
+		`SELECT coalesce(author, '') FROM github_pull_requests WHERE `+prEntityIDSQL+` = $1`,
 		entityID).Scan(&author)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
@@ -798,7 +798,7 @@ func projectForApproval(tx *sql.Tx, kind, entityID string) (string, error) {
 	var query string
 	switch kind {
 	case "pr":
-		query = `SELECT coalesce(t.project_id, '') FROM pull_requests p
+		query = `SELECT coalesce(t.project_id, '') FROM github_pull_requests p
 		           JOIN tasks t ON t.id = p.task_id
 		          WHERE p.repo || '#' || p.number = $1`
 	case "doc":
@@ -909,7 +909,7 @@ func (s *Store) GetApproval(ctx context.Context, id int64) (*Approval, error) {
 //
 // Every join is on a primary key (or pull_requests' unique repo+number), so
 // no branch can fan a single approvals row out into several queue rows.
-const approvalEntityJoins = `LEFT JOIN pull_requests pr
+const approvalEntityJoins = `LEFT JOIN github_pull_requests pr
 		ON a.entity_kind = 'pr' AND a.entity_id = pr.repo || '#' || pr.number
 	LEFT JOIN tasks t ON t.id = pr.task_id
 	LEFT JOIN docs d ON a.entity_kind = 'doc' AND a.entity_id = 'doc:' || d.id
@@ -1163,7 +1163,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 		`SELECT EXISTS (
 			-- WL-REQ-1769 bucket 1: reviews assigned to the actor
 			SELECT 1 FROM approvals a
-			 LEFT JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
+			 LEFT JOIN github_pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
 			   AND a.required_actor = $1
 			   AND (pr.state IS NULL OR pr.state = 'open')
@@ -1172,7 +1172,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 
 			-- WL-REQ-1769 bucket 2: unassigned reviews in a project the actor leads
 			SELECT 1 FROM approvals a
-			 JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
+			 JOIN github_pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
 			 JOIN tasks t ON t.id = pr.task_id
 			 JOIN project_participants pp
 			   ON pp.project_id = t.project_id AND pp.actor_id = $1 AND pp.is_lead
@@ -1185,7 +1185,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 			-- WL-REQ-1769 bucket 3: reviews the actor owns -- they authored the PR
 			-- and somebody else is the required reviewer
 			SELECT 1 FROM approvals a
-			 JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
+			 JOIN github_pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
 			 JOIN actors act ON act.id = $1
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
 			   AND pr.author IS NOT NULL AND act.github_username IS NOT NULL

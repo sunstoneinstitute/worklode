@@ -313,7 +313,7 @@ func TestUpsertPRUpdateKeepsTaskID(t *testing.T) {
 	}
 }
 
-// TestUpsertPRNonRegressing covers the guard on pull_requests.updated_at: a
+// TestUpsertPRNonRegressing covers the guard on github_pull_requests.updated_at: a
 // delivery carrying an older updated_at must not overwrite newer facts, which
 // is how a replayed pull_request.opened used to regress a merged PR (WL-198).
 func TestUpsertPRNonRegressing(t *testing.T) {
@@ -417,7 +417,7 @@ func TestUpsertPRLegacyNullTimestampYields(t *testing.T) {
 	}
 }
 
-// TestUpsertCIRunNonRegressing covers the guard on ci_runs.updated_at: a
+// TestUpsertCIRunNonRegressing covers the guard on github_ci_runs.updated_at: a
 // stale in_progress delivery must not regress a completed run.
 func TestUpsertCIRunNonRegressing(t *testing.T) {
 	t.Parallel()
@@ -644,7 +644,7 @@ func TestUpsertCIRunIdempotent(t *testing.T) {
 	}
 
 	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ci_runs`).Scan(&count); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM github_ci_runs`).Scan(&count); err != nil {
 		t.Fatalf("count ci_runs: %v", err)
 	}
 	if count != 1 {
@@ -662,7 +662,7 @@ func TestUpsertCIRunIdempotent(t *testing.T) {
 		t.Fatalf("third UpsertCIRun (conclusion update): %v", err)
 	}
 	var gotConclusion sql.NullString
-	if err := s.db.QueryRow(`SELECT conclusion FROM ci_runs`).Scan(&gotConclusion); err != nil {
+	if err := s.db.QueryRow(`SELECT conclusion FROM github_ci_runs`).Scan(&gotConclusion); err != nil {
 		t.Fatalf("read conclusion: %v", err)
 	}
 	if !gotConclusion.Valid || gotConclusion.String != "success" {
@@ -687,7 +687,7 @@ func TestUpsertReviewIdempotent(t *testing.T) {
 		t.Fatalf("second UpsertReview (redelivery): %v", err)
 	}
 	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM reviews`).Scan(&count); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM github_reviews`).Scan(&count); err != nil {
 		t.Fatalf("count reviews: %v", err)
 	}
 	if count != 1 {
@@ -701,7 +701,7 @@ func TestUpsertReviewIdempotent(t *testing.T) {
 	if err := upsertReview(t, s, rv2); err != nil {
 		t.Fatalf("UpsertReview second reviewer: %v", err)
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM reviews`).Scan(&count); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM github_reviews`).Scan(&count); err != nil {
 		t.Fatalf("count reviews: %v", err)
 	}
 	if count != 2 {
