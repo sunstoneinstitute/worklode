@@ -34,7 +34,7 @@ active or unstarted.
 | Plan state | Condition |
 |---|---|
 | `draft` | document status `draft` |
-| `built` | status `superseded` or `spent`, or `accepted` with at least one task and every task landed |
+| `built` | status `superseded` or `executed`, or `accepted` with at least one task and every task landed |
 | `in_progress` | `accepted`, at least one task landed or active, at least one not landed |
 | `not_started` | `accepted`, tasks minted, none landed and none active |
 | `no_record` | `accepted` and no minted task |

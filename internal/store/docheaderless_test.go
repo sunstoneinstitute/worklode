@@ -305,8 +305,8 @@ func TestLinkRefusesInverse(t *testing.T) {
 			t.Errorf("link %s = %v, want ErrInvalidInput", typ, err)
 		}
 	}
-	setDocStatus(t, s, plan.ID, "spent")
+	setDocStatus(t, s, plan.ID, "executed")
 	if err := linkDocEdge(t, s, plan.ID, model.DocEdgeInput{Type: "wasDerivedFrom", To: "x"}); !errors.Is(err, ErrInvalidInput) {
-		t.Errorf("link on a spent plan = %v, want ErrInvalidInput", err)
+		t.Errorf("link on a executed plan = %v, want ErrInvalidInput", err)
 	}
 }

@@ -147,7 +147,7 @@ func (s *Store) StalePlanRef(ctx context.Context, planDoc int64) (string, error)
 // (WL-REQ-170), as a SQL boolean over a `docs` row aliased `d`. A plan counts as
 // executed when any task minted from it ever held a lease — active or expired,
 // since the fact that matters is that execution happened at all, not whether
-// it is still in progress. A spec counts as executed when an accepted or spent
+// it is still in progress. A spec counts as executed when an accepted or executed
 // plan covers one of its sections: a rule it arranges, or a successor of one,
 // is reached by the plan's covers edges (the covered_sections view).
 //
@@ -164,7 +164,7 @@ const docHasExecution = `CASE d.kind
 	            SELECT 1 FROM covered_sections cs
 	              JOIN docs p ON p.id = cs.plan_id
 	             WHERE cs.doc_id = d.id
-	               AND p.status IN ('accepted', 'spent'))
+	               AND p.status IN ('accepted', 'executed'))
 	        END`
 
 // StaleCandidate is one accepted spec or plan with the WL-REQ-170 clock facts.

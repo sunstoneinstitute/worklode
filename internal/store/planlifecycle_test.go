@@ -2,15 +2,17 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
+	"strconv"
 	"testing"
 )
 
 // abandon transitions a task straight to abandoned from whatever state it
 // currently holds, through RecordEvent — the closing move every test in this
 // file uses to make a plan's last minted task close.
-func abandon(t *testing.T, s *Store, taskID string) {
+func abandon(t *testing.T, s *Store, taskID string) int64 {
 	t.Helper()
-	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.transition", nil,
+	ev, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.transition", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			from, err := TaskState(tx, taskID)
 			if err != nil {
@@ -21,6 +23,7 @@ func abandon(t *testing.T, s *Store, taskID string) {
 	if err != nil {
 		t.Fatalf("abandon %s: %v", taskID, err)
 	}
+	return ev
 }
 
 // setRuleStatus runs SetRuleStatus through RecordEvent, the way a caller
@@ -34,10 +37,10 @@ func setRuleStatus(t *testing.T, s *Store, ruleID int64, status string) error {
 	return err
 }
 
-// TestPlanSpentWhenLastTaskCloses: closing the last open task minted by a
-// plan flips the plan to spent and governs any ungoverned task from the
-// plan's arrangement (S5, increment 3 R4).
-func TestPlanSpentWhenLastTaskCloses(t *testing.T) {
+// TestPlanExecutedWhenLastTaskCloses: closing the last open task minted by a
+// plan flips the plan to executed and governs any ungoverned task from the
+// plan's arrangement (WL-REQ-1664).
+func TestPlanExecutedWhenLastTaskCloses(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
@@ -53,10 +56,18 @@ func TestPlanSpentWhenLastTaskCloses(t *testing.T) {
 	if d, _ := s.GetDoc(t.Context(), plan.ID); d.Status != "accepted" {
 		t.Fatalf("one task still open: plan should stay accepted, got %s", d.Status)
 	}
-	abandon(t, s, tasks[1].ID)
+	closeEvent := abandon(t, s, tasks[1].ID)
 	d, err := s.GetDoc(t.Context(), plan.ID)
-	if err != nil || d.Status != "spent" {
-		t.Fatalf("last task closed: plan should be spent, got %s %v", d.Status, err)
+	if err != nil || d.Status != "executed" {
+		t.Fatalf("last task closed: plan should be executed, got %s %v", d.Status, err)
+	}
+	// This path mints no event of its own: the status change reuses the
+	// closing task's event.
+	var logEvent int64
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT event_id FROM state_log WHERE entity_kind = $1 AND entity_id = $2 AND change->>'new' = 'executed'`,
+		docEntityKind, strconv.FormatInt(plan.ID, 10)).Scan(&logEvent); err != nil || logEvent != closeEvent {
+		t.Fatalf("state_log event = %d, %v; want the closing task's event %d", logEvent, err, closeEvent)
 	}
 	gov, err := s.GovernedBy(t.Context(), tasks[1].ID)
 	if err != nil || len(gov) == 0 {
@@ -121,7 +132,7 @@ func TestWithdrawnRuleMakesPlansStale(t *testing.T) {
 	}
 }
 
-// TestListDocsHidesTerminalPlans: withdrawn and spent plans, and withdrawn or
+// TestListDocsHidesTerminalPlans: withdrawn and executed plans, and withdrawn or
 // superseded documents of other kinds, are hidden only when HideTerminal asks
 // for it and no Status is named (S5, R6). The zero
 // filter sees them, because callers such as the corpus importer's slug lookup
@@ -193,10 +204,10 @@ func TestDeleteLastInProgressTaskLeavesPlanAccepted(t *testing.T) {
 	}
 }
 
-// TestPlanNeverSpentWithNoLiveTasks: a plan whose every minted task was
-// soft-deleted never becomes spent, even when both deletes run through the
+// TestPlanNeverExecutedWithNoLiveTasks: a plan whose every minted task was
+// soft-deleted never becomes executed, even when both deletes run through the
 // in_progress rollup that calls settlePlan (C1 fix review, increment 3).
-func TestPlanNeverSpentWithNoLiveTasks(t *testing.T) {
+func TestPlanNeverExecutedWithNoLiveTasks(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
@@ -216,14 +227,14 @@ func TestPlanNeverSpentWithNoLiveTasks(t *testing.T) {
 	}
 	d, err := s.GetDoc(t.Context(), plan.ID)
 	if err != nil || d.Status != "accepted" {
-		t.Fatalf("plan with every task deleted should stay accepted, not spent, got %s %v", d.Status, err)
+		t.Fatalf("plan with every task deleted should stay accepted, not executed, got %s %v", d.Status, err)
 	}
 }
 
-// TestSpentPlanStillCounts: a spent plan is a finished accepted plan. Its
+// TestExecutedPlanStillCounts: a executed plan is a finished accepted plan. Its
 // spec's covered section stays planned, the spec stays executed, and the
 // WL-REQ-170 sweeper does not pick the plan up (final review C2, increment 3).
-func TestSpentPlanStillCounts(t *testing.T) {
+func TestExecutedPlanStillCounts(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	if _, _, err := acceptDoc(t, s, spec.ID, "stig"); err != nil {
@@ -237,8 +248,8 @@ func TestSpentPlanStillCounts(t *testing.T) {
 	for _, task := range tasks {
 		abandon(t, s, task.ID)
 	}
-	if d, _ := s.GetDoc(t.Context(), plan.ID); d.Status != "spent" {
-		t.Fatalf("plan status = %s, want spent", d.Status)
+	if d, _ := s.GetDoc(t.Context(), plan.ID); d.Status != "executed" {
+		t.Fatalf("plan status = %s, want executed", d.Status)
 	}
 
 	_, gaps, err := s.NeedsPlanning(t.Context(), "p1")
@@ -248,7 +259,7 @@ func TestSpentPlanStillCounts(t *testing.T) {
 	for _, g := range gaps {
 		for _, sec := range g.Gaps {
 			if g.Doc == spec.ID && sec.Anchor == "sec-1" {
-				t.Errorf("sec-1 covered by a spent plan reported as needing planning: %+v", g)
+				t.Errorf("sec-1 covered by a executed plan reported as needing planning: %+v", g)
 			}
 		}
 	}
@@ -258,19 +269,19 @@ func TestSpentPlanStillCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := candidateByID(cands, plan.ID); ok {
-		t.Errorf("spent plan %d is a stale candidate", plan.ID)
+		t.Errorf("executed plan %d is a stale candidate", plan.ID)
 	}
 	specC, ok := candidateByID(cands, spec.ID)
 	if !ok || !specC.HasExecution {
-		t.Errorf("spec covered by a spent plan: candidate %v, HasExecution %v, want true", ok, specC.HasExecution)
+		t.Errorf("spec covered by a executed plan: candidate %v, HasExecution %v, want true", ok, specC.HasExecution)
 	}
 }
 
-// TestDeleteLastOpenReadyTaskSpendsPlan: deleting a plan's last open task
+// TestDeleteLastOpenReadyTaskExecutesPlan: deleting a plan's last open task
 // while it is ready still settles the plan, because DeleteTask runs
 // settlePlan itself rather than only through the in_progress rollback
 // (final review M1, increment 3).
-func TestDeleteLastOpenReadyTaskSpendsPlan(t *testing.T) {
+func TestDeleteLastOpenReadyTaskExecutesPlan(t *testing.T) {
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
 	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "pl", Body: governedPlanBody, CreatedBy: "stig"})
@@ -283,13 +294,13 @@ func TestDeleteLastOpenReadyTaskSpendsPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	d, err := s.GetDoc(t.Context(), plan.ID)
-	if err != nil || d.Status != "spent" {
-		t.Fatalf("last open task deleted while ready: plan should be spent, got %s %v", d.Status, err)
+	if err != nil || d.Status != "executed" {
+		t.Fatalf("last open task deleted while ready: plan should be executed, got %s %v", d.Status, err)
 	}
 }
 
 // TestSettleFinishedPlans: a plan whose minted tasks all closed before the
-// settle hook saw them (here: forced back to stale by hand) is spent by the
+// settle hook saw them (here: forced back to stale by hand) is executed by the
 // sweeper pass, once, and a plan with an open task is left alone.
 func TestSettleFinishedPlans(t *testing.T) {
 	s := openDocStore(t)
@@ -311,15 +322,69 @@ func TestSettleFinishedPlans(t *testing.T) {
 
 	n, err := s.SettleFinishedPlans(t.Context())
 	if err != nil || n != 1 {
-		t.Fatalf("SettleFinishedPlans = %d, %v; want 1 spent", n, err)
+		t.Fatalf("SettleFinishedPlans = %d, %v; want 1 executed", n, err)
 	}
-	if d, _ := s.GetDoc(t.Context(), finished.ID); d.Status != "spent" {
-		t.Fatalf("finished plan should be spent, got %s", d.Status)
+	if d, _ := s.GetDoc(t.Context(), finished.ID); d.Status != "executed" {
+		t.Fatalf("finished plan should be executed, got %s", d.Status)
 	}
 	if d, _ := s.GetDoc(t.Context(), live.ID); d.Status != "accepted" {
 		t.Fatalf("plan with open tasks should stay accepted, got %s", d.Status)
 	}
 	if n, err := s.SettleFinishedPlans(t.Context()); err != nil || n != 0 {
-		t.Fatalf("second pass = %d, %v; want nothing to spend", n, err)
+		t.Fatalf("second pass = %d, %v; want nothing to execute", n, err)
+	}
+	source := "doc.executed:" + finished.Slug + ":" + strconv.Itoa(finished.Version)
+	var events int
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM events WHERE type = 'doc.executed' AND external_id = $1`, source).Scan(&events); err != nil || events != 1 {
+		t.Fatalf("doc.executed events under %s = %d, %v; want 1", source, events, err)
+	}
+}
+
+// TestUpgradeKeepsSpentProvenance: events and state_log rows written before the
+// rename keep saying spent. Neither the sweeper nor ListDocs touches them
+// (WL-REQ-1664).
+func TestUpgradeKeepsSpentProvenance(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
+	plan := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "old", Body: governedPlanBody, CreatedBy: "stig"})
+	setDocStatus(t, s, plan.ID, "executed")
+	ctx := t.Context()
+	extID := "doc.spent:" + plan.Slug + ":" + strconv.Itoa(plan.Version)
+	var eventID int64
+	if err := s.db.QueryRowContext(ctx,
+		`INSERT INTO events (source, external_id, type, payload, received_at)
+		 VALUES ($1, $2, 'doc.spent', '{}', now()) RETURNING id`, staleEventSource, extID).Scan(&eventID); err != nil {
+		t.Fatal(err)
+	}
+	const change = `{"field":"status","old":"accepted","new":"spent"}`
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO state_log (entity_kind, entity_id, change, event_id, at) VALUES ($1, $2, $3, $4, now())`,
+		docEntityKind, strconv.FormatInt(plan.ID, 10), change, eventID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SettleFinishedPlans(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ListDocs(ctx, DocFilter{Project: "p1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var typ string
+	if err := s.db.QueryRowContext(ctx, `SELECT type FROM events WHERE id = $1`, eventID).Scan(&typ); err != nil || typ != "doc.spent" {
+		t.Errorf("event type = %q, %v; want doc.spent", typ, err)
+	}
+	var got map[string]string
+	var raw []byte
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT change FROM state_log WHERE event_id = $1 AND entity_id = $2`, eventID, strconv.FormatInt(plan.ID, 10)).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &got); err != nil || got["new"] != "spent" || got["old"] != "accepted" || got["field"] != "status" {
+		t.Errorf("state_log change = %s, %v; want %s", raw, err, change)
+	}
+	if d, err := s.GetDoc(ctx, plan.ID); err != nil || d.Status != "executed" {
+		t.Errorf("status = %v, %v; want executed", d, err)
 	}
 }

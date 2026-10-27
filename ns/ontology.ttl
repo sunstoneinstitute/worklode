@@ -85,7 +85,7 @@ wl:Plan a owl:Class ;
     wl:layer wlc:execution ;
     rdfs:comment """An executable document: a bundle of task definitions with instructions
         attached, minted as tasks when it is accepted (WL-SPEC-77). Reviewable and accept-gated
-        like a DesignDoc, but spent by execution rather than superseded, freely mutable, and
+        like a DesignDoc, but executed rather than superseded, freely mutable, and
         taking no wl:Section parts and no frozen anchors — the section lock that protects a
         spec would be harmful here, so nothing may pin a claim to a plan (WL-SPEC-77). A sibling
         of wl:DesignDoc, never a subclass: WL-SPEC-77 reintroduced plans as documents on that

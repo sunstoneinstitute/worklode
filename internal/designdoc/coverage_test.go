@@ -78,13 +78,13 @@ func TestSectionSuperseded_DischargesFull(t *testing.T) {
 		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "superseded"}})
 }
 
-// A spent plan discharges like a superseded one.
+// A executed plan discharges like a superseded one.
 func TestSectionSpent_DischargesFull(t *testing.T) {
 	ix := buildIndex(t, map[string]string{
-		"a.md": "---\nstatus: spent\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
+		"a.md": "---\nstatus: executed\ncovers: " + specSec1 + "#sec-1\n---\n# A\n\nBody.\n",
 	})
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Planned,
-		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "spent"}})
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "executed"}})
 }
 
 func TestSectionUnplanned_EmptyCorpus(t *testing.T) {
