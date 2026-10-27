@@ -159,7 +159,7 @@ func TestEnvironmentAndCommitTriples(t *testing.T) {
 	}
 }
 
-// AC8, first half: a release_frontiers row projects as wl:cutFrom (spelled
+// AC8, first half: a github_release_frontiers row projects as wl:cutFrom (spelled
 // wl:covers until WL-REQ-208 took that name) from the git_tag artifact to the
 // frontier commit.
 func TestReleaseCutFromTriples(t *testing.T) {

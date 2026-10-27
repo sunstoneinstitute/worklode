@@ -243,7 +243,7 @@ func TestPushLastDeployMapsShas(t *testing.T) {
 		`SELECT id FROM main_commits WHERE repo = $1 AND sha = $2`,
 		demoRepo, "3333333333333333333333333333333333333333")
 	got := e.rawQueryInt(t,
-		`SELECT main_id FROM deploy_shas WHERE repo = $1 AND sha = $2`,
+		`SELECT main_id FROM github_deploy_shas WHERE repo = $1 AND sha = $2`,
 		demoRepo, "5555555555555555555555555555555555555555")
 	if got != mainID {
 		t.Fatalf("deploy_sha main_id = %d, want %d", got, mainID)
