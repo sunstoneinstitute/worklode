@@ -97,6 +97,11 @@ describe("DateCell", () => {
     expect(screen.getByRole("button")).toHaveTextContent("Sep 15, 2026")
   })
 
+  it("shows a calendar icon after the date", () => {
+    const { container } = render(<DateCell value="2026-09-15" onChange={vi.fn()} />)
+    expect(container.querySelector("button i")).toHaveAttribute("aria-hidden", "true")
+  })
+
   it("opens a calendar when clicked", async () => {
     const user = userEvent.setup()
     render(<DateCell value="2026-09-15" onChange={vi.fn()} />)

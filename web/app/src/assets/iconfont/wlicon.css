@@ -1,8 +1,8 @@
 @font-face {
     font-family: "wlicon";
-    src: url("./wlicon.woff2?dc83ef032213e8531cd5fb0394fbe8ea") format("woff2"),
-url("./wlicon.woff?dc83ef032213e8531cd5fb0394fbe8ea") format("woff"),
-url("./wlicon.ttf?dc83ef032213e8531cd5fb0394fbe8ea") format("truetype");
+    src: url("./wlicon.woff2?a9695c96f6af549e10a8a1308e089ced") format("woff2"),
+url("./wlicon.woff?a9695c96f6af549e10a8a1308e089ced") format("woff"),
+url("./wlicon.ttf?a9695c96f6af549e10a8a1308e089ced") format("truetype");
 }
 
 i[class^="wlicon-"]:before, i[class*=" wlicon-"]:before {
@@ -112,9 +112,12 @@ i[class^="wlicon-"]:before, i[class*=" wlicon-"]:before {
 .wlicon-check:before {
     content: "\f120";
 }
-.wlicon-arrow-forward:before {
+.wlicon-calendar-month:before {
     content: "\f121";
 }
-.wlicon-add:before {
+.wlicon-arrow-forward:before {
     content: "\f122";
+}
+.wlicon-add:before {
+    content: "\f123";
 }
