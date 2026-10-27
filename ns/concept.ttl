@@ -40,13 +40,13 @@ wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLab
     skos:definition "Every rule the document contains is withdrawn; rule supersession is dct:replaces between rules." .
 wlc:withdrawn a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "withdrawn" ;
     skos:definition "An accepted document closed without a successor." .
-wlc:spent a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "spent" ;
-    skos:definition "A plan whose every minted task has closed (12 S5)." .
+wlc:executed a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "executed" ;
+    skos:definition "A plan whose every minted task has closed (WL-REQ-1664)." .
 
 # The order is data, so "is X before Y" is queryable. RDF still does not enforce
 # legal transitions; those rules live with the authoring skill (WL-SPEC-80).
 wlc:DesignDocStatusOrder a skos:OrderedCollection ;
-    skos:memberList ( wlc:draft wlc:accepted wlc:stale wlc:superseded wlc:withdrawn wlc:spent ) .
+    skos:memberList ( wlc:draft wlc:accepted wlc:stale wlc:superseded wlc:withdrawn wlc:executed ) .
 
 
 # ---------------------------------------------------------------------------
