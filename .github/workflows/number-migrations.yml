@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: number-migrations
@@ -33,12 +34,28 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
+      # The queue landing a PR also sends `dequeued`, after the branch is
+      # deleted on merge: there is nothing left to check out or number.
+      - name: skip a merged PR
+        id: open
+        if: github.event.action == 'dequeued'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          state=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state --jq .state)
+          if [ "$state" != OPEN ]; then
+            echo "PR is $state; nothing to number."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.open.outputs.skip != 'true'
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           persist-credentials: false
       - name: find NEW migrations
         id: new
+        if: steps.open.outputs.skip != 'true'
         env:
           ACTION: ${{ github.event.action }}
         run: |
