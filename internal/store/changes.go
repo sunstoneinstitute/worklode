@@ -198,7 +198,7 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, bool, erro
 	}
 
 	result, err := tx.Exec(
-		`INSERT INTO pull_requests (repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at, author)
+		`INSERT INTO github_pull_requests (repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at, author)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, nullif($13, ''))
 		 ON CONFLICT (repo, number) DO UPDATE SET
 		   title = excluded.title,
@@ -208,9 +208,9 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, bool, erro
 		   url = excluded.url,
 		   merged_at = excluded.merged_at,
 		   updated_at = excluded.updated_at,
-		   author = coalesce(excluded.author, pull_requests.author),
-		   task_id = CASE WHEN pull_requests.task_id IS NULL THEN excluded.task_id ELSE pull_requests.task_id END
-		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(pull_requests.updated_at, '-infinity')`,
+		   author = coalesce(excluded.author, github_pull_requests.author),
+		   task_id = CASE WHEN github_pull_requests.task_id IS NULL THEN excluded.task_id ELSE github_pull_requests.task_id END
+		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(github_pull_requests.updated_at, '-infinity')`,
 		pr.Repo, pr.Number, pr.Title, pr.State, taskIDArg, pr.HeadRef, pr.HeadSHA, mergeSHA, pr.URL, openedAt, mergedAt, updatedAt, pr.Author,
 	)
 	if err != nil {
@@ -234,7 +234,7 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, bool, erro
 // ExistingPRNumbers returns the pull-request numbers already stored for repo.
 // See ExistingIssueNumbers for why import needs it.
 func ExistingPRNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
-	rows, err := tx.Query(`SELECT number FROM pull_requests WHERE repo = $1`, repo)
+	rows, err := tx.Query(`SELECT number FROM github_pull_requests WHERE repo = $1`, repo)
 	if err != nil {
 		return nil, fmt.Errorf("existing pr numbers for %s: %w", repo, err)
 	}
@@ -297,7 +297,7 @@ func scanPR(row rowScanner) (*PullRequest, error) {
 // GetPRTx is GetPR inside an open transaction: the GitHub review ingest
 // reads the PR it is about to act on within the delivery's own transaction.
 func GetPRTx(tx *sql.Tx, repo string, number int64) (*PullRequest, error) {
-	row := tx.QueryRow(`SELECT `+prColumns+` FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number)
+	row := tx.QueryRow(`SELECT `+prColumns+` FROM github_pull_requests WHERE repo = $1 AND number = $2`, repo, number)
 	pr, err := scanPR(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("PR %s#%d: %w", repo, number, ErrNotFound)
@@ -311,7 +311,7 @@ func GetPRTx(tx *sql.Tx, repo string, number int64) (*PullRequest, error) {
 // GetPR looks up a pull request by repo and number. Returns ErrNotFound if
 // it does not exist.
 func (s *Store) GetPR(ctx context.Context, repo string, number int64) (*PullRequest, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT `+prColumns+` FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number)
+	row := s.db.QueryRowContext(ctx, `SELECT `+prColumns+` FROM github_pull_requests WHERE repo = $1 AND number = $2`, repo, number)
 	pr, err := scanPR(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("PR %s#%d: %w", repo, number, ErrNotFound)
@@ -343,7 +343,7 @@ type PRRef struct {
 // PRsForTask reads one task's PRs for display and applies neither filter.
 func (s *Store) TaskPRs(ctx context.Context) ([]PRRef, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo, number, task_id FROM pull_requests
+		`SELECT repo, number, task_id FROM github_pull_requests
 		 WHERE task_id IS NOT NULL AND state IN ('open', 'merged')
 		 ORDER BY repo, number`)
 	if err != nil {
@@ -360,7 +360,7 @@ func (s *Store) TaskPRs(ctx context.Context) ([]PRRef, error) {
 // repo then number.
 func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+prColumns+` FROM pull_requests WHERE task_id = $1 ORDER BY repo, number`, taskID)
+		`SELECT `+prColumns+` FROM github_pull_requests WHERE task_id = $1 ORDER BY repo, number`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("PRs for task %s: %w", taskID, err)
 	}
@@ -375,7 +375,7 @@ func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, e
 // that is or became the task's delivery, not every attempt.
 func (s *Store) OpenPRsForProject(ctx context.Context, projectID string) ([]PullRequest, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+prColumns+` FROM pull_requests
+		`SELECT `+prColumns+` FROM github_pull_requests
 		 WHERE state IN ('open', 'merged')
 		   AND task_id IN (SELECT id FROM tasks WHERE project_id = $1)
 		 ORDER BY updated_at DESC`, projectID)
@@ -398,7 +398,7 @@ func (s *Store) OpenPRsForProject(ctx context.Context, projectID string) ([]Pull
 func PRTaskID(tx *sql.Tx, repo string, number int64) (string, error) {
 	var taskID sql.NullString
 	err := tx.QueryRow(
-		`SELECT task_id FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number,
+		`SELECT task_id FROM github_pull_requests WHERE repo = $1 AND number = $2`, repo, number,
 	).Scan(&taskID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
@@ -420,7 +420,7 @@ func TaskIDForRef(tx *sql.Tx, ref string) (string, error) {
 	return id, nil
 }
 
-// SetPRQueued sets or clears pull_requests.queued_at (WL-REQ-1340): a
+// SetPRQueued sets or clears github_pull_requests.queued_at (WL-REQ-1340): a
 // non-nil at marks the PR as entering the merge queue, nil marks it as
 // having left (merged, or removed from the queue). Unlike UpsertPR this
 // carries no non-regression guard — queue membership is a fact this store
@@ -431,7 +431,7 @@ func SetPRQueued(tx *sql.Tx, repo string, number int64, at *time.Time) error {
 		queuedAt = sql.NullTime{Time: at.UTC(), Valid: true}
 	}
 	_, err := tx.Exec(
-		`UPDATE pull_requests SET queued_at = $1 WHERE repo = $2 AND number = $3`,
+		`UPDATE github_pull_requests SET queued_at = $1 WHERE repo = $2 AND number = $3`,
 		queuedAt, repo, number,
 	)
 	if err != nil {
@@ -545,7 +545,7 @@ func scanCIRun(r rowScanner) (CIRun, error) {
 // first.
 func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+ciRunColumns+` FROM ci_runs WHERE repo = $1 AND head_sha = $2 ORDER BY started_at, id`,
+		`SELECT `+ciRunColumns+` FROM github_ci_runs WHERE repo = $1 AND head_sha = $2 ORDER BY started_at, id`,
 		repo, headSHA)
 	if err != nil {
 		return nil, fmt.Errorf("ci runs for %s %s: %w", repo, headSHA, err)
@@ -570,7 +570,7 @@ func (s *Store) CIRunsForSHAs(ctx context.Context, keys []RepoSHA) (map[RepoSHA]
 	}
 	repos, shas := splitRepoSHAs(keys)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+ciRunColumns+` FROM ci_runs
+		`SELECT `+ciRunColumns+` FROM github_ci_runs
 		 WHERE (repo, head_sha) IN (SELECT * FROM unnest($1::text[], $2::text[]))
 		 ORDER BY repo, head_sha, started_at, id`,
 		repos, shas)
@@ -668,7 +668,7 @@ func UpsertCIRun(tx *sql.Tx, r CIRun) error {
 		updatedAt = sql.NullTime{Time: r.UpdatedAt.UTC(), Valid: true}
 	}
 	_, err := tx.Exec(
-		`INSERT INTO ci_runs (repo, head_sha, workflow, status, conclusion, url, started_at, completed_at, updated_at)
+		`INSERT INTO github_ci_runs (repo, head_sha, workflow, status, conclusion, url, started_at, completed_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (repo, head_sha, workflow, started_at) DO UPDATE SET
 		   status = excluded.status,
@@ -676,7 +676,7 @@ func UpsertCIRun(tx *sql.Tx, r CIRun) error {
 		   url = excluded.url,
 		   completed_at = excluded.completed_at,
 		   updated_at = excluded.updated_at
-		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(ci_runs.updated_at, '-infinity')`,
+		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(github_ci_runs.updated_at, '-infinity')`,
 		r.Repo, r.HeadSHA, r.Workflow, r.Status, conclusion, r.URL,
 		r.StartedAt.UTC(), completedAt, updatedAt,
 	)

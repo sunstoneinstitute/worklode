@@ -99,7 +99,7 @@ type PollCandidate struct {
 func (s *Store) PollCandidates(ctx context.Context, repo, task string, since *time.Time) ([]PollCandidate, error) {
 	q := `SELECT DISTINCT t.id, t.state, x.repo
 	      FROM tasks t
-	      JOIN (SELECT task_id, repo FROM pull_requests WHERE task_id IS NOT NULL
+	      JOIN (SELECT task_id, repo FROM github_pull_requests WHERE task_id IS NOT NULL
 	            UNION
 	            SELECT task_id, repo FROM task_commits) x ON x.task_id = t.id
 	      WHERE t.deleted_at IS NULL

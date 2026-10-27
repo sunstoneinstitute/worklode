@@ -171,7 +171,7 @@ func TestDecideApprovalBySessionResolves(t *testing.T) {
 
 // TestDecideApprovalRefusesSelfApproval checks WL-REQ-124's default refusal:
 // the PR's own author cannot decide their change, matched on the actor's
-// github_username against pull_requests.author. The second half is
+// github_username against github_pull_requests.author. The second half is
 // what keeps this from passing for the wrong reason — the same row is
 // decidable by somebody else.
 func TestDecideApprovalRefusesSelfApproval(t *testing.T) {

@@ -505,7 +505,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 // trailing "pr-<digits>-<hex>" segment instead of splitting on "/".
 var mergeGroupHeadRef = regexp.MustCompile(`/pr-(\d+)-[0-9a-f]+$`)
 
-// applyMergeGroup sets or clears pull_requests.queued_at for the PR named in
+// applyMergeGroup sets or clears github_pull_requests.queued_at for the PR named in
 // the merge_group's head_ref (WL-REQ-1340): checks_requested marks the PR
 // queued as of now, destroyed clears it. action is caller-guaranteed to be
 // one of those two (applyFunc filters). A head_ref that does not match the

@@ -27,14 +27,14 @@ func UpsertIssue(tx *sql.Tx, is model.Issue, updatedAt time.Time) error {
 		updated = sql.NullTime{Time: updatedAt.UTC(), Valid: true}
 	}
 	_, err := tx.Exec(
-		`INSERT INTO issues (repo, number, title, state, url, updated_at)
+		`INSERT INTO github_issues (repo, number, title, state, url, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (repo, number) DO UPDATE SET
 		   title = excluded.title,
 		   state = excluded.state,
 		   url = excluded.url,
 		   updated_at = excluded.updated_at
-		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(issues.updated_at, '-infinity')`,
+		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(github_issues.updated_at, '-infinity')`,
 		is.Repo, is.Number, is.Title, is.State, is.URL, updated,
 	)
 	if err != nil {
@@ -48,7 +48,7 @@ func UpsertIssue(tx *sql.Tx, is model.Issue, updatedAt time.Time) error {
 // from updated ones — the upsert itself cannot distinguish the two, and a
 // dry run must report the same split without writing.
 func ExistingIssueNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
-	rows, err := tx.Query(`SELECT number FROM issues WHERE repo = $1`, repo)
+	rows, err := tx.Query(`SELECT number FROM github_issues WHERE repo = $1`, repo)
 	if err != nil {
 		return nil, fmt.Errorf("existing issue numbers for %s: %w", repo, err)
 	}
@@ -87,7 +87,7 @@ func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskI
 		return nil, fmt.Errorf("marshal applies_to_versions: %w", err)
 	}
 	res, err := tx.Exec(
-		`UPDATE issues SET triage_state = 'promoted', task_id = $1, applies_to_versions = $2
+		`UPDATE github_issues SET triage_state = 'promoted', task_id = $1, applies_to_versions = $2
 		 WHERE repo = $3 AND number = $4 AND triage_state = 'new'`,
 		task.ID, string(versionsJSON), repo, number,
 	)
@@ -119,7 +119,7 @@ func LinkIssue(tx *sql.Tx, repo string, number int64, taskID string) error {
 	}
 
 	res, err := tx.Exec(
-		`UPDATE issues SET triage_state = 'promoted', task_id = $1
+		`UPDATE github_issues SET triage_state = 'promoted', task_id = $1
 		 WHERE repo = $2 AND number = $3 AND triage_state = 'new'`,
 		taskID, repo, number,
 	)
@@ -137,7 +137,7 @@ func DismissIssue(tx *sql.Tx, repo string, number int64) error {
 		return err
 	}
 	res, err := tx.Exec(
-		`UPDATE issues SET triage_state = 'dismissed'
+		`UPDATE github_issues SET triage_state = 'dismissed'
 		 WHERE repo = $1 AND number = $2 AND triage_state = 'new'`,
 		repo, number,
 	)
@@ -154,7 +154,7 @@ func DismissIssue(tx *sql.Tx, repo string, number int64) error {
 func requireNewIssue(tx *sql.Tx, repo string, number int64) error {
 	var triageState string
 	err := tx.QueryRow(
-		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
+		`SELECT triage_state FROM github_issues WHERE repo = $1 AND number = $2`, repo, number,
 	).Scan(&triageState)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
@@ -192,7 +192,7 @@ func requireTriaged(res sql.Result, repo string, number int64) error {
 func IssueTitle(tx *sql.Tx, repo string, number int64) (string, error) {
 	var title sql.NullString
 	err := tx.QueryRow(
-		`SELECT title FROM issues WHERE repo = $1 AND number = $2`, repo, number,
+		`SELECT title FROM github_issues WHERE repo = $1 AND number = $2`, repo, number,
 	).Scan(&title)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
@@ -229,7 +229,7 @@ func scanIssue(row rowScanner) (*model.Issue, error) {
 func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) ([]model.Issue, error) {
 	q := `SELECT i.repo, i.number, i.title, i.state, i.triage_state, i.task_id,
 	             i.applies_to_versions, i.url
-	      FROM issues i`
+	      FROM github_issues i`
 	var args []any
 	var where []string
 	if projectID != "" {
@@ -256,7 +256,7 @@ func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) (
 // empty triageState counts them all. It is ListIssues' length without the
 // rows, for the read paths that only render a count.
 func (s *Store) CountIssues(ctx context.Context, triageState string) (int, error) {
-	q := `SELECT count(*) FROM issues`
+	q := `SELECT count(*) FROM github_issues`
 	var args []any
 	if triageState != "" {
 		args = append(args, triageState)
