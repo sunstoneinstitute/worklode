@@ -18,7 +18,7 @@ var wantTables = []string{
 	"issues",
 	"pull_requests",
 	"ci_runs",
-	"reviews",
+	"github_reviews",
 	"artifacts",
 	"deployments",
 	"runtime_events",

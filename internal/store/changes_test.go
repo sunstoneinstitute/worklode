@@ -687,7 +687,7 @@ func TestUpsertReviewIdempotent(t *testing.T) {
 		t.Fatalf("second UpsertReview (redelivery): %v", err)
 	}
 	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM reviews`).Scan(&count); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM github_reviews`).Scan(&count); err != nil {
 		t.Fatalf("count reviews: %v", err)
 	}
 	if count != 1 {
@@ -701,7 +701,7 @@ func TestUpsertReviewIdempotent(t *testing.T) {
 	if err := upsertReview(t, s, rv2); err != nil {
 		t.Fatalf("UpsertReview second reviewer: %v", err)
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM reviews`).Scan(&count); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM github_reviews`).Scan(&count); err != nil {
 		t.Fatalf("count reviews: %v", err)
 	}
 	if count != 2 {

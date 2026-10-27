@@ -280,15 +280,15 @@ func TestDependsOnMigrationRoundTrip(t *testing.T) {
 		return n == 1
 	}
 
-	migrateSteps(t, s, -1)
+	migrateTo(t, s, 119)
 	insertEdgeRaw(t, s, a.ID, b.ID, "blocks")
-	migrateSteps(t, s, 1)
+	migrateTo(t, s, 120)
 	if !edge(b.ID, a.ID, "dependsOn") || edge(a.ID, b.ID, "blocks") {
 		t.Fatalf("after up: want only %s dependsOn %s", b.ID, a.ID)
 	}
-	migrateSteps(t, s, -1)
+	migrateTo(t, s, 119)
 	if !edge(a.ID, b.ID, "blocks") || edge(b.ID, a.ID, "dependsOn") {
 		t.Fatalf("after down: want only %s blocks %s", a.ID, b.ID)
 	}
-	migrateSteps(t, s, 1)
+	migrateTo(t, s, 0)
 }

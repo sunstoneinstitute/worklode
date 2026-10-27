@@ -608,7 +608,7 @@ func scanReview(r rowScanner) (Review, error) {
 func (s *Store) ReviewsForPR(ctx context.Context, repo string, prNumber int64) ([]Review, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT repo, pr_number, reviewer, state, submitted_at
-		 FROM reviews WHERE repo = $1 AND pr_number = $2 ORDER BY submitted_at, id`,
+		 FROM github_reviews WHERE repo = $1 AND pr_number = $2 ORDER BY submitted_at, id`,
 		repo, prNumber)
 	if err != nil {
 		return nil, fmt.Errorf("reviews for %s#%d: %w", repo, prNumber, err)
@@ -636,7 +636,7 @@ func (s *Store) ReviewsForPRs(ctx context.Context, keys []RepoPR) (map[RepoPR][]
 		numbers = append(numbers, k.Number)
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo, pr_number, reviewer, state, submitted_at FROM reviews
+		`SELECT repo, pr_number, reviewer, state, submitted_at FROM github_reviews
 		 WHERE (repo, pr_number) IN (SELECT * FROM unnest($1::text[], $2::bigint[]))
 		 ORDER BY repo, pr_number, submitted_at, id`,
 		repos, numbers)
@@ -694,7 +694,7 @@ func UpsertCIRun(tx *sql.Tx, r CIRun) error {
 // its state cannot differ between two deliveries of it.
 func UpsertReview(tx *sql.Tx, rv Review) error {
 	_, err := tx.Exec(
-		`INSERT INTO reviews (repo, pr_number, reviewer, state, submitted_at)
+		`INSERT INTO github_reviews (repo, pr_number, reviewer, state, submitted_at)
 		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (repo, pr_number, reviewer, submitted_at) DO UPDATE SET
 		   state = excluded.state`,
