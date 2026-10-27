@@ -56,7 +56,7 @@ func TestReplayAppliesIgnoredEventsAfterMapping(t *testing.T) {
 	if res.Candidates != 1 || res.Replayed != 1 || res.StillUnmapped != 0 {
 		t.Fatalf("replay result = %+v; want 1 candidate, 1 replayed", res)
 	}
-	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues WHERE repo = 'sunstoneinstitute/demo' AND number = 7`); n != 1 {
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_issues WHERE repo = 'sunstoneinstitute/demo' AND number = 7`); n != 1 {
 		t.Fatalf("issue rows after replay = %d, want 1", n)
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM events WHERE external_id = 'd-1' AND applied_at IS NOT NULL`); n != 1 {
@@ -202,7 +202,7 @@ func assertPR42Merged(t *testing.T, e *env, when, wantUpdated string) {
 	var mergeSHA sql.NullString
 	var mergedAt, updatedAt sql.NullTime
 	if !e.rawQueryRow(t, []any{&state, &mergeSHA, &mergedAt, &updatedAt},
-		`SELECT state, merge_sha, merged_at, updated_at FROM pull_requests
+		`SELECT state, merge_sha, merged_at, updated_at FROM github_pull_requests
 		 WHERE repo = $1 AND number = 42`, demoRepo) {
 		t.Fatalf("%s: no pull_requests row for %s#42", when, demoRepo)
 	}
@@ -240,7 +240,7 @@ func TestReplayDryRunWritesNothing(t *testing.T) {
 	if !res.DryRun || res.Candidates != 1 || res.Replayed != 1 {
 		t.Fatalf("dry-run result = %+v; want 1 would-replay", res)
 	}
-	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 0 {
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_issues`); n != 0 {
 		t.Fatalf("dry-run wrote %d issue rows, want 0", n)
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM events WHERE applied_at IS NOT NULL`); n != 0 {

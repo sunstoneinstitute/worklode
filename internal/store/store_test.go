@@ -15,10 +15,10 @@ var wantTables = []string{
 	"tasks",
 	"task_edges",
 	"leases",
-	"issues",
-	"pull_requests",
-	"ci_runs",
-	"reviews",
+	"github_issues",
+	"github_pull_requests",
+	"github_ci_runs",
+	"github_reviews",
 	"artifacts",
 	"deployments",
 	"runtime_events",
@@ -90,8 +90,8 @@ func TestMigrateRoundTrip(t *testing.T) {
 // 0069's down migration must clear before DELETE FROM tasks: a dependsOn edge
 // (task_edges), a lease (leases), a document it authored
 // (docs.generated_by_task), a note raised against it (doc_notes.task_id), a
-// promoted issue and PR pointing at it (issues.task_id,
-// pull_requests.task_id), and a decisions row attached to it
+// promoted issue and PR pointing at it (github_issues.task_id,
+// github_pull_requests.task_id), and a decisions row attached to it
 // (decisions.task_id). Every one of these is a non-CASCADE foreign key onto
 // tasks(id), so any one left populated fails the whole MigrateDown.
 //
@@ -135,12 +135,12 @@ func TestMigrateRoundTripWithLiveRally(t *testing.T) {
 		t.Fatalf("insert doc note raised by the rally: %v", err)
 	}
 	if _, err := s.db.ExecContext(t.Context(),
-		`INSERT INTO issues (repo, number, task_id) VALUES ('horndb/repo', 1, $1)`,
+		`INSERT INTO github_issues (repo, number, task_id) VALUES ('horndb/repo', 1, $1)`,
 		rally.ID); err != nil {
 		t.Fatalf("insert issue promoted to the rally: %v", err)
 	}
 	if _, err := s.db.ExecContext(t.Context(),
-		`INSERT INTO pull_requests (repo, number, state, task_id) VALUES ('horndb/repo', 1, 'open', $1)`,
+		`INSERT INTO github_pull_requests (repo, number, state, task_id) VALUES ('horndb/repo', 1, 'open', $1)`,
 		rally.ID); err != nil {
 		t.Fatalf("insert PR linked to the rally: %v", err)
 	}

@@ -19,7 +19,7 @@ func checkAuthoringReviewable(tx *sql.Tx, taskID string) error {
 	var stuck bool
 	err := tx.QueryRow(
 		`SELECT t.kind = 'design'
-		    AND NOT EXISTS (SELECT 1 FROM pull_requests p
+		    AND NOT EXISTS (SELECT 1 FROM github_pull_requests p
 		                    WHERE p.task_id = t.id AND p.state IN ('open', 'merged'))
 		    AND NOT EXISTS (SELECT 1 FROM events e
 		                    WHERE e.type = $2

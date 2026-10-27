@@ -358,14 +358,14 @@ func TestFailedApplyKeepsDeliveryForReplay(t *testing.T) {
 	e := newEnvWithMetrics(t, m)
 	db := e.st.DBForTests()
 
-	if _, err := db.Exec(`ALTER TABLE issues RENAME TO issues_hidden`); err != nil {
+	if _, err := db.Exec(`ALTER TABLE github_issues RENAME TO issues_hidden`); err != nil {
 		t.Fatalf("hide issues table: %v", err)
 	}
 	rr := deliver(t, e.h, "issues", "d-fail", "issues_opened.json")
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("delivery with broken apply: code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if _, err := db.Exec(`ALTER TABLE issues_hidden RENAME TO issues`); err != nil {
+	if _, err := db.Exec(`ALTER TABLE issues_hidden RENAME TO github_issues`); err != nil {
 		t.Fatalf("restore issues table: %v", err)
 	}
 
@@ -384,7 +384,7 @@ func TestFailedApplyKeepsDeliveryForReplay(t *testing.T) {
 	if res.Candidates != 1 || res.Replayed != 1 {
 		t.Fatalf("replay result = %+v; want 1 candidate, 1 replayed", res)
 	}
-	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 1 {
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_issues`); n != 1 {
 		t.Fatalf("issue rows after replay = %d, want 1", n)
 	}
 	if n := e.rawQueryInt(t,
@@ -397,7 +397,7 @@ func TestFailedApplyKeepsDeliveryForReplay(t *testing.T) {
 	if rr.Code != http.StatusOK || ackStatus(t, rr) != "duplicate" {
 		t.Fatalf("redelivery after replay: code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 1 {
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_issues`); n != 1 {
 		t.Fatalf("issue rows after redelivery = %d, want 1", n)
 	}
 }
@@ -409,14 +409,14 @@ func TestFailedApplyRepairedByRedelivery(t *testing.T) {
 	e := newEnv(t)
 	db := e.st.DBForTests()
 
-	if _, err := db.Exec(`ALTER TABLE issues RENAME TO issues_hidden`); err != nil {
+	if _, err := db.Exec(`ALTER TABLE github_issues RENAME TO issues_hidden`); err != nil {
 		t.Fatalf("hide issues table: %v", err)
 	}
 	rr := deliver(t, e.h, "issues", "d-retry", "issues_opened.json")
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("delivery with broken apply: code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if _, err := db.Exec(`ALTER TABLE issues_hidden RENAME TO issues`); err != nil {
+	if _, err := db.Exec(`ALTER TABLE issues_hidden RENAME TO github_issues`); err != nil {
 		t.Fatalf("restore issues table: %v", err)
 	}
 
@@ -424,7 +424,7 @@ func TestFailedApplyRepairedByRedelivery(t *testing.T) {
 	if rr.Code != http.StatusOK || ackStatus(t, rr) != "duplicate" {
 		t.Fatalf("redelivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 1 {
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_issues`); n != 1 {
 		t.Fatalf("issue rows after redelivery = %d, want 1 (apply must re-run)", n)
 	}
 	if n := e.rawQueryInt(t,
@@ -449,7 +449,7 @@ func TestIdempotency(t *testing.T) {
 	if n := e.eventCount(t); n != 1 {
 		t.Fatalf("event rows = %d, want 1", n)
 	}
-	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 1 {
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_issues`); n != 1 {
 		t.Fatalf("issue rows = %d, want 1", n)
 	}
 }
@@ -1020,7 +1020,7 @@ func TestUnmappedRepoIgnored(t *testing.T) {
 	if typ := e.eventType(t, "d-1"); typ != "issues.opened.ignored" {
 		t.Fatalf("event type = %q, want issues.opened.ignored", typ)
 	}
-	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 0 {
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_issues`); n != 0 {
 		t.Fatalf("issue rows = %d, want 0", n)
 	}
 }
@@ -1150,8 +1150,8 @@ func TestPROpenedMaterializesAwaitingApproval(t *testing.T) {
 	}
 	// The PR author is what the self-approval check compares against.
 	if author := e.rawQueryString(t,
-		`SELECT author FROM pull_requests WHERE repo = $1 AND number = 42`, demoRepo); author != "alice" {
-		t.Errorf("pull_requests.author = %q, want alice", author)
+		`SELECT author FROM github_pull_requests WHERE repo = $1 AND number = 42`, demoRepo); author != "alice" {
+		t.Errorf("github_pull_requests.author = %q, want alice", author)
 	}
 
 	deliverOK(t, e, "pull_request", "d-appr-2", "pull_request_opened.json")
@@ -1507,12 +1507,12 @@ func TestDeliveryNamesNoTaskWhenUncorrelated(t *testing.T) {
 	}
 }
 
-// prQueuedAt reads pull_requests.queued_at for repo/number, nil when unset.
+// prQueuedAt reads github_pull_requests.queued_at for repo/number, nil when unset.
 func (e *dbEnv) prQueuedAt(t *testing.T, repo string, number int64) *time.Time {
 	t.Helper()
 	var queuedAt sql.NullTime
 	if !e.rawQueryRow(t, []any{&queuedAt},
-		`SELECT queued_at FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number) {
+		`SELECT queued_at FROM github_pull_requests WHERE repo = $1 AND number = $2`, repo, number) {
 		t.Fatalf("pull_requests row not found for %s#%d", repo, number)
 	}
 	if !queuedAt.Valid {

@@ -1,0 +1,24 @@
+BEGIN;
+
+ALTER SEQUENCE github_reviews_id_seq RENAME TO reviews_id_seq;
+ALTER TABLE github_reviews RENAME CONSTRAINT github_reviews_pkey TO reviews_pkey;
+ALTER TABLE github_reviews RENAME CONSTRAINT github_reviews_repo_pr_number_reviewer_submitted_at_key TO reviews_repo_pr_number_reviewer_submitted_at_key;
+ALTER TABLE github_reviews RENAME CONSTRAINT github_reviews_state_check TO reviews_state_check;
+ALTER TABLE github_reviews RENAME TO reviews;
+
+ALTER SEQUENCE github_ci_runs_id_seq RENAME TO ci_runs_id_seq;
+ALTER TABLE github_ci_runs RENAME CONSTRAINT github_ci_runs_pkey TO ci_runs_pkey;
+ALTER TABLE github_ci_runs RENAME CONSTRAINT github_ci_runs_repo_head_sha_workflow_started_at_key TO ci_runs_repo_head_sha_workflow_started_at_key;
+ALTER TABLE github_ci_runs RENAME TO ci_runs;
+
+ALTER TABLE github_pull_requests RENAME CONSTRAINT github_pull_requests_pkey TO pull_requests_pkey;
+ALTER TABLE github_pull_requests RENAME CONSTRAINT github_pull_requests_state_check TO pull_requests_state_check;
+ALTER TABLE github_pull_requests RENAME CONSTRAINT github_pull_requests_task_id_fkey TO pull_requests_task_id_fkey;
+ALTER TABLE github_pull_requests RENAME TO pull_requests;
+
+ALTER TABLE github_issues RENAME CONSTRAINT github_issues_pkey TO issues_pkey;
+ALTER TABLE github_issues RENAME CONSTRAINT github_issues_task_id_fkey TO issues_task_id_fkey;
+ALTER TABLE github_issues RENAME CONSTRAINT github_issues_triage_state_check TO issues_triage_state_check;
+ALTER TABLE github_issues RENAME TO issues;
+
+COMMIT;

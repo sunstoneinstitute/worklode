@@ -252,3 +252,5 @@ configMapGenerator:
       - migrations/0119_ref-classifications.down.sql
       - migrations/0120_task-edges-depends-on.up.sql
       - migrations/0120_task-edges-depends-on.down.sql
+      - migrations/0121_github-tables.up.sql
+      - migrations/0121_github-tables.down.sql
