@@ -33,6 +33,7 @@ export const NotificationsIcon = (props: Omit<IconProps, "name">) => <Icon name=
 export const DarkModeIcon = (props: Omit<IconProps, "name">) => <Icon name="dark-mode" {...props} />
 export const LightModeIcon = (props: Omit<IconProps, "name">) => <Icon name="light-mode" {...props} />
 export const MenuIcon = (props: Omit<IconProps, "name">) => <Icon name="menu" {...props} />
+export const CalendarIcon = (props: Omit<IconProps, "name">) => <Icon name="calendar-month" {...props} />
 export const ScheduleIcon = (props: Omit<IconProps, "name">) => <Icon name="schedule" {...props} />
 export const DashboardIcon = (props: Omit<IconProps, "name">) => <Icon name="dashboard" {...props} />
 export const DescriptionIcon = (props: Omit<IconProps, "name">) => <Icon name="description" {...props} />

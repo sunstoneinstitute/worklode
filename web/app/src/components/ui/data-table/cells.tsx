@@ -12,7 +12,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CheckIcon } from "@/components/icons"
+import { CalendarIcon, CheckIcon } from "@/components/icons"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { DataTableUser, SelectOption, RowAction, RowActionHelpers } from "./types"
 
@@ -129,8 +129,10 @@ export function DateCell({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="cursor-pointer text-left">
+        {/* The icon hints that the date can be changed; it brightens with the text */}
+        <button type="button" className="group inline-flex cursor-pointer items-center gap-1.5 text-left whitespace-nowrap">
           {formatIsoDate(value)}
+          <CalendarIcon size={16} className="text-muted-foreground group-hover:text-highlight" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
