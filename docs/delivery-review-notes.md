@@ -96,7 +96,7 @@ what the ids are for.
 
 ### C7 — One deploy event advances N tasks, with no fan-out
 
-`main_commits` gives each main commit a monotonic id, `deploy_shas` maps a
+`main_commits` gives each main commit a monotonic id, `github_deploy_shas` maps a
 deployed sha back to one, `env_deploys` holds the per-`(repo, environment)`
 frontier, and `ResolveDelivery` advances every task whose landed id is at or
 below it (`TasksBelowFrontier`). Four tasks in one docker image need no

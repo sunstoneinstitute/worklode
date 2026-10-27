@@ -1,0 +1,14 @@
+BEGIN;
+
+ALTER TABLE github_release_frontiers RENAME CONSTRAINT github_release_frontiers_main_id_fkey TO release_frontiers_main_id_fkey;
+ALTER TABLE github_release_frontiers RENAME CONSTRAINT github_release_frontiers_pkey TO release_frontiers_pkey;
+ALTER TABLE github_release_frontiers RENAME TO release_frontiers;
+
+ALTER TABLE github_deploy_shas RENAME CONSTRAINT github_deploy_shas_main_id_fkey TO deploy_shas_main_id_fkey;
+ALTER TABLE github_deploy_shas RENAME CONSTRAINT github_deploy_shas_pkey TO deploy_shas_pkey;
+ALTER TABLE github_deploy_shas RENAME TO deploy_shas;
+
+ALTER TABLE github_branch_rules RENAME CONSTRAINT github_branch_rules_pkey TO repo_branch_rules_pkey;
+ALTER TABLE github_branch_rules RENAME TO repo_branch_rules;
+
+COMMIT;
