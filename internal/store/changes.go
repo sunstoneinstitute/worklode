@@ -444,7 +444,7 @@ func SetPRQueued(tx *sql.Tx, repo string, number int64, at *time.Time) error {
 // (WL-REQ-1340, WL-REQ-6), overwriting whatever was known before.
 func UpsertBranchRules(tx *sql.Tx, repo, branch string, mergeQueue, pullRequest bool, at time.Time) error {
 	_, err := tx.Exec(
-		`INSERT INTO repo_branch_rules (repo, branch, merge_queue, pull_request, checked_at)
+		`INSERT INTO github_branch_rules (repo, branch, merge_queue, pull_request, checked_at)
 		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (repo, branch) DO UPDATE SET
 		   merge_queue = excluded.merge_queue,
@@ -465,7 +465,7 @@ func (s *Store) BranchRules(ctx context.Context, repo string) (model.RepoBranchR
 	r := model.RepoBranchRules{Repo: repo}
 	var pr sql.NullBool
 	err := s.db.QueryRowContext(ctx,
-		`SELECT branch, merge_queue, pull_request, checked_at FROM repo_branch_rules
+		`SELECT branch, merge_queue, pull_request, checked_at FROM github_branch_rules
 		 WHERE repo = $1 ORDER BY checked_at DESC LIMIT 1`, repo).
 		Scan(&r.Branch, &r.MergeQueue, &pr, &r.CheckedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -482,7 +482,7 @@ func (s *Store) BranchRules(ctx context.Context, repo string) (model.RepoBranchR
 
 // BranchRulesForRepos is the bulk form of BranchRules, keyed by repo only: the
 // refresh loop (WL-750) only ever writes the row for a repo's default branch,
-// so repo_branch_rules holds at most one row per repo in practice, and that
+// so github_branch_rules holds at most one row per repo in practice, and that
 // row is the one a PR's base branch join would resolve to since
 // pull_requests carries no base branch of its own. A repo missing from the
 // result is unknown and reads as "no queue" (WL-REQ-1340) — callers
@@ -493,7 +493,7 @@ func (s *Store) BranchRulesForRepos(ctx context.Context, repos []string) (map[st
 		return out, nil
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo, merge_queue FROM repo_branch_rules WHERE repo = ANY($1)`, repos)
+		`SELECT repo, merge_queue FROM github_branch_rules WHERE repo = ANY($1)`, repos)
 	if err != nil {
 		return nil, fmt.Errorf("branch rules for %d repos: %w", len(repos), err)
 	}

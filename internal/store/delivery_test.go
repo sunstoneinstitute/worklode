@@ -332,7 +332,7 @@ func TestSetReleaseFrontierIsForwardOnly(t *testing.T) {
 		t.Helper()
 		var ts time.Time
 		if err := tx.QueryRow(
-			`SELECT published_at FROM release_frontiers WHERE repo = 'acme/app' AND tag = 'v1.0.0'`,
+			`SELECT published_at FROM github_release_frontiers WHERE repo = 'acme/app' AND tag = 'v1.0.0'`,
 		).Scan(&ts); err != nil {
 			t.Fatal(err)
 		}

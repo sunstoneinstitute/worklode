@@ -9,7 +9,7 @@ import (
 // deployBranchSHA is the commit on last-deploy/dev in push_last_deploy.json.
 // Its main-sha: trailer names mainMergeSHA, and deployment_status_prod.json
 // reports it as the deployed sha — so the prod watermark only lands if the
-// deploy_shas mapping resolved it back to the main commit.
+// github_deploy_shas mapping resolved it back to the main commit.
 const deployBranchSHA = "5555555555555555555555555555555555555555"
 
 // TestDeliveryEndToEnd walks one task through the whole delivery lifecycle
@@ -90,9 +90,9 @@ func TestDeliveryEndToEnd(t *testing.T) {
 	//    its main-sha: trailer names. No frontier moves yet.
 	deliverPushOK(t, e, "d-4", "push_last_deploy.json")
 	if got := e.rawQueryInt(t,
-		`SELECT main_id FROM deploy_shas WHERE repo = $1 AND sha = $2`,
+		`SELECT main_id FROM github_deploy_shas WHERE repo = $1 AND sha = $2`,
 		demoRepo, deployBranchSHA); got != head {
-		t.Fatalf("deploy_shas main_id = %d, want %d", got, head)
+		t.Fatalf("github_deploy_shas main_id = %d, want %d", got, head)
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM env_deploys`); n != 0 {
 		t.Fatalf("env_deploys rows after last-deploy push = %d, want 0", n)
@@ -114,7 +114,7 @@ func TestDeliveryEndToEnd(t *testing.T) {
 	}
 
 	// 6. Prod deployment_status, reported against the deploy-branch sha: it
-	//    resolves through deploy_shas, and with no Flux signal yet for prod
+	//    resolves through github_deploy_shas, and with no Flux signal yet for prod
 	//    the bootstrap fallback advances the task immediately.
 	deliverOK(t, e, "deployment_status", "d-6", "deployment_status_prod.json")
 	gh, flux, seen, ok = e.envDeploy(t, "prod")

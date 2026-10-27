@@ -677,8 +677,8 @@ func TestReleasePublished(t *testing.T) {
 	if builtAt.IsZero() {
 		t.Fatal("artifact built_at is zero")
 	}
-	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM release_frontiers`); n != 0 {
-		t.Fatalf("release_frontiers rows = %d, want 0", n)
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_release_frontiers`); n != 0 {
+		t.Fatalf("github_release_frontiers rows = %d, want 0", n)
 	}
 }
 
@@ -705,7 +705,7 @@ func TestReleaseArtifactKeepsAnUnlandedCommitish(t *testing.T) {
 	}
 	// The frontier is a main-commit id, so it still falls back to main's head.
 	if got, want := e.rawQueryInt(t,
-		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v0.9.1'`, demoRepo),
+		`SELECT main_id FROM github_release_frontiers WHERE repo = $1 AND tag = 'v0.9.1'`, demoRepo),
 		e.mainCommitID(t, headSHA); got != want {
 		t.Fatalf("frontier main_id = %d, want %d (main head)", got, want)
 	}
@@ -731,9 +731,9 @@ func TestReleaseSetsFrontier(t *testing.T) {
 	}
 	head := e.mainCommitID(t, "3333333333333333333333333333333333333333")
 	got := e.rawQueryInt(t,
-		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v1.2.3'`, demoRepo)
+		`SELECT main_id FROM github_release_frontiers WHERE repo = $1 AND tag = 'v1.2.3'`, demoRepo)
 	if got != head {
-		t.Fatalf("release_frontiers main_id = %d, want %d (head of main)", got, head)
+		t.Fatalf("github_release_frontiers main_id = %d, want %d (head of main)", got, head)
 	}
 }
 
@@ -782,7 +782,7 @@ func TestReleaseResolvesBranchCommitish(t *testing.T) {
 	// frontier: over-marking delivery from an unlanded commit would be worse
 	// than the pre-Task-4 main-head approximation this replaces.
 	got := e.rawQueryInt(t,
-		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v1.2.4'`, demoRepo)
+		`SELECT main_id FROM github_release_frontiers WHERE repo = $1 AND tag = 'v1.2.4'`, demoRepo)
 	if want := e.mainCommitID(t, "3333333333333333333333333333333333333333"); got != want {
 		t.Fatalf("frontier main_id = %d, want %d (main head, not the resolved branch sha)", got, want)
 	}
@@ -799,7 +799,7 @@ func TestReleaseUnresolvableBranchFallsBackToMainHead(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	got := e.rawQueryInt(t,
-		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v1.2.4'`, demoRepo)
+		`SELECT main_id FROM github_release_frontiers WHERE repo = $1 AND tag = 'v1.2.4'`, demoRepo)
 	if got != e.mainCommitID(t, "3333333333333333333333333333333333333333") {
 		t.Fatalf("frontier = %d, want main head", got)
 	}
@@ -854,7 +854,7 @@ func TestReleaseFrontierNarrowsToTaggedCommit(t *testing.T) {
 		t.Fatalf("backport release: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if got, want := e.rawQueryInt(t,
-		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v0.9.0'`, demoRepo),
+		`SELECT main_id FROM github_release_frontiers WHERE repo = $1 AND tag = 'v0.9.0'`, demoRepo),
 		e.mainCommitID(t, oldSHA); got != want {
 		t.Fatalf("backport frontier main_id = %d, want %d (the tagged commit)", got, want)
 	}
@@ -890,8 +890,8 @@ func TestReleaseDoesNotAdvanceNonReleaseRepo(t *testing.T) {
 			if st := e.taskState(t, taskID); st != "merged" {
 				t.Fatalf("task state = %q, want merged (released gated on done_state)", st)
 			}
-			if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM release_frontiers`); n != 1 {
-				t.Fatalf("release_frontiers rows = %d, want 1 (frontier is recorded regardless)", n)
+			if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM github_release_frontiers`); n != 1 {
+				t.Fatalf("github_release_frontiers rows = %d, want 1 (frontier is recorded regardless)", n)
 			}
 		})
 	}

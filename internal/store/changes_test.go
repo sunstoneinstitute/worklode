@@ -927,7 +927,7 @@ func TestBranchRulesRoundTrip(t *testing.T) {
 	}
 
 	// A row written before pull_request was observed reads as unknown.
-	if _, err := s.db.Exec(`UPDATE repo_branch_rules SET pull_request = NULL WHERE repo = $1`, repo); err != nil {
+	if _, err := s.db.Exec(`UPDATE github_branch_rules SET pull_request = NULL WHERE repo = $1`, repo); err != nil {
 		t.Fatal(err)
 	}
 	got, err = s.BranchRules(t.Context(), repo)
