@@ -27,7 +27,7 @@ var docKinds = []string{"spec", "plan"}
 
 // docStatusValues is the closed set behind `lode doc list --status`: the
 // live document statuses plus "all", the pseudo-status that also includes
-// the terminal statuses (withdrawn, superseded, spent) the default listing
+// the terminal statuses (withdrawn, superseded, executed) the default listing
 // hides. The statuses themselves come from ns.DesignDocStatuses,
 // pinned to the docs.status CHECK constraint by internal/store.
 var docStatusValues = append(slices.Clone(ns.DesignDocStatuses), "all")
@@ -256,7 +256,7 @@ func newDocListCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, plan")
 	cmd.Flags().StringVar(&status, "status", "",
-		"filter by status: "+strings.Join(ns.DesignDocStatuses, ", ")+", or all to include withdrawn, superseded and spent documents")
+		"filter by status: "+strings.Join(ns.DesignDocStatuses, ", ")+", or all to include withdrawn, superseded and executed documents")
 	completeFlagValues(cmd, "kind", docKinds)
 	completeFlagValues(cmd, "status", docStatusValues)
 	cmd.Flags().StringVar(&owner, "owner", "", "filter by owning actor")

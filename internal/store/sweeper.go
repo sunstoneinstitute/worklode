@@ -72,15 +72,15 @@ func (s *Store) sweepLeases(ctx context.Context, every time.Duration) {
 				slog.Info("emitted doc.stale", "count", emitted)
 			}
 
-			spent, spendErr := s.SettleFinishedPlans(ctx)
-			if spendErr != nil && ctx.Err() != nil {
+			executed, executeErr := s.SettleFinishedPlans(ctx)
+			if executeErr != nil && ctx.Err() != nil {
 				return
 			}
 			switch {
-			case spendErr != nil:
-				slog.Error("settle finished plans", "err", spendErr)
-			case spent > 0:
-				slog.Info("spent finished plans", "count", spent)
+			case executeErr != nil:
+				slog.Error("settle finished plans", "err", executeErr)
+			case executed > 0:
+				slog.Info("executed finished plans", "count", executed)
 			}
 
 			purged, purgeErr := s.PurgeTaskActivity(ctx, s.nowFn().UTC())

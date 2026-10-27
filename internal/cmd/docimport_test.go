@@ -224,7 +224,7 @@ func TestDocImport(t *testing.T) {
 			"002-target-spec":              "draft",
 			"003-record-a-decision":        "draft",
 			"2026-01-01-mintable-plan":     "accepted",
-			"2026-01-02-legacy-plan":       "accepted", // no status key: a spent plan
+			"2026-01-02-legacy-plan":       "accepted", // no status key: an executed plan
 			"2026-01-03-task-key-plan":     "accepted",
 			"2026-01-04-cross-corpus-plan": "draft",
 		} {

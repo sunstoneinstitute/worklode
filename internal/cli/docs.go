@@ -560,8 +560,8 @@ func docStatusBanner(d model.Doc) string {
 		return fmt.Sprintf("STALE since %s — re-planning owed (WL-REQ-170)", LocalTime(d.UpdatedAt))
 	case "withdrawn":
 		return fmt.Sprintf("WITHDRAWN since %s — closed without execution (WL-REQ-170)", LocalTime(d.UpdatedAt))
-	case "spent":
-		return fmt.Sprintf("SPENT since %s — every minted task has closed (12 S5)", LocalTime(d.UpdatedAt))
+	case "executed":
+		return fmt.Sprintf("EXECUTED since %s — every minted task has closed (WL-REQ-1664)", LocalTime(d.UpdatedAt))
 	}
 	return ""
 }

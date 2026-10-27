@@ -112,7 +112,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document operations by op (create|update|patch|stale|spent|accept|submit|revise|discard|withdraw|edges|resolve|note|delete|undelete|list-versions|get-version|arrange|unarrange) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (WL-REQ-170), or refused-mechanical|no-reviewers for patch's gate (WL-REQ-171)).",
+			Help: "Design-document operations by op (create|update|patch|stale|executed|accept|submit|revise|discard|withdraw|edges|resolve|note|delete|undelete|list-versions|get-version|arrange|unarrange) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (WL-REQ-170), or refused-mechanical|no-reviewers for patch's gate (WL-REQ-171)).",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",

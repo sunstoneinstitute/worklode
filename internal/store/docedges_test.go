@@ -182,7 +182,7 @@ func TestReplaceDocEdges(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
 
-	// Accepted at creation, the state the importer puts a spent plan in.
+	// Accepted at creation, the state the importer puts a executed plan in.
 	plan := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "025-part-2", Body: planBody,
 		CreatedBy: "stig", Status: "accepted",

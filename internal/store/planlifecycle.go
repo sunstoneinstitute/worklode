@@ -57,14 +57,14 @@ func governPlanTasks(tx *sql.Tx, planID int64) error {
 
 // settlePlan runs after every task state change: when the task came from a
 // plan and that plan has at least one live minted task and no live task left
-// open, the plan is spent (S5, increment 3 R4). A plan with no minted task
+// open, the plan is executed (WL-REQ-1664). A plan with no minted task
 // never gets here with a task, so a coverage-only plan stays accepted. The
 // "at least one live task" half of that check is load-bearing, not
 // redundant: DeleteTask tombstones a task (deleted_at) before it calls
 // transitionKnown to roll it off in_progress, so by the time settlePlan runs
 // here the just-deleted task is already invisible to the live-task count.
 // Without requiring a live task to exist, deleting the last in-progress task
-// of a plan — or the last one if it was the only task minted — would spend
+// of a plan — or the last one if it was the only task minted — would execute
 // the plan with nothing delivered.
 //
 // Cheap for the common case of a task with no plan_doc: one indexed lookup,
@@ -92,12 +92,12 @@ func settlePlan(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
 	if err != nil || !done {
 		return err
 	}
-	return spendPlan(tx, now, planID.Int64, status, eventID)
+	return executePlan(tx, now, planID.Int64, status, eventID)
 }
 
-// planFinished locks plan planID and reports whether it is due to be spent:
+// planFinished locks plan planID and reports whether it is due to be executed:
 // accepted or stale, with at least one live minted task and none open. The
-// status it returns is the one spendPlan logs as the old value.
+// status it returns is the one executePlan logs as the old value.
 func planFinished(tx *sql.Tx, planID int64) (status string, done bool, err error) {
 	err = tx.QueryRow(`SELECT status FROM docs WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, planID).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -119,29 +119,29 @@ func planFinished(tx *sql.Tx, planID int64) (status string, done bool, err error
 	return status, total > 0 && open == 0, nil
 }
 
-// spendPlan governs the plan's tasks and flips it from status to spent,
+// executePlan governs the plan's tasks and flips it from status to executed,
 // attributed to eventID. Callers check planFinished first.
-func spendPlan(tx *sql.Tx, now time.Time, planID int64, status string, eventID int64) error {
+func executePlan(tx *sql.Tx, now time.Time, planID int64, status string, eventID int64) error {
 	if err := governPlanTasks(tx, planID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE docs SET status = 'spent', updated_at = $2 WHERE id = $1`,
+	if _, err := tx.Exec(`UPDATE docs SET status = 'executed', updated_at = $2 WHERE id = $1`,
 		planID, now.UTC().Truncate(time.Second)); err != nil {
-		return fmt.Errorf("spend plan %d: %w", planID, err)
+		return fmt.Errorf("execute plan %d: %w", planID, err)
 	}
-	return logDocChange(tx, planID, eventID, map[string]string{"field": "status", "old": status, "new": "spent"})
+	return logDocChange(tx, planID, eventID, map[string]string{"field": "status", "old": status, "new": "executed"})
 }
 
-// SettleFinishedPlans spends every accepted or stale plan whose minted tasks
+// SettleFinishedPlans executes every accepted or stale plan whose minted tasks
 // have all closed. settlePlan does this as each task closes, but a plan whose
 // tasks closed before that hook existed, or that went stale after they did,
 // is reached only here. The sweeper runs it on every tick; it returns the
-// number of plans spent.
+// number of plans executed.
 //
 // Each plan is settled in its own transaction: planFinished re-checks under
-// the row lock, and the doc.spent event is inserted only once that check
-// passes, keyed on (slug, version) so a plan is spent by at most one event.
-func (s *Store) SettleFinishedPlans(ctx context.Context) (spent int, err error) {
+// the row lock, and the doc.executed event is inserted only once that check
+// passes, keyed on (slug, version) so a plan is executed by at most one event.
+func (s *Store) SettleFinishedPlans(ctx context.Context) (executed int, err error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT d.id, d.slug, d.version FROM docs d
 		  WHERE d.kind = 'plan' AND d.status IN ('accepted', 'stale') AND d.deleted_at IS NULL
@@ -178,27 +178,27 @@ func (s *Store) SettleFinishedPlans(ctx context.Context) (spent int, err error) 
 			var eventID int64
 			err = tx.QueryRowContext(ctx,
 				`INSERT INTO events (source, external_id, type, payload, received_at)
-				 VALUES ($1, $2, 'doc.spent', $3, $4)
+				 VALUES ($1, $2, 'doc.executed', $3, $4)
 				 ON CONFLICT (source, external_id) DO NOTHING
 				 RETURNING id`,
-				staleEventSource, "doc.spent:"+c.slug+":"+strconv.Itoa(c.version), payload, s.nowFn().UTC(),
+				staleEventSource, "doc.executed:"+c.slug+":"+strconv.Itoa(c.version), payload, s.nowFn().UTC(),
 			).Scan(&eventID)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil
 			}
 			if err != nil {
-				return fmt.Errorf("record doc.spent for plan %d: %w", c.id, err)
+				return fmt.Errorf("record doc.executed for plan %d: %w", c.id, err)
 			}
-			if err := spendPlan(tx, s.nowFn(), c.id, status, eventID); err != nil {
+			if err := executePlan(tx, s.nowFn(), c.id, status, eventID); err != nil {
 				return err
 			}
-			spent++
-			s.metrics.docOp("spent", nil)
+			executed++
+			s.metrics.docOp("executed", nil)
 			return nil
 		})
 		if err != nil {
-			return spent, fmt.Errorf("settle plan %d: %w", c.id, err)
+			return executed, fmt.Errorf("settle plan %d: %w", c.id, err)
 		}
 	}
-	return spent, nil
+	return executed, nil
 }
