@@ -138,7 +138,7 @@ func TestUpsertIssueInsertAndUpdate(t *testing.T) {
 	}
 }
 
-// TestUpsertIssueNonRegressing covers the guard on issues.updated_at: an
+// TestUpsertIssueNonRegressing covers the guard on github_issues.updated_at: an
 // out-of-order or replayed delivery carrying an older updated_at must not
 // overwrite newer facts (WL-198).
 func TestUpsertIssueNonRegressing(t *testing.T) {
