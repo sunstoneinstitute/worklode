@@ -654,3 +654,61 @@ func TestListParticipantsSortsDeputyAfterLead(t *testing.T) {
 		t.Fatalf("roster order = %v, want %v (lead, deputy, then members)", order, want)
 	}
 }
+
+func TestListContributors(t *testing.T) {
+	t.Parallel()
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "p1", "P1", "LC1"); err != nil {
+		t.Fatalf("CreateProject p1: %v", err)
+	}
+	for _, a := range []struct{ id, kind string }{{"ada", "human"}, {"bob", "human"}, {"bot", "agent"}} {
+		if err := s.CreateActor(ctx, a.id, a.kind, a.id, false); err != nil {
+			t.Fatalf("CreateActor %s: %v", a.id, err)
+		}
+		seedParticipant(t, s, "p1", a.id, "member", false)
+	}
+	newTask := func(title string) string {
+		return createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "p1", Title: title, Body: "b",
+			Priority: "medium", Kind: "feature", CreatedBy: "ada",
+		}).ID
+	}
+	assign := func(id, actor string) {
+		t.Helper()
+		if err := assignTask(t, s, taskTestNow, id, actor); err != nil {
+			t.Fatalf("assign %s to %s: %v", id, actor, err)
+		}
+	}
+
+	t1, t2 := newTask("t1"), newTask("t2")
+	newTask("t3") // never assigned
+	assign(t1, "ada")
+	assign(t1, "bob")
+	assign(t2, "ada")
+	walkTo(t, s, t2, "merged")
+
+	// A withdrawn task does not count; an agent is never a contributor.
+	t4 := newTask("t4")
+	assign(t4, "bob")
+	if _, err := s.db.ExecContext(ctx, `UPDATE tasks SET deleted_at = now() WHERE id = $1`, t4); err != nil {
+		t.Fatalf("soft-delete t4: %v", err)
+	}
+	assign(newTask("t5"), "bot")
+
+	got, err := s.ListContributors(ctx, "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ada was ever-assigned t1 and t2 (the t1 reassignment does not erase
+	// her); bob was ever-assigned t1. Closed tasks still count.
+	if len(got) != 2 || got[0].Actor != "ada" || got[0].Tasks != 2 ||
+		got[1].Actor != "bob" || got[1].Tasks != 1 {
+		t.Fatalf("contributors wrong: %+v", got)
+	}
+
+	if _, err := s.ListContributors(ctx, "does-not-exist"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
