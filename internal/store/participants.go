@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Participant is one Crew member of a project, aggregated over their
@@ -126,6 +128,57 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 		}
 		slices.Sort(p.Roles)
 		out = append(out, *p)
+	}
+	return out, nil
+}
+
+// ListContributors returns every human ever assigned a live task in
+// projectID (WL-REQ-764), most tasks first, then actor id. It unions the
+// current tasks.assignee with every assignee the state_log assignment history
+// names, so a reassignment does not erase the earlier assignee and closed
+// tasks still count. Agents are excluded: they execute delegated work and
+// are not contributors. Returns ErrNotFound if the project does not exist.
+//
+// ponytail: the state_log scan has no expression index on change->>'field';
+// add one only when the log's volume makes this reader measurably slow.
+func (s *Store) ListContributors(ctx context.Context, projectID string) ([]model.Contributor, error) {
+	if _, err := s.GetProject(ctx, projectID); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`WITH assigned AS (
+		     SELECT t.id AS task_id, t.assignee AS actor_id
+		       FROM tasks t
+		      WHERE t.project_id = $1 AND t.deleted_at IS NULL AND t.assignee IS NOT NULL
+		     UNION
+		     SELECT t.id, sl.change->>'new'
+		       FROM state_log sl
+		       JOIN tasks t ON t.id = sl.entity_id
+		      WHERE sl.entity_kind = 'task' AND sl.change->>'field' = 'assignee'
+		        AND COALESCE(sl.change->>'new', '') <> ''
+		        AND t.project_id = $1 AND t.deleted_at IS NULL
+		 )
+		 SELECT a.id, COALESCE(a.display_name, ''), COUNT(DISTINCT x.task_id)
+		   FROM assigned x
+		   JOIN actors a ON a.id = x.actor_id AND a.kind = 'human'
+		  GROUP BY a.id, a.display_name
+		  ORDER BY COUNT(DISTINCT x.task_id) DESC, a.id`,
+		projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list contributors for project %s: %w", projectID, err)
+	}
+	defer rows.Close()
+
+	out := []model.Contributor{}
+	for rows.Next() {
+		var c model.Contributor
+		if err := rows.Scan(&c.Actor, &c.DisplayName, &c.Tasks); err != nil {
+			return nil, fmt.Errorf("list contributors for project %s: %w", projectID, err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list contributors for project %s: %w", projectID, err)
 	}
 	return out, nil
 }
