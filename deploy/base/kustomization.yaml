@@ -258,3 +258,5 @@ configMapGenerator:
       - migrations/0122_github-tables-2.down.sql
       - migrations/0123_plan_status_executed.up.sql
       - migrations/0123_plan_status_executed.down.sql
+      - migrations/NEW-crew-lifecycle.up.sql
+      - migrations/NEW-crew-lifecycle.down.sql
