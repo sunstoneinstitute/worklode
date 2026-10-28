@@ -67,7 +67,7 @@ governs every part while being built by none of them, and it needs no
 
 For a spec section `S` whose rule is a requirement (an invariant or
 informative rule is never a gap), over accepted-or-superseded plans covering its rule
-(a superseded plan is spent, and discharges what it covered — WL-REQ-187):
+(a superseded plan is executed, and discharges what it covered — WL-REQ-187):
 
 - some such plan covers it, and no draft plan also covers it →
   **planned**;
