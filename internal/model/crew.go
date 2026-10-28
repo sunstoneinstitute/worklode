@@ -43,3 +43,13 @@ type AddCrewMemberInput struct {
 	Lead   bool   `json:"lead"`
 	Deputy bool   `json:"deputy"`
 }
+
+// Contributor is one human ever assigned a task in a project (WL-REQ-764,
+// WL-REQ-123). It is derived from assignment facts and never stored, so
+// someone who did one task gets credit without anyone maintaining a list.
+// Tasks counts the distinct live tasks ever assigned to them there.
+type Contributor struct {
+	Actor       string `json:"actor"`
+	DisplayName string `json:"display_name"`
+	Tasks       int    `json:"tasks"`
+}
