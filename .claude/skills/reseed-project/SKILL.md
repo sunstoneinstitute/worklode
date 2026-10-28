@@ -35,7 +35,7 @@ them, so plan checkboxes are never the evidence.
 
 **The one case the queries cannot see: imported plans.** `lode doc import`
 lands a plan at its stated status without minting tasks, so an imported plan —
-spent or unexecuted — has no task set and `--needs-execution` omits it by
+executed or unexecuted — has no task set and `--needs-execution` omits it by
 design. For those, evidence is implementation presence: a plan is executed iff
 the package, CLI verb, or migration it promises exists. Judge that against
 **the commit the server runs**, not your checkout's HEAD — the deployed image
@@ -108,7 +108,7 @@ COMMIT;
    ```
 
    Do not hand-create execute-tasks. The mint is the seeding.
-3. **Leave spent plans alone.** Imported accepted, no task set, nothing owed.
+3. **Leave executed plans alone.** Imported accepted, no task set, nothing owed.
 4. **Wire series ordering** between the minted tasks — roots are tasks, and
    blocking stays a task-level verb:
 

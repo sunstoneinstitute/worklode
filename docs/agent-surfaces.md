@@ -194,7 +194,7 @@ backbone rather than this tree (055), for the reason below.
 ### Specs and plans are not corrected for a rename
 
 A rename leaves old spellings behind in the corpus. **They stay.** A spec states
-what was decided; a spent plan records what someone did. Rewriting either to use
+what was decided; an executed plan records what someone did. Rewriting either to use
 today's spelling makes it describe a decision that was not taken or an execution
 that did not happen, and the git history that would have shown the substitution
 is one more diff to read past. WL-REQ-306 states the same rule from the other
