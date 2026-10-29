@@ -1,6 +1,6 @@
 // approvals.go serves the JSON approval surfaces: requesting review on a
 // document, filing an ad-hoc requirement on any governed target (WL-REQ-124),
-// reading the awaiting queue, and deciding a row (WL-REQ-1608).
+// listing approvals by state, and deciding a row (WL-REQ-1608).
 package api
 
 import (
@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -168,17 +169,30 @@ func textPtr(s string) *string {
 	return &s
 }
 
-// listApprovals handles GET /api/v1/approvals: the awaiting queue (WL-REQ-124)
-// as JSON, the same rows the cockpit's /reviews page renders. Read-only.
-// Excludes a pr-kind row whose PR has since closed (WL-663): tasks carry no
-// review requirement by default (WL-REQ-124), so a closed, unreviewed PR is
-// not an outstanding requirement, just an ingest artifact nobody can act on
-// any more.
+// listApprovals handles GET /api/v1/approvals: the approvals in one state,
+// by default the awaiting queue (WL-REQ-124), the same rows the cockpit's
+// /reviews page renders. Read-only. Excludes an open row whose PR has since
+// closed (WL-663): tasks carry no review requirement by default
+// (WL-REQ-124), so a closed, unreviewed PR is not an outstanding
+// requirement, just an ingest artifact nobody can act on any more.
 //
 // No dedicated metric, on resolveDocRef's reasoning: every outcome this route
 // has is already a status code on http_requests_total's {route, code}.
 func (s *server) listApprovals(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.st.ListAwaitingApprovals(r.Context())
+	var params model.ApprovalListParams
+	if err := readQuery(r, &params); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if params.State == "" {
+		params.State = "awaiting"
+	}
+	if !slices.Contains(model.ApprovalStates, params.State) {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"state must be one of "+strings.Join(model.ApprovalStates, ", "))
+		return
+	}
+	rows, err := s.st.ListApprovals(r.Context(), params.State)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -303,7 +317,8 @@ func (s *server) approvalDecideAPIErr(w http.ResponseWriter, err error) {
 // approvalRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var approvalRouteDocs = map[string]routeDoc{
 	"GET /api/v1/approvals": {
-		summary:   "List the awaiting approval queue",
+		summary:   "List the approvals in one state, by default the awaiting queue",
+		params:    model.ApprovalListParams{},
 		responses: map[int]any{http.StatusOK: model.ApprovalListResponse{}},
 	},
 	"POST /api/v1/approvals": {

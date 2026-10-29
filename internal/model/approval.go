@@ -90,6 +90,16 @@ type AwaitingApproval struct {
 	RequiredActorName *string `json:"required_actor_name,omitempty"`
 }
 
+// ApprovalStates are the approvals table's state values. Awaiting and
+// changes_requested are open: either can still be decided (WL-REQ-1608).
+var ApprovalStates = []string{"awaiting", "changes_requested", "approved", "rejected"}
+
+// ApprovalListParams is the query string of GET /api/v1/approvals.
+type ApprovalListParams struct {
+	// State is one of ApprovalStates; omitted for awaiting.
+	State string `query:"state,omitempty"`
+}
+
 // ApprovalListResponse is the response body of GET /api/v1/approvals.
 type ApprovalListResponse struct {
 	Approvals []AwaitingApproval `json:"approvals"`
