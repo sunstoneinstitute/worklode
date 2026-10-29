@@ -1,0 +1,2 @@
+
+The **state vocabulary** is global and fixed: `draft`, `ready`, `in_progress`, `in_review`, `merged`, `completed`, `deployed_dev`, `deployed_prod`, `released`, `abandoned`. It is enforced by the `tasks.state` CHECK constraint and `ns/shapes.ttl`'s `sh:in` list, which are never made per-project. A workflow selects a subset and an edge set over it. It never mints a state name. This is what keeps code that enumerates vocabulary subsets (delivery ranks, "open" filters, reopenable states) sound in every workflow: a workflow can only omit states.

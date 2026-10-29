@@ -1,0 +1,3 @@
+
+`/blob/{hash}` serves both a browser `<img>` (session cookie) and a CLI or agent fetch (bearer token) through one `eitherAuth` middleware that mirrors the web UI's auth model: with a web auth provider configured, `401` with neither credential; with none configured, `401` unless `LODE_WEB_OPEN` is set. An unknown bearer token is `401` on every instance. The refusal is a status code, never an HTML page or login redirect. The content hash is deduplication, never access control. The bucket stays private; presigned URLs are the only anonymous read path. Session cookies are `SameSite=Lax`, so a cross-site `<img>` gets `401`.
+

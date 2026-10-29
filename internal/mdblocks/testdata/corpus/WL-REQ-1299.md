@@ -1,0 +1,3 @@
+
+A spec's text is assembled on read from its template and its arrangement: the template text in order, and at each entry the heading at its depth, then the rule's body. The heading carries the derived number and anchor (WL-REQ-165) and, on a rule, the rule's ref between the heading text and the anchor: `## 4. Sections and anchors (WL-REQ-165) {#sec-4}`. A spec heading carries no ref. The ref is a link to the rule's page (WL-REQ-1633) and is not part of the heading text, so the editable form (WL-REQ-1680) omits it and carries `rule=` instead. `docs.body` holds the template and no rule text. `lode show`, `lode doc show`, the cockpit, the corpus index and the projection all read the rendered text, and a past version is rendered from `doc_rule_versions`.
+

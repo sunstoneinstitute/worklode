@@ -1,0 +1,4 @@
+
+`decision_resolve(task, key, answer?, confirmed?)` records an answer only when the user gave it. When the client speaks MCP protocol `2026-07-28` and supports form elicitation, the tool returns an input-required result (SEP-2322) offering the decision's options plus a free-text answer. The client's retry of the call carries the answer, and an accept records it. Otherwise the tool answers with the question and its options and this instruction: "Ask the user with your question tool (e.g. AskUserQuestion), offering these options. In a voice conversation, read the question and options and wait for the answer. Then call decision_resolve with that answer and confirmed=true." A call with `answer` and without `confirmed=true` records nothing.
+
+Why: a decision is the user's call, and the model must not answer it on the user's behalf.

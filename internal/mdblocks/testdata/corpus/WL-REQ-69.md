@@ -1,0 +1,3 @@
+
+The catalog is the 1Password item `worklode-secrets-catalog`, one per environment in that environment's Worklode vault. An ExternalSecret using `dataFrom.extract` projects it per environment (via `ClusterSecretStore` `onepassword-hzdev-worklode` / `onepassword-hzprod-worklode`) into a Kubernetes Secret of the same name, mounted into the server. `catalog.toml` and each template are field labels on that item. The server reads `catalog.toml` from `LODE_SECRETS_CATALOG_PATH` and template files from the same directory. Adding or editing an entry or a template is a 1Password edit and needs no pull request, because `dataFrom.extract` projects every field label. The catalog carries no values and no per-user state.
+

@@ -1,0 +1,3 @@
+
+Both the web callback and the direct token exchange run the same steps: verify the ID token (invalid, expired or wrong audience gives 401); require `user` in `groups` (else 403); upsert the `human` actor with `admin = groups contains admin` and `github_username` set from the `githubUsername` claim, which carries the Keycloak user attribute of the same name; both re-sync on every login, so a demotion takes effect at the next login. `actors.github_username` is unique: a login asserting a GitHub username another actor already holds is refused with a message naming the username, because two Keycloak accounts claiming one GitHub identity is a misconfiguration. A missing `githubUsername` never fails a login.
+

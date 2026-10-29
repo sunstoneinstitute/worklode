@@ -1,0 +1,3 @@
+
+`deleted_at IS NULL` joins the `WHERE` of every list, board, ranking, claim, roll-up, delivery resolution, cockpit page, document list, search and projection. Fetching by id succeeds and renders the tombstone (actor, time, justification). Events stay in `lode event tail`. Edges stay, and a deleted blocker stops blocking because the blocking check reads live tasks. The knowledge graph shows live rows only and drops a deleted row on the next projection pass; the tombstone is not projected, because the event log owns provenance. Deleted is not closed: `taskClosed` stays "delivered or abandoned", so a deleted `draft` reports `closed: false`. A mutation addressed to a deleted row by id still applies.
+

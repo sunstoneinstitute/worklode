@@ -1,0 +1,5 @@
+
+`lode install` writes a marker-delimited managed block into `.worklode/agent-instructions.md` in the main checkout. The block states that the repo is Worklode-tracked and how work is entered: `lode work next [id]`, `lode task claim <id>` from inside an existing worktree, `lode work resume <dir>`, and `lode work status`. Content outside the markers is never touched; a missing file is created. The file holds no machine-specific data and is meant to be committed.
+
+Install appends one pointer line to `AGENTS.md` and to `CLAUDE.md`, creating either file if missing: "Before starting work, read `.worklode/agent-instructions.md` in the repository root if it exists." A file that already carries the line outside a code fence is unchanged. Install strips any managed block it finds in `AGENTS.md`, `CLAUDE.md` and `CLAUDE.local.md`, and deletes a `CLAUDE.local.md` that holds only `@AGENTS.md`; one holding anything else is left in place. Uninstall removes the managed block and keeps the pointer lines. Writing in the main checkout keeps a task branch free of the change.
+

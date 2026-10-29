@@ -1,0 +1,3 @@
+
+An accepted document nothing acts on pollutes every reader's context. The lease sweeper supplies the clock: when an accepted document crosses the staleness threshold (30 days by default, configurable per instance and per project) with no execution against it, it emits `doc.stale` once. The subscriber mints a `design` grooming task: re-evaluate, adjust, or close. Any revision re-arms the clock. A stale accepted document is excluded from `lode task brief` assembly, flagged in `lode doc show`, and flagged where another document `requires` it. The target is 100% resolution: every accepted document shipped or explicitly closed. The number to watch is `lode doc list --unresolved --older-than 30d`.
+

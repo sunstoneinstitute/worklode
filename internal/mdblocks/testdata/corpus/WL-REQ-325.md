@@ -1,0 +1,5 @@
+
+`lode install` records which plugin version a repo uses; the `upstream` block records what that version derived from. A repo does not pin upstream plugins.
+
+`lode install` writes `skillOverrides` entries into `.claude/settings.local.json` turning off the upstream skills the vendored set replaces. It does so unconditionally, whether or not either plugin is installed, so a later plugin install does not silently add a second copy of the flow. The list: every `superpowers` skill (all model-invocable, and `using-superpowers` is injected at every `SessionStart`), and the model-invocable `mattpocock-skills` skills the remixes replace: `grilling`, `tdd`, `diagnosing-bugs`, `writing-for-agents`, `code-review`, `codebase-design`, `prototype`, `research`, `resolving-merge-conflicts`, `wizard`. `domain-modeling` is kept and deliberately absent from the list. Writing is idempotent: owned entries are reconciled on every run, unrelated entries preserved. `lode install` reports what it turned off. The rest of what `lode install` manages is in WL-SPEC-80 §5.
+

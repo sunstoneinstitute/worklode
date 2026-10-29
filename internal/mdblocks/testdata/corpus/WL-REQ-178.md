@@ -1,0 +1,3 @@
+
+Classes, properties, SKOS enums and SHACL shapes live in `ns/*.ttl` (`wl:` ontology and `wlc:` concepts under `https://worklode.io/ns/`; `wlid:` is the instance's own base URL, WL-SPEC-79 §10.1). A codegen step (`scripts/nsgen.py`) emits Go constants, SQL `CHECK` fragments and event validation tables, and the declared edge types per edge table read from `wl:edgeOrigin` and `wl:storedAs` (section 8.1). Generated artifacts are checked in and CI fails on diff. A schema change is one commit touching Turtle, generated code and migration. The mirror follows the spec: amend the spec first, then `ns/`. Validated with `riot --validate`.
+

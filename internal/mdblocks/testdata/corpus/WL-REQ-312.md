@@ -1,0 +1,3 @@
+
+`GET /api/v1/projects/resolve?remote=<url>` returns the project a remote maps to, or 404 when unmapped. It accepts every form `git remote get-url` emits plus a bare `owner/name`. Normalization: strip an scp-style `user@host:` prefix or a URL scheme and authority, drop a leading `/`, drop a trailing `.git` and trailing `/`, then require exactly two non-empty path segments. Anything else is 422. The host is discarded, since `project_repos.repo` is `owner/name` and unique. The response is the same project object `GET /api/v1/projects` returns, so it carries `key`. The route is read-only (plain auth, no admin) and is registered so the literal `resolve` segment wins over `{id}`.
+

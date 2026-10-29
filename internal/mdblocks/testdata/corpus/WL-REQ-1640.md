@@ -1,0 +1,2 @@
+
+A rule relates to other rules through typed edges written by an architect (`refines`, `needs`, `constrains`, `conflictsWith`, WL-REQ-1367) with `lode rule link` and `lode rule unlink` over `POST`/`DELETE /api/v1/rules/{id}/edges`. A rule's `references` edges, manual and derived, are rows of the `inline_refs` table (WL-REQ-1852); `lode rule link --references` writes a `manual` row there. Manual edges are never touched by the derivation.

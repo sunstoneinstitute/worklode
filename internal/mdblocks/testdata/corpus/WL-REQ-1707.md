@@ -1,0 +1,3 @@
+
+Four queries in `internal/overview` read implementation evidence, and `GET /api/v1/overview` reports their counts. Unimplemented intent: an `accepted` rule in its document's canonical graph that no component `wl:implements`. Rule coverage: per document, the non-superseded rules that some component implements over all of them. Stale claim: an `implements` claim whose `wl:pinnedVersion` has a lower `dcat:version` than the version the rule was `wl:lastRevisedIn`, compared as integers. Orphaned claim: an `implements` claim naming a rule that the claim's document, reached through `dcat:hasVersion` from the pinned version, no longer arranges.
+

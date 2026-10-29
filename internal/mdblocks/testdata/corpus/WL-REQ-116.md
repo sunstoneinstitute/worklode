@@ -1,0 +1,3 @@
+
+A `decision`-kind task is an undertaking with one accountable assignee: a scope approval, a go/no-go, a choice between framings. Its questions are rows in `decisions` (WL-SPEC-75#sec-11a), one or more per task. It closes when its last row is answered, in the same transaction as that answer. It has no code, branch or PR, so it is never leased: `lode task assign` names the decider, who starts and closes it (WL-REQ-123). `lode task claim` on one is an error. Where an answer needs a durable rationale, the `design` task that records it in a document `dependsOn` the decision. A decision task needs no approval by default; a flow may still require one (WL-REQ-124).
+
