@@ -11,18 +11,21 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+
+	"github.com/sunstoneinstitute/worklode/internal/mdblocks"
 )
 
 // Option configures Open.
 type Option func(*Store)
 
 // WithMetrics registers the store's Prometheus instruments on reg: claim and
-// lease counters, the active-lease gauge, the inline reference classification
+// lease counters, the active-lease gauge, body normalisation counts, the inline reference classification
 // counters, and database/sql pool stats.
 // Without this option the store records nothing.
 func WithMetrics(reg prometheus.Registerer) Option {
 	return func(s *Store) {
 		s.metrics = newStoreMetrics(reg)
+		bodyNormMetrics.Store(mdblocks.NewMetrics(reg))
 		s.db.m = s.metrics
 		reg.MustRegister(collectors.NewDBStatsCollector(s.db.DB, "worklode"))
 		reg.MustRegister(&leaseCollector{db: s.db.DB, now: s.Now})

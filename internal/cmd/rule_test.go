@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -476,5 +477,46 @@ func TestRuleSetConcept(t *testing.T) {
 	if len(got) != 2 || got[0].Concept == nil || *got[0].Concept != iri || got[0].Kind != nil ||
 		got[1].Concept == nil || *got[1].Concept != "" {
 		t.Errorf("patched = %+v", got)
+	}
+}
+
+// TestDocAndRuleEditNormalise: a draft written through `lode doc edit` and
+// `lode rule edit` reads back normalised (WL-REQ-1867).
+func TestDocAndRuleEditNormalise(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	const raw, norm = "para one\nwrapped here\n\n* star bullet\n", "para one wrapped here\n\n- star bullet\n"
+
+	out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec", "--slug", "norm",
+		"--file", writeDocFile(t, "# Norm\n\n## 1. One {#sec-1}\n\nx\n"), "--json")
+	if err != nil {
+		t.Fatalf("doc add: %v\n%s", err, out)
+	}
+	id := strconv.FormatInt(docJSON(t, out).ID, 10)
+
+	if out, err := runLode(t, "doc", "edit", id, "--file", writeDocFile(t, "# Norm\n\n"+raw+"\n## 1. One {#sec-1}\n\nx\n")); err != nil {
+		t.Fatalf("doc edit: %v\n%s", err, out)
+	}
+	out, err = runLode(t, "doc", "show", id, "--json")
+	if err != nil {
+		t.Fatalf("doc show: %v\n%s", err, out)
+	}
+	if body := string(docJSON(t, out).Body); !strings.Contains(body, "# Norm\n\n"+norm+"\n## 1.") {
+		t.Errorf("doc body after edit:\n%q", body)
+	}
+
+	if out, err := runLode(t, "rule", "edit", "PROJ-REQ-1", "--file", writeDocFile(t, raw)); err != nil {
+		t.Fatalf("rule edit: %v\n%s", err, out)
+	}
+	out, err = runLode(t, "rule", "show", "PROJ-REQ-1", "--json")
+	if err != nil {
+		t.Fatalf("rule show: %v\n%s", err, out)
+	}
+	var r model.Rule
+	if err := json.Unmarshal([]byte(out), &r); err != nil {
+		t.Fatalf("decode rule %q: %v", out, err)
+	}
+	if string(r.Body) != "\n"+norm {
+		t.Errorf("rule body after edit = %q", r.Body)
 	}
 }
