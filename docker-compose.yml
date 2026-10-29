@@ -4,7 +4,8 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
     ports:
-      - "127.0.0.1:5432:5432"
+      # LODE_POSTGRES_PORT moves the host side when 5432 is taken.
+      - "127.0.0.1:${LODE_POSTGRES_PORT:-5432}:5432"
     volumes:
       # A named volume, not a ./data bind mount: Postgres chowns its data
       # directory to uid 999 mode 0700, and a directory the developer cannot
@@ -71,15 +72,33 @@ services:
       LODE_EMBEDDING_MODEL: ${LODE_EMBEDDING_MODEL:-}
       LODE_EMBEDDING_CONTEXT_TOKENS: ${LODE_EMBEDDING_CONTEXT_TOKENS:-}
       LODE_EMBEDDING_API_KEY: ${LODE_EMBEDDING_API_KEY:-}
+      LODE_EMBEDDING_QUERY_PREFIX: ${LODE_EMBEDDING_QUERY_PREFIX:-}
+      LODE_EMBEDDING_DOCUMENT_PREFIX: ${LODE_EMBEDDING_DOCUMENT_PREFIX:-}
       # How often the corpus index converges (WL-REQ-260); unset means 5m. Search
       # still works with no embedding provider — the loop writes the chunk
       # text the lexical arm needs either way.
       LODE_INDEX_INTERVAL: ${LODE_INDEX_INTERVAL:-}
+      LODE_TYPESAFE_API_KEY: ${LODE_TYPESAFE_API_KEY:-}
     restart: unless-stopped
     # No healthcheck: the image is distroless (no shell, no curl/wget), so
     # there is no in-container binary to run an HTTP probe with. /healthz and
     # /metrics live on the admin port (:9090), which compose does not publish;
     # add a "127.0.0.1:9090:9090" port mapping to probe liveness from the host.
+
+  # The embedding server deploy/base/embeddings.yaml runs, opt-in with
+  # `--profile embeddings`; without it search runs on its lexical arm only.
+  # The image is private (docker login ghcr.io) and amd64-only, so Apple
+  # Silicon runs it under emulation. `make dev-server` uses it when it answers;
+  # the containerized server needs the LODE_EMBEDDING_* values from
+  # deploy/base/configmap.yaml, with URL http://embeddings:8080/v1/embeddings.
+  embeddings:
+    profiles: ["embeddings"]
+    image: ghcr.io/sunstoneinstitute/worklode-embeddings:embeddinggemma-300m-tei1.9.3
+    platform: linux/amd64
+    command: ["--model-id=/model", "--port=8080", "--max-client-batch-size=256", "--auto-truncate", "--max-concurrent-requests=2048"]
+    ports:
+      - "127.0.0.1:${LODE_EMBEDDINGS_PORT:-8081}:8080"
+    restart: unless-stopped
 
   # SPARQL endpoint for knowledge-graph integration tests only (the production
   # write path is internal/graphserver; Oxigraph stands in for validation).
