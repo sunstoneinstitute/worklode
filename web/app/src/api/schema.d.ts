@@ -9500,7 +9500,6 @@ export interface components {
             id?: string;
             props?: unknown;
             range?: components["schemas"]["ByteRange"];
-            tableContent?: components["schemas"]["TableContent"];
             type?: string;
         };
         EndAgentSessionInput: {
@@ -10565,13 +10564,6 @@ export interface components {
             stale_plans?: number;
             tasks?: number;
             withdrawn?: number;
-        };
-        TableContent: {
-            rows?: components["schemas"]["TableRow"][] | null;
-            type?: string;
-        };
-        TableRow: {
-            cells?: components["schemas"]["InlineContent"][][] | null;
         };
         Task: {
             about_anchor?: string;
