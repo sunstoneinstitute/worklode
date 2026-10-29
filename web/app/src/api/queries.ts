@@ -305,7 +305,20 @@ export type BodySubject = {
   docKind: string
   blocks: components["schemas"]["EditorBlock"][]
   body_sha256: string
+  /** The stored Markdown the blocks' offsets count into, and its version: what a thread anchors to */
+  body: string
+  version: number
+  /** Where threads go (WL-REQ-1317); none for a task body */
+  threads?: ThreadSubject
 }
+
+/**
+ * A document or rule as thread subject. `openOn` is the document a new thread
+ * is posted to: the document itself, or a document arranging the rule (none
+ * when no document arranges it).
+ */
+export type ThreadSubject = { kind: "doc" | "rule"; id: number; ref: string; openOn?: number }
+export type ReviewThread = components["schemas"]["ReviewThread"]
 
 /** Reads the subject with ?as=blocks, never from cache: the hash must be the stored body's now */
 export function useBodySubject(target: BodyTarget) {
@@ -319,19 +332,45 @@ export function useBodySubject(target: BodyTarget) {
         const { data, error, response } = await api.GET("/api/v1/rules/{id}", { params: { path: { id: target.ref }, query } })
         if (error) throw failure(error, response)
         const heading = data.heading ?? ""
-        return { lockId: String(data.id), title: `${data.ref}: ${heading}`, heading, docKind: "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "" }
+        const id = data.id ?? 0
+        return {
+          lockId: String(id), title: `${data.ref}: ${heading}`, heading, docKind: "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "",
+          body: data.body ?? "", version: data.version ?? 0,
+          threads: { kind: "rule", id, ref: target.ref, openOn: data.arranged_in?.[0]?.doc },
+        }
       }
       if (target.kind === "task") {
         const { data, error, response } = await api.GET("/api/v1/tasks/{id}", { params: { path: { id: target.ref }, query } })
         if (error) throw failure(error, response)
-        return { lockId: data.id ?? "", title: `${data.id}: ${data.title}`, heading: "", docKind: "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "" }
+        return { lockId: data.id ?? "", title: `${data.id}: ${data.title}`, heading: "", docKind: "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "", body: data.body ?? "", version: 0 }
       }
       const resolved = await api.GET("/api/v1/docs/resolve", { params: { query: { ref: target.ref } } })
       if (resolved.error) throw failure(resolved.error, resolved.response)
       const id = resolved.data.id ?? 0
       const { data, error, response } = await api.GET("/api/v1/docs/{id}", { params: { path: { id: String(id) }, query } })
       if (error) throw failure(error, response)
-      return { lockId: String(id), title: `${data.ref}: ${data.title}`, heading: "", docKind: data.kind ?? "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "" }
+      return {
+        lockId: String(id), title: `${data.ref}: ${data.title}`, heading: "", docKind: data.kind ?? "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "",
+        body: data.body ?? "", version: data.version ?? 0,
+        threads: { kind: "doc", id, ref: target.ref, openOn: id },
+      }
+    },
+  })
+}
+
+/** A document's or rule's threads, bare notes and review threads together, `obsolete` included (WL-REQ-1323) */
+export function useThreads(subject: ThreadSubject | undefined) {
+  return useQuery({
+    queryKey: ["threads", subject?.kind, subject?.ref],
+    enabled: subject !== undefined,
+    queryFn: async (): Promise<ReviewThread[]> => {
+      const s = subject!
+      const { data, error, response } =
+        s.kind === "doc"
+          ? await api.GET("/api/v1/docs/{id}/threads", { params: { path: { id: String(s.id) } } })
+          : await api.GET("/api/v1/rules/{id}/threads", { params: { path: { id: s.ref } } })
+      if (error) throw failure(error, response)
+      return data
     },
   })
 }

@@ -1,7 +1,7 @@
 import { HttpResponse, delay, http } from "msw"
 import type { components } from "@/api/schema"
 import { sha256Hex } from "@/editor/bytes"
-import { type CrewMember, type LeadHandoff, type LitmusTest, type MockLock, type ProjectDocument, type Task, db, idea, projectDetail, sharedIdea, visibleIdea } from "./db"
+import { type ReviewThread, type CrewMember, type LeadHandoff, type LitmusTest, type MockLock, type ProjectDocument, type Task, db, idea, projectDetail, sharedIdea, visibleIdea } from "./db"
 import type { Ok } from "./typed"
 
 // Visible loading states in development; instant in tests
@@ -247,6 +247,60 @@ export const handlers = [
     if (refused) return refused
     doc.body = input.blocks ? blocksMarkdown(input.blocks) : (input.body ?? "")
     const body: Ok<"/api/v1/docs/{id}/body", "put"> = doc
+    return HttpResponse.json(body)
+  }),
+
+  // Threads (WL-REQ-1323). Opening checks the anchor's quote against the stored bytes, as the server does.
+  http.get("/api/v1/docs/:id/threads", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const body: Ok<"/api/v1/docs/{id}/threads", "get"> = db.threads.filter((t) => String(t.anchor?.doc) === params.id)
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/rules/:id/threads", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const rule = ruleByRef(String(params.id))
+    if (!rule) return HttpResponse.json({ error: "rule not found" }, { status: 404 })
+    const body: Ok<"/api/v1/rules/{id}/threads", "get"> = db.threads.filter((t) => t.anchor?.rule === rule.id)
+    return HttpResponse.json(body)
+  }),
+
+  http.post("/api/v1/docs/:id/threads", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const doc = db.docs.find((d) => String(d.id) === params.id)
+    if (!doc) return HttpResponse.json({ error: "document not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["OpenThreadInput"]
+    const a = input.anchor ?? {}
+    const subject = a.rule ? db.rules.find((r) => r.id === a.rule) : a.doc === doc.id ? doc : undefined
+    const stored = utf8.encode(subject?.body ?? "").slice(a.byte_start ?? 0, a.byte_end ?? 0)
+    if (!subject || !input.body?.trim() || !a.version || new TextDecoder().decode(stored) !== a.quote) {
+      return HttpResponse.json({ error: "the anchor does not match the stored text" }, { status: 422 })
+    }
+    const thread: ReviewThread = {
+      id: db.threads.length + 1, anchor: a, intent: input.intent, status: "open", author: db.me.id, created_at: new Date().toISOString(),
+      messages: [{ id: 1, seq: 1, author: db.me.id, role: "reviewer", body: input.body }],
+    }
+    db.threads.push(thread)
+    return HttpResponse.json(thread, { status: 201 })
+  }),
+
+  http.post("/api/v1/threads/:tid/messages", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const thread = db.threads.find((t) => String(t.id) === params.tid)
+    if (!thread) return HttpResponse.json({ error: "thread not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["ThreadReplyInput"]
+    const message = { id: (thread.messages?.length ?? 0) + 1, thread: thread.id, author: db.me.id, role: "reviewer", body: input.body }
+    thread.messages = [...(thread.messages ?? []), message]
+    return HttpResponse.json(message, { status: 201 })
+  }),
+
+  http.post("/api/v1/threads/:tid/resolve", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const thread = db.threads.find((t) => String(t.id) === params.tid)
+    if (!thread) return HttpResponse.json({ error: "thread not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["ThreadResolveInput"]
+    Object.assign(thread, { status: input.status ?? "resolved", resolved_by: db.me.id, resolved_at: new Date().toISOString() })
+    const body: Ok<"/api/v1/threads/{tid}/resolve", "post"> = thread
     return HttpResponse.json(body)
   }),
 
@@ -548,13 +602,19 @@ function lockView(lock: MockLock): components["schemas"]["BodyLock"] {
 // Worklode Markdown; the mock only needs text to survive the round trip.
 type EditorBlock = components["schemas"]["EditorBlock"]
 
+const utf8 = new TextEncoder()
+
 async function asBlocks(request: Request, body: string): Promise<{ blocks?: EditorBlock[]; body_sha256?: string }> {
   if (new URL(request.url).searchParams.get("as") !== "blocks") return {}
-  const blocks = body
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map((text): EditorBlock => ({ type: "paragraph", content: [{ type: "text", text, styles: {} }] }))
+  // Each paragraph's run carries its UTF-8 byte offset in body, as the server's do (WL-RULE-1870)
+  const blocks: EditorBlock[] = []
+  for (const m of body.matchAll(/[^\n]+(?:\n[^\n]+)*/g)) {
+    const text = m[0].trim()
+    if (!text) continue
+    const at = utf8.encode(body.slice(0, m.index + m[0].indexOf(text))).length
+    const end = at + utf8.encode(text).length
+    blocks.push({ type: "paragraph", range: { start: at, end }, content: [{ type: "text", text, styles: {}, offset: at }] })
+  }
   return { blocks, body_sha256: await sha256Hex(body) }
 }
 

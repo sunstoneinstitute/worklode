@@ -98,7 +98,9 @@ function seed() {
   const intakeConfigured: boolean = true
   // Body locks by "kind:id" (GET/POST/PUT/DELETE /api/v1/locks/{kind}/{id})
   const locks = new MockLocks()
-  return { me, projects, crew, participants, leadHandoffs, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured, locks }
+  // Review threads on documents and rules (WL-REQ-1322)
+  const threads: ReviewThread[] = []
+  return { threads, me, projects, crew, participants, leadHandoffs, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured, locks }
 }
 
 type BodyLock = Ok<"/api/v1/locks/{kind}/{id}", "get">
@@ -150,6 +152,7 @@ export function visibleIdea(id: string) {
   return db.ideas.find((i) => i.id === id && (i.author === db.me.id || i.shared))
 }
 
+export type ReviewThread = Ok<"/api/v1/threads/{tid}/resolve", "post">
 export type Doc = NonNullable<Ok<"/api/v1/docs", "get">["docs"]>[number]
 export type Rule = Ok<"/api/v1/rules", "get">[number]
 export type ProjectDocument = NonNullable<Ok<"/api/v1/projects/{id}/documents", "get">["documents"]>[number]

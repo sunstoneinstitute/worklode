@@ -1,17 +1,20 @@
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { type BodyConflict, saveBody } from "@/api/mutations"
-import { type BodySubject, type BodyTarget, HttpError, browser, useBodySubject } from "@/api/queries"
+import { type BodySubject, type BodyTarget, HttpError, type ReviewThread, browser, useBodySubject, useThreads } from "@/api/queries"
 import type { components } from "@/api/schema"
 import { Button } from "@/components/ui/button"
 import { LoadError, LoadingBlock } from "@/components/ui/load-state"
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 import { useLeaveGuard } from "@/hooks/use-leave-guard"
 import { NotFound } from "@/pages/NotFound"
+import { cn } from "cn"
 import { type Blocks, BodyEditor } from "./BodyEditor"
 import { BodyView } from "./BodyView"
+import { CommentPanel } from "./CommentPanel"
 import { LockedDialog } from "./LockedDialog"
 import { sha256Hex } from "./bytes"
+import { type BodyComments, type SelectionAnchor, type ThreadRange } from "./threads"
 import { useBodyLock } from "./use-body-lock"
 
 type EditorBlock = components["schemas"]["EditorBlock"]
@@ -68,6 +71,13 @@ function BodyEditPage({
   const lock = useBodyLock(target.kind, loaded.lockId, { dirty })
   const guard = useLeaveGuard({ dirty, onClose: () => browser.assign(viewHref) })
   const editable = lock.status === "held" && !spec
+  // Threads on a document or rule body; a task body has none (WL-REQ-1317)
+  const threads = useThreads(loaded.threads)
+  const [pending, setPending] = useState<SelectionAnchor | null>(null)
+  const highlights = useMemo(() => openRanges(threads.data ?? [], loaded), [threads.data, loaded])
+  // Anchors count into the body as loaded: a reloaded body has its own blocks
+  const comments: BodyComments | undefined =
+    loaded.threads && base.blocks === loaded.blocks ? { source: loaded.blocks, body: loaded.body, highlights, onSelect: setPending } : undefined
 
   async function save(against: string): Promise<boolean> {
     if (lock.status !== "held" || saving) return false
@@ -142,11 +152,13 @@ function BodyEditPage({
           </Button>
         </div>
       )}
-      <div className={conflict ? "grid gap-6 lg:grid-cols-2" : ""}>
+      <div className={loaded.threads ? "grid gap-6 lg:grid-cols-4" : ""}>
+      <div className={cn(conflict && "grid gap-6 lg:grid-cols-2", loaded.threads && "lg:col-span-3")}>
         <BodyEditor
           key={base.key}
           blocks={base.blocks as Blocks}
           readOnly={!editable}
+          comments={comments}
           onChange={(blocks) => {
             current.current = blocks as unknown as EditorBlock[]
             setDirty(true)
@@ -167,6 +179,10 @@ function BodyEditPage({
             <BodyView key={conflict.body_sha256} blocks={(conflict.blocks ?? []) as Blocks} />
           </section>
         )}
+      </div>
+      {loaded.threads && (
+        <CommentPanel subject={loaded.threads} version={loaded.version} threads={threads.data ?? []} pending={pending} onOpened={() => setPending(null)} />
+      )}
       </div>
       {lock.status === "locked" && dialog && (
         <LockedDialog
@@ -200,4 +216,19 @@ function BodyEditPage({
       />
     </div>
   )
+}
+
+/**
+ * The byte ranges of the open threads anchored to this subject's loaded
+ * version. A spec's threads on its arranged rules carry rule bytes, which do
+ * not map onto the rendered body, so they are listed without a highlight.
+ */
+function openRanges(threads: ReviewThread[], loaded: BodySubject): ThreadRange[] {
+  const subject = loaded.threads
+  return threads.flatMap((t) => {
+    const a = t.anchor
+    const mine = subject?.kind === "doc" ? a?.doc === subject.id && !a?.rule : a?.rule === subject?.id
+    if (t.status !== "open" || !mine || a?.version !== loaded.version || a.byte_end == null || a.byte_start == null) return []
+    return [{ id: t.id ?? 0, start: a.byte_start, end: a.byte_end }]
+  })
 }
