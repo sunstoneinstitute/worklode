@@ -324,3 +324,40 @@ export async function saveBody(target: BodyTarget, subject: BodySubject, input: 
   }
   throw failure(error as ErrorResponse, response)
 }
+
+// Threads on a document or rule (WL-REQ-1317, WL-REQ-1323). Each write refetches every thread list.
+type OpenThreadInput = components["schemas"]["OpenThreadInput"]
+
+function useThreadWrite<V>(write: (vars: V) => Promise<unknown>, what: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: write,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["threads"] }),
+    onError: (e) => toast.error(`Couldn't ${what}: ${e.message}`),
+  })
+}
+
+/** Opens a bare thread on document `doc`, anchored to it or to a rule it arranges */
+export function useOpenThread() {
+  return useThreadWrite(async ({ doc, input }: { doc: number; input: OpenThreadInput }) => {
+    const { data, error, response } = await api.POST("/api/v1/docs/{id}/threads", { params: { path: { id: String(doc) } }, body: input })
+    if (error) throw failure(error, response)
+    return data
+  }, "comment")
+}
+
+export function useReplyThread() {
+  return useThreadWrite(async ({ thread, body }: { thread: number; body: string }) => {
+    const { data, error, response } = await api.POST("/api/v1/threads/{tid}/messages", { params: { path: { tid: String(thread) } }, body: { body } })
+    if (error) throw failure(error, response)
+    return data
+  }, "reply")
+}
+
+export function useResolveThread() {
+  return useThreadWrite(async (thread: number) => {
+    const { data, error, response } = await api.POST("/api/v1/threads/{tid}/resolve", { params: { path: { tid: String(thread) } }, body: { status: "resolved" } })
+    if (error) throw failure(error, response)
+    return data
+  }, "resolve")
+}

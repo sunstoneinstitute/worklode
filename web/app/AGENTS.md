@@ -216,6 +216,13 @@ lock, which `LockedDialog.tsx` explains (WL-REQ-1868). Saves send
 MSW mocks keep lock state in `db.locks` (`src/mocks/db.ts`), served by the lock
 handlers in `src/mocks/handlers.ts`.
 
+A document or rule body shows its threads (WL-REQ-1317): `src/editor/threads.ts`
+paints each open thread's byte range as a ProseMirror decoration, never a mark,
+and maps a selection to the anchor's bytes and quote through `bytes.ts`
+against the blocks as loaded. `CommentPanel.tsx` lists the threads and opens,
+replies to and resolves them through the thread routes; the mocks keep them in
+`db.threads`. A task body has none.
+
 ## DataTable: generic, schema-driven table component
 
 `src/components/ui/data-table/` is a reusable table. Columns, sorting,
