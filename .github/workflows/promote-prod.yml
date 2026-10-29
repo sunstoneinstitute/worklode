@@ -47,7 +47,7 @@ jobs:
           lfs: true
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -55,7 +55,7 @@ jobs:
 
       - name: Promote image to hzprod
         id: promote
-        uses: sunstoneinstitute/actions/promote-images@1dc757461086ff5f3f3765eea6089d9c8af46930 # v1.8.1
+        uses: sunstoneinstitute/actions/promote-images@3c3ceffadf24a8077738bf911173238bc4b9f554 # v1.10.0
         with:
           from-env: dev
           to-env: prod
