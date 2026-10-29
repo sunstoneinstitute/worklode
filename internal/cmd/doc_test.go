@@ -1025,6 +1025,12 @@ func TestDocLintFile(t *testing.T) {
 				"### Task 1 — No fence\n\nprose only\n",
 			wantErr: true, contains: []string{"task 1", "kind is required"},
 		},
+		"plan with a task swallowed by an unclosed fence": {
+			body: "---\nstatus: draft\ncovers: NO-SPEC\n---\n\n# P\n\n## Tasks\n\n" +
+				"### Task 1 — Open\n\n```yaml\nkind: chore\n```\n\n```\nnever closed\n\n" +
+				"### Task 2 — Lost\n\n```yaml\nkind: chore\n```\n",
+			wantErr: true, contains: []string{"### Task 2 — Lost", "unclosed fence"},
+		},
 		// A spec is not a plan, so its "## Tasks" section is prose: the
 		// plan-task check is skipped rather than guessed at.
 		"tasks section in a non-plan is not linted as a plan": {
