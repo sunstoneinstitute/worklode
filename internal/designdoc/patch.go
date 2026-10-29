@@ -163,17 +163,15 @@ func codeSurfaces(text string) []string {
 	var out []string
 	var fence string
 	for _, line := range strings.Split(text, "\n") {
-		stripped := strings.TrimLeft(line, " \t")
 		if fence != "" {
-			if strings.HasPrefix(stripped, fence) {
+			if closesFence(line, fence) {
 				fence = ""
 			} else {
 				out = append(out, line)
 			}
 			continue
 		}
-		if strings.HasPrefix(stripped, "```") || strings.HasPrefix(stripped, "~~~") {
-			fence = stripped[:3]
+		if fence, _ = openFence(line); fence != "" {
 			continue
 		}
 		out = append(out, inlineCodePattern.FindAllString(line, -1)...)

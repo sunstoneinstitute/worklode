@@ -189,23 +189,14 @@ func splitPlanTaskFence(body string) (fenceContent, rest string, found bool) {
 		return "", body, false
 	}
 
-	openLine := lineText(i)
-	var mark string
-	switch {
-	case strings.HasPrefix(openLine, "```"):
-		mark = "```"
-	case strings.HasPrefix(openLine, "~~~"):
-		mark = "~~~"
-	default:
-		return "", body, false
-	}
-	if strings.TrimSpace(strings.TrimPrefix(openLine, mark)) != "yaml" {
+	mark, info := openFence(lineText(i))
+	if mark == "" || info != "yaml" {
 		return "", body, false
 	}
 
 	j := i + 1
 	for j < len(lines) {
-		if strings.HasPrefix(lineText(j), mark) {
+		if closesFence(lineText(j), mark) {
 			break
 		}
 		j++
@@ -218,6 +209,31 @@ func splitPlanTaskFence(body string) (fenceContent, rest string, found bool) {
 	fenceContent = body[lines[i+1].start:lines[j].start]
 	rest = body[:lines[i].start] + body[lines[j].end:]
 	return fenceContent, rest, true
+}
+
+// fencedTaskHeadingRE matches a line shaped like a task heading.
+var fencedTaskHeadingRE = regexp.MustCompile(`(?m)^###[ \t]+Task[ \t]+\d.*$`)
+
+// UncountedTaskHeadings reports every "### Task N" line under "## Tasks" that
+// the parse read as fenced code rather than a heading, the trace an unclosed
+// fence leaves when it swallows the tasks after it.
+func UncountedTaskHeadings(d *Document) []string {
+	var out []string
+	in := false
+	for _, sec := range d.Sections {
+		if sec.Level <= 2 {
+			in = sec.Level == 2 && strings.TrimSpace(sec.Title) == "Tasks"
+		}
+		if !in {
+			continue
+		}
+		for _, h := range fencedTaskHeadingRE.FindAllString(sec.Body, -1) {
+			out = append(out, fmt.Sprintf(
+				"%q under \"## Tasks\" is inside a fenced code block, so it is not a task; check for an unclosed fence above it",
+				strings.TrimRight(h, "\r")))
+		}
+	}
+	return out
 }
 
 // checkPlanTaskNumbering enforces that N runs 1, 2, 3… in document order
@@ -393,14 +409,15 @@ func AnnotatePlanTaskHeadings(body string, ids map[string]string) string {
 	}
 	textIdx := heading.SubexpIndex("text")
 	lines := strings.Split(body, "\n")
-	fenced := false
+	var fence string
 	for i, line := range lines {
-		if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "```") ||
-			strings.HasPrefix(trimmed, "~~~") {
-			fenced = !fenced
+		if fence != "" {
+			if closesFence(line, fence) {
+				fence = ""
+			}
 			continue
 		}
-		if fenced {
+		if fence, _ = openFence(line); fence != "" {
 			continue
 		}
 		loc := heading.FindStringSubmatchIndex(strings.TrimRight(line, "\r"))
