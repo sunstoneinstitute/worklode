@@ -24,7 +24,7 @@ tell an adjective from a verb or a view from an action.
 - **L1** — Entity commands are `lode <entity> <verb>`. Entity nouns are
   singular and exactly what the backbone models: `actor`, `approval`, `blob`,
   `channel`, `decision`, `deliverable`, `doc`, `event`, `gate`, `graph`,
-  `inbox`, `milestone`, `project`, `rule`, `secret`, `skill`, `task`, `token`. No bare
+  `inbox`, `milestone`, `project`, `review`, `rule`, `secret`, `skill`, `task`, `token`. No bare
   top-level command may act on an entity.
 - **L2** — Bare top-level commands act on this machine or this checkout, not
   on an entity. The set is closed: `doctor`, `install`, `uninstall`, `login`,
@@ -40,7 +40,7 @@ tell an adjective from a verb or a view from an action.
   `tail`, `gc`, `link`, `dismiss`, `serve`, `listen`, `next`, `resume`,
   `attach`, `detach`, `assign`, `block`, `govern`, `parent`, `duplicate`,
   `request`, `pack`, `note`, `escalate`, `gap`, `fix`, `withdraw`, `report`,
-  `check`, `supersede`, `arrange`, `decide`.
+  `check`, `supersede`, `arrange`, `decide`, `comment`, `approve`, `wait`.
 - **L4** — Verbs are imperative verbs. No adjectives: `task ready` becomes
   `task publish`. No hyphenated verbs, with exceptions named in the
   WL-REQ-308 allowlist. `set` is a verb like any other: the field it writes
@@ -72,11 +72,11 @@ tell an adjective from a verb or a view from an action.
   (`project overview`). These are permanent API, not compatibility aliases.
   Adding a fifth requires amending WL-REQ-305.
 
-The resulting top-level, twenty-six commands and four shortcuts:
+The resulting top-level, twenty-seven commands and four shortcuts:
 
 | Class | Commands |
 |---|---|
-| Entities (L1) | `actor`, `approval`, `blob`, `channel`, `decision`, `deliverable`, `doc`, `event`, `gate`, `graph`, `inbox`, `milestone`, `project`, `rule`, `secret`, `skill`, `task`, `token` |
+| Entities (L1) | `actor`, `approval`, `blob`, `channel`, `decision`, `deliverable`, `doc`, `event`, `gate`, `graph`, `inbox`, `milestone`, `project`, `review`, `rule`, `secret`, `skill`, `task`, `token` |
 | Workflow (L8) | `work` |
 | Cross-entity readers (L7) | `show`, `search` |
 | Machine (L2) | `doctor`, `install`, `uninstall`, `login`, `logout` |

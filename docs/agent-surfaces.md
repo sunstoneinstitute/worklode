@@ -137,6 +137,19 @@ groups were synced more than 24 hours ago cannot decide a row that needs a
 group; the refusal says to run `lode login` or reconnect the MCP connector.
 A task-scoped token cannot decide at all.
 
+## Reviewing a document
+
+`lode review` drives a document review over `/api/v1/reviews` (WL-REQ-1775):
+`add <ref>`, `list [--mine] [--open]`, `show <review-id> [--json]`,
+`comment <review-id> --quote "…" --intent question|change_request|note --body "…"`,
+`comment <review-id> --thread <thread-id> --body "…"`, `resolve <thread-id>`,
+`approve <review-id>`, `set verdict changes_requested <review-id>`,
+`submit <review-id>` (author round at the document's current version) and
+`wait <review-id> [--after <seq>] [--timeout <s>]` (one JSON envelope, or
+nothing on timeout). `--quote` must occur exactly once in the document's
+current text, the rendered body for a spec. No skill names these yet; the
+worker text for reviews comes with WL-PLAN-133.
+
 ## Authoring guidance starts from rules
 
 Every surface that teaches design authoring (root `CLAUDE.md`, the
