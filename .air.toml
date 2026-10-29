@@ -1,0 +1,17 @@
+# make dev-server-watch: rebuild and restart lode-server on source changes.
+root = "."
+tmp_dir = "bin/air"
+
+[build]
+  cmd = "go tool templ generate && make bin/lode-server"
+  full_bin = "make dev-server"
+  include_ext = ["go", "templ", "css", "js"]
+  exclude_dir = ["web", ".claude", ".worktrees", "bin", "graphify-out", "node_modules", "e2e"]
+  exclude_regex = ["_templ\\.go$", "_test\\.go$"]
+  delay = 500
+  send_interrupt = true
+  kill_delay = "5s"
+  stop_on_error = true
+
+[misc]
+  clean_on_exit = true
