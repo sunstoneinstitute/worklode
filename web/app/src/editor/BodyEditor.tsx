@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useHtmlDark } from "@/hooks/use-dark-mode"
 import { schema } from "./schema"
+import { type BodyComments, threadHighlights, useThreadMarks } from "./threads"
 
 const { heading, source, callout } = schema.blockSpecs
 
@@ -133,6 +134,7 @@ export function useBodyEditor(blocks: Blocks) {
     schema: bodySchema,
     initialContent: blocks.length ? blocks : undefined,
     domAttributes: { editor: { "aria-label": "Body" } },
+    extensions: [() => ({ key: "threadHighlights", prosemirrorPlugins: [threadHighlights] })],
   })
 }
 
@@ -140,12 +142,15 @@ interface BodyEditorProps {
   blocks: Blocks
   onChange: (blocks: (typeof bodySchema.Block)[]) => void
   readOnly?: boolean
+  /** Thread highlights and the selection a thread starts from; none on a task body (WL-REQ-1317) */
+  comments?: BodyComments
 }
 
 /** A document body in BlockNote. Reports blocks on edits that change them, never on open. */
-export function BodyEditor({ blocks, onChange, readOnly = false }: BodyEditorProps) {
+export function BodyEditor({ blocks, onChange, readOnly = false, comments }: BodyEditorProps) {
   const isDark = useHtmlDark()
   const editor = useBodyEditor(blocks)
+  const onSelectionChange = useThreadMarks(editor, comments)
   // BlockNote reports transactions that leave the document as it was
   const last = useRef<string>(undefined)
   last.current ??= JSON.stringify(editor.document)
@@ -164,6 +169,7 @@ export function BodyEditor({ blocks, onChange, readOnly = false }: BodyEditorPro
       sideMenu={false}
       shadCNComponents={SHADCN_COMPONENTS as never}
       onChange={report}
+      onSelectionChange={onSelectionChange}
     >
       <SideMenuController sideMenu={(props) => <SideMenu {...props} dragHandleMenu={BodyDragHandleMenu} />} />
     </BlockNoteView>

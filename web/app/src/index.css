@@ -492,3 +492,8 @@
   gap: var(--spacing);
   padding: var(--spacing) calc(var(--spacing) * 2);
 }
+/* An open thread's range: a decoration, never a mark (WL-REQ-1317) */
+.bn-container .bn-thread-mark {
+  background: color-mix(in srgb, var(--color-highlight) 25%, transparent);
+  border-bottom: 2px solid var(--color-highlight);
+}
