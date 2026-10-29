@@ -87,14 +87,13 @@ services:
 
   # The embedding server deploy/base/embeddings.yaml runs, opt-in with
   # `--profile embeddings`; without it search runs on its lexical arm only.
-  # The image is private (docker login ghcr.io) and amd64-only, so Apple
-  # Silicon runs it under emulation. `make dev-server` uses it when it answers;
+  # The image is private (docker login ghcr.io). `make dev-server` uses it
+  # when it answers;
   # the containerized server needs the LODE_EMBEDDING_* values from
   # deploy/base/configmap.yaml, with URL http://embeddings:8080/v1/embeddings.
   embeddings:
     profiles: ["embeddings"]
-    image: ghcr.io/sunstoneinstitute/worklode-embeddings:embeddinggemma-300m-tei1.9.3
-    platform: linux/amd64
+    image: ghcr.io/sunstoneinstitute/worklode-embeddings:embeddinggemma-300m-tei1.9.4
     command: ["--model-id=/model", "--port=8080", "--max-client-batch-size=256", "--auto-truncate", "--max-concurrent-requests=2048"]
     ports:
       - "127.0.0.1:${LODE_EMBEDDINGS_PORT:-8081}:8080"

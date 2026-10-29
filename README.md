@@ -841,8 +841,7 @@ database. If port 5432 is taken, set `LODE_POSTGRES_PORT` (for example
 `DEV_DSN` overrides the whole database URL.
 
 For the dense arm of search, run `make dev-embeddings` before
-`make dev-server`. It needs `docker login ghcr.io`, and on Apple Silicon the
-amd64 image runs emulated at about a second per chunk. `make dev-server`
+`make dev-server`. It needs `docker login ghcr.io`. `make dev-server`
 uses it when it answers on `LODE_EMBEDDINGS_PORT` (default 8081).
 
 Open http://localhost:5173. Vite serves the SPA's routes from source and
