@@ -12,7 +12,7 @@
       "name": "lode",
       "source": "./plugins/claude/lode",
       "description": "[code] Worklode for coding agents: /lode:* commands to claim tasks into worktrees, hand them off for review, and plan and consolidate specs. The README lists every command.",
-      "version": "0.17.0",
+      "version": "0.18.0",
       "author": {
         "name": "Stig Bakken",
         "email": "stig@sunstone.institute"
