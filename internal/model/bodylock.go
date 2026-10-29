@@ -37,3 +37,14 @@ type LockLost struct {
 type LockReleaseParams struct {
 	Session string `query:"session"`
 }
+
+// BodyConflict is the 409 answer to an editor save whose if_body_sha256 is
+// not the stored body's (WL-REQ-1868): the stored text now, as Markdown and as
+// blocks. ID is the subject's id as BodyLock.SubjectID has it.
+type BodyConflict struct {
+	Kind       string        `json:"kind"`
+	ID         string        `json:"id"`
+	BodySHA256 string        `json:"body_sha256"`
+	Body       Markdown      `json:"body"`
+	Blocks     []EditorBlock `json:"blocks"`
+}

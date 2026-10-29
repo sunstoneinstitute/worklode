@@ -777,6 +777,9 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	var updated *model.Doc
 	err = s.recordDocEvent(w, r, "update", "doc.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
+			if err := store.CheckBodySave(tx, "doc", strconv.FormatInt(id, 10), req.LockSession, req.IfBodySHA256); err != nil {
+				return err
+			}
 			d, err := store.UpdateDocBody(tx, now, id, string(req.Body), req.IfVersion, eventID)
 			if err != nil {
 				return err
@@ -1195,6 +1198,11 @@ func (s *server) updateDocRevision(w http.ResponseWriter, r *http.Request) {
 			"if_version names a document version, and a revision edit writes the open candidate: drop it")
 		return
 	}
+	if req.IfBodySHA256 != "" || req.LockSession != "" {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"if_body_sha256 and lock_session check the document body, and a revision edit writes the open candidate: drop them")
+		return
+	}
 	now := s.st.Now()
 	err := s.recordDocEvent(w, r, "update", "doc.revision_updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
@@ -1294,7 +1302,7 @@ func (s *server) recordDocEvent(
 		return err
 	}
 	if _, _, err := s.st.RecordDocEvent(r.Context(), op, docSource, extID, eventType, payload, apply); err != nil {
-		s.mapStoreErr(w, err)
+		s.mapSaveErr(w, r, err)
 		return err
 	}
 	return nil
@@ -1363,7 +1371,7 @@ var docRouteDocs = map[string]routeDoc{
 	"PUT /api/v1/docs/{id}/body": {
 		summary:   "Replace a document's body, as Markdown or (not on a spec) as editor blocks",
 		request:   model.UpdateDocBodyInput{},
-		responses: map[int]any{http.StatusOK: model.Doc{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
+		responses: map[int]any{http.StatusOK: model.Doc{}, http.StatusUnprocessableEntity: model.ErrorResponse{}, http.StatusConflict: bodySaveConflict},
 	},
 	"POST /api/v1/docs/{id}/patch": {
 		summary:   "Amend an accepted document in place",

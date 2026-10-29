@@ -520,3 +520,47 @@ func TestDocAndRuleEditNormalise(t *testing.T) {
 		t.Errorf("rule body after edit = %q", r.Body)
 	}
 }
+
+// TestBodyEditsSendNoEditorChecks: `lode rule edit` and `lode task edit` send
+// no if_body_sha256 and no lock_session, so a held lock never refuses them
+// (WL-REQ-1868).
+func TestBodyEditsSendNoEditorChecks(t *testing.T) {
+	var sent []string
+	record := func(reply any) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			sent = append(sent, r.Method+" "+string(b))
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(reply)
+		}
+	}
+	rule := model.Rule{Ref: "WL-RULE-1", Heading: "H", Body: "\nx\n", Status: "draft", Version: 1}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/rules/WL-RULE-1", record(rule))
+	mux.HandleFunc("PUT /api/v1/rules/WL-RULE-1", record(rule))
+	mux.HandleFunc("PATCH /api/v1/tasks/WL-1", record(model.Task{ID: "WL-1", Title: "T"}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	if out, err := runLode(t, "rule", "edit", "WL-RULE-1", "--file", writeDocFile(t, "x\n")); err != nil {
+		t.Fatalf("rule edit: %v\n%s", err, out)
+	}
+	if out, err := runLode(t, "task", "edit", "WL-1", "--body", "y"); err != nil {
+		t.Fatalf("task edit: %v\n%s", err, out)
+	}
+	writes := 0
+	for _, s := range sent {
+		if strings.HasPrefix(s, "GET") {
+			continue
+		}
+		writes++
+		if strings.Contains(s, "if_body_sha256") || strings.Contains(s, "lock_session") {
+			t.Errorf("edit carries an editor check: %s", s)
+		}
+	}
+	if writes != 2 {
+		t.Fatalf("writes = %d, want 2: %q", writes, sent)
+	}
+}

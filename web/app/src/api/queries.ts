@@ -28,8 +28,10 @@ export class LoginRedirect extends HttpError {
   }
 }
 
-export function failure(error: ErrorResponse, response: Response) {
-  return new HttpError(response.status, error.error ?? `${response.status} ${response.statusText}`.trim(), error.fields)
+/** A body save's 409 carries a BodyConflict or BodyLock, not an ErrorResponse; its message is the status line. */
+export function failure(error: ErrorResponse | object, response: Response) {
+  const e = error as ErrorResponse
+  return new HttpError(response.status, e.error ?? `${response.status} ${response.statusText}`.trim(), e.fields)
 }
 
 /**
