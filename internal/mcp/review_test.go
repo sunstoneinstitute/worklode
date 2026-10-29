@@ -122,3 +122,26 @@ func TestReviewTools(t *testing.T) {
 		t.Fatalf("stale groups = %+v", res.Content)
 	}
 }
+
+// WL-1227: approval_add on a task binds a revision, so the row can be decided.
+func TestTaskApprovalDecides(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	alice := f.connect(t, f.alice, oldProtocol, nil)
+	bob := f.connect(t, f.bob, oldProtocol, nil)
+	h := handleOf(t, call(t, alice, "project_use", map[string]any{"project": "WL", "confirmed": true}))
+	api := f.client(f.alice)
+
+	task, _, err := api.CreateTask(ctx, model.CreateTaskInput{Project: "worklode", Title: "Approve me", Kind: "chore", Priority: "low"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := call(t, alice, "approval_add", map[string]any{"project": h, "entity": task.ID, "approver": "bob"})
+	if res.IsError {
+		t.Fatalf("approval_add = %s", text(res, 0))
+	}
+	id, _ := strconv.ParseInt(strings.Fields(text(res, 0))[1], 10, 64)
+	if res := call(t, bob, "approval_decide", map[string]any{"id": id, "verdict": "approve", "confirmed": true}); res.IsError {
+		t.Fatalf("approval_decide = %s", text(res, 0))
+	}
+}
