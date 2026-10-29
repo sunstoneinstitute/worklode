@@ -145,7 +145,7 @@ func TestBumpRuleVersionSnapshotsEdges(t *testing.T) {
 	var version int
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
 		var err error
-		_, version, err = reviseRule(tx, a, "One", "A, revised.")
+		_, version, err = reviseRule(tx, a, "One", "A, revised.", 0)
 		return err
 	}); err != nil {
 		t.Fatalf("reviseRule: %v", err)

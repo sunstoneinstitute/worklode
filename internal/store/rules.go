@@ -50,7 +50,7 @@ type ruleRow struct {
 // match (or none) does the second walk, in document order, bump/keep rules
 // and write doc_rules positions. minted reports whether a new rule was
 // inserted.
-func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable string) (minted bool, derive func() error, err error) {
+func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable string, eventID int64) (minted bool, derive func() error, err error) {
 	var project string
 	if err := tx.QueryRow(`SELECT project_id FROM docs WHERE id = $1`, docID).Scan(&project); err != nil {
 		return false, nil, fmt.Errorf("project of doc %d: %w", docID, err)
@@ -160,7 +160,7 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable stri
 			id, version, err = insertRule(tx, project, sec.Title, sec.Body)
 			minted = true
 		case m.heading != sec.Title || !sameRuleBody(m.body, sec.Body):
-			id, version, err = reviseRule(tx, m.id, sec.Title, sec.Body)
+			id, version, err = reviseRule(tx, m.id, sec.Title, sec.Body, eventID)
 		default:
 			id, version = m.id, m.version
 		}
@@ -346,10 +346,12 @@ func insertRule(tx *sql.Tx, project, heading, body string) (int64, int, error) {
 // and those intermediate states have no reader. Once the newest version is
 // accepted it is locked, and the change becomes the next version, itself a
 // draft until the arranging document is accepted.
-func reviseRule(tx *sql.Tx, id int64, heading, body string) (int64, int, error) {
-	var status string
+func reviseRule(tx *sql.Tx, id int64, heading, body string, eventID int64) (int64, int, error) {
+	var status, old string
 	var version int
-	if err := tx.QueryRow(`SELECT status, version FROM rules WHERE id = $1`, id).Scan(&status, &version); err != nil {
+	if err := tx.QueryRow(
+		`SELECT r.status, r.version, v.body FROM rules r JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+		  WHERE r.id = $1`, id).Scan(&status, &version, &old); err != nil {
 		return 0, 0, fmt.Errorf("read rule %d: %w", id, err)
 	}
 	if status == "draft" {
@@ -358,12 +360,15 @@ func reviseRule(tx *sql.Tx, id int64, heading, body string) (int64, int, error) 
 			id, version, heading, body); err != nil {
 			return 0, 0, fmt.Errorf("rewrite rule %d v%d: %w", id, version, err)
 		}
+		if err := relocateRuleThreads(tx, id, version, version, old, body, eventID); err != nil {
+			return 0, 0, err
+		}
 		if _, err := tx.Exec(`UPDATE rules SET updated_at = now() WHERE id = $1`, id); err != nil {
 			return 0, 0, fmt.Errorf("touch rule %d: %w", id, err)
 		}
 		return id, version, nil
 	}
-	version, err := bumpRuleVersion(tx, id, heading, body, "edit")
+	version, err := bumpRuleVersion(tx, id, heading, body, "edit", eventID)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -684,7 +689,7 @@ func (s *Store) EditRule(ctx context.Context, projectKey string, number int64, i
 	if err != nil {
 		return nil, err
 	}
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "rule.edited", payload, func(tx *sql.Tx, _ int64) error {
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "rule.edited", payload, func(tx *sql.Tx, eventID int64) error {
 		id, err := RuleIDByRef(tx, projectKey, number)
 		if err != nil {
 			return err
@@ -706,7 +711,7 @@ func (s *Store) EditRule(ctx context.Context, projectKey string, number int64, i
 		if heading == string(in.Heading) && sameRuleBody(current, body) {
 			return nil
 		}
-		_, version, err := reviseRule(tx, id, string(in.Heading), body)
+		_, version, err := reviseRule(tx, id, string(in.Heading), body, eventID)
 		if err != nil {
 			return err
 		}

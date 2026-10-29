@@ -254,6 +254,9 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
+	if err := relocateDocThreads(tx, id, version-1, version, d.body, eventID); err != nil {
+		return nil, err
+	}
 	if err := landRevisionEdges(tx, id); err != nil {
 		return nil, err
 	}
