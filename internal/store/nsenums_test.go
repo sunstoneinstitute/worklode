@@ -27,6 +27,8 @@ var schemeChecks = map[string]struct {
 	"ArtifactKind":     {table: "artifacts", column: "kind"},
 	"DeploymentStatus": {table: "deployments", column: "status"},
 	"RuntimeEventKind": {table: "runtime_events", column: "kind"},
+	"ReviewIntent":     {table: "review_threads", column: "intent"},
+	"ReviewVerdict":    {table: "review_rounds", column: "verdict"},
 	// wlc:pypi_target is spelled apart from wlc:pypi because the artifact
 	// kind and the target kind are different concepts; the relational schema
 	// lets them share the name.
