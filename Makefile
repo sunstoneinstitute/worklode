@@ -96,7 +96,7 @@ seed: ## Replace compose's database with a pg_dump -Fc file, then migrate: make 
 export LODE_EMBEDDINGS_PORT ?= $(call env_or_default,LODE_EMBEDDINGS_PORT,8081)
 EMBEDDINGS_URL := http://localhost:$(LODE_EMBEDDINGS_PORT)
 
-dev-embeddings: ## Start compose's embedding server (amd64 image; emulated on Apple Silicon)
+dev-embeddings: ## Start compose's embedding server
 	$(ENV_RUN) docker compose --profile embeddings up -d embeddings
 
 # Embedding settings mirror deploy/base/configmap.yaml, used only when
