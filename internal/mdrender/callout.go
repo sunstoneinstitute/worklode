@@ -171,5 +171,5 @@ func (calloutExtension) Extend(m goldmark.Markdown) {
 }
 
 // calloutExt is the extension value registered on md and mdDoc, beside
-// emojiExt and mermaidExt.
+// Emoji and mermaidExt.
 var calloutExt = calloutExtension{}
