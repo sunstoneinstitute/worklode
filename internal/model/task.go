@@ -165,11 +165,13 @@ type CreateTaskInput struct {
 // "none" clears the concern. State requests one of the transitions
 // patchStateFrom allows (internal/api/tasks.go) in the same request.
 type EditTaskInput struct {
-	Title              *Markdown `json:"title"`
-	Body               *Markdown `json:"body"`
-	Priority           *string   `json:"priority"`
-	Concern            *string   `json:"concern"`
-	NeedsDecomposition *bool     `json:"needs_decomposition"`
+	Title *Markdown `json:"title"`
+	Body  *Markdown `json:"body"`
+	// Blocks is the body as editor blocks, in place of Body (WL-REQ-1867).
+	Blocks             []EditorBlock `json:"blocks,omitempty"`
+	Priority           *string       `json:"priority"`
+	Concern            *string       `json:"concern"`
+	NeedsDecomposition *bool         `json:"needs_decomposition"`
 	// Due, when non-nil, sets the due date (YYYY-MM-DD); "" clears it (WL-REQ-1796).
 	Due *string `json:"due"`
 	// HumanOnly, when non-nil, sets or clears the no-unattended-pickup flag.

@@ -363,6 +363,9 @@ type WithdrawDocInput struct {
 type UpdateDocBodyInput struct {
 	Body      Markdown `json:"body"`
 	IfVersion int      `json:"if_version,omitempty"`
+	// Blocks is the body as editor blocks, in place of Body (WL-REQ-1867).
+	// A spec's body is assembled from its rules and takes no blocks.
+	Blocks []EditorBlock `json:"blocks,omitempty"`
 }
 
 // DocEdgeInput is one document edge as a caller names it: the request body of
@@ -443,6 +446,7 @@ type DocPatchResponse struct {
 type DocDetail struct {
 	Doc
 	InlineRefs
+	BlocksBody
 	Sections []DocSection `json:"sections"`
 	Edges    []DocEdge    `json:"edges"`
 	EdgesIn  []DocEdge    `json:"edges_in"`

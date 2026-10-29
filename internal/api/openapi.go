@@ -198,11 +198,6 @@ func buildOpenAPI(guards map[string]routeGuard, docs map[string]routeDoc) ([]byt
 			r.Spec.Paths.MapOfPathItemValues[path].Delete.RequestBody = body
 		}
 	}
-	// No route carries blocks yet; register BlocksBody so EditorBlock is in
-	// components. Remove once WL-1370's routes reference it.
-	if _, err := requestBody(r, model.BlocksBody{}); err != nil {
-		return nil, fmt.Errorf("openapi: %w", err)
-	}
 	return r.Spec.MarshalJSON()
 }
 

@@ -604,10 +604,26 @@ func (s *server) getDoc(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	var p model.BodyParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	wantBlocks, ok := asBlocks(w, p)
+	if !ok {
+		return
+	}
 	detail, err := s.docDetail(r, id)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
+	}
+	// A spec serves its assembled body, the text GET returns as body.
+	if wantBlocks {
+		if detail.BlocksBody, err = bodyBlocks("doc", detail.Body); err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, detail)
 }
@@ -739,6 +755,17 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
+	}
+	if req.Blocks != nil {
+		// A spec's text changes through its rules (WL-REQ-1300).
+		if existing.Kind == "spec" {
+			writeErr(w, http.StatusUnprocessableEntity, "a spec's body takes no blocks: edit its rules (WL-REQ-1300)")
+			return
+		}
+		if req.Body, ok = blocksMarkdown(w, req.Body != "", req.Blocks); !ok {
+			return
+		}
+		req.Blocks = nil
 	}
 	warnings, err := s.checkPlanBudget(r.Context(), existing.Kind, existing.Project, string(req.Body))
 	if err != nil {
@@ -1316,8 +1343,9 @@ var docRouteDocs = map[string]routeDoc{
 		params:    model.DocSectionsParams{},
 	},
 	"GET /api/v1/docs/{id}": {
-		summary:   "Get a document with its sections, edges and notes",
+		summary:   "Get a document with its sections, edges and notes; ?as=blocks adds its body as editor blocks",
 		responses: map[int]any{http.StatusOK: model.DocDetail{}},
+		params:    model.BodyParams{},
 	},
 	"GET /api/v1/docs/{id}/versions": {
 		summary:   "List a document's versions",
@@ -1333,9 +1361,9 @@ var docRouteDocs = map[string]routeDoc{
 		responses: map[int]any{http.StatusOK: model.DocVersion{}},
 	},
 	"PUT /api/v1/docs/{id}/body": {
-		summary:   "Replace a document's body",
+		summary:   "Replace a document's body, as Markdown or (not on a spec) as editor blocks",
 		request:   model.UpdateDocBodyInput{},
-		responses: map[int]any{http.StatusOK: model.Doc{}},
+		responses: map[int]any{http.StatusOK: model.Doc{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
 	},
 	"POST /api/v1/docs/{id}/patch": {
 		summary:   "Amend an accepted document in place",

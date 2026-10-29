@@ -84,9 +84,18 @@ type ByteRange struct {
 	End   int `json:"end"`
 }
 
-// BlocksBody is a Markdown field served as blocks.
+// BlocksBody is a body served as blocks (WL-REQ-1867): what GET on a
+// document, rule or task adds with ?as=blocks, and nothing otherwise.
+// BodySHA256 is the hex SHA-256 of the stored body the blocks came from.
 type BlocksBody struct {
-	Blocks []EditorBlock `json:"blocks"`
+	Blocks     []EditorBlock `json:"blocks,omitempty"`
+	BodySHA256 string        `json:"body_sha256,omitempty"`
+}
+
+// BodyParams is the query of GET /api/v1/docs/{id}, /rules/{id} and
+// /tasks/{id}. As is "blocks" or empty.
+type BodyParams struct {
+	As string `query:"as"`
 }
 
 // editorBlockTypes is the block list of WL-REQ-1871 (Worklode Markdown).
