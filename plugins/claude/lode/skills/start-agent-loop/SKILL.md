@@ -76,6 +76,7 @@ reshapes the rest.
    one) — from the main repo, run `git worktree remove <worktree>` (add
    `--force` only if it refuses over untracked build artifacts, never over
    uncommitted edits) so an unattended run doesn't leave one behind per task.
-   Back to 1.
+   If you abandon the claim instead, run `lode task release <id>` before
+   removing the worktree: removal alone leaves the lease held. Back to 1.
 
 Load the working-under-worklode skill before the first task.
