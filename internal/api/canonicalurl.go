@@ -47,8 +47,14 @@ func withQuery(path string, r *http.Request) string {
 // projectEntityPage handles GET /projects/{proj}/{kind}/{n} and its /{ver}
 // sibling. A document kind serves the document page, or one version of it; a
 // task kind serves the task page, and a task named under another kind, or
-// under "task", redirects to its own. Tasks have no versions.
+// under "task", redirects to its own. Tasks have no versions. A {ver} of
+// "edit" is the SPA's body editor (spaViaCanonical), which resolves {kind}
+// itself.
 func (s *server) projectEntityPage(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("ver") == "edit" {
+		s.spaShell(w, r)
+		return
+	}
 	p, redirected := s.projectFromPath(w, r, r.PathValue("proj"))
 	if p == nil || redirected {
 		return

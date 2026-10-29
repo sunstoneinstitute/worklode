@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api } from "./client"
 import { type ListResource, useCreateInList, useRemoveFromList, useUpdateInList } from "./list-mutations"
-import { HttpError, failure, projectCrewKey, queryKeys } from "./queries"
+import { type BodySubject, type BodyTarget, HttpError, failure, projectCrewKey, queryKeys } from "./queries"
 import type { components } from "./schema"
 import type { Idea, ProjectDocument, Task } from "./types"
 
@@ -299,4 +299,28 @@ export async function releaseBodyLock(kind: LockKind, id: string, session: strin
 export async function unlockBody(kind: LockKind, id: string) {
   const { error, response } = await api.POST("/api/v1/locks/{kind}/{id}/unlock", { params: { path: { kind, id } } })
   if (error) throw failure(error, response)
+}
+
+// Body saves (WL-REQ-1868): blocks, the body_sha256 they were loaded
+// against, and the lock session
+
+export type BodyConflict = components["schemas"]["BodyConflict"]
+export type BodySave = { blocks: components["schemas"]["EditorBlock"][]; if_body_sha256: string; lock_session: string }
+export type BodySaveResult = { ok: true; body: string } | { ok: false; conflict: BodyConflict } | { ok: false; lock: BodyLock }
+
+/** Saves a body; a 409 is the newer stored text (BodyConflict) or the lock (BodyLock) */
+export async function saveBody(target: BodyTarget, subject: BodySubject, input: BodySave): Promise<BodySaveResult> {
+  const answer =
+    target.kind === "rule"
+      ? await api.PUT("/api/v1/rules/{id}", { params: { path: { id: target.ref } }, body: { ...input, heading: subject.heading } })
+      : target.kind === "task"
+        ? await api.PATCH("/api/v1/tasks/{id}", { params: { path: { id: target.ref } }, body: input })
+        : await api.PUT("/api/v1/docs/{id}/body", { params: { path: { id: subject.lockId } }, body: input })
+  const { data, error, response } = answer
+  if (data) return { ok: true, body: data.body ?? "" }
+  if (response.status === 409) {
+    if (error && "body_sha256" in error) return { ok: false, conflict: error as BodyConflict }
+    return { ok: false, lock: error as BodyLock }
+  }
+  throw failure(error as ErrorResponse, response)
 }
