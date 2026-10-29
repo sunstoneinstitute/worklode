@@ -155,7 +155,7 @@ func newApprovalListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, raw, err := c.ListApprovals(cmd.Context())
+			resp, raw, err := c.ListApprovals(cmd.Context(), model.ApprovalListParams{})
 			if err != nil {
 				return err
 			}
@@ -224,7 +224,7 @@ func awaitingApprovalIDs(cmd *cobra.Command, args []string, toComplete string) (
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	defer cancel()
-	resp, _, err := c.ListApprovals(ctx)
+	resp, _, err := c.ListApprovals(ctx, model.ApprovalListParams{})
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

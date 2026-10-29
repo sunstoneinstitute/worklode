@@ -37,7 +37,7 @@ func TestReviewTools(t *testing.T) {
 
 	state := func(id int64) string {
 		t.Helper()
-		r, _, err := api.ListApprovals(ctx)
+		r, _, err := api.ListApprovals(ctx, model.ApprovalListParams{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +80,7 @@ func TestReviewTools(t *testing.T) {
 	if res := call(t, alice, "approval_request", map[string]any{"project": h, "doc": "spec 1"}); res.IsError {
 		t.Fatalf("approval_request = %s", text(res, 0))
 	}
-	r, _, _ := api.ListApprovals(ctx)
+	r, _, _ := api.ListApprovals(ctx, model.ApprovalListParams{})
 	var docID int64
 	for _, a := range r.Approvals {
 		if a.Lane != "" {
@@ -144,4 +144,64 @@ func TestTaskApprovalDecides(t *testing.T) {
 	if res := call(t, bob, "approval_decide", map[string]any{"id": id, "verdict": "approve", "confirmed": true}); res.IsError {
 		t.Fatalf("approval_decide = %s", text(res, 0))
 	}
+}
+
+// TestApprovalDecideChangesRequested decides a changes_requested row through
+// MCP (WL-REQ-1608) and lists approvals by each state.
+func TestApprovalDecideChangesRequested(t *testing.T) {
+	f := newFixture(t)
+	alice := f.connect(t, f.alice, oldProtocol, nil)
+	bob := f.connect(t, f.bob, oldProtocol, nil)
+	h := handleOf(t, call(t, alice, "project_use", map[string]any{"project": "WL", "confirmed": true}))
+	if res := call(t, alice, "doc_add", map[string]any{"project": h, "kind": "spec", "title": "Twice decided", "body": "## 1. Scope {#sec-1}\n\nText.\n"}); res.IsError {
+		t.Fatalf("doc_add = %s", text(res, 0))
+	}
+	doc, err := f.client(f.alice).ResolveDoc(t.Context(), "WL-SPEC-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One row per lane: the key is (entity, revision, lane), so a second
+	// requirement on the same lane would return the first row.
+	add := func(lane string) int64 {
+		t.Helper()
+		a, _, err := f.client(f.alice).RequireApproval(t.Context(), model.RequireApprovalInput{
+			EntityKind: "doc", EntityID: model.DocEntityID(doc.ID), Lane: lane, Actor: "bob"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a.ID
+	}
+	decide := func(id int64, verdict string) {
+		t.Helper()
+		if res := call(t, bob, "approval_decide", map[string]any{"id": id, "verdict": verdict, "confirmed": true}); res.IsError {
+			t.Fatalf("approval_decide %d %s = %s", id, verdict, text(res, 0))
+		}
+	}
+	listed := func(state string, want int) {
+		t.Helper()
+		res := call(t, bob, "approval_list", map[string]any{"state": state})
+		if res.IsError {
+			t.Fatalf("approval_list %s = %s", state, text(res, 0))
+		}
+		if got := text(res, 0); !strings.HasPrefix(got, strconv.Itoa(want)+" approvals") && !(want == 0 && strings.HasPrefix(got, "No approvals")) {
+			t.Fatalf("approval_list %s = %q, want %d", state, got, want)
+		}
+	}
+
+	changed := add("changed")
+	decide(changed, "request changes")
+	listed("changes_requested", 1)
+	listed("awaiting", 0)
+
+	decide(changed, "approve")
+	listed("changes_requested", 0)
+	listed("approved", 1)
+
+	rejected := add("rejected")
+	decide(rejected, "reject")
+	listed("rejected", 1)
+
+	add("waiting")
+	listed("awaiting", 1)
+	listed("", 1)
 }

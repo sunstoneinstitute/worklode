@@ -235,7 +235,7 @@ func mcpJourney(t *testing.T, call func(string, map[string]any) *sdk.CallToolRes
 	}
 	awaiting := func() bool {
 		t.Helper()
-		r, _, err := api.ListApprovals(ctx)
+		r, _, err := api.ListApprovals(ctx, model.ApprovalListParams{})
 		if err != nil {
 			t.Fatalf("list approvals: %v", err)
 		}
