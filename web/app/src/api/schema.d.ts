@@ -8882,6 +8882,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{id}/reviewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace a task's reviewer roster; every reviewer must be an existing actor and the task must not be closed */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetTaskReviewersInput"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TaskReviewers"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{id}/secrets-materialized": {
         parameters: {
             query?: never;
@@ -11694,6 +11754,9 @@ export interface components {
         SetSkillsInput: {
             skills?: string[] | null;
         };
+        SetTaskReviewersInput: {
+            reviewers?: string[] | null;
+        };
         SetTaskStateInput: {
             state?: string;
         };
@@ -11839,6 +11902,7 @@ export interface components {
             plan_doc?: number;
             priority?: string;
             project?: string;
+            reviewers?: string[];
             secrets?: string[] | null;
             skills?: string[] | null;
             state?: string;
@@ -11897,6 +11961,9 @@ export interface components {
             repo?: string;
             state?: string;
             task_id?: string;
+        };
+        TaskReviewers: {
+            reviewers?: string[] | null;
         };
         TaskSkills: {
             skills?: string[] | null;

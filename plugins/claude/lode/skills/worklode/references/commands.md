@@ -319,6 +319,7 @@ Flags: --closure, --deliverable, --inline, --kind, --milestone, --pager, --plan,
 - `lode task renew` — Extend the caller's lease on a task
   Flags: --ttl
 - `lode task reopen` — Reopen a delivered, completed or abandoned task (merged|deployed_dev|deployed_prod|released|completed|abandoned -> ready; a fresh claim is then required)
+- `lode task reviewers` — Show the task's assigned reviewers
 - `lode task rework` — Send a task under review back to in_progress (e.g. changes requested)
 - `lode task set` — Set one field on a task, e.g. `lode task set state merged WL-5`
 - `lode task show` — Show a task's details: body, edges, blocked status, and lease holder

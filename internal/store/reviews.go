@@ -284,3 +284,53 @@ func (s *Store) ReviewEvents(ctx context.Context, id, after int64) (*model.Revie
 	slices.SortFunc(ev.Messages, func(a, b model.ReviewMessage) int { return a.Seq - b.Seq })
 	return ev, nil
 }
+
+// SetTaskReviewers replaces a task's reviewer roster with reviewers
+// (WL-REQ-1322). Every reviewer must be an existing actor and the task must
+// not be closed. Reads return the roster in assignment order, so each insert
+// is stamped a microsecond after the one before it.
+func SetTaskReviewers(tx *sql.Tx, now time.Time, taskID, actorID string, reviewers []string, eventID int64) error {
+	var closed bool
+	err := tx.QueryRow(`SELECT `+taskClosed("t")+` FROM tasks t WHERE t.id = $1 FOR UPDATE`, taskID).Scan(&closed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("look up task %s: %w", taskID, err)
+	}
+	if closed {
+		return fmt.Errorf("task %s is closed; its reviewers cannot change: %w", taskID, ErrInvalidInput)
+	}
+	for _, r := range reviewers {
+		if err := checkActorExists(tx, r); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM task_reviewers WHERE task_id = $1`, taskID); err != nil {
+		return fmt.Errorf("clear reviewers for task %s: %w", taskID, err)
+	}
+	for i, r := range reviewers {
+		if _, err := tx.Exec(
+			`INSERT INTO task_reviewers (task_id, actor_id, assigned_at) VALUES ($1, $2, $3)
+			 ON CONFLICT DO NOTHING`,
+			taskID, r, now.UTC().Add(time.Duration(i)*time.Microsecond)); err != nil {
+			return fmt.Errorf("assign reviewer %s to task %s: %w", r, taskID, err)
+		}
+	}
+	return nil
+}
+
+// taskReviewers is a task's reviewer roster in assignment order.
+func taskReviewers(ctx context.Context, db rowsQueryer, taskID string) ([]string, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT actor_id FROM task_reviewers WHERE task_id = $1 ORDER BY assigned_at, actor_id`, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("load reviewers for task %s: %w", taskID, err)
+	}
+	return collectRows(rows, "load reviewers for task "+taskID, scanString)
+}
+
+// TaskReviewers reads a task's reviewer roster.
+func (s *Store) TaskReviewers(ctx context.Context, taskID string) ([]string, error) {
+	return taskReviewers(ctx, s.db, taskID)
+}
