@@ -59,7 +59,7 @@ var routeDocs = mergeRouteDocs(
 	ladderRouteDocs, lifecycleRouteDocs, mergesRouteDocs, milestoneRouteDocs,
 	openapiRouteDocs, overviewRouteDocs, probeRouteDocs, progressRouteDocs,
 	projectionRouteDocs, projectsettingRouteDocs, rallyRouteDocs,
-	reconcileRouteDocs, referenceRouteDocs, replanRouteDocs, ruleRouteDocs,
+	reconcileRouteDocs, referenceRouteDocs, reviewRouteDocs, replanRouteDocs, ruleRouteDocs,
 	ruleedgeRouteDocs, rulesupersedeRouteDocs, runtimeRouteDocs,
 	searchRouteDocs, secretRouteDocs, skillRouteDocs, softdeleteRouteDocs,
 	taskRouteDocs, termRouteDocs, taskblockerRouteDocs, tasktokenRouteDocs,

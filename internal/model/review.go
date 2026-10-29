@@ -103,6 +103,17 @@ type OpenThreadInput struct {
 	Body   string       `json:"body"`
 }
 
+// ThreadReplyInput is the body of a reply to a thread.
+type ThreadReplyInput struct {
+	Body string `json:"body"`
+}
+
+// ThreadResolveInput is the body that resolves a thread. Status is resolved
+// (the default) or obsolete.
+type ThreadResolveInput struct {
+	Status string `json:"status,omitempty"`
+}
+
 // ThreadReanchor moves a thread to a new anchor.
 type ThreadReanchor struct {
 	Thread int64        `json:"thread"`

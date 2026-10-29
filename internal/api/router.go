@@ -375,6 +375,20 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/owner":           guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/notes":           guardedAny(permDocWrite),
 	"GET /api/v1/docs/{id}/notes":            guardedAny(permDocRead),
+	// --- reviews of documents and rules (WL-REQ-1323) ------------------------
+	// Reads take doc.read and writes doc.write, as the doc and rule routes do;
+	// part 2 widens them for change reviews.
+	"POST /api/v1/reviews":                             guardedAny(permDocWrite),
+	"GET /api/v1/reviews":                              guardedAny(permDocRead),
+	"GET /api/v1/reviews/{id}":                         guardedAny(permDocRead),
+	"POST /api/v1/reviews/{id}/threads":                guardedAny(permDocWrite),
+	"POST /api/v1/reviews/{id}/threads/{tid}/messages": guardedAny(permDocWrite),
+	"POST /api/v1/reviews/{id}/threads/{tid}/resolve":  guardedAny(permDocWrite),
+	"GET /api/v1/docs/{id}/threads":                    guardedAny(permDocRead),
+	"GET /api/v1/rules/{id}/threads":                   guardedAny(permDocRead),
+	"POST /api/v1/docs/{id}/threads":                   guardedAny(permDocWrite),
+	"POST /api/v1/threads/{tid}/messages":              guardedAny(permDocWrite),
+	"POST /api/v1/threads/{tid}/resolve":               guardedAny(permDocWrite),
 	// Setting the reviewer set (WL-REQ-170, WL-359) is the same shape as owner
 	// transfer: guarded rather than guardedAny, since it too is a deliberate
 	// act on the document's identity, gated in the store on the same

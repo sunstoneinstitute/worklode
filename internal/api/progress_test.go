@@ -407,8 +407,9 @@ func TestProgressDraftPlanAction(t *testing.T) {
 	}
 	// A disabled button carries no body and no confirmation sentence: there
 	// is nothing for the script to send.
-	if strings.Contains(line, "data-body=") {
-		t.Errorf("a disabled Accept button still carries the body it would send: %s", line)
+	accept := between(t, line, `data-route="accept"`, "</button>")
+	if strings.Contains(accept, "data-body=") {
+		t.Errorf("a disabled Accept button still carries the body it would send: %s", accept)
 	}
 	// Two buttons: the draft plan's line and the draft spec's row (§3.2).
 	if got := strings.Count(body, `data-route="accept"`); got != 2 {
@@ -416,13 +417,10 @@ func TestProgressDraftPlanAction(t *testing.T) {
 	}
 }
 
-// TestProgressReviewActionDisabled: POST /api/v1/reviews (WL-REQ-1323) is
-// not in today's routeGuards, so hasReviewSurface reports false and every
-// spec row and plan line renders its Review button, pointed at that route,
-// disabled with that reason (WL-REQ-1337). The enabled shape, once a route lands, is
-// TestHasReviewSurfaceOnceRegistered's, in internal/api's own package —
-// this test only holds today's rendering to today's table.
-func TestProgressReviewActionDisabled(t *testing.T) {
+// TestProgressReviewActionEnabled: POST /api/v1/reviews (WL-REQ-1323) is in
+// routeGuards, so every spec row and plan line renders its Review button,
+// pointed at that route, enabled (WL-REQ-1337).
+func TestProgressReviewActionEnabled(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -441,8 +439,8 @@ func TestProgressReviewActionDisabled(t *testing.T) {
 	if got := strings.Count(body, `data-route="/api/v1/reviews"`); got != 2 {
 		t.Errorf("the page renders %d review buttons, want 2 (the spec row and the plan line): %s", got, body)
 	}
-	if got := strings.Count(body, reason); got != 2 {
-		t.Errorf("the page renders %d disabled review reasons, want 2: %s", got, body)
+	if got := strings.Count(body, reason); got != 0 {
+		t.Errorf("the page renders %d disabled review reasons, want 0: %s", got, body)
 	}
 }
 
