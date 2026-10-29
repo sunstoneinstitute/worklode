@@ -1132,7 +1132,7 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 		where += fmt.Sprintf(" AND %s = $%d", c.column, len(args))
 	}
 	if f.HasNotes {
-		where += " AND EXISTS (SELECT 1 FROM doc_notes n WHERE n.doc_id = docs.id)"
+		where += " AND EXISTS (SELECT 1 FROM review_threads n WHERE n.doc_id = docs.id AND n.review_id IS NULL)"
 	}
 	if f.HideTerminal && f.Status == "" && !f.Deleted {
 		where += " AND status NOT IN ('withdrawn', 'superseded', 'executed')"
