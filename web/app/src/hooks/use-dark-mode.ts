@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 
 const STORAGE_KEY = "worklode.theme"
 
@@ -24,4 +24,21 @@ export function useDarkMode() {
   }, [isDark])
 
   return { isDark, toggle: () => setIsDark((prev) => !prev) }
+}
+
+/**
+ * Whether <html> has the `dark` class, kept live. Read-only: a component that
+ * only follows the theme (the body editor) must not hold a second copy of the
+ * choice that useDarkMode keeps.
+ */
+export function useHtmlDark() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const observer = new MutationObserver(onChange)
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+      return () => observer.disconnect()
+    },
+    () => document.documentElement.classList.contains("dark"),
+    () => false,
+  )
 }

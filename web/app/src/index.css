@@ -5,6 +5,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/dm-sans";
+@source "../node_modules/@blocknote/shadcn";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -413,3 +414,81 @@
   opacity: 1;
 }
 
+
+
+/* BlockNote (src/editor): its own palette, font and spacing replaced by ours.
+   These rely on BlockNote's internal class names; recheck them when upgrading.
+   [data-color-scheme] raises the specificity above BlockNote's theme rules. */
+.bn-container.bn-root[data-color-scheme] {
+  --bn-colors-editor-text: var(--foreground);
+  --bn-colors-editor-background: transparent;
+  --bn-colors-menu-text: var(--popover-foreground);
+  --bn-colors-menu-background: var(--popover);
+  --bn-colors-tooltip-text: var(--popover-foreground);
+  --bn-colors-tooltip-background: var(--muted);
+  --bn-colors-hovered-text: var(--foreground);
+  --bn-colors-hovered-background: var(--muted);
+  --bn-colors-selected-text: var(--primary-foreground);
+  --bn-colors-selected-background: var(--primary);
+  --bn-colors-disabled-text: var(--muted-foreground);
+  --bn-colors-disabled-background: var(--muted);
+  --bn-colors-border: var(--border);
+  --bn-colors-shadow: var(--border);
+  --bn-colors-side-menu: var(--muted-foreground);
+  --bn-link-color: var(--color-primary);
+  /* An unset variable makes the root fall back to the app's font */
+  --bn-font-family: inherit;
+}
+.dark .bn-container.bn-root[data-color-scheme] {
+  --bn-link-color: var(--color-highlight);
+}
+/* BlockNote also hardcodes its Inter stack on this class */
+.bn-container .bn-default-styles {
+  font-family: inherit;
+}
+.bn-container.bn-shadcn .bn-editor a {
+  color: var(--bn-link-color);
+}
+/* No border or inner padding: the text sits on the page, like a document */
+.bn-field.bn-container .bn-editor,
+.bn-view.bn-container .bn-editor {
+  padding: 0;
+}
+.bn-field.bn-container .bn-editor {
+  flex: 1;
+}
+.bn-container .bn-source {
+  width: 100%;
+  field-sizing: content;
+  padding: calc(var(--spacing) * 2);
+  border: thin solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.bn-container .bn-callout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing);
+  width: 100%;
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  border-inline-start: medium solid var(--color-highlight);
+  background: var(--muted);
+}
+.bn-container .bn-heading {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--spacing) * 2);
+}
+.bn-container .bn-anchor {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: normal;
+  color: var(--muted-foreground);
+}
+.bn-anchor-field {
+  display: grid;
+  gap: var(--spacing);
+  padding: var(--spacing) calc(var(--spacing) * 2);
+}
