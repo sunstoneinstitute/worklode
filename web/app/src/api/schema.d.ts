@@ -8758,6 +8758,9 @@ export interface components {
             blocking_plans?: components["schemas"]["DocRef"][] | null;
             root?: string;
         };
+        BlocksBody: {
+            blocks?: components["schemas"]["EditorBlock"][] | null;
+        };
         BoardProject: {
             blocked?: components["schemas"]["BoardTask"][] | null;
             id?: string;
@@ -8821,6 +8824,10 @@ export interface components {
             id?: string;
             state?: string;
             title?: string;
+        };
+        ByteRange: {
+            end?: number;
+            start?: number;
         };
         ChecklistItem: {
             checked?: boolean;
@@ -9487,6 +9494,15 @@ export interface components {
             state?: null | string;
             title?: null | string;
         };
+        EditorBlock: {
+            children?: components["schemas"]["EditorBlock"][];
+            content?: components["schemas"]["InlineContent"][];
+            id?: string;
+            props?: unknown;
+            range?: components["schemas"]["ByteRange"];
+            tableContent?: components["schemas"]["TableContent"];
+            type?: string;
+        };
         EndAgentSessionInput: {
             agent?: string;
             cost_amount?: null | string;
@@ -9675,6 +9691,16 @@ export interface components {
             prs?: components["schemas"]["ImportCounts"];
             repo?: string;
             truncated?: boolean;
+        };
+        InlineContent: {
+            content?: components["schemas"]["InlineContent"][];
+            href?: string;
+            offset?: number;
+            styles?: {
+                [key: string]: boolean;
+            };
+            text?: string;
+            type?: string;
         };
         InlineRef: {
             field?: string;
@@ -10539,6 +10565,13 @@ export interface components {
             stale_plans?: number;
             tasks?: number;
             withdrawn?: number;
+        };
+        TableContent: {
+            rows?: components["schemas"]["TableRow"][] | null;
+            type?: string;
+        };
+        TableRow: {
+            cells?: components["schemas"]["InlineContent"][][] | null;
         };
         Task: {
             about_anchor?: string;
