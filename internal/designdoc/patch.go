@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/mdfence"
 )
 
 // Finding is one WL-REQ-1666 mechanical-substantive rule firing on one section.
@@ -164,14 +166,14 @@ func codeSurfaces(text string) []string {
 	var fence string
 	for _, line := range strings.Split(text, "\n") {
 		if fence != "" {
-			if closesFence(line, fence) {
+			if mdfence.Closes(line, fence) {
 				fence = ""
 			} else {
 				out = append(out, line)
 			}
 			continue
 		}
-		if fence, _ = openFence(line); fence != "" {
+		if fence, _ = mdfence.Open(line); fence != "" {
 			continue
 		}
 		out = append(out, inlineCodePattern.FindAllString(line, -1)...)

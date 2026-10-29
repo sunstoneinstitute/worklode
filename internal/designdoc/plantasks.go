@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/sunstoneinstitute/worklode/internal/mdfence"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
@@ -189,14 +190,14 @@ func splitPlanTaskFence(body string) (fenceContent, rest string, found bool) {
 		return "", body, false
 	}
 
-	mark, info := openFence(lineText(i))
+	mark, info := mdfence.Open(lineText(i))
 	if mark == "" || info != "yaml" {
 		return "", body, false
 	}
 
 	j := i + 1
 	for j < len(lines) {
-		if closesFence(lineText(j), mark) {
+		if mdfence.Closes(lineText(j), mark) {
 			break
 		}
 		j++
@@ -412,12 +413,12 @@ func AnnotatePlanTaskHeadings(body string, ids map[string]string) string {
 	var fence string
 	for i, line := range lines {
 		if fence != "" {
-			if closesFence(line, fence) {
+			if mdfence.Closes(line, fence) {
 				fence = ""
 			}
 			continue
 		}
-		if fence, _ = openFence(line); fence != "" {
+		if fence, _ = mdfence.Open(line); fence != "" {
 			continue
 		}
 		loc := heading.FindStringSubmatchIndex(strings.TrimRight(line, "\r"))
