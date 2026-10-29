@@ -132,7 +132,7 @@ func hitDoc(tx *sql.Tx, project, key string, h inlineref.Hit) (docID int64, k st
 }
 
 // resolveHit resolves one hit (WL-REQ-1357). A #rule-<n> fragment resolves
-// to that rule. A section fragment the previous text cited keeps the target
+// to that rule, or is unresolved when the doc's project has no rule n. A section fragment the previous text cited keeps the target
 // its row holds, or the doc when it never had one; a new one resolves to the
 // rule arranged at that anchor, else to the doc (WL-RULE-1849). A plan
 // arranges no rules of its own, so its anchors resolve to the plan
@@ -169,12 +169,13 @@ func resolveHit(tx *sql.Tx, project, key string, h inlineref.Hit, prior *priorRe
 	doc := strconv.FormatInt(docID, 10)
 	if h.RuleFragment != 0 {
 		id, err := RuleIDByRef(tx, k, h.RuleFragment)
-		if err == nil {
-			return resolved{kind: "rule", id: strconv.FormatInt(id, 10), viaDoc: doc}, true, nil
+		if errors.Is(err, ErrNotFound) {
+			return resolved{}, false, nil
 		}
-		if !errors.Is(err, ErrNotFound) {
+		if err != nil {
 			return resolved{}, false, err
 		}
+		return resolved{kind: "rule", id: strconv.FormatInt(id, 10), viaDoc: doc}, true, nil
 	}
 	if h.Anchor == "" {
 		return resolved{kind: "doc", id: doc}, true, nil
@@ -289,6 +290,21 @@ func deriveInlineRefs(tx *sql.Tx, project string, from model.NodeKind, fromID, f
 		return fmt.Errorf("reset inline ref lines of %s %s %s: %w", from, fromID, field, err)
 	}
 	for _, r := range refs {
+		// A derived row duplicating a manual one, whatever its via, adds its
+		// lines to the manual row instead (WL-REQ-1852).
+		res, err := tx.Exec(
+			`UPDATE inline_refs SET lines = (SELECT array_agg(l ORDER BY l) FROM unnest(lines || $7::int[]) l)
+			  WHERE ctid = (SELECT ctid FROM inline_refs WHERE `+match+` AND to_kind = $5 AND to_id = $6
+			                  AND source = 'manual' ORDER BY via_doc NULLS FIRST, via_anchor NULLS FIRST LIMIT 1)`,
+			from, fromID, field, version, r.ToKind, r.ToID, r.Lines)
+		if err != nil {
+			return fmt.Errorf("merge inline ref %s %s -> %s %s: %w", from, fromID, r.ToKind, r.ToID, err)
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return fmt.Errorf("merge inline ref %s %s -> %s %s: %w", from, fromID, r.ToKind, r.ToID, err)
+		} else if n > 0 {
+			continue
+		}
 		if _, err := tx.Exec(
 			`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, via_doc, via_anchor, lines, source)
 			 VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, ''), $9, 'derived')
