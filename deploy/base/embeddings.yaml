@@ -47,7 +47,7 @@ spec:
           # Built by .github/workflows/build-embeddings-image.yml from
           # deploy/embeddings.Dockerfile, by hand, once per model version. The
           # tag names the model and the base it was built from.
-          image: ghcr.io/sunstoneinstitute/worklode-embeddings:embeddinggemma-300m-tei1.9.3
+          image: ghcr.io/sunstoneinstitute/worklode-embeddings:embeddinggemma-300m-tei1.9.4
           imagePullPolicy: IfNotPresent
           args:
             # A filesystem path, not a repo id: the weights are in the image,

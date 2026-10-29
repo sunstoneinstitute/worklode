@@ -20,7 +20,9 @@
 # version — not on every commit. Bump MODEL_ID or the base tag and the workflow's
 # default tag together.
 
-FROM python:3.13-slim AS weights
+# The weights are architecture-independent: fetch them once on the build host
+# and copy them into each platform's base.
+FROM --platform=$BUILDPLATFORM python:3.13-slim AS weights
 ARG MODEL_ID=google/embeddinggemma-300m
 RUN pip install --no-cache-dir huggingface_hub==1.30.0
 # --local-dir, not the hub cache: text-embeddings-inference takes a filesystem
@@ -38,5 +40,8 @@ snapshot_download(os.environ['MODEL_ID'], local_dir='/model')" \
 
 # A fresh stage: nothing from the build environment reaches the published image
 # except the weights copied on the next line.
-FROM ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.3
+# Upstream publishes amd64 and arm64 as separate tags; TARGETARCH picks one.
+FROM --platform=linux/amd64 ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.4 AS tei-amd64
+FROM --platform=linux/arm64 ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9.4 AS tei-arm64
+FROM tei-${TARGETARCH}
 COPY --from=weights /model /model

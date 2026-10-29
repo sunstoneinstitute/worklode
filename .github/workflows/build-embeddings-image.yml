@@ -4,7 +4,8 @@
 # text-embeddings-inference base does, so it deliberately stays off the
 # per-commit path in _build-image.yml.
 #
-# After a run, pin the new tag in deploy/base/embeddings.yaml.
+# After a run, pin the new tag in deploy/base/embeddings.yaml,
+# deploy/base/embeddings-query.yaml and docker-compose.yml.
 name: build-embeddings-image
 
 on:
@@ -15,7 +16,7 @@ on:
           Image tag, naming the model and the base version it was built from.
           Bump it whenever deploy/embeddings.Dockerfile changes either.
         type: string
-        default: embeddinggemma-300m-tei1.9.3
+        default: embeddinggemma-300m-tei1.9.4
 
 permissions:
   contents: read
@@ -62,6 +63,9 @@ jobs:
           context: .
           file: deploy/embeddings.Dockerfile
           push: true
+          # arm64 is for developers on Apple Silicon; the final stage only
+          # copies files, so neither platform needs emulation.
+          platforms: linux/amd64,linux/arm64
           tags: ghcr.io/sunstoneinstitute/worklode-embeddings:${{ inputs.tag }}
           # google/embeddinggemma-300m is a gated repo; this token must belong
           # to an account granted access under the Gemma Terms of Use. Mounted
