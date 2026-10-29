@@ -251,3 +251,36 @@ func (s *Store) ListReviews(ctx context.Context, p model.ReviewListParams) ([]mo
 	}
 	return out, nil
 }
+
+// ReviewEvents reads what review id gained after message seq after: its
+// messages with a higher seq and their threads, plus threads resolved at or
+// after that message's created_at. No column records when a thread's status
+// changed in seq order, so the status arm compares times; a resolve in the
+// same second as message after can come back more than once.
+func (s *Store) ReviewEvents(ctx context.Context, id, after int64) (*model.ReviewEvents, error) {
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM reviews WHERE id = $1)`, id).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("read review %d: %w", id, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("review %d: %w", id, ErrNotFound)
+	}
+	threads, err := threadsWhere(ctx, s.db, `t.review_id = $1 AND (
+		EXISTS (SELECT 1 FROM review_messages m WHERE m.thread_id = t.id AND m.seq > $2)
+		OR t.resolved_at >= (SELECT created_at FROM review_messages WHERE review_id = $1 AND seq = $2))`, id, after)
+	if err != nil {
+		return nil, err
+	}
+	ev := &model.ReviewEvents{After: after, Threads: nonNil(threads), Messages: []model.ReviewMessage{}}
+	for i := range ev.Threads {
+		for _, m := range ev.Threads[i].Messages {
+			if int64(m.Seq) > after {
+				ev.Messages = append(ev.Messages, m)
+				ev.After = max(ev.After, int64(m.Seq))
+			}
+		}
+		ev.Threads[i].Messages = nil
+	}
+	slices.SortFunc(ev.Messages, func(a, b model.ReviewMessage) int { return a.Seq - b.Seq })
+	return ev, nil
+}
