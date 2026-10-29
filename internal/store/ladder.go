@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 )
@@ -22,9 +23,10 @@ type GapInput struct {
 }
 
 // RecordGap records task.gap_found. Its external id
-// (task.gap_found:<task>:<doc>#<anchor>) makes a retried call a no-op: it
-// returns the same inserted=false a redelivered webhook gets from
-// RecordEvent, never a second log entry.
+// (task.gap_found:<task>:<doc>#<anchor>:<reason hash>) makes a retried call a
+// no-op: it returns the same inserted=false a redelivered webhook gets from
+// RecordEvent, never a second log entry. A different reason on the same
+// section is a different gap and is recorded.
 func (s *Store) RecordGap(ctx context.Context, in GapInput) (inserted bool, err error) {
 	reason := strings.TrimSpace(in.Reason)
 	if reason == "" {
@@ -37,7 +39,8 @@ func (s *Store) RecordGap(ctx context.Context, in GapInput) (inserted bool, err 
 	if err != nil {
 		return false, err
 	}
-	extID := fmt.Sprintf("task.gap_found:%s:%s#%s", in.TaskID, in.Doc, in.Anchor)
+	sum := sha256.Sum256([]byte(reason))
+	extID := fmt.Sprintf("task.gap_found:%s:%s#%s:%x", in.TaskID, in.Doc, in.Anchor, sum[:6])
 	_, inserted, err = s.RecordEvent(ctx, "cli", extID, "task.gap_found", payload, nil)
 	if err != nil {
 		s.metrics.gap("error")
