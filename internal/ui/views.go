@@ -919,7 +919,8 @@ type RuleView struct {
 
 // ruleActions is the rule page's two Accept buttons, drawn on a draft rule's
 // current version: plain Accept, and Accept as substantive, which is `lode
-// rule accept --substantive` and always mints a review (WL-REQ-171). Rule.Owner is the rule's own owner; when it is empty the
+// rule accept --substantive` and always mints a review (WL-REQ-171). A first
+// version amends nothing, so it gets plain Accept only. Rule.Owner is the rule's own owner; when it is empty the
 // owner is resolved from an arranging spec by the store, which then decides.
 func ruleActions(v RuleView) []ProgressAction {
 	if !v.Current || v.Rule.Status != "draft" {
@@ -933,11 +934,12 @@ func ruleActions(v RuleView) []ProgressAction {
 		reason = v.Rule.Ref + " is owned by " + v.Rule.Owner
 	}
 	route := v.CanonicalURL + "/accept"
-	return []ProgressAction{
-		{Route: route, Label: "Accept", Confirm: "Accept " + v.Rule.Ref, Reason: reason},
-		{Route: route, Body: `{"substantive":true}`, Label: "Accept as substantive",
-			Confirm: "Accept " + v.Rule.Ref + " and request review", Reason: reason},
+	acts := []ProgressAction{{Route: route, Label: "Accept", Confirm: "Accept " + v.Rule.Ref, Reason: reason}}
+	if v.Rule.Version > 1 {
+		acts = append(acts, ProgressAction{Route: route, Body: `{"substantive":true}`, Label: "Accept as substantive",
+			Confirm: "Accept " + v.Rule.Ref + " and request review", Reason: reason})
 	}
+	return acts
 }
 
 // TermView is a definition rule's term page (WL-REQ-1368).
