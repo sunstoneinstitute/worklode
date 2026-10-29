@@ -760,10 +760,6 @@ type DocView struct {
 	// each carrying the decide form the Reviews queue uses. Empty when none
 	// is open, which is the ordinary case for an accepted document.
 	Approvals []ApprovalRow
-	// Editor swaps the rendered body for the WL-855 BlockNote spike, set by
-	// ?editor=1. It is a prototype behind a query parameter: nothing saves,
-	// and no other page has one.
-	Editor bool
 	// Viewer is the session's actor, empty for an anonymous viewer. It decides
 	// whether Accept is enabled, as on the Progress page.
 	Viewer string
