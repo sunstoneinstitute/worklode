@@ -1,0 +1,463 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "internal/store/reviews.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 1
+        },
+        {
+          "type": "text",
+          "text": ". ",
+          "offset": 27
+        },
+        {
+          "type": "text",
+          "text": "OpenReview(tx, now, in, actorID, eventID)",
+          "styles": {
+            "code": true
+          },
+          "offset": 30
+        },
+        {
+          "type": "text",
+          "text": " for ",
+          "offset": 72
+        },
+        {
+          "type": "text",
+          "text": "in.Doc != 0",
+          "styles": {
+            "code": true
+          },
+          "offset": 78
+        },
+        {
+          "type": "text",
+          "text": " (a ",
+          "offset": 90
+        },
+        {
+          "type": "text",
+          "text": "Task",
+          "styles": {
+            "code": true
+          },
+          "offset": 95
+        },
+        {
+          "type": "text",
+          "text": " subject is refused with ",
+          "offset": 100
+        },
+        {
+          "type": "text",
+          "text": "ErrInvalidInput",
+          "styles": {
+            "code": true
+          },
+          "offset": 126
+        },
+        {
+          "type": "text",
+          "text": " naming part 2):",
+          "offset": 142
+        }
+      ],
+      "range": {
+        "start": 0,
+        "end": 158
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Lock the document row; refuse a ",
+          "offset": 163
+        },
+        {
+          "type": "text",
+          "text": "superseded",
+          "styles": {
+            "code": true
+          },
+          "offset": 196
+        },
+        {
+          "type": "text",
+          "text": " document.",
+          "offset": 207
+        }
+      ],
+      "range": {
+        "start": 160,
+        "end": 217
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Roster from ",
+          "offset": 221
+        },
+        {
+          "type": "text",
+          "text": "docReviewers(tx, docID)",
+          "styles": {
+            "code": true
+          },
+          "offset": 234
+        },
+        {
+          "type": "text",
+          "text": "; empty is ",
+          "offset": 258
+        },
+        {
+          "type": "text",
+          "text": "ErrInvalidInput",
+          "styles": {
+            "code": true
+          },
+          "offset": 270
+        },
+        {
+          "type": "text",
+          "text": " \"set reviewers with ",
+          "offset": 286
+        },
+        {
+          "type": "text",
+          "text": "lode doc set reviewers",
+          "styles": {
+            "code": true
+          },
+          "offset": 308
+        },
+        {
+          "type": "text",
+          "text": " first\".",
+          "offset": 331
+        }
+      ],
+      "range": {
+        "start": 218,
+        "end": 339
+      }
+    },
+    {
+      "id": "",
+      "type": "source",
+      "props": {
+        "markdown": "3. Insert `reviews` (`subject 'doc'`, `state 'open'`, `base_ref =\n   docs.version`, `round 0`, `opened_by`). The partial unique index turns a\n   second open review into `ErrConflict`; map the pg error."
+      },
+      "range": {
+        "start": 341,
+        "end": 542
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "RequestDocApproval(tx, now, docID, version)",
+          "styles": {
+            "code": true
+          },
+          "offset": 548
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 592
+        }
+      ],
+      "range": {
+        "start": 544,
+        "end": 593
+      }
+    },
+    {
+      "id": "",
+      "type": "source",
+      "props": {
+        "markdown": "5. Review tasks, adopt-then-mint (Decisions): the adopt step is an `UPDATE\n   tasks SET assignee = $1 WHERE about_doc = $2 AND kind = 'review' AND\n   assignee IS NULL AND state IN ('draft','ready')` limited to one row;\n   minting reuses the task-creation path `acceptPlanDoc` uses\n   (`internal/store/docplanning.go`)."
+      },
+      "range": {
+        "start": 595,
+        "end": 913
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "reviewAuthor(tx, review)",
+          "styles": {
+            "code": true
+          },
+          "offset": 916
+        },
+        {
+          "type": "text",
+          "text": " per Decisions. ",
+          "offset": 941
+        },
+        {
+          "type": "text",
+          "text": "GetReview(ctx, id)",
+          "styles": {
+            "code": true
+          },
+          "offset": 958
+        },
+        {
+          "type": "text",
+          "text": " returns the review with roster, threads (each with messages), and rounds. ",
+          "offset": 977
+        },
+        {
+          "type": "text",
+          "text": "ListReviews",
+          "styles": {
+            "code": true
+          },
+          "offset": 1053
+        },
+        {
+          "type": "text",
+          "text": " filters ",
+          "offset": 1065
+        },
+        {
+          "type": "text",
+          "text": "subject",
+          "styles": {
+            "code": true
+          },
+          "offset": 1075
+        },
+        {
+          "type": "text",
+          "text": ", ",
+          "offset": 1083
+        },
+        {
+          "type": "text",
+          "text": "reviewer",
+          "styles": {
+            "code": true
+          },
+          "offset": 1086
+        },
+        {
+          "type": "text",
+          "text": " (in roster), ",
+          "offset": 1095
+        },
+        {
+          "type": "text",
+          "text": "state",
+          "styles": {
+            "code": true
+          },
+          "offset": 1110
+        },
+        {
+          "type": "text",
+          "text": ", ",
+          "offset": 1116
+        },
+        {
+          "type": "text",
+          "text": "open",
+          "styles": {
+            "code": true
+          },
+          "offset": 1119
+        },
+        {
+          "type": "text",
+          "text": " (",
+          "offset": 1124
+        },
+        {
+          "type": "text",
+          "text": "closed_at IS NULL",
+          "styles": {
+            "code": true
+          },
+          "offset": 1127
+        },
+        {
+          "type": "text",
+          "text": ").",
+          "offset": 1145
+        }
+      ],
+      "range": {
+        "start": 915,
+        "end": 1147
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "First store test:",
+          "offset": 1149
+        }
+      ],
+      "range": {
+        "start": 1149,
+        "end": 1166
+      }
+    },
+    {
+      "id": "",
+      "type": "codeBlock",
+      "props": {
+        "language": "go"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "func TestOpenDocReview(t *testing.T) {\n",
+          "offset": 1174
+        },
+        {
+          "type": "text",
+          "text": "    // draft spec with reviewers {a, b}; submit not required.\n",
+          "offset": 1213
+        },
+        {
+          "type": "text",
+          "text": "    r, err := store.OpenReview(tx, now, model.OpenReviewInput{Doc: doc.ID}, \"opener\", ev)\n",
+          "offset": 1275
+        },
+        {
+          "type": "text",
+          "text": "    // want: r.State == \"open\", r.BaseRef == \"1\", r.Reviewers == [a b];\n",
+          "offset": 1365
+        },
+        {
+          "type": "text",
+          "text": "    // two approvals lanes awaiting at revision \"1\";\n",
+          "offset": 1437
+        },
+        {
+          "type": "text",
+          "text": "    // two review tasks about doc, assignees a and b;\n",
+          "offset": 1490
+        },
+        {
+          "type": "text",
+          "text": "    // a second OpenReview → ErrConflict;\n",
+          "offset": 1544
+        },
+        {
+          "type": "text",
+          "text": "    // a doc with no reviewers → ErrInvalidInput.\n",
+          "offset": 1588
+        },
+        {
+          "type": "text",
+          "text": "}\n",
+          "offset": 1640
+        }
+      ],
+      "range": {
+        "start": 1168,
+        "end": 1645
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "go test -trimpath ./internal/store -run 'TestOpenDocReview|TestGetReview|TestListReviews' -count=1",
+          "styles": {
+            "code": true
+          },
+          "offset": 1654
+        },
+        {
+          "type": "text",
+          "text": " against Postgres — ",
+          "offset": 1753
+        },
+        {
+          "type": "text",
+          "text": "ok",
+          "styles": {
+            "code": true
+          },
+          "offset": 1776
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1779
+        }
+      ],
+      "range": {
+        "start": 1647,
+        "end": 1780
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Commit: ",
+          "offset": 1787
+        },
+        {
+          "type": "text",
+          "text": "store: open and read a document review; roster, approvals lanes, review tasks (WL-REQ-1324, WL-REQ-1778)",
+          "styles": {
+            "code": true
+          },
+          "offset": 1796
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1901
+        }
+      ],
+      "range": {
+        "start": 1781,
+        "end": 1902
+      }
+    }
+  ]
+}

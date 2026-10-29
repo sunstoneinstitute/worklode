@@ -1,0 +1,365 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "WL-1373 gave ",
+          "offset": 0
+        },
+        {
+          "type": "text",
+          "text": "internal/designdoc",
+          "styles": {
+            "code": true
+          },
+          "offset": 14
+        },
+        {
+          "type": "text",
+          "text": " a CommonMark fence check (",
+          "offset": 33
+        },
+        {
+          "type": "text",
+          "text": "openFence",
+          "styles": {
+            "code": true
+          },
+          "offset": 61
+        },
+        {
+          "type": "text",
+          "text": ", ",
+          "offset": 71
+        },
+        {
+          "type": "text",
+          "text": "closesFence",
+          "styles": {
+            "code": true
+          },
+          "offset": 74
+        },
+        {
+          "type": "text",
+          "text": " in ",
+          "offset": 86
+        },
+        {
+          "type": "text",
+          "text": "designdoc.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 91
+        },
+        {
+          "type": "text",
+          "text": "). Four other scanners still treat any line starting with three backticks (some also ",
+          "offset": 104
+        },
+        {
+          "type": "text",
+          "text": "~~~",
+          "styles": {
+            "code": true
+          },
+          "offset": 190
+        },
+        {
+          "type": "text",
+          "text": ") as a fence toggle, so a line such as ",
+          "offset": 194
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "styles": {
+            "code": true
+          },
+          "offset": 234
+        },
+        {
+          "type": "text",
+          "text": " ```{mermaid} ",
+          "offset": 236
+        },
+        {
+          "type": "text",
+          "text": "text",
+          "styles": {
+            "code": true
+          },
+          "offset": 251
+        },
+        {
+          "type": "text",
+          "text": " flips them and everything after it is misread:",
+          "offset": 256
+        }
+      ],
+      "range": {
+        "start": 0,
+        "end": 303
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "internal/gate/cite.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 308
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "offset": 330
+        },
+        {
+          "type": "text",
+          "text": "isFence",
+          "styles": {
+            "code": true
+          },
+          "offset": 332
+        },
+        {
+          "type": "text",
+          "text": ": the spec gate's citation check skips or scans the wrong lines.",
+          "offset": 340
+        }
+      ],
+      "range": {
+        "start": 305,
+        "end": 404
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "internal/cmd/sharedinstructions.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 408
+        },
+        {
+          "type": "text",
+          "text": " (around line 51)",
+          "offset": 443
+        }
+      ],
+      "range": {
+        "start": 405,
+        "end": 460
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "internal/cmd/instructions.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 464
+        },
+        {
+          "type": "text",
+          "text": " (around lines 163 and 242; backticks only)",
+          "offset": 493
+        }
+      ],
+      "range": {
+        "start": 461,
+        "end": 536
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "internal/cli/ansimd.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 540
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "offset": 563
+        },
+        {
+          "type": "text",
+          "text": "openingFence",
+          "styles": {
+            "code": true
+          },
+          "offset": 565
+        },
+        {
+          "type": "text",
+          "text": ": terminal Markdown rendering.",
+          "offset": 578
+        }
+      ],
+      "range": {
+        "start": 537,
+        "end": 608
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Fix: move the two functions into a stdlib-only leaf package (for example ",
+          "offset": 610
+        },
+        {
+          "type": "text",
+          "text": "internal/mdfence",
+          "styles": {
+            "code": true
+          },
+          "offset": 684
+        },
+        {
+          "type": "text",
+          "text": "), have ",
+          "offset": 701
+        },
+        {
+          "type": "text",
+          "text": "internal/designdoc",
+          "styles": {
+            "code": true
+          },
+          "offset": 710
+        },
+        {
+          "type": "text",
+          "text": " call it, and switch the four scanners to it. A leaf package keeps ",
+          "offset": 729
+        },
+        {
+          "type": "text",
+          "text": "internal/cli",
+          "styles": {
+            "code": true
+          },
+          "offset": 797
+        },
+        {
+          "type": "text",
+          "text": ", which ",
+          "offset": 810
+        },
+        {
+          "type": "text",
+          "text": "lode-hook",
+          "styles": {
+            "code": true
+          },
+          "offset": 819
+        },
+        {
+          "type": "text",
+          "text": " imports, from pulling in ",
+          "offset": 829
+        },
+        {
+          "type": "text",
+          "text": "internal/designdoc",
+          "styles": {
+            "code": true
+          },
+          "offset": 856
+        },
+        {
+          "type": "text",
+          "text": " and its YAML dependency (",
+          "offset": 875
+        },
+        {
+          "type": "text",
+          "text": "internal/disttest/deps_test.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 902
+        },
+        {
+          "type": "text",
+          "text": " guards that closure).",
+          "offset": 933
+        }
+      ],
+      "range": {
+        "start": 610,
+        "end": 955
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Each scanner has a test with a backtick line whose info string contains a backtick, and a four-backtick fence holding a three-backtick line.",
+          "offset": 963
+        }
+      ],
+      "range": {
+        "start": 957,
+        "end": 1103
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "internal/disttest",
+          "styles": {
+            "code": true
+          },
+          "offset": 1111
+        },
+        {
+          "type": "text",
+          "text": " stays green.",
+          "offset": 1129
+        }
+      ],
+      "range": {
+        "start": 1104,
+        "end": 1142
+      }
+    }
+  ]
+}
