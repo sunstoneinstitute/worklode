@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean up dev-up dev-down dev-db dev-embeddings dev-server dev-web FORCE
 
 # WL-REQ-15: seven executables from one module. The three user binaries are what
 # Homebrew installs; three more ship in the container images, and
@@ -64,6 +64,54 @@ web-gen: openapi ## Regenerate the SPA's typed API client from bin/openapi.json
 web-clean: ## Put the committed placeholder back after a local SPA build
 	git clean -fdx internal/webapp/dist
 	git checkout -- internal/webapp/dist/index.html
+
+# When .env holds op:// references, run compose and lode-server under op run so
+# 1Password resolves them. Compose interpolates the resolved values, which take
+# precedence over its own read of .env.
+ENV_RUN := $(if $(shell grep -qs '^[^\#]*op://' .env && echo y),op run --env-file=.env --)
+
+up: ## Start the compose stack, resolving .env's op:// references
+	$(ENV_RUN) docker compose up -d
+
+# Host-side development: Postgres in compose, lode-server and Vite on the host.
+# Exported so docker compose publishes Postgres on the same port.
+export LODE_POSTGRES_PORT ?= 5432
+DEV_DSN ?= postgres://postgres:postgres@localhost:$(LODE_POSTGRES_PORT)/postgres?sslmode=disable
+
+dev-db: ## Start compose's Postgres and migrate it from the host
+	$(ENV_RUN) docker compose up -d --wait postgres
+	go run -trimpath ./cmd/lode-migrate --dsn '$(DEV_DSN)' --migrations-path deploy/base/migrations
+
+export LODE_EMBEDDINGS_PORT ?= 8081
+EMBEDDINGS_URL := http://localhost:$(LODE_EMBEDDINGS_PORT)
+
+dev-embeddings: ## Start compose's embedding server (amd64 image; emulated on Apple Silicon)
+	$(ENV_RUN) docker compose --profile embeddings up -d embeddings
+
+# Embedding settings mirror deploy/base/configmap.yaml, used only when
+# dev-embeddings answers.
+dev-server: bin/lode-server ## Run lode-server on the host against dev-db (stop compose's worklode first)
+	@if curl -sf -o /dev/null $(EMBEDDINGS_URL)/health; then \
+		echo "using embeddings at $(EMBEDDINGS_URL)"; \
+		export LODE_EMBEDDING_URL=$(EMBEDDINGS_URL)/v1/embeddings LODE_EMBEDDING_MODEL=/model \
+			LODE_EMBEDDING_CONTEXT_TOKENS=2048 \
+			LODE_EMBEDDING_QUERY_PREFIX='task: search result | query: ' \
+			LODE_EMBEDDING_DOCUMENT_PREFIX='title: none | text: '; \
+	fi; \
+	LODE_DSN='$(DEV_DSN)' LODE_WEB_OPEN=$${LODE_WEB_OPEN:-1} LODE_INSTANCE_ENV=$${LODE_INSTANCE_ENV:-dev} exec $(ENV_RUN) ./bin/lode-server
+
+dev-web: ## Run the SPA's Vite dev server against dev-server (http://localhost:5173)
+	cd web/app && pnpm install --frozen-lockfile && VITE_API_MOCKS=off pnpm dev
+
+# EMBEDDINGS=1 also starts dev-embeddings and waits up to 3 minutes for it to
+# answer, since dev-server only checks for it once, at startup.
+dev-up: dev-db $(if $(EMBEDDINGS),dev-embeddings) ## Run dev-db, then dev-server and dev-web together (EMBEDDINGS=1 adds dev-embeddings)
+	@$(if $(EMBEDDINGS),for i in $$(seq 90); do curl -sf -o /dev/null $(EMBEDDINGS_URL)/health && break; sleep 2; done)
+	$(MAKE) -j2 dev-server dev-web
+
+# No -v: the Postgres volume, and with it the dev database, survives.
+dev-down: ## Stop and remove the compose containers, keeping the database volume
+	docker compose --profile embeddings down
 
 .DEFAULT_GOAL := build
 

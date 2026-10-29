@@ -57,8 +57,11 @@ the MSW mocks, so no server is needed.
 
 To use a local Go server instead, copy `.env.example` to `.env.local` and
 set `VITE_API_MOCKS=off`, or run `VITE_API_MOCKS=off pnpm dev`. Vite then
-proxies `/api` to `VITE_API_TARGET` (default `http://localhost:8080`).
-Start that server with `LODE_WEB_OPEN=1`.
+serves the paths in `src/routes.json` itself and proxies everything else
+(`/api` and the templ cockpit pages) to `VITE_API_TARGET` (default
+`http://localhost:8080`). From the repo root, `make dev-db dev-server` starts
+that server and `make dev-web` starts Vite this way (see the root README's
+"Server on the host").
 
 ## Other commands
 
