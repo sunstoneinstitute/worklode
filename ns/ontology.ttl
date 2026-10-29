@@ -211,6 +211,59 @@ wl:ClassificationRepaired a owl:Class ;
     wl:layer wlc:execution ;
     rdfs:comment """A person kept, adjusted, rejected or added a classification (WL-REQ-1856).""" .
 
+wl:Review a owl:Class ;
+    skos:definition "review" ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A review of one design document or task, made of rounds of threads
+        (WL-REQ-1781).""" .
+
+wl:ReviewThread a owl:Class ;
+    skos:definition "review thread" ;
+    wl:layer wlc:execution ;
+    rdfs:comment "One comment thread within a wl:Review, with a wl:threadIntent (WL-REQ-1781)." .
+
+wl:ReviewOpened a owl:Class ;
+    skos:definition "review opened" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment "A review of a document or task was opened (WL-REQ-1780)." .
+
+wl:ReviewRoundSubmitted a owl:Class ;
+    skos:definition "review round submitted" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment "A reviewer submitted a round of threads (WL-REQ-1780). Carries wl:reviewRole, wl:client, wl:focused and wl:threadCount." .
+
+wl:ReviewQuestionAsked a owl:Class ;
+    skos:definition "review question asked" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment "A reviewer asked a question thread (WL-REQ-1780). Carries wl:threadIntent." .
+
+wl:ReviewQuestionAnswered a owl:Class ;
+    skos:definition "review question answered" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment "A question thread was answered (WL-REQ-1780)." .
+
+wl:ReviewThreadResolved a owl:Class ;
+    skos:definition "review thread resolved" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment "A review thread was resolved (WL-REQ-1780). Carries wl:threadStatus." .
+
+wl:ReviewVerdictRecorded a owl:Class ;
+    skos:definition "review verdict recorded" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment "A round's verdict was recorded (WL-REQ-1780). Carries wl:reviewVerdict." .
+
+wl:ReviewClosed a owl:Class ;
+    skos:definition "review closed" ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment "A review was closed (WL-REQ-1780). Carries wl:outcome." .
+
 # ---------------------------------------------------------------------------
 # Layer 3 — runtime · deploy (observed; projected from ingest). Every class is
 # anchored on a PROV-O parent where a truthful anchor exists, so PROV-aware
@@ -810,6 +863,60 @@ wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;
         differ entails that every Issue is a Task, which contradicts their disjointness. OWL
         therefore states the pair; shapes.ttl pins the intended direction (a Task mirrors an
         Issue).""" .
+
+wl:reviews a owl:ObjectProperty ;
+    skos:definition "reviews" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Review ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Task ) ] ;
+    rdfs:comment "The document or task a review is about (WL-REQ-1781)." .
+
+wl:reviewRole a owl:DatatypeProperty ;
+    skos:definition "review role" ;
+    wl:layer wlc:execution ;
+    rdfs:comment "The role a reviewer acts in for a review round (WL-REQ-1781)." .
+
+wl:threadIntent a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "thread intent" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:ReviewThread ; rdfs:range skos:Concept ;
+    rdfs:comment "A thread's intent, a concept in wlc:ReviewIntent (WL-REQ-1781)." .
+
+wl:reviewVerdict a owl:ObjectProperty, owl:FunctionalProperty ;
+    skos:definition "review verdict" ;
+    wl:layer wlc:execution ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "A round's verdict, a concept in wlc:ReviewVerdict (WL-REQ-1781)." .
+
+wl:threadStatus a owl:DatatypeProperty ;
+    skos:definition "thread status" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:ReviewThreadResolved ;
+    rdfs:comment "The status a resolved thread moved to (WL-REQ-1780)." .
+
+wl:client a owl:DatatypeProperty ;
+    skos:definition "client" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:ReviewRoundSubmitted ;
+    rdfs:comment "The client that submitted the round (WL-REQ-1780)." .
+
+wl:focused a owl:DatatypeProperty ;
+    skos:definition "focused" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:ReviewRoundSubmitted ;
+    rdfs:comment "Whether the round was a focused one (WL-REQ-1780)." .
+
+wl:threadCount a owl:DatatypeProperty ;
+    skos:definition "thread count" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:ReviewRoundSubmitted ;
+    rdfs:comment "Number of threads in the round (WL-REQ-1780)." .
+
+wl:outcome a owl:DatatypeProperty ;
+    skos:definition "outcome" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:ReviewClosed ;
+    rdfs:comment "How a review ended (WL-REQ-1780)." .
 
 wl:subject a owl:ObjectProperty ;
     skos:definition "is about" ;

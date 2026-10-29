@@ -211,3 +211,25 @@ wlc:flux_recovery a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:pre
 # `model.TaskPriorities` and `model.ActorKinds`, each held to its CHECK
 # constraint by a test in internal/store.
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Review thread intent and verdict (WL-REQ-1781).
+# ---------------------------------------------------------------------------
+
+wlc:ReviewIntent a skos:ConceptScheme ; skos:prefLabel "Review thread intent" .
+
+wlc:note a skos:Concept ; skos:inScheme wlc:ReviewIntent ; skos:prefLabel "note" ;
+    skos:definition "A comment that asks for nothing." .
+wlc:change_request a skos:Concept ; skos:inScheme wlc:ReviewIntent ; skos:prefLabel "change_request" ;
+    skos:definition "A thread asking for a change." .
+wlc:question a skos:Concept ; skos:inScheme wlc:ReviewIntent ; skos:prefLabel "question" ;
+    skos:definition "A thread asking for an answer." .
+
+
+wlc:ReviewVerdict a skos:ConceptScheme ; skos:prefLabel "Review verdict" .
+
+wlc:approved a skos:Concept ; skos:inScheme wlc:ReviewVerdict ; skos:prefLabel "approved" ;
+    skos:definition "The round approves the subject." .
+wlc:changes_requested a skos:Concept ; skos:inScheme wlc:ReviewVerdict ; skos:prefLabel "changes_requested" ;
+    skos:definition "The round asks for changes before approval." .

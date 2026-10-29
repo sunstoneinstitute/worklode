@@ -19,6 +19,8 @@ var Schemes = map[string][]string{
 	"DesignDocStatus":  {"accepted", "draft", "executed", "stale", "superseded", "withdrawn"},
 	"EdgeOrigin":       {"declared", "inferred"},
 	"ModelLayer":       {"execution", "intent", "runtime"},
+	"ReviewIntent":     {"change_request", "note", "question"},
+	"ReviewVerdict":    {"approved", "changes_requested"},
 	"RuleKind":         {"capability", "catalogue", "definition", "informative", "invariant", "principle", "requirement"},
 	"RuntimeEventKind": {"crashloop", "flux_failure", "flux_recovery", "oom"},
 	"TaskKind":         {"bug", "chore", "decision", "design", "feature", "rally", "review", "spike"},
