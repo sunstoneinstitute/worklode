@@ -40,6 +40,9 @@ jobs:
       - name: Lint
         working-directory: web/app
         run: pnpm lint
+      - name: BlockNote contract (WL-REQ-1867)
+        working-directory: web/app
+        run: pnpm vitest run src/editor/contract.test.ts
       - name: Test
         working-directory: web/app
         run: pnpm test

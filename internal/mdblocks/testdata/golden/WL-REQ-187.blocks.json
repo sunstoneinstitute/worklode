@@ -1,0 +1,635 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "For a requirement section ",
+          "offset": 0
+        },
+        {
+          "type": "text",
+          "text": "S",
+          "styles": {
+            "code": true
+          },
+          "offset": 27
+        },
+        {
+          "type": "text",
+          "text": " of an accepted spec, the query looks at every live plan with a ",
+          "offset": 29
+        },
+        {
+          "type": "text",
+          "text": "covers",
+          "styles": {
+            "code": true
+          },
+          "offset": 94
+        },
+        {
+          "type": "text",
+          "text": " edge that claims ",
+          "offset": 101
+        },
+        {
+          "type": "text",
+          "text": "S",
+          "styles": {
+            "code": true
+          },
+          "offset": 120
+        },
+        {
+          "type": "text",
+          "text": ", and every plan that ",
+          "offset": 122
+        },
+        {
+          "type": "text",
+          "text": "defers",
+          "styles": {
+            "code": true
+          },
+          "offset": 145
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "offset": 152
+        },
+        {
+          "type": "text",
+          "text": "S",
+          "styles": {
+            "code": true
+          },
+          "offset": 154
+        },
+        {
+          "type": "text",
+          "text": ". A plan discharges ",
+          "offset": 156
+        },
+        {
+          "type": "text",
+          "text": "S",
+          "styles": {
+            "code": true
+          },
+          "offset": 177
+        },
+        {
+          "type": "text",
+          "text": " when its status is ",
+          "offset": 179
+        },
+        {
+          "type": "text",
+          "text": "accepted",
+          "styles": {
+            "code": true
+          },
+          "offset": 200
+        },
+        {
+          "type": "text",
+          "text": ", ",
+          "offset": 209
+        },
+        {
+          "type": "text",
+          "text": "superseded",
+          "styles": {
+            "code": true
+          },
+          "offset": 212
+        },
+        {
+          "type": "text",
+          "text": " or ",
+          "offset": 223
+        },
+        {
+          "type": "text",
+          "text": "executed",
+          "styles": {
+            "code": true
+          },
+          "offset": 228
+        },
+        {
+          "type": "text",
+          "text": ". Draft plans never discharge: an unapproved split must not hide a gap.",
+          "offset": 237
+        }
+      ],
+      "range": {
+        "start": 0,
+        "end": 308
+      }
+    },
+    {
+      "id": "",
+      "type": "table",
+      "range": {
+        "start": 310,
+        "end": 585
+      },
+      "content": {
+        "type": "tableContent",
+        "columnWidths": [
+          null,
+          null
+        ],
+        "headerRows": 1,
+        "rows": [
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "Outcome",
+                  "offset": 312
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "Rule",
+                  "offset": 322
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "planned",
+                  "offset": 341
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "some discharging plan covers ",
+                  "offset": 351
+                },
+                {
+                  "type": "text",
+                  "text": "S",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 381
+                },
+                {
+                  "type": "text",
+                  "text": " and no draft plan also covers it",
+                  "offset": 383
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "plan-draft",
+                  "offset": 421
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "a draft plan covers ",
+                  "offset": 434
+                },
+                {
+                  "type": "text",
+                  "text": "S",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 455
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "deferred",
+                  "offset": 462
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "no plan covers ",
+                  "offset": 473
+                },
+                {
+                  "type": "text",
+                  "text": "S",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 489
+                },
+                {
+                  "type": "text",
+                  "text": ", and some discharging plan ",
+                  "offset": 491
+                },
+                {
+                  "type": "text",
+                  "text": "defers",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 520
+                },
+                {
+                  "type": "text",
+                  "text": " ",
+                  "offset": 527
+                },
+                {
+                  "type": "text",
+                  "text": "S",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 529
+                },
+                {
+                  "type": "text",
+                  "text": " to a named owner",
+                  "offset": 531
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "unplanned",
+                  "offset": 553
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "no plan covers ",
+                  "offset": 565
+                },
+                {
+                  "type": "text",
+                  "text": "S",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 581
+                }
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Rules:",
+          "offset": 587
+        }
+      ],
+      "range": {
+        "start": 587,
+        "end": 593
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "A ",
+          "offset": 597
+        },
+        {
+          "type": "text",
+          "text": "covers",
+          "styles": {
+            "code": true
+          },
+          "offset": 600
+        },
+        {
+          "type": "text",
+          "text": " edge means the plan builds the whole rule, so one covering plan discharges it. A rule covered by more than one plan counts as planned only once none of those plans is a draft: until then the rule is ",
+          "offset": 607
+        },
+        {
+          "type": "text",
+          "text": "plan-draft",
+          "styles": {
+            "code": true
+          },
+          "offset": 808
+        },
+        {
+          "type": "text",
+          "text": ". This is how a rule shared by plans that each build part of it is reported until it is split (WL-SPEC-77 §19).",
+          "offset": 819
+        }
+      ],
+      "range": {
+        "start": 595,
+        "end": 931
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Only requirements are reported. An invariant or informative rule is never a gap.",
+          "offset": 934
+        }
+      ],
+      "range": {
+        "start": 932,
+        "end": 1014
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "A deferral discharges nothing. It names who is owed the rest, and the report prints the owner beside the anchor: the owner's slug, or the reference verbatim when it did not resolve. A draft plan's deferral classifies nothing. A deferral is delivered when any plan discharges ",
+          "offset": 1017
+        },
+        {
+          "type": "text",
+          "text": "S",
+          "styles": {
+            "code": true
+          },
+          "offset": 1293
+        },
+        {
+          "type": "text",
+          "text": "; the owner is never a gate on who may deliver.",
+          "offset": 1295
+        }
+      ],
+      "range": {
+        "start": 1015,
+        "end": 1342
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "An undischarged section reports the strongest outcome that applies: ",
+          "offset": 1345
+        },
+        {
+          "type": "text",
+          "text": "plan-draft",
+          "styles": {
+            "code": true
+          },
+          "offset": 1414
+        },
+        {
+          "type": "text",
+          "text": " over ",
+          "offset": 1425
+        },
+        {
+          "type": "text",
+          "text": "deferred",
+          "styles": {
+            "code": true
+          },
+          "offset": 1432
+        },
+        {
+          "type": "text",
+          "text": " over ",
+          "offset": 1441
+        },
+        {
+          "type": "text",
+          "text": "unplanned",
+          "styles": {
+            "code": true
+          },
+          "offset": 1448
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1458
+        }
+      ],
+      "range": {
+        "start": 1343,
+        "end": 1459
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "A whole-document ",
+          "offset": 1462
+        },
+        {
+          "type": "text",
+          "text": "covers",
+          "styles": {
+            "code": true
+          },
+          "offset": 1480
+        },
+        {
+          "type": "text",
+          "text": " entry resolves to every requirement of the document when the plan is written, so it covers each of them.",
+          "offset": 1487
+        }
+      ],
+      "range": {
+        "start": 1460,
+        "end": 1592
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Overlap is legal: two plans covering one section is two plans touching it.",
+          "offset": 1595
+        }
+      ],
+      "range": {
+        "start": 1593,
+        "end": 1669
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "A plan whose ",
+          "offset": 1672
+        },
+        {
+          "type": "text",
+          "text": "covers",
+          "styles": {
+            "code": true
+          },
+          "offset": 1686
+        },
+        {
+          "type": "text",
+          "text": " is ",
+          "offset": 1693
+        },
+        {
+          "type": "text",
+          "text": "NO-SPEC",
+          "styles": {
+            "code": true
+          },
+          "offset": 1698
+        },
+        {
+          "type": "text",
+          "text": " (§3.3) contributes to nothing and is never itself a gap.",
+          "offset": 1706
+        }
+      ],
+      "range": {
+        "start": 1670,
+        "end": 1764
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "A deleted document takes part on neither end.",
+          "offset": 1767
+        }
+      ],
+      "range": {
+        "start": 1765,
+        "end": 1812
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "A spec is listed when at least one requirement section is not planned, with the gap count, the anchors, and each anchor's outcome:",
+          "offset": 1814
+        }
+      ],
+      "range": {
+        "start": 1814,
+        "end": 1944
+      }
+    },
+    {
+      "id": "",
+      "type": "codeBlock",
+      "content": [
+        {
+          "type": "text",
+          "text": "WL-SPEC-\u003cn\u003e   accepted   3/9 need planning   sec-2.4(plan-draft) sec-4(unplanned) sec-6(deferred:\u003cowner\u003e)\n",
+          "offset": 1950
+        }
+      ],
+      "range": {
+        "start": 1946,
+        "end": 2059
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Planning coverage and implementation coverage are different questions. ",
+          "offset": 2061
+        },
+        {
+          "type": "text",
+          "text": "covers",
+          "styles": {
+            "code": true
+          },
+          "offset": 2133
+        },
+        {
+          "type": "text",
+          "text": " says someone undertook to build a section; ",
+          "offset": 2140
+        },
+        {
+          "type": "text",
+          "text": "implements",
+          "styles": {
+            "code": true
+          },
+          "offset": 2185
+        },
+        {
+          "type": "text",
+          "text": " says the running code satisfies it (WL-SPEC-77 §13).",
+          "offset": 2196
+        }
+      ],
+      "range": {
+        "start": 2061,
+        "end": 2250
+      }
+    }
+  ]
+}

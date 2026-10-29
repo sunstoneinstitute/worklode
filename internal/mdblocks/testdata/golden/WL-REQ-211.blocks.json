@@ -1,0 +1,171 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "A task body's front matter names its rendering engine under one key:",
+          "offset": 0
+        }
+      ],
+      "range": {
+        "start": 0,
+        "end": 68
+      }
+    },
+    {
+      "id": "",
+      "type": "codeBlock",
+      "props": {
+        "language": "markdown"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "---\n",
+          "offset": 82
+        },
+        {
+          "type": "text",
+          "text": "mode: reveal\n",
+          "offset": 86
+        },
+        {
+          "type": "text",
+          "text": "---\n",
+          "offset": 99
+        }
+      ],
+      "range": {
+        "start": 70,
+        "end": 106
+      }
+    },
+    {
+      "id": "",
+      "type": "table",
+      "range": {
+        "start": 108,
+        "end": 219
+      },
+      "content": {
+        "type": "tableContent",
+        "columnWidths": [
+          null,
+          null
+        ],
+        "headerRows": 1,
+        "rows": [
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "Value",
+                  "offset": 110
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "Renders as",
+                  "offset": 118
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "doc",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 144
+                },
+                {
+                  "type": "text",
+                  "text": " (default)",
+                  "offset": 148
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "a document",
+                  "offset": 161
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "reveal",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 177
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "a slide deck through reveal.js",
+                  "offset": 187
+                }
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "An unknown value renders as ",
+          "offset": 221
+        },
+        {
+          "type": "text",
+          "text": "doc",
+          "styles": {
+            "code": true
+          },
+          "offset": 250
+        },
+        {
+          "type": "text",
+          "text": " and is reported by ",
+          "offset": 254
+        },
+        {
+          "type": "text",
+          "text": "lode doctor",
+          "styles": {
+            "code": true
+          },
+          "offset": 275
+        },
+        {
+          "type": "text",
+          "text": ". The mode picks which trusted renderer runs. Every fragment of author content still passes the same bluemonday policy (WL-SPEC-78#sec-8.6a). No mode introduces a markup path around it.",
+          "offset": 287
+        }
+      ],
+      "range": {
+        "start": 221,
+        "end": 472
+      }
+    }
+  ]
+}

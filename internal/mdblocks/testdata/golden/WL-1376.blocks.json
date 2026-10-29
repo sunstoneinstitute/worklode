@@ -1,0 +1,392 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "source",
+      "props": {
+        "markdown": "One mutation across every surface, mirroring the doc form exactly. Read\n`internal/cmd/docreviewers.go` and `store.SetDocReviewers`\n(`internal/store/approvals.go`) first: the doc side is `lode doc reviewers\n\u003cref\u003e` to view and `lode doc set reviewers \u003cactor…\u003e \u003cref\u003e` to write, and\nthe task side copies both."
+      },
+      "range": {
+        "start": 0,
+        "end": 307
+      }
+    },
+    {
+      "id": "",
+      "type": "source",
+      "props": {
+        "markdown": "- `internal/store/reviews.go`: `SetTaskReviewers(tx, now, taskID, actorID,\n  reviewers []string, eventID)`: whole-list replace, every reviewer an\n  existing actor, refused on a closed task; `taskReviewers(tx, taskID)`.\n  Event `task.reviewers_set` with `{\"reviewers\": [...]}`."
+      },
+      "range": {
+        "start": 309,
+        "end": 585
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "internal/api/tasks.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 590
+        },
+        {
+          "type": "text",
+          "text": ": ",
+          "offset": 612
+        },
+        {
+          "type": "text",
+          "text": "POST /api/v1/tasks/{id}/reviewers",
+          "styles": {
+            "code": true
+          },
+          "offset": 615
+        },
+        {
+          "type": "text",
+          "text": " (WL-REQ-1323), ",
+          "offset": 649
+        },
+        {
+          "type": "text",
+          "text": "guardedBound(permTaskWrite)",
+          "styles": {
+            "code": true
+          },
+          "offset": 666
+        },
+        {
+          "type": "text",
+          "text": " in ",
+          "offset": 694
+        },
+        {
+          "type": "text",
+          "text": "routeGuards",
+          "styles": {
+            "code": true
+          },
+          "offset": 699
+        },
+        {
+          "type": "text",
+          "text": ", with its ",
+          "offset": 711
+        },
+        {
+          "type": "text",
+          "text": "routeDoc",
+          "styles": {
+            "code": true
+          },
+          "offset": 723
+        },
+        {
+          "type": "text",
+          "text": "; ",
+          "offset": 732
+        },
+        {
+          "type": "text",
+          "text": "model.TaskDetail",
+          "styles": {
+            "code": true
+          },
+          "offset": 735
+        },
+        {
+          "type": "text",
+          "text": " gains ",
+          "offset": 752
+        },
+        {
+          "type": "text",
+          "text": "Reviewers []string",
+          "styles": {
+            "code": true
+          },
+          "offset": 760
+        },
+        {
+          "type": "text",
+          "text": " (",
+          "offset": 779
+        },
+        {
+          "type": "text",
+          "text": "json:\"reviewers,omitempty\"",
+          "styles": {
+            "code": true
+          },
+          "offset": 782
+        },
+        {
+          "type": "text",
+          "text": "), filled by the task detail read.",
+          "offset": 809
+        }
+      ],
+      "range": {
+        "start": 587,
+        "end": 843
+      }
+    },
+    {
+      "id": "",
+      "type": "source",
+      "props": {
+        "markdown": "- `internal/cli/tasks.go`, `internal/cmd/task.go`: `lode task reviewers\n  \u003cid\u003e` (view) and `reviewers` as a field of the existing `lode task set\n  \u003cfield\u003e \u003cvalue…\u003e \u003cid\u003e`; `cli.TaskDetailRender` shows the roster."
+      },
+      "range": {
+        "start": 845,
+        "end": 1058
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "First store test: set ",
+          "offset": 1060
+        },
+        {
+          "type": "text",
+          "text": "{a, b}",
+          "styles": {
+            "code": true
+          },
+          "offset": 1083
+        },
+        {
+          "type": "text",
+          "text": ", read back in assignment order; set ",
+          "offset": 1090
+        },
+        {
+          "type": "text",
+          "text": "{b}",
+          "styles": {
+            "code": true
+          },
+          "offset": 1128
+        },
+        {
+          "type": "text",
+          "text": ", ",
+          "offset": 1132
+        },
+        {
+          "type": "text",
+          "text": "a",
+          "styles": {
+            "code": true
+          },
+          "offset": 1135
+        },
+        {
+          "type": "text",
+          "text": " gone; unknown actor is ",
+          "offset": 1137
+        },
+        {
+          "type": "text",
+          "text": "ErrInvalidInput",
+          "styles": {
+            "code": true
+          },
+          "offset": 1162
+        },
+        {
+          "type": "text",
+          "text": "; abandoned task is ",
+          "offset": 1178
+        },
+        {
+          "type": "text",
+          "text": "ErrInvalidInput",
+          "styles": {
+            "code": true
+          },
+          "offset": 1199
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1215
+        }
+      ],
+      "range": {
+        "start": 1060,
+        "end": 1216
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "go test -trimpath ./internal/store ./internal/api ./internal/cmd -run 'TaskReviewers' -count=1",
+          "styles": {
+            "code": true
+          },
+          "offset": 1225
+        },
+        {
+          "type": "text",
+          "text": " against Postgres — ",
+          "offset": 1320
+        },
+        {
+          "type": "text",
+          "text": "ok",
+          "styles": {
+            "code": true
+          },
+          "offset": 1343
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1346
+        }
+      ],
+      "range": {
+        "start": 1218,
+        "end": 1347
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "go test -trimpath ./internal/api -run 'TestRouteGuards|TestOpenAPI' -count=1",
+          "styles": {
+            "code": true
+          },
+          "offset": 1355
+        },
+        {
+          "type": "text",
+          "text": " — ",
+          "offset": 1432
+        },
+        {
+          "type": "text",
+          "text": "ok",
+          "styles": {
+            "code": true
+          },
+          "offset": 1438
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1441
+        }
+      ],
+      "range": {
+        "start": 1348,
+        "end": 1442
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "docs/agent-surfaces.md",
+          "styles": {
+            "code": true
+          },
+          "offset": 1450
+        },
+        {
+          "type": "text",
+          "text": " lists the new verbs; ",
+          "offset": 1473
+        },
+        {
+          "type": "text",
+          "text": "go test -trimpath ./internal/cmd -run TestAgentSurfaces",
+          "styles": {
+            "code": true
+          },
+          "offset": 1496
+        },
+        {
+          "type": "text",
+          "text": " — ",
+          "offset": 1552
+        },
+        {
+          "type": "text",
+          "text": "ok",
+          "styles": {
+            "code": true
+          },
+          "offset": 1558
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1561
+        }
+      ],
+      "range": {
+        "start": 1443,
+        "end": 1562
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Commit: ",
+          "offset": 1569
+        },
+        {
+          "type": "text",
+          "text": "task_reviewers: store, POST /tasks/{id}/reviewers, lode task set reviewers (WL-REQ-1322, WL-REQ-1323, WL-REQ-1775)",
+          "styles": {
+            "code": true
+          },
+          "offset": 1578
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1693
+        }
+      ],
+      "range": {
+        "start": 1563,
+        "end": 1694
+      }
+    }
+  ]
+}

@@ -1,0 +1,609 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "lode review exec \u003cid\u003e [--focused] [--worktree \u003cdir\u003e]",
+          "styles": {
+            "code": true
+          },
+          "offset": 1
+        },
+        {
+          "type": "text",
+          "text": " in ",
+          "offset": 54
+        },
+        {
+          "type": "text",
+          "text": "internal/cmd/review.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 59
+        },
+        {
+          "type": "text",
+          "text": ", client-side only (WL-REQ-1776):",
+          "offset": 82
+        }
+      ],
+      "range": {
+        "start": 0,
+        "end": 115
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "GetReview",
+          "styles": {
+            "code": true
+          },
+          "offset": 121
+        },
+        {
+          "type": "text",
+          "text": "; a closed review is refused.",
+          "offset": 131
+        }
+      ],
+      "range": {
+        "start": 117,
+        "end": 160
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Temp directory ",
+          "offset": 164
+        },
+        {
+          "type": "text",
+          "text": "os.MkdirTemp(\"\", \"lode-desk-\u003cid\u003e-\")",
+          "styles": {
+            "code": true
+          },
+          "offset": 180
+        },
+        {
+          "type": "text",
+          "text": "; the guide via part 3's ",
+          "offset": 216
+        },
+        {
+          "type": "text",
+          "text": "cmd.materializeGuide",
+          "styles": {
+            "code": true
+          },
+          "offset": 242
+        },
+        {
+          "type": "text",
+          "text": " when one exists, focused when ",
+          "offset": 263
+        },
+        {
+          "type": "text",
+          "text": "--focused",
+          "styles": {
+            "code": true
+          },
+          "offset": 295
+        },
+        {
+          "type": "text",
+          "text": " is given and with skims emptied otherwise (WL-RULE-1320).",
+          "offset": 305
+        }
+      ],
+      "range": {
+        "start": 161,
+        "end": 363
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Document subject: ",
+          "offset": 367
+        },
+        {
+          "type": "text",
+          "text": "lode doc show --anchors",
+          "styles": {
+            "code": true
+          },
+          "offset": 386
+        },
+        {
+          "type": "text",
+          "text": " into the temp dir with the sidecar; change subject: the task's worktree must be the cwd (or ",
+          "offset": 410
+        },
+        {
+          "type": "text",
+          "text": "--worktree",
+          "styles": {
+            "code": true
+          },
+          "offset": 504
+        },
+        {
+          "type": "text",
+          "text": "), and ",
+          "offset": 515
+        },
+        {
+          "type": "text",
+          "text": "exec",
+          "styles": {
+            "code": true
+          },
+          "offset": 523
+        },
+        {
+          "type": "text",
+          "text": " refuses when its root holds a ",
+          "offset": 528
+        },
+        {
+          "type": "text",
+          "text": ".crit.config.json",
+          "styles": {
+            "code": true
+          },
+          "offset": 560
+        },
+        {
+          "type": "text",
+          "text": " or a ",
+          "offset": 578
+        },
+        {
+          "type": "text",
+          "text": ".crit/hooks/",
+          "styles": {
+            "code": true
+          },
+          "offset": 585
+        },
+        {
+          "type": "text",
+          "text": " directory, naming it.",
+          "offset": 598
+        }
+      ],
+      "range": {
+        "start": 364,
+        "end": 620
+      }
+    },
+    {
+      "id": "",
+      "type": "source",
+      "props": {
+        "markdown": "4. Write `\u003ctmp\u003e/.crit.config.json`: the user's `~/.crit.config.json` when\n   it exists, with `hooks.on_finish_unresolved` and\n   `hooks.on_finish_approved` both set to `inline:lode review import\n   --review \u003cid\u003e [--anchors \u003csidecar\u003e]` and `author` set to the actor name\n   from `cli.Client.WhoAmI`."
+      },
+      "range": {
+        "start": 622,
+        "end": 920
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Exec crit (",
+          "offset": 925
+        },
+        {
+          "type": "text",
+          "text": "crit \u003ccopy\u003e",
+          "styles": {
+            "code": true
+          },
+          "offset": 937
+        },
+        {
+          "type": "text",
+          "text": " with cwd = the temp dir for a document, ",
+          "offset": 949
+        },
+        {
+          "type": "text",
+          "text": "crit",
+          "styles": {
+            "code": true
+          },
+          "offset": 991
+        },
+        {
+          "type": "text",
+          "text": " in the worktree for a change) with ",
+          "offset": 996
+        },
+        {
+          "type": "text",
+          "text": "HOME=\u003ctmp\u003e",
+          "styles": {
+            "code": true
+          },
+          "offset": 1033
+        },
+        {
+          "type": "text",
+          "text": " and ",
+          "offset": 1044
+        },
+        {
+          "type": "text",
+          "text": "LODE_REVIEW_FOCUSED=1",
+          "styles": {
+            "code": true
+          },
+          "offset": 1050
+        },
+        {
+          "type": "text",
+          "text": " when ",
+          "offset": 1072
+        },
+        {
+          "type": "text",
+          "text": "--focused",
+          "styles": {
+            "code": true
+          },
+          "offset": 1079
+        },
+        {
+          "type": "text",
+          "text": ", the rest of the environment inherited, stdio inherited; on exit, print where the round landed (import already printed it) or that crit exited without finishing, and where the temp dir is so a failed import can be re-run from ",
+          "offset": 1089
+        },
+        {
+          "type": "text",
+          "text": "finish.json",
+          "styles": {
+            "code": true
+          },
+          "offset": 1317
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1329
+        }
+      ],
+      "range": {
+        "start": 922,
+        "end": 1330
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "lode doctor",
+          "styles": {
+            "code": true
+          },
+          "offset": 1335
+        },
+        {
+          "type": "text",
+          "text": " gains a ",
+          "offset": 1347
+        },
+        {
+          "type": "text",
+          "text": "crit",
+          "styles": {
+            "code": true
+          },
+          "offset": 1357
+        },
+        {
+          "type": "text",
+          "text": " row: present or not, version vs ",
+          "offset": 1362
+        },
+        {
+          "type": "text",
+          "text": "PIN",
+          "styles": {
+            "code": true
+          },
+          "offset": 1396
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1400
+        }
+      ],
+      "range": {
+        "start": 1331,
+        "end": 1401
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The command is a subprocess launcher; test the parts that are not crit: a table test over the generated config JSON (user keys preserved, both hook lines, sidecar flag present only for a document, ",
+          "offset": 1403
+        },
+        {
+          "type": "text",
+          "text": "author",
+          "styles": {
+            "code": true
+          },
+          "offset": 1601
+        },
+        {
+          "type": "text",
+          "text": " set) and a fake ",
+          "offset": 1608
+        },
+        {
+          "type": "text",
+          "text": "crit",
+          "styles": {
+            "code": true
+          },
+          "offset": 1626
+        },
+        {
+          "type": "text",
+          "text": " on ",
+          "offset": 1631
+        },
+        {
+          "type": "text",
+          "text": "PATH",
+          "styles": {
+            "code": true
+          },
+          "offset": 1636
+        },
+        {
+          "type": "text",
+          "text": " (a shell script in ",
+          "offset": 1641
+        },
+        {
+          "type": "text",
+          "text": "testdata/",
+          "styles": {
+            "code": true
+          },
+          "offset": 1662
+        },
+        {
+          "type": "text",
+          "text": " that asserts ",
+          "offset": 1672
+        },
+        {
+          "type": "text",
+          "text": "HOME",
+          "styles": {
+            "code": true
+          },
+          "offset": 1687
+        },
+        {
+          "type": "text",
+          "text": " is the temp dir, echoes its argv, and runs the ",
+          "offset": 1692
+        },
+        {
+          "type": "text",
+          "text": "on_finish_unresolved",
+          "styles": {
+            "code": true
+          },
+          "offset": 1741
+        },
+        {
+          "type": "text",
+          "text": " hook from ",
+          "offset": 1762
+        },
+        {
+          "type": "text",
+          "text": "$HOME/.crit.config.json",
+          "styles": {
+            "code": true
+          },
+          "offset": 1774
+        },
+        {
+          "type": "text",
+          "text": " with ",
+          "offset": 1798
+        },
+        {
+          "type": "text",
+          "text": "finish_unresolved.json",
+          "styles": {
+            "code": true
+          },
+          "offset": 1805
+        },
+        {
+          "type": "text",
+          "text": " on stdin) proving the end-to-end wiring lands a round with ",
+          "offset": 1828
+        },
+        {
+          "type": "text",
+          "text": "client = crit",
+          "styles": {
+            "code": true
+          },
+          "offset": 1889
+        },
+        {
+          "type": "text",
+          "text": ", and that ",
+          "offset": 1903
+        },
+        {
+          "type": "text",
+          "text": "--focused",
+          "styles": {
+            "code": true
+          },
+          "offset": 1915
+        },
+        {
+          "type": "text",
+          "text": " lands ",
+          "offset": 1925
+        },
+        {
+          "type": "text",
+          "text": "focused = true",
+          "styles": {
+            "code": true
+          },
+          "offset": 1933
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 1948
+        }
+      ],
+      "range": {
+        "start": 1403,
+        "end": 1949
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "go test -trimpath ./internal/cmd -run 'ReviewDesk|Doctor' -count=1",
+          "styles": {
+            "code": true
+          },
+          "offset": 1958
+        },
+        {
+          "type": "text",
+          "text": " against Postgres — ",
+          "offset": 2025
+        },
+        {
+          "type": "text",
+          "text": "ok",
+          "styles": {
+            "code": true
+          },
+          "offset": 2048
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 2051
+        }
+      ],
+      "range": {
+        "start": 1951,
+        "end": 2052
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Manual, with real crit at the pinned tag: one document review and one change review each finished from the desk; paste ",
+          "offset": 2059
+        },
+        {
+          "type": "text",
+          "text": "lode review show",
+          "styles": {
+            "code": true
+          },
+          "offset": 2179
+        },
+        {
+          "type": "text",
+          "text": " for both into the PR.",
+          "offset": 2196
+        }
+      ],
+      "range": {
+        "start": 2053,
+        "end": 2218
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Commit: ",
+          "offset": 2225
+        },
+        {
+          "type": "text",
+          "text": "lode review exec: crit as the interim desk, wired through its finish hooks (WL-REQ-1776, WL-REQ-1316)",
+          "styles": {
+            "code": true
+          },
+          "offset": 2234
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 2336
+        }
+      ],
+      "range": {
+        "start": 2219,
+        "end": 2337
+      }
+    }
+  ]
+}

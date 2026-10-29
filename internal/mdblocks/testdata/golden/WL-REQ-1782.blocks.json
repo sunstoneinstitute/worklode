@@ -1,0 +1,388 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "source",
+      "props": {
+        "markdown": "Hover text appears on every cell and reference after a short delay and\nnever captures the pointer. A section cell: `§3.1 Renewal · In progress ·\nWL-PLAN-99`. A task cell: id, title and its **position**, the first line that\napplies:"
+      },
+      "range": {
+        "start": 0,
+        "end": 234
+      }
+    },
+    {
+      "id": "",
+      "type": "table",
+      "range": {
+        "start": 236,
+        "end": 957
+      },
+      "content": {
+        "type": "tableContent",
+        "columnWidths": [
+          null,
+          null
+        ],
+        "headerRows": 1,
+        "rows": [
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "Position",
+                  "offset": 238
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "Fact",
+                  "offset": 249
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "merged",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 269
+                },
+                {
+                  "type": "text",
+                  "text": ", ",
+                  "offset": 276
+                },
+                {
+                  "type": "text",
+                  "text": "deployed to dev",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 279
+                },
+                {
+                  "type": "text",
+                  "text": ", ",
+                  "offset": 295
+                },
+                {
+                  "type": "text",
+                  "text": "deployed to prod",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 298
+                },
+                {
+                  "type": "text",
+                  "text": ", ",
+                  "offset": 315
+                },
+                {
+                  "type": "text",
+                  "text": "released",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 318
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "the task is landed; this outranks any PR or CI fact",
+                  "offset": 330
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "queued for merge",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 387
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "the PR has an open merge-queue entry",
+                  "offset": 407
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "checks failed on PR #N",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 449
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "latest CI run for the PR's head SHA concluded ",
+                  "offset": 475
+                },
+                {
+                  "type": "text",
+                  "text": "failure",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 522
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "checks running on PR #N",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 536
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "latest CI run is ",
+                  "offset": 563
+                },
+                {
+                  "type": "text",
+                  "text": "in_progress",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 581
+                },
+                {
+                  "type": "text",
+                  "text": " or ",
+                  "offset": 593
+                },
+                {
+                  "type": "text",
+                  "text": "queued",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 598
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "PR #N open",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 611
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "an open PR carries the task id and neither line above applies",
+                  "offset": 625
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "in review",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 692
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "task ",
+                  "offset": 705
+                },
+                {
+                  "type": "text",
+                  "text": "in_review",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 711
+                },
+                {
+                  "type": "text",
+                  "text": ", no PR fact",
+                  "offset": 721
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "claimed by \u003cactor\u003e, \u003cage\u003e",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 739
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "task ",
+                  "offset": 768
+                },
+                {
+                  "type": "text",
+                  "text": "in_progress",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 774
+                },
+                {
+                  "type": "text",
+                  "text": " with a live lease; age in minutes, hours or days",
+                  "offset": 786
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "assigned to \u003cactor\u003e",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 841
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "task ",
+                  "offset": 864
+                },
+                {
+                  "type": "text",
+                  "text": "ready",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 870
+                },
+                {
+                  "type": "text",
+                  "text": " with an assignee",
+                  "offset": 876
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "ready",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 899
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "task ",
+                  "offset": 908
+                },
+                {
+                  "type": "text",
+                  "text": "ready",
+                  "styles": {
+                    "code": true
+                  },
+                  "offset": 914
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "the task state",
+                  "offset": 925
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "anything else",
+                  "offset": 942
+                }
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The PR number is a link only when the tooltip is pinned by a click.",
+          "offset": 959
+        }
+      ],
+      "range": {
+        "start": 959,
+        "end": 1026
+      }
+    }
+  ]
+}
