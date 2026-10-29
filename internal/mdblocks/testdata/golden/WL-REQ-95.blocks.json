@@ -1,0 +1,399 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "codeBlock",
+      "content": [
+        {
+          "type": "text",
+          "text": "Claim(ctx, taskID, actorID, worktree, ttl) (*Lease, error)\n",
+          "offset": 4
+        }
+      ],
+      "range": {
+        "start": 0,
+        "end": 66
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Executed as the ",
+          "offset": 68
+        },
+        {
+          "type": "text",
+          "text": "apply",
+          "styles": {
+            "code": true
+          },
+          "offset": 85
+        },
+        {
+          "type": "text",
+          "text": " callback of ",
+          "offset": 91
+        },
+        {
+          "type": "text",
+          "text": "RecordEvent(\"cli\", \u003cminted id\u003e, \"lease.claimed\", …)",
+          "styles": {
+            "code": true
+          },
+          "offset": 105
+        },
+        {
+          "type": "text",
+          "text": ":",
+          "offset": 159
+        }
+      ],
+      "range": {
+        "start": 68,
+        "end": 160
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "SELECT … FROM tasks WHERE id = $1 FOR UPDATE",
+          "styles": {
+            "code": true
+          },
+          "offset": 166
+        },
+        {
+          "type": "text",
+          "text": ". Concurrent claims of the same task serialize here; claims of different tasks never contend. Unknown task gives ",
+          "offset": 213
+        },
+        {
+          "type": "text",
+          "text": "ErrNotFound",
+          "styles": {
+            "code": true
+          },
+          "offset": 327
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 339
+        }
+      ],
+      "range": {
+        "start": 162,
+        "end": 340
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Verify the actor exists (",
+          "offset": 344
+        },
+        {
+          "type": "text",
+          "text": "ErrNotFound",
+          "styles": {
+            "code": true
+          },
+          "offset": 370
+        },
+        {
+          "type": "text",
+          "text": ").",
+          "offset": 382
+        }
+      ],
+      "range": {
+        "start": 341,
+        "end": 384
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Verify no active lease (",
+          "offset": 388
+        },
+        {
+          "type": "text",
+          "text": "ErrLeased",
+          "styles": {
+            "code": true
+          },
+          "offset": 413
+        },
+        {
+          "type": "text",
+          "text": ").",
+          "offset": 423
+        }
+      ],
+      "range": {
+        "start": 385,
+        "end": 425
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Verify not blocked: ",
+          "offset": 429
+        },
+        {
+          "type": "text",
+          "text": "IsBlocked",
+          "styles": {
+            "code": true
+          },
+          "offset": 450
+        },
+        {
+          "type": "text",
+          "text": " (",
+          "offset": 460
+        },
+        {
+          "type": "text",
+          "text": "ErrBlocked",
+          "styles": {
+            "code": true
+          },
+          "offset": 463
+        },
+        {
+          "type": "text",
+          "text": ").",
+          "offset": 474
+        }
+      ],
+      "range": {
+        "start": 426,
+        "end": 476
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Verify claimable: not a task with children, not ",
+          "offset": 480
+        },
+        {
+          "type": "text",
+          "text": "decision",
+          "styles": {
+            "code": true
+          },
+          "offset": 529
+        },
+        {
+          "type": "text",
+          "text": " or ",
+          "offset": 538
+        },
+        {
+          "type": "text",
+          "text": "rally",
+          "styles": {
+            "code": true
+          },
+          "offset": 543
+        },
+        {
+          "type": "text",
+          "text": " kind, not labelled ",
+          "offset": 549
+        },
+        {
+          "type": "text",
+          "text": "needs-decomposition",
+          "styles": {
+            "code": true
+          },
+          "offset": 570
+        },
+        {
+          "type": "text",
+          "text": ", not deleted.",
+          "offset": 590
+        }
+      ],
+      "range": {
+        "start": 477,
+        "end": 604
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "Transition(tx, now, taskID, \"ready\", \"in_progress\", eventID)",
+          "styles": {
+            "code": true
+          },
+          "offset": 609
+        },
+        {
+          "type": "text",
+          "text": " (",
+          "offset": 670
+        },
+        {
+          "type": "text",
+          "text": "ErrBadTransition",
+          "styles": {
+            "code": true
+          },
+          "offset": 673
+        },
+        {
+          "type": "text",
+          "text": ").",
+          "offset": 690
+        }
+      ],
+      "range": {
+        "start": 605,
+        "end": 692
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "INSERT INTO leases … RETURNING id",
+          "styles": {
+            "code": true
+          },
+          "offset": 697
+        },
+        {
+          "type": "text",
+          "text": ". The ",
+          "offset": 733
+        },
+        {
+          "type": "text",
+          "text": "leases_active",
+          "styles": {
+            "code": true
+          },
+          "offset": 740
+        },
+        {
+          "type": "text",
+          "text": " index is the backstop: a unique violation (",
+          "offset": 754
+        },
+        {
+          "type": "text",
+          "text": "23505",
+          "styles": {
+            "code": true
+          },
+          "offset": 799
+        },
+        {
+          "type": "text",
+          "text": ") maps to ",
+          "offset": 805
+        },
+        {
+          "type": "text",
+          "text": "ErrLeased",
+          "styles": {
+            "code": true
+          },
+          "offset": 816
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 826
+        }
+      ],
+      "range": {
+        "start": 693,
+        "end": 827
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "All steps, the event row and the ",
+          "offset": 829
+        },
+        {
+          "type": "text",
+          "text": "state_log",
+          "styles": {
+            "code": true
+          },
+          "offset": 863
+        },
+        {
+          "type": "text",
+          "text": " row commit or roll back together. ",
+          "offset": 873
+        },
+        {
+          "type": "text",
+          "text": "Claim",
+          "styles": {
+            "code": true
+          },
+          "offset": 909
+        },
+        {
+          "type": "text",
+          "text": " is a total, atomic function of one candidate id. Ranking, candidate construction and retry policy live in §8; on a lost race ",
+          "offset": 915
+        },
+        {
+          "type": "text",
+          "text": "claim --next",
+          "styles": {
+            "code": true
+          },
+          "offset": 1043
+        },
+        {
+          "type": "text",
+          "text": " re-ranks and tries the next candidate.",
+          "offset": 1056
+        }
+      ],
+      "range": {
+        "start": 829,
+        "end": 1095
+      }
+    }
+  ]
+}

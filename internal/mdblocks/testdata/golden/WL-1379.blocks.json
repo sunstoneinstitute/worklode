@@ -1,0 +1,507 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "source",
+      "props": {
+        "markdown": "- `SubmitReviewerRound`: refuse a verdict from `reviewAuthor`, the active\n  lease holder or `tasks.assignee` (`ErrForbidden`, \"self-approval: \u003cactor\u003e\n  holds the lease\"). After the round, when the subject is a task in\n  `in_review` and (`verdict = changes_requested` or\n  `review.BlocksApproval`), `Transition(in_review → in_progress)`; lease\n  untouched. Observe part 1's metrics with `subject = change`."
+      },
+      "range": {
+        "start": 0,
+        "end": 407
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "The close hook in ",
+          "offset": 411
+        },
+        {
+          "type": "text",
+          "text": "transitionKnown",
+          "styles": {
+            "code": true
+          },
+          "offset": 430
+        },
+        {
+          "type": "text",
+          "text": " (",
+          "offset": 446
+        },
+        {
+          "type": "text",
+          "text": "internal/store/tasks.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 449
+        },
+        {
+          "type": "text",
+          "text": "): on ",
+          "offset": 473
+        },
+        {
+          "type": "text",
+          "text": "in_review → merged|abandoned",
+          "styles": {
+            "code": true
+          },
+          "offset": 480
+        },
+        {
+          "type": "text",
+          "text": ", and the direct ",
+          "offset": 511
+        },
+        {
+          "type": "text",
+          "text": "in_progress → merged",
+          "styles": {
+            "code": true
+          },
+          "offset": 529
+        },
+        {
+          "type": "text",
+          "text": " jump while a review is open, call ",
+          "offset": 552
+        },
+        {
+          "type": "text",
+          "text": "CloseReview(outcome)",
+          "styles": {
+            "code": true
+          },
+          "offset": 588
+        },
+        {
+          "type": "text",
+          "text": ". Put it beside ",
+          "offset": 609
+        },
+        {
+          "type": "text",
+          "text": "resolveParent",
+          "styles": {
+            "code": true
+          },
+          "offset": 626
+        },
+        {
+          "type": "text",
+          "text": " and ",
+          "offset": 640
+        },
+        {
+          "type": "text",
+          "text": "settlePlan",
+          "styles": {
+            "code": true
+          },
+          "offset": 646
+        },
+        {
+          "type": "text",
+          "text": " at the end of ",
+          "offset": 657
+        },
+        {
+          "type": "text",
+          "text": "transitionKnown",
+          "styles": {
+            "code": true
+          },
+          "offset": 673
+        },
+        {
+          "type": "text",
+          "text": ", not in each caller.",
+          "offset": 689
+        }
+      ],
+      "range": {
+        "start": 409,
+        "end": 710
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "EscalateTask",
+          "styles": {
+            "code": true
+          },
+          "offset": 714
+        },
+        {
+          "type": "text",
+          "text": " (",
+          "offset": 727
+        },
+        {
+          "type": "text",
+          "text": "internal/store/escalate.go",
+          "styles": {
+            "code": true
+          },
+          "offset": 730
+        },
+        {
+          "type": "text",
+          "text": "): inside its transaction, before ",
+          "offset": 757
+        },
+        {
+          "type": "text",
+          "text": "releaseLeaseTx",
+          "styles": {
+            "code": true
+          },
+          "offset": 792
+        },
+        {
+          "type": "text",
+          "text": ", when the task has an open review with an open ",
+          "offset": 807
+        },
+        {
+          "type": "text",
+          "text": "question",
+          "styles": {
+            "code": true
+          },
+          "offset": 856
+        },
+        {
+          "type": "text",
+          "text": " thread, ",
+          "offset": 865
+        },
+        {
+          "type": "text",
+          "text": "ReplyThread",
+          "styles": {
+            "code": true
+          },
+          "offset": 875
+        },
+        {
+          "type": "text",
+          "text": " on that thread with the escalation's task id and ",
+          "offset": 887
+        },
+        {
+          "type": "text",
+          "text": "role = author",
+          "styles": {
+            "code": true
+          },
+          "offset": 938
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 952
+        }
+      ],
+      "range": {
+        "start": 711,
+        "end": 953
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "API: the part 1 review handlers add the task-permission check of Global Constraints for a task subject; ",
+          "offset": 956
+        },
+        {
+          "type": "text",
+          "text": "POST /reviews",
+          "styles": {
+            "code": true
+          },
+          "offset": 1061
+        },
+        {
+          "type": "text",
+          "text": " with ",
+          "offset": 1075
+        },
+        {
+          "type": "text",
+          "text": "task",
+          "styles": {
+            "code": true
+          },
+          "offset": 1082
+        },
+        {
+          "type": "text",
+          "text": " set needs ",
+          "offset": 1087
+        },
+        {
+          "type": "text",
+          "text": "permTaskWrite",
+          "styles": {
+            "code": true
+          },
+          "offset": 1099
+        },
+        {
+          "type": "text",
+          "text": " for the caller, decided in the handler after the route guard, with the ",
+          "offset": 1113
+        },
+        {
+          "type": "text",
+          "text": "routeGuards",
+          "styles": {
+            "code": true
+          },
+          "offset": 1186
+        },
+        {
+          "type": "text",
+          "text": " comment.",
+          "offset": 1198
+        }
+      ],
+      "range": {
+        "start": 954,
+        "end": 1207
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "First store test:",
+          "offset": 1209
+        }
+      ],
+      "range": {
+        "start": 1209,
+        "end": 1226
+      }
+    },
+    {
+      "id": "",
+      "type": "codeBlock",
+      "props": {
+        "language": "go"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "func TestChangeReviewLoop(t *testing.T) {\n",
+          "offset": 1234
+        },
+        {
+          "type": "text",
+          "text": "    // x holds the lease; reviewers {a}.\n",
+          "offset": 1276
+        },
+        {
+          "type": "text",
+          "text": "    // a opens a question; x replies; task still in_review; lease active.\n",
+          "offset": 1317
+        },
+        {
+          "type": "text",
+          "text": "    // a opens a question; x runs EscalateTask → the thread's last message names the escalation task,\n",
+          "offset": 1391
+        },
+        {
+          "type": "text",
+          "text": "    //   role author; review open; task still in_review; lease released.\n",
+          "offset": 1495
+        },
+        {
+          "type": "text",
+          "text": "    // x approves → ErrForbidden (self-approval).\n",
+          "offset": 1568
+        },
+        {
+          "type": "text",
+          "text": "    // a sends changes_requested → task in_progress, lease active, review state changes_requested.\n",
+          "offset": 1620
+        },
+        {
+          "type": "text",
+          "text": "    // x SubmitAuthorRound{sha2} → task in_review, state open.\n",
+          "offset": 1721
+        },
+        {
+          "type": "text",
+          "text": "    // a approves at sha2 → state approved.\n",
+          "offset": 1786
+        },
+        {
+          "type": "text",
+          "text": "    // transition in_review → merged → review closed, outcome merged, event wl:ReviewClosed.\n",
+          "offset": 1832
+        },
+        {
+          "type": "text",
+          "text": "}\n",
+          "offset": 1929
+        }
+      ],
+      "range": {
+        "start": 1228,
+        "end": 1934
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "go test -trimpath ./internal/store -run 'TestChangeReviewLoop|TestTransition|TestEscalate' -count=1",
+          "styles": {
+            "code": true
+          },
+          "offset": 1943
+        },
+        {
+          "type": "text",
+          "text": " against Postgres — ",
+          "offset": 2043
+        },
+        {
+          "type": "text",
+          "text": "ok",
+          "styles": {
+            "code": true
+          },
+          "offset": 2066
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 2069
+        }
+      ],
+      "range": {
+        "start": 1936,
+        "end": 2070
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "go test -trimpath ./internal/api -run 'Review|MetricsEndpoint' -count=1",
+          "styles": {
+            "code": true
+          },
+          "offset": 2078
+        },
+        {
+          "type": "text",
+          "text": " — ",
+          "offset": 2150
+        },
+        {
+          "type": "text",
+          "text": "ok",
+          "styles": {
+            "code": true
+          },
+          "offset": 2156
+        },
+        {
+          "type": "text",
+          "text": " (a task-subject open from a subject without ",
+          "offset": 2159
+        },
+        {
+          "type": "text",
+          "text": "permTaskWrite",
+          "styles": {
+            "code": true
+          },
+          "offset": 2205
+        },
+        {
+          "type": "text",
+          "text": " is 403; ",
+          "offset": 2219
+        },
+        {
+          "type": "text",
+          "text": "worklode_review_rounds_total{subject=\"change\"}",
+          "styles": {
+            "code": true
+          },
+          "offset": 2229
+        },
+        {
+          "type": "text",
+          "text": " moves).",
+          "offset": 2276
+        }
+      ],
+      "range": {
+        "start": 2071,
+        "end": 2284
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Commit: ",
+          "offset": 2291
+        },
+        {
+          "type": "text",
+          "text": "Change review loop: in_review transitions, self-approval refused, escalation on a question, close on merge (WL-REQ-1324, WL-REQ-1774, WL-RULE-1321)",
+          "styles": {
+            "code": true
+          },
+          "offset": 2300
+        },
+        {
+          "type": "text",
+          "text": ".",
+          "offset": 2448
+        }
+      ],
+      "range": {
+        "start": 2285,
+        "end": 2449
+      }
+    }
+  ]
+}

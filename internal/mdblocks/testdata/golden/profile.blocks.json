@@ -1,0 +1,369 @@
+{
+  "blocks": [
+    {
+      "id": "",
+      "type": "heading",
+      "props": {
+        "level": 1
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Worklode Markdown profile",
+          "offset": 2
+        }
+      ],
+      "range": {
+        "start": 0,
+        "end": 27
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "One instance of every WL-REQ-1871 entry. ",
+          "offset": 29
+        },
+        {
+          "type": "text",
+          "text": "scripts/check-quarto-profile.sh",
+          "styles": {
+            "code": true
+          },
+          "offset": 71
+        },
+        {
+          "type": "text",
+          "text": " renders it through Quarto.",
+          "offset": 103
+        }
+      ],
+      "range": {
+        "start": 29,
+        "end": 130
+      }
+    },
+    {
+      "id": "",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "anchor": "purpose"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Purpose",
+          "offset": 135
+        }
+      ],
+      "range": {
+        "start": 132,
+        "end": 153
+      }
+    },
+    {
+      "id": "",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "A paragraph with ",
+          "offset": 155
+        },
+        {
+          "type": "text",
+          "text": "emphasis",
+          "styles": {
+            "italic": true
+          },
+          "offset": 173
+        },
+        {
+          "type": "text",
+          "text": ", ",
+          "offset": 182
+        },
+        {
+          "type": "text",
+          "text": "strong",
+          "styles": {
+            "bold": true
+          },
+          "offset": 186
+        },
+        {
+          "type": "text",
+          "text": ", ",
+          "offset": 194
+        },
+        {
+          "type": "text",
+          "text": "struck",
+          "styles": {
+            "strike": true
+          },
+          "offset": 198
+        },
+        {
+          "type": "text",
+          "text": ", ",
+          "offset": 206
+        },
+        {
+          "type": "text",
+          "text": "code",
+          "styles": {
+            "code": true
+          },
+          "offset": 209
+        },
+        {
+          "type": "text",
+          "text": " and a ",
+          "offset": 214
+        },
+        {
+          "type": "link",
+          "href": "https://example.com/",
+          "content": [
+            {
+              "type": "text",
+              "text": "link",
+              "offset": 222
+            }
+          ],
+          "offset": 222
+        },
+        {
+          "type": "text",
+          "text": ", and an emoji: 🚀.",
+          "offset": 249
+        }
+      ],
+      "range": {
+        "start": 155,
+        "end": 270
+      }
+    },
+    {
+      "id": "",
+      "type": "bulletListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "bullet item",
+          "offset": 274
+        }
+      ],
+      "range": {
+        "start": 272,
+        "end": 285
+      }
+    },
+    {
+      "id": "",
+      "type": "numberedListItem",
+      "content": [
+        {
+          "type": "text",
+          "text": "numbered item",
+          "offset": 289
+        }
+      ],
+      "range": {
+        "start": 286,
+        "end": 302
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "open task",
+          "offset": 309
+        }
+      ],
+      "range": {
+        "start": 303,
+        "end": 318
+      }
+    },
+    {
+      "id": "",
+      "type": "checkListItem",
+      "props": {
+        "checked": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "done task",
+          "offset": 325
+        }
+      ],
+      "range": {
+        "start": 319,
+        "end": 334
+      }
+    },
+    {
+      "id": "",
+      "type": "table",
+      "range": {
+        "start": 336,
+        "end": 372
+      },
+      "content": {
+        "type": "tableContent",
+        "columnWidths": [
+          null,
+          null
+        ],
+        "headerRows": 1,
+        "rows": [
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "Name",
+                  "offset": 338
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "Value",
+                  "offset": 345
+                }
+              ]
+            ]
+          },
+          {
+            "cells": [
+              [
+                {
+                  "type": "text",
+                  "text": "a",
+                  "offset": 365
+                }
+              ],
+              [
+                {
+                  "type": "text",
+                  "text": "1",
+                  "offset": 369
+                }
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "",
+      "type": "codeBlock",
+      "props": {
+        "language": "go"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "x := 1\n",
+          "offset": 380
+        }
+      ],
+      "range": {
+        "start": 374,
+        "end": 390
+      }
+    },
+    {
+      "id": "",
+      "type": "codeBlock",
+      "props": {
+        "language": "mermaid"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "graph TD\n",
+          "offset": 405
+        },
+        {
+          "type": "text",
+          "text": "  A --\u003e B\n",
+          "offset": 414
+        }
+      ],
+      "range": {
+        "start": 392,
+        "end": 427
+      }
+    },
+    {
+      "id": "",
+      "type": "quote",
+      "content": [
+        {
+          "type": "text",
+          "text": "quoted text",
+          "offset": 431
+        }
+      ],
+      "range": {
+        "start": 429,
+        "end": 442
+      }
+    },
+    {
+      "id": "",
+      "type": "callout",
+      "props": {
+        "kind": "warning"
+      },
+      "children": [
+        {
+          "id": "",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Careful.",
+              "offset": 467
+            }
+          ],
+          "range": {
+            "start": 467,
+            "end": 475
+          }
+        }
+      ],
+      "range": {
+        "start": 444,
+        "end": 479
+      }
+    },
+    {
+      "id": "",
+      "type": "image",
+      "props": {
+        "caption": "A pixel",
+        "url": "pixel.svg"
+      },
+      "range": {
+        "start": 481,
+        "end": 502
+      }
+    }
+  ]
+}

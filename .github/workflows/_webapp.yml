@@ -1,0 +1,51 @@
+name: webapp
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: >-
+          Runner label(s) as a JSON array — '["ubuntu-26.04"]' for a hosted
+          PR, '["self-hosted","gha-buildcache"]' for a trusted one.
+        type: string
+        default: '["ubuntu-26.04"]'
+
+permissions:
+  contents: read
+
+jobs:
+  webapp:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: corepack enable pnpm
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/app/pnpm-lock.yaml
+      - name: Install
+        working-directory: web/app
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: API client is current
+        run: ./scripts/check-openapi-client.sh
+      - name: Typecheck
+        working-directory: web/app
+        run: pnpm typecheck
+      - name: Lint
+        working-directory: web/app
+        run: pnpm lint
+      - name: BlockNote contract (WL-REQ-1867)
+        working-directory: web/app
+        run: pnpm vitest run src/editor/contract.test.ts
+      - name: Test
+        working-directory: web/app
+        run: pnpm test
+      - name: Build
+        working-directory: web/app
+        run: pnpm build
