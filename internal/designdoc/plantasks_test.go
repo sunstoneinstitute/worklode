@@ -3,6 +3,7 @@ package designdoc
 import (
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -665,5 +666,65 @@ func TestPlanTasksUsesKindPolicy(t *testing.T) {
 	d := mustParsePlan(t, "## Tasks\n\n### Task 1 — Review\n\n```yaml\nkind: review\n```\n")
 	if _, err := PlanTasks(d); err != nil {
 		t.Fatalf("configured plan-mintable kind: %v", err)
+	}
+}
+
+// planTaskSection is one minimal task section for the fence tests.
+func planTaskSection(n int, title, body string) string {
+	return "### Task " + strconv.Itoa(n) + " — " + title + "\n\n```yaml\nkind: chore\n```\n\n" + body + "\n\n"
+}
+
+// A line opening with backticks whose info string holds a backtick is an
+// inline code span, not a fence, so the tasks after it still parse
+// (WL-PLAN-166).
+func TestPlanTasksBacktickLineThatIsNotAFence(t *testing.T) {
+	body := "## Tasks\n\n" +
+		planTaskSection(1, "First", "```` ```{mermaid} ```` blocks render as diagrams in the cockpit.") +
+		planTaskSection(2, "Second", "Body two.") +
+		planTaskSection(3, "Third", "Body three.")
+	d := mustParsePlan(t, body)
+	defs, err := PlanTasks(d)
+	if err != nil {
+		t.Fatalf("PlanTasks: %v", err)
+	}
+	if len(defs) != 3 {
+		t.Fatalf("got %d defs, want 3", len(defs))
+	}
+	if got := AnnotatePlanTaskHeadings(body, map[string]string{"Third": "WL-9"}); !strings.Contains(got, "Third (WL-9)") {
+		t.Errorf("AnnotatePlanTaskHeadings missed the heading after the backtick line:\n%s", got)
+	}
+}
+
+// A three-backtick line inside a four-backtick fence does not close it.
+func TestPlanTasksLongerFenceHoldsShorterOne(t *testing.T) {
+	d := mustParsePlan(t, "## Tasks\n\n"+
+		planTaskSection(1, "First", "````markdown\n```\n### Task 9 — Not a task\n```\n````")+
+		planTaskSection(2, "Second", "Body two."))
+	defs, err := PlanTasks(d)
+	if err != nil {
+		t.Fatalf("PlanTasks: %v", err)
+	}
+	if len(defs) != 2 || defs[1].Title != "Second" {
+		t.Fatalf("got %+v, want tasks First and Second", defs)
+	}
+	if !strings.Contains(defs[0].Body, "### Task 9 — Not a task") {
+		t.Errorf("task 1 body lost its fenced content: %q", defs[0].Body)
+	}
+}
+
+// A task heading swallowed by an unclosed fence is reported, so a truncated
+// parse is never silent.
+func TestUncountedTaskHeadings(t *testing.T) {
+	d := mustParsePlan(t, "## Tasks\n\n"+
+		planTaskSection(1, "First", "```\nnever closed")+
+		planTaskSection(2, "Second", "Body two."))
+	got := UncountedTaskHeadings(d)
+	if len(got) != 1 || !strings.Contains(got[0], "### Task 2 — Second") {
+		t.Errorf("UncountedTaskHeadings = %q, want one finding naming Task 2", got)
+	}
+
+	clean := mustParsePlan(t, "## Tasks\n\n"+planTaskSection(1, "First", "Body."))
+	if got := UncountedTaskHeadings(clean); len(got) != 0 {
+		t.Errorf("clean plan: UncountedTaskHeadings = %q, want none", got)
 	}
 }

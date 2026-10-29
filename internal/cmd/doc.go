@@ -358,6 +358,7 @@ func lintDocFile(doc *designdoc.Document) []string {
 		if _, err := designdoc.PlanTasks(doc); err != nil {
 			findings = append(findings, err.Error())
 		}
+		findings = append(findings, designdoc.UncountedTaskHeadings(doc)...)
 	}
 	return findings
 }
