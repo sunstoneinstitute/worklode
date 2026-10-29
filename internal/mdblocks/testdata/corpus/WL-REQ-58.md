@@ -1,0 +1,3 @@
+
+`lode login --no-browser`, or automatically when the platform opener (`xdg-open`, `open`, `rundll32`) is not on `PATH`, or the platform is neither macOS nor Windows and both `DISPLAY` and `WAYLAND_DISPLAY` are empty. Any other launch failure stays fatal, because a browser probably did open. Manual mode binds no listener. The CLI prints `{authorize_url}?mode=manual&state=CLISTATE`; the user opens it anywhere; after login the page shows the one-time code with a copy button; the user pastes it into the CLI prompt; steps 5 and 6 proceed unchanged. The page carries the code, never the token, so the long-lived credential appears only inside the CLI process and the keychain. Stdin at EOF fails with guidance instead of blocking.
+

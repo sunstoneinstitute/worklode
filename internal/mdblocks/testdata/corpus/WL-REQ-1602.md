@@ -1,0 +1,3 @@
+
+The Sunstone stage of an investigation project is a query derived from governed decisions (`decision` tasks), milestones, deliverables and work; it is never an editable column. Entering Research is an explicit lead decision. After Research, Worklode may recommend a transition and the lead confirms it. Advancing with unfinished work needs a stated reason; that work stays on its milestone as carryover. Returning to an earlier stage appends another reasoned transition event. Once every required deliverable is terminal Worklode may recommend closure, but the lead closes explicitly after reviewing unfinished items. Closure ends the bounded project and its active Crew.
+

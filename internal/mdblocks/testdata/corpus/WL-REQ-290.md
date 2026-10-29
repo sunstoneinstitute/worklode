@@ -1,0 +1,9 @@
+
+| Store function | Behavior |
+|---|---|
+| `TouchAgentSession(ctx, taskID, actorID, agent, version, sessionID, buckets)` | Start or heartbeat. Wrapped in `RecordEvent("cli", "agent-session-<leaseID>-<agent>-<sessionID>", "agent_session.started", ...)` whose apply is `INSERT ... ON CONFLICT DO NOTHING`; first-seen is idempotent through the events table's `(source, external_id)` uniqueness. The `last_seen_at` bump and `ended_at` clear run as a plain UPDATE outside the event, in a transaction that first takes `SELECT ... FOR SHARE` on the lease and skips the write when the lease is released. The insert takes the same lock. Optional `usage` is written after the touch, replace-not-accumulate. |
+| `EndAgentSession(ctx, taskID, actorID, agent, sessionID, usage)` | Records `agent_session.ended` with a random event id, sets `ended_at`, writes supplied tokens and cost. Idempotency comes from the `ended_at IS NULL` predicate: a repeat close matches no rows, fails apply, and rolls the event back. |
+| `ReportProjectSessionUsage(ctx, projectID, agent, sessionID, byTask)` | Replacement usage totals for one session across a project, keyed by task, including rows whose lease is gone. No holder check. Usage with no task is overhead; no separate overhead-only entry point exists. |
+
+Both lease-bound functions resolve the active lease and require the caller to be its holder, returning `ErrNotFound` for a non-holder so the two failure cases stay indistinguishable. The lease lock is required because a plain uncorrelated `EXISTS` is evaluated once against the statement snapshot, and the foreign key does not serialize the insert against `UPDATE leases SET released_at` (`FOR KEY SHARE` versus `FOR NO KEY UPDATE`). All four paths that touch both tables lock `leases` before `agent_sessions`. `ProjectCost` reports the combined task-attributed and overhead total with overhead broken out.
+

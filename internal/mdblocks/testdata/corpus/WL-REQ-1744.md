@@ -1,0 +1,3 @@
+
+The task brief carries a `skills` object in the recommendation shape WL-REQ-319 defines. The hook renders it: each pinned skill's SKILL.md body inline (served from the backbone, so pins survive a local fetch failure) with the local path for sibling files, then the matches as name, score, description and the path of their `SKILL.md`, with the instruction to read it if relevant. Inlined pin bodies share a 32 KiB budget. A pin that does not fit is never truncated: it is listed with its size and path. A skill whose archive is not local is listed with `lode skill install <name>` instead of a path. Brief injection is described in WL-SPEC-80#sec-7.1.
+

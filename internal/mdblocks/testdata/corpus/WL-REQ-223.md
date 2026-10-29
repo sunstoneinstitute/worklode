@@ -1,0 +1,3 @@
+
+Activation copies only the fields Worklode uses: durable identifiers, scheduled times, organizer actor, mapped invitees, conference identity, and the agenda metadata. Calendar change notifications trigger reconciliation; a periodic pass repairs missed or expired channels. The participant set is replaced atomically. If Calendar is unavailable the last confirmed set is kept and marked stale, and no access is granted from an unverified change; the UI names the last successful sync. A cancelled event marks the meeting cancelled and suppresses the indicator; minutes and revisions are kept. If the organizer leaves Crew, sync stops authorizing new meeting actions while a meeting administrator keeps recovery access.
+

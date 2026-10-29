@@ -1,0 +1,2 @@
+
+`/projects/<proj>/rule/<n>` shows one design rule: ref and heading, status and version chips, the rendered body, the documents arranging it with a link to each section, the plans covering it, the tasks it governs, and its version list, each version at `/<n>/<ver>`. Every rule ref in rendered prose (`WL-REQ-<n>`; `WL-RULE-<n>` also matches) links there through `/rules/<ref>`. The page is read-only; rules are edited through `lode rule` and the JSON API.

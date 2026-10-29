@@ -1,0 +1,2 @@
+
+The task page (WL-SPEC-82) shows an Activity card below the agent session cards, collapsed like every task-page section after the body, newest row first, at most 200 rows on load. Each row shows the time, the event, a one-line summary derived server-side from the allowlisted attributes (for a finished subagent, its type, tool calls and duration; for exhausted API retries, the status code and attempts), and the session. A long summary is collapsed. The card is omitted when the task has no rows and no running session.

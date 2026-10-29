@@ -1,0 +1,3 @@
+
+Coexistence is non-negotiable: never clobber, mark Worklode's entries by command identity, strip-then-write so a re-run converges. Each adapter restates that in its format: JSON entry lists (Claude Code `.claude/settings*.json`, Codex `$CODEX_HOME/hooks.json`), or a file Worklode owns outright (Copilot `worklode.json` in its hooks directory, the Amp plugin `plugins/worklode.ts`). No adapter rewrites a config file it cannot round-trip; such a file is left untouched and reported. Managed bindings are written as `lode-hook ...` and `lode-statusline`. The install report is a list with one stanza per agent and names the events a harness could not bind.
+

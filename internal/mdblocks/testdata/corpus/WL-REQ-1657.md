@@ -1,0 +1,3 @@
+
+A document that contains rules becomes `superseded` only when another document is accepted. Accepting a document supersedes, in the same transaction, every draft or accepted document that meets all three conditions: (1) every rule it contains is withdrawn; (2) every one of those withdrawn rules has at least one successor, a rule in any document that `supersedes` it; (3) at least one of those successors is a rule the accepted document arranges. A document with a withdrawn rule that has no successor keeps its status, and `--bare-superseded` reports that rule. A superseded draft is reachable by no verb, which is how a refactor retires specs that were never accepted.
+

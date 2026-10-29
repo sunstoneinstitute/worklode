@@ -1,0 +1,3 @@
+
+Worklode uses Google Workspace domain-wide delegation with the narrowest read-only scopes. The current-meeting lookup impersonates only the signed-in actor and reads only a narrow time window. Before activation nothing is persisted and no event detail is exposed to another user. The cockpit shows a generic green indicator, including for private events, and reveals details only to that actor after interaction. Clicking persists nothing; Worklode shows the proposed project and metadata and creates the meeting and minutes only after confirmation. Every delegated read is audited (actor, operation, external key, time, outcome) without copying the payload. An actor may disable meeting awareness for their account.
+

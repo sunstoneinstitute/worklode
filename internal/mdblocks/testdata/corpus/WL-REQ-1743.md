@@ -1,0 +1,3 @@
+
+The local store has two directories. `~/.worklode/store/<hash>/` holds each unpacked version, immutable once extracted, so concurrent worktrees hold different versions without clobbering and a hash match makes re-fetch a no-op. `~/.worklode/skills/<name>` is a symlink to the most recently installed version and holds nothing else, so a harness walking it sees each skill once. `LODE_SKILLS_DIR` moves the links directory, and the store sits beside it. At brief time the hook fetches whatever the brief lists that is missing locally via `GET /api/v1/skills/{name}/archive/{hash}`, with bounded concurrency and a time budget. No background sync, no full mirror. Manual surface: `lode skill install <name>[@<hash>]`, `lode skill list`; ranking by query is `lode search`.
+

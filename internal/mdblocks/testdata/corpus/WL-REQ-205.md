@@ -1,0 +1,2 @@
+
+A plan's status is `draft` while written and reviewed, `accepted` from the moment execution is authorised, and `executed` once every task its acceptance minted is closed. The move to `executed` happens in the transaction that closes the last task. A `superseded` plan counts as executed. Plans take no per-section status. The tasks a plan's acceptance mints carry the plan reference (WL-SPEC-77 §11); the plan's execution state is read from those tasks' `closed` flags.

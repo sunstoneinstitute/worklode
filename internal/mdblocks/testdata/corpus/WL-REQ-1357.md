@@ -1,0 +1,3 @@
+
+`lode show`, every `lode doc` verb and the cockpit's `/docs/ref/<ref>` redirect resolve a document ref with one grammar, tried in this order: a path, matched by its basename as the slug; a document number, optionally followed by slug text; a bare slug; the shorthand, with its `<TYPE>` kind-checked. A bare number names a spec, never a plan, because plans have a counter of their own. A ref that matches nothing in the current project is resolved against the whole backbone. A shorthand whose key belongs to another project resolves against that project's documents. A key no project carries is printed as unresolved and exits 0.
+

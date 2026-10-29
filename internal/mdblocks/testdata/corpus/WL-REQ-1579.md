@@ -1,0 +1,3 @@
+
+`GET /api/v1/secrets/catalog` serves the catalog (WL-REQ-69), authenticated with any actor token. There is no unauthenticated route, because the name-to-`op://` map exposes vault and item structure. A templated entry's response inlines its template text, exported name and placeholder-to-reference map. The server validates on read: the template file exists, the placeholder set equals the `cred.` set, the template is valid UTF-8, and derived item names `<NAME>__<PLACEHOLDER>` are unique catalog-wide and disjoint from every entry name. A validation failure is a 500 with a log line naming the entry.
+

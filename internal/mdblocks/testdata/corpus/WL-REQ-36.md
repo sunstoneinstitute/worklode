@@ -1,0 +1,2 @@
+
+Telemetry export is configured through MDM as managed settings: the OTel exporters, endpoints, headers and resource attributes for every harness. For Claude Code, `lode install` sets `OTEL_METRICS_INCLUDE_REPOSITORY=true` in the settings `env`. Lifecycle hooks open, heartbeat, close or release a session or lease and carry no token accounting. `lode install` is idempotent and never touches foreign hooks. No content telemetry is enabled: no prompts, responses, raw API bodies, tool content or tool arguments. Hook details are in WL-SPEC-80.

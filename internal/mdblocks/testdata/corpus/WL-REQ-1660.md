@@ -1,0 +1,2 @@
+
+`lode doc submit <id>` emits `wl:DocumentSubmitted` and changes no column. Only the owner submits. Submitting records the owner's intent to accept once review passes (WL-REQ-1659). The `doc-lifecycle` subscriber mints a `review` task (WL-SPEC-75#sec-9.6). A second submit while that task is open mints nothing. A plan edited since its last submission mints a fresh review task once the previous one closed.

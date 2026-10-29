@@ -1,0 +1,2 @@
+
+`GET /tasks/{id}/activity/events` streams new activity records to the Activity card (WL-REQ-1237) as Server-Sent Events, built like the Progress page stream (WL-SPEC-85#sec-6): a poll of ClickHouse (WL-REQ-1234) for the task's records after a cursor of `Timestamp` plus record identity, `Last-Event-ID` resume, and a heartbeat while idle. Each frame carries the server-rendered row, which the page inserts as is. The page script is a separate asset under `script-src 'self'`.
