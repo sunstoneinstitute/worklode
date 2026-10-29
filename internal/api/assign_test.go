@@ -39,7 +39,7 @@ func TestAssignExplicitBody(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Assign to bob", "priority": "high", "kind": "feature",
 	})
-	secondActor(t, st, "bob")
+	seedActor(t, st, "bob", "human", "bob", false) // Crew members are human (WL-REQ-1605)
 	store.SeedCrewForTests(t, st, "proj", "bob")
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "bob"})
@@ -114,7 +114,7 @@ func TestStartAssignedToAnother(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Bob's task", "priority": "high", "kind": "feature",
 	})
-	secondActor(t, st, "bob")
+	seedActor(t, st, "bob", "human", "bob", false) // Crew members are human (WL-REQ-1605)
 	store.SeedCrewForTests(t, st, "proj", "bob")
 	setup := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "bob"})
 	if setup.Code != http.StatusOK {
