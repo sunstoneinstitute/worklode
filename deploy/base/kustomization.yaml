@@ -264,5 +264,5 @@ configMapGenerator:
       - migrations/0125_completed-state.down.sql
       - migrations/0126_drop-doc-rules-anchor.up.sql
       - migrations/0126_drop-doc-rules-anchor.down.sql
-      - migrations/NEW-review-surface.up.sql
-      - migrations/NEW-review-surface.down.sql
+      - migrations/0127_review-surface.up.sql
+      - migrations/0127_review-surface.down.sql
