@@ -1,6 +1,6 @@
 {
   "name": "lode",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Worklode for coding agents: /lode:* commands to claim tasks into worktrees, hand them off for review, and plan and consolidate specs. The README lists every command.",
   "author": {
     "name": "Stig Bakken",
