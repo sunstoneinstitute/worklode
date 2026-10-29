@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"regexp"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/mdfence"
 )
 
 // heading matches an ATX heading, optionally numbered and optionally
@@ -339,33 +341,6 @@ type hit struct {
 	rule, ref                 string
 }
 
-// openFence returns the marker a line opens a fenced code block with ("```",
-// "~~~~") and its info string, or "" when the line opens none. As in
-// CommonMark, the marker is a run of three or more backticks or tildes, and a
-// backtick fence's info string holds no backtick: "```` ```x ````" is an
-// inline code span. Leading indentation is not limited, so a fence nested in a
-// list item still counts.
-func openFence(line string) (marker, info string) {
-	s := strings.TrimLeft(line, " \t")
-	if s == "" || (s[0] != '`' && s[0] != '~') {
-		return "", ""
-	}
-	n := len(s) - len(strings.TrimLeft(s, s[:1]))
-	info = strings.TrimSpace(s[n:])
-	if n < 3 || (s[0] == '`' && strings.Contains(info, "`")) {
-		return "", ""
-	}
-	return s[:n], info
-}
-
-// closesFence reports whether line closes a fence opened with marker: a run
-// of the same character at least as long, followed only by whitespace.
-func closesFence(line, marker string) bool {
-	s := strings.TrimLeft(line, " \t")
-	n := len(s) - len(strings.TrimLeft(s, marker[:1]))
-	return n >= len(marker) && strings.TrimSpace(s[n:]) == ""
-}
-
 // scanHeadings finds every ATX heading outside fenced code, in order.
 func scanHeadings(body string) []hit {
 	var hits []hit
@@ -373,12 +348,12 @@ func scanHeadings(body string) []hit {
 	for _, ln := range splitLines(body) {
 		line := strings.TrimRight(ln.text(body), "\r")
 		if fence != "" {
-			if closesFence(line, fence) {
+			if mdfence.Closes(line, fence) {
 				fence = ""
 			}
 			continue
 		}
-		if fence, _ = openFence(line); fence != "" {
+		if fence, _ = mdfence.Open(line); fence != "" {
 			continue
 		}
 		m := heading.FindStringSubmatch(line)

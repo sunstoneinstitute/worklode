@@ -679,3 +679,17 @@ func ensureAgentsMD(root string) (string, error) {
 	}
 	return ensureManagedBlock(path)
 }
+
+func TestAgentsBlockFencesFollowCommonMark(t *testing.T) {
+	block := agentsBlockBegin + "\n" + agentsBlockEnd + "\n"
+	if got := findBlockRegions("```` ```x ```` is code\n" + block); len(got) != 1 {
+		t.Errorf("inline code line hid the block: %v", got)
+	}
+	if got := findBlockRegions("````\n```\n" + block + "````\n"); len(got) != 0 {
+		t.Errorf("block quoted in a four-backtick fence was found: %v", got)
+	}
+	got := importedPaths("```` ```x ````\n@a\n````\n```\n@b\n````\n@c\n")
+	if strings.Join(got, ",") != "a,c" {
+		t.Errorf("importedPaths = %q, want a,c", got)
+	}
+}

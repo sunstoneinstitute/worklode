@@ -34,6 +34,8 @@ func TestCitationsMatches(t *testing.T) {
 		"bodies cite “§12” by number":            nil,
 		"`§1` is fine but §2 is not":             {"§2"},
 		`an unclosed " quote §3`:                 {"§3"},
+		"```` ```x ```` is code\n§4":             {"§4"},
+		"````\n```\n§4\n````\n§5":                {"§5"},
 	}
 	for in, want := range cases {
 		got := texts(Citations(in))
@@ -120,6 +122,36 @@ func TestAddedCitations(t *testing.T) {
 	want := []string{"a.go:3 WL-SPEC-77 §4", "doc.md:11 #sec-2", "b.go:4 #sec-6"}
 	if strings.Join(where, "|") != strings.Join(want, "|") {
 		t.Errorf("AddedCitations = %q, want %q", where, want)
+	}
+}
+
+// TestAddedCitationsCommonMarkFences holds the diff scanner and the
+// post-image classifier to CommonMark: a backtick line whose info string has a
+// backtick opens no fence, and a three-backtick line does not close a
+// four-backtick fence.
+func TestAddedCitationsCommonMarkFences(t *testing.T) {
+	post := []string{"```` ```x ```` is code", "§1", "````", "```", "§2", "````", "§3"}
+	var diff []string
+	diff = append(diff, "diff --git a/d.md b/d.md", "--- a/d.md", "+++ b/d.md", "@@ -0,0 +1,7 @@")
+	for _, l := range post {
+		diff = append(diff, "+"+l)
+	}
+	cfg := Config{Paths: []string{"x"}}
+	for name, img := range map[string]func(string) (string, bool){
+		"diff":       nil,
+		"post-image": func(string) (string, bool) { return strings.Join(post, "\n"), true },
+	} {
+		got, err := cfg.AddedCitations(strings.Join(diff, "\n"), img)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var where []string
+		for _, c := range got {
+			where = append(where, c.Where+" "+c.Text)
+		}
+		if want := "d.md:2 §1|d.md:7 §3"; strings.Join(where, "|") != want {
+			t.Errorf("%s: AddedCitations = %q, want %q", name, where, want)
+		}
 	}
 }
 

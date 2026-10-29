@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"unicode/utf8"
+
+	"github.com/sunstoneinstitute/worklode/internal/mdfence"
 )
 
 // Terminal markdown styling, in-repo rather than through a library.
@@ -129,7 +131,7 @@ func writeFlowed(out *strings.Builder, block []string, width int) {
 // closed. The fence lines themselves are dropped; the indent replaces them.
 func writeCodeBlock(out *strings.Builder, lines []string, i int, fence string) int {
 	for j := i + 1; j < len(lines); j++ {
-		if strings.HasPrefix(strings.TrimLeft(lines[j], " "), fence) {
+		if mdfence.Closes(lines[j], fence) {
 			return j
 		}
 		out.WriteString(sgrDim + "  " + lines[j] + sgrReset + "\n")
@@ -139,13 +141,8 @@ func writeCodeBlock(out *strings.Builder, lines []string, i int, fence string) i
 
 // openingFence reports the fence that opens a code block on this line, or "".
 func openingFence(line string) string {
-	trimmed := strings.TrimLeft(line, " ")
-	for _, fence := range []string{"```", "~~~"} {
-		if strings.HasPrefix(trimmed, fence) {
-			return fence
-		}
-	}
-	return ""
+	fence, _ := mdfence.Open(line)
+	return fence
 }
 
 // isThematicBreak reports whether the line is a horizontal rule: three or more

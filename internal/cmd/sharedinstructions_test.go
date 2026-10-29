@@ -157,3 +157,17 @@ func TestReportSharedInstructions(t *testing.T) {
 		t.Fatalf("uninstall report: %s", &out)
 	}
 }
+
+func TestInstructionPointerFencesFollowCommonMark(t *testing.T) {
+	cases := map[string]string{
+		"```` ```x ```` is code\n" + instructionReadLine + "\n": instrUnchanged,
+		"````\n```\n" + instructionReadLine + "\n````\n":        instrAdded,
+	}
+	for body, want := range cases {
+		root := t.TempDir()
+		writeFile(t, root, agentsFile, body)
+		if got, err := ensureInstructionPointer(filepath.Join(root, agentsFile)); err != nil || got != want {
+			t.Errorf("%q: %s %v, want %s", body, got, err, want)
+		}
+	}
+}
