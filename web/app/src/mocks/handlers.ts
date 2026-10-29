@@ -117,7 +117,7 @@ export const handlers = [
     const task = db.tasks.find((t) => t.id === params.id)
     if (!task) return HttpResponse.json({ error: "task not found" }, { status: 404 })
     const input = (await request.json()) as components["schemas"]["EditTaskInput"]
-    const states = ["draft", "ready", "in_progress", "in_review", "merged", "deployed_dev", "deployed_prod", "released", "abandoned"]
+    const states = ["draft", "ready", "in_progress", "in_review", "merged", "completed", "deployed_dev", "deployed_prod", "released", "abandoned"]
     if (input.state && !states.includes(input.state)) {
       return HttpResponse.json({ error: `unknown state ${input.state}` }, { status: 400 })
     }

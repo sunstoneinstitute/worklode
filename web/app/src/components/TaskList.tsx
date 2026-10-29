@@ -18,6 +18,7 @@ const STATE_OPTIONS = [
   { value: "in_progress", label: "In progress", colorVar: "--color-accent" },
   { value: "in_review", label: "In review", colorVar: "--color-accent" },
   { value: "merged", label: "Merged", colorVar: "--color-highlight" },
+  { value: "completed", label: "Completed", colorVar: "--color-highlight" },
   { value: "deployed_dev", label: "Deployed dev", colorVar: "--color-highlight" },
   { value: "deployed_prod", label: "Deployed prod", colorVar: "--color-highlight" },
   { value: "released", label: "Released", colorVar: "--color-highlight" },

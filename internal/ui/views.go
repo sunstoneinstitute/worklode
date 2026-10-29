@@ -1055,6 +1055,8 @@ func stateLabel(state string) string {
 		return "Ready"
 	case "blocked":
 		return "Blocked"
+	case "completed":
+		return "Completed"
 	default:
 		return state
 	}
