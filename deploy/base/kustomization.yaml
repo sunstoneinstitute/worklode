@@ -262,3 +262,5 @@ configMapGenerator:
       - migrations/0124_crew-lifecycle.down.sql
       - migrations/0125_completed-state.up.sql
       - migrations/0125_completed-state.down.sql
+      - migrations/NEW-drop-doc-rules-anchor.up.sql
+      - migrations/NEW-drop-doc-rules-anchor.down.sql
