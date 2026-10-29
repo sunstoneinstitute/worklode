@@ -23,7 +23,7 @@ unbounded.
 |---|---|---|
 | nothing | any ready task | `lode work next --json` |
 | `--kind <k>`, `--strict-focus` | narrowed frontier | the same, with those flags |
-| bugs, bugfixes, chores, "clean up" | maintenance | `lode task list --status ready --kind bug --json`, then `--kind chore` once bugs run dry |
+| bugs, bugfixes, chores, "clean up" | maintenance | `lode work next --kind bug --json`, then `--kind chore` once it returns nothing |
 | a spec (`032`, `WL-SPEC-32`), a plan ref (`WL-PLAN-7`), or "finish <feature>" | one spec through to done | see **Spec focus** |
 | a milestone (`WL-MILE-2`) | one milestone's tasks | `lode task list --milestone <ref> --status ready --json`; the first task is the pick |
 | unblock, unblocking, "get things moving" | clear blockers | see **Unblock focus** |
@@ -54,8 +54,8 @@ reshapes the rest.
 
 1. Run the selection rule. Nothing selected, or `--max` reached: report why and
    stop.
-2. Claim: `lode work next <id> --json` when the rule picked an id (the
-   default rule claims on its own). `"claimed": false` means another worker
+2. Claim: `lode work next <id> --json` when the rule picked an id (a
+   `lode work next` rule claims on its own). `"claimed": false` means another worker
    took it — reselect.
 3. `cd` into the JSON's `worktree`. The `brief` is the context contract; do not
    spelunk the repo to reconstruct it. A brief too thin to work from is a
