@@ -393,13 +393,21 @@ func ResolveThread(tx *sql.Tx, now time.Time, threadID int64, actorID, status st
 // informed by the event of the write that caused it, the way
 // classificationEvent does: the store cannot import eventbus.
 func reviewEvent(tx *sql.Tx, at time.Time, typ string, threadID int64, actorID string, informedBy int64, props map[string]any) error {
-	subject := iri.CURIE(iri.ReviewThread(threadID))
+	return recordReviewEvent(tx, at, typ, iri.CURIE(iri.ReviewThread(threadID)), actorID, informedBy, props)
+}
+
+// recordReviewEvent records one WL-REQ-1780 event about subject, a review or
+// a thread CURIE. An empty actorID leaves prov:wasAssociatedWith out. The
+// external id names the informing event, since a review sees many rounds.
+func recordReviewEvent(tx *sql.Tx, at time.Time, typ, subject, actorID string, informedBy int64, props map[string]any) error {
 	payload := map[string]any{
-		"@context":               "https://worklode.io/ns/ontology#",
-		"@type":                  typ,
-		"prov:atTime":            at.UTC().Format(time.RFC3339),
-		"prov:wasAssociatedWith": iri.CURIE(iri.Agent(actorID)),
-		"wl:subject":             subject,
+		"@context":    "https://worklode.io/ns/ontology#",
+		"@type":       typ,
+		"prov:atTime": at.UTC().Format(time.RFC3339),
+		"wl:subject":  subject,
+	}
+	if actorID != "" {
+		payload["prov:wasAssociatedWith"] = iri.CURIE(iri.Agent(actorID))
 	}
 	if informedBy != 0 {
 		payload["prov:wasInformedBy"] = iri.CURIE(iri.Event(informedBy))
@@ -411,8 +419,8 @@ func reviewEvent(tx *sql.Tx, at time.Time, typ string, threadID int64, actorID s
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO events (source, external_id, type, payload, received_at) VALUES ('cli', $1, $2, $3, $4)`,
-		typ+":"+subject, typ, b, at.UTC()); err != nil {
-		return fmt.Errorf("record %s for thread %d: %w", typ, threadID, err)
+		typ+":"+subject+":"+strconv.FormatInt(informedBy, 10), typ, b, at.UTC()); err != nil {
+		return fmt.Errorf("record %s for %s: %w", typ, subject, err)
 	}
 	return nil
 }

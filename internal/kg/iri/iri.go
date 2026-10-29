@@ -180,6 +180,11 @@ func Repo(host, owner, name string) string {
 	return IDNS + "repo/" + host + "/" + owner + "/" + name
 }
 
+// Review returns the instance IRI of one review (WL-REQ-1781).
+func Review(id int64) string {
+	return IDNS + "review/" + strconv.FormatInt(id, 10)
+}
+
 // ReviewThread returns the instance IRI of one review thread, a bare note
 // included (WL-REQ-1781).
 func ReviewThread(id int64) string {
