@@ -789,6 +789,26 @@ func docActions(v DocView) []ProgressAction {
 	return acts
 }
 
+// docEditURL is the SPA body editor of a document (WL-REQ-1868), "" for
+// one with no canonical URL or a spec, whose text changes through its rules
+// (WL-REQ-1300).
+func docEditURL(d model.Doc) string {
+	if d.Number == 0 || d.Kind == "spec" {
+		return ""
+	}
+	return model.DocCanonicalURL(d) + "/edit"
+}
+
+// taskEditURL is the SPA body editor of a task (WL-REQ-1868), "" when the
+// task id is not <projectKey>-<n> and so has no canonical URL.
+func taskEditURL(v TaskView) string {
+	key, n, ok := model.SplitTaskID(v.Task.ID)
+	if !ok || key != v.Project.Key {
+		return ""
+	}
+	return "/projects/" + v.Task.Project + "/" + v.Task.Kind + "/" + strconv.Itoa(n) + "/edit"
+}
+
 // taskActions is the task page's Publish button, drawn on a draft task.
 func taskActions(v TaskView) []ProgressAction {
 	if v.Task.State != "draft" {

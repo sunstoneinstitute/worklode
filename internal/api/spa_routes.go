@@ -13,11 +13,20 @@ var spaRoutes = []string{
 	"/ideas/new",
 	"/projects",
 	"/projects/$projectId",
+	"/projects/$projectId/$kind/$n/edit",
 	"/projects/$projectId/crew",
 	"/projects/$projectId/documents",
+	"/projects/$projectId/rule/$n/edit",
 	"/projects/$projectId/tasks",
 	"/tasks",
 }
+
+// spaViaCanonical is the spaRoutes path registerSPA does not register:
+// ServeMux refuses it beside the rule page's /projects/{proj}/rule/{n}/{ver},
+// since each is more specific on one segment. Its paths reach the
+// canonical /projects/{proj}/{kind}/{n}/{ver} route, which hands {ver}
+// "edit" to the SPA shell (projectEntityPage).
+const spaViaCanonical = "/projects/$projectId/$kind/$n/edit"
 
 // muxPattern turns a TanStack route ("/projects/$id") into its ServeMux path
 // ("/projects/{id}"), which is also its routeGuards key.

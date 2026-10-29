@@ -3,7 +3,7 @@ package ui
 // rule.templ renders a design rule's cockpit page: the rule's
 // current or a named version, the documents that arrange it, the tasks it
 // governs, and its version history. The one write is Accept on a draft
-// rule; a rule is edited through its arranging document, never on this page.
+// rule; Edit links to the SPA body editor (WL-REQ-1868).
 templ Rule(v RuleView) {
 	@Page(v.Page) {
 		@globalShell() {
@@ -20,6 +20,9 @@ templ Rule(v RuleView) {
 						<span class="chip plain">{ tag }</span>
 					}
 				</p>
+				if v.Current {
+					<p><a href={ v.CanonicalURL + "/edit" }>Edit</a></p>
+				}
 				@pageActs(ruleActions(v))
 			</section>
 			if !v.Current {

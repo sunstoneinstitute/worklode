@@ -1,5 +1,6 @@
 import { HttpResponse, delay, http } from "msw"
 import type { components } from "@/api/schema"
+import { sha256Hex } from "@/editor/bytes"
 import { type CrewMember, type LeadHandoff, type LitmusTest, type MockLock, type ProjectDocument, type Task, db, idea, projectDetail, sharedIdea, visibleIdea } from "./db"
 import type { Ok } from "./typed"
 
@@ -145,11 +146,27 @@ export const handlers = [
     return HttpResponse.json(task, { status: 201 })
   }),
 
+  http.get("/api/v1/tasks/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const task = db.tasks.find((t) => t.id === params.id)
+    if (!task) return HttpResponse.json({ error: "task not found" }, { status: 404 })
+    const body: Ok<"/api/v1/tasks/{id}", "get"> = { ...task, ...(await asBlocks(request, task.body ?? "")) }
+    return HttpResponse.json(body)
+  }),
+
   http.patch("/api/v1/tasks/:id", async ({ params, request }) => {
     await delay(LATENCY_MS)
     const task = db.tasks.find((t) => t.id === params.id)
     if (!task) return HttpResponse.json({ error: "task not found" }, { status: 404 })
     const input = (await request.json()) as components["schemas"]["EditTaskInput"]
+    const refused = await refuseBodySave("task", task.id ?? "", task.body ?? "", input)
+    if (refused) return refused
+    if (input.blocks) {
+      task.body = blocksMarkdown(input.blocks)
+      delete input.blocks
+    }
+    delete input.if_body_sha256
+    delete input.lock_session
     const states = ["draft", "ready", "in_progress", "in_review", "merged", "completed", "deployed_dev", "deployed_prod", "released", "abandoned"]
     if (input.state && !states.includes(input.state)) {
       return HttpResponse.json({ error: `unknown state ${input.state}` }, { status: 400 })
@@ -200,6 +217,58 @@ export const handlers = [
     await delay(LATENCY_MS)
     const project = new URL(request.url).searchParams.get("project")
     const body: Ok<"/api/v1/rules", "get"> = db.rules.filter((r) => !project || r.project === project)
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/docs/resolve", async ({ request }) => {
+    await delay(LATENCY_MS)
+    const doc = db.docs.find((d) => d.ref === new URL(request.url).searchParams.get("ref"))
+    if (!doc) return HttpResponse.json({ error: "document not found" }, { status: 404 })
+    return HttpResponse.json(doc)
+  }),
+
+  http.get("/api/v1/docs/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const doc = db.docs.find((d) => String(d.id) === params.id)
+    if (!doc) return HttpResponse.json({ error: "document not found" }, { status: 404 })
+    const body: Ok<"/api/v1/docs/{id}", "get"> = { ...doc, ...(await asBlocks(request, doc.body ?? "")) }
+    return HttpResponse.json(body)
+  }),
+
+  http.put("/api/v1/docs/:id/body", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const doc = db.docs.find((d) => String(d.id) === params.id)
+    if (!doc) return HttpResponse.json({ error: "document not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["UpdateDocBodyInput"]
+    if (input.blocks && doc.kind === "spec") {
+      return HttpResponse.json({ error: "a spec's body takes no blocks: edit its rules (WL-REQ-1300)" }, { status: 422 })
+    }
+    const refused = await refuseBodySave("doc", String(doc.id), doc.body ?? "", input)
+    if (refused) return refused
+    doc.body = input.blocks ? blocksMarkdown(input.blocks) : (input.body ?? "")
+    const body: Ok<"/api/v1/docs/{id}/body", "put"> = doc
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/rules/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const rule = ruleByRef(String(params.id))
+    if (!rule) return HttpResponse.json({ error: "rule not found" }, { status: 404 })
+    const body: Ok<"/api/v1/rules/{id}", "get"> = { ...rule, ...(await asBlocks(request, rule.body ?? "")) }
+    return HttpResponse.json(body)
+  }),
+
+  http.put("/api/v1/rules/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const rule = ruleByRef(String(params.id))
+    if (!rule) return HttpResponse.json({ error: "rule not found" }, { status: 404 })
+    const input = (await request.json()) as components["schemas"]["EditRuleInput"]
+    const refused = await refuseBodySave("rule", String(rule.id), rule.body ?? "", input)
+    if (refused) return refused
+    // A draft is rewritten in place; the mock keeps every rule a draft
+    rule.heading = input.heading ?? rule.heading
+    rule.body = input.blocks ? blocksMarkdown(input.blocks) : (input.body ?? "")
+    const body: Ok<"/api/v1/rules/{id}", "put"> = rule
     return HttpResponse.json(body)
   }),
 
@@ -472,4 +541,62 @@ function lockView(lock: MockLock): components["schemas"]["BodyLock"] {
   const view = { ...lock }
   delete view.ended
   return view
+}
+
+// The body editor's wire form (WL-REQ-1867), simplified: one paragraph block
+// per Markdown paragraph, its text as a single run. The server parses
+// Worklode Markdown; the mock only needs text to survive the round trip.
+type EditorBlock = components["schemas"]["EditorBlock"]
+
+async function asBlocks(request: Request, body: string): Promise<{ blocks?: EditorBlock[]; body_sha256?: string }> {
+  if (new URL(request.url).searchParams.get("as") !== "blocks") return {}
+  const blocks = body
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((text): EditorBlock => ({ type: "paragraph", content: [{ type: "text", text, styles: {} }] }))
+  return { blocks, body_sha256: await sha256Hex(body) }
+}
+
+function blocksMarkdown(blocks: EditorBlock[]): string {
+  const paragraphs = blocks.map((b) => (b.content ?? []).map((run) => run.text ?? "").join("")).filter(Boolean)
+  return paragraphs.length ? `${paragraphs.join("\n\n")}\n` : ""
+}
+
+/**
+ * A body save's two checks (WL-REQ-1868), in the server's order: a
+ * lock_session that is not the live session is 409 with the lock, then an
+ * if_body_sha256 that is not the stored body's hash is 409 with the stored
+ * text. Undefined when the save may go ahead.
+ */
+async function refuseBodySave(
+  kind: string,
+  id: string,
+  stored: string,
+  input: { if_body_sha256?: string; lock_session?: string },
+) {
+  if (input.lock_session) {
+    const lock = db.locks.get(`${kind}:${id}`)
+    if (!lock || lock.ended || lock.session !== input.lock_session) {
+      const body: components["schemas"]["BodyLock"] = lock && !lock.ended ? { ...lockView(lock), session: undefined } : { kind, subject_id: id, holder: "" }
+      return HttpResponse.json(body, { status: 409 })
+    }
+  }
+  if (input.if_body_sha256) {
+    const current = await asBlocks(new Request("http://mock/?as=blocks"), stored)
+    if (current.body_sha256 !== input.if_body_sha256) {
+      const body: components["schemas"]["BodyConflict"] = { kind, id, body: stored, ...current }
+      return HttpResponse.json(body, { status: 409 })
+    }
+  }
+  return undefined
+}
+
+// A rule ref (WL-REQ-12) names the rule by project key and number; its kind is not part of the name
+function ruleByRef(ref: string) {
+  const match = /^(.+)-[A-Z]+-(\d+)$/.exec(ref)
+  if (!match) return undefined
+  const [, key, n] = match
+  const project = db.projects.find((p) => p.key === key)
+  return db.rules.find((r) => r.project === project?.id && r.ref?.replace(/^.+-/, "") === n)
 }

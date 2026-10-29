@@ -44,3 +44,27 @@ func TestSPAShellAndAssets(t *testing.T) {
 		t.Fatalf("cockpit asset: %d %q", rec.Code, ct)
 	}
 }
+
+// TestSPAEditRoutes checks both body editor routes answer the SPA shell,
+// /edit under a document or task kind through the canonical route
+// (spaViaCanonical), and that a version path still reaches the cockpit.
+func TestSPAEditRoutes(t *testing.T) {
+	h, _, err := NewServer(store.OpenTestStore(t), Config{WebOpen: true, WebAppForTest: fstest.MapFS{
+		"index.html": {Data: []byte("<div id=root></div>")},
+	}})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	for _, path := range []string{"/projects/web/spec/89/edit", "/projects/web/feature/9/edit", "/projects/web/rule/7/edit"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "id=root") {
+			t.Errorf("%s: %d %q", path, rec.Code, rec.Body.String())
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/projects/web/spec/89/2", nil))
+	if strings.Contains(rec.Body.String(), "id=root") {
+		t.Errorf("version path served the SPA shell")
+	}
+}

@@ -85,3 +85,9 @@ export const bytesToSelection = (blocks: Block[], bytes: Bytes): Selection | nul
   const to = bytes.end === bytes.start ? from : byteToChar(all, bytes.end, true)
   return from === null || to === null ? null : { from, to }
 }
+
+/** Hex SHA-256 of a body's UTF-8 bytes: the server's body_sha256 */
+export async function sha256Hex(body: string): Promise<string> {
+  const sum = await crypto.subtle.digest("SHA-256", utf8.encode(body))
+  return Array.from(new Uint8Array(sum), (b) => b.toString(16).padStart(2, "0")).join("")
+}
