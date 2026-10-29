@@ -292,7 +292,7 @@ func TestEscalationLadder(t *testing.T) {
 	if !recorded.Recorded {
 		t.Fatal("first gap report recorded nothing, want a new event")
 	}
-	// The external id is (task, doc, anchor), so a retry is a no-op rather
+	// The external id is (task, doc, anchor, reason), so a retry is a no-op rather
 	// than a second entry on the funnel.
 	replayed, _, err := bob.RecordGap(ctx, widget.ID, gap)
 	if err != nil {
