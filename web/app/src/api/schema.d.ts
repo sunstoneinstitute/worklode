@@ -10646,6 +10646,8 @@ export interface components {
             anchor?: components["schemas"]["ReviewAnchor"];
             body?: string;
             intent?: string;
+            raised_by_session?: string;
+            raised_by_task?: string;
         };
         Overview: {
             critical_head?: components["schemas"]["FrontierTask"];

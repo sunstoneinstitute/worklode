@@ -15,7 +15,7 @@ var (
 		"actor": true, "approval": true, "blob": true, "channel": true,
 		"decision": true, "deliverable": true, "doc": true, "event": true,
 		"gate": true, "graph": true,
-		"inbox": true, "milestone": true, "project": true, "rule": true, "secret": true,
+		"inbox": true, "milestone": true, "project": true, "review": true, "rule": true, "secret": true,
 		"skill": true, "task": true, "token": true,
 	}
 	l2Machine = map[string]bool{ // L2: acts on this machine or this checkout
@@ -63,6 +63,9 @@ var l3DomainActions = map[string]bool{
 	"supersede": true, // lode rule supersede: the refactor primitive
 	"arrange":   true, // lode rule arrange: place a rule in a spec (WL-REQ-1297)
 	"decide":    true, // lode approval decide: record a verdict (WL-REQ-1608)
+	"comment":   true, // lode review comment: open or reply to a thread (WL-REQ-1775)
+	"approve":   true, // lode review approve: a round with verdict approved (WL-REQ-1775)
+	"wait":      true, // lode review wait: long-poll a review's events (WL-REQ-1775)
 }
 
 // nounViews is the noun-subcommand table of WL-REQ-308, transcribed by full

@@ -96,11 +96,15 @@ type OpenReviewInput struct {
 	BaseRef string `json:"base_ref,omitempty"`
 }
 
-// OpenThreadInput is the body that opens a thread.
+// OpenThreadInput is the body that opens a thread. RaisedByTask and
+// RaisedBySession name the caller's task and coding session, as `lode doc
+// note` does; both may be empty.
 type OpenThreadInput struct {
-	Anchor ReviewAnchor `json:"anchor"`
-	Intent string       `json:"intent"`
-	Body   string       `json:"body"`
+	Anchor          ReviewAnchor `json:"anchor"`
+	Intent          string       `json:"intent"`
+	Body            string       `json:"body"`
+	RaisedByTask    string       `json:"raised_by_task,omitempty"`
+	RaisedBySession string       `json:"raised_by_session,omitempty"`
 }
 
 // ThreadReplyInput is the body of a reply to a thread.

@@ -108,7 +108,7 @@ func (s *server) openReviewThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.openThread(w, r, map[string]any{"review": id}, func(tx *sql.Tx, now time.Time, in model.OpenThreadInput, actorID string, eventID int64) (*model.ReviewThread, error) {
-		return store.OpenThread(tx, now, id, in, actorID, "", "", eventID)
+		return store.OpenThread(tx, now, id, in, actorID, in.RaisedByTask, in.RaisedBySession, eventID)
 	})
 }
 
