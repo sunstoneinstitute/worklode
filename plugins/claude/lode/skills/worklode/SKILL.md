@@ -5,8 +5,8 @@ description: Use when asked to explain Worklode itself — what it is, what enti
 
 # Worklode
 
-Sunstone's org-wide work tracker: one Go binary, `lode`, that is server, CLI
-client, Kubernetes pod watcher, and migrator, backed by Postgres with an
+Sunstone's org-wide work tracker: the `lode` CLI plus the operator-side
+`lode-server`, `lode-watch` and `lode-migrate`, backed by Postgres with an
 append-only event log. This skill is the mental model — the entity/edge
 catalog, the task state machine, the document model, and every `lode`
 command in outline. Deep detail lives one hop away in `references/`; load
@@ -17,13 +17,14 @@ those on demand, not up front.
 | Entity | Id | For |
 |---|---|---|
 | Task | `WL-217` | Claimable work |
-| Rule | `WL-REQ-<n>` (requirement), `WL-RULE-<n>` (invariant, informative) | A design rule with its own identity, kind, status and version history |
+| Rule | `WL-REQ-<n>` (requirement, catalogue), `WL-RULE-<n>` (every other kind) | A design rule with its own identity, kind, status and version history |
 | Doc | `WL-SPEC-25`, `WL-PLAN-7`, or slug | A spec arranges rules for reading; a plan is governed by the rules its work undertakes |
 | Project | slug | Umbrella over 1..n repos |
+| Milestone | `WL-MILE-2` | An ordered container a project's tasks and deliverables hang off |
 | Deliverable | `WL-DEL-3` | A shipped thing — state derived from reported facts, never a status a human sets |
 | Actor | free text | Human, agent, or service account |
 | Lease | numeric | One worktree's claim on one task |
-| Approval | `(entity, id, revision)` | A required sign-off (currently: GitHub PR reviews only) |
+| Approval | `(entity, id, revision)` | A required sign-off on a doc, task, deliverable or PR; `lode approval decide` settles one |
 | Issue / PullRequest / Artifact / Deployment | `(repo,n)` / numeric | GitHub and delivery facts, correlated to tasks |
 | Event | monotonic id | The append-only log everything else derives from |
 
@@ -54,23 +55,25 @@ event — not the merge itself), `merged→deployed_dev/deployed_prod/released`
 (Flux reconciliation, resolved forward-only against whatever facts have
 arrived, in any order). Full event-by-event table: `references/webhooks.md`.
 
-**No PR, no webhook — close it by hand:** a design or review task (settling
-a decision, signing off on a proposal) has no code and no PR to drive the
-rest of the lifecycle. Once the call is made, drive it yourself: `task
-start` (ready→in_progress) → `task submit` (→in_review) → `task set state
-merged` (→merged). `task start` refuses with a 422 if the task is already
-assigned to someone else's identity ("assigned to X; unassign first") — run
-`task unassign` first, then `start`.
+**No PR, no webhook — close it by hand:** a task whose outcome is not code
+(research, a decision, an ops change, a document) has no PR to drive the rest
+of the lifecycle. Once the work is done, run `task complete` (→completed); it
+is refused when the task has a pull request. A design task that wrote a
+document closes on its own when `lode doc submit` submits that document. To
+mark the work in progress first, use `task start` (ready→in_progress); it
+refuses with a 422 if the task is already assigned to someone else's identity
+("assigned to X; unassign first") — run `task unassign` first, then `start`.
 
 A task with `childOf` children can't itself sit in `in_review` or any
-delivery state — `task set state merged` on a parent reports the roll-up rule
-instead.
+delivery state. Its state follows its children, rolling up to `merged` or
+`completed`, so `task set state merged` and `task complete` on a parent are
+refused (WL-REQ-90).
 
 ## Edges
 
 | Between | Types |
 |---|---|
-| task ↔ task | `childOf` (subtask), `blocks`, `followUpTo` (spun out of), `duplicateOf` (same request, filed twice) |
+| task ↔ task | `childOf` (subtask), `dependsOn` (`blocks` read from the far end), `followUpTo` (spun out of), `duplicateOf` (same request, filed twice) |
 | task → rule | `governedBy` (follows the newest version unless pinned) |
 | spec → rule | Arrangement: rule, version, position, depth and section anchor |
 | rule → rule | `refines`, `constrains`, `conflictsWith`, `references`, `wasDerivedFrom`, `amends`, `supersedes` (new rule → old rule; `amendedBy`/`supersededBy` are read from the far end, never stored) |
@@ -82,8 +85,8 @@ Full table with direction and set-by command: `references/entities-and-edges.md`
 
 ## Rally
 
-A `rally` is a task kind that carries no work of its own. Its `blocks` edges
-name the tasks a person picked as the thing to finish now. Those tasks, plus
+A `rally` is a task kind that carries no work of its own. Its `dependsOn`
+edges name the tasks a person picked as the thing to finish now. Those tasks, plus
 everything they transitively wait on, sort first in `lode work next` — ahead
 of critical and priority, in both default and `--strict-focus` mode.
 
@@ -175,6 +178,7 @@ Every rule has one kind (`lode rule set <ref> --kind <kind>`):
 | `invariant` | `WL-RULE-<n>` | binds every task in its project and is never finished |
 | `definition` | `WL-RULE-<n>` | one term, one meaning, in one scope |
 | `principle` | `WL-RULE-<n>` | a stance other rules `refine` |
+| `capability` | `WL-RULE-<n>` | something people can do; the rules refining it build it |
 
 All kinds share one counter, so `WL-REQ-<n>` and `WL-RULE-<n>` with one
 number name the same rule. Output prints the infix of the rule's current

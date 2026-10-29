@@ -9,14 +9,15 @@ command to run (that's `commands.md`) or how documents version (that's
 
 | Entity | Id / key | What it is |
 |---|---|---|
-| Project | slug (`worklode`) | An umbrella over 1..n repos (`project_repos`). Unbounded — there is no "milestone" class; a project is inherently ongoing. |
+| Project | slug (`worklode`) | An umbrella over 1..n repos (`project_repos`). Unbounded; a project is inherently ongoing. |
+| Milestone | `<PROJECT_KEY>-MILE-<n>` | An ordered container a project's tasks and deliverables hang off. `lode milestone`, `lode task list --milestone`. |
 | Task | `<PROJECT_KEY>-<n>` (`WL-217`) | The unit of claimable work. Global sequence per project. |
-| Rule | `<PROJECT_KEY>-REQ-<n>` for a requirement, `<PROJECT_KEY>-RULE-<n>` for an invariant or informative rule; any infix resolves by number | An independently versioned design rule, arranged into specs and governing plans and tasks. Its kind is `requirement` (a plan builds it), `invariant` (binds every task in its project) or `informative` (context only). |
+| Rule | `<PROJECT_KEY>-REQ-<n>` for a requirement or catalogue, `<PROJECT_KEY>-RULE-<n>` for every other kind; any infix resolves by number | An independently versioned design rule, arranged into specs and governing plans and tasks. Its kind is `requirement` or `catalogue` (a plan builds it), `invariant` (binds every task in its project), `definition` (one term), `principle` (a stance other rules refine) or `capability` (something people can do, built by its refiners). |
 | Doc | numbered per (project, kind), also addressable by slug | A spec arranges rules for reading; a plan is governed by the rules its work undertakes. |
 | Deliverable | `<PROJECT_KEY>-DEL-<n>` | A thing the project ships (a service, a package) — never claimed or worked; state is derived from reported facts, not a status a human sets. |
 | Actor | free text id | A human, agent, or service account. Carries `admin`, and since WL-SPEC-74 the Keycloak identity claims (`groups`, `email`) recorded at login. |
 | Lease | numeric id | One worktree's claim on one task. At most one active lease per task and per worktree. Ending a lease (release/done/block/abandon/reopen) never itself changes task state. |
-| Approval | `(entity_kind, entity_id, subject_revision)` | WL-REQ-124's one-table model of "does this need a sign-off". Currently populated only from GitHub PR review requests (`awaiting → approved/rejected/changes_requested`); no general CLI verb for it yet. |
+| Approval | `(entity_kind, entity_id, subject_revision)` | WL-REQ-124's one-table model of "does this need a sign-off". Rows come from GitHub PR review requests and from `lode approval add`/`request` (`awaiting → approved/rejected/changes_requested`). `lode approval decide` makes the same decision as the cockpit's Reviews form. |
 | Project participant | `(project_id, actor_id, role)` | WL-REQ-123 "Project Crew" — role-labelled, visible before any task is claimed. At most one `is_lead` and at most one `is_deputy` row per project. `lode project crew`. |
 | Issue / PullRequest | `(repo, number)` | GitHub facts ingested by the App webhook, optionally correlated to a task. |
 | Artifact / Deployment | numeric id | A built thing (`docker_image`, `pypi`, `git_tag`, `binary`) and where it landed (Flux Kustomization, PyPI, manual). |
@@ -56,8 +57,9 @@ Every pre-merged state can also go to `abandoned`; `merged`/`deployed_dev`/
 | terminal-ish → `ready` | You: `lode task reopen` (fresh claim required) |
 
 A **container task** — one with children — cannot itself sit in
-`in_review`/`deployed_dev`/`deployed_prod`/`released`; `lode task set state
-merged` on a parent reports the roll-up rule instead of a bad transition.
+`in_review`/`deployed_dev`/`deployed_prod`/`released`. Its state rolls up from
+its children to `merged` or `completed`, and `lode task set state merged` or
+`lode task complete` on a parent is refused (WL-REQ-90).
 
 Leases are orthogonal to state: a lease says a worktree is occupied, and
 nothing in the delivery pipeline (merge, deploy, release) touches it. Leases
@@ -79,7 +81,7 @@ end only via release, done, block, abandon, reopen, or the expiry sweep.
 | From → to | Meaning |
 |---|---|
 | Spec → rule | An arrangement records a rule version, position, depth and section anchor. |
-| Plan → rule (`covers`) | The requirements the plan builds. Each `covers` entry (a requirement ref, a `<doc>#sec-N` ref, or a whole-document ref) is resolved to requirements when the plan is written, skipping invariants and informative rules, and stored as a `covers` edge from the plan to each. A direct ref to a non-requirement is refused. A `covers` edge always means the plan builds the whole requirement; there are no coverage levels. |
+| Plan → rule (`covers`) | The requirements the plan builds. Each `covers` entry (a requirement ref, a `<doc>#sec-N` ref, or a whole-document ref) is resolved to requirements when the plan is written, skipping kinds a plan does not build, and stored as a `covers` edge from the plan to each. A direct ref to a non-requirement is refused. A `covers` edge always means the plan builds the whole requirement; there are no coverage levels. |
 | Task → rule (`governedBy`) | Governing rule, linked by plan acceptance, by hand, or by the `Spec:` trailer gate. The link records the version at link time and follows the newest text unless pinned. Every accepted invariant in the task's project also governs it; that is derived when the task is read, never stored. |
 | Rule → rule (`refines`, `constrains`, `conflictsWith`, `references`) | Design relationships. Text references also produce derived `references` edges. |
 | Rule → rule (`amends`) | The subject changes how the object is read without replacing it; `lode show --inline` folds it in. Documents do not amend or replace each other. |

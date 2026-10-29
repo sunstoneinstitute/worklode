@@ -40,7 +40,7 @@ unplanned spec.
 For each spec with gaps, read `lode rule list --doc <spec-ref> --json` to map
 anchors to rule refs. Inspect the affected rules with `lode show <rule-ref>`
 for existing covering plans and governed tasks. Report the refs alongside the
-anchors; retain anchors in the proposed plan's `covers` syntax.
+anchors; the proposed plan's `covers` names the rule refs.
 
 For each gap, check whether it is already tracked: `lode task list --status
 all --json` and look for a `kind: design` task whose title starts with `Plan

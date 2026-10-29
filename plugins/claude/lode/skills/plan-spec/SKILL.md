@@ -32,15 +32,15 @@ that decided which task to pick up — stay unattributed by design.
 accepted spec. Read it with `lode show <ref> --inline`, then
 `lode rule list --doc <ref> --json` for the rules it arranges. Read a rule with
 `lode show <rule-ref>` to inspect its text, version, relationships and existing
-governed tasks. Use `lode doc show <ref> --json` to map rules back to section
-anchors for `covers`. The backbone is the copy of record.
+governed tasks. The backbone is the copy of record.
 
 **Step 3: write the plans.** Load `lode:splitting-specs-into-plans` if the spec is
 large enough to need a numbered series, and `superpowers:writing-plans` for
 each plan document. Split by the rules the work must satisfy, keeping standing
-constraints with every part they govern. A plan's `covers:` frontmatter still
-names the spec sections it undertakes, anchor by anchor: a whole-document edge discharges nothing, so
-`lode doc list --needs-planning` would keep reporting the spec as unplanned.
+constraints with every part they govern. A plan's `covers:` frontmatter names
+the rule refs it builds; a section or whole-document ref is shorthand for the
+requirements under it. A requirement no accepted plan covers stays a gap in
+`lode doc list --needs-planning`.
 A plan is also bounded by a server-enforced token budget (12 S19); `lode doc
 add` warns past the soft budget and refuses past the hard ceiling, which is
 the signal to split further.
@@ -60,6 +60,6 @@ links each minted task to the rules governing the plan. Check `lode rule list --
 and a minted task's `governed_by` with `lode show <task-id> --json`.
 Unresolved coverage refs select no rules; repair them before accepting.
 
-**Step 5: finish the design task.** `lode task set state merged <design-task-id>` once the
+**Step 5: finish the design task.** `lode task complete <design-task-id>` once the
 plan documents are accepted. Writing the plan is the deliverable; executing it
 is the task set the acceptance just minted, not this task.

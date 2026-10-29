@@ -150,7 +150,8 @@ no comment takes the recommendation. Then apply the answers:
 One more round of agents, each owning one or two documents:
 
 - **Rule granularity:** every requirement must give useful guidance on its own. Merge rules that were
-  split too small. Mark pure context or rationale as informative so it does not count as a planning gap.
+  split too small. Fold pure context or rationale into the rule it explains, or leave it as spec template text,
+  so it does not count as a planning gap.
 - **Owner answers** for that document.
 - **Cross-links** between the new specs (for example "the deployment spec" becomes a real reference).
 - **ADRs** rewritten in place as current decisions.
@@ -211,8 +212,8 @@ Before retiring anything, the coordinator checks, and the owner approves the res
 - A doc whose rules are all superseded still shows `accepted`. Retire it with `lode doc withdraw
   --justification`. Drafts cannot be withdrawn. Delete them with `lode doc delete`, which can be undone.
 - Docs with no anchored sections have no rules, so supersession does not apply. Withdraw them directly.
-- `lode rule set --kind informative` marks context. A rule that an accepted plan `covers` cannot become
-  informative; leave it a requirement.
+- `lode rule set --kind` changes a rule's kind (`definition`, `principle` and the rest). The `informative` kind is
+  retired. A rule that an accepted plan `covers` stays a requirement or catalogue.
 - Stored doc notes cannot be deleted (as of October 2026). Leave stale ones.
 - Accepting a new spec can be blocked by an open approval that only its approver can decide. Ask the owner.
 - Write every task and doc reference shown to the owner as a link to the Worklode web UI.

@@ -120,8 +120,7 @@ Every rule has exactly one kind, and each kind states one obligation
 | `principle` | `WL-RULE-<n>` | a design stance other rules `refine`; not checkable on its own | through its refiners only | never covered, never a gap |
 | `capability` | `WL-RULE-<n>` | something people can do with the system; the rules refining it build it | through its refiners only | covered when every requirement and catalogue under it is covered |
 
-`capability` is drafted in WL-REQ-1642 and not yet accepted or built: until
-`lode rule set --kind` accepts it, write a capability root as a `principle`. A capability names what people can do ("manage Worklode from an
+A capability names what people can do ("manage Worklode from an
 MCP client"); a principle names a stance on how ("never pick a project
 silently").
 
@@ -372,7 +371,7 @@ Prose: files to touch, the test that proves it. Then optional `- [ ]` steps.
 | `kind` | yes | — | `feature`, `bug`, `chore`, `design` — never `review`/`spike`, which plans don't mint |
 | `priority` | no | `medium` | `critical`, `high`, `medium`, `low` |
 | `skills` | no | none | skill-registry names; `plugin:skill` is the registry's identity, a bare name resolves while it names one skill |
-| `blockedBy` | no | none | task numbers **in this file**; becomes `blocks` edges at mint |
+| `blockedBy` | no | none | task numbers **in this file**; becomes `dependsOn` edges at mint |
 
 A task's **title is its declaration's identity**: titles must be unique
 within the plan, and accepting an edited plan mints only the declarations
@@ -415,7 +414,7 @@ the declaration it came from.
 
 The judgment is yours, and it splits on task state:
 
-- **Open (`ready`, `claimed`, in flight)** — re-body it. Someone is about to
+- **Open (`ready`, `in_progress`, `in_review`)** — re-body it. Someone is about to
   work from prose you now know is wrong.
 - **Closed (`deployed_dev`, `merged`, abandoned)** — leave it. A finished
   task is execution fact, and a title naming the wrong migration number is

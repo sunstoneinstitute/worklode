@@ -14,7 +14,7 @@ document. Each placement records the rule and version, position, depth and
 section anchor. A rule ref names the rule; a ref such as `WL-SPEC-77#sec-11`
 names a place in that spec's arrangement.
 
-A rule's kind is one of five, and sets the infix its ref prints with:
+A rule's kind is one of six, and sets the infix its ref prints with:
 
 - **requirement** (`WL-REQ-<n>`): a plan builds it once. A planning gap until
   an accepted plan covers it. New rules are requirements.
@@ -27,6 +27,9 @@ A rule's kind is one of five, and sets the infix its ref prints with:
   covered, never a gap.
 - **principle** (`WL-RULE-<n>`): a stance other rules `refine`. Never covered,
   never a gap.
+- **capability** (`WL-RULE-<n>`): something people can do with the system; the
+  rules refining it build it. Covered when every requirement and catalogue
+  under it is covered.
 
 The number alone identifies a rule: `WL-REQ-<n>` and `WL-RULE-<n>` resolve
 to the same rule wherever a ref is read. Change a kind
@@ -45,7 +48,8 @@ split it into a requirement and an invariant.
 - **Existing ADRs** — still readable and arrange rules like specs. Put new
   durable rationale in the spec owning the subject.
 
-Specs use `draft`, `accepted` and `superseded`; plans can also be `stale`.
+Specs use `draft`, `accepted`, `superseded` and `withdrawn`; plans can also be
+`stale` or `executed`.
 A submitted spec stays `draft` while review runs. Rules have their own status, including
 `withdrawn`. A rule's text can change while it is draft; changing accepted
 text creates a new draft version, preserving the accepted version.
