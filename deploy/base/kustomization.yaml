@@ -266,5 +266,5 @@ configMapGenerator:
       - migrations/0126_drop-doc-rules-anchor.down.sql
       - migrations/0127_review-surface.up.sql
       - migrations/0127_review-surface.down.sql
-      - migrations/NEW-doc-notes-fold.up.sql
-      - migrations/NEW-doc-notes-fold.down.sql
+      - migrations/0128_doc-notes-fold.up.sql
+      - migrations/0128_doc-notes-fold.down.sql
