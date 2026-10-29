@@ -254,3 +254,60 @@ func TestLeadHandoffThenRemoval(t *testing.T) {
 	}
 	assertLead(t, s, "carol")
 }
+
+func closeCrew(t *testing.T, s *Store) error {
+	t.Helper()
+	return handoffRecord(t, s, "crew.lead_handoff_cancelled", func(tx *sql.Tx, eventID int64) error {
+		return CloseCrew(tx, s.Now(), "p1", "ada", eventID)
+	})
+}
+
+func TestCloseCrewCancelsPendingHandoff(t *testing.T) {
+	s := handoffFixture(t)
+	ctx := context.Background()
+	hid, err := requestHandoff(t, s, "bob", "ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.ListParticipants(ctx, "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := closeCrew(t, s); err != nil {
+		t.Fatal(err)
+	}
+	if h, err := s.PendingLeadHandoff(ctx, "p1"); err != nil || h != nil {
+		t.Fatalf("pending handoff after close = %v, %v", h, err)
+	}
+	var state string
+	if err := s.db.QueryRowContext(ctx, `SELECT state FROM crew_lead_handoffs WHERE id = $1`, hid).Scan(&state); err != nil || state != "cancelled" {
+		t.Fatalf("handoff state = %q, %v", state, err)
+	}
+	after, err := s.ListParticipants(ctx, "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("roster changed: %d rows before, %d after", len(before), len(after))
+	}
+	assertLead(t, s, "ada")
+
+	countCloses := func() (n int) {
+		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM state_log
+		    WHERE entity_kind = 'project' AND entity_id = 'p1'
+		      AND change @> '{"field":"crew","op":"close"}'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if n := countCloses(); n != 1 {
+		t.Fatalf("close rows = %d, want 1", n)
+	}
+	if err := closeCrew(t, s); err != nil {
+		t.Fatalf("second CloseCrew: %v", err)
+	}
+	if n := countCloses(); n != 1 {
+		t.Fatalf("close rows after second call = %d, want 1", n)
+	}
+}
