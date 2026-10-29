@@ -150,6 +150,15 @@ nothing on timeout). `--quote` must occur exactly once in the document's
 current text, the rendered body for a spec. No skill names these yet; the
 worker text for reviews comes with WL-PLAN-133.
 
+## Editing a body in the SPA
+
+The SPA edits a body at two routes (WL-REQ-1868): `/projects/$projectId/$kind/$n/edit`
+for documents and tasks, and `/projects/$projectId/rule/$n/edit` for rules.
+Opening one takes the body's lock (`/api/v1/locks/{kind}/{id}`); a save sends
+`if_body_sha256` and `lock_session`. An agent or `lode` edit sends neither, is
+never refused for a lock, and turns the open editor's next save into a 409
+conflict that carries the new text. `e2e/bodylocks_test.go` drives this path.
+
 ## Authoring guidance starts from rules
 
 Every surface that teaches design authoring (root `CLAUDE.md`, the

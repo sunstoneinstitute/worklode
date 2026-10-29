@@ -204,6 +204,18 @@ A form keeps its values and field errors in React state (WL-REQ-1810);
 values in `localStorage` under `worklode:v1:draft:<actor>:<form>[:<id>]`;
 `src/api/client.ts` deletes every draft on any 401 (WL-REQ-1813).
 
+## Body editor
+
+`src/editor/BodyEditor.tsx` edits a document, rule or task body as BlockNote
+blocks and `BodyView.tsx` shows it read-only. `useBodyLock`
+(`src/editor/use-body-lock.ts`) takes the lock, checks in, and reports a lost
+lock, which `LockedDialog.tsx` explains (WL-REQ-1868). Saves send
+`if_body_sha256` and `lock_session`; a 409 carries the stored text as
+`body` and `blocks`. The routes are `/projects/$projectId/$kind/$n/edit`
+(documents and tasks) and `/projects/$projectId/rule/$n/edit` (rules). The
+MSW mocks keep lock state in `db.locks` (`src/mocks/db.ts`), served by the lock
+handlers in `src/mocks/handlers.ts`.
+
 ## DataTable: generic, schema-driven table component
 
 `src/components/ui/data-table/` is a reusable table. Columns, sorting,
