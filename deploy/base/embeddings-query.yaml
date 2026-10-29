@@ -43,7 +43,7 @@ spec:
         fsGroup: 65532
       containers:
         - name: embeddings
-          image: ghcr.io/sunstoneinstitute/worklode-embeddings:embeddinggemma-300m-tei1.9.3
+          image: ghcr.io/sunstoneinstitute/worklode-embeddings:embeddinggemma-300m-tei1.9.4
           imagePullPolicy: IfNotPresent
           args:
             - --model-id=/model
