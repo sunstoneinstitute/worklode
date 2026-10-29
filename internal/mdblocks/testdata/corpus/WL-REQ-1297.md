@@ -1,0 +1,5 @@
+
+`lode rule arrange <spec> <rule> [--after <ref> | --under <ref>]` places an existing rule in a spec, and `lode rule unarrange <spec> <rule>` removes it from the spec without withdrawing it. `--after` and `--under` take a rule ref or an anchor of the spec's current version. Both write `doc_rules` through the spec's own write path: in place on a draft, into the candidate revision on an accepted spec. The entry records a position and a depth, and its number and anchor are derived (WL-REQ-165). Any number of specs may arrange the same rule, and each shows the same text. A rule whose last arrangement is removed stays a standalone rule. Withdrawal is `lode rule supersede` (WL-REQ-1646).
+
+Unarranging a rule from an accepted spec is substantive for the spec: landing the candidate mints a review task for the spec's reviewers, as any substantive revision does (WL-REQ-1666). Unarranging an entry that has deeper entries under it is refused, naming them; those entries are unarranged or moved first. A spec write that leaves out a rule unarranges it under the same rules.
+

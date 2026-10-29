@@ -1,0 +1,3 @@
+
+Keycloak is the only login. Each person has exactly one `human` actor, auto-provisioned on first login. Two actor rows for one person are merged into the Keycloak actor by a reviewed one-off SQL script: every referencing row is repointed (columns come from `pg_constraint` rows with `confrelid = 'actors'`, never a hand-kept list), rows that would collide on a unique constraint are dropped, then the duplicate is deleted. The event log keeps the historical ids as provenance and is never rewritten. A login whose `preferred_username` collides with a non-human actor (the bootstrap admin) is a 409.
+

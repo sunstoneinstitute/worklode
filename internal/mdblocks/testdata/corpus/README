@@ -1,0 +1,7 @@
+Corpus fixture for TestCorpusRoundTrip (WL-REQ-1867).
+
+Exported 2026-10-29 from the dev instance: the body of every accepted rule in
+the worklode project (857, `lode rule list --status accepted --json`, then
+`lode show <ref> --json`) and the 50 highest-numbered tasks with a non-empty
+body (`lode task list --status all --json`, then `lode task show <id> --json`).
+One file per body, named after its ref, holding the body only.

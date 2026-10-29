@@ -1,0 +1,12 @@
+
+- Spec status view on the drift board (drifted, unimplemented and accepted sections): WL-PLAN-122 task 3.
+- Decisions bucket in the inbox (decision-kind tasks, assigned / owned / unassigned in led projects): WL-333.
+- Each section's rule ref shown under the heading it was minted from on rendered documents, with the rule's sections outlined as one unit on hover: WL-900.
+- Stage due dates: an optional date per stepper stage, set by the lead through a `permWebWrite` form, never read by stage derivation, replaced without history: WL-PLAN-140.
+- Editorial decision and Approved launch modes, intake capture on `/ideas` and `/intake`, the candidate dossier page, the Selection and Editorial Evaluation decisions, promotion redirecting to the Approved launch cockpit, the Enter Research act, the derived stage on the stepper, stage transitions with carryover and closure: WL-PLAN-101 (WL-570, WL-572 to WL-579).
+- Crew invitations for external experts before identity linkage, lead handoff, derived contributors, Crew history, agents refused as Crew, and closing the Crew with the project: WL-PLAN-104 (WL-694, WL-696 to WL-704).
+- Revision binding for approvals: the gate read, the designation act and the CI gate in `promote-prod.yml`: WL-PLAN-100 (WL-563 to WL-565, WL-567).
+- Lane-specific review views: the analysis view (repository, commit, environment lock, entry point, tests and CI, dataset snapshots, lineage, outputs, diff from the last reviewed revision) and methodology and report views that bind exact upstream revisions: WL-977 (WL-PLAN-100 scope).
+- Jump box (§2.4): WL-975.
+- Fact-selected panels (§6): WL-976.
+- WL-SPEC-84 change reviews in the inbox's review buckets (§12), read from `reviews` and `task_reviewers`: WL-PLAN-133 task 8.

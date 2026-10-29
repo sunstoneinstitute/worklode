@@ -1,0 +1,3 @@
+
+`lode rule edit WL-RULE-<n> --file <body> [--heading <text>]` (`PUT /api/v1/rules/{id}`) edits a rule through the one spec that arranges it. The store regenerates that document's body with the rule's new heading and text and writes it through the document's own path. On a draft document the rule's draft version is rewritten in place. On an accepted document the write goes into the candidate revision, opened when none is open, and the rule's next version appears when the revision lands. A rule arranged in no document, or in more than one, is refused with a message naming the case. A plan never carries a rule edit, since it arranges no rule.
+

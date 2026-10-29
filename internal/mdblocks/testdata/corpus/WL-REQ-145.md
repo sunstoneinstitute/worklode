@@ -1,0 +1,2 @@
+
+The built-in workflow `default` declares all ten states and all implied entries. Its edge set is the core edges plus every entry of WL-REQ-144. That set is `legalTransitions` in `internal/store/tasks.go`, and `TestTaskStateShapeMatchesStateMachine` pins `ns/shapes.ttl`'s state list against it. Workflow names are slugs (`[a-z0-9-]{1,40}`) with an optional one-sentence `description`. `default` is reserved and cannot be redefined.

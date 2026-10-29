@@ -1,0 +1,3 @@
+
+Creating minutes or a note creates one mutable working draft and no revision. Collaborative editing changes the draft. A permitted actor explicitly finishes it: finishing an empty document is refused, finishing creates immutable revision 1 and closes the shared editing session. Scheduled meeting end never finishes minutes. A correction starts one shared draft from the latest revision, and finishing it creates the next revision. At most one working draft exists per document. Readers see the latest finished revision by default and the working draft only when they may edit it. Every finish records actor and time. Prior revisions stay readable to anyone with current access. BlockNote and its collaboration transport are implementation choices behind this contract.
+

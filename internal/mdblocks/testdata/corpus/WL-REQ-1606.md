@@ -1,0 +1,3 @@
+
+Approval of an `approvals` row (WL-REQ-124) by the entity's author is disallowed by default, except on a plan: plans are often written by an agent under the author's own credentials, so a plan's author may approve it. A review flow may name the entity kinds whose author may decide their own approval. On a project stamped with such a flow, the author of an entity of a named kind decides its approval directly. The decision records the author as the exception's authorizer and is event-logged like any other. This is how the owner of a solo project accepts a spec their agent wrote under their credentials. Worklode ships a solo flow that requires no sign-off and allows self-review of documents, applied to a project by name.
+

@@ -1,0 +1,3 @@
+
+A meeting has zero or more provider-owned resources of kind `agenda`, `transcript`, or `smart_notes`, each with meeting, kind, provider, external ID, optional title, body and URL, provider generation time, and last update time. Provider plus kind plus external ID make ingest idempotent. An activated Calendar event gets one read-only agenda resource (title, description, event URL) that Calendar changes replace. Meet transcript and Gemini smart-notes events, subscribed through the stored space, upsert a resource with provider ID, title, generated time, and Google Docs URL. Those URLs render as metadata beside the minutes, never in the body, and create no revision. Drive stays the content and sharing authority.
+

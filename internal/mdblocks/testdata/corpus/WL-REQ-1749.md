@@ -1,0 +1,4 @@
+
+Design and planning are separate skills because a spec is durable and a plan is executed once the tasks it minted close (WL-SPEC-77#sec-11). They share the question format and diverge on what they drive toward. A merge is neither a concatenation nor winner-takes-all; each remix states in its body which behaviour came from where. The merges are designed before they are written: one research document per family, reviewed and accepted, whose output is the prompt set.
+
+Every remix is Worklode-aware (documents are addressable as `WL-SPEC-<n>`, `lode show` renders a section, tasks come from plan acceptance) and Sunstone Way-aware (the seven stages, so a data-science brainstorm reaches for a Topic Intake Brief and a Gate). The set is called the motherlode in `LICENSES.md` and the prompts, never as an invocation.

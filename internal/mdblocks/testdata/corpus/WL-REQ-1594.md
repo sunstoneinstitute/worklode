@@ -1,0 +1,5 @@
+
+A deploy frontier in `env_deploys` (WL-REQ-113) is confirmed at seq N once both the GitHub `deployment_status: success` and the Flux `ReconciliationSucceeded` signals are present; every task with landed seq at most N is covered. Where no Flux revision has ever correlated for a repo/env, the GitHub signal alone confirms; the first matching Flux revision latches `flux_seen` and the pair requires both signals permanently. The latch never releases on its own; the handler logs `flux delivery gating latched`, and the repair is a `flux_seen` reset in the database. A deployment SHA on main resolves to its seq directly; a `last-deploy/*` SHA resolves through the `main-sha:` trailers of its cherry-picked commits.
+
+A release frontier is the release's `target_commitish` when that resolves (through the GitHub App, for branch names) to a known main commit, so a backport tag covers only what it contains. Otherwise it falls back to main's head at webhook arrival. The release artifact records the resolved commit directly.
+

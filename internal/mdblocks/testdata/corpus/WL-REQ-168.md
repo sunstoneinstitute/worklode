@@ -1,0 +1,3 @@
+
+A document's metadata and edges live only in rows: `docs` columns, `doc_edges` and, for a plan, the tasks it minted (WL-REQ-174). `lode doc add --kind spec|plan --slug <slug> --file <path> [--number] [--owner]` and `lode doc import` accept a YAML header at the top of the input file; the create path turns it into those rows and stores the body without it. Every later body write refuses a body that opens with a header, naming the flag or command that makes the change. `lode doc edit --file` and `lode doc revise --file` replace the body only. Metadata changes through flags (`lode doc edit <ref> --title <text>`, `--issued <date>`), and edges through `lode doc link <ref> --<type> <target>` and `lode doc unlink <ref> --<type> <target>` (WL-SPEC-77#sec-9f).
+

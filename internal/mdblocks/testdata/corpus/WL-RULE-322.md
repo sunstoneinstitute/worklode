@@ -1,0 +1,3 @@
+
+Two MIT plugins, `superpowers` and `mattpocock-skills`, cover the work before a task exists: deciding what to build, interrogating the decision, writing it down. Their skills are vendored into `plugins/claude/lode/skills/`, merged where both treat the same job, and edited to know Worklode's documents and the Sunstone Way. Vendoring is chosen because a skill in another plugin cannot be patched, and the skills that matter carry their file layout inside their guidance. The cost is that Worklode owns the merge on every upstream release. No part of §8 is built; the plans that build it are listed under Designed, not built.
+

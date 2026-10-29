@@ -1,0 +1,3 @@
+
+- Task ordering stored subject → object as `dependsOn` (CHECK `('child_of','dependsOn','follow_up_to','duplicate_of')`), existing `blocks` rows flipped, and a write naming `blocks` refused with a 422 naming `dependsOn`: WL-908 (WL-PLAN-145).
+- Google Chat crew spaces: a `gchat-crew-space` subscriber on `crew.member_added` and `crew.member_removed` creates the space `"{Key} {Name} Crew"` when `projects.chat_space_name` is null, invites members by `actors.email`, skips a missing email, an address outside the Workspace domain or an unlinked invitee with a `gchat.crew_space.member_skipped` event, acks only after the Chat API calls succeed, and authenticates as a dedicated Chat App on Workload Identity: WL-PLAN-105 (draft, no tasks).

@@ -1,0 +1,2 @@
+
+`taskClosed` is a predicate joined through the repo mapping. A task is closed when it is `abandoned` or `completed`, in every repo, or has reached its repo's `done_state` or a later state on that repo's delivery path. A task's repos are the ones its work landed in (`task_commits` joined with `main_commits`). A task landing in several repos is closed only when it satisfies the strictest. A task with children is closed at `merged` in every repo, because it can never advance past it.
