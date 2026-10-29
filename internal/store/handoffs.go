@@ -322,3 +322,39 @@ func cancelLeadHandoff(tx *sql.Tx, now time.Time, h *LeadHandoff, by string, eve
 	}
 	return logHandoff(tx, h, eventID, "cancel", by, nil)
 }
+
+// CloseCrew is the crew half of closing a project (WL-REQ-1605): it
+// cancels any pending lead-handoff ceremony and records the crew as closed
+// in the change log. It deletes nothing: the participant rows, linked
+// invitations, and events are the preserved roster, role history, and
+// derived contributions. The caller is the project-close transaction
+// (WL-PLAN-101), which also owns refusing new crew mutations on a closed
+// project; this function is written to be callable from that transaction
+// and idempotent when nothing is pending. The refusal needs WL-PLAN-101's
+// project-state fact and gates before the crew functions are called, so
+// they need no change for it. The close row is written once per project;
+// a repeat call finds it and writes nothing.
+func CloseCrew(tx *sql.Tx, now time.Time, projectID, by string, eventID int64) error {
+	h, err := scanLeadHandoff(tx.QueryRow(
+		`SELECT `+leadHandoffColumns+` FROM crew_lead_handoffs
+		  WHERE project_id = $1 AND state = 'pending' FOR UPDATE`, projectID))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return fmt.Errorf("read pending lead handoff of project %s: %w", projectID, err)
+	default:
+		if err := cancelLeadHandoff(tx, now, h, by, eventID); err != nil {
+			return err
+		}
+	}
+	var closed bool
+	if err := tx.QueryRow(`SELECT EXISTS (SELECT 1 FROM state_log
+	        WHERE entity_kind = 'project' AND entity_id = $1
+	          AND change @> '{"field":"crew","op":"close"}')`, projectID).Scan(&closed); err != nil {
+		return fmt.Errorf("check crew close of project %s: %w", projectID, err)
+	}
+	if closed {
+		return nil
+	}
+	return LogChange(tx, "project", projectID, eventID, map[string]any{"field": "crew", "op": "close", "by": by})
+}
