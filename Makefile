@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean dev-db dev-embeddings dev-server dev-web FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean up dev-db dev-embeddings dev-server dev-web FORCE
 
 # WL-REQ-15: seven executables from one module. The three user binaries are what
 # Homebrew installs; three more ship in the container images, and
@@ -65,20 +65,28 @@ web-clean: ## Put the committed placeholder back after a local SPA build
 	git clean -fdx internal/webapp/dist
 	git checkout -- internal/webapp/dist/index.html
 
+# When .env.local sets any variable, run compose and lode-server under op run so
+# 1Password resolves its op:// references. Compose interpolates the exported
+# values, which take precedence over its own read of .env.
+ENV_RUN := $(if $(shell grep -qs '^[A-Z_]*=' .env.local && echo y),op run --env-file=.env.local --)
+
+up: ## Start the compose stack with .env.local's variables
+	$(ENV_RUN) docker compose up -d
+
 # Host-side development: Postgres in compose, lode-server and Vite on the host.
 # Exported so docker compose publishes Postgres on the same port.
 export LODE_POSTGRES_PORT ?= 5432
 DEV_DSN ?= postgres://postgres:postgres@localhost:$(LODE_POSTGRES_PORT)/postgres?sslmode=disable
 
 dev-db: ## Start compose's Postgres and migrate it from the host
-	docker compose up -d --wait postgres
+	$(ENV_RUN) docker compose up -d --wait postgres
 	go run -trimpath ./cmd/lode-migrate --dsn '$(DEV_DSN)' --migrations-path deploy/base/migrations
 
 export LODE_EMBEDDINGS_PORT ?= 8081
 EMBEDDINGS_URL := http://localhost:$(LODE_EMBEDDINGS_PORT)
 
 dev-embeddings: ## Start compose's embedding server (amd64 image; emulated on Apple Silicon)
-	docker compose --profile embeddings up -d embeddings
+	$(ENV_RUN) docker compose --profile embeddings up -d embeddings
 
 # Embedding settings mirror deploy/base/configmap.yaml, used only when
 # dev-embeddings answers.
@@ -90,7 +98,7 @@ dev-server: bin/lode-server ## Run lode-server on the host against dev-db (stop 
 			LODE_EMBEDDING_QUERY_PREFIX='task: search result | query: ' \
 			LODE_EMBEDDING_DOCUMENT_PREFIX='title: none | text: '; \
 	fi; \
-	LODE_DSN='$(DEV_DSN)' LODE_WEB_OPEN=$${LODE_WEB_OPEN:-1} LODE_INSTANCE_ENV=$${LODE_INSTANCE_ENV:-dev} exec ./bin/lode-server
+	LODE_DSN='$(DEV_DSN)' LODE_WEB_OPEN=$${LODE_WEB_OPEN:-1} LODE_INSTANCE_ENV=$${LODE_INSTANCE_ENV:-dev} exec $(ENV_RUN) ./bin/lode-server
 
 dev-web: ## Run the SPA's Vite dev server against dev-server (http://localhost:5173)
 	cd web/app && pnpm install --frozen-lockfile && VITE_API_MOCKS=off pnpm dev
