@@ -11,6 +11,14 @@ const (
 
 	TypeReferenceClassified    = "wl:ReferenceClassified"
 	TypeClassificationRepaired = "wl:ClassificationRepaired"
+
+	TypeReviewOpened           = "wl:ReviewOpened"
+	TypeReviewRoundSubmitted   = "wl:ReviewRoundSubmitted"
+	TypeReviewQuestionAsked    = "wl:ReviewQuestionAsked"
+	TypeReviewQuestionAnswered = "wl:ReviewQuestionAnswered"
+	TypeReviewThreadResolved   = "wl:ReviewThreadResolved"
+	TypeReviewVerdictRecorded  = "wl:ReviewVerdictRecorded"
+	TypeReviewClosed           = "wl:ReviewClosed"
 )
 
 // baseProperties are allowed in every domain-event payload.
@@ -28,6 +36,14 @@ var payloadProperties = map[string][]string{
 	// The payload of these two is a ref_classifications row, not a DomainEvent.
 	TypeReferenceClassified:    {},
 	TypeClassificationRepaired: {},
+
+	TypeReviewOpened:           {},
+	TypeReviewRoundSubmitted:   {"wl:reviewRole", "wl:client", "wl:focused", "wl:threadCount"},
+	TypeReviewQuestionAsked:    {"wl:threadIntent"},
+	TypeReviewQuestionAnswered: {},
+	TypeReviewThreadResolved:   {"wl:threadStatus"},
+	TypeReviewVerdictRecorded:  {"wl:reviewVerdict"},
+	TypeReviewClosed:           {"wl:outcome"},
 }
 
 // KnownType reports whether typ is a generated domain-event type. Metrics
