@@ -30,6 +30,15 @@ func (s *server) getRule(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	var p model.BodyParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	wantBlocks, ok := asBlocks(w, p)
+	if !ok {
+		return
+	}
 	c, err := s.st.GetRule(r.Context(), ref.Key, ref.Number)
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -40,7 +49,14 @@ func (s *server) getRule(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, model.RuleDetail{Rule: *c, InlineRefs: refs})
+	detail := model.RuleDetail{Rule: *c, InlineRefs: refs}
+	if wantBlocks {
+		if detail.BlocksBody, err = bodyBlocks("rule", c.Body); err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, detail)
 }
 
 // editRule handles PUT /api/v1/rules/{id}: the rule's next draft text
@@ -55,6 +71,12 @@ func (s *server) editRule(w http.ResponseWriter, r *http.Request) {
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
+	}
+	if req.Blocks != nil {
+		if req.Body, ok = blocksMarkdown(w, req.Body != "", req.Blocks); !ok {
+			return
+		}
+		req.Blocks = nil
 	}
 	c, err := s.st.EditRule(r.Context(), ref.Key, ref.Number, req, actorIDFrom(r))
 	if err != nil {
@@ -325,13 +347,14 @@ var ruleRouteDocs = map[string]routeDoc{
 		responses: map[int]any{http.StatusOK: model.Rule{}},
 	},
 	"GET /api/v1/rules/{id}": {
-		summary:   "Get a rule by ref, with its inline references",
+		summary:   "Get a rule by ref, with its inline references; ?as=blocks adds its body as editor blocks",
 		responses: map[int]any{http.StatusOK: model.RuleDetail{}},
+		params:    model.BodyParams{},
 	},
 	"PUT /api/v1/rules/{id}": {
-		summary:   "Write a rule's heading and body as its next draft version",
+		summary:   "Write a rule's heading and body, as Markdown or as editor blocks, as its next draft version",
 		request:   model.EditRuleInput{},
-		responses: map[int]any{http.StatusOK: model.Rule{}},
+		responses: map[int]any{http.StatusOK: model.Rule{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
 	},
 	"PATCH /api/v1/rules/{id}": {
 		summary:   "Edit a rule's owner, tags and kind",

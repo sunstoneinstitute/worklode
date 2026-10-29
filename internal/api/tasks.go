@@ -243,6 +243,15 @@ func edgesToJSON(out, in []store.Edge) ([]model.TaskEdgeOut, []model.TaskEdgeIn)
 // without a second request.
 func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	var p model.BodyParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	wantBlocks, ok := asBlocks(w, p)
+	if !ok {
+		return
+	}
 	t, err := s.st.GetTask(r.Context(), id)
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -321,6 +330,12 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	for _, b := range blobs {
 		b.URL = blobURL(b.Hash, b.Filename)
 		resp.Blobs = append(resp.Blobs, b)
+	}
+	if wantBlocks {
+		if resp.BlocksBody, err = bodyBlocks("task", t.Body); err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -571,6 +586,13 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
+	}
+	if req.Blocks != nil {
+		md, ok := blocksMarkdown(w, req.Body != nil, req.Blocks)
+		if !ok {
+			return
+		}
+		req.Body, req.Blocks = &md, nil
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
 		req.NeedsDecomposition == nil && req.HumanOnly == nil && req.State == nil &&
@@ -963,8 +985,9 @@ var taskRouteDocs = map[string]routeDoc{
 		params:    model.TaskListParams{},
 	},
 	"GET /api/v1/tasks/{id}": {
-		summary:   "Get a task's full detail",
+		summary:   "Get a task's full detail; ?as=blocks adds its body as editor blocks",
 		responses: map[int]any{http.StatusOK: model.TaskDetail{}},
+		params:    model.BodyParams{},
 	},
 	"GET /api/v1/tasks/{id}/cost": {
 		summary:   "Get a task's accounted usage and cost",
@@ -972,9 +995,9 @@ var taskRouteDocs = map[string]routeDoc{
 		params:    model.TaskCostParams{},
 	},
 	"PATCH /api/v1/tasks/{id}": {
-		summary:   "Update a task's fields; due is YYYY-MM-DD, and \"\" clears it",
+		summary:   "Update a task's fields; due is YYYY-MM-DD, and \"\" clears it; the body is Markdown or editor blocks",
 		request:   model.EditTaskInput{},
-		responses: map[int]any{http.StatusOK: model.Task{}},
+		responses: map[int]any{http.StatusOK: model.Task{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
 	},
 	"PUT /api/v1/tasks/{id}/skills": {
 		summary:   "Set a task's pinned skills",
