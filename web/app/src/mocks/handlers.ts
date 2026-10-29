@@ -71,7 +71,7 @@ export const handlers = [
     if (!members || i < 0) return HttpResponse.json({ error: "not found" }, { status: 404 })
     if (members[i].lead) {
       return HttpResponse.json(
-        { error: "project lead cannot be removed; lead handoff is not implemented: invalid input" },
+        { error: "project lead cannot be removed; hand the lead off first (lode project crew handoff): invalid input" },
         { status: 422 },
       )
     }

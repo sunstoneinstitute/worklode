@@ -646,10 +646,10 @@ func TestProjectCrewRemove(t *testing.T) {
 		t.Fatalf("error = %v, want it to name %s (task, ready)", err, task.ID)
 	}
 
-	// The lead cannot go while handoff is unimplemented.
+	// The lead cannot go until handed off.
 	if out, err := runLode(t, "project", "crew", "remove", "proj", "ada"); err == nil {
 		t.Fatalf("lead removal: want an error, got nil\noutput: %s", out)
-	} else if !strings.Contains(err.Error(), "lead handoff is not implemented") {
+	} else if !strings.Contains(err.Error(), "hand the lead off first") {
 		t.Fatalf("lead removal error = %v, want it to say why", err)
 	}
 

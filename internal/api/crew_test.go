@@ -232,12 +232,12 @@ func TestRemoveCrewMemberAPI(t *testing.T) {
 		t.Fatalf("body = %s, want it to list %s (task, ready)", rr.Body.String(), taskID)
 	}
 
-	// The lead is never removable while lead handoff is unimplemented.
+	// The lead is not removable until handed off.
 	rr = doReq(t, h, "DELETE", "/api/v1/projects/proj/participants/ada", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("lead removal status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "lead handoff is not implemented") {
+	if !strings.Contains(rr.Body.String(), "hand the lead off first") {
 		t.Fatalf("body = %s, want it to say why the lead cannot go", rr.Body.String())
 	}
 
