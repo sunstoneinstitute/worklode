@@ -712,3 +712,112 @@ func TestListContributors(t *testing.T) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
+
+// seedOwnedReviewAndDecision gives actor ada (a crew member of horndb) an
+// awaiting PR approval and an open decision task, returning the approval's
+// entity id, the decision task id and the approval row id.
+func seedOwnedReviewAndDecision(t *testing.T, s *Store) (entityID, decisionID string, approvalID int64) {
+	t.Helper()
+	ctx := t.Context()
+	if err := s.CreateActor(ctx, "ada", "human", "Ada", false); err != nil {
+		t.Fatal(err)
+	}
+	seedParticipant(t, s, "horndb", "ada", "member", false)
+	if err := s.AddRepo(ctx, "horndb", "org/data"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	entityID = "org/data#7"
+	actor := "ada"
+	_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "pr.ingest", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			if _, _, err := UpsertPR(tx, PullRequest{Repo: "org/data", Number: 7,
+				Title: "Add data", State: "open", OpenedAt: now, UpdatedAt: now}, ""); err != nil {
+				return err
+			}
+			_, err := InsertAwaitingApproval(tx, now, "pr", entityID, "sha1", "", nil, &actor, nil)
+			return err
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM approvals WHERE entity_id = $1`, entityID).Scan(&approvalID); err != nil {
+		t.Fatal(err)
+	}
+	in := defaultTaskInput()
+	in.Kind = "decision"
+	in.Title = "Pick a format"
+	d := createTask(t, s, now, in)
+	if err := assignTask(t, s, now, d.ID, "ada"); err != nil {
+		t.Fatal(err)
+	}
+	return entityID, d.ID, approvalID
+}
+
+func TestOpenWorkOwnedBySeesReviewsAndDecisions(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	entityID, decisionID, approvalID := seedOwnedReviewAndDecision(t, s)
+
+	kindOf := func() map[string]string {
+		got, err := s.OpenWorkOwnedBy(t.Context(), "horndb", "ada")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]string{}
+		for _, w := range got {
+			m[w.ID] = w.Kind
+		}
+		return m
+	}
+	got := kindOf()
+	if got[entityID] != "review" || got[decisionID] != "decision" {
+		t.Fatalf("want review %s and decision %s, got %v", entityID, decisionID, got)
+	}
+
+	// Resolving the approval drops the review; closing the task drops the decision.
+	tx := mustBegin(t, s)
+	if err := ResolveApproval(tx, approvalID, "approved", nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(t.Context(),
+		`UPDATE tasks SET state = 'completed' WHERE id = $1`, decisionID); err != nil {
+		t.Fatal(err)
+	}
+	if got := kindOf(); len(got) != 0 {
+		t.Fatalf("want nothing open, got %v", got)
+	}
+}
+
+func TestRemoveParticipantRefusesOpenReview(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	entityID, decisionID, _ := seedOwnedReviewAndDecision(t, s)
+	if _, err := s.db.ExecContext(t.Context(),
+		`UPDATE tasks SET state = 'completed' WHERE id = $1`, decisionID); err != nil {
+		t.Fatal(err)
+	}
+	err := removeParticipant(t, s, "horndb", "ada", "stig")
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), entityID+" (review, awaiting)") {
+		t.Fatalf("want ErrInvalidInput naming the review, got %v", err)
+	}
+}
+
+func TestAddParticipantRefusesAgents(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	if err := s.CreateActor(t.Context(), "bot", "agent", "Bot", false); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "crew.member_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddParticipant(tx, time.Now(), "horndb", "bot", "member", false, false, "stig", eventID)
+		})
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "WL-REQ-1605") {
+		t.Fatalf("want ErrInvalidInput citing WL-REQ-1605, got %v", err)
+	}
+}

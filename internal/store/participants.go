@@ -240,10 +240,11 @@ func (s *Store) ProjectsForActor(ctx context.Context, actorID string) ([]ActorPr
 }
 
 // OwnedWork is one open item a Crew member owns, blocking their removal
-// (WL-REQ-123). Kind is "task" today; approvals (WL-REQ-124, plan C)
-// and decisions join this query when their tables exist.
+// (WL-REQ-1605). Kind is "task", "decision" (a decision-kind task), or
+// "review" (an open PR approval naming the member as required actor; ID is
+// then the PR's "repo#number").
 type OwnedWork struct {
-	Kind  string // "task"
+	Kind  string // "task", "decision" or "review"
 	ID    string
 	Title string
 	State string
@@ -277,7 +278,7 @@ var openWorkExcludedStates = func() string {
 // is not in deliveredStateSet (see openWorkExcludedStates).
 func openWorkOwnedBy(ctx context.Context, q rowQueryer, projectID, actorID string) ([]OwnedWork, error) {
 	rows, err := q.QueryContext(ctx,
-		`SELECT id, title, state
+		`SELECT id, title, state, kind
 		   FROM tasks
 		  WHERE project_id = $1 AND assignee = $2
 		    AND state NOT IN (`+openWorkExcludedStates+`)
@@ -290,14 +291,46 @@ func openWorkOwnedBy(ctx context.Context, q rowQueryer, projectID, actorID strin
 
 	var out []OwnedWork
 	for rows.Next() {
-		w := OwnedWork{Kind: "task"}
-		if err := rows.Scan(&w.ID, &w.Title, &w.State); err != nil {
+		var w OwnedWork
+		var kind string
+		if err := rows.Scan(&w.ID, &w.Title, &w.State, &kind); err != nil {
 			return nil, fmt.Errorf("open work owned by %s in project %s: %w", actorID, projectID, err)
+		}
+		w.Kind = "task"
+		if kind == "decision" {
+			w.Kind = "decision"
 		}
 		out = append(out, w)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("open work owned by %s in project %s: %w", actorID, projectID, err)
+	}
+	rows.Close() // free the connection before the next query on a Tx
+
+	// Open PR approvals naming the member as the required reviewer. A row
+	// with only a required_role names no actor and is owned by nobody.
+	rrows, err := q.QueryContext(ctx,
+		`SELECT a.entity_id, coalesce(pr.title, ''), a.state
+		   FROM approvals a
+		   JOIN github_pull_requests pr ON a.entity_kind = 'pr' AND a.entity_id = pr.repo || '#' || pr.number
+		   JOIN project_repos r ON r.repo = pr.repo
+		  WHERE r.project_id = $1 AND a.required_actor = $2
+		    AND a.state IN ('awaiting', 'changes_requested')
+		  ORDER BY a.entity_id, a.id`,
+		projectID, actorID)
+	if err != nil {
+		return nil, fmt.Errorf("open reviews owned by %s in project %s: %w", actorID, projectID, err)
+	}
+	defer rrows.Close()
+	for rrows.Next() {
+		w := OwnedWork{Kind: "review"}
+		if err := rrows.Scan(&w.ID, &w.Title, &w.State); err != nil {
+			return nil, fmt.Errorf("open reviews owned by %s in project %s: %w", actorID, projectID, err)
+		}
+		out = append(out, w)
+	}
+	if err := rrows.Err(); err != nil {
+		return nil, fmt.Errorf("open reviews owned by %s in project %s: %w", actorID, projectID, err)
 	}
 	return out, nil
 }
@@ -398,6 +431,14 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 	}
 	if err := requireActor(tx, actorID); err != nil {
 		return err
+	}
+	var kind string
+	if err := tx.QueryRow(`SELECT kind FROM actors WHERE id = $1`, actorID).Scan(&kind); err != nil {
+		return fmt.Errorf("read kind of actor %s: %w", actorID, err)
+	}
+	if kind != "human" {
+		return fmt.Errorf("actor %s is a %s: agents execute delegated work and cannot join the Crew (WL-REQ-1605): %w",
+			actorID, kind, ErrInvalidInput)
 	}
 	var by sql.NullString
 	if addedBy != "" {
