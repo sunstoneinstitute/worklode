@@ -18,3 +18,12 @@ func TestMapStoreErrNotShared(t *testing.T) {
 		t.Fatalf("status = %d, want 409", rec.Code)
 	}
 }
+
+// TestMapStoreErrReviewOpen: a second open review on one subject is a 409.
+func TestMapStoreErrReviewOpen(t *testing.T) {
+	rec := httptest.NewRecorder()
+	(&server{}).mapStoreErr(rec, fmt.Errorf("doc 1: %w", store.ErrReviewOpen))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rec.Code)
+	}
+}

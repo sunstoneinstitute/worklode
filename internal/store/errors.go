@@ -100,6 +100,10 @@ var (
 	// shared yet (WL-REQ-1799). Only the author sees it: anyone else gets
 	// ErrNotFound for a private idea.
 	ErrNotShared = errors.New("idea not shared")
+	// ErrReviewOpen means the subject already has a review that is not
+	// closed: the reviews_open_doc and reviews_open_task partial unique
+	// indexes (WL-REQ-1322).
+	ErrReviewOpen = errors.New("subject already has an open review")
 )
 
 // FieldError is an ErrInvalidInput that names the one request field at
