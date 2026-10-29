@@ -5590,6 +5590,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Long-poll a review for messages after a seq and threads resolved since; 204 when nothing arrives by the timeout */
+        get: {
+            parameters: {
+                query?: {
+                    after?: number;
+                    timeout?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReviewEvents"];
+                    };
+                };
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{id}/rounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit a reviewer round (verdict set) or an author round (base_ref set, no verdict) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReviewRoundInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Review"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{id}/rounds/{n}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one reviewer round of a review */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    n: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReviewRound"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{id}/threads": {
         parameters: {
             query?: never;
@@ -10956,6 +11130,12 @@ export interface components {
             side?: string;
             version?: number;
         };
+        ReviewEvents: {
+            /** Format: int64 */
+            after?: number;
+            messages?: components["schemas"]["ReviewMessage"][] | null;
+            threads?: components["schemas"]["ReviewThread"][] | null;
+        };
         ReviewMessage: {
             author?: string;
             body?: string;
@@ -10979,6 +11159,15 @@ export interface components {
             round?: number;
             /** Format: date-time */
             submitted_at?: string;
+            verdict?: string;
+        };
+        ReviewRoundInput: {
+            base_ref?: string;
+            client?: string;
+            focused?: boolean;
+            overall_note?: string;
+            reanchors?: components["schemas"]["ThreadReanchor"][];
+            threads?: components["schemas"]["OpenThreadInput"][];
             verdict?: string;
         };
         ReviewThread: {
@@ -11458,6 +11647,11 @@ export interface components {
             needed_by?: components["schemas"]["RuleEdge"][] | null;
             rule?: components["schemas"]["Rule"];
             slug?: string;
+        };
+        ThreadReanchor: {
+            anchor?: components["schemas"]["ReviewAnchor"];
+            /** Format: int64 */
+            thread?: number;
         };
         ThreadReplyInput: {
             body?: string;

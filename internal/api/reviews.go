@@ -277,6 +277,130 @@ func (s *server) ruleThreads(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, nonNilSlice(threads))
 }
 
+// submitRound handles POST /api/v1/reviews/{id}/rounds. A body with a
+// verdict is a reviewer round; one with base_ref and no verdict is an author
+// round (WL-REQ-1323). client defaults to cli; the store refuses a value
+// outside the WL-REQ-1322 CHECK with 422.
+func (s *server) submitRound(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathInt64(w, r, "id")
+	if !ok {
+		return
+	}
+	var req model.ReviewRoundInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if (req.Verdict == "") == (req.BaseRef == "") {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"a round sets verdict (a reviewer round) or base_ref (an author round), not both or neither")
+		return
+	}
+	if req.Client == "" {
+		req.Client = "cli"
+	}
+	submit := store.SubmitReviewerRound
+	if req.Verdict == "" {
+		submit = store.SubmitAuthorRound
+	}
+	actorID, now := actorIDFrom(r), s.st.Now()
+	var rev *model.Review
+	if err := s.recordReviewEvent(w, r, "review.round_submitted", map[string]any{"review": id}, req,
+		func(tx *sql.Tx, eventID int64) (err error) {
+			rev, err = submit(tx, now, id, req, actorID, eventID)
+			return err
+		}); err != nil {
+		return
+	}
+	s.reviewMetrics.Round(rev.Subject, req.Client)
+	if req.Verdict != "" {
+		// Rounds are ordered by round, so the last is the one just written.
+		submitted := rev.Rounds[len(rev.Rounds)-1].SubmittedAt
+		s.reviewMetrics.Verdict(req.Verdict, subjectFrom(r).Kind, submitted.Sub(rev.OpenedAt))
+		for _, th := range req.Threads {
+			s.reviewMetrics.Thread(th.Intent)
+		}
+		if len(req.Threads) > 0 {
+			s.refreshOpenThreads(r)
+		}
+	}
+	writeJSON(w, http.StatusCreated, rev)
+}
+
+// getRound handles GET /api/v1/reviews/{id}/rounds/{n}: one reviewer round.
+// An author round is not a row (WL-REQ-1322), so its number is 404.
+func (s *server) getRound(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathInt64(w, r, "id")
+	if !ok {
+		return
+	}
+	n, ok := pathInt64(w, r, "n")
+	if !ok {
+		return
+	}
+	rev, err := s.st.GetReview(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	for _, rd := range rev.Rounds {
+		if int64(rd.Round) == n {
+			writeJSON(w, http.StatusOK, rd)
+			return
+		}
+	}
+	writeErr(w, http.StatusNotFound, "not found")
+}
+
+// maxEventsTimeout caps the events feed's timeout parameter.
+const maxEventsTimeout = 60 * time.Second
+
+// reviewEvents handles GET /api/v1/reviews/{id}/events?after=&timeout=. It
+// answers at once when a message has a seq above after, or a thread was
+// resolved since the poll started. Otherwise it re-reads every second until
+// the timeout, then answers with threads resolved since message after, or 204.
+// ponytail: poll loop; LISTEN/NOTIFY if reviewer counts make it hurt.
+func (s *server) reviewEvents(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathInt64(w, r, "id")
+	if !ok {
+		return
+	}
+	var p model.ReviewEventsParams
+	if err := readQuery(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	timeout := min(time.Duration(max(p.Timeout, 0))*time.Second, maxEventsTimeout)
+	started := s.st.Now().UTC().Truncate(time.Second)
+	deadline := time.Now().Add(timeout)
+	for {
+		ev, err := s.st.ReviewEvents(r.Context(), id, p.After)
+		if err != nil {
+			if r.Context().Err() == nil {
+				s.mapStoreErr(w, err)
+			}
+			return
+		}
+		fresh := len(ev.Messages) > 0
+		for _, t := range ev.Threads {
+			fresh = fresh || (t.ResolvedAt != nil && !t.ResolvedAt.Before(started))
+		}
+		if fresh || (!time.Now().Before(deadline) && len(ev.Threads) > 0) {
+			writeJSON(w, http.StatusOK, ev)
+			return
+		}
+		if !time.Now().Before(deadline) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(min(time.Second, time.Until(deadline))):
+		}
+	}
+}
+
 // nonNilSlice answers an empty list as [] rather than null.
 func nonNilSlice[T any](s []T) []T {
 	if s == nil {
@@ -341,5 +465,20 @@ var reviewRouteDocs = map[string]routeDoc{
 		summary:   "Resolve any thread, a bare note included",
 		request:   model.ThreadResolveInput{},
 		responses: map[int]any{http.StatusOK: model.ReviewThread{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
+	},
+	"POST /api/v1/reviews/{id}/rounds": {
+		summary: "Submit a reviewer round (verdict set) or an author round (base_ref set, no verdict)",
+		request: model.ReviewRoundInput{},
+		responses: map[int]any{http.StatusCreated: model.Review{},
+			http.StatusForbidden: model.ErrorResponse{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
+	},
+	"GET /api/v1/reviews/{id}/rounds/{n}": {
+		summary:   "Get one reviewer round of a review",
+		responses: map[int]any{http.StatusOK: model.ReviewRound{}},
+	},
+	"GET /api/v1/reviews/{id}/events": {
+		summary:   "Long-poll a review for messages after a seq and threads resolved since; 204 when nothing arrives by the timeout",
+		responses: map[int]any{http.StatusOK: model.ReviewEvents{}, http.StatusNoContent: nil},
+		params:    model.ReviewEventsParams{},
 	},
 }

@@ -159,3 +159,13 @@ type ReviewEventsParams struct {
 	After   int64 `query:"after"`
 	Timeout int   `query:"timeout"`
 }
+
+// ReviewEvents is one answer of the review events feed: the messages with a
+// seq above the request's after, the threads they belong to, and the threads
+// resolved at or after the time of message after. Threads carry no messages
+// here. After is the highest seq returned, the cursor for the next call.
+type ReviewEvents struct {
+	After    int64           `json:"after"`
+	Threads  []ReviewThread  `json:"threads"`
+	Messages []ReviewMessage `json:"messages"`
+}
