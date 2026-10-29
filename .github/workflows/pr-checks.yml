@@ -15,6 +15,8 @@ on:
     types: [checks_requested]
 
 permissions:
+  # actions: read lets triage look up the PR run a queue entry can reuse.
+  actions: read
   contents: read
   pull-requests: read
 
@@ -48,15 +50,46 @@ jobs:
           ASSOCIATION: ${{ github.event.pull_request.author_association }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          MG_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          MG_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
           set -euo pipefail
 
           # A merge-queue build has no pull_request payload to inspect: the
           # ref is main plus PRs that each already passed these checks on
-          # their own, so it is trusted, runs everything, and skips nothing.
+          # their own, so it is trusted and runs everything, unless its tree
+          # is the PR head's tree and a pull_request run on that head passed
+          # with no job skipped. That holds only for a lone entry whose PR was
+          # rebased on current main; any other entry has a tree no run saw.
+          # Every lookup failure falls through to the full run.
+          # NEW migrations are rechecked here because _lint.yml rejects them
+          # only on merge_group, which a skipped lint would let through.
+          already_passed() {
+            local n pr_head run_id migrations
+            n=$(sed -nE 's|^gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<<"$MG_HEAD_REF")
+            [ -n "$n" ] || return 1
+            pr_head=$(gh api "repos/$REPO/pulls/$n" --jq .head.sha) || return 1
+            [ "$(gh api "repos/$REPO/commits/$MG_HEAD_SHA" --jq .commit.tree.sha)" = \
+              "$(gh api "repos/$REPO/commits/$pr_head" --jq .commit.tree.sha)" ] || return 1
+            run_id=$(gh api "repos/$REPO/actions/workflows/pr-checks.yml/runs?event=pull_request&status=success&head_sha=$pr_head" \
+              --jq '.workflow_runs[0].id // empty') || return 1
+            [ -n "$run_id" ] || return 1
+            gh api "repos/$REPO/actions/runs/$run_id/jobs" \
+              --jq '.jobs | length > 0 and all(.conclusion == "success")' | grep -qx true || return 1
+            # ponytail: contents API lists at most 1000 entries; switch to the git trees API past that.
+            migrations=$(gh api "repos/$REPO/contents/deploy/base/migrations?ref=$MG_HEAD_SHA" --jq '.[].name') || return 1
+            ! grep -q '^NEW' <<<"$migrations"
+          }
           if [ "${{ github.event_name }}" = "merge_group" ]; then
-            echo "Merge-queue build — running every check on the trusted runners."
-            printf 'trusted=true\ncode=true\nrun=true\n' >> "$GITHUB_OUTPUT"
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+            if already_passed; then
+              echo "::notice::Queue entry's tree is the PR head's, which already passed every check — skipping."
+              printf 'code=true\nrun=false\n' >> "$GITHUB_OUTPUT"
+            else
+              echo "Merge-queue build — running every check on the trusted runners."
+              printf 'code=true\nrun=true\n' >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
