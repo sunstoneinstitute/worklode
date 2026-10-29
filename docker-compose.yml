@@ -4,7 +4,8 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
     ports:
-      - "127.0.0.1:5432:5432"
+      # LODE_POSTGRES_PORT moves the host side when 5432 is taken.
+      - "127.0.0.1:${LODE_POSTGRES_PORT:-5432}:5432"
     volumes:
       # A named volume, not a ./data bind mount: Postgres chowns its data
       # directory to uid 999 mode 0700, and a directory the developer cannot

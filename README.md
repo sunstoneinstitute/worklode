@@ -836,7 +836,9 @@ make dev-web     # Vite on :5173 with hot reload, proxying to :8080
 Stop compose's `worklode` service first if it is running
 (`docker compose stop worklode`): it holds port 8080. Set
 `LODE_BOOTSTRAP_TOKEN` before the first `make dev-server` on a fresh
-database. `DEV_DSN` overrides the database URL.
+database. If port 5432 is taken, set `LODE_POSTGRES_PORT` (for example
+`export LODE_POSTGRES_PORT=5433`) for both compose and the make targets;
+`DEV_DSN` overrides the whole database URL.
 
 Open http://localhost:5173. Vite serves the SPA's routes from source and
 proxies every other path (the API and the templ cockpit) to the server.

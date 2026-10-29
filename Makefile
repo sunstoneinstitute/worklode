@@ -66,7 +66,9 @@ web-clean: ## Put the committed placeholder back after a local SPA build
 	git checkout -- internal/webapp/dist/index.html
 
 # Host-side development: Postgres in compose, lode-server and Vite on the host.
-DEV_DSN ?= postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+# Exported so docker compose publishes Postgres on the same port.
+export LODE_POSTGRES_PORT ?= 5432
+DEV_DSN ?= postgres://postgres:postgres@localhost:$(LODE_POSTGRES_PORT)/postgres?sslmode=disable
 
 dev-db: ## Start compose's Postgres and migrate it from the host
 	docker compose up -d --wait postgres
