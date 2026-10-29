@@ -39,9 +39,21 @@ func Normalize(text string, hits []Hit, targets []*Target) string {
 			repl = "[" + h.LinkText + "](" + t.Ref + ")"
 		}
 		l := lines[h.Line-1]
-		lines[h.Line-1] = l[:h.Start] + repl + l[h.End:]
+		start, end := span(l, h)
+		lines[h.Line-1] = l[:start] + repl + l[end:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// span is the bytes of line a rewrite of h replaces: the hit, plus the angle
+// brackets around a URL autolink, since `<WL-7>` would parse as an HTML tag.
+// mdblocks.Normalize stores a bare URL in that spelling.
+func span(line string, h Hit) (int, int) {
+	if h.Form == FormURL && h.LinkText == "" && h.Start > 0 && h.End < len(line) &&
+		line[h.Start-1] == '<' && line[h.End] == '>' {
+		return h.Start - 1, h.End + 1
+	}
+	return h.Start, h.End
 }
 
 // Verify reports whether newText is a pure normalization of oldText
@@ -55,7 +67,8 @@ func Verify(oldText, newText string, keys map[string]bool, resolve func(Hit) *Ta
 	spans := make([][][2]int, len(oldLines))
 	for _, h := range oldHits {
 		if rewritable(h, resolve(h)) {
-			spans[h.Line-1] = append(spans[h.Line-1], [2]int{h.Start, h.End})
+			start, end := span(oldLines[h.Line-1], h)
+			spans[h.Line-1] = append(spans[h.Line-1], [2]int{start, end})
 		}
 	}
 	for i, ss := range spans {

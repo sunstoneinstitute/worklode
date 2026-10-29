@@ -41,6 +41,7 @@ func normalize(text string) string {
 func TestNormalize(t *testing.T) {
 	cases := []struct{ name, in, want string }{
 		{"bare url", "see https://lode.example/tasks/WL-7 now", "see WL-7 now"},
+		{"angle autolink", "see <https://lode.example/tasks/WL-7> now", "see WL-7 now"},
 		{"link with ref text", "see [WL-7](https://lode.example/tasks/WL-7) now", "see WL-7 now"},
 		{"link with other text", "see [the task](https://lode.example/tasks/WL-7) now", "see [the task](WL-7) now"},
 		{"bare path", "see /tasks/WL-7 now", "see /tasks/WL-7 now"},
@@ -147,7 +148,7 @@ func TestNormalizeUnresolvedUntouched(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	old := "a https://lode.example/tasks/WL-7 b\nc WL-RULE-12 d"
+	old := "a https://lode.example/tasks/WL-7 b\nc WL-RULE-12 d <https://lode.example/tasks/WL-7>"
 	ok := normalize(old)
 	if err := Verify(old, ok, testKeys, resolveFake); err != nil {
 		t.Errorf("pure normalization rejected: %v", err)

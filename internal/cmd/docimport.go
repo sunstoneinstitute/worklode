@@ -40,6 +40,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/mdblocks"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -484,17 +485,19 @@ func printImportCorpus(w io.Writer, docs []importDoc) {
 // sameImportedBody reports whether a stored document's rendered body is the
 // file's body. A spec renders its numbers and anchors from its arrangement
 // and prints rule refs on rule headings (WL-REQ-165, WL-REQ-1299), so both
-// sides are compared in that form without the refs.
+// sides are compared in that form without the refs. Every body write
+// normalises (WL-REQ-1867), so both sides are compared normalised.
 func sameImportedBody(kind, rendered, file string) bool {
+	norm := func(s string) string { return string(mdblocks.Normalize([]byte(s))) }
 	if kind == "plan" {
-		return rendered == file
+		return norm(rendered) == norm(file)
 	}
 	d, err := designdoc.Parse([]byte(file))
 	if err != nil {
 		return false
 	}
 	d.DeriveAnchors()
-	return designdoc.StripRuleRefs(rendered) == string(d.Bytes())
+	return norm(designdoc.StripRuleRefs(rendered)) == norm(string(d.Bytes()))
 }
 
 // printDriftedDocs names every file whose body drifted from a document the

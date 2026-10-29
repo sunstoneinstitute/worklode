@@ -172,12 +172,15 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if err != nil {
 		return nil, err
 	}
-	if err := checkSpecHeadings(in.Kind, parsed.doc); err != nil {
+	// The header is read off before normalising: Normalize does not know
+	// frontmatter.
+	fm, issued := parsed.doc.Frontmatter, parsed.issued
+	parsed.doc.Frontmatter = nil
+	body, parsed, err := normalizeDocWrite(in.Kind, strings.TrimLeft(string(parsed.doc.Bytes()), "\n"))
+	if err != nil {
 		return nil, err
 	}
-	fm := parsed.doc.Frontmatter
-	parsed.doc.Frontmatter = nil
-	body := strings.TrimLeft(string(parsed.doc.Bytes()), "\n")
+	parsed.issued = issued
 	// Created accepted: run AcceptDoc's first-accept gate. Plans skip it: they
 	// carry no sections and no anchors (WL-REQ-172).
 	acceptedAtCreate := status == "accepted" && in.Kind != "plan"
@@ -299,7 +302,7 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 			id, status, ErrInvalidInput)
 	}
 
-	parsed, err := parseSpecWrite(kind, body)
+	body, parsed, err := normalizeDocWrite(kind, body)
 	if err != nil {
 		return nil, err
 	}
@@ -780,6 +783,18 @@ func parseSpecWrite(kind, body string) (parsedDoc, error) {
 		return p, err
 	}
 	return p, checkSpecHeadings(kind, p.doc)
+}
+
+// normalizeDocWrite is parseSpecWrite over body's stored form (WL-REQ-1867).
+// body is checked before normalising too, so a header is refused rather than
+// normalised into prose.
+func normalizeDocWrite(kind, body string) (string, parsedDoc, error) {
+	if _, err := parseSpecWrite(kind, body); err != nil {
+		return "", parsedDoc{}, err
+	}
+	body = normalizeBody("doc", body)
+	p, err := parseSpecWrite(kind, body)
+	return body, p, err
 }
 
 // checkSpecHeadings is WL-REQ-1295's write gate: a spec carries rules,

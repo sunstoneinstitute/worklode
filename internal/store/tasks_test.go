@@ -199,7 +199,7 @@ func TestCreateTaskSequentialIDsAndDefaults(t *testing.T) {
 	if !reflect.DeepEqual(got, t1) {
 		t.Fatalf("GetTask: got %+v, want %+v", got, t1)
 	}
-	if got.Project != "horndb" || got.Title != "a task" || got.Body != "body" ||
+	if got.Project != "horndb" || got.Title != "a task" || got.Body != "body\n" ||
 		got.Priority != "medium" || got.Kind != "feature" || got.CreatedBy != "stig" {
 		t.Fatalf("GetTask fields: got %+v", got)
 	}
