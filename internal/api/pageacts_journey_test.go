@@ -175,6 +175,9 @@ func TestRulePageAcceptJourney(t *testing.T) {
 			t.Fatalf("owner's draft rule page lacks %s:\n%s", want, body)
 		}
 	}
+	if strings.Contains(body, "Accept as substantive") {
+		t.Fatalf("a first version's page offers Accept as substantive")
+	}
 	if body := pageAs(t, h, page, erin); !strings.Contains(body, "is owned by dana") || strings.Contains(body, `data-confirm="Accept `) {
 		t.Fatalf("non-owner's page should carry a disabled Accept naming dana:\n%s", body)
 	}
@@ -193,11 +196,11 @@ func TestRulePageAcceptJourney(t *testing.T) {
 	}
 
 	// Accept as substantive on a second version mints its review.
-	if !strings.Contains(body, "Accept as substantive") {
-		t.Fatalf("owner's draft rule page lacks Accept as substantive:\n%s", body)
-	}
 	if rr := doReq(t, h, http.MethodPut, "/api/v1/rules/WL-RULE-1", token, model.EditRuleInput{Heading: "Alone", Body: "Text, reworded."}); rr.Code != http.StatusOK {
 		t.Fatalf("edit rule = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if body := pageAs(t, h, page, dana); !strings.Contains(body, "Accept as substantive") {
+		t.Fatalf("version 2's draft page lacks Accept as substantive:\n%s", body)
 	}
 	if rr := jsonPost(t, h, route, dana, `{"substantive":true}`); rr.Code != http.StatusOK {
 		t.Fatalf("substantive accept = %d, body %s", rr.Code, rr.Body.String())
