@@ -66,7 +66,10 @@ gh api -X PATCH repos/sunstoneinstitute/worklode -F allow_auto_merge=true
 - The `triage` job's first branch: on a `merge_group` event it sets
   `trusted=true`, `code=true`, `run=true` and exits. There is no PR
   payload to read file lists or author association from, and every PR in
-  the group already passed these checks on its own.
+  the group already passed these checks on its own. It sets `run=false`
+  instead when the entry's tree equals the PR head's tree, a
+  `pull_request` run on that head passed with no job skipped, and no
+  `NEW` migration is present. Skipped jobs satisfy `checks`.
 - The `checks` job at the end: `if: always()`, needs every other job, and
   is the one check the ruleset names.
 
