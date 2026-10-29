@@ -114,7 +114,9 @@ type Edge struct {
 // released as the terminal for release-based repos, backward moves
 // in_progress → ready and in_review → in_progress, direct-to-main jumps
 // ready|in_progress → merged, and abandoned reachable from every
-// pre-merged state. Terminal-ish states are not strictly terminal: reopen
+// pre-merged state. completed (work done with no pull request, WL-REQ-1884)
+// is reachable from ready, in_progress and in_review, and sits outside the
+// delivery axis. Terminal-ish states are not strictly terminal: reopen
 // returns to ready (a fresh claim is then required).
 var legalTransitions = map[[2]string]bool{
 	{"draft", "ready"}:                true,
@@ -139,6 +141,10 @@ var legalTransitions = map[[2]string]bool{
 	{"deployed_prod", "ready"}:        true,
 	{"released", "ready"}:             true,
 	{"abandoned", "ready"}:            true,
+	{"ready", "completed"}:            true,
+	{"in_progress", "completed"}:      true,
+	{"in_review", "completed"}:        true,
+	{"completed", "ready"}:            true,
 }
 
 // allStates returns every state the task machine can occupy, sorted. It is
@@ -343,6 +349,11 @@ func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string
 			return err
 		}
 	}
+	if to == "completed" {
+		if err := checkNoPullRequests(tx, taskID); err != nil {
+			return err
+		}
+	}
 
 	_, err := tx.Exec(
 		`UPDATE tasks SET state = $1, updated_at = $2 WHERE id = $3`,
@@ -362,6 +373,34 @@ func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string
 		return err
 	}
 	return settlePlan(tx, now, taskID, eventID)
+}
+
+// checkNoPullRequests refuses completing a task that has a pull request in any
+// state: such a task is delivered by merging or abandoned (WL-REQ-1884).
+func checkNoPullRequests(tx *sql.Tx, taskID string) error {
+	rows, err := tx.Query(
+		`SELECT repo, number FROM github_pull_requests WHERE task_id = $1 ORDER BY repo, number`, taskID)
+	if err != nil {
+		return fmt.Errorf("list pull requests of task %s: %w", taskID, err)
+	}
+	defer rows.Close()
+	var refs []string
+	for rows.Next() {
+		var repo string
+		var n int
+		if err := rows.Scan(&repo, &n); err != nil {
+			return fmt.Errorf("scan pull request of task %s: %w", taskID, err)
+		}
+		refs = append(refs, fmt.Sprintf("%s#%d", repo, n))
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list pull requests of task %s: %w", taskID, err)
+	}
+	if len(refs) > 0 {
+		return fmt.Errorf("task %s has pull requests (%s): merge or abandon it instead of completing: %w",
+			taskID, strings.Join(refs, ", "), ErrBadTransition)
+	}
+	return nil
 }
 
 // TaskState returns the current state of a task inside the given transaction
@@ -1321,12 +1360,13 @@ var deliveryRanks = map[string]int{
 	"merged": 1, "deployed_dev": 2, "deployed_prod": 3, "released": 3,
 }
 
-// deliveredStateSet is every ranked state plus abandoned: the states in which
+// deliveredStateSet is every ranked state plus abandoned and completed (neither
+// is a delivery state, so neither is ranked): the states in which
 // a task has no work left for anyone to own, whatever repo it belongs to. It
 // answers the state-only question assign.go asks. It is *not* the blocking
 // predicate — that is per repo, see taskClosed.
 var deliveredStateSet = func() map[string]bool {
-	m := map[string]bool{"abandoned": true}
+	m := map[string]bool{"abandoned": true, "completed": true}
 	for st := range deliveryRanks {
 		m[st] = true
 	}
@@ -1352,7 +1392,8 @@ func deliveryRank(expr string) string {
 
 // taskClosed renders the "no longer blocks its dependents" predicate for the
 // tasks row aliased as alias. Per WL-REQ-87 the closed set is per repo,
-// not one fixed tuple of states: a task is closed when it is abandoned, or
+// not one fixed tuple of states: a task is closed when it is abandoned or
+// completed (neither has a delivery to wait for), or
 // when its state is at or past the done_state of every repo its work *landed*
 // in. The same merged task is closed where done_state = 'merged' and still
 // open where the repo gates on 'released'.
@@ -1387,7 +1428,7 @@ func deliveryRank(expr string) string {
 // query must not reuse those aliases.
 func taskClosed(alias string) string {
 	state := alias + ".state"
-	return `(` + state + ` = 'abandoned' OR (` + deliveryRank(state) + ` > 0
+	return `(` + state + ` IN ('abandoned','completed') OR (` + deliveryRank(state) + ` > 0
 	     AND (EXISTS (SELECT 1 FROM task_edges ch
 	                  JOIN tasks cht ON cht.id = ch.from_task AND cht.deleted_at IS NULL
 	                  WHERE ch.to_task = ` + alias + `.id AND ch.type = 'childOf')

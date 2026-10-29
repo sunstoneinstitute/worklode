@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -44,6 +45,10 @@ func TestTransitionLegal(t *testing.T) {
 		{"deployed_prod", "ready"},
 		{"released", "ready"},
 		{"abandoned", "ready"},
+		{"ready", "completed"},
+		{"in_progress", "completed"},
+		{"in_review", "completed"},
+		{"completed", "ready"},
 	}
 	for _, c := range cases {
 		in := defaultTaskInput()
@@ -76,6 +81,8 @@ func TestTransitionIllegal(t *testing.T) {
 		{"released", "deployed_dev"},
 		{"abandoned", "merged"},
 		{"abandoned", "in_progress"},
+		{"draft", "completed"},
+		{"completed", "merged"},
 	}
 	for _, c := range cases {
 		in := defaultTaskInput()
@@ -176,13 +183,13 @@ func TestTransitionWritesStateLogAndBumpsUpdatedAt(t *testing.T) {
 }
 
 // TestDeliveredStateSetCoversDeliveryRanks pins deliveredStateSet against the
-// delivery axis it is derived from: every ranked state plus abandoned, and
-// nothing else. A state added to deliveryRanks without reaching the set would
+// delivery axis it is derived from: every ranked state plus abandoned and
+// completed, and nothing else. A state added to deliveryRanks without reaching the set would
 // leave assign.go's state-only guards and taskClosed disagreeing on what
 // "delivered" means.
 func TestDeliveredStateSetCoversDeliveryRanks(t *testing.T) {
 	t.Parallel()
-	want := append(slices.Sorted(maps.Keys(deliveryRanks)), "abandoned")
+	want := append(slices.Sorted(maps.Keys(deliveryRanks)), "abandoned", "completed")
 	slices.Sort(want)
 	if got := slices.Sorted(maps.Keys(deliveredStateSet)); !slices.Equal(got, want) {
 		t.Fatalf("deliveredStateSet = %v, want %v", got, want)
@@ -251,5 +258,46 @@ func TestTaskStateShapeMatchesStateMachine(t *testing.T) {
 		t.Errorf("wl:taskState sh:in = %v, want %v\n"+
 			"ns/shapes.ttl and legalTransitions disagree; widen both together",
 			inShape, want)
+	}
+}
+
+// TestCompletedRefusedWithPullRequest pins WL-REQ-1884: a task that has a
+// pull request in any state cannot be completed, and the error names it.
+func TestCompletedRefusedWithPullRequest(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	// No pull request: allowed.
+	plain := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := transition(t, s, taskTestNow, plain.ID, "ready", "completed"); err != nil {
+		t.Fatalf("ready -> completed without a pull request: %v", err)
+	}
+
+	for fi, from := range []string{"ready", "in_progress"} {
+		task := createTask(t, s, taskTestNow, defaultTaskInput())
+		walkTo(t, s, task.ID, from)
+		for i, st := range []string{"open", "merged", "closed"} {
+			if _, err := s.db.ExecContext(t.Context(),
+				`INSERT INTO github_pull_requests (repo, number, state, task_id) VALUES ($1, $2, $3, $4)`,
+				"acme/app", 100+fi*10+i, st, task.ID); err != nil {
+				t.Fatalf("insert %s pull request: %v", st, err)
+			}
+		}
+		err := transition(t, s, taskTestNow, task.ID, from, "completed")
+		if !errors.Is(err, ErrBadTransition) {
+			t.Fatalf("%s -> completed with pull requests: want ErrBadTransition, got %v", from, err)
+		}
+		for _, ref := range []string{fmt.Sprintf("acme/app#%d", 100+fi*10), fmt.Sprintf("acme/app#%d", 101+fi*10), fmt.Sprintf("acme/app#%d", 102+fi*10)} {
+			if !strings.Contains(err.Error(), ref) {
+				t.Errorf("error %q does not name %s", err, ref)
+			}
+		}
+		got, err := s.GetTask(t.Context(), task.ID)
+		if err != nil {
+			t.Fatalf("GetTask: %v", err)
+		}
+		if got.State != from {
+			t.Fatalf("state after refused completion: got %q, want %q", got.State, from)
+		}
 	}
 }
