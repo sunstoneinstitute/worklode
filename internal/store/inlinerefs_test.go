@@ -734,3 +734,34 @@ func TestNormalizeAcceptedRuleSectionRef(t *testing.T) {
 		t.Errorf("v%d %q body %q", r.Version, r.Change, r.Body)
 	}
 }
+
+// TestRuleFragmentManualAndMissing: a derived <doc>#rule-<n> to a rule a
+// manual row already targets adds its lines to the manual row whatever its
+// via (WL-REQ-1852); a #rule-<n> naming no rule of the doc's project writes
+// no row and is reported unresolved (WL-RULE-1849, WL-REQ-1851).
+func TestRuleFragmentManualAndMissing(t *testing.T) {
+	s := openDocStore(t)
+	body := "---\nstatus: draft\n---\n# A\n\n## 1. Leaf {#sec-1}\n\nX.\n"
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: body, CreatedBy: "stig"})
+	seedDocNoteTask(t, s, "P1-7")
+	leaf := strconv.FormatInt(ruleID(t, s, "P1", 1), 10)
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO inline_refs (from_kind, from_id, field, to_kind, to_id, lines, source)
+		 VALUES ('task', 'P1-7', 'body', 'rule', $1, '{}', 'manual')`, leaf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE tasks SET body = $1 WHERE id = 'P1-7'`,
+		"See P1-REQ-1.\nAnd P1-SPEC-1#rule-1.\nNot P1-SPEC-1#rule-99."); err != nil {
+		t.Fatal(err)
+	}
+	n, err := deriveNode(t, s, "task", "P1-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := viaRows(t, s, "task", "P1-7", "body", nil), []string{"rule:" + leaf + "   {1,2}"}; !slices.Equal(got, want) {
+		t.Errorf("rows:\n got %q\nwant %q", got, want)
+	}
+	if !slices.Equal(n.Unresolved, []string{"P1-SPEC-1#rule-99"}) {
+		t.Errorf("unresolved: got %q", n.Unresolved)
+	}
+}
