@@ -5,3 +5,6 @@ the worklode project (857, `lode rule list --status accepted --json`, then
 `lode show <ref> --json`) and the 50 highest-numbered tasks with a non-empty
 body (`lode task list --status all --json`, then `lode task show <id> --json`).
 One file per body, named after its ref, holding the body only.
+
+hard-breaks.md is hand-written: one hard line break in each spelling, in a
+paragraph, a list item and a quote (WL-1423).

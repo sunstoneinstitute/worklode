@@ -16,7 +16,8 @@ import (
 // of a text run sits at Offset plus the byte length of the characters before
 // it. An emoji shortcode is its own one-character run, at the shortcode's
 // colon, so the runs around it keep that mapping. A link's Offset is its
-// first text run's.
+// first text run's. A hard line break is "\n" and a soft one is " ", both at
+// the newline byte (WL-1423).
 func inline(src []byte, n ast.Node) []model.InlineContent {
 	c := inlineConv{src: src}
 	c.walk(n, nil)
@@ -34,8 +35,11 @@ func (c *inlineConv) walk(n ast.Node, styles map[string]bool) {
 		switch k := k.(type) {
 		case *ast.Text:
 			c.text(string(k.Segment.Value(c.src)), k.Segment.Start, styles, false)
-			if k.SoftLineBreak() || k.HardLineBreak() {
+			switch {
+			case k.HardLineBreak():
 				c.text("\n", lineEnd(c.src, k.Segment.Stop), styles, false)
+			case k.SoftLineBreak():
+				c.text(" ", lineEnd(c.src, k.Segment.Stop), styles, false)
 			}
 		case *ast.Emphasis:
 			if k.Level == 2 {
@@ -84,9 +88,18 @@ func (c *inlineConv) text(t string, at int, styles map[string]bool, emoji bool) 
 	c.out = append(c.out, model.InlineContent{Type: "text", Text: t, Styles: styles, Offset: at})
 }
 
-// isEmoji reports whether r is an emoji run: its text is not the source's bytes.
+// isEmoji reports whether r is an emoji run: its text is not the source's
+// bytes, where a soft break's space stands for a newline.
 func (c *inlineConv) isEmoji(r model.InlineContent) bool {
-	return r.Offset+len(r.Text) > len(c.src) || string(c.src[r.Offset:r.Offset+len(r.Text)]) != r.Text
+	if r.Offset+len(r.Text) > len(c.src) {
+		return true
+	}
+	for i := range len(r.Text) {
+		if s := c.src[r.Offset+i]; s != r.Text[i] && (s != '\n' || r.Text[i] != ' ') {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *inlineConv) link(href string, pos int, fill func(*inlineConv)) {
