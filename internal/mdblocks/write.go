@@ -25,7 +25,7 @@ func Normalize(md []byte) []byte {
 }
 
 // Write returns the stored spelling of blocks (WL-REQ-1871): each paragraph
-// and list item on one line, a blank line between blocks except between list
+// and list item on one line except at a hard line break, a blank line between blocks except between list
 // items, children indented to their list item's text. Run text is source
 // bytes and is written verbatim, escapes included.
 func Write(blocks []model.EditorBlock) ([]byte, error) {
@@ -82,7 +82,7 @@ func sep(prev, next model.EditorBlock) string {
 func writeBlock(w *strings.Builder, b model.EditorBlock, indent string, number int) {
 	switch b.Type {
 	case "paragraph":
-		w.WriteString(writeInline(b.Content, false))
+		w.WriteString(breaks(writeInline(b.Content, false), indent))
 	case "heading":
 		var p struct {
 			Level  int
@@ -112,7 +112,7 @@ func writeBlock(w *strings.Builder, b model.EditorBlock, indent string, number i
 			}
 			text = box + text
 		}
-		w.WriteString(strings.TrimRight(marker+text, " "))
+		w.WriteString(breaks(strings.TrimRight(marker+text, " "), indent+strings.Repeat(" ", len(marker))))
 		if len(b.Children) > 0 {
 			child := indent + strings.Repeat(" ", len(marker))
 			w.WriteString(sep(b, b.Children[0]))
@@ -147,7 +147,7 @@ func writeBlock(w *strings.Builder, b model.EditorBlock, indent string, number i
 		}
 		w.WriteString(indent + fence)
 	case "quote":
-		w.WriteString(strings.TrimRight("> "+writeInline(b.Content, false), " "))
+		w.WriteString(breaks(strings.TrimRight("> "+writeInline(b.Content, false), " "), indent+"> "))
 	case "callout":
 		var p struct{ Kind string }
 		_ = json.Unmarshal(b.Props, &p)
@@ -196,7 +196,16 @@ var styleOrder = []string{"bold", "italic", "strike"}
 
 var delim = map[string]string{"bold": "**", "italic": "*", "strike": "~~"}
 
-// writeInline writes runs on one line. Emphasis delimiters nest: a style
+// breaks writes each hard line break in line as a backslash before the
+// newline (WL-1423), the next line prefixed by indent. A break at the end has
+// no line to break before and is dropped.
+func breaks(line, indent string) string {
+	line = strings.TrimRight(line, "\n")
+	return strings.ReplaceAll(line, "\n", "\\\n"+indent)
+}
+
+// writeInline writes runs on one line, except a hard line break, which stays
+// "\n" outside a code span and a table cell. Emphasis delimiters nest: a style
 // that runs on longer is opened first, so it closes last. Consecutive code
 // runs are one code span split at an escape. In a table cell an unescaped
 // pipe is escaped: the table parser drops the backslash inside a code span.
@@ -233,7 +242,9 @@ func writeInline(runs []model.InlineContent, cell bool) string {
 			i++
 			text += runs[i].Text
 		}
-		text = strings.ReplaceAll(text, "\n", " ")
+		if cell || r.Styles["code"] {
+			text = strings.ReplaceAll(text, "\n", " ")
+		}
 		if cell {
 			text = escapePipes(text)
 		}

@@ -39,7 +39,9 @@ func TestInlineRuns(t *testing.T) {
 		{"<http://x>\n", `[{"type":"link","href":"http://x","content":[{"type":"text","text":"http://x","offset":1}],"offset":1}]`},
 		{"see http://x.io now\n", `[{"type":"text","text":"see ","offset":0},{"type":"link","href":"http://x.io","content":[{"type":"text","text":"http://x.io","offset":4}],"offset":4},{"type":"text","text":" now","offset":15}]`},
 		{"a :tada: b\n", `[{"type":"text","text":"a ","offset":0},{"type":"text","text":"🎉","offset":2},{"type":"text","text":" b","offset":8}]`},
-		{"a\nb\n", `[{"type":"text","text":"a\nb","offset":0}]`},
+		{"a\nb\n", `[{"type":"text","text":"a b","offset":0}]`},
+		{"a  \nb\n", `[{"type":"text","text":"a","offset":0},{"type":"text","text":"\nb","offset":3}]`},
+		{"a\\\nb\n", `[{"type":"text","text":"a","offset":0},{"type":"text","text":"\nb","offset":2}]`},
 	}
 	for _, c := range cases {
 		blocks, err := mdblocks.Parse([]byte(c.md))
@@ -55,7 +57,8 @@ func TestInlineRuns(t *testing.T) {
 
 // TestInlineSourceMap maps every character of every run back to the source:
 // offset + byte length of the run's preceding characters is the character's
-// position. An emoji run's one character maps to the shortcode's colon.
+// position. An emoji run's one character maps to the shortcode's colon, and
+// a soft line break's space to the newline.
 func TestInlineSourceMap(t *testing.T) {
 	md := []byte("# A *b* `c`\n\n" +
 		"Some **bold _nested_** and ~~gone~~ text with [a **link**](http://x) and :tada: end\n" +
@@ -101,7 +104,7 @@ func TestInlineSourceMap(t *testing.T) {
 			continue
 		}
 		for i := range len(r.Text) {
-			if md[r.Offset+i] != r.Text[i] {
+			if md[r.Offset+i] != r.Text[i] && (md[r.Offset+i] != '\n' || r.Text[i] != ' ') {
 				t.Errorf("run %q at %d: byte %d is %q in source", r.Text, r.Offset, i, md[r.Offset+i])
 				break
 			}
@@ -112,5 +115,12 @@ func TestInlineSourceMap(t *testing.T) {
 	}
 	if !strings.Contains(string(md), "  \nhard") {
 		t.Fatal("fixture lost its hard break")
+	}
+	hard := false
+	for _, r := range runs {
+		hard = hard || strings.HasPrefix(r.Text, "\nhard")
+	}
+	if !hard {
+		t.Error("no run starts with the hard break")
 	}
 }
