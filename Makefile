@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean up dev-up dev-down dev-db dev-embeddings dev-server dev-web seed FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean up dev-up dev-down dev-db dev-embeddings dev-server dev-server-watch dev-web seed FORCE
 
 # WL-REQ-15: seven executables from one module. The three user binaries are what
 # Homebrew installs; three more ship in the container images, and
@@ -111,14 +111,17 @@ dev-server: bin/lode-server ## Run lode-server on the host against dev-db (stop 
 	fi; \
 	LODE_DSN='$(DEV_DSN)' LODE_WEB_OPEN=$${LODE_WEB_OPEN:-1} LODE_INSTANCE_ENV=$${LODE_INSTANCE_ENV:-dev} exec $(ENV_RUN) ./bin/lode-server
 
+dev-server-watch: ## Run dev-server, rebuilding and restarting it on source changes (.air.toml)
+	go tool air
+
 dev-web: ## Run the SPA's Vite dev server against dev-server (http://localhost:5173)
 	cd web/app && pnpm install --frozen-lockfile && VITE_API_MOCKS=off pnpm dev
 
 # EMBEDDINGS=1 also starts dev-embeddings and waits up to 3 minutes for it to
 # answer, since dev-server only checks for it once, at startup.
-dev-up: dev-db $(if $(EMBEDDINGS),dev-embeddings) ## Run dev-db, then dev-server and dev-web together (EMBEDDINGS=1 adds dev-embeddings)
+dev-up: dev-db $(if $(EMBEDDINGS),dev-embeddings) ## Run dev-db, then dev-server-watch and dev-web together (EMBEDDINGS=1 adds dev-embeddings)
 	@$(if $(EMBEDDINGS),for i in $$(seq 90); do curl -sf -o /dev/null $(EMBEDDINGS_URL)/health && break; sleep 2; done)
-	$(MAKE) -j2 dev-server dev-web
+	$(MAKE) -j2 dev-server-watch dev-web
 
 # No -v: the Postgres volume, and with it the dev database, survives.
 dev-down: ## Stop and remove the compose containers, keeping the database volume
