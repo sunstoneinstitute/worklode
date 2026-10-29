@@ -268,5 +268,5 @@ configMapGenerator:
       - migrations/0127_review-surface.down.sql
       - migrations/0128_doc-notes-fold.up.sql
       - migrations/0128_doc-notes-fold.down.sql
-      - migrations/NEW-body-locks.up.sql
-      - migrations/NEW-body-locks.down.sql
+      - migrations/0129_body-locks.up.sql
+      - migrations/0129_body-locks.down.sql
