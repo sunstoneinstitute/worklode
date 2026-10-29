@@ -50,6 +50,10 @@ var calloutMarker = regexp.MustCompile(`(?i)\A\[!(note|tip|important|warning|cau
 type calloutNode struct {
 	gast.BaseBlock
 	Name string // lowercase key into calloutTitles: "note", "tip", ...
+	// Close is the byte offset of a callout fence's closing line, 0 for an
+	// alert or an unclosed fence (quarto.go).
+	Close int
+	fence int // colon count of a callout fence's opening line
 }
 
 var kindCallout = gast.NewNodeKind("Callout")
