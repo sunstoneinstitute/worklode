@@ -37,6 +37,10 @@ func TestNormalize(t *testing.T) {
 		{"table", "|a|b|\n|:-|-:|\n|1|2|\n", "| a | b |\n|---|---|\n| 1 | 2 |\n"},
 		{"callout", "::: {.callout-note}\nSee\n*this*.\n:::\n", "::: {.callout-note}\nSee *this*.\n:::\n"},
 		{"source", "<div>\nhi\n</div>\n\nx\n", "<div>\nhi\n</div>\n\nx\n"},
+		{"hard break, two spaces", "a  \nb\n", "a\\\nb\n"},
+		{"hard break, backslash", "a\\\nb\n", "a\\\nb\n"},
+		{"hard break in a list item", "- a  \n  *b*\n", "- a\\\n  *b*\n"},
+		{"hard break in a quote", "> a\\\n> b\n", "> a\\\n> b\n"},
 		{"empty", "", ""},
 	}
 	for _, c := range cases {
@@ -82,8 +86,8 @@ func TestCorpusRoundTrip(t *testing.T) {
 
 // TestCorpusSameBlocks checks normalising keeps a body's blocks. Ids, ranges
 // and run offsets shift with the rewrite, so they are ignored. So are the
-// run boundaries and soft line breaks the writer removes: adjacent runs with
-// the same styles are merged and "\n" in a run compares as a space.
+// run boundaries the writer removes: adjacent runs with the same styles are
+// merged.
 func TestCorpusSameBlocks(t *testing.T) {
 	sources := 0
 	for _, f := range corpus(t) {
@@ -150,7 +154,6 @@ func runs(rs []model.InlineContent) []model.InlineContent {
 	var out []model.InlineContent
 	for _, r := range rs {
 		r.Offset = 0
-		r.Text = strings.ReplaceAll(r.Text, "\n", " ")
 		r.Content = runs(r.Content)
 		if l := len(out) - 1; l >= 0 && r.Type == "text" && out[l].Type == "text" && reflect.DeepEqual(out[l].Styles, r.Styles) {
 			out[l].Text += r.Text
