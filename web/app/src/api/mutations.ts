@@ -42,6 +42,39 @@ export function useRemoveCrewMember(projectId: string) {
   })
 }
 
+/**
+ * Requests a handoff of the project's lead (WL-REQ-1605), then refetches the
+ * roster. Accepting and authorizing have no API route: they are web-session acts.
+ */
+export function useRequestLeadHandoff(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (to: string) => {
+      const { data, error, response } = await api.POST("/api/v1/projects/{id}/lead-handoff", {
+        params: { path: { id: projectId } },
+        body: { to },
+      })
+      if (error) throw failure(error, response)
+      return data
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: projectCrewKey(projectId) }),
+  })
+}
+
+/** Cancels the project's pending lead handoff, then refetches the roster */
+export function useCancelLeadHandoff(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { error, response } = await api.DELETE("/api/v1/projects/{id}/lead-handoff", {
+        params: { path: { id: projectId } },
+      })
+      if (error) throw failure(error, response)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: projectCrewKey(projectId) }),
+  })
+}
+
 // Task and project writes. The optimistic behavior lives in
 // list-mutations.ts; each resource only says where its data lives.
 

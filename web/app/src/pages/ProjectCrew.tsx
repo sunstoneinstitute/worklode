@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react"
 import { useParams } from "@tanstack/react-router"
-import { useAddCrewMember, useRemoveCrewMember } from "@/api/mutations"
-import { useCrew, useProjectCrew } from "@/api/queries"
+import { useAddCrewMember, useCancelLeadHandoff, useRemoveCrewMember, useRequestLeadHandoff } from "@/api/mutations"
+import { useCrew, useLeadHandoff, useProjectCrew } from "@/api/queries"
 import { TrashIcon } from "@/components/icons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ function getRowId(row: Row) {
 export function ProjectCrew() {
   const { projectId } = useParams({ from: "/projects/$projectId/crew" })
   const roster = useProjectCrew(projectId)
+  const handoff = useLeadHandoff(projectId)
   const remove = useRemoveCrewMember(projectId)
 
   const columns: DataTableColumn<Row>[] = [
@@ -69,6 +70,11 @@ export function ProjectCrew() {
           <p role="alert" className="mb-5 rounded-card bg-surface p-5 text-sm text-destructive">
             {remove.error.message}
           </p>
+        )}
+        {handoff.data ? (
+          <PendingHandoff projectId={projectId} handoff={handoff.data} rows={rows} />
+        ) : (
+          rows.some((r) => r.lead) && <RequestHandoff projectId={projectId} rows={rows} />
         )}
         <DataTable
           // The table copies `data` when it mounts; a new key per fetch shows a refetch
@@ -134,6 +140,85 @@ function AddCrewMember({ projectId, members }: { projectId: string; members: str
       {add.isError && (
         <span role="alert" className="text-sm text-destructive">
           {add.error.message}
+        </span>
+      )}
+    </form>
+  )
+}
+
+type Handoff = NonNullable<ReturnType<typeof useLeadHandoff>["data"]>
+
+function nameOf(rows: Row[], actor: string) {
+  return rows.find((r) => r.actor === actor)?.name || actor
+}
+
+/**
+ * The pending lead-handoff ceremony (WL-REQ-1605): from → to, the steps
+ * already recorded, and Cancel. Accepting and authorizing are web-session
+ * acts with no API route, so this page cannot record them.
+ */
+function PendingHandoff({ projectId, handoff, rows }: { projectId: string; handoff: Handoff; rows: Row[] }) {
+  const cancel = useCancelLeadHandoff(projectId)
+  const from = nameOf(rows, handoff.from ?? "")
+  const to = nameOf(rows, handoff.to ?? "")
+  const done = [
+    handoff.outgoing_accepted_at && `${from} accepted`,
+    handoff.incoming_accepted_at && `${to} accepted`,
+    handoff.editor_authorized_by && `Editor ${handoff.editor_authorized_by} authorized`,
+    handoff.science_lead_authorized_by && `Science lead ${handoff.science_lead_authorized_by} authorized`,
+  ].filter(Boolean)
+  return (
+    <section aria-label="Pending lead handoff" className="mb-5 rounded-card bg-surface p-5 text-sm text-text-primary">
+      <p className="font-medium">
+        Lead handoff pending: {from} → {to}
+      </p>
+      <p className="mt-1.5">{done.length ? done.join(", ") : "No acceptances recorded yet"}</p>
+      <div className="mt-2.5 flex items-center gap-2.5">
+        <Button size="sm" variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+          Cancel handoff
+        </Button>
+        {cancel.isError && (
+          <span role="alert" className="text-destructive">
+            {cancel.error.message}
+          </span>
+        )}
+      </div>
+    </section>
+  )
+}
+
+/** Asks for the lead to move to another Crew member; the move waits for the ceremony */
+function RequestHandoff({ projectId, rows }: { projectId: string; rows: Row[] }) {
+  const request = useRequestLeadHandoff(projectId)
+  const [to, setTo] = useState("")
+  const candidates = rows.filter((r) => !r.lead)
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    request.mutate(to, { onSuccess: () => setTo("") })
+  }
+
+  return (
+    <form aria-label="Hand off lead" onSubmit={submit} className="mb-5 flex flex-wrap items-center gap-2.5 text-sm">
+      <span className="text-text-primary">Hand off lead to</span>
+      <Select value={to} onValueChange={setTo}>
+        <SelectTrigger aria-label="New lead" className="w-48">
+          <SelectValue placeholder="Crew member" />
+        </SelectTrigger>
+        <SelectContent>
+          {candidates.map((c) => (
+            <SelectItem key={c.actor} value={c.actor}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button type="submit" size="sm" disabled={!to || request.isPending}>
+        Request
+      </Button>
+      {request.isError && (
+        <span role="alert" className="text-destructive">
+          {request.error.message}
         </span>
       )}
     </form>

@@ -31,7 +31,7 @@ func TestCrewTableFallsBackToActorID(t *testing.T) {
 	CrewTable(&b, []model.CrewMember{
 		{Actor: "ada", DisplayName: "Ada Lovelace", Roles: []string{"editor"}},
 		{Actor: "bob", DisplayName: "", Roles: []string{"reporter"}},
-	})
+	}, nil)
 	out := b.String()
 	if !strings.Contains(out, "Ada Lovelace") {
 		t.Fatalf("CrewTable output missing the display name for ada:\n%s", out)

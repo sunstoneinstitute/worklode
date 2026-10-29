@@ -539,7 +539,7 @@ func RemoveParticipant(tx *sql.Tx, now time.Time, projectID, actorID, removedBy 
 		return fmt.Errorf("actor %s is not on project %s's crew: %w", actorID, projectID, ErrNotFound)
 	}
 	if isLead {
-		return fmt.Errorf("project lead cannot be removed; hand the lead off first (lode project crew handoff): %w", ErrInvalidInput)
+		return fmt.Errorf("project lead cannot be removed; hand the lead off first (lode project crew transfer): %w", ErrInvalidInput)
 	}
 
 	// The same query the responsibility listing reads (WL-REQ-343), run on

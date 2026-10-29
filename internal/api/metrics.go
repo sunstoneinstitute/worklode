@@ -50,7 +50,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"action"})
 	s.crewChanges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_crew_changes_total",
-		Help: "Project Crew membership changes, by surface (api), action (add, remove), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
+		Help: "Project Crew membership changes, by surface (api), action (add, remove, handoff_request, handoff_accept, handoff_authorize, handoff_cancel), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
 	}, []string{"surface", "action", "outcome"})
 	s.milestoneChanges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_milestone_changes_total",
@@ -758,8 +758,10 @@ func (s *server) observeAssignment(action string) {
 }
 
 // crewChangeActions are every action label worklode_crew_changes_total
-// carries: the two membership mutations WL-REQ-123 defines.
-var crewChangeActions = []string{"add", "remove"}
+// carries: the two membership mutations WL-REQ-123 defines and the lead
+// handoff acts (WL-REQ-1605).
+var crewChangeActions = []string{"add", "remove",
+	"handoff_request", "handoff_accept", "handoff_authorize", "handoff_cancel"}
 
 // crewChangeOutcomes are every outcome label worklode_crew_changes_total
 // carries, pre-initialised so an instance where nobody has changed a Crew

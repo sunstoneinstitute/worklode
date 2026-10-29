@@ -28,6 +28,8 @@ function seed() {
     ],
     p2: [],
   }
+  // Each project's pending lead handoff, by project id (WL-REQ-1605)
+  const leadHandoffs: Record<string, LeadHandoff> = {}
   const tasks: Task[] = [
     { id: "WL-1", project: "p1", title: "Draft launch copy", state: "in_progress", priority: "high", assignee: "stig", due: "2026-10-30" },
     { id: "WL-2", project: "p1", title: "Audit icon set", state: "ready", priority: "medium", assignee: "", due: "" },
@@ -96,7 +98,7 @@ function seed() {
   const intakeConfigured: boolean = true
   // Body locks by "kind:id" (GET/POST/PUT/DELETE /api/v1/locks/{kind}/{id})
   const locks = new MockLocks()
-  return { me, projects, crew, participants, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured, locks }
+  return { me, projects, crew, participants, leadHandoffs, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured, locks }
 }
 
 type BodyLock = Ok<"/api/v1/locks/{kind}/{id}", "get">
@@ -154,6 +156,7 @@ export type ProjectDocument = NonNullable<Ok<"/api/v1/projects/{id}/documents", 
 
 export type Task = NonNullable<Ok<"/api/v1/tasks", "get">["tasks"]>[number]
 export type CrewMember = NonNullable<Ok<"/api/v1/projects/{id}/participants", "get">["participants"]>[number]
+export type LeadHandoff = NonNullable<Ok<"/api/v1/projects/{id}/participants", "get">["lead_handoff"]>
 
 /** What GET /api/v1/projects/{id} answers, or undefined for an unknown id */
 export function projectDetail(id: string): Ok<"/api/v1/projects/{id}", "get"> | undefined {

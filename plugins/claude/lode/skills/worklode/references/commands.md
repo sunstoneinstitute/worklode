@@ -160,6 +160,8 @@ Flags: --server
 - `lode project crew add` — Add an actor to a project's Crew
   Flags: --deputy, --lead, --role
 - `lode project crew remove` — Remove an actor from a project's Crew
+- `lode project crew transfer` — Request, or cancel, a handoff of a project's lead
+  Flags: --cancel
 - `lode project focus` — Show a project's ranking focus (ordered list of concerns)
 - `lode project health` — Report webhook-ingestion health per mapped repo
 - `lode project list` — List projects

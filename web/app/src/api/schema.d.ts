@@ -4607,6 +4607,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/lead-handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request a lead handoff; acceptance happens in the cockpit */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RequestLeadHandoffInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LeadHandoff"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        /** Cancel the pending lead handoff */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{id}/milestones": {
         parameters: {
             query?: never;
@@ -10810,6 +10890,23 @@ export interface components {
         LadderEventResult: {
             recorded?: boolean;
         };
+        LeadHandoff: {
+            editor_authorized_by?: string;
+            from?: string;
+            /** Format: int64 */
+            id?: number;
+            /** Format: date-time */
+            incoming_accepted_at?: null | string;
+            /** Format: date-time */
+            outgoing_accepted_at?: null | string;
+            project?: string;
+            /** Format: date-time */
+            requested_at?: string;
+            requested_by?: string;
+            science_lead_authorized_by?: string;
+            state?: string;
+            to?: string;
+        };
         Lease: {
             /** Format: date-time */
             acquired_at?: string;
@@ -10933,6 +11030,7 @@ export interface components {
             violations?: number;
         };
         ParticipantListResponse: {
+            lead_handoff?: components["schemas"]["LeadHandoff"];
             participants?: components["schemas"]["CrewMember"][] | null;
         };
         PatchDocInput: {
@@ -11353,6 +11451,9 @@ export interface components {
             done_state?: string;
             repo?: string;
             status_evidence?: components["schemas"]["EvidenceSummary"];
+        };
+        RequestLeadHandoffInput: {
+            to?: string;
         };
         RequireApprovalInput: {
             actor?: string;
