@@ -876,6 +876,9 @@ func TestContainerTarget(t *testing.T) {
 		{"all closed, one delivered", closedKids("merged", "abandoned"), "merged"},
 		{"all closed via deploy", closedKids("deployed_dev", "released"), "merged"},
 		{"all abandoned", closedKids("abandoned", "abandoned"), "abandoned"},
+		{"all completed", closedKids("completed", "completed"), "completed"},
+		{"completed and abandoned", closedKids("completed", "abandoned"), "completed"},
+		{"completed and merged", closedKids("completed", "merged"), "merged"},
 		{"all delivered", closedKids("merged", "deployed_prod"), "merged"},
 		// Per-repo closedness (WL-REQ-87): a landed child that has not reached
 		// its repo's done_state holds the parent at in_progress rather than
@@ -1585,5 +1588,58 @@ func TestChildrenOfOrderMatchesModelCompareTaskIDs(t *testing.T) {
 	want := slices.SortedFunc(slices.Values(ids), model.CompareTaskIDs)
 	if !slices.Equal(gotIDs, want) {
 		t.Fatalf("ChildrenOf order = %v, want %v (model.CompareTaskIDs order)", gotIDs, want)
+	}
+}
+
+func manualTransition(t *testing.T, s *Store, id, target string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.state", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return ManualTransition(tx, taskTestNow, id, target, eventID)
+		})
+	return err
+}
+
+func TestRollUpCompleted(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	container, kids := parentWithChildren(t, s, 2)
+	walkTo(t, s, kids[0].ID, "completed")
+	if got := stateOf(t, s, container.ID); got != "in_progress" {
+		t.Fatalf("container = %s, want in_progress", got)
+	}
+	walkTo(t, s, kids[1].ID, "completed")
+	if got := stateOf(t, s, container.ID); got != "completed" {
+		t.Fatalf("container = %s, want completed", got)
+	}
+	if err := transition(t, s, taskTestNow, kids[0].ID, "completed", "ready"); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := stateOf(t, s, container.ID); got != "in_progress" {
+		t.Fatalf("container = %s, want in_progress with one child still completed", got)
+	}
+	if err := transition(t, s, taskTestNow, kids[1].ID, "completed", "ready"); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := stateOf(t, s, container.ID); got != "ready" {
+		t.Fatalf("container = %s, want ready after both reopen", got)
+	}
+}
+
+// TestManualTransitionRefusesParent: a manual merged or completed on a task
+// with children is refused (WL-REQ-90); a leaf is unaffected.
+func TestManualTransitionRefusesParent(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	parent, _ := parentWithChildren(t, s, 1)
+	for _, target := range []string{"merged", "completed"} {
+		err := manualTransition(t, s, parent.ID, target)
+		if !errors.Is(err, ErrBadTransition) || !strings.Contains(err.Error(), "has children") {
+			t.Fatalf("manual %s on parent = %v, want container ErrBadTransition", target, err)
+		}
+	}
+	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := manualTransition(t, s, leaf.ID, "completed"); err != nil {
+		t.Fatalf("manual completed on leaf: %v", err)
 	}
 }

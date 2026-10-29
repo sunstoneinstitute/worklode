@@ -174,6 +174,28 @@ var containerForbiddenStates = map[string]bool{
 	"in_review": true, "deployed_dev": true, "deployed_prod": true, "released": true,
 }
 
+// ManualTransition moves taskID to target from its current state for a manual
+// caller. A task with children cannot be set to merged or completed by hand:
+// the roll-up earns those states from its children (WL-REQ-90). The roll-up
+// itself goes through Transition, which stays open to them.
+func ManualTransition(tx *sql.Tx, now time.Time, taskID, target string, eventID int64) error {
+	cur, err := TaskState(tx, taskID)
+	if err != nil {
+		return err
+	}
+	if target == "merged" || target == "completed" {
+		container, err := hasChildren(tx, taskID)
+		if err != nil {
+			return err
+		}
+		if container {
+			return fmt.Errorf("task %s has children: its state follows them, so it cannot be set to %s by hand (close its children instead): %w",
+				taskID, target, ErrBadTransition)
+		}
+	}
+	return Transition(tx, now, taskID, cur, target, eventID)
+}
+
 // ValidDue reports whether s is empty or a real YYYY-MM-DD date (WL-REQ-1796).
 func ValidDue(s string) error {
 	if s == "" {

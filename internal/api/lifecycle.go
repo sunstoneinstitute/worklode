@@ -308,7 +308,10 @@ func (s *server) setTaskState(w http.ResponseWriter, r *http.Request) {
 				"; use the claim, release, abandon, reopen, or PATCH endpoints for other transitions")
 		return
 	}
-	s.finishTask(w, r, setStateEventType(req.State), transitionTo(req.State))
+	s.finishTask(w, r, setStateEventType(req.State),
+		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
+			return store.ManualTransition(tx, now, taskID, req.State, eventID)
+		})
 }
 
 // abandonTask handles POST /api/v1/tasks/{id}/abandon: current state ->

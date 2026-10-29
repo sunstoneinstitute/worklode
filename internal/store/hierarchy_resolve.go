@@ -35,12 +35,15 @@ func containerTarget(children []childState) string {
 	if len(children) == 0 {
 		return ""
 	}
-	closed, abandoned, started := 0, 0, 0
+	closed, abandoned, completed, started := 0, 0, 0, 0
 	for _, c := range children {
 		if c.Closed {
 			closed++
 			if c.State == "abandoned" {
 				abandoned++
+			}
+			if c.State == "completed" {
+				completed++
 			}
 		}
 		if c.State != "draft" && c.State != "ready" {
@@ -51,6 +54,11 @@ func containerTarget(children []childState) string {
 	// Must precede the closed==len arm — abandoned is itself a closed state.
 	case closed == len(children) && abandoned == len(children):
 		return "abandoned"
+	// Completed work has no delivery of its own, so a parent whose closed
+	// children are only completed or abandoned is completed; any merged-or-later
+	// child makes it merged.
+	case closed == len(children) && completed+abandoned == len(children):
+		return "completed"
 	case closed == len(children):
 		return "merged"
 	case started > 0 || closed > 0:
