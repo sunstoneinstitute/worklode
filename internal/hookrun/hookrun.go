@@ -235,7 +235,7 @@ var events = []Event{
 	{"heartbeat", "Report the session as still alive (at most once a minute)."},
 	{"session-end", "Close the agent session on this worktree's lease."},
 	{"pre-commit", "Push the lease TTL out on commit; never blocks the commit."},
-	{"commit-msg", "Refuse a message citing a spec section; stamp the Worklode-Task trailer in a task worktree."},
+	{"commit-msg", "Refuse a message citing a spec section or failing the spec gate; stamp the Worklode-Task trailer in a task worktree."},
 	{"post-merge", "Report a merge that landed on the default branch in this clone."},
 	{"post-commit", "Same, for the squash and conflict-resolution merges post-merge never sees."},
 	{"worktree-create", "Auto-resume the task's lease when its worktree is created."},
@@ -263,7 +263,8 @@ func EventNames() []string {
 // that action did anything — runs the --next downstream command if present,
 // replaying the original payload on its stdin and propagating its exit code.
 // Without --next it returns 0, except when commit-msg refuses a message that
-// cites a spec section (WL-REQ-1791): then it returns 1 and runs no --next.
+// cites a spec section (WL-REQ-1791) or fails the local gate check
+// (WL-REQ-1549): then it returns 1 and runs no --next.
 //
 // otel-headers is answered before any of that, without reading opts.Stdin at
 // all: it is a credential helper Claude Code invokes for its own purposes,
@@ -281,7 +282,7 @@ func Run(ctx context.Context, opts Options) int {
 	payload := normalizePayload(opts.Harness, raw)
 	dir := resolveDir(payload)
 	l := layoutFor(opts, dir)
-	if opts.Event == "commit-msg" && refuseSectionCitations(ctx, opts, dir) {
+	if opts.Event == "commit-msg" && refuseCommitMsg(ctx, opts, dir) {
 		return 1
 	}
 	dispatch(ctx, opts, payload, dir, l)

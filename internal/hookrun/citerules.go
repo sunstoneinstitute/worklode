@@ -23,11 +23,12 @@ const citeRulesContext = "Cite a rule by its ref (WL-REQ-<n>, WL-RULE-<n>) in co
 // git drops everything below it, so the check does too.
 const scissors = "------------------------ >8 ------------------------"
 
-// refuseSectionCitations is the commit-msg citation check (WL-REQ-1791): the
-// one hook that fails its event (WL-REQ-1722). It runs in every checkout,
-// before the trailer stamp, and reports whether it refused the message.
-// Anything it cannot read is a warning, never a refusal.
-func refuseSectionCitations(ctx context.Context, opts Options, dir string) bool {
+// refuseCommitMsg runs the two commit-msg checks, the hooks' only failing
+// path (WL-REQ-1722): the message's own section citations (WL-REQ-1791), in
+// every checkout, and the local gate check (WL-REQ-1549), in a repo with a
+// [gate] table. It runs before the trailer stamp and reports whether it
+// refused the commit. Anything it cannot read is a warning, never a refusal.
+func refuseCommitMsg(ctx context.Context, opts Options, dir string) bool {
 	if len(opts.Args) == 0 {
 		return false
 	}
@@ -55,17 +56,27 @@ func refuseSectionCitations(ctx context.Context, opts Options, dir string) bool 
 		warn(opts, "git stripspace: %v (citations not checked)", err)
 		return false
 	}
-	cites := gate.Citations(string(out))
-	if len(cites) == 0 {
-		return false
-	}
 	ctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
 	resolve := func(designdoc.SectionRef) string { return "" }
 	if c, err := opts.client(); err == nil {
 		resolve = func(s designdoc.SectionRef) string { return c.SectionRule(ctx, s) }
 	}
-	warn(opts, "commit refused: cite rules by ref, never by spec section (WL-REQ-1791):\n%s",
-		strings.TrimRight(gate.Describe(cites, resolve), "\n"))
-	return true
+	refused := false
+	if cites := gate.Citations(string(out)); len(cites) > 0 {
+		warn(opts, "commit refused: cite rules by ref, never by spec section (WL-REQ-1791):\n%s",
+			strings.TrimRight(gate.Describe(cites, resolve), "\n"))
+		refused = true
+	}
+	// The local gate check (WL-REQ-1549): the same verdict CI's spec-gate
+	// job would reach, on the staged change.
+	refusal, unread := gate.Staged(root, string(out), resolve)
+	if unread != nil {
+		warn(opts, "gate: %v (staged change not checked)", unread)
+	}
+	if refusal != nil {
+		warn(opts, "commit refused (git commit --no-verify skips this): %v", refusal)
+		refused = true
+	}
+	return refused
 }
