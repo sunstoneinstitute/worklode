@@ -128,7 +128,7 @@ jobs:
                  "declares 'environment: prod'."
             exit 1
           fi
-          curl -fsS https://api.github.com/meta \
+          curl -fsS -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/meta \
             | jq -r '.ssh_keys[] | "github.com " + .' > "$KNOWN_HOSTS"
           export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS"
 
@@ -136,6 +136,7 @@ jobs:
         env:
           VERSION: ${{ steps.bump-versions.outputs.version }}
           MAIN_PUSH_DEPLOY_KEY: ${{ secrets.MAIN_PUSH_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Output summary
         run: |
