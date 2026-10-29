@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -45,28 +44,17 @@ func AddDocNote(
 		return model.DocNote{}, fmt.Errorf(
 			"doc %d is a plan and has no sections to anchor a note to (WL-REQ-172): %w", docID, ErrInvalidInput)
 	}
-	var exists bool
-	err = tx.QueryRow(
-		`SELECT true FROM doc_sections WHERE doc_id = $1 AND anchor = $2`, docID, anchor).Scan(&exists)
-	if errors.Is(err, sql.ErrNoRows) {
-		return model.DocNote{}, fmt.Errorf(
-			"doc %d has no section #%s to anchor a note to: %w", docID, anchor, ErrInvalidInput)
-	}
+	// A note is a bare thread anchored to its section alone, so editing the
+	// section never makes it obsolete (WL-REQ-1319, WL-REQ-1667).
+	th, err := OpenThread(tx, now, 0, model.OpenThreadInput{
+		Anchor: model.ReviewAnchor{Doc: docID, DocAnchor: anchor}, Intent: "note", Body: body,
+	}, actorID, in.Task, in.Session, eventID)
 	if err != nil {
-		return model.DocNote{}, fmt.Errorf("check section #%s of doc %d: %w", anchor, docID, err)
+		return model.DocNote{}, err
 	}
-
 	note := model.DocNote{
-		Doc: docID, Anchor: anchor, Body: model.Markdown(body),
-		Task: in.Task, Session: in.Session, CreatedBy: actorID,
-		CreatedAt: now.UTC().Truncate(time.Second),
-	}
-	if err := tx.QueryRow(
-		`INSERT INTO doc_notes (doc_id, anchor, body, task_id, session_id, created_by, created_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-		docID, anchor, body, nullText(in.Task), nullText(in.Session), nullText(actorID), note.CreatedAt,
-	).Scan(&note.ID); err != nil {
-		return model.DocNote{}, fmt.Errorf("add note on doc %d #%s: %w", docID, anchor, err)
+		ID: th.ID, Doc: docID, Anchor: anchor, Body: model.Markdown(body),
+		Task: in.Task, Session: in.Session, CreatedBy: actorID, CreatedAt: th.CreatedAt,
 	}
 	if err := deriveDocNoteRefs(tx, note.ID); err != nil {
 		return model.DocNote{}, err
@@ -78,13 +66,17 @@ func AddDocNote(
 	return note, nil
 }
 
-// ListDocNotes returns a document's notes in the order they were left, which
-// is also the order they render under their sections.
+// ListDocNotes returns a document's notes, the bare threads anchored to a
+// section alone, in the order they were left, which is also the order they
+// render under their sections. ThreadsForSubject returns notes and review
+// threads together.
 func (s *Store) ListDocNotes(ctx context.Context, docID int64) ([]model.DocNote, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, doc_id, anchor, body,
-		        coalesce(task_id,''), coalesce(session_id,''), coalesce(created_by,''), created_at
-		   FROM doc_notes WHERE doc_id = $1 ORDER BY id`, docID)
+		`SELECT t.id, t.doc_id, t.doc_anchor, m.body,
+		        coalesce(t.raised_by_task,''), coalesce(t.raised_by_session,''), t.author_id, t.created_at
+		   FROM review_threads t JOIN review_messages m ON m.thread_id = t.id AND m.seq = 1
+		  WHERE t.doc_id = $1 AND t.review_id IS NULL AND t.version IS NULL AND t.doc_anchor IS NOT NULL
+		  ORDER BY t.id`, docID)
 	if err != nil {
 		return nil, fmt.Errorf("list notes on doc %d: %w", docID, err)
 	}
