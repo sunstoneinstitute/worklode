@@ -55,11 +55,10 @@ func OpenThread(tx *sql.Tx, now time.Time, reviewID int64, in model.OpenThreadIn
 	isRange := a.Version != 0 || a.ByteEnd != 0 || a.Quote != ""
 	switch {
 	case isRange:
-		anchor, err := checkRangeAnchor(tx, rev, a)
-		if err != nil {
+		var err error
+		if a, err = checkRangeAnchor(tx, rev, a); err != nil {
 			return nil, err
 		}
-		a.DocAnchor = anchor
 	case rev != nil:
 		return nil, fmt.Errorf("a review thread anchors to a byte range and its quote (WL-REQ-1317): %w", ErrInvalidInput)
 	default:
@@ -145,24 +144,25 @@ func checkThreadSubject(tx *sql.Tx, r *model.Review, a model.ReviewAnchor) error
 }
 
 // checkRangeAnchor checks a byte range against the stored Markdown of the
-// version it names (WL-REQ-1317) and returns the section anchor the range
-// falls in. A rule's text is rule_versions.body; a plan's is docs.body at
-// its current version.
-func checkRangeAnchor(tx *sql.Tx, rev *model.Review, a model.ReviewAnchor) (string, error) {
+// version it names (WL-REQ-1317) and returns the anchor with DocAnchor set to
+// the section the range falls in. A rule's text is rule_versions.body; a
+// plan's is docs.body at its current version. A spec's range is of its
+// rendered body and is first mapped onto the rule or template text it covers.
+func checkRangeAnchor(tx *sql.Tx, rev *model.Review, a model.ReviewAnchor) (model.ReviewAnchor, error) {
 	if a.Version <= 0 || a.Quote == "" {
-		return "", fmt.Errorf("a range anchor needs a version and a quote: %w", ErrInvalidInput)
+		return a, fmt.Errorf("a range anchor needs a version and a quote: %w", ErrInvalidInput)
 	}
 	if a.Rule != 0 {
 		var body string
 		err := tx.QueryRow(`SELECT body FROM rule_versions WHERE rule_id = $1 AND version = $2`, a.Rule, a.Version).Scan(&body)
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("rule %d has no version %d: %w", a.Rule, a.Version, ErrInvalidInput)
+			return a, fmt.Errorf("rule %d has no version %d: %w", a.Rule, a.Version, ErrInvalidInput)
 		}
 		if err != nil {
-			return "", fmt.Errorf("read rule %d v%d: %w", a.Rule, a.Version, err)
+			return a, fmt.Errorf("read rule %d v%d: %w", a.Rule, a.Version, err)
 		}
 		if err := checkRange(body, a); err != nil {
-			return "", err
+			return a, err
 		}
 		// The section the rule is arranged at, in the review's document first.
 		var reviewDoc int64
@@ -174,31 +174,39 @@ func checkRangeAnchor(tx *sql.Tx, rev *model.Review, a model.ReviewAnchor) (stri
 			`SELECT coalesce(anchor, '') FROM doc_entries WHERE rule_id = $1
 			  ORDER BY doc_id = $2 DESC, doc_id, position LIMIT 1`, a.Rule, reviewDoc).Scan(&anchor)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("read arrangement of rule %d: %w", a.Rule, err)
+			return a, fmt.Errorf("read arrangement of rule %d: %w", a.Rule, err)
 		}
-		return anchor, nil
+		a.DocAnchor = anchor
+		return a, nil
 	}
 	var kind, body string
 	var version int
 	err := tx.QueryRow(`SELECT kind, body, version FROM docs WHERE id = $1`, a.Doc).Scan(&kind, &body, &version)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", fmt.Errorf("doc %d: %w", a.Doc, ErrNotFound)
+		return a, fmt.Errorf("doc %d: %w", a.Doc, ErrNotFound)
 	}
 	if err != nil {
-		return "", fmt.Errorf("read doc %d: %w", a.Doc, err)
+		return a, fmt.Errorf("read doc %d: %w", a.Doc, err)
 	}
-	// Seam for WL-1404: a spec is read rendered, and mapping a range of the
-	// rendered body onto rule or template bytes is that change's.
 	if kind != "plan" {
-		return "", fmt.Errorf("range anchors on a spec are mapped by a later change; anchor on the rule: %w", ErrInvalidInput)
+		m, err := mapRenderedRange(tx, a.Doc, a.Version, a.ByteStart, a.ByteEnd)
+		if err != nil {
+			return a, err
+		}
+		m.Quote = a.Quote
+		if m.Rule != 0 {
+			return checkRangeAnchor(tx, rev, m)
+		}
+		a = m
 	}
 	if a.Version != version {
-		return "", fmt.Errorf("doc %d is at version %d; open threads on the current version: %w", a.Doc, version, ErrInvalidInput)
+		return a, fmt.Errorf("doc %d is at version %d; open threads on the current version: %w", a.Doc, version, ErrInvalidInput)
 	}
 	if err := checkRange(body, a); err != nil {
-		return "", err
+		return a, err
 	}
-	return sectionAt(body, a.ByteStart), nil
+	a.DocAnchor = sectionAt(body, a.ByteStart)
+	return a, nil
 }
 
 // checkRange holds WL-REQ-1317's three conditions: the range lies in body,

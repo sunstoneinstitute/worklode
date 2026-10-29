@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,6 +30,9 @@ type arrangedText struct {
 	ref     string
 	depth   int
 	slug    string
+	// ruleID and ruleVersion name the rule version shown, 0 for a heading.
+	ruleID      int64
+	ruleVersion int
 }
 
 // arrangedTexts reads the entries of table (doc_rules, or doc_rule_versions
@@ -37,7 +41,8 @@ type arrangedText struct {
 func arrangedTexts(ctx context.Context, q rowQueryer, table, where string, args ...any) (map[int64][]arrangedText, error) {
 	rows, err := q.QueryContext(ctx,
 		`SELECT x.doc_id, coalesce(x.heading, v.heading, ''), coalesce(v.body, ''), x.rule_id IS NOT NULL,
-		        coalesce(`+ruleRefSQL("p", "r")+`, ''), x.depth, coalesce(x.slug, '')
+		        coalesce(`+ruleRefSQL("p", "r")+`, ''), x.depth, coalesce(x.slug, ''),
+		        coalesce(x.rule_id, 0), coalesce(x.rule_version, 0)
 		   FROM `+table+` x
 		   LEFT JOIN rule_versions v ON v.rule_id = x.rule_id AND v.version = x.rule_version
 		   LEFT JOIN rules r ON r.id = x.rule_id
@@ -52,7 +57,7 @@ func arrangedTexts(ctx context.Context, q rowQueryer, table, where string, args 
 	for rows.Next() {
 		var id int64
 		var t arrangedText
-		if err := rows.Scan(&id, &t.heading, &t.body, &t.rule, &t.ref, &t.depth, &t.slug); err != nil {
+		if err := rows.Scan(&id, &t.heading, &t.body, &t.rule, &t.ref, &t.depth, &t.slug, &t.ruleID, &t.ruleVersion); err != nil {
 			return nil, fmt.Errorf("scan arranged text from %s: %w", table, err)
 		}
 		out[id] = append(out[id], t)
@@ -75,13 +80,48 @@ func deriveTexts(texts []arrangedText) []designdoc.Derived {
 // agrees with every entry, is returned unchanged, so a document with no
 // arrangement renders byte for byte as stored.
 func renderBody(body string, texts []arrangedText) string {
-	if len(texts) == 0 {
-		return body
+	rendered, _ := renderSpans(body, texts)
+	return rendered
+}
+
+// renderedSpan is a byte range [Start, End) of a rendered spec and where its
+// bytes come from (WL-REQ-1317): the body of rule version Rule/RuleVersion
+// from byte Offset, or with Rule 0 docs.body from byte Offset. Offset -1
+// marks derived text, a heading line or the blank lines around a rule body,
+// which belongs to neither. Anchor is the section the span sits in.
+type renderedSpan struct {
+	Start, End  int
+	Rule        int64
+	RuleVersion int
+	Offset      int
+	Anchor      string
+}
+
+// renderSpans is renderBody's text with the span map that tiles it.
+func renderSpans(body string, texts []arrangedText) (string, []renderedSpan) {
+	whole := []renderedSpan{{End: len(body), Offset: 0}}
+	if len(texts) == 0 || body == "" {
+		return body, whole[:min(1, len(body))]
 	}
 	doc, err := designdoc.Parse([]byte(body))
 	if err != nil {
-		return body
+		return body, whole
 	}
+	// Where each parsed section's heading and body sit in docs.body; an
+	// unedited Document's Bytes is its source, frontmatter first.
+	type orig struct{ head, body, bodyLen int }
+	origs := map[*designdoc.Section]orig{}
+	pos := len(body)
+	for _, sec := range doc.Sections {
+		pos -= len(sec.HeadingAndBody())
+	}
+	prefixLen, origPreamble := pos, len(doc.Preamble)
+	for _, sec := range doc.Sections {
+		h := len(sec.Heading())
+		origs[sec] = orig{head: pos, body: pos + h, bodyLen: len(sec.Body)}
+		pos += h + len(sec.Body)
+	}
+
 	derived := deriveTexts(texts)
 	var placeholders []*designdoc.Section
 	for _, sec := range doc.Sections {
@@ -102,9 +142,11 @@ func renderBody(body string, texts []arrangedText) string {
 			placeholders = append(placeholders, sec)
 		}
 	}
+	entry := map[*designdoc.Section]int{}
 	last := len(doc.Sections) - 1
 	for i, t := range texts {
 		sec := placeholders[i]
+		entry[sec] = i
 		sec.Level, sec.Number, sec.Anchor, sec.Title = t.depth, derived[i].Number, derived[i].Anchor, t.heading
 		sec.Ref = ""
 		if t.rule {
@@ -120,7 +162,72 @@ func renderBody(body string, texts []arrangedText) string {
 			}
 		}
 	}
-	return string(doc.Bytes())
+	rendered := string(doc.Bytes())
+
+	var spans []renderedSpan
+	at, anchor := 0, ""
+	add := func(n int, rule int64, ruleVersion, offset int) {
+		if n <= 0 {
+			return
+		}
+		sp := renderedSpan{Start: at, End: at + n, Rule: rule, RuleVersion: ruleVersion, Offset: offset, Anchor: anchor}
+		at += n
+		if k := len(spans) - 1; k >= 0 {
+			p := &spans[k]
+			if p.Rule == rule && p.RuleVersion == ruleVersion &&
+				((offset < 0 && p.Offset < 0) || (offset >= 0 && p.Offset >= 0 && p.Offset+p.End-p.Start == offset)) {
+				p.End = sp.End
+				return
+			}
+		}
+		spans = append(spans, sp)
+	}
+	// template is n rendered bytes copied from docs.body at off, of which
+	// only the first have are there (endLine may have added one).
+	template := func(n, off, have int) {
+		add(min(n, have), 0, 0, off)
+		add(n-min(n, have), 0, 0, -1)
+	}
+	template(prefixLen-origPreamble+len(doc.Preamble), 0, prefixLen)
+	for _, sec := range doc.Sections {
+		o, parsed := origs[sec]
+		i, placed := entry[sec]
+		if placed {
+			anchor = sec.Anchor
+		}
+		h := len(sec.Heading())
+		if placed || !parsed {
+			add(h, 0, 0, -1)
+		} else {
+			template(h, o.head, h)
+		}
+		if !placed || !texts[i].rule {
+			template(len(sec.Body), o.body, o.bodyLen)
+			continue
+		}
+		// The rule's text sits in the rendered body with its surrounding
+		// line breaks re-cut (sectionBody); the bytes both share are the
+		// rule's, the rest derived.
+		t, r := texts[i], sec.Body
+		trim := strings.Trim(t.body, "\r\n")
+		if trim == "" {
+			add(len(r), 0, 0, -1)
+			continue
+		}
+		rs := len(r) - len(strings.TrimLeft(r, "\r\n"))
+		ts := len(t.body) - len(strings.TrimLeft(t.body, "\r\n"))
+		re, te := rs+len(trim), ts+len(trim)
+		for rs > 0 && ts > 0 && r[rs-1] == t.body[ts-1] {
+			rs, ts = rs-1, ts-1
+		}
+		for re < len(r) && te < len(t.body) && r[re] == t.body[te] {
+			re, te = re+1, te+1
+		}
+		add(rs, 0, 0, -1)
+		add(re-rs, t.ruleID, t.ruleVersion, ts)
+		add(len(r)-re, 0, 0, -1)
+	}
+	return rendered, spans
 }
 
 // specTemplate is body with the text of the k-th anchored section removed
@@ -209,4 +316,72 @@ func renderDocList(ctx context.Context, q rowQueryer, docs []model.Doc) error {
 		ptrs[i] = &docs[i]
 	}
 	return renderDocs(ctx, q, ptrs...)
+}
+
+// mapRenderedRange maps [start, end) of spec docID's rendered body at its
+// current version onto the rule text or template text it came from
+// (WL-REQ-1317): a range in one rule's text is an anchor on that rule
+// version, a range in template text an anchor on docs.body. A range on
+// another version, over derived text, or across two spans is refused.
+func mapRenderedRange(tx *sql.Tx, docID int64, version, start, end int) (model.ReviewAnchor, error) {
+	var body string
+	var current int
+	err := tx.QueryRow(`SELECT body, version FROM docs WHERE id = $1`, docID).Scan(&body, &current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.ReviewAnchor{}, fmt.Errorf("doc %d: %w", docID, ErrNotFound)
+	}
+	if err != nil {
+		return model.ReviewAnchor{}, fmt.Errorf("read doc %d: %w", docID, err)
+	}
+	if version != current {
+		return model.ReviewAnchor{}, fmt.Errorf("doc %d is at version %d; open threads on the current version: %w", docID, current, ErrInvalidInput)
+	}
+	texts, err := arrangedTexts(context.Background(), tx, "doc_rules", "x.doc_id = $1", docID)
+	if err != nil {
+		return model.ReviewAnchor{}, err
+	}
+	rendered, spans := renderSpans(body, texts[docID])
+	if start < 0 || start >= end || end > len(rendered) {
+		return model.ReviewAnchor{}, fmt.Errorf("byte range [%d,%d) is not inside a %d-byte text: %w", start, end, len(rendered), ErrInvalidInput)
+	}
+	k := 0
+	for spans[k].End <= start {
+		k++
+	}
+	sp := spans[k]
+	if end > sp.End || sp.Offset < 0 {
+		last := sp
+		for _, s := range spans[k:] {
+			if s.Start < end {
+				last = s
+			}
+		}
+		if last == sp {
+			return model.ReviewAnchor{}, fmt.Errorf("byte range [%d,%d) covers %s: %w", start, end, describeSpan(sp), ErrInvalidInput)
+		}
+		return model.ReviewAnchor{}, fmt.Errorf("byte range [%d,%d) crosses from %s into %s: %w",
+			start, end, describeSpan(sp), describeSpan(last), ErrInvalidInput)
+	}
+	a := model.ReviewAnchor{ByteStart: start - sp.Start + sp.Offset, ByteEnd: end - sp.Start + sp.Offset}
+	if sp.Rule != 0 {
+		a.Rule, a.Version = sp.Rule, sp.RuleVersion
+	} else {
+		a.Doc, a.Version = docID, current
+	}
+	return a, nil
+}
+
+// describeSpan names a span for an error: what text it is and its section.
+func describeSpan(sp renderedSpan) string {
+	what := "the template text"
+	switch {
+	case sp.Rule != 0:
+		what = "the rule text"
+	case sp.Offset < 0:
+		what = "derived text (a heading line or the blank lines around a rule)"
+	}
+	if sp.Anchor == "" {
+		return what + " before the first section"
+	}
+	return what + " at " + sp.Anchor
 }
