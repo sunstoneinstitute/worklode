@@ -18,9 +18,37 @@ type CrewMember struct {
 
 // ParticipantListResponse is the response body of GET
 // /api/v1/projects/{id}/participants. An empty roster is an empty list, not
-// null.
+// null. LeadHandoff is the project's pending lead-handoff ceremony, absent
+// when none is open: the ceremony is roster state.
 type ParticipantListResponse struct {
 	Participants []CrewMember `json:"participants"`
+	LeadHandoff  *LeadHandoff `json:"lead_handoff,omitempty"`
+}
+
+// LeadHandoff is the wire form of one lead-handoff ceremony (WL-REQ-1605).
+// A nil time or empty string means that step has not happened. The
+// outgoing lead's acceptance, or both authorizations (an editor and a
+// science lead standing in for an unavailable outgoing lead), plus the
+// incoming lead's acceptance complete it.
+type LeadHandoff struct {
+	ID                  int64      `json:"id"`
+	Project             string     `json:"project"`
+	From                string     `json:"from"`
+	To                  string     `json:"to"`
+	State               string     `json:"state"`
+	OutgoingAcceptedAt  *time.Time `json:"outgoing_accepted_at,omitempty"`
+	IncomingAcceptedAt  *time.Time `json:"incoming_accepted_at,omitempty"`
+	EditorAuthorizedBy  string     `json:"editor_authorized_by,omitempty"`
+	ScienceAuthorizedBy string     `json:"science_lead_authorized_by,omitempty"`
+	RequestedBy         string     `json:"requested_by,omitempty"`
+	RequestedAt         time.Time  `json:"requested_at"`
+}
+
+// RequestLeadHandoffInput is the request body of POST
+// /api/v1/projects/{id}/lead-handoff. To is the Crew member who would become
+// lead; the outgoing lead is the project's current one.
+type RequestLeadHandoffInput struct {
+	To string `json:"to"`
 }
 
 // CrewListResponse is the response body of GET /api/v1/crew: every human

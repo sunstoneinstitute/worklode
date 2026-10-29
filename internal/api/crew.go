@@ -1,8 +1,9 @@
 // crew.go serves a project's Crew (WL-REQ-123, WL-REQ-343) through the JSON
 // API: the roster (GET /api/v1/projects/{id}/participants) and its add and
 // remove routes (POST /api/v1/projects/{id}/participants, DELETE
-// /api/v1/projects/{id}/participants/{actor}). The SPA's Crew page
-// (WL-REQ-1802) and the CLI both call them.
+// /api/v1/projects/{id}/participants/{actor}), plus requesting and
+// cancelling a lead handoff (/api/v1/projects/{id}/lead-handoff,
+// WL-REQ-1605). The SPA's Crew page (WL-REQ-1802) and the CLI both call them.
 //
 // Each membership change has exactly one write function, recordCrewAdd and
 // recordCrewRemove, recorded under event type "crew.member_added" /
@@ -15,6 +16,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -82,7 +84,12 @@ func (s *server) listCrewMembers(w http.ResponseWriter, r *http.Request) {
 	for _, p := range crew {
 		members = append(members, toCrewMember(p))
 	}
-	writeJSON(w, http.StatusOK, model.ParticipantListResponse{Participants: members})
+	pending, err := s.st.PendingLeadHandoff(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.ParticipantListResponse{Participants: members, LeadHandoff: toLeadHandoff(pending)})
 }
 
 // listCrew handles GET /api/v1/crew: the instance roster of human actors
@@ -194,6 +201,111 @@ func (s *server) removeCrewMember(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// toLeadHandoff is the one conversion point from store.LeadHandoff to its
+// wire form. A nil ceremony stays nil.
+func toLeadHandoff(h *store.LeadHandoff) *model.LeadHandoff {
+	if h == nil {
+		return nil
+	}
+	at := func(t time.Time) *time.Time {
+		if t.IsZero() {
+			return nil
+		}
+		return &t
+	}
+	return &model.LeadHandoff{
+		ID: h.ID, Project: h.ProjectID, From: h.FromActor, To: h.ToActor, State: h.State,
+		OutgoingAcceptedAt: at(h.OutgoingAcceptedAt), IncomingAcceptedAt: at(h.IncomingAcceptedAt),
+		EditorAuthorizedBy: h.EditorAuthorizedBy, ScienceAuthorizedBy: h.ScienceAuthorizedBy,
+		RequestedBy: h.RequestedBy, RequestedAt: h.RequestedAt,
+	}
+}
+
+// requestLeadHandoff handles POST /api/v1/projects/{id}/lead-handoff: open a
+// ceremony moving the project's lead to req.To, recorded under
+// "crew.lead_handoff_requested" (WL-REQ-1605). The payload names the
+// outgoing lead, so the roster is read first; store.RequestLeadHandoff
+// re-reads the lead under FOR UPDATE and stays the authority, so a lead that
+// changed between the two leaves at most a payload one lead stale.
+//
+// Accepting and authorizing have no API route on purpose: consent to
+// accountability is a web-session act, like deciding an approval in the
+// cockpit (WL-REQ-1605).
+func (s *server) requestLeadHandoff(w http.ResponseWriter, r *http.Request) {
+	var req model.RequestLeadHandoffInput
+	if err := readJSON(w, r, &req); err != nil {
+		s.observeCrewChange("api", "handoff_request", "rejected")
+		writeBodyErr(w, err)
+		return
+	}
+	projectID, to, by := r.PathValue("id"), strings.TrimSpace(req.To), actorIDFrom(r)
+	ho, err := s.recordLeadHandoffRequest(r.Context(), projectID, to, by)
+	if err != nil {
+		s.observeCrewChange("api", "handoff_request", crewOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeCrewChange("api", "handoff_request", "ok")
+	writeJSON(w, http.StatusCreated, toLeadHandoff(ho))
+}
+
+func (s *server) recordLeadHandoffRequest(ctx context.Context, projectID, to, by string) (*store.LeadHandoff, error) {
+	if to == "" {
+		return nil, fmt.Errorf("to is required: %w", store.ErrInvalidInput)
+	}
+	crew, err := s.st.ListParticipants(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	from := ""
+	for _, p := range crew {
+		if p.IsLead {
+			from = p.ActorID
+		}
+	}
+	now := s.st.Now()
+	if err := s.recordEvent(ctx, "cli", "crew.lead_handoff_requested", map[string]any{
+		"project": projectID, "from": from, "to": to, "by": by,
+	}, func(tx *sql.Tx, eventID int64) error {
+		_, err := store.RequestLeadHandoff(tx, now, projectID, to, by, eventID)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return s.st.PendingLeadHandoff(ctx, projectID)
+}
+
+// cancelLeadHandoff handles DELETE /api/v1/projects/{id}/lead-handoff: close
+// the pending ceremony without moving the lead, recorded under
+// "crew.lead_handoff_cancelled". 404 when none is pending; the store refuses
+// anyone but the outgoing lead, the incoming lead or the requester.
+func (s *server) cancelLeadHandoff(w http.ResponseWriter, r *http.Request) {
+	err := s.recordLeadHandoffCancel(r.Context(), r.PathValue("id"), actorIDFrom(r))
+	if err != nil {
+		s.observeCrewChange("api", "handoff_cancel", crewOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeCrewChange("api", "handoff_cancel", "ok")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) recordLeadHandoffCancel(ctx context.Context, projectID, by string) error {
+	ho, err := s.st.PendingLeadHandoff(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if ho == nil {
+		return fmt.Errorf("project %s has no pending lead handoff: %w", projectID, store.ErrNotFound)
+	}
+	now := s.st.Now()
+	return s.recordEvent(ctx, "cli", "crew.lead_handoff_cancelled", map[string]any{
+		"project": projectID, "handoff": ho.ID, "from": ho.FromActor, "to": ho.ToActor, "by": by,
+	}, func(tx *sql.Tx, eventID int64) error {
+		return store.CancelLeadHandoff(tx, now, ho.ID, by, eventID)
+	})
+}
+
 // crewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var crewRouteDocs = map[string]routeDoc{
 	"GET /api/v1/crew": {
@@ -211,6 +323,15 @@ var crewRouteDocs = map[string]routeDoc{
 	},
 	"DELETE /api/v1/projects/{id}/participants/{actor}": {
 		summary:   "Remove a member from a project's Crew",
+		responses: map[int]any{http.StatusNoContent: nil},
+	},
+	"POST /api/v1/projects/{id}/lead-handoff": {
+		summary:   "Request a lead handoff; acceptance happens in the cockpit",
+		request:   model.RequestLeadHandoffInput{},
+		responses: map[int]any{http.StatusCreated: model.LeadHandoff{}},
+	},
+	"DELETE /api/v1/projects/{id}/lead-handoff": {
+		summary:   "Cancel the pending lead handoff",
 		responses: map[int]any{http.StatusNoContent: nil},
 	},
 }

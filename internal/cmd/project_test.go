@@ -795,3 +795,53 @@ func TestProjectSetSettings(t *testing.T) {
 		t.Fatalf("unknown setting: want an error, got nil\noutput: %s", out)
 	}
 }
+
+// TestProjectCrewTransfer covers `lode project crew transfer`: a request names
+// both leads and points acceptance at the cockpit, the roster listing shows
+// the pending ceremony, and --cancel closes it.
+func TestProjectCrewTransfer(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	for _, id := range []string{"ada", "bob"} {
+		if err := st.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "ada", "--role", "editor", "--lead"); err != nil {
+		t.Fatalf("seed lead: %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "reporter"); err != nil {
+		t.Fatalf("seed member: %v\noutput: %s", err, out)
+	}
+
+	out, err := runLode(t, "project", "crew", "transfer", "proj", "bob")
+	if err != nil {
+		t.Fatalf("transfer: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "ada") || !strings.Contains(out, "bob") || !strings.Contains(out, "cockpit") {
+		t.Fatalf("transfer output = %q, want both leads and the cockpit", out)
+	}
+
+	out, err = runLode(t, "project", "crew", "proj")
+	if err != nil {
+		t.Fatalf("crew list: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "lead handoff pending: ada -> bob") {
+		t.Fatalf("crew list output = %q, want the pending ceremony line", out)
+	}
+
+	if out, err := runLode(t, "project", "crew", "transfer", "proj"); err == nil {
+		t.Fatalf("transfer with neither a target nor --cancel succeeded: %s", out)
+	}
+	out, err = runLode(t, "project", "crew", "transfer", "proj", "--cancel")
+	if err != nil {
+		t.Fatalf("transfer --cancel: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "cancelled") {
+		t.Fatalf("cancel output = %q", out)
+	}
+	if h, err := st.PendingLeadHandoff(ctx, "proj"); err != nil || h != nil {
+		t.Fatalf("pending after cancel = %+v, %v; want none", h, err)
+	}
+}

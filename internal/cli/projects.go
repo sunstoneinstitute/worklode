@@ -146,12 +146,34 @@ func (c *Client) AddCrewMember(ctx context.Context, project, actor, role string,
 // project's Crew (WL-REQ-123), lead-first then by when they were added.
 // An empty roster is an empty slice, not nil.
 func (c *Client) ListCrew(ctx context.Context, project string) ([]model.CrewMember, []byte, error) {
-	resp, raw, err := doJSON[model.ParticipantListResponse](ctx, c, http.MethodGet,
-		"/api/v1/projects/"+url.PathEscape(project)+"/participants", nil, "participant list")
+	resp, raw, err := c.ProjectCrew(ctx, project)
 	if err != nil {
 		return nil, nil, err
 	}
 	return resp.Participants, raw, nil
+}
+
+// ProjectCrew calls GET /api/v1/projects/{id}/participants and returns the
+// whole envelope: the roster and the pending lead handoff, if any.
+func (c *Client) ProjectCrew(ctx context.Context, project string) (model.ParticipantListResponse, []byte, error) {
+	return doJSON[model.ParticipantListResponse](ctx, c, http.MethodGet,
+		"/api/v1/projects/"+url.PathEscape(project)+"/participants", nil, "participant list")
+}
+
+// RequestLeadHandoff calls POST /api/v1/projects/{id}/lead-handoff, opening a
+// ceremony moving the project's lead to `to` (WL-REQ-1605). Accepting and
+// authorizing happen in the cockpit; there is no client method for them.
+func (c *Client) RequestLeadHandoff(ctx context.Context, project, to string) (model.LeadHandoff, []byte, error) {
+	return doJSON[model.LeadHandoff](ctx, c, http.MethodPost,
+		"/api/v1/projects/"+url.PathEscape(project)+"/lead-handoff",
+		model.RequestLeadHandoffInput{To: to}, "lead handoff")
+}
+
+// CancelLeadHandoff calls DELETE /api/v1/projects/{id}/lead-handoff, closing
+// the pending ceremony without moving the lead. 204, so raw is empty.
+func (c *Client) CancelLeadHandoff(ctx context.Context, project string) ([]byte, error) {
+	return c.do(ctx, http.MethodDelete,
+		"/api/v1/projects/"+url.PathEscape(project)+"/lead-handoff", nil)
 }
 
 // ProjectSummary calls GET /api/v1/projects/{id}/summary (WL-REQ-1797).
@@ -327,9 +349,10 @@ func pollVerb(dryRun bool) string {
 	return "examined"
 }
 
-// CrewTable renders a project's Crew roster: name, roles comma-joined, and a
-// "lead" marker on the row of the project's one lead, if any.
-func CrewTable(w io.Writer, members []model.CrewMember) {
+// CrewTable renders a project's Crew roster: name, roles comma-joined, a
+// "lead" marker on the row of the project's one lead, if any, and a line for
+// a pending lead handoff.
+func CrewTable(w io.Writer, members []model.CrewMember, handoff *model.LeadHandoff) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ACTOR\tNAME\tROLES\tLEAD")
 	for _, m := range members {
@@ -347,4 +370,37 @@ func CrewTable(w io.Writer, members []model.CrewMember) {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", m.Actor, name, strings.Join(m.Roles, ", "), lead)
 	}
 	tw.Flush()
+	if handoff != nil {
+		fmt.Fprintf(w, "\nlead handoff pending: %s -> %s (requested %s)%s\n",
+			handoff.From, handoff.To, LocalTime(handoff.RequestedAt), handoffProgress(handoff))
+	}
+}
+
+// handoffProgress names the steps of a pending ceremony already recorded.
+func handoffProgress(h *model.LeadHandoff) string {
+	var done []string
+	if h.OutgoingAcceptedAt != nil {
+		done = append(done, h.From+" accepted")
+	}
+	if h.IncomingAcceptedAt != nil {
+		done = append(done, h.To+" accepted")
+	}
+	if h.EditorAuthorizedBy != "" {
+		done = append(done, "editor "+h.EditorAuthorizedBy+" authorized")
+	}
+	if h.ScienceAuthorizedBy != "" {
+		done = append(done, "science lead "+h.ScienceAuthorizedBy+" authorized")
+	}
+	if len(done) == 0 {
+		return ""
+	}
+	return "; " + strings.Join(done, ", ")
+}
+
+// LeadHandoffRequested confirms a lead-handoff request: both leads, and where
+// acceptance happens.
+func LeadHandoffRequested(w io.Writer, h model.LeadHandoff) {
+	fmt.Fprintf(w, "requested lead handoff on project %s: %s -> %s (%s)\n",
+		h.Project, h.From, h.To, LocalTime(h.RequestedAt))
+	fmt.Fprintf(w, "acceptance happens in the cockpit's Crew page: the lead moves once %s and %s both accept\n", h.From, h.To)
 }

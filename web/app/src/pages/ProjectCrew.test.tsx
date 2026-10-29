@@ -60,4 +60,53 @@ describe("/projects/$projectId/crew", () => {
     await renderApp("/projects/p2/crew")
     expect(await screen.findByText("No Crew yet")).toBeInTheDocument()
   })
+
+  it("requests a lead handoff, shows the pending banner, and cancels it", async () => {
+    const user = userEvent.setup()
+    await renderApp("/projects/p1/crew")
+    await screen.findByRole("row", { name: /Ada Lovelace/ })
+
+    const form = screen.getByRole("form", { name: "Hand off lead" })
+    await user.click(within(form).getByRole("combobox", { name: "New lead" }))
+    // Only Crew members other than the lead are offered
+    expect(screen.queryByRole("option", { name: "Stig Bakken" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("option", { name: "Ada Lovelace" }))
+    await user.click(within(form).getByRole("button", { name: "Request" }))
+
+    const banner = await screen.findByRole("region", { name: "Pending lead handoff" })
+    expect(banner).toHaveTextContent("Stig Bakken → Ada Lovelace")
+    expect(banner).toHaveTextContent("No acceptances recorded yet")
+    expect(screen.queryByRole("form", { name: "Hand off lead" })).not.toBeInTheDocument()
+
+    await user.click(within(banner).getByRole("button", { name: "Cancel handoff" }))
+    expect(await screen.findByRole("form", { name: "Hand off lead" })).toBeInTheDocument()
+    expect(screen.queryByRole("region", { name: "Pending lead handoff" })).not.toBeInTheDocument()
+  })
+
+  it("lists the acceptances and authorizations already recorded", async () => {
+    server.use(
+      http.get("/api/v1/projects/:id/participants", () =>
+        HttpResponse.json({
+          participants: [
+            { actor: "stig", display_name: "Stig Bakken", roles: ["owner"], lead: true },
+            { actor: "ada", display_name: "Ada Lovelace", roles: ["member"], lead: false },
+          ],
+          lead_handoff: {
+            id: 7,
+            project: "p1",
+            from: "stig",
+            to: "ada",
+            state: "pending",
+            incoming_accepted_at: "2026-10-29T10:00:00Z",
+            editor_authorized_by: "bob",
+            requested_at: "2026-10-28T10:00:00Z",
+          },
+        }),
+      ),
+    )
+    await renderApp("/projects/p1/crew")
+    const banner = await screen.findByRole("region", { name: "Pending lead handoff" })
+    expect(banner).toHaveTextContent("Ada Lovelace accepted")
+    expect(banner).toHaveTextContent("Editor bob authorized")
+  })
 })

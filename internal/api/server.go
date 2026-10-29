@@ -1161,6 +1161,8 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("POST /api/v1/ideas/{id}/sources", s.createIdeaSource)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
 	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
+	r.api("POST /api/v1/projects/{id}/lead-handoff", s.requestLeadHandoff)
+	r.api("DELETE /api/v1/projects/{id}/lead-handoff", s.cancelLeadHandoff)
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
 	r.api("PATCH /api/v1/projects/{id}/settings", s.patchProjectSettings)
 	r.api("POST /api/v1/projects/{id}/session-usage", s.reportProjectSessionUsage)

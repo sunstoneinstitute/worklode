@@ -521,6 +521,11 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/ideas/{id}/sources":                   guardedAny(permIdeaWrite),
 	"POST /api/v1/projects/{id}/participants":           guarded(permCrewWrite),
 	"DELETE /api/v1/projects/{id}/participants/{actor}": guarded(permCrewWrite),
+	// Lead handoff (WL-REQ-1605): request and cancel only. Accept and
+	// authorize have no API route on purpose: consent to accountability is a
+	// person at a browser, not a bearer token in a script.
+	"POST /api/v1/projects/{id}/lead-handoff":   guarded(permCrewWrite),
+	"DELETE /api/v1/projects/{id}/lead-handoff": guarded(permCrewWrite),
 	// Reporting overhead usage (WL-REQ-40) is not a claim on any one task,
 	// so every authenticated role may report it — see permProjectReport.
 	"POST /api/v1/projects/{id}/session-usage": guarded(permProjectReport),
