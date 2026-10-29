@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean dev-db dev-server dev-web FORCE
 
 # WL-REQ-15: seven executables from one module. The three user binaries are what
 # Homebrew installs; three more ship in the container images, and
@@ -64,6 +64,19 @@ web-gen: openapi ## Regenerate the SPA's typed API client from bin/openapi.json
 web-clean: ## Put the committed placeholder back after a local SPA build
 	git clean -fdx internal/webapp/dist
 	git checkout -- internal/webapp/dist/index.html
+
+# Host-side development: Postgres in compose, lode-server and Vite on the host.
+DEV_DSN ?= postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+
+dev-db: ## Start compose's Postgres and migrate it from the host
+	docker compose up -d --wait postgres
+	go run -trimpath ./cmd/lode-migrate --dsn '$(DEV_DSN)' --migrations-path deploy/base/migrations
+
+dev-server: bin/lode-server ## Run lode-server on the host against dev-db (stop compose's worklode first)
+	LODE_DSN='$(DEV_DSN)' LODE_WEB_OPEN=$${LODE_WEB_OPEN:-1} LODE_INSTANCE_ENV=$${LODE_INSTANCE_ENV:-dev} ./bin/lode-server
+
+dev-web: ## Run the SPA's Vite dev server against dev-server (http://localhost:5173)
+	cd web/app && pnpm install --frozen-lockfile && VITE_API_MOCKS=off pnpm dev
 
 .DEFAULT_GOAL := build
 

@@ -822,6 +822,25 @@ override with `TEST_POSTGRES_DSN`); each test creates and drops its own
 ephemeral database. Tests skip when Postgres is unreachable, unless `CI` is
 set.
 
+### Server on the host
+
+To iterate on `lode-server` without rebuilding the image, run only Postgres
+in compose and the server on the host:
+
+```bash
+make dev-db      # compose Postgres on :5432, migrated from the host
+make dev-server  # bin/lode-server on :8080 with LODE_WEB_OPEN=1
+make dev-web     # Vite on :5173 with hot reload, proxying to :8080
+```
+
+Stop compose's `worklode` service first if it is running
+(`docker compose stop worklode`): it holds port 8080. Set
+`LODE_BOOTSTRAP_TOKEN` before the first `make dev-server` on a fresh
+database. `DEV_DSN` overrides the database URL.
+
+Open http://localhost:5173. Vite serves the SPA's routes from source and
+proxies every other path (the API and the templ cockpit) to the server.
+
 Migrations live under `deploy/base/migrations/` and use
 [golang-migrate](https://github.com/golang-migrate/migrate). They are no
 longer embedded in the binary or applied automatically — `lode-server` expects
