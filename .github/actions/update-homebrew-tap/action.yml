@@ -78,6 +78,7 @@ runs:
       env:
         TAP_DEPLOY_KEY: ${{ inputs.deploy-key }}
         TAG: ${{ inputs.tag }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
 
@@ -99,8 +100,9 @@ runs:
 
         # Host keys from the GitHub meta API over TLS, rather than a
         # trust-on-first-use ssh-keyscan or a hardcoded key that rots when
-        # GitHub rotates theirs.
-        curl -fsS https://api.github.com/meta \
+        # GitHub rotates theirs. Authenticated, since shared runner IPs exhaust
+        # the unauthenticated rate limit and get a 403.
+        curl -fsS -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/meta \
           | jq -r '.ssh_keys[] | "github.com " + .' > "$KNOWN_HOSTS"
 
         export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS"
