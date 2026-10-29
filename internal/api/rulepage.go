@@ -6,12 +6,14 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
@@ -48,6 +50,7 @@ func (s *server) rulePage(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("rendering rule page without version history", "rule", c.Ref, "err", err)
 	}
 	view := ruleView(s.mdcache, s.projectKeys(r.Context(), p.ID), c, versions, p.ID)
+	view.Viewer = actorIDFrom(r)
 	s.renderWeb(w, r, http.StatusOK, "rule page", ui.Rule(view))
 }
 
@@ -65,4 +68,35 @@ func (s *server) ruleRefRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/projects/%s/rule/%d", p.ID, ref.Number), http.StatusFound)
+}
+
+// acceptRuleFromPage handles POST /projects/{id}/rule/{n}/accept: the rule
+// page's Accept button, performing `lode rule accept` through the page-script
+// write gate (WL-REQ-1338). A body of {"substantive": true} is `--substantive`.
+// The store holds the owner check. A rule that is no
+// longer draft is a 409, since the button is drawn only on a draft.
+func (s *server) acceptRuleFromPage(w http.ResponseWriter, r *http.Request) {
+	var body model.AcceptRuleInput
+	sub, project, ok := s.beginJSONPost(w, r, "rule/accept", &body)
+	if !ok {
+		return
+	}
+	n, err := strconv.ParseInt(r.PathValue("n"), 10, 64)
+	if err != nil || n <= 0 {
+		s.observeProgressWrite("rule/accept", "refused")
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	c, err := s.st.AcceptRule(r.Context(), project.Key, n, body.Substantive, sub.ActorID)
+	switch {
+	case errors.Is(err, store.ErrBadTransition):
+		s.observeProgressWrite("rule/accept", "conflict")
+		writeErr(w, http.StatusConflict, err.Error())
+	case err != nil:
+		s.observeProgressWrite("rule/accept", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+	default:
+		s.observeProgressWrite("rule/accept", "ok")
+		writeJSON(w, http.StatusOK, c)
+	}
 }
