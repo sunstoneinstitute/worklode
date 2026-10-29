@@ -19,7 +19,7 @@ gets recorded on the task is a `decision`. Ask the user only when the
 description genuinely fits two kinds.
 
 The eighth kind, `rally`, is not filed here: it carries no work of its own,
-only `blocks` edges naming tasks that already exist. Assemble one by hand
+only `dependsOn` edges naming tasks that already exist. Assemble one by hand
 (`lode task add --kind rally --draft`, then `lode task block`).
 
 **Step 2: fill the gap the kind cares about.** Each kind has one thing a task
