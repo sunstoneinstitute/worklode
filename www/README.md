@@ -30,8 +30,9 @@ Then open <http://localhost:8000/>.
 ## Deployment
 
 `.github/workflows/deploy-www.yml` publishes this directory to GitHub Pages on
-every push to `main` that touches `www/`, and can be run by hand from the
-Actions tab. `CNAME` sets the custom domain; GitHub reads it on each deploy, so
+every push to `main` that touches `www/` or `ns/*.ttl`, and can be run by hand
+from the Actions tab. It copies `ns/*.ttl` into `/ns/`, so the `wl:` vocabulary
+is served at <https://worklode.io/ns/ontology.ttl> as `text/turtle`. `CNAME` sets the custom domain; GitHub reads it on each deploy, so
 it must stay in this directory.
 
 One-time setup outside this repo:
