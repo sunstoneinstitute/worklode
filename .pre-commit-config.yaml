@@ -43,6 +43,14 @@ repos:
         language: script
         pass_filenames: false
         files: ^(\.claude-plugin/|\.agents/|plugins/)
+      # The embedding image tag is written in five files; the Dockerfile's model
+      # and TEI base decide what it must be. CI runs it through make test-scripts.
+      - id: embeddings-version
+        name: embedding image tag matches its Dockerfile
+        entry: scripts/check-embeddings-version.sh
+        language: script
+        pass_filenames: false
+        files: ^(deploy/embeddings\.Dockerfile|deploy/base/embeddings(-query)?\.yaml|docker-compose\.yml|\.github/workflows/build-embeddings-image\.yml)$
       # CI's spec gate, before a push: commit messages exist by then, so the
       # Spec: trailer check runs alongside the citation check. Install once
       # with `pre-commit install -t pre-push`; `lode install` manages the
