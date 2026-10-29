@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean up dev-up dev-down dev-db dev-embeddings dev-server dev-web FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean up dev-up dev-down dev-db dev-embeddings dev-server dev-web seed FORCE
 
 # WL-REQ-15: seven executables from one module. The three user binaries are what
 # Homebrew installs; three more ship in the container images, and
@@ -74,15 +74,26 @@ up: ## Start the compose stack, resolving .env's op:// references
 	$(ENV_RUN) docker compose up -d
 
 # Host-side development: Postgres in compose, lode-server and Vite on the host.
-# Exported so docker compose publishes Postgres on the same port.
-export LODE_POSTGRES_PORT ?= 5432
+# Exported so docker compose publishes Postgres on the same port. Make does not
+# read .env, so env_or_default takes the value from there before the default.
+env_or_default = $(or $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -1),$(2))
+export LODE_POSTGRES_PORT ?= $(call env_or_default,LODE_POSTGRES_PORT,5432)
 DEV_DSN ?= postgres://postgres:postgres@localhost:$(LODE_POSTGRES_PORT)/postgres?sslmode=disable
 
 dev-db: ## Start compose's Postgres and migrate it from the host
 	$(ENV_RUN) docker compose up -d --wait postgres
 	go run -trimpath ./cmd/lode-migrate --dsn '$(DEV_DSN)' --migrations-path deploy/base/migrations
 
-export LODE_EMBEDDINGS_PORT ?= 8081
+seed: ## Replace compose's database with a pg_dump -Fc file, then migrate: make seed DUMP=<file>
+	@test -f "$(DUMP)" || { echo "usage: make seed DUMP=<pg_dump -Fc file>"; exit 1; }
+	$(ENV_RUN) docker compose up -d --wait postgres
+	docker compose exec -T -e PGOPTIONS='-c client_min_messages=warning' postgres psql -q -U postgres -v ON_ERROR_STOP=1 \
+		-c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public'
+	@# Docker's 64 MB /dev/shm cannot hold a parallel HNSW index build.
+	docker compose exec -T -e PGOPTIONS='-c max_parallel_maintenance_workers=0' postgres pg_restore -U postgres -d postgres --no-owner --no-acl --exit-on-error < '$(DUMP)'
+	go run -trimpath ./cmd/lode-migrate --dsn '$(DEV_DSN)' --migrations-path deploy/base/migrations
+
+export LODE_EMBEDDINGS_PORT ?= $(call env_or_default,LODE_EMBEDDINGS_PORT,8081)
 EMBEDDINGS_URL := http://localhost:$(LODE_EMBEDDINGS_PORT)
 
 dev-embeddings: ## Start compose's embedding server (amd64 image; emulated on Apple Silicon)
