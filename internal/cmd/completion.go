@@ -200,8 +200,8 @@ func taskSetArgs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.
 // A document is addressable several ways (WL-REQ-199): by slug
 // ("design-doc-queries"), by the WL-REQ-168 shorthand ("WL-SPEC-61"), by a
 // number-and-slug form, by a corpus path, and by any of those with a
-// "#sec-N" fragment. Slug and shorthand are offered — the two forms a person
-// types from memory. Fragments are deliberately not attempted here: a
+// "#sec-N" fragment. Only the shorthand is offered, described by the title;
+// slugs crowd the list and add nothing the title does not say. Fragments are deliberately not attempted here: a
 // fragment's candidates are the target document's own anchors, which needs a
 // second, per-document lookup keyed on a reference that is still half-typed.
 // If that is ever wanted it is its own task, not a line in this one.
@@ -227,19 +227,15 @@ func docRefsFiltered(cmd *cobra.Command, toComplete string, deleted bool) ([]cob
 	slices.SortFunc(docs, func(a, b model.Doc) int {
 		return model.CompareTaskIDs(cli.DocRef(a), cli.DocRef(b))
 	})
-	out := make([]cobra.Completion, 0, 2*len(docs))
+	out := make([]cobra.Completion, 0, len(docs))
 	for _, d := range docs {
-		desc := completionDescription(string(d.Title))
-		refs := []string{d.Slug}
 		// A document with no number predates WL-REQ-122's backfill; DocRef
 		// degrades it to a bare kind ("spec"), which is not a reference.
-		if d.Number != 0 {
-			refs = append([]string{cli.DocRef(d)}, refs...)
+		if d.Number == 0 {
+			continue
 		}
-		for _, ref := range refs {
-			if ref != "" && strings.HasPrefix(ref, toComplete) {
-				out = append(out, cobra.Completion(ref+"\t"+desc))
-			}
+		if ref := cli.DocRef(d); strings.HasPrefix(ref, toComplete) {
+			out = append(out, cobra.Completion(ref+"\t"+completionDescription(string(d.Title))))
 		}
 	}
 	return out, cobra.ShellCompDirectiveNoFileComp
