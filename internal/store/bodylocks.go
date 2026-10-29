@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -279,4 +280,37 @@ func (s *Store) setLocksHeld(ctx context.Context) {
 	for _, k := range lockKinds {
 		s.metrics.bodyLocksHeld.WithLabelValues(k).Set(float64(counts[k]))
 	}
+}
+
+// LockSubjectOwner returns who besides an admin may unlock the subject: a
+// document's or rule's owner, a task's assignee, "" when none. A subject that
+// does not exist, or an id not in its canonical form, is ErrNotFound.
+func (s *Store) LockSubjectOwner(ctx context.Context, kind, subjectID string) (string, error) {
+	var q string
+	var arg any = subjectID
+	switch kind {
+	case "doc", "rule":
+		n, err := strconv.ParseInt(subjectID, 10, 64)
+		if err != nil || strconv.FormatInt(n, 10) != subjectID {
+			return "", ErrNotFound
+		}
+		arg = n
+		q = `SELECT coalesce(owner, '') FROM docs WHERE id = $1`
+		if kind == "rule" {
+			q = `SELECT coalesce(owner, '') FROM rules WHERE id = $1`
+		}
+	case "task":
+		q = `SELECT coalesce(assignee, '') FROM tasks WHERE id = $1`
+	default:
+		return "", checkLockKind(kind)
+	}
+	var owner string
+	err := s.db.QueryRowContext(ctx, q, arg).Scan(&owner)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("lock subject owner: %w", err)
+	}
+	return owner, nil
 }
