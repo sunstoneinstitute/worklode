@@ -833,6 +833,10 @@ make dev-server  # bin/lode-server on :8080 with LODE_WEB_OPEN=1
 make dev-web     # Vite on :5173 with hot reload, proxying to :8080
 ```
 
+`make dev-up` runs all three: `dev-db`, then `dev-server` and `dev-web` side
+by side in one terminal. Ctrl-C stops both. `make dev-down` removes the
+compose containers and keeps the database volume.
+
 Stop compose's `worklode` service first if it is running
 (`docker compose stop worklode`): it holds port 8080. Set
 `LODE_BOOTSTRAP_TOKEN` before the first `make dev-server` on a fresh
@@ -844,6 +848,8 @@ For the dense arm of search, run `make dev-embeddings` before
 `make dev-server`. It needs `docker login ghcr.io`, and on Apple Silicon the
 amd64 image runs emulated at about a second per chunk. `make dev-server`
 uses it when it answers on `LODE_EMBEDDINGS_PORT` (default 8081).
+`make dev-up EMBEDDINGS=1` starts it too and waits for it before starting the
+server.
 
 Open http://localhost:5173. Vite serves the SPA's routes from source and
 proxies every other path (the API and the templ cockpit) to the server.
