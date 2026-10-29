@@ -1,8 +1,8 @@
 # Worklode SHACL shapes — closed-world constraints over the `wl:` vocabulary.
 #
 # Extracted from the node-shape sketches in WL-SPEC-79 and WL-SPEC-77, plus the domain/range constraints WL-SPEC-78 asks for; those specs
-# remain authoritative. Published by rdf-registry as rdf/shapes/wl-shapes.ttl
-# behind the SHACL gate (ADR-0003).
+# remain authoritative. deploy-www.yml publishes it at
+# https://worklode.io/ns/shapes.ttl.
 #
 # The load-bearing split (WL-SPEC-79): OWL is open-world with no unique names, so it
 # never flags a missing required field. owl:FunctionalProperty catches *more than
