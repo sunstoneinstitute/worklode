@@ -111,10 +111,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the awaiting approval queue */
+        /** List the approvals in one state, by default the awaiting queue */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    state?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;

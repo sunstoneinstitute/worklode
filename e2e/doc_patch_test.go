@@ -253,7 +253,7 @@ func getPageAs(t *testing.T, target, session string) (int, string) {
 // nothing else.
 func docLanes(t *testing.T, ctx context.Context, c *cli.Client, docID int64) []model.AwaitingApproval {
 	t.Helper()
-	resp, _, err := c.ListApprovals(ctx)
+	resp, _, err := c.ListApprovals(ctx, model.ApprovalListParams{})
 	if err != nil {
 		t.Fatalf("GET /api/v1/approvals: %v", err)
 	}

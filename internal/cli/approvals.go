@@ -21,10 +21,11 @@ func (c *Client) RequestDocApproval(ctx context.Context, id int64) (model.Doc, [
 		nil, "doc")
 }
 
-// ListApprovals calls GET /api/v1/approvals: every outstanding approval,
-// oldest first, across entity kinds and projects.
-func (c *Client) ListApprovals(ctx context.Context) (model.ApprovalListResponse, []byte, error) {
-	return doJSON[model.ApprovalListResponse](ctx, c, http.MethodGet, "/api/v1/approvals", nil, "approval list")
+// ListApprovals calls GET /api/v1/approvals: every approval in params.State
+// (awaiting when empty), oldest first, across entity kinds and projects.
+func (c *Client) ListApprovals(ctx context.Context, params model.ApprovalListParams) (model.ApprovalListResponse, []byte, error) {
+	return doJSON[model.ApprovalListResponse](ctx, c, http.MethodGet,
+		withParams("/api/v1/approvals", params), nil, "approval list")
 }
 
 // RequireApproval calls POST /api/v1/approvals: WL-REQ-124's ad-hoc

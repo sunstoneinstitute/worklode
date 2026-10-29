@@ -1002,6 +1002,13 @@ func scanAwaitingApproval(row rowScanner) (*AwaitingApproval, error) {
 // matched (approvalEntityTitle/URL); Author is the PR's login where there is
 // one and otherwise the actor that filed the requirement.
 func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, error) {
+	return s.ListApprovals(ctx, "awaiting")
+}
+
+// ListApprovals is ListAwaitingApprovals for any one state. The closed-PR
+// exclusion (WL-663) applies to the open states only: a decided row on a
+// merged PR is still a record of that decision.
+func (s *Store) ListApprovals(ctx context.Context, state string) ([]AwaitingApproval, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+qualifyColumns(approvalColumns, "a")+`,
 		        `+approvalEntityTitle+`, `+approvalEntityURL+`,
@@ -1011,13 +1018,13 @@ func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, 
 		 `+approvalEntityJoins+`
 		 LEFT JOIN projects p ON p.id = `+approvalProjectID+`
 		 LEFT JOIN actors ra ON ra.id = a.required_actor
-		 WHERE a.state = 'awaiting'
-		   AND `+approvalPROpen+`
-		 ORDER BY a.created_at, a.id`)
+		 WHERE a.state = $1
+		   AND (a.state NOT IN ('awaiting', 'changes_requested') OR `+approvalPROpen+`)
+		 ORDER BY a.created_at, a.id`, state)
 	if err != nil {
-		return nil, fmt.Errorf("list awaiting approvals: %w", err)
+		return nil, fmt.Errorf("list %s approvals: %w", state, err)
 	}
-	return collectRows(rows, "list awaiting approvals", byValue(scanAwaitingApproval))
+	return collectRows(rows, "list "+state+" approvals", byValue(scanAwaitingApproval))
 }
 
 // ApprovalCount is one project's tally of awaiting approvals that name an

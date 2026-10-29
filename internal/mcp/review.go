@@ -72,8 +72,8 @@ func (s *server) addReviewTools() {
 	s.addTool("approval_request", "Ask a document's reviewers for their verdict on its current version.",
 		`{"type":"object","properties":{`+projectProp+`,"doc":`+docRefProp+`},"required":["doc"]}`,
 		s.approvalRequest)
-	s.addTool("approval_list", "List the approvals waiting on a decision, ten at a time.",
-		`{"type":"object","properties":{"state":{"type":"string","description":"Only approvals in this state."},"cursor":{"type":"string","description":"The cursor from the previous page."}}}`,
+	s.addTool("approval_list", "List the approvals in one state, by default those waiting on a decision, ten at a time.",
+		`{"type":"object","properties":{"state":{"type":"string","description":"Only approvals in this state: awaiting (the default), changes_requested, approved or rejected."},"cursor":{"type":"string","description":"The cursor from the previous page."}}}`,
 		s.approvalList)
 	s.addTool("approval_add", "Require an approval from one person on a document or task.",
 		`{"type":"object","properties":{`+projectProp+`,"entity":{"type":"string","description":"The document or task's ref, as written or spoken."},"approver":{"type":"string","description":"The actor id that decides."}},"required":["entity","approver"]}`,
@@ -136,21 +136,18 @@ func (s *server) approvalList(ctx context.Context, c *cli.Client, req *mcp.CallT
 	if err != nil {
 		return nil, err
 	}
-	r, _, err := c.ListApprovals(ctx)
+	state := strings.ReplaceAll(strings.TrimSpace(a.State), " ", "_")
+	if state == "" {
+		state = "awaiting"
+	}
+	r, _, err := c.ListApprovals(ctx, model.ApprovalListParams{State: state})
 	if err != nil {
 		return nil, err
 	}
 	rows := r.Approvals
-	if a.State != "" {
-		rows = rows[:0:0]
-		for _, row := range r.Approvals {
-			if row.State == a.State {
-				rows = append(rows, row)
-			}
-		}
-	}
+	label := strings.ReplaceAll(state, "_", " ")
 	if len(rows) == 0 {
-		return say("No approvals are waiting.", nil), nil
+		return say(fmt.Sprintf("No approvals are %s.", label), nil), nil
 	}
 	page, next, err := pageOf(rows, a.Cursor, s.cfg.SessionSecret)
 	if err != nil {
@@ -161,7 +158,7 @@ func (s *server) approvalList(ctx context.Context, c *cli.Client, req *mcp.CallT
 	if next != "" {
 		fmt.Fprintf(&b, "\nMore approvals: call approval_list again with cursor %q.\n", next)
 	}
-	return say(fmt.Sprintf("%d approvals are waiting.", len(rows)), b.String()), nil
+	return say(fmt.Sprintf("%d approvals are %s.", len(rows), label), b.String()), nil
 }
 
 // approvalAdd requires approver on a document, or on a task when the ref
@@ -205,7 +202,7 @@ func (s *server) approvalDecide(ctx context.Context, c *cli.Client, req *mcp.Cal
 	if err != nil {
 		return nil, err
 	}
-	row, err := awaitingApproval(ctx, c, a.ID)
+	row, err := openApproval(ctx, c, a.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -255,16 +252,18 @@ func revisionOf(a model.AwaitingApproval) string {
 	return a.SubjectRevision
 }
 
-// awaitingApproval finds approval id in GET /approvals, the only API read of
-// an approval row.
-func awaitingApproval(ctx context.Context, c *cli.Client, id int64) (model.AwaitingApproval, error) {
-	r, _, err := c.ListApprovals(ctx)
-	if err != nil {
-		return model.AwaitingApproval{}, err
-	}
-	for _, a := range r.Approvals {
-		if a.ID == id {
-			return a, nil
+// openApproval finds approval id among the rows that can still be decided:
+// awaiting or changes_requested (WL-REQ-1608).
+func openApproval(ctx context.Context, c *cli.Client, id int64) (model.AwaitingApproval, error) {
+	for _, state := range []string{"awaiting", "changes_requested"} {
+		r, _, err := c.ListApprovals(ctx, model.ApprovalListParams{State: state})
+		if err != nil {
+			return model.AwaitingApproval{}, err
+		}
+		for _, a := range r.Approvals {
+			if a.ID == id {
+				return a, nil
+			}
 		}
 	}
 	return model.AwaitingApproval{}, &toolError{outcome: outcomeNotFound, msg: fmt.Sprintf("No approval %d is waiting on a decision.", id)}
