@@ -1038,10 +1038,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a document with its sections, edges and notes */
+        /** Get a document with its sections, edges and notes; ?as=blocks adds its body as editor blocks */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    as?: string;
+                };
                 header?: never;
                 path: {
                     id: string;
@@ -1203,7 +1205,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Replace a document's body */
+        /** Replace a document's body, as Markdown or (not on a spec) as editor blocks */
         put: {
             parameters: {
                 query?: never;
@@ -1226,6 +1228,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Doc"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description Any non-2xx answer */
@@ -5425,10 +5436,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a rule by ref, with its inline references */
+        /** Get a rule by ref, with its inline references; ?as=blocks adds its body as editor blocks */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    as?: string;
+                };
                 header?: never;
                 path: {
                     id: string;
@@ -5457,7 +5470,7 @@ export interface paths {
                 };
             };
         };
-        /** Write a rule's heading and body as its next draft version */
+        /** Write a rule's heading and body, as Markdown or as editor blocks, as its next draft version */
         put: {
             parameters: {
                 query?: never;
@@ -5480,6 +5493,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Rule"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description Any non-2xx answer */
@@ -6354,10 +6376,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a task's full detail */
+        /** Get a task's full detail; ?as=blocks adds its body as editor blocks */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    as?: string;
+                };
                 header?: never;
                 path: {
                     id: string;
@@ -6426,7 +6450,7 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Update a task's fields; due is YYYY-MM-DD, and "" clears it */
+        /** Update a task's fields; due is YYYY-MM-DD, and "" clears it; the body is Markdown or editor blocks */
         patch: {
             parameters: {
                 query?: never;
@@ -6449,6 +6473,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Task"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description Any non-2xx answer */
@@ -8760,9 +8793,6 @@ export interface components {
             blocking_plans?: components["schemas"]["DocRef"][] | null;
             root?: string;
         };
-        BlocksBody: {
-            blocks?: components["schemas"]["EditorBlock"][] | null;
-        };
         BoardProject: {
             blocked?: components["schemas"]["BoardTask"][] | null;
             id?: string;
@@ -9253,7 +9283,9 @@ export interface components {
         };
         DocDetail: {
             amendments?: components["schemas"]["DocAmendment"][];
+            blocks?: components["schemas"]["EditorBlock"][];
             body?: string;
+            body_sha256?: string;
             /** Format: date-time */
             created_at?: string;
             created_by?: string;
@@ -9478,11 +9510,13 @@ export interface components {
             milestone?: null | string;
         };
         EditRuleInput: {
+            blocks?: components["schemas"]["EditorBlock"][];
             body?: string;
             heading?: string;
         };
         EditTaskInput: {
             artifacts?: null | string[];
+            blocks?: components["schemas"]["EditorBlock"][];
             body?: null | string;
             concern?: null | string;
             due?: null | string;
@@ -10331,7 +10365,9 @@ export interface components {
         };
         RuleDetail: {
             arranged_in?: components["schemas"]["RuleArrangement"][] | null;
+            blocks?: components["schemas"]["EditorBlock"][];
             body?: string;
+            body_sha256?: string;
             change?: string;
             concept_iri?: string;
             covered_by?: components["schemas"]["RulePlan"][] | null;
@@ -10624,7 +10660,9 @@ export interface components {
             assignee?: string;
             blobs?: components["schemas"]["TaskBlob"][];
             blocked?: boolean;
+            blocks?: components["schemas"]["EditorBlock"][];
             body?: string;
+            body_sha256?: string;
             branch?: string;
             closed?: boolean;
             concern?: string;
@@ -10786,6 +10824,7 @@ export interface components {
             repo?: string;
         };
         UpdateDocBodyInput: {
+            blocks?: components["schemas"]["EditorBlock"][];
             body?: string;
             if_version?: number;
         };

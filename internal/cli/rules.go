@@ -25,6 +25,12 @@ func (c *Client) GetRuleDetail(ctx context.Context, ref string) (model.RuleDetai
 	return doJSON[model.RuleDetail](ctx, c, http.MethodGet, "/api/v1/rules/"+url.PathEscape(ref), nil, "rule")
 }
 
+// GetRuleBlocks is GetRuleDetail with ?as=blocks: the detail also carries the
+// body as editor blocks and its SHA-256 (WL-REQ-1867).
+func (c *Client) GetRuleBlocks(ctx context.Context, ref string) (model.RuleDetail, []byte, error) {
+	return doJSON[model.RuleDetail](ctx, c, http.MethodGet, withParams("/api/v1/rules/"+url.PathEscape(ref), model.BodyParams{As: "blocks"}), nil, "rule")
+}
+
 // ListRules calls GET /api/v1/rules: rules without their text, in
 // arrangement order when Doc is set, by number otherwise.
 func (c *Client) ListRules(ctx context.Context, p model.RuleListParams) ([]model.Rule, []byte, error) {

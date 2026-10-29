@@ -49,6 +49,7 @@ type Rule struct {
 type RuleDetail struct {
 	Rule
 	InlineRefs
+	BlocksBody
 }
 
 // RuleArrangement is one document's placement of a rule.
@@ -91,6 +92,8 @@ type RuleTask struct {
 type EditRuleInput struct {
 	Heading Markdown `json:"heading"`
 	Body    Markdown `json:"body"`
+	// Blocks is the body as editor blocks, in place of Body (WL-REQ-1867).
+	Blocks []EditorBlock `json:"blocks,omitempty"`
 }
 
 // AcceptRuleInput is the optional body of POST /api/v1/rules/{id}/accept.

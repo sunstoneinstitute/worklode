@@ -69,6 +69,12 @@ func (c *Client) GetDoc(ctx context.Context, id int64) (model.DocDetail, []byte,
 	return doJSON[model.DocDetail](ctx, c, http.MethodGet, docPath(id, ""), nil, "doc")
 }
 
+// GetDocBlocks is GetDoc with ?as=blocks: the detail also carries the body as
+// editor blocks and its SHA-256 (WL-REQ-1867).
+func (c *Client) GetDocBlocks(ctx context.Context, id int64) (model.DocDetail, []byte, error) {
+	return doJSON[model.DocDetail](ctx, c, http.MethodGet, withParams(docPath(id, ""), model.BodyParams{As: "blocks"}), nil, "doc")
+}
+
 // ListDocVersions calls GET /api/v1/docs/{id}/versions: every version of a
 // document, newest first (WL-REQ-164).
 func (c *Client) ListDocVersions(ctx context.Context, id int64) ([]model.DocVersionSummary, []byte, error) {

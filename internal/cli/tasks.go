@@ -49,6 +49,12 @@ func (c *Client) GetTask(ctx context.Context, id string) (model.TaskDetail, []by
 	return doJSON[model.TaskDetail](ctx, c, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id), nil, "task")
 }
 
+// GetTaskBlocks is GetTask with ?as=blocks: the detail also carries the body
+// as editor blocks and its SHA-256 (WL-REQ-1867).
+func (c *Client) GetTaskBlocks(ctx context.Context, id string) (model.TaskDetail, []byte, error) {
+	return doJSON[model.TaskDetail](ctx, c, http.MethodGet, withParams("/api/v1/tasks/"+url.PathEscape(id), model.BodyParams{As: "blocks"}), nil, "task")
+}
+
 // SetTaskSkills calls PUT /api/v1/tasks/{id}/skills, replacing the task's
 // pinned skill names. A nil or empty skills clears existing pins.
 func (c *Client) SetTaskSkills(ctx context.Context, id string, skills []string) ([]byte, error) {

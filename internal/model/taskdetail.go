@@ -57,6 +57,7 @@ type TaskTreeResponse struct {
 type TaskDetail struct {
 	Task
 	InlineRefs
+	BlocksBody
 	Blocked bool `json:"blocked"`
 	Edges   struct {
 		Out []TaskEdgeOut `json:"out"`
