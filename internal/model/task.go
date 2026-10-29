@@ -230,6 +230,19 @@ type TaskSkills struct {
 	Skills []string `json:"skills"`
 }
 
+// SetTaskReviewersInput is the request body for POST
+// /api/v1/tasks/{id}/reviewers: the whole reviewer roster, replacing the old
+// one (WL-REQ-1323).
+type SetTaskReviewersInput struct {
+	Reviewers []string `json:"reviewers"`
+}
+
+// TaskReviewers is the response body of POST /api/v1/tasks/{id}/reviewers:
+// the stored roster in assignment order.
+type TaskReviewers struct {
+	Reviewers []string `json:"reviewers"`
+}
+
 // Edge is the response body of POST /api/v1/tasks/{id}/edges: the edge as
 // stored, with both endpoints resolved to task ids (EdgeInput names only one
 // of them).

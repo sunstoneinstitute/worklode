@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1804,5 +1805,53 @@ func TestEdgeEndpointAcceptsLegacyTypeNames(t *testing.T) {
 		map[string]any{"to": "WL-1", "type": "child_of"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestTaskReviewersRoute covers POST /api/v1/tasks/{id}/reviewers: replace
+// semantics, the roster on the task detail read, and the 422 for an actor
+// that does not exist.
+func TestTaskReviewersRoute(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	docActor(t, st, "bob")
+	docActor(t, st, "carol")
+	created := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "medium", "kind": "feature",
+	})
+	id := created["id"].(string)
+
+	set := func(reviewers ...string) *httptest.ResponseRecorder {
+		return doReq(t, h, "POST", "/api/v1/tasks/"+id+"/reviewers", token,
+			model.SetTaskReviewersInput{Reviewers: reviewers})
+	}
+	roster := func() []string {
+		t.Helper()
+		rr := doReq(t, h, "GET", "/api/v1/tasks/"+id, token, nil)
+		var d model.TaskDetail
+		decodeInto(t, rr, &d)
+		return d.Reviewers
+	}
+
+	rr := set("carol", "bob")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := roster(); !slices.Equal(got, []string{"carol", "bob"}) {
+		t.Fatalf("roster = %v, want [carol bob]", got)
+	}
+	if rr := set("stranger"); rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown actor status = %d, want 422", rr.Code)
+	}
+	if rr := set("bob"); rr.Code != http.StatusOK {
+		t.Fatalf("replace status = %d", rr.Code)
+	}
+	if got := roster(); !slices.Equal(got, []string{"bob"}) {
+		t.Fatalf("roster = %v, want [bob]", got)
+	}
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-99999/reviewers", token,
+		model.SetTaskReviewersInput{}); rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown task status = %d, want 404", rr.Code)
 	}
 }

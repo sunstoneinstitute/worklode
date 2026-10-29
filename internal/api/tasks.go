@@ -286,7 +286,13 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions, GovernedBy: governed, Generated: generated}
+	reviewers, err := s.st.TaskReviewers(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions, GovernedBy: governed, Generated: generated, Reviewers: reviewers}
 	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)
@@ -877,6 +883,33 @@ func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.TaskSkills{Skills: t.Skills})
 }
 
+// setTaskReviewers handles POST /api/v1/tasks/{id}/reviewers: replaces the
+// task's reviewer roster wholesale (WL-REQ-1323) and answers with the stored
+// roster.
+func (s *server) setTaskReviewers(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req model.SetTaskReviewersInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	actorID := actorIDFrom(r)
+	err := s.recordTaskEvent(r.Context(), "cli", "task.reviewers_set", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.SetTaskReviewers(tx, s.st.Now(), id, actorID, req.Reviewers, eventID)
+		})
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	reviewers, err := s.st.TaskReviewers(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.TaskReviewers{Reviewers: reviewers})
+}
+
 // publishTasksFromPage handles POST /projects/{id}/tasks/publish: the task
 // page's and a plan page's Publish button, performing `lode task publish`
 // (draft -> ready) through the page-script write gate (WL-REQ-1338). The body
@@ -1006,6 +1039,11 @@ var taskRouteDocs = map[string]routeDoc{
 		summary:   "Set a task's pinned skills",
 		request:   model.SetSkillsInput{},
 		responses: map[int]any{http.StatusOK: model.TaskSkills{}},
+	},
+	"POST /api/v1/tasks/{id}/reviewers": {
+		summary:   "Replace a task's reviewer roster; every reviewer must be an existing actor and the task must not be closed",
+		request:   model.SetTaskReviewersInput{},
+		responses: map[int]any{http.StatusOK: model.TaskReviewers{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
 	},
 	"POST /api/v1/tasks/{id}/edges": {
 		summary:   "Add an edge from or to a task",
