@@ -518,7 +518,8 @@ func newInstallCmd() *cobra.Command {
 			"post-commit hooks (into the repo's shared hooks directory, honoring core.hooksPath) " +
 			"that invoke `lode-hook <event>`, chaining any hook already present on the same event, " +
 			"or — for pre-commit — the pre-commit framework. pre-commit keeps a working session's " +
-			"lease alive; commit-msg stamps a Worklode-Task trailer into commits made in a task " +
+			"lease alive; commit-msg refuses a commit that cites a spec section or, in a repo with a " +
+			"[gate] table, fails the spec gate on the staged change, and stamps a Worklode-Task trailer into commits made in a task " +
 			"worktree, so the commit says which task it belongs to even after a rebase or squash; " +
 			"post-merge and post-commit report a merge that lands on the default branch " +
 			"here, so a task advances without waiting for a GitHub webhook. The agent " +

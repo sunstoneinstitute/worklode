@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
@@ -108,4 +109,84 @@ func (d Declaration) Spelled() string {
 		ref += " " + d.Qualifier
 	}
 	return ref
+}
+
+// Staged is the commit-msg form of Run (WL-REQ-1549): the change is the
+// staged paths, and the trailer may be in message or in any commit since the
+// branch's merge base with the remote's default branch. Merge, cherry-pick and
+// revert commits carry other people's changes and are not checked. refusal
+// is the verdict; unread is a git or config read that failed, which the hook
+// reports as a warning (WL-REQ-1722). Both nil means the commit may proceed.
+func Staged(dir, message string, resolve func(designdoc.SectionRef) string) (refusal, unread error) {
+	root, ok := gitexec.Line(dir, "rev-parse", "--show-toplevel")
+	if !ok {
+		return nil, nil
+	}
+	cfg, enabled, err := Load(root)
+	if err != nil || !enabled {
+		return nil, err
+	}
+	for _, f := range []string{"MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"} {
+		p, ok := gitexec.Line(root, "rev-parse", "--git-path", f)
+		if !ok {
+			continue
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(root, p)
+		}
+		if _, err := os.Stat(p); err == nil {
+			return nil, nil
+		}
+	}
+	names, err := gitexec.Text(root, "diff", "--cached", "--name-only", "--no-renames")
+	if err != nil {
+		return nil, err
+	}
+	in := Input{Texts: []string{message}, ResolveSection: resolve}
+	for _, p := range strings.Split(names, "\n") {
+		if p = strings.TrimSpace(p); p != "" {
+			in.Changed = append(in.Changed, p)
+		}
+	}
+	if base, ok := branchBase(root); ok {
+		if log, err := gitexec.Text(root, "log", "--format=%B%x00", base+"..HEAD"); err == nil {
+			for _, m := range strings.Split(log, "\x00") {
+				if m = strings.TrimSpace(m); m != "" {
+					in.Texts = append(in.Texts, m)
+				}
+			}
+		}
+	}
+	added, err := gitexec.Text(root, "diff", "--cached", "--no-renames", "--no-color", "--no-ext-diff")
+	if err != nil {
+		return nil, err
+	}
+	postImage := func(file string) (string, bool) {
+		b, err := gitexec.Bytes(root, "show", ":"+file)
+		return string(b), err == nil
+	}
+	cites, err := cfg.AddedCitations(added, postImage)
+	if err != nil {
+		return nil, err
+	}
+	_, err = Check(cfg, in)
+	if len(cites) > 0 {
+		err = errors.Join(err, fmt.Errorf("cite rules by ref, never by spec section (WL-REQ-1791):\n%s",
+			strings.TrimRight(Describe(cites, resolve), "\n")))
+	}
+	if err != nil {
+		return fmt.Errorf("gate: %w", err), nil
+	}
+	return nil, nil
+}
+
+// branchBase is the merge base of HEAD and the remote's default branch
+// (origin/HEAD, else origin/main). ok is false on an unborn branch or a repo
+// with no such remote branch.
+func branchBase(root string) (string, bool) {
+	remote, ok := gitexec.Line(root, "rev-parse", "--abbrev-ref", "origin/HEAD")
+	if !ok {
+		remote = "origin/main"
+	}
+	return gitexec.Line(root, "merge-base", "HEAD", remote)
 }
