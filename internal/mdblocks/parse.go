@@ -19,6 +19,7 @@ import (
 	"github.com/yuin/goldmark/util"
 
 	"github.com/sunstoneinstitute/worklode/internal/mdfence"
+	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -28,7 +29,7 @@ import (
 var parser = goldmark.New(
 	goldmark.WithExtensions(
 		extension.Table, extension.Strikethrough, extension.Linkify, extension.TaskList,
-		extension.DefinitionList,
+		extension.DefinitionList, mdrender.Emoji,
 	),
 	goldmark.WithParserOptions(
 		gparser.WithBlockParsers(util.Prioritized(extension.NewFootnoteBlockParser(), 999)),
@@ -198,28 +199,6 @@ func inProfile(src []byte, n ast.Node) bool {
 func soleImage(p ast.Node) (*ast.Image, bool) {
 	img, ok := p.FirstChild().(*ast.Image)
 	return img, ok && img.NextSibling() == nil
-}
-
-// inline returns n's text as plain runs. Styles and links are WL-1352's.
-func inline(src []byte, n ast.Node) []model.InlineContent {
-	var out []model.InlineContent
-	_ = ast.Walk(n, func(c ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		switch c := c.(type) {
-		case *ast.Text:
-			t := string(c.Segment.Value(src))
-			if c.SoftLineBreak() || c.HardLineBreak() {
-				t += "\n"
-			}
-			out = append(out, model.InlineContent{Type: "text", Text: t, Offset: c.Segment.Start})
-		case *ast.AutoLink:
-			out = append(out, model.InlineContent{Type: "text", Text: string(c.Label(src)), Offset: c.Pos()})
-		}
-		return ast.WalkContinue, nil
-	})
-	return out
 }
 
 func plainText(runs []model.InlineContent) string {
