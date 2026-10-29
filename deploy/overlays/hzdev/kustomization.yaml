@@ -69,5 +69,5 @@ patches:
         value: worklode.dev.sunstoneinstitute.ai
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
-    newTag: "f2f8fba8d"
+    newTag: "747e647f"
     newName: ghcr.io/sunstoneinstitute/worklode
