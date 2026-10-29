@@ -636,3 +636,25 @@ func TestProjectProgressInformativeSection(t *testing.T) {
 		t.Errorf("informative = %v, want %v", got, want)
 	}
 }
+
+// TestProjectProgressSkipsRetiredSpecs: a withdrawn or superseded spec is not read.
+func TestProjectProgressSkipsRetiredSpecs(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"withdrawn", "superseded"} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			s := openDocStore(t)
+			specID, _, _ := seedProgressCorpus(t, s)
+			if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET status = $2 WHERE id = $1`, specID, status); err != nil {
+				t.Fatalf("set spec status: %v", err)
+			}
+			in, err := s.ProjectProgress(t.Context(), "p1", nil)
+			if err != nil {
+				t.Fatalf("ProjectProgress: %v", err)
+			}
+			if len(in.Specs) != 0 {
+				t.Errorf("got %d specs, want 0", len(in.Specs))
+			}
+		})
+	}
+}
