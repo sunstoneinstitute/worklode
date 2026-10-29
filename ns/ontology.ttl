@@ -7,8 +7,8 @@
 # class, and WL-SPEC-78 adds plan coverage. Where a spec
 # section is cited below, that section is the reason the term exists.
 #
-# This file is a reference, not a deployment: the graph is not implemented, and
-# publication under https://worklode.io/ns/ belongs to rdf-registry (WL-SPEC-79).
+# This file is a reference, not a deployment: the graph is not implemented.
+# deploy-www.yml publishes it at https://worklode.io/ns/ontology.ttl.
 # It is also the parseable form — the Turtle blocks in the specs are
 # illustrative and do not parse, because they concatenate adjacent string
 # literals and leave slashes unescaped in prefixed names (wlid:doc/spec-006).

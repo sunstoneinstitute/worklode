@@ -238,16 +238,12 @@ outright once it is fixed over annotating it as resolved.
   by per-repo graph partitioning, and same-graph races are last-write-wins over
   fully recomputed documents — at worst one run stale, self-healing on the next
   run.
-- `[P3]` **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (WL-SPEC-79
-  must-have 3, publishing half): decided 2026-08-06 that this repo serves the
-  files from its own site, without rdf-registry (rdf-registry#31 closed).
-  `deploy-www.yml` uploads only `www/`, so `ns/` is not served today — the
-  deploy must include the ttl files and add `ns/**` to its path trigger. The
-  namespace is hash-style (`…/ns/ontology#`), so dereferencing any term
-  fetches the extensionless `…/ns/ontology`, which GitHub Pages cannot
-  content-negotiate — pick a serving strategy deliberately. Specs WL-SPEC-79,
-  WL-SPEC-79 item 3, WL-SPEC-77 and the `ns/ontology.ttl` header still record the
-  rdf-registry approach and need amending.
+- `[P3]` **`wl:` term IRIs do not dereference.** `deploy-www.yml` serves
+  `ns/*.ttl` at `https://worklode.io/ns/<file>.ttl` as `text/turtle` (WL-978),
+  but the namespace is hash-style (`…/ns/ontology#`), so dereferencing a term
+  fetches the extensionless `…/ns/ontology`, which 404s. GitHub Pages cannot
+  content-negotiate, so pick a serving strategy deliberately. WL-RULE-1360
+  still says the vocabulary is published to rdf-registry.
 - `[P4]` **`internal/designdoc/corpus.go`'s sync loader is dead code.**
   `LoadSyncCorpus`, `CorpusDoc`, `SectionMeta`, `EdgeMeta` and
   `frontmatterJSON` served the retired git→backbone sync (`f11af04`) and now
