@@ -98,6 +98,12 @@ export function useDraft<T extends Record<string, string>>({
       setRestored(false)
       setValues(initial)
     },
+    /** Write these values now, without the typing delay (a lost lock, a closing page) */
+    flush: (next: T) => {
+      clearTimeout(timer.current)
+      writeDraft(key, next)
+      setValues(next)
+    },
     /** Delete the draft, keeping the values (after a successful submit) */
     clear: () => {
       clearTimeout(timer.current)
