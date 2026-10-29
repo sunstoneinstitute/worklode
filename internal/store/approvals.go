@@ -103,8 +103,9 @@ func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int) err
 }
 
 // DefaultSubjectRevision returns the revision an ad-hoc requirement binds to
-// when the caller names none: a document's current version, "" for every
-// other kind — nothing else carries a revision the backbone owns.
+// when the caller names none: a document's current version, a task's
+// updated_at (tasks carry no version column, and an approval without a
+// revision can never be decided, WL-REQ-1608), "" for every other kind.
 //
 // It doubles as the existence check the ad-hoc route needs: ErrNotFound when
 // no row under kind has entityID, ErrInvalidInput for a kind outside
@@ -123,12 +124,21 @@ func DefaultSubjectRevision(tx *sql.Tx, kind, entityID string) (string, error) {
 		}
 		return strconv.Itoa(version), nil
 	}
+	if kind == "task" {
+		var updated time.Time
+		err := tx.QueryRow(`SELECT updated_at FROM tasks WHERE id = $1`, entityID).Scan(&updated)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		if err != nil {
+			return "", fmt.Errorf("revision of task %s: %w", entityID, err)
+		}
+		return updated.UTC().Format(time.RFC3339Nano), nil
+	}
 	var query string
 	switch kind {
 	case "deliverable":
 		query = `SELECT 1 FROM deliverables WHERE id = $1`
-	case "task":
-		query = `SELECT 1 FROM tasks WHERE id = $1`
 	case "pr":
 		query = `SELECT 1 FROM github_pull_requests WHERE ` + prEntityIDSQL + ` = $1`
 	default:
