@@ -2,12 +2,14 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -415,5 +417,43 @@ func TestListInstanceCrewAPI(t *testing.T) {
 	h2.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"actor":"alice"`) {
 		t.Fatalf("session: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestRemoveCrewMemberAPIRefusesOpenReview: an open PR approval naming the
+// member as required reviewer blocks removal and is named in the message
+// (WL-REQ-1605).
+func TestRemoveCrewMemberAPIRefusesOpenReview(t *testing.T) {
+	t.Parallel()
+	st, h, _, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	seedCrewActors(t, st, "ada", "bob")
+	for _, body := range []map[string]any{
+		{"actor": "ada", "role": "editor", "lead": true},
+		{"actor": "bob", "role": "reporter"},
+	} {
+		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
+			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
+		}
+	}
+	if err := st.AddRepo(context.Background(), "proj", "org/data"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	bob := "bob"
+	if _, _, err := st.RecordEvent(context.Background(), "cli", "ext-review-1", "pr.ingest", nil,
+		func(tx *sql.Tx, _ int64) error {
+			if _, _, err := store.UpsertPR(tx, store.PullRequest{Repo: "org/data", Number: 3,
+				Title: "Add data", State: "open", OpenedAt: now, UpdatedAt: now}, ""); err != nil {
+				return err
+			}
+			_, err := store.InsertAwaitingApproval(tx, now, "pr", "org/data#3", "sha1", "", nil, &bob, nil)
+			return err
+		}); err != nil {
+		t.Fatal(err)
+	}
+	rr := doReq(t, h, "DELETE", "/api/v1/projects/proj/participants/bob", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "org/data#3 (review, awaiting)") {
+		t.Fatalf("status %d, body %s; want 422 naming the review", rr.Code, rr.Body.String())
 	}
 }
