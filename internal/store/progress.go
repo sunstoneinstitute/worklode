@@ -110,15 +110,16 @@ func (s *Store) progressDocs(ctx context.Context, projectID string, specs []int6
 	return specDocs, plans, nil
 }
 
-// progressSpecDocs reads the project's live specs, or just those named by
-// specs when it is non-empty.
+// progressSpecDocs reads the project's live specs (WL-REQ-1334), or just those
+// named by specs when it is non-empty.
 func (s *Store) progressSpecDocs(ctx context.Context, projectID string, specs []int64) (map[int64]*progress.Spec, error) {
 	query := `
 SELECT d.id, coalesce(d.number, 0), d.title, d.status, d.updated_at,
        coalesce(p.key, ''), coalesce(d.owner, '')
   FROM docs d
   JOIN projects p ON p.id = d.project_id
- WHERE d.project_id = $1 AND d.kind = 'spec' AND d.deleted_at IS NULL`
+ WHERE d.project_id = $1 AND d.kind = 'spec' AND d.deleted_at IS NULL
+   AND d.status IN ('draft', 'accepted', 'executed', 'stale')`
 	args := []any{projectID}
 	if len(specs) > 0 {
 		query += " AND d.id = ANY($2)"
