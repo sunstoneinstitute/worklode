@@ -1,8 +1,23 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
+
+// The SPA's routes (WL-REQ-1305) as one regex, "$param" matching one segment
+const spaRoute = new RegExp(
+  `^(?:${(JSON.parse(readFileSync(path.resolve(import.meta.dirname, 'src/routes.json'), 'utf8')) as string[])
+    .map((r) => r.replace(/\$\w+/g, '[^/]+'))
+    .join('|')})/?$`,
+)
+// Vite's dev client and module graph
+const viteOwned = /^\/(?:@|src\/|node_modules\/|__)/
+
+function keepInVite(url: string): boolean {
+  const p = url.split('?')[0]
+  return viteOwned.test(p) || spaRoute.test(p)
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -25,9 +40,17 @@ export default defineConfig(({ mode }) => {
       // No data: URIs: the server's CSP allows fonts and images from 'self' only
       assetsInlineLimit: 0,
     },
-    // With the mock API off, /api goes to the Go server
+    // With the mock API off, every path except Vite's own and the SPA's routes
+    // goes to the Go server, so links into the templ cockpit work too
     server: mocksOff
-      ? { proxy: { '/api': env.VITE_API_TARGET || 'http://localhost:8080' } }
+      ? {
+          proxy: {
+            '/': {
+              target: env.VITE_API_TARGET || 'http://localhost:8080',
+              bypass: (req) => (keepInVite(req.url ?? '/') ? req.url : undefined),
+            },
+          },
+        }
       : undefined,
     test: {
       environment: 'jsdom',
