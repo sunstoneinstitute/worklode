@@ -33,7 +33,7 @@ tell an adjective from a verb or a view from an action.
   reads many, `edit` replaces a body, `set <field>` writes one named field or
   state, `remove` drops a member from a collection, `delete` tombstones an
   entity. Any other verb must name a domain action none of these expresses:
-  `claim`, `release`, `renew`, `submit`, `abandon`, `reopen`, `rework`,
+  `claim`, `release`, `renew`, `submit`, `abandon`, `complete`, `reopen`, `rework`,
   `start`, `stop`, `publish`, `promote`, `revoke`, `sync`, `exec`, `purge`,
   `import`, `install`, `recommend`, `resolve`, `decompose`, `instruct`,
   `reconcile`, `transfer`, `accept`, `revise`, `lint`, `derive`, `seek`,

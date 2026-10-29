@@ -47,6 +47,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskSubmitCmd(),
 		newTaskSetCmd(),
 		newTaskAbandonCmd(),
+		newTaskCompleteCmd(),
 		newTaskDeleteCmd(),
 		newTaskUndeleteCmd(),
 		newTaskBlockCmd(),
@@ -424,7 +425,7 @@ func newTaskListCmd() *cobra.Command {
 		},
 	}
 	addScopeFlags(cmd, &scope, "filter by project id")
-	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
+	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, completed, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, completed, and abandoned)")
 	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this task")
 	cmd.Flags().StringVar(&milestone, "milestone", "", "list only the tasks in this milestone, including the children of tasks attached to it")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
@@ -457,7 +458,7 @@ func resolveDeletedStatusFilter(statuses []string, deleted, statusGiven bool) []
 
 // resolveStatusFilter turns `lode task list --status` values into the state
 // filter sent to the server: no flag hides the delivered states (merged,
-// deployed_dev, deployed_prod, released) and abandoned; "all" disables
+// deployed_dev, deployed_prod, released), completed and abandoned; "all" disables
 // filtering entirely.
 func resolveStatusFilter(statuses []string) []string {
 	if len(statuses) == 0 {
@@ -735,7 +736,7 @@ func newTaskPublishCmd() *cobra.Command {
 }
 
 func newTaskReopenCmd() *cobra.Command {
-	return newTaskTransitionCmd("reopen <id>", "Reopen a delivered or abandoned task (merged|deployed_dev|deployed_prod|released|abandoned -> ready; a fresh claim is then required)",
+	return newTaskTransitionCmd("reopen <id>", "Reopen a delivered, completed or abandoned task (merged|deployed_dev|deployed_prod|released|completed|abandoned -> ready; a fresh claim is then required)",
 		false, (*cli.Client).ReopenTask)
 }
 
@@ -1138,6 +1139,16 @@ everything between the field and the id is the value.
 func newTaskAbandonCmd() *cobra.Command {
 	return newTaskTransitionCmd("abandon <id>", "Abandon a task from any non-terminal state",
 		true, (*cli.Client).AbandonTask)
+}
+
+func newTaskCompleteCmd() *cobra.Command {
+	cmd := newTaskTransitionCmd("complete <id>", "Complete a task whose outcome is not code (ready|in_progress|in_review -> completed)",
+		true, (*cli.Client).CompleteTask)
+	cmd.Long = "Complete a task whose outcome is not code: research, a decision, an ops change,\n" +
+		"a document. No pull request or merge webhook will close such a task, so this\n" +
+		"does. Code work closes by landing on main, so a task with a pull request is\n" +
+		"refused (WL-REQ-1884); merge or abandon it instead."
+	return cmd
 }
 
 // newTaskDeleteCmd is `lode task delete` (WL-REQ-117): the narrow close for a row
