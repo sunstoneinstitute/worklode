@@ -111,7 +111,7 @@ func TestTaskEditTitle(t *testing.T) {
 		t.Fatalf("edit --title --body: %v", err)
 	}
 	title, body := taskTitleBody(t, task.ID)
-	if title != "Both" || body != "new body" {
+	if title != "Both" || body != "new body\n" {
 		t.Fatalf("title, body = %q, %q; want %q, %q", title, body, "Both", "new body")
 	}
 
@@ -140,7 +140,7 @@ func TestTaskEditBody(t *testing.T) {
 	if _, err := runLode(t, "task", "edit", task.ID, "--body", "from flag"); err != nil {
 		t.Fatalf("edit --body: %v", err)
 	}
-	if got := taskBody(t, task.ID); got != "from flag" {
+	if got := taskBody(t, task.ID); got != "from flag\n" {
 		t.Fatalf("body after --body = %q, want %q", got, "from flag")
 	}
 
@@ -151,7 +151,7 @@ func TestTaskEditBody(t *testing.T) {
 	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", path); err != nil {
 		t.Fatalf("edit --body-file: %v", err)
 	}
-	if got := taskBody(t, task.ID); got != "# From file\n\nmulti\nline\n" {
+	if got := taskBody(t, task.ID); got != "# From file\n\nmulti line\n" {
 		t.Fatalf("body after --body-file = %q", got)
 	}
 
@@ -160,7 +160,7 @@ func TestTaskEditBody(t *testing.T) {
 	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", "-"); err != nil {
 		t.Fatalf("edit --body-file -: %v", err)
 	}
-	if got := taskBody(t, task.ID); got != "from stdin" {
+	if got := taskBody(t, task.ID); got != "from stdin\n" {
 		t.Fatalf("body after --body-file - = %q, want %q", got, "from stdin")
 	}
 
@@ -168,7 +168,7 @@ func TestTaskEditBody(t *testing.T) {
 	if _, err := runLode(t, "task", "edit", task.ID, "--priority", "low"); err != nil {
 		t.Fatalf("edit --priority: %v", err)
 	}
-	if got := taskBody(t, task.ID); got != "from stdin" {
+	if got := taskBody(t, task.ID); got != "from stdin\n" {
 		t.Fatalf("body after unrelated edit = %q, want %q", got, "from stdin")
 	}
 }
@@ -194,7 +194,7 @@ func TestTaskEditBodyErrors(t *testing.T) {
 	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", ""); err == nil {
 		t.Fatal(`--body-file "": want error, got nil`)
 	}
-	if got := taskBody(t, task.ID); got != "ORIGINAL" {
+	if got := taskBody(t, task.ID); got != "ORIGINAL\n" {
 		t.Fatalf(`body after --body-file "" = %q, want it untouched (%q)`, got, "ORIGINAL")
 	}
 }

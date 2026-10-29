@@ -46,7 +46,7 @@ func (s *Store) AddRule(ctx context.Context, in model.AddRuleInput, actor string
 		} else if err != nil {
 			return fmt.Errorf("read project %q: %w", in.Project, err)
 		}
-		body := sectionBody(string(in.Body), true)
+		body := sectionBody(normalizeBody("rule", string(in.Body)), true)
 		id, version, err := insertRule(tx, in.Project, string(in.Heading), body)
 		if err != nil {
 			return err

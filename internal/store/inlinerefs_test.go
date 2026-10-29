@@ -238,7 +238,7 @@ func TestNormalizeAcceptedRule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Version != 2 || r.Status != "accepted" || r.Change != "normalize" || !strings.HasPrefix(string(r.Body), "\nNames P1-RULE-1.\nAnd `P1-REQ-1`.") {
+	if r.Version != 2 || r.Status != "accepted" || r.Change != "normalize" || !strings.HasPrefix(string(r.Body), "\nNames P1-RULE-1. And `P1-REQ-1`.") {
 		t.Errorf("v%d %s %q body %q", r.Version, r.Status, r.Change, r.Body)
 	}
 	if n := taskCount(t, s); n != before {
@@ -292,7 +292,8 @@ func TestNormalizeTaskBody(t *testing.T) {
 	if err := s.db.QueryRowContext(t.Context(), `SELECT body FROM tasks WHERE id = 'P1-7'`).Scan(&body); err != nil {
 		t.Fatal(err)
 	}
-	if want := "Needs P1-8 first.\nThen [it](P1-8)."; body != want {
+	// The normalising write stores mdblocks.Normalize's form too (WL-REQ-1867).
+	if want := "Needs P1-8 first. Then [it](P1-8).\n"; body != want {
 		t.Errorf("body %q, want %q", body, want)
 	}
 }
@@ -559,7 +560,7 @@ func TestSectionRefKeepsResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 	setBody("Unrelated.\nSee P1-SPEC-1#sec-1.1 and P1-SPEC-1#sec-1.")
-	check("after unrelated edit", "doc:"+doc+"  sec-1 {2}", "rule:"+leaf+" "+doc+" sec-1.1 {2}")
+	check("after unrelated edit", "doc:"+doc+"  sec-1 {1}", "rule:"+leaf+" "+doc+" sec-1.1 {1}")
 
 	// Removed, then added back: resolved afresh.
 	setBody("Nothing.")
@@ -585,7 +586,7 @@ func TestSectionRefKeepsResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 	setBody("Edited.\nSee P1-SPEC-1#sec-1.2.")
-	check("edit of legacy text", "doc:"+doc+"  sec-1.2 {2}")
+	check("edit of legacy text", "doc:"+doc+"  sec-1.2 {1}")
 }
 
 // TestSectionRefKeepsResolutionAcrossVersions: a versioned field's next
@@ -665,7 +666,7 @@ func TestNormalizeSectionRefFromRuleRow(t *testing.T) {
 	if changed, _, err := normalizeNode(t, s, "task", "P1-7"); err != nil || !changed {
 		t.Fatalf("changed %v, err %v", changed, err)
 	}
-	if got, want := body(), "See P1-SPEC-1#rule-1."; got != want {
+	if got, want := body(), "See P1-SPEC-1#rule-1.\n"; got != want {
 		t.Errorf("body %q, want %q", got, want)
 	}
 	leaf := strconv.FormatInt(ruleID(t, s, "P1", 1), 10)
@@ -682,7 +683,7 @@ func TestNormalizeSectionRefFromDocRow(t *testing.T) {
 	if changed, _, err := normalizeNode(t, s, "task", "P1-7"); err != nil || changed {
 		t.Fatalf("changed %v, err %v", changed, err)
 	}
-	if got, want := body(), "See P1-SPEC-1#sec-1."; got != want {
+	if got, want := body(), "See P1-SPEC-1#sec-1.\n"; got != want {
 		t.Errorf("body %q, want %q", got, want)
 	}
 }
@@ -700,7 +701,7 @@ func TestNormalizeSectionRefAfterMove(t *testing.T) {
 	if _, _, err := normalizeNode(t, s, "task", "P1-7"); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := body(), "See P1-SPEC-1#rule-1."; got != want {
+	if got, want := body(), "See P1-SPEC-1#rule-1.\n"; got != want {
 		t.Errorf("body %q, want %q", got, want)
 	}
 }

@@ -219,6 +219,7 @@ func dueArg(s string) any {
 // from a RecordEvent apply callback with the store's clock as now, and
 // appends a state_log row attributed to eventID.
 func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.Task, error) {
+	in.Body = normalizeBody("task", in.Body)
 	if in.Concern != "" && !ValidConcern(in.Concern) {
 		return nil, fmt.Errorf("unknown concern %q: %w", in.Concern, ErrInvalidInput)
 	}
@@ -576,6 +577,10 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 // cross-project attach and an unknown milestone are both ErrInvalidInput,
 // checked inside this transaction against the task's current project.
 func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body *model.Markdown, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind, milestone, due *string) error {
+	if body != nil {
+		n := model.Markdown(normalizeBody("task", string(*body)))
+		body = &n
+	}
 	if due != nil {
 		if err := ValidDue(*due); err != nil {
 			return err

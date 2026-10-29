@@ -106,7 +106,7 @@ func TestCreateTask(t *testing.T) {
 	got := decodeMap(t, rr)
 	want := map[string]any{
 		"id": "WL-1", "project": "proj", "title": "First task",
-		"body": "do the thing", "priority": "high", "kind": "feature",
+		"body": "do the thing\n", "priority": "high", "kind": "feature",
 		"state": "ready", "created_by": "alice",
 	}
 	for k, v := range want {
@@ -338,7 +338,7 @@ func TestListTasksOmitsBody(t *testing.T) {
 			t.Fatalf("GET %s status = %d, body %s", path, rr.Code, rr.Body.String())
 		}
 		task := decodeMap(t, rr)["tasks"].([]any)[0].(map[string]any)
-		if got, _ := task["body"].(string); (got == "the body") != want {
+		if got, _ := task["body"].(string); (got == "the body\n") != want {
 			t.Errorf("GET %s: body = %q, want present=%v", path, got, want)
 		}
 	}
@@ -512,7 +512,7 @@ func TestPatchTask(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
-	if got["title"] != "New title" || got["body"] != "orig body" || got["priority"] != "high" {
+	if got["title"] != "New title" || got["body"] != "orig body\n" || got["priority"] != "high" {
 		t.Fatalf("after title patch: %v", got)
 	}
 
@@ -522,7 +522,7 @@ func TestPatchTask(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got = decodeMap(t, rr)
-	if got["title"] != "New title" || got["body"] != "new body" || got["priority"] != "low" {
+	if got["title"] != "New title" || got["body"] != "new body\n" || got["priority"] != "low" {
 		t.Fatalf("after body/priority patch: %v", got)
 	}
 

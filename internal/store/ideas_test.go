@@ -91,7 +91,7 @@ func TestIdeaVisibilityAndShare(t *testing.T) {
 		t.Fatalf("get intake task: %v", err)
 	}
 	if task.Kind != "design" || task.Project != "intake" || task.State != "ready" ||
-		task.Title != "Rivers" || task.Body != "secret body" || task.CreatedBy != "a" {
+		task.Title != "Rivers" || task.Body != "secret body\n" || task.CreatedBy != "a" {
 		t.Fatalf("intake task = %+v", task)
 	}
 	wantPayload(t, s, "idea.shared", map[string]any{"idea": idea.ID, "task": task.ID, "actor": "a"})
@@ -131,7 +131,7 @@ func TestIdeaVisibilityAndShare(t *testing.T) {
 	if _, err := s.PatchIdea(ctx, "a", idea.ID, model.PatchIdeaInput{Title: (*model.Markdown)(&newTitle), Body: (*model.Markdown)(&newBody)}); err != nil {
 		t.Fatalf("a patch shared: %v", err)
 	}
-	if task, _ := s.GetTask(ctx, shared.Task); string(task.Title) != newTitle || string(task.Body) != newBody {
+	if task, _ := s.GetTask(ctx, shared.Task); string(task.Title) != newTitle || string(task.Body) != newBody+"\n" {
 		t.Fatalf("task after patch = %q / %q", task.Title, task.Body)
 	}
 

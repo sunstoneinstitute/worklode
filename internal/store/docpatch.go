@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/mdblocks"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -102,17 +103,22 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 			"doc %d is %s: only an accepted document is amended in place (WL-REQ-171): %w",
 			in.ID, d.status, ErrInvalidInput)
 	}
-	if storedBody(d.kind, in.Body) == storedBody(d.kind, d.body) {
+	var next parsedDoc
+	in.Body, next, err = normalizeDocWrite(d.kind, in.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	// The gates compare normalised text on both sides, so a section of an
+	// accepted body stored before WL-REQ-1867 that differs only in spelling
+	// is not a change.
+	oldBody := string(mdblocks.Normalize([]byte(d.body)))
+	if storedBody(d.kind, in.Body) == storedBody(d.kind, oldBody) {
 		return nil, nil, fmt.Errorf("doc %d: nothing changed: %w", in.ID, ErrInvalidInput)
 	}
 
-	old, err := parseDocBody(d.kind, d.body)
+	old, err := parseDocBody(d.kind, oldBody)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse the accepted body of doc %d: %w", in.ID, err)
-	}
-	next, err := parseSpecWrite(d.kind, in.Body)
-	if err != nil {
-		return nil, nil, err
 	}
 	changed := designdoc.ChangedAnchors(old.doc, next.doc)
 
