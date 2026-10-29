@@ -221,3 +221,49 @@ export function useSaveIntake() {
     if (error) throw failure(error, response)
   })
 }
+
+// Body locks (WL-REQ-1868). `id` is the doc id, the numeric rule id or the task id.
+
+export type LockKind = "doc" | "rule" | "task"
+export type BodyLock = components["schemas"]["BodyLock"]
+export type LockLost = components["schemas"]["LockLost"]
+type ErrorResponse = components["schemas"]["ErrorResponse"]
+
+/** Takes a body lock: a new session, or (409) the lock another holder has */
+export async function takeBodyLock(kind: LockKind, id: string): Promise<{ ok: true; lock: BodyLock } | { ok: false; lock: BodyLock }> {
+  const { data, error, response } = await api.POST("/api/v1/locks/{kind}/{id}", { params: { path: { kind, id } } })
+  if (data) return { ok: true, lock: data }
+  if (response.status === 409) return { ok: false, lock: error as BodyLock }
+  throw failure(error as ErrorResponse, response)
+}
+
+/** Checks a session in; a 409 means the session has ended */
+export async function checkInBodyLock(
+  kind: LockKind,
+  id: string,
+  body: components["schemas"]["LockCheckIn"],
+): Promise<{ ok: true } | { ok: false; lost: LockLost }> {
+  const { data, error, response } = await api.PUT("/api/v1/locks/{kind}/{id}", { params: { path: { kind, id } }, body })
+  if (data) return { ok: true }
+  if (response.status === 409) return { ok: false, lost: error as LockLost }
+  throw failure(error as ErrorResponse, response)
+}
+
+/**
+ * Releases one session. `keepalive` lets the request outlive the page on
+ * pagehide; it goes through `api`, so it keeps the WL-REQ-1770 headers,
+ * which `navigator.sendBeacon` cannot send.
+ */
+export async function releaseBodyLock(kind: LockKind, id: string, session: string, { keepalive = false } = {}) {
+  const { error, response } = await api.DELETE("/api/v1/locks/{kind}/{id}", {
+    params: { path: { kind, id }, query: { session } },
+    keepalive,
+  })
+  if (error) throw failure(error, response)
+}
+
+/** Ends every session on a lock; the subject's owner or an admin only */
+export async function unlockBody(kind: LockKind, id: string) {
+  const { error, response } = await api.POST("/api/v1/locks/{kind}/{id}/unlock", { params: { path: { kind, id } } })
+  if (error) throw failure(error, response)
+}
