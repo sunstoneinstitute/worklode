@@ -916,6 +916,32 @@ type RuleView struct {
 	// Current is false on an older version's page, which is what shows the
 	// "back to current" banner; CanonicalURL is where it links.
 	Current bool
+	// Viewer is the session's actor, empty for an anonymous viewer. It decides
+	// whether Accept is enabled, as on the document page.
+	Viewer string
+}
+
+// ruleActions is the rule page's two Accept buttons, drawn on a draft rule's
+// current version: plain Accept, and Accept as substantive, which is `lode
+// rule accept --substantive` and always mints a review (WL-REQ-171). Rule.Owner is the rule's own owner; when it is empty the
+// owner is resolved from an arranging spec by the store, which then decides.
+func ruleActions(v RuleView) []ProgressAction {
+	if !v.Current || v.Rule.Status != "draft" {
+		return nil
+	}
+	var reason string
+	switch {
+	case v.Viewer == "":
+		reason = "sign in to accept"
+	case v.Rule.Owner != "" && v.Rule.Owner != v.Viewer:
+		reason = v.Rule.Ref + " is owned by " + v.Rule.Owner
+	}
+	route := v.CanonicalURL + "/accept"
+	return []ProgressAction{
+		{Route: route, Label: "Accept", Confirm: "Accept " + v.Rule.Ref, Reason: reason},
+		{Route: route, Body: `{"substantive":true}`, Label: "Accept as substantive",
+			Confirm: "Accept " + v.Rule.Ref + " and request review", Reason: reason},
+	}
 }
 
 // TermView is a definition rule's term page (WL-REQ-1368).

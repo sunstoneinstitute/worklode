@@ -8,12 +8,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 func TestDocAndTaskPageActsJourney(t *testing.T) {
@@ -140,4 +142,71 @@ func pageAs(t *testing.T, h http.Handler, path, session string) string {
 		t.Fatalf("GET %s = %d, body %s", path, rr.Code, rr.Body.String())
 	}
 	return rr.Body.String()
+}
+
+// TestRulePageAcceptJourney drives the rule page's Accept button: enabled for
+// the owner, disabled for anyone else, refused for a non-owner, and gone once
+// the rule is accepted.
+func TestRulePageAcceptJourney(t *testing.T) {
+	t.Parallel()
+	st, h, iss := newOIDCServer(t, api.Config{})
+	projID := seedProjectWithKey(t, st, "WL")
+	dana := sessionFor(t, h, iss, map[string]any{
+		"preferred_username": "dana", "name": "Dana",
+		"groups": []string{"user"}, "githubUsername": "danah",
+	})
+	erin := sessionFor(t, h, iss, map[string]any{
+		"preferred_username": "erin", "name": "Erin",
+		"groups": []string{"user"}, "githubUsername": "erinh",
+	})
+	token, err := st.CreateToken(context.Background(), "dana", "journey token", nil)
+	if err != nil {
+		t.Fatalf("create token for dana: %v", err)
+	}
+	if rr := doReq(t, h, http.MethodPost, "/api/v1/rules", token, model.AddRuleInput{Project: projID, Heading: "Alone", Body: "Text.", Kind: "invariant"}); rr.Code != http.StatusCreated {
+		t.Fatalf("add rule = %d, body %s", rr.Code, rr.Body.String())
+	}
+	page := "/projects/" + projID + "/rule/1"
+	route := page + "/accept"
+
+	body := pageAs(t, h, page, dana)
+	for _, want := range []string{`data-route="` + route + `"`, `data-confirm="Accept WL-RULE-1"`, `src="/assets/act.js`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("owner's draft rule page lacks %s:\n%s", want, body)
+		}
+	}
+	if body := pageAs(t, h, page, erin); !strings.Contains(body, "is owned by dana") || strings.Contains(body, `data-confirm="Accept `) {
+		t.Fatalf("non-owner's page should carry a disabled Accept naming dana:\n%s", body)
+	}
+
+	if rr := jsonPost(t, h, route, erin, `{}`); rr.Code != http.StatusForbidden {
+		t.Fatalf("non-owner accept = %d, body %s; want 403", rr.Code, rr.Body.String())
+	}
+	if rr := jsonPost(t, h, route, dana, `{}`); rr.Code != http.StatusOK {
+		t.Fatalf("accept = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := jsonPost(t, h, route, dana, `{}`); rr.Code != http.StatusConflict {
+		t.Fatalf("second accept = %d, body %s; want 409", rr.Code, rr.Body.String())
+	}
+	if body := pageAs(t, h, page, dana); strings.Contains(body, `data-route="`+route+`"`) {
+		t.Fatalf("accepted rule page still offers Accept")
+	}
+
+	// Accept as substantive on a second version mints its review.
+	if !strings.Contains(body, "Accept as substantive") {
+		t.Fatalf("owner's draft rule page lacks Accept as substantive:\n%s", body)
+	}
+	if rr := doReq(t, h, http.MethodPut, "/api/v1/rules/WL-RULE-1", token, model.EditRuleInput{Heading: "Alone", Body: "Text, reworded."}); rr.Code != http.StatusOK {
+		t.Fatalf("edit rule = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := jsonPost(t, h, route, dana, `{"substantive":true}`); rr.Code != http.StatusOK {
+		t.Fatalf("substantive accept = %d, body %s", rr.Code, rr.Body.String())
+	}
+	tasks, err := st.ListTasks(t.Context(), store.TaskFilter{Project: projID})
+	if err != nil {
+		t.Fatalf("list tasks: %v", err)
+	}
+	if !slices.ContainsFunc(tasks, func(tk model.Task) bool { return tk.Title == "Review WL-RULE-1 v2" }) {
+		t.Fatalf("substantive accept minted no review; tasks %+v", tasks)
+	}
 }

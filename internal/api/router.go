@@ -185,6 +185,7 @@ var routeGuards = map[string]routeGuard{
 	// page is never shadowed by the task and document pages.
 	"GET /projects/{proj}/rule/{n}":         guarded(permWebRead),
 	"GET /projects/{proj}/rule/{n}/{ver}":   guarded(permWebRead),
+	"POST /projects/{id}/rule/{n}/accept":   guarded(permDocWrite),
 	"GET /projects/{proj}/term/{slug}":      guarded(permWebRead),
 	"GET /projects/{proj}/{kind}/{n}":       guarded(permWebRead),
 	"GET /projects/{proj}/{kind}/{n}/{ver}": guarded(permWebRead),

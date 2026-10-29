@@ -887,6 +887,7 @@ func (s *server) registerCockpit(r *router) {
 	// route. ruleRefRedirect only ever 302s, like docRefRedirect above.
 	r.web("GET /projects/{proj}/rule/{n}", s.navWrap("knowledge", s.rulePage))
 	r.web("GET /projects/{proj}/rule/{n}/{ver}", s.navWrap("knowledge", s.rulePage))
+	r.web("POST /projects/{id}/rule/{n}/accept", s.acceptRuleFromPage)
 	r.web("GET /projects/{proj}/term/{slug}", s.navWrap("knowledge", s.termPage))
 	r.web("GET /projects/{proj}/{kind}/{n}", s.projectEntityPage)
 	r.web("GET /projects/{proj}/{kind}/{n}/{ver}", s.projectEntityPage)

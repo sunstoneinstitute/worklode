@@ -2,9 +2,8 @@ package ui
 
 // rule.templ renders a design rule's cockpit page: the rule's
 // current or a named version, the documents that arrange it, the tasks it
-// governs, and its version history. Read-only, like the document corpus it
-// is drawn from — a rule is edited through its arranging document, never
-// on this page.
+// governs, and its version history. The one write is Accept on a draft
+// rule; a rule is edited through its arranging document, never on this page.
 templ Rule(v RuleView) {
 	@Page(v.Page) {
 		@globalShell() {
@@ -21,6 +20,7 @@ templ Rule(v RuleView) {
 						<span class="chip plain">{ tag }</span>
 					}
 				</p>
+				@pageActs(ruleActions(v))
 			</section>
 			if !v.Current {
 				<section class="card pad">
