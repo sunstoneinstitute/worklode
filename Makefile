@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean dev-db dev-server dev-web FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet openapi clean graph-serve graph-query web web-gen web-clean dev-db dev-embeddings dev-server dev-web FORCE
 
 # WL-REQ-15: seven executables from one module. The three user binaries are what
 # Homebrew installs; three more ship in the container images, and
@@ -74,8 +74,23 @@ dev-db: ## Start compose's Postgres and migrate it from the host
 	docker compose up -d --wait postgres
 	go run -trimpath ./cmd/lode-migrate --dsn '$(DEV_DSN)' --migrations-path deploy/base/migrations
 
+export LODE_EMBEDDINGS_PORT ?= 8081
+EMBEDDINGS_URL := http://localhost:$(LODE_EMBEDDINGS_PORT)
+
+dev-embeddings: ## Start compose's embedding server (amd64 image; emulated on Apple Silicon)
+	docker compose --profile embeddings up -d embeddings
+
+# Embedding settings mirror deploy/base/configmap.yaml, used only when
+# dev-embeddings answers.
 dev-server: bin/lode-server ## Run lode-server on the host against dev-db (stop compose's worklode first)
-	LODE_DSN='$(DEV_DSN)' LODE_WEB_OPEN=$${LODE_WEB_OPEN:-1} LODE_INSTANCE_ENV=$${LODE_INSTANCE_ENV:-dev} ./bin/lode-server
+	@if curl -sf -o /dev/null $(EMBEDDINGS_URL)/health; then \
+		echo "using embeddings at $(EMBEDDINGS_URL)"; \
+		export LODE_EMBEDDING_URL=$(EMBEDDINGS_URL)/v1/embeddings LODE_EMBEDDING_MODEL=/model \
+			LODE_EMBEDDING_CONTEXT_TOKENS=2048 \
+			LODE_EMBEDDING_QUERY_PREFIX='task: search result | query: ' \
+			LODE_EMBEDDING_DOCUMENT_PREFIX='title: none | text: '; \
+	fi; \
+	LODE_DSN='$(DEV_DSN)' LODE_WEB_OPEN=$${LODE_WEB_OPEN:-1} LODE_INSTANCE_ENV=$${LODE_INSTANCE_ENV:-dev} exec ./bin/lode-server
 
 dev-web: ## Run the SPA's Vite dev server against dev-server (http://localhost:5173)
 	cd web/app && pnpm install --frozen-lockfile && VITE_API_MOCKS=off pnpm dev

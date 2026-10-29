@@ -840,6 +840,11 @@ database. If port 5432 is taken, set `LODE_POSTGRES_PORT` (for example
 `export LODE_POSTGRES_PORT=5433`) for both compose and the make targets;
 `DEV_DSN` overrides the whole database URL.
 
+For the dense arm of search, run `make dev-embeddings` before
+`make dev-server`. It needs `docker login ghcr.io`, and on Apple Silicon the
+amd64 image runs emulated at about a second per chunk. `make dev-server`
+uses it when it answers on `LODE_EMBEDDINGS_PORT` (default 8081).
+
 Open http://localhost:5173. Vite serves the SPA's routes from source and
 proxies every other path (the API and the templ cockpit) to the server.
 
