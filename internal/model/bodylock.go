@@ -31,3 +31,9 @@ type LockLost struct {
 	By     string   `json:"by,omitempty"`
 	Lock   BodyLock `json:"lock"`
 }
+
+// LockReleaseParams is the query of DELETE /api/v1/locks/{kind}/{id}: the
+// session to release.
+type LockReleaseParams struct {
+	Session string `query:"session"`
+}
