@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { HttpResponse, http } from "msw"
 import { beforeAll, beforeEach, expect, test } from "vitest"
@@ -20,6 +20,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  localStorage.clear()
   db.projects.push({ id: "web", key: "WEB", name: "Web", horizon: "standing", repos: [] })
   db.rules.push({ id: 7, ref: "WEB-REQ-7", project: "web", heading: "Seven", kind: "requirement", status: "draft", body: "v1 text\n" })
   db.docs.push({ id: 89, ref: "WEB-SPEC-89", project: "web", kind: "spec", number: 89, title: "Web spec", status: "draft", body: "spec text\n" })
@@ -96,9 +97,49 @@ test("a save refused for the lock goes to the lost-lock path", async () => {
   await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
   await typeAndSave(" lost")
   expect(await screen.findByRole("status")).toHaveTextContent(/no longer hold the lock/i)
-  expect(await body()).toHaveAttribute("contenteditable", "false")
-  expect(await body()).toHaveTextContent("lostv1 text")
+  expect(await screen.findByRole("region", { name: "Your unsaved changes" })).toHaveTextContent("lostv1 text")
   expect(screen.queryByRole("region", { name: "Newer stored text" })).not.toBeInTheDocument()
+})
+
+const draftKey = () => Object.keys(localStorage).find((k) => k.includes(":body:rule:7"))
+
+test("a lost lock keeps the unsaved blocks read-only until retaken", async () => {
+  const sent: components["schemas"]["EditRuleInput"][] = []
+  server.events.on("request:start", async ({ request }) => {
+    if (request.method === "PUT" && request.url.includes("/api/v1/rules/")) sent.push(await request.clone().json())
+  })
+  await renderApp("/projects/web/rule/7/edit")
+  await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+  await userEvent.type(await body(), "mine ")
+  db.locks.end("rule:7", { reason: "unlocked", by: "u2" })
+  await userEvent.click(screen.getByRole("button", { name: "Save" }))
+  const kept = await screen.findByRole("region", { name: "Your unsaved changes" })
+  expect(kept).toHaveTextContent("mine v1 text")
+  expect(screen.getByRole("status")).toHaveTextContent(/no longer hold the lock/i)
+  expect(JSON.parse(localStorage.getItem(draftKey()!)!).sha).toBe(await sha("v1 text\n"))
+  await userEvent.click(screen.getByRole("button", { name: "Take the lock again" }))
+  await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+  expect(await body()).toHaveTextContent("mine v1 text")
+  await userEvent.click(screen.getByRole("button", { name: "Save" }))
+  await waitFor(() => expect(rule().body).toBe("mine v1 text\n"))
+  server.events.removeAllListeners()
+  expect(sent.at(-1)?.if_body_sha256).toBe(await sha("v1 text\n"))
+  expect(draftKey()).toBeUndefined()
+})
+
+test("an existing draft opens before the server's blocks, and Discard draft goes back to them", async () => {
+  await renderApp("/projects/web/rule/7/edit")
+  await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+  await userEvent.type(await body(), "draft ")
+  window.dispatchEvent(new Event("pagehide")) // writes the draft before the release
+  expect(draftKey()).toBeDefined()
+  cleanup()
+  await renderApp("/projects/web/rule/7/edit")
+  expect(await body()).toHaveTextContent("draft v1 text")
+  expect(await screen.findByRole("status")).toHaveTextContent(/draft restored/i)
+  await userEvent.click(screen.getByRole("button", { name: "Discard draft" }))
+  await waitFor(async () => expect(await body()).not.toHaveTextContent("draft"))
+  expect(draftKey()).toBeUndefined()
 })
 
 test("leaving with unsaved changes asks first", async () => {
