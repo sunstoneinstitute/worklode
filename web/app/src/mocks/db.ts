@@ -94,7 +94,22 @@ function seed() {
   }
   // LODE_INTAKE_PROJECT is set; false makes share answer 409
   const intakeConfigured: boolean = true
-  return { me, projects, crew, participants, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured }
+  // Body locks by "kind:id" (GET/POST/PUT/DELETE /api/v1/locks/{kind}/{id})
+  const locks = new MockLocks()
+  return { me, projects, crew, participants, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured, locks }
+}
+
+type BodyLock = Ok<"/api/v1/locks/{kind}/{id}", "get">
+
+/** A held lock; `ended` is set when its session ends under the holder (unlocked, inactive, expired) */
+export type MockLock = BodyLock & { ended?: { reason: string; by: string } }
+
+export class MockLocks extends Map<string, MockLock> {
+  /** Ends the lock's session the way the server's unlock or sweep does */
+  end(key: string, ended: { reason: string; by: string }) {
+    const lock = this.get(key)
+    if (lock) lock.ended = ended
+  }
 }
 
 export type Idea = Ok<"/api/v1/ideas/{id}", "get">
