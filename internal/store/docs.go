@@ -456,7 +456,11 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 				"doc %d is %s: a plan is accepted from draft, re-accepted while accepted, or re-accepted out of stale (WL-REQ-170): %w",
 				id, d.status, ErrInvalidInput)
 		}
-		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
+		doc, minted, err := acceptPlanDoc(tx, now, id, d, actorID, eventID)
+		if err == nil {
+			err = closeDocReview(tx, now, id, "accepted", eventID)
+		}
+		return doc, minted, err
 	}
 	// Draft-only for a spec or ADR: an accepted one is revised (WL-REQ-170), never
 	// re-accepted.
@@ -490,6 +494,9 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		return nil, nil, err
 	}
 	if err := supersedeRetiredDocs(tx, ts, id, eventID); err != nil {
+		return nil, nil, err
+	}
+	if err := closeDocReview(tx, now, id, "accepted", eventID); err != nil {
 		return nil, nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
