@@ -1,6 +1,6 @@
 import { HttpResponse, delay, http } from "msw"
 import type { components } from "@/api/schema"
-import { type CrewMember, type LitmusTest, type ProjectDocument, type Task, db, idea, projectDetail, sharedIdea, visibleIdea } from "./db"
+import { type CrewMember, type LitmusTest, type MockLock, type ProjectDocument, type Task, db, idea, projectDetail, sharedIdea, visibleIdea } from "./db"
 import type { Ok } from "./typed"
 
 // Visible loading states in development; instant in tests
@@ -366,4 +366,77 @@ export const handlers = [
     db.ideas.splice(db.ideas.indexOf(found), 1)
     return new HttpResponse(null, { status: 204 })
   }),
+
+  // Body locks. One session per lock: a second take by the holder replaces it.
+  http.get("/api/v1/locks/:kind/:id", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const kind = String(params.kind)
+    const subject_id = String(params.id)
+    const lock = db.locks.get(`${kind}:${subject_id}`)
+    const body: Ok<"/api/v1/locks/{kind}/{id}", "get"> =
+      lock && !lock.ended ? { ...lockView(lock), session: undefined } : { kind, subject_id, holder: "", can_unlock: false }
+    return HttpResponse.json(body)
+  }),
+
+  http.post("/api/v1/locks/:kind/:id", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const kind = String(params.kind)
+    const subject_id = String(params.id)
+    const key = `${kind}:${subject_id}`
+    const held = db.locks.get(key)
+    if (held && !held.ended && held.holder && held.holder !== db.me.id) {
+      return HttpResponse.json({ ...lockView(held), session: undefined }, { status: 409 })
+    }
+    const lock: Ok<"/api/v1/locks/{kind}/{id}", "post"> = {
+      kind,
+      subject_id,
+      holder: db.me.id,
+      can_unlock: true,
+      session: `session-${++lockSessions}`,
+    }
+    db.locks.set(key, lock)
+    return HttpResponse.json(lock)
+  }),
+
+  http.put("/api/v1/locks/:kind/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const input = (await request.json()) as components["schemas"]["LockCheckIn"]
+    const lock = db.locks.get(`${String(params.kind)}:${String(params.id)}`)
+    if (!lock || lock.ended || lock.session !== input.session) {
+      const lost: components["schemas"]["LockLost"] = {
+        reason: lock?.ended?.reason ?? "released",
+        by: lock?.ended?.by ?? "",
+        lock: lock && !lock.ended ? { ...lockView(lock), session: undefined } : { holder: "" },
+      }
+      return HttpResponse.json(lost, { status: 409 })
+    }
+    const body: Ok<"/api/v1/locks/{kind}/{id}", "put"> = lockView(lock)
+    return HttpResponse.json(body)
+  }),
+
+  http.delete("/api/v1/locks/:kind/:id", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const key = `${String(params.kind)}:${String(params.id)}`
+    const session = new URL(request.url).searchParams.get("session")
+    if (db.locks.get(key)?.session === session) db.locks.delete(key)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post("/api/v1/locks/:kind/:id/unlock", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const key = `${String(params.kind)}:${String(params.id)}`
+    const lock = db.locks.get(key)
+    if (lock && !lock.can_unlock) return HttpResponse.json({ error: "forbidden" }, { status: 403 })
+    db.locks.delete(key)
+    return new HttpResponse(null, { status: 204 })
+  }),
 ]
+
+let lockSessions = 0
+
+// The wire shape, without the mock's own fields
+function lockView(lock: MockLock): components["schemas"]["BodyLock"] {
+  const view = { ...lock }
+  delete view.ended
+  return view
+}
