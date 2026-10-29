@@ -152,7 +152,7 @@ func newProjectCrewCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			members, raw, err := c.ListCrew(cmd.Context(), args[0])
+			resp, raw, err := c.ProjectCrew(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -160,11 +160,61 @@ func newProjectCrewCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.CrewTable(cmd.OutOrStdout(), members)
+			cli.CrewTable(cmd.OutOrStdout(), resp.Participants, resp.LeadHandoff)
 			return nil
 		},
 	}
-	cmd.AddCommand(newProjectCrewAddCmd(), newProjectCrewRemoveCmd())
+	cmd.AddCommand(newProjectCrewAddCmd(), newProjectCrewRemoveCmd(), newProjectCrewTransferCmd())
+	return cmd
+}
+
+// newProjectCrewTransferCmd requests or cancels a lead handoff (WL-REQ-1605).
+// Accepting and authorizing are web-session acts with no CLI command.
+func newProjectCrewTransferCmd() *cobra.Command {
+	var cancel bool
+	cmd := &cobra.Command{
+		Use:               "transfer <project> [<to-actor>]",
+		ValidArgsFunction: projectThenActor,
+		Short:             "Request, or cancel, a handoff of a project's lead",
+		Long: "Request a handoff of the project's lead to another human Crew member,\n" +
+			"or cancel the pending one with --cancel.\n\n" +
+			"The lead does not move yet. The outgoing and incoming leads accept in the\n" +
+			"cockpit's Crew page (an editor and a science lead may jointly stand in for an\n" +
+			"unavailable outgoing lead); the lead moves once the ceremony is complete.",
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if cancel == (len(args) == 2) {
+				return fmt.Errorf("give either a <to-actor> or --cancel")
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			if cancel {
+				raw, err := c.CancelLeadHandoff(cmd.Context(), args[0])
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "cancelled the pending lead handoff on project %s\n", args[0])
+				return nil
+			}
+			h, raw, err := c.RequestLeadHandoff(cmd.Context(), args[0], args[1])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.LeadHandoffRequested(cmd.OutOrStdout(), h)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&cancel, "cancel", false, "cancel the project's pending lead handoff")
 	return cmd
 }
 

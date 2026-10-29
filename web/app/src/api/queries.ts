@@ -124,17 +124,29 @@ export function useCrew() {
 
 export const projectCrewKey = queryKeys.projects.crew
 
+async function fetchProjectCrew(id: string) {
+  const { data, error, response } = await api.GET("/api/v1/projects/{id}/participants", {
+    params: { path: { id } },
+  })
+  if (error) throw failure(error, response)
+  return data
+}
+
 /** A project's Crew roster */
 export function useProjectCrew(id: string) {
   return useQuery({
     queryKey: projectCrewKey(id),
-    queryFn: async () => {
-      const { data, error, response } = await api.GET("/api/v1/projects/{id}/participants", {
-        params: { path: { id } },
-      })
-      if (error) throw failure(error, response)
-      return data.participants ?? []
-    },
+    queryFn: () => fetchProjectCrew(id),
+    select: (data) => data.participants ?? [],
+  })
+}
+
+/** A project's pending lead handoff, or undefined when none is open (WL-REQ-1605) */
+export function useLeadHandoff(id: string) {
+  return useQuery({
+    queryKey: projectCrewKey(id),
+    queryFn: () => fetchProjectCrew(id),
+    select: (data) => data.lead_handoff,
   })
 }
 

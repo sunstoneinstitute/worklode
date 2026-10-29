@@ -457,3 +457,68 @@ func TestRemoveCrewMemberAPIRefusesOpenReview(t *testing.T) {
 		t.Fatalf("status %d, body %s; want 422 naming the review", rr.Code, rr.Body.String())
 	}
 }
+
+// TestLeadHandoffAPI covers POST and DELETE /api/v1/projects/{id}/lead-handoff:
+// a request answers 201 with the ceremony and shows on the roster as
+// lead_handoff; a second request while one is pending is refused; cancel
+// answers 204 and the roster drops the ceremony; a cancel with nothing
+// pending is 404.
+func TestLeadHandoffAPI(t *testing.T) {
+	t.Parallel()
+	st, h, _, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	seedCrewActors(t, st, "ada", "bob")
+	for _, body := range []map[string]any{
+		{"actor": "ada", "role": "editor", "lead": true},
+		{"actor": "bob", "role": "reporter"},
+	} {
+		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
+			t.Fatalf("add %v: status %d; body %s", body, rr.Code, rr.Body.String())
+		}
+	}
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/lead-handoff", token, map[string]any{"to": "bob"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("request: status %d, want 201; body %s", rr.Code, rr.Body.String())
+	}
+	var ho model.LeadHandoff
+	if err := json.Unmarshal(rr.Body.Bytes(), &ho); err != nil {
+		t.Fatalf("decode %q: %v", rr.Body.String(), err)
+	}
+	if ho.From != "ada" || ho.To != "bob" || ho.State != "pending" || ho.Project != "proj" || ho.ID == 0 {
+		t.Fatalf("handoff = %+v, want pending ada -> bob on proj", ho)
+	}
+	ev := storeEventsOfType(t, st, "crew.lead_handoff_requested", 1)
+	var payload map[string]any
+	if err := json.Unmarshal(ev[0].Payload, &payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if payload["project"] != "proj" || payload["from"] != "ada" || payload["to"] != "bob" {
+		t.Fatalf("payload = %v, want project/from/to", payload)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/projects/proj/participants", token, nil)
+	var roster model.ParticipantListResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &roster); err != nil {
+		t.Fatalf("decode roster %q: %v", rr.Body.String(), err)
+	}
+	if roster.LeadHandoff == nil || roster.LeadHandoff.ID != ho.ID {
+		t.Fatalf("roster lead_handoff = %+v, want ceremony %d", roster.LeadHandoff, ho.ID)
+	}
+
+	if rr := doReq(t, h, "POST", "/api/v1/projects/proj/lead-handoff", token, map[string]any{"to": "bob"}); rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("second request: status %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	if rr := doReq(t, h, "DELETE", "/api/v1/projects/proj/lead-handoff", token, nil); rr.Code != http.StatusNoContent {
+		t.Fatalf("cancel: status %d, want 204; body %s", rr.Code, rr.Body.String())
+	}
+	storeEventsOfType(t, st, "crew.lead_handoff_cancelled", 1)
+	rr = doReq(t, h, "GET", "/api/v1/projects/proj/participants", token, nil)
+	if strings.Contains(rr.Body.String(), "lead_handoff") {
+		t.Fatalf("roster after cancel still carries lead_handoff: %s", rr.Body.String())
+	}
+	if rr := doReq(t, h, "DELETE", "/api/v1/projects/proj/lead-handoff", token, nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("cancel with nothing pending: status %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}

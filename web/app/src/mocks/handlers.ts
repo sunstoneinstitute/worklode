@@ -1,6 +1,6 @@
 import { HttpResponse, delay, http } from "msw"
 import type { components } from "@/api/schema"
-import { type CrewMember, type LitmusTest, type MockLock, type ProjectDocument, type Task, db, idea, projectDetail, sharedIdea, visibleIdea } from "./db"
+import { type CrewMember, type LeadHandoff, type LitmusTest, type MockLock, type ProjectDocument, type Task, db, idea, projectDetail, sharedIdea, visibleIdea } from "./db"
 import type { Ok } from "./typed"
 
 // Visible loading states in development; instant in tests
@@ -36,7 +36,10 @@ export const handlers = [
     await delay(LATENCY_MS)
     const members = db.participants[String(params.id)]
     if (!members) return HttpResponse.json({ error: "not found" }, { status: 404 })
-    const body: Ok<"/api/v1/projects/{id}/participants", "get"> = { participants: members }
+    const body: Ok<"/api/v1/projects/{id}/participants", "get"> = {
+      participants: members,
+      lead_handoff: db.leadHandoffs[String(params.id)],
+    }
     return HttpResponse.json(body)
   }),
 
@@ -64,6 +67,36 @@ export const handlers = [
     return HttpResponse.json(member, { status: 201 })
   }),
 
+  http.post("/api/v1/projects/:id/lead-handoff", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const id = String(params.id)
+    const lead = db.participants[id]?.find((m) => m.lead)
+    if (!lead) return HttpResponse.json({ error: "project has no lead to hand off: invalid input" }, { status: 422 })
+    if (db.leadHandoffs[id]) {
+      return HttpResponse.json({ error: `project ${id} already has a pending lead handoff: invalid input` }, { status: 422 })
+    }
+    const input = (await request.json()) as components["schemas"]["RequestLeadHandoffInput"]
+    const handoff: LeadHandoff = {
+      id: 1,
+      project: id,
+      from: lead.actor ?? "",
+      to: input.to ?? "",
+      state: "pending",
+      requested_by: db.me.id ?? "",
+      requested_at: new Date().toISOString(),
+    }
+    db.leadHandoffs[id] = handoff
+    return HttpResponse.json(handoff, { status: 201 })
+  }),
+
+  http.delete("/api/v1/projects/:id/lead-handoff", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const id = String(params.id)
+    if (!db.leadHandoffs[id]) return HttpResponse.json({ error: "no pending lead handoff: not found" }, { status: 404 })
+    delete db.leadHandoffs[id]
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.delete("/api/v1/projects/:id/participants/:actor", async ({ params }) => {
     await delay(LATENCY_MS)
     const members = db.participants[String(params.id)]
@@ -71,7 +104,7 @@ export const handlers = [
     if (!members || i < 0) return HttpResponse.json({ error: "not found" }, { status: 404 })
     if (members[i].lead) {
       return HttpResponse.json(
-        { error: "project lead cannot be removed; hand the lead off first (lode project crew handoff): invalid input" },
+        { error: "project lead cannot be removed; hand the lead off first (lode project crew transfer): invalid input" },
         { status: 422 },
       )
     }

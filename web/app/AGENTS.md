@@ -155,7 +155,7 @@ Every read goes through `src/api/`:
   every write, which the server requires of a cookie-authorized write
   (WL-REQ-1770); the browser adds `Sec-Fetch-Site`.
 - `queries.ts`: read hooks (`useMe`, `useProjects`, `useProjectCrew`, `useTasks`, `useProjectSummary`, ...).
-- `mutations.ts`: write hooks (crew add/remove, task create/update/delete), each invalidating the queries it changes. An error body is
+- `mutations.ts`: write hooks (crew add/remove, lead handoff request/cancel, task create/update/delete), each invalidating the queries it changes. An error body is
   `ErrorResponse` (`{ "error": string }`); a hook throws it as an
   `HttpError` carrying the status.
 - `list-mutations.ts`: optimistic create/update/delete over a `ListResource`
