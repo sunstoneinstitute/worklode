@@ -65,12 +65,12 @@ web-clean: ## Put the committed placeholder back after a local SPA build
 	git clean -fdx internal/webapp/dist
 	git checkout -- internal/webapp/dist/index.html
 
-# When .env.local sets any variable, run compose and lode-server under op run so
-# 1Password resolves its op:// references. Compose interpolates the exported
-# values, which take precedence over its own read of .env.
-ENV_RUN := $(if $(shell grep -qs '^[A-Z_]*=' .env.local && echo y),op run --env-file=.env.local --)
+# When .env holds op:// references, run compose and lode-server under op run so
+# 1Password resolves them. Compose interpolates the resolved values, which take
+# precedence over its own read of .env.
+ENV_RUN := $(if $(shell grep -qs '^[^\#]*op://' .env && echo y),op run --env-file=.env --)
 
-up: ## Start the compose stack with .env.local's variables
+up: ## Start the compose stack, resolving .env's op:// references
 	$(ENV_RUN) docker compose up -d
 
 # Host-side development: Postgres in compose, lode-server and Vite on the host.

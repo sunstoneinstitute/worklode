@@ -133,12 +133,13 @@ database. Tests skip silently when Postgres is unreachable unless `CI` is set
 
 Local stack: `export LODE_BOOTSTRAP_TOKEN=wl_$(openssl rand -hex 20)` then
 `docker compose up -d` (Postgres + migrations + server; web UI on
-`localhost:8080`). `.env.local` (committed) documents every `LODE_*` variable
-in `docker-compose.yml` and `deploy/base/`, all commented out. Uncommenting
-one makes `make up` and the `dev-*` targets run under `op run --env-file=.env.local`,
-so secrets go in as `op://` references; plain `docker compose` does not read
-the file. Adding or removing a server variable in either place updates
-`.env.local` in the same change.
+`localhost:8080`). Compose also reads `.env` (gitignored) from the repo root.
+`cp .env.example .env` and uncomment what you need. A `.env` value may be an
+`op://` reference: `make up` (and the `dev-*` targets) run under `op run` when
+`.env` holds one, plain `docker compose` does not. `.env.example` documents
+every `LODE_*` variable in `docker-compose.yml` and `deploy/base/`. Adding or
+removing a server variable in either place updates `.env.example` in the same
+change.
 
 ## Architecture
 
