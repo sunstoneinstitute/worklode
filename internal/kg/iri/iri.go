@@ -179,3 +179,9 @@ func RepoObservedGraph(source, host, owner, name string) string {
 func Repo(host, owner, name string) string {
 	return IDNS + "repo/" + host + "/" + owner + "/" + name
 }
+
+// ReviewThread returns the instance IRI of one review thread, a bare note
+// included (WL-REQ-1781).
+func ReviewThread(id int64) string {
+	return IDNS + "review_thread/" + strconv.FormatInt(id, 10)
+}

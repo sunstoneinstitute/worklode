@@ -200,49 +200,7 @@ func getReview(ctx context.Context, db rowsQueryer, id int64) (*model.Review, er
 // reviewThreads loads a review's threads in creation order, each with its
 // messages in seq order.
 func reviewThreads(ctx context.Context, db rowsQueryer, reviewID int64) ([]model.ReviewThread, error) {
-	rows, err := db.QueryContext(ctx,
-		`SELECT id, review_id, coalesce(doc_id, 0), coalesce(rule_id, 0), coalesce(version, 0),
-		        coalesce(byte_start, 0), coalesce(byte_end, 0), coalesce(quote, ''), coalesce(doc_anchor, ''),
-		        coalesce(repo, ''), coalesce(path, ''), coalesce(side, ''), coalesce(line_number, 0),
-		        coalesce(anchor_text, ''), coalesce(blob_sha, ''),
-		        intent, coalesce(intent_classifier, ''), coalesce(intent_confidence, 0), status, author_id,
-		        coalesce(raised_by_task, ''), coalesce(raised_by_session, ''), created_at,
-		        coalesce(resolved_by, ''), resolved_at
-		   FROM review_threads WHERE review_id = $1 ORDER BY id`, reviewID)
-	if err != nil {
-		return nil, fmt.Errorf("load threads of review %d: %w", reviewID, err)
-	}
-	threads, err := collectRows(rows, fmt.Sprintf("load threads of review %d", reviewID), func(row rowScanner) (model.ReviewThread, error) {
-		var t model.ReviewThread
-		a := &t.Anchor
-		err := row.Scan(&t.ID, &t.Review, &a.Doc, &a.Rule, &a.Version, &a.ByteStart, &a.ByteEnd, &a.Quote, &a.DocAnchor,
-			&a.Repo, &a.Path, &a.Side, &a.Line, &a.AnchorText, &a.BlobSHA,
-			&t.Intent, &t.IntentClassifier, &t.IntentConfidence, &t.Status, &t.Author,
-			&t.RaisedByTask, &t.RaisedBySession, &t.CreatedAt, &t.ResolvedBy, &t.ResolvedAt)
-		return t, err
-	})
-	if err != nil || len(threads) == 0 {
-		return threads, err
-	}
-	rows, err = db.QueryContext(ctx,
-		`SELECT m.id, m.thread_id, m.seq, m.actor_id, m.role, m.body, m.created_at
-		   FROM review_messages m JOIN review_threads t ON t.id = m.thread_id
-		  WHERE t.review_id = $1 ORDER BY m.seq, m.id`, reviewID)
-	if err != nil {
-		return nil, fmt.Errorf("load messages of review %d: %w", reviewID, err)
-	}
-	byThread, err := groupRows(rows, fmt.Sprintf("load messages of review %d", reviewID), func(row rowScanner) (int64, model.ReviewMessage, error) {
-		var m model.ReviewMessage
-		err := row.Scan(&m.ID, &m.Thread, &m.Seq, &m.Author, &m.Role, &m.Body, &m.CreatedAt)
-		return m.Thread, m, err
-	})
-	if err != nil {
-		return nil, err
-	}
-	for i := range threads {
-		threads[i].Messages = byThread[threads[i].ID]
-	}
-	return threads, nil
+	return threadsWhere(ctx, db, `t.review_id = $1`, reviewID)
 }
 
 // ListReviews lists reviews newest-opened last, without threads or rounds.

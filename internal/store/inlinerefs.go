@@ -473,12 +473,16 @@ func deriveDocRefs(tx *sql.Tx, docID int64, prev map[string]string) error {
 	return pruneClassifiedEdges(tx, "doc", id, nil)
 }
 
-// deriveDocNoteRefs extracts a new doc note, held by its doc as note/<id>.
+// deriveDocNoteRefs extracts a new doc note, held by its doc as note/<id>,
+// from the note thread's first message.
 func deriveDocNoteRefs(tx *sql.Tx, noteID int64) error {
 	var project, body string
 	var docID int64
 	if err := tx.QueryRow(
-		`SELECT d.project_id, d.id, n.body FROM doc_notes n JOIN docs d ON d.id = n.doc_id WHERE n.id = $1`, noteID,
+		`SELECT d.project_id, d.id, m.body FROM review_threads t
+		   JOIN docs d ON d.id = t.doc_id
+		   JOIN review_messages m ON m.thread_id = t.id AND m.seq = 1
+		  WHERE t.id = $1`, noteID,
 	).Scan(&project, &docID, &body); err != nil {
 		return fmt.Errorf("read doc note %d for inline refs: %w", noteID, err)
 	}
