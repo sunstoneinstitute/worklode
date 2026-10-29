@@ -80,7 +80,7 @@ func (s *server) editRule(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := s.st.EditRule(r.Context(), ref.Key, ref.Number, req, actorIDFrom(r))
 	if err != nil {
-		s.mapStoreErr(w, err)
+		s.mapSaveErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, c)
@@ -354,7 +354,7 @@ var ruleRouteDocs = map[string]routeDoc{
 	"PUT /api/v1/rules/{id}": {
 		summary:   "Write a rule's heading and body, as Markdown or as editor blocks, as its next draft version",
 		request:   model.EditRuleInput{},
-		responses: map[int]any{http.StatusOK: model.Rule{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
+		responses: map[int]any{http.StatusOK: model.Rule{}, http.StatusUnprocessableEntity: model.ErrorResponse{}, http.StatusConflict: bodySaveConflict},
 	},
 	"PATCH /api/v1/rules/{id}": {
 		summary:   "Edit a rule's owner, tags and kind",

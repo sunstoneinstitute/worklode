@@ -701,6 +701,9 @@ func (s *Store) EditRule(ctx context.Context, projectKey string, number int64, i
 		if status != "draft" && status != "accepted" {
 			return fmt.Errorf("rule %s is %s; only a live rule is edited: %w", ref, status, ErrBadTransition)
 		}
+		if err := CheckBodySave(tx, "rule", fmt.Sprint(id), in.LockSession, in.IfBodySHA256); err != nil {
+			return err
+		}
 		body := sectionBody(normalizeBody("rule", string(in.Body)), true)
 		var heading, current string
 		if err := tx.QueryRow(

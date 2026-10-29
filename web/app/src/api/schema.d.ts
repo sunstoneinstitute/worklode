@@ -1230,6 +1230,15 @@ export interface paths {
                         "application/json": components["schemas"]["Doc"];
                     };
                 };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BodyConflict"] | components["schemas"]["BodyLock"];
+                    };
+                };
                 /** @description Unprocessable Entity */
                 422: {
                     headers: {
@@ -6306,6 +6315,15 @@ export interface paths {
                         "application/json": components["schemas"]["Rule"];
                     };
                 };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BodyConflict"] | components["schemas"]["BodyLock"];
+                    };
+                };
                 /** @description Unprocessable Entity */
                 422: {
                     headers: {
@@ -7334,6 +7352,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Task"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BodyConflict"] | components["schemas"]["BodyLock"];
                     };
                 };
                 /** @description Unprocessable Entity */
@@ -9820,6 +9847,13 @@ export interface components {
             /** Format: date-time */
             updated_at?: string;
         };
+        BodyConflict: {
+            blocks?: components["schemas"]["EditorBlock"][] | null;
+            body?: string;
+            body_sha256?: string;
+            id?: string;
+            kind?: string;
+        };
         BodyLock: {
             can_unlock?: boolean;
             holder?: string;
@@ -10501,6 +10535,8 @@ export interface components {
             blocks?: components["schemas"]["EditorBlock"][];
             body?: string;
             heading?: string;
+            if_body_sha256?: string;
+            lock_session?: string;
         };
         EditTaskInput: {
             artifacts?: null | string[];
@@ -10509,7 +10545,9 @@ export interface components {
             concern?: null | string;
             due?: null | string;
             human_only?: null | boolean;
+            if_body_sha256?: string;
             kind?: null | string;
+            lock_session?: string;
             milestone?: null | string;
             needs_decomposition?: null | boolean;
             plan?: null | string;
@@ -11948,7 +11986,9 @@ export interface components {
         UpdateDocBodyInput: {
             blocks?: components["schemas"]["EditorBlock"][];
             body?: string;
+            if_body_sha256?: string;
             if_version?: number;
+            lock_session?: string;
         };
         WebhookAck: {
             status?: string;

@@ -673,6 +673,9 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	err := s.recordTaskEvent(r.Context(), "cli", "task.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
+			if err := store.CheckBodySave(tx, "task", id, req.LockSession, req.IfBodySHA256); err != nil {
+				return err
+			}
 			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.HumanOnly, req.Kind, req.Milestone, req.Due); err != nil {
 				return err
 			}
@@ -735,7 +738,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		s.observeMilestoneChange("task_attach", err)
 	}
 	if err != nil {
-		s.mapStoreErr(w, err)
+		s.mapSaveErr(w, r, err)
 		return
 	}
 	t, err := s.st.GetTask(r.Context(), id)
@@ -997,7 +1000,7 @@ var taskRouteDocs = map[string]routeDoc{
 	"PATCH /api/v1/tasks/{id}": {
 		summary:   "Update a task's fields; due is YYYY-MM-DD, and \"\" clears it; the body is Markdown or editor blocks",
 		request:   model.EditTaskInput{},
-		responses: map[int]any{http.StatusOK: model.Task{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
+		responses: map[int]any{http.StatusOK: model.Task{}, http.StatusUnprocessableEntity: model.ErrorResponse{}, http.StatusConflict: bodySaveConflict},
 	},
 	"PUT /api/v1/tasks/{id}/skills": {
 		summary:   "Set a task's pinned skills",

@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -24,6 +26,17 @@ type ErrLockHeld struct{ Lock model.BodyLock }
 
 func (e *ErrLockHeld) Error() string {
 	return fmt.Sprintf("%s %s is locked by %s", e.Lock.Kind, e.Lock.SubjectID, e.Lock.Holder)
+}
+
+// ErrBodyMoved means an editor save's if_body_sha256 is not the stored
+// body's. Body is the stored body; ID is the subject's id as a lock has it.
+type ErrBodyMoved struct {
+	Kind, ID string
+	Body     model.Markdown
+}
+
+func (e *ErrBodyMoved) Error() string {
+	return fmt.Sprintf("%s %s: the stored body moved since it was loaded", e.Kind, e.ID)
 }
 
 // ErrLockLost means the session no longer holds the lock.
@@ -313,4 +326,87 @@ func (s *Store) LockSubjectOwner(ctx context.Context, kind, subjectID string) (s
 		return "", fmt.Errorf("lock subject owner: %w", err)
 	}
 	return owner, nil
+}
+
+// CheckBodySave runs an editor save's checks inside the write's transaction
+// (WL-REQ-1868), locking the subject's row: first the lock (a lockSession that
+// is not a live session on the subject is *ErrLockHeld), then the hash of the
+// stored body as GET serves it (*ErrBodyMoved). An empty argument skips its
+// check, so a CLI, API or MCP write is never refused for a lock.
+func CheckBodySave(tx *sql.Tx, kind, subjectID, lockSession, ifBodySHA256 string) error {
+	if lockSession == "" && ifBodySHA256 == "" {
+		return nil
+	}
+	body, err := lockedBody(tx, kind, subjectID)
+	if err != nil {
+		return err
+	}
+	if lockSession != "" {
+		var live bool
+		if err := tx.QueryRow(
+			`SELECT EXISTS (SELECT 1 FROM body_lock_sessions
+			  WHERE id = $1 AND kind = $2 AND subject_id = $3 AND ended_at IS NULL)`,
+			lockSession, kind, subjectID).Scan(&live); err != nil {
+			return fmt.Errorf("check lock session: %w", err)
+		}
+		if !live {
+			l := model.BodyLock{Kind: kind, SubjectID: subjectID}
+			err := tx.QueryRow(`SELECT holder FROM body_locks WHERE kind = $1 AND subject_id = $2`,
+				kind, subjectID).Scan(&l.Holder)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("check lock session: %w", err)
+			}
+			return &ErrLockHeld{Lock: l}
+		}
+	}
+	if ifBodySHA256 != "" {
+		sum := sha256.Sum256([]byte(body))
+		if !strings.EqualFold(hex.EncodeToString(sum[:]), ifBodySHA256) {
+			return &ErrBodyMoved{Kind: kind, ID: subjectID, Body: model.Markdown(body)}
+		}
+	}
+	return nil
+}
+
+// lockedBody locks the subject's row for the write and returns its body as
+// GET serves it: a document's rendered body, a rule's current version.
+func lockedBody(tx *sql.Tx, kind, subjectID string) (string, error) {
+	switch kind {
+	case "doc":
+		id, err := strconv.ParseInt(subjectID, 10, 64)
+		if err != nil {
+			return "", ErrNotFound
+		}
+		if _, err := tx.Exec(`SELECT 1 FROM docs WHERE id = $1 FOR UPDATE`, id); err != nil {
+			return "", fmt.Errorf("lock doc %d: %w", id, err)
+		}
+		d, err := getDocTx(tx, id)
+		if err != nil {
+			return "", err
+		}
+		return string(d.Body), nil
+	case "rule":
+		var body string
+		err := tx.QueryRow(
+			`SELECT v.body FROM rules r JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+			  WHERE r.id = $1 FOR NO KEY UPDATE OF r`, subjectID).Scan(&body)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		if err != nil {
+			return "", fmt.Errorf("read rule %s body: %w", subjectID, err)
+		}
+		return body, nil
+	case "task":
+		var body sql.NullString
+		err := tx.QueryRow(`SELECT body FROM tasks WHERE id = $1 FOR UPDATE`, subjectID).Scan(&body)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		if err != nil {
+			return "", fmt.Errorf("read task %s body: %w", subjectID, err)
+		}
+		return body.String, nil
+	}
+	return "", checkLockKind(kind)
 }

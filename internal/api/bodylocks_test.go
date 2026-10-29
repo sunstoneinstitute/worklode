@@ -8,8 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // lockFixture is a server with a document owned by bob, a rule owned by
@@ -215,5 +218,155 @@ func TestLockNeedsActor(t *testing.T) {
 	f.h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("open subject take: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestRuleSaveConflictReturnsStoredText: a draft rule rewritten in place
+// keeps its version, so only the body hash catches the move (WL-REQ-1868).
+func TestRuleSaveConflictReturnsStoredText(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	var rule model.Rule
+	decodeInto(t, doReq(t, h, http.MethodPost, "/api/v1/rules", token, model.AddRuleInput{Project: projID, Heading: "R", Body: "v1 text\n", Kind: "invariant"}), &rule)
+	var loaded model.BlocksBody
+	decodeInto(t, doReq(t, h, http.MethodGet, "/api/v1/rules/WL-RULE-1?as=blocks", token, nil), &loaded)
+	if rr := doReq(t, h, http.MethodPut, "/api/v1/rules/WL-RULE-1", token, model.EditRuleInput{Heading: "R", Body: "agent wrote this\n"}); rr.Code != http.StatusOK {
+		t.Fatalf("agent edit: %d %s", rr.Code, rr.Body)
+	}
+	var now model.Rule
+	decodeInto(t, doReq(t, h, http.MethodGet, "/api/v1/rules/WL-RULE-1", token, nil), &now)
+	if now.Version != rule.Version {
+		t.Fatalf("draft edit moved the version: %d -> %d", rule.Version, now.Version)
+	}
+
+	for name, in := range map[string]model.EditRuleInput{
+		"body":   {Heading: "R", Body: "mine\n", IfBodySHA256: loaded.BodySHA256},
+		"blocks": {Heading: "R", Blocks: []model.EditorBlock{sourceBlock}, IfBodySHA256: loaded.BodySHA256},
+	} {
+		rr := doReq(t, h, http.MethodPut, "/api/v1/rules/WL-RULE-1", token, in)
+		var c model.BodyConflict
+		decodeInto(t, rr, &c)
+		if rr.Code != http.StatusConflict || c.Kind != "rule" || c.ID != fmt.Sprint(rule.ID) ||
+			c.BodySHA256 != sha(string(now.Body)) || c.Body != now.Body || len(c.Blocks) != 1 {
+			t.Fatalf("%s: %d %+v", name, rr.Code, c)
+		}
+	}
+	rr := doReq(t, h, http.MethodPut, "/api/v1/rules/WL-RULE-1", token, model.EditRuleInput{Heading: "R", Body: "mine\n", IfBodySHA256: sha(string(now.Body))})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("current hash: %d %s", rr.Code, rr.Body)
+	}
+}
+
+// TestDocSaveConflict: the document body write checks the hash, on both the
+// body and the blocks path.
+func TestDocSaveConflict(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "plan", Slug: "p", Body: "---\nstatus: draft\n---\n# P\n\nText.\n"})
+	var loaded model.BlocksBody
+	decodeInto(t, doReq(t, h, http.MethodGet, docPath(plan.ID, "?as=blocks"), token, nil), &loaded)
+	if rr := doReq(t, h, http.MethodPut, docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: "# P\n\nAgent text.\n"}); rr.Code != http.StatusOK {
+		t.Fatalf("agent edit: %d %s", rr.Code, rr.Body)
+	}
+	var now model.DocDetail
+	decodeInto(t, doReq(t, h, http.MethodGet, docPath(plan.ID, ""), token, nil), &now)
+	for name, in := range map[string]model.UpdateDocBodyInput{
+		"body":   {Body: "# P\n\nMine.\n", IfBodySHA256: loaded.BodySHA256},
+		"blocks": {Blocks: []model.EditorBlock{sourceBlock}, IfBodySHA256: loaded.BodySHA256},
+	} {
+		rr := doReq(t, h, http.MethodPut, docPath(plan.ID, "/body"), token, in)
+		var c model.BodyConflict
+		decodeInto(t, rr, &c)
+		if rr.Code != http.StatusConflict || c.Kind != "doc" || c.ID != fmt.Sprint(plan.ID) ||
+			c.BodySHA256 != sha(string(now.Body)) || c.Body != now.Body || len(c.Blocks) == 0 {
+			t.Fatalf("%s: %d %+v", name, rr.Code, c)
+		}
+	}
+	if rr := doReq(t, h, http.MethodPut, docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: "# P\n\nMine.\n", IfBodySHA256: sha(string(now.Body))}); rr.Code != http.StatusOK {
+		t.Fatalf("current hash: %d %s", rr.Code, rr.Body)
+	}
+}
+
+// TestTaskSaveConflict: PATCH /tasks/{id} checks the hash.
+func TestTaskSaveConflict(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	task := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "T", "priority": "medium", "kind": "chore", "body": "v1\n"})
+	id := task["id"].(string)
+	path := "/api/v1/tasks/" + id
+	var loaded model.BlocksBody
+	decodeInto(t, doReq(t, h, http.MethodGet, path+"?as=blocks", token, nil), &loaded)
+	if rr := doReq(t, h, http.MethodPatch, path, token, map[string]any{"body": "agent\n"}); rr.Code != http.StatusOK {
+		t.Fatalf("agent edit: %d %s", rr.Code, rr.Body)
+	}
+	for name, in := range map[string]map[string]any{
+		"body":   {"body": "mine\n", "if_body_sha256": loaded.BodySHA256},
+		"blocks": {"blocks": []model.EditorBlock{sourceBlock}, "if_body_sha256": loaded.BodySHA256},
+	} {
+		rr := doReq(t, h, http.MethodPatch, path, token, in)
+		var c model.BodyConflict
+		decodeInto(t, rr, &c)
+		if rr.Code != http.StatusConflict || c.Kind != "task" || c.ID != id ||
+			c.BodySHA256 != sha("agent\n") || c.Body != "agent\n" || len(c.Blocks) != 1 {
+			t.Fatalf("%s: %d %+v", name, rr.Code, c)
+		}
+	}
+}
+
+// TestSaveLockCheck: a save whose lock session is not live is 409 with the
+// lock, can_unlock filled for the caller; a save with no session is never
+// refused for a lock (WL-REQ-1868).
+func TestSaveLockCheck(t *testing.T) {
+	t.Parallel()
+	f := newLockFixture(t)
+	path := "/api/v1/tasks/" + f.task
+	stale := takeLock(t, f.h, f.bob, "task", f.task)
+	if rr := doReq(t, f.h, http.MethodPost, lockPath("task", f.task)+"/unlock", f.admin, nil); rr.Code != http.StatusNoContent {
+		t.Fatalf("unlock: %d %s", rr.Code, rr.Body)
+	}
+	live := takeLock(t, f.h, f.dave, "task", f.task)
+
+	rr := doReq(t, f.h, http.MethodPatch, path, f.bob, map[string]any{"body": "bob\n", "lock_session": stale.Session})
+	var l model.BodyLock
+	decodeInto(t, rr, &l)
+	if rr.Code != http.StatusConflict || l.Holder != "dave" || !l.CanUnlock {
+		t.Fatalf("stale session: %d %+v", rr.Code, l)
+	}
+	if rr := doReq(t, f.h, http.MethodPatch, path, f.dave, map[string]any{"body": "dave\n", "lock_session": live.Session}); rr.Code != http.StatusOK {
+		t.Fatalf("live session: %d %s", rr.Code, rr.Body)
+	}
+	if rr := doReq(t, f.h, http.MethodPatch, path, f.carol, map[string]any{"body": "agent\n"}); rr.Code != http.StatusOK {
+		t.Fatalf("no session while dave holds the lock: %d %s", rr.Code, rr.Body)
+	}
+}
+
+// TestSaveConflictMetrics: both refusals move
+// worklode_body_save_conflicts_total.
+func TestSaveConflictMetrics(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	st := store.OpenTestStore(t, store.WithMetrics(reg))
+	token := seedActor(t, st, "alice", "human", "Alice", true)
+	h, _, err := api.NewServer(st, api.Config{WebOpen: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projID := seedProjectWithKey(t, st, "WL")
+	var rule model.Rule
+	decodeInto(t, doReq(t, h, http.MethodPost, "/api/v1/rules", token, model.AddRuleInput{Project: projID, Heading: "R", Body: "x\n", Kind: "invariant"}), &rule)
+	path := "/api/v1/rules/WL-RULE-1"
+	if rr := doReq(t, h, http.MethodPut, path, token, model.EditRuleInput{Heading: "R", Body: "y\n", IfBodySHA256: sha("nope")}); rr.Code != http.StatusConflict {
+		t.Fatalf("moved: %d %s", rr.Code, rr.Body)
+	}
+	if rr := doReq(t, h, http.MethodPut, path, token, model.EditRuleInput{Heading: "R", Body: "y\n", LockSession: "gone"}); rr.Code != http.StatusConflict {
+		t.Fatalf("lock: %d %s", rr.Code, rr.Body)
+	}
+	for _, reason := range []string{"moved", "lock"} {
+		if got := sampleWith(t, reg, "worklode_body_save_conflicts_total", map[string]string{"kind": "rule", "reason": reason}); got != 1 {
+			t.Errorf("%s = %v, want 1", reason, got)
+		}
 	}
 }

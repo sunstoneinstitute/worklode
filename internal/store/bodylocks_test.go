@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -220,4 +221,35 @@ func TestBodySaveConflictsRegistered(t *testing.T) {
 	}
 	// Nil-safe without WithMetrics.
 	openTestStore(t).BodySaveConflict("doc", "lock")
+}
+
+// TestBodySaveLockCheck: a save with a stale lock session is ErrLockHeld; a
+// save with no session succeeds while another actor holds the lock
+// (WL-REQ-1868).
+func TestBodySaveLockCheck(t *testing.T) {
+	s := openDocStore(t)
+	ctx := t.Context()
+	r, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "H", Body: "v1\n"}, "stig")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := strconv.FormatInt(r.ID, 10)
+	mine, err := s.TakeLock(ctx, "rule", id, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReleaseLockSession(ctx, "rule", id, mine.Session); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.TakeLock(ctx, "rule", id, "bob"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.EditRule(ctx, "P1", r.Number, model.EditRuleInput{Heading: "H", Body: "mine\n", LockSession: mine.Session}, "alice")
+	var held *ErrLockHeld
+	if !errors.As(err, &held) || held.Lock.Holder != "bob" {
+		t.Fatalf("stale session: %v", err)
+	}
+	if _, err := s.EditRule(ctx, "P1", r.Number, model.EditRuleInput{Heading: "H", Body: "agent\n"}, "stig"); err != nil {
+		t.Fatalf("no session while bob holds the lock: %v", err)
+	}
 }
