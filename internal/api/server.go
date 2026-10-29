@@ -1748,7 +1748,8 @@ func readQuery(r *http.Request, v any) error {
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
 // ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
 // ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
-// ErrRevisionExists/ErrReferenceExists/ErrActorExists/ErrProjectExists → 409,
+// ErrRevisionExists/ErrReferenceExists/ErrActorExists/ErrProjectExists/
+// ErrReviewOpen → 409,
 // ErrUnknownBlob → 422, anything else → 500 with a generic body (the detail
 // is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
@@ -1786,7 +1787,8 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrActorExists),
 		errors.Is(err, store.ErrProjectExists),
 		errors.Is(err, store.ErrRuleCovered),
-		errors.Is(err, store.ErrNotShared):
+		errors.Is(err, store.ErrNotShared),
+		errors.Is(err, store.ErrReviewOpen):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		s.log.Error("internal error", "err", err)
