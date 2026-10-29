@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/mdfence"
 )
 
 const sharedInstructionsFile = ".worklode/agent-instructions.md"
@@ -45,13 +47,9 @@ func ensureInstructionPointer(path string) (string, error) {
 	if err != nil && !missing {
 		return "", fmt.Errorf("read %s: %w", path, err)
 	}
-	inFence := false
+	var fence mdfence.Tracker
 	for _, line := range strings.Split(string(body), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			inFence = !inFence
-		}
-		if !inFence && trimmed == instructionReadLine {
+		if !fence.Fence(line) && strings.TrimSpace(line) == instructionReadLine {
 			return instrUnchanged, nil
 		}
 	}

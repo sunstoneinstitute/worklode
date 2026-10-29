@@ -183,3 +183,13 @@ func TestRenderStyledBlocksDoNotAbsorbTheNextBlock(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderStyledFencesFollowCommonMark(t *testing.T) {
+	if out := plain(renderStyled("```` ```{mermaid} ```` text\n", 80)); strings.HasPrefix(out, "  ") || !strings.HasSuffix(out, " text") {
+		t.Errorf("a backtick info string with a backtick opened a fence: %q", out)
+	}
+	out := plain(renderStyled("````\n```\ninner\n````\n\nafter\n", 80))
+	if want := "  ```\n  inner\n\nafter"; out != want {
+		t.Errorf("four-backtick fence:\ngot:  %q\nwant: %q", out, want)
+	}
+}

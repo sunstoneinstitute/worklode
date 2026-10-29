@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/mdfence"
 	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
@@ -42,22 +43,13 @@ type Citation struct {
 // line before it is tested.
 func Citations(text string) []Citation {
 	var out []Citation
-	fenced := false
+	var fence mdfence.Tracker
 	for _, line := range strings.Split(text, "\n") {
-		if isFence(line) {
-			fenced = !fenced
-			continue
-		}
-		if !fenced {
+		if !fence.Fence(line) {
 			out = append(out, lineCitations(line)...)
 		}
 	}
 	return out
-}
-
-func isFence(line string) bool {
-	t := strings.TrimSpace(line)
-	return strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")
 }
 
 // lineCitations is the test over one line of prose, matches in order.
@@ -182,7 +174,7 @@ func (c Config) AddedCitations(diff string, postImage func(file string) (string,
 		out     []Citation
 		file    string
 		skip    bool
-		fenced  bool
+		fence   mdfence.Tracker
 		lineNum int
 		covered bool // the previous line was a standalone ignore directive
 		prose   []string
@@ -211,7 +203,7 @@ func (c Config) AddedCitations(diff string, postImage func(file string) (string,
 				return nil, fmt.Errorf("unreadable hunk header %q", l)
 			}
 			lineNum, _ = strconv.Atoi(m[1])
-			fenced = false
+			fence = mdfence.Tracker{}
 			covered = false
 			continue
 		}
@@ -241,11 +233,7 @@ func (c Config) AddedCitations(diff string, postImage func(file string) (string,
 			}
 			continue
 		}
-		if isFence(text) {
-			fenced = !fenced
-			continue
-		}
-		if kind == '+' && !fenced {
+		if !fence.Fence(text) && kind == '+' {
 			out = appendWhere(out, lineCitations(text), file, n)
 		}
 	}
@@ -259,11 +247,9 @@ func proseLines(file, text string) []string {
 	lines := strings.Split(text, "\n")
 	out := make([]string, len(lines))
 	if path.Ext(file) != ".go" {
-		fenced := false
+		var fence mdfence.Tracker
 		for i, l := range lines {
-			if isFence(l) {
-				fenced = !fenced
-			} else if !fenced {
+			if !fence.Fence(l) {
 				out[i] = l
 			}
 		}

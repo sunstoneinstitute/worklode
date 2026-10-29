@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/mdfence"
 )
 
 // Root filenames used by the shared installer and legacy migration.
@@ -150,7 +152,7 @@ type blockRegion struct{ start, end int }
 // swallowing them to EOF would delete authored prose.
 func findBlockRegions(body string) []blockRegion {
 	var out []blockRegion
-	inFence := false
+	var fence mdfence.Tracker
 	open, openEnd := -1, -1
 
 	for pos := 0; pos <= len(body); {
@@ -160,9 +162,7 @@ func findBlockRegions(body string) []blockRegion {
 			line, lineEnd = body[pos:pos+nl], pos+nl+1
 		}
 		switch trimmed := strings.TrimSpace(line); {
-		case strings.HasPrefix(trimmed, "```"):
-			inFence = !inFence
-		case inFence:
+		case fence.Fence(line):
 			// A marker inside a fence is quoted text, not a marker.
 		case trimmed == agentsBlockBegin:
 			// A second begin before any end closes the first at its own line.
@@ -235,13 +235,11 @@ func spliceAgentsBlock(existing string) string {
 // inside a fenced block is quoted text, matching findBlockRegions.
 func importedPaths(body string) []string {
 	var out []string
-	inFence := false
+	var fence mdfence.Tracker
 	for _, line := range strings.Split(body, "\n") {
 		t := strings.TrimSpace(line)
 		switch {
-		case strings.HasPrefix(t, "```"):
-			inFence = !inFence
-		case inFence, !strings.HasPrefix(t, "@"), strings.ContainsAny(t, " \t"):
+		case fence.Fence(line), !strings.HasPrefix(t, "@"), strings.ContainsAny(t, " \t"):
 		default:
 			out = append(out, strings.TrimPrefix(t, "@"))
 		}
