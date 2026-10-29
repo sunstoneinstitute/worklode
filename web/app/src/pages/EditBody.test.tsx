@@ -115,7 +115,7 @@ test("a lost lock keeps the unsaved blocks read-only until retaken", async () =>
   await userEvent.click(screen.getByRole("button", { name: "Save" }))
   const kept = await screen.findByRole("region", { name: "Your unsaved changes" })
   expect(kept).toHaveTextContent("mine v1 text")
-  expect(screen.getByRole("status")).toHaveTextContent(/someone unlocked it/i)
+  expect(screen.getByRole("status")).toHaveTextContent(/no longer hold the lock/i)
   expect(JSON.parse(localStorage.getItem(draftKey()!)!).sha).toBe(await sha("v1 text\n"))
   await userEvent.click(screen.getByRole("button", { name: "Take the lock again" }))
   await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
