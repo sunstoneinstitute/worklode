@@ -235,13 +235,11 @@ func TestDocumentReview(t *testing.T) {
 	}
 
 	// 7. The event log (WL-REQ-1780).
-	count := func(typ string) []model.Event {
+	// The commit horizon is cluster-wide, so a read right after a write may
+	// miss it; poll until the expected number is visible.
+	count := func(typ string, want int) []model.Event {
 		t.Helper()
-		page, _, err := admin.ListEvents(ctx, model.EventListParams{Type: typ})
-		if err != nil {
-			t.Fatalf("list %s events: %v", typ, err)
-		}
-		return page.Events
+		return pollEventListE2E(t, ctx, admin, model.EventListParams{Type: typ}, want)
 	}
 	for typ, n := range map[string]int{
 		eventbus.TypeReviewOpened:           1,
@@ -250,12 +248,12 @@ func TestDocumentReview(t *testing.T) {
 		eventbus.TypeReviewVerdictRecorded:  2,
 		eventbus.TypeReviewClosed:           1,
 	} {
-		if got := len(count(typ)); got != n {
+		if got := len(count(typ, n)); got != n {
 			t.Errorf("%s events = %d, want %d", typ, got, n)
 		}
 	}
 	resolved := 0
-	for _, ev := range count(eventbus.TypeReviewThreadResolved) {
+	for _, ev := range count(eventbus.TypeReviewThreadResolved, 2) {
 		if eventPayload(t, eventByID(t, ctx, admin, ev.ID))["wl:threadStatus"] == "resolved" {
 			resolved++
 		}
