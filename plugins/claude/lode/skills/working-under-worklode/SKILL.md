@@ -25,9 +25,10 @@ someone must make, an unmet precondition. Record it honestly with
 that are within scope.
 
 **Release without done/block** — if you must abandon the worktree with the
-task genuinely still workable (wrong fit, user redirected you), just stop;
-removing the worktree releases the lease, and an untouched worktree ages out
-to the sweeper. Don't mark done what isn't.
+task genuinely still workable (wrong fit, user redirected you), run
+`lode task release <id>` before `git worktree remove`. Removing the worktree
+does not release the lease: it holds until the sweeper expires it, up to two
+hours after the last commit. Don't mark done what isn't.
 
 ## When the plan or spec does not cover the case
 
