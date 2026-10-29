@@ -283,11 +283,11 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion i
 // snapshot and before the arrangement is rebuilt, so a row it adds to
 // doc_rules is matched by syncRules without entering the prior version.
 func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVersion int, eventID int64, pin func(*sql.Tx) error) (*model.Doc, error) {
-	var kind, status string
+	var kind, status, oldBody string
 	var version int
 	err := tx.QueryRow(
-		`SELECT kind, status, version FROM docs WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&kind, &status, &version)
+		`SELECT kind, status, version, body FROM docs WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&kind, &status, &version, &oldBody)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
@@ -349,6 +349,9 @@ func updateDocBodyPinned(tx *sql.Tx, now time.Time, id int64, body string, ifVer
 		}
 	}
 	if err := rebuildSections(tx, id, kind, parsed.doc, version, eventID); err != nil {
+		return nil, err
+	}
+	if err := relocateDocThreads(tx, id, version-1, version, oldBody, eventID); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -919,7 +922,7 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 	if kind == "plan" {
 		return after, nil
 	}
-	minted, derive, err := syncRules(tx, docID, doc, priorTable)
+	minted, derive, err := syncRules(tx, docID, doc, priorTable, eventID)
 	if err != nil {
 		return nil, err
 	}

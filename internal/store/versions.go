@@ -141,7 +141,13 @@ func moveSpecsToAcceptedRules(tx *sql.Tx, ruleIDs []int64, except int64, change 
 // change. An edit makes the version a draft; a normalization keeps the
 // rule's status, so an accepted rule stays accepted (WL-REQ-1855). It
 // returns the new version.
-func bumpRuleVersion(tx *sql.Tx, ruleID int64, heading, body, change string) (int, error) {
+func bumpRuleVersion(tx *sql.Tx, ruleID int64, heading, body, change string, eventID int64) (int, error) {
+	var old string
+	if err := tx.QueryRow(
+		`SELECT v.body FROM rule_versions v JOIN rules r ON r.id = v.rule_id AND r.version = v.version WHERE r.id = $1`,
+		ruleID).Scan(&old); err != nil {
+		return 0, fmt.Errorf("read rule %d text: %w", ruleID, err)
+	}
 	if _, err := tx.Exec(
 		`INSERT INTO inline_refs (from_kind, from_id, field, from_version, to_kind, to_id, lines, source)
 		 SELECT i.from_kind, i.from_id, i.field, r.version + 1, i.to_kind, i.to_id, '{}', 'manual'
@@ -171,7 +177,7 @@ func bumpRuleVersion(tx *sql.Tx, ruleID int64, heading, body, change string) (in
 		ruleID, version, heading, body, change); err != nil {
 		return 0, fmt.Errorf("insert rule %d v%d: %w", ruleID, version, err)
 	}
-	return version, nil
+	return version, relocateRuleThreads(tx, ruleID, version-1, version, old, body, eventID)
 }
 
 // docEdgeSnapshot reads document id's outgoing edges as snapshotted at

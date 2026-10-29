@@ -140,7 +140,7 @@ func ensureRules(tx *sql.Tx, docID int64) error {
 	if err != nil {
 		return fmt.Errorf("parse doc %d: %w", docID, err)
 	}
-	_, derive, err := syncRules(tx, docID, parsed, "doc_entries")
+	_, derive, err := syncRules(tx, docID, parsed, "doc_entries", 0)
 	if err != nil {
 		return err
 	}

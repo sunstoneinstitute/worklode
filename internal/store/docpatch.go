@@ -363,6 +363,9 @@ func publishPatch(tx *sql.Tx, now time.Time, in DocPatchInput, d lockedDoc,
 	if err := checkRulesLeft(tx, in.ID, prior, after, nil); err != nil {
 		return 0, err
 	}
+	if err := relocateDocThreads(tx, in.ID, version-1, version, d.body, eventID); err != nil {
+		return 0, err
+	}
 	if len(changed) > 0 {
 		if _, err := tx.Exec(
 			`UPDATE doc_sections SET last_revised_in = $3

@@ -650,7 +650,7 @@ func NormalizeNode(tx *sql.Tx, now time.Time, project string, kind model.NodeKin
 	case "task":
 		err = normalizeTask(tx, now, n, id, &b)
 	case "rule":
-		err = normalizeRuleNode(tx, n, id, &b)
+		err = normalizeRuleNode(tx, n, id, eventID, &b)
 	case "doc":
 		err = normalizeDoc(tx, now, n, id, eventID, &b)
 	default:
@@ -697,7 +697,7 @@ func normalizeTask(tx *sql.Tx, now time.Time, n *normalizer, id string, b *strin
 	return UpdateTaskFields(tx, now, id, newTitle, newBody, nil, nil, nil, nil, nil, nil, nil, nil)
 }
 
-func normalizeRuleNode(tx *sql.Tx, n *normalizer, id string, b *strings.Builder) error {
+func normalizeRuleNode(tx *sql.Tx, n *normalizer, id string, eventID int64, b *strings.Builder) error {
 	ruleID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return fmt.Errorf("rule id %q: %w", id, ErrInvalidInput)
@@ -733,7 +733,7 @@ func normalizeRuleNode(tx *sql.Tx, n *normalizer, id string, b *strings.Builder)
 	ref := ruleRefOf(tx, ruleID)
 	lineDiff(b, ref+" heading", heading, newHeading)
 	lineDiff(b, ref+" body", body, newBody)
-	return normalizeRule(tx, n.project, ruleID, newHeading, newBody)
+	return normalizeRule(tx, n.project, ruleID, newHeading, newBody, eventID)
 }
 
 // normalizeRule writes heading and body as rule ruleID's normalized text: a
@@ -741,7 +741,7 @@ func normalizeRuleNode(tx *sql.Tx, n *normalizer, id string, b *strings.Builder)
 // the next version, accepted and marked normalize, when the text is a pure
 // normalization, and every spec arranging it moves to that version
 // (WL-REQ-1298, WL-REQ-1855).
-func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body string) error {
+func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body string, eventID int64) error {
 	var status, oldHeading, oldBody string
 	var oldVersion int
 	if err := tx.QueryRow(
@@ -754,7 +754,7 @@ func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body strin
 	var err error
 	switch status {
 	case "draft":
-		_, version, err = reviseRule(tx, ruleID, heading, body)
+		_, version, err = reviseRule(tx, ruleID, heading, body, eventID)
 		if err != nil {
 			return err
 		}
@@ -777,7 +777,7 @@ func normalizeRule(tx *sql.Tx, project string, ruleID int64, heading, body strin
 		if err := n.verify(ref, "body", oldBody, body); err != nil {
 			return err
 		}
-		if version, err = bumpRuleVersion(tx, ruleID, heading, body, "normalize"); err != nil {
+		if version, err = bumpRuleVersion(tx, ruleID, heading, body, "normalize", eventID); err != nil {
 			return err
 		}
 		if err := deriveRuleInlineRefs(tx, project, ruleID, version, oldHeading, oldBody, heading, body); err != nil {
@@ -851,12 +851,16 @@ func normalizeDoc(tx *sql.Tx, now time.Time, n *normalizer, id string, eventID i
 		if err := n.verify(ref, "body", body, newBody); err != nil {
 			return err
 		}
-		if _, err := bumpDocVersion(tx, docID, "normalize"); err != nil {
+		next, err := bumpDocVersion(tx, docID, "normalize")
+		if err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE docs SET body = $2, updated_at = $3 WHERE id = $1`,
 			docID, newBody, now.UTC().Truncate(time.Second)); err != nil {
 			return fmt.Errorf("normalize doc %s body: %w", ref, err)
+		}
+		if err := relocateDocThreads(tx, docID, next-1, next, body, eventID); err != nil {
+			return err
 		}
 		if err := logDocChange(tx, docID, eventID, map[string]string{"field": "body", "change": "normalize"}); err != nil {
 			return err
