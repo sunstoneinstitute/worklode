@@ -107,10 +107,11 @@ var groupOrder = []string{"active", "planning", "no_record", "built"}
 // the state machine rather than listing states, so a state added to
 // model.TaskStates lands in a class without touching this function.
 // TestTaskClassPartitionsTaskStates fails the build until someone names the new
-// state's class. PlanState, Derive's counts and the task strip all call this;
+// state's class. `completed` is named here because it is closed without being
+// settable (WL-REQ-1884). PlanState, Derive's counts and the task strip all call this;
 // nothing else compares a task state to a literal.
 func TaskClass(state string) string {
-	if slices.Contains(model.SettableTaskStates, state) {
+	if state == "completed" || slices.Contains(model.SettableTaskStates, state) {
 		return "landed"
 	}
 	if state == "abandoned" {

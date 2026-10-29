@@ -175,7 +175,7 @@ wl:TaskShape a sh:NodeShape ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:in ( "draft" "ready" "in_progress" "in_review" "merged"
-                "deployed_dev" "deployed_prod" "released" "abandoned" ) ;
+                "deployed_dev" "deployed_prod" "released" "abandoned" "completed" ) ;
         sh:message "A Task mirrors exactly one backbone state literal from the tasks.state CHECK set." ;
     ] ;
     # Mirrors the tasks.priority CHECK constraint (migration 0001_baseline); widen both together.

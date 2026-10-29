@@ -153,3 +153,32 @@ func TestListTasksSetsClosed(t *testing.T) {
 		t.Fatalf("ListTasks Closed: got %v, want %v", got, want)
 	}
 }
+
+// TestCompletedTaskClosedDespiteReleaseGate pins that completed closes
+// unconditionally: a landed commit in a released-gated repo does not hold it
+// open, so its dependent is not blocked (WL-REQ-87).
+func TestCompletedTaskClosedDespiteReleaseGate(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+	mapRepo(t, s, "horndb", "acme/app", "released")
+
+	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
+	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, blocked.ID, blocker.ID, "dependsOn"); err != nil {
+		t.Fatalf("AddEdge: %v", err)
+	}
+	landCommit(t, s, blocker.ID, "acme/app", "sha-app")
+	walkTo(t, s, blocker.ID, "completed")
+
+	closed, err := s.ClosedTaskIDs(ctx, []string{blocker.ID})
+	if err != nil {
+		t.Fatalf("ClosedTaskIDs: %v", err)
+	}
+	if !closed[blocker.ID] {
+		t.Fatalf("ClosedTaskIDs[%s] = false, want true (completed)", blocker.ID)
+	}
+	if isBlocked(t, s, blocked.ID) {
+		t.Fatalf("IsBlocked(%s): want false once the blocker is completed", blocked.ID)
+	}
+}

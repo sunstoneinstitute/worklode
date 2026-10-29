@@ -17,7 +17,7 @@ var TaskPriorities = []string{"critical", "high", "medium", "low"}
 // the machine cannot leave this list behind.
 var TaskStates = []string{
 	"draft", "ready", "in_progress", "in_review",
-	"merged", "deployed_dev", "deployed_prod", "released", "abandoned",
+	"merged", "completed", "deployed_dev", "deployed_prod", "released", "abandoned",
 }
 
 // DisplayState is the state a surface shows for a task: "blocked" for a

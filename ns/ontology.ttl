@@ -623,7 +623,7 @@ wl:taskState a owl:DatatypeProperty, owl:FunctionalProperty ;
     rdfs:range xsd:string ;
     rdfs:comment """The task's execution state, projected as a literal mirror of the backbone enum:
         one of draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released,
-        abandoned. Deliberately NOT wl:status and deliberately not a SKOS scheme — the state machine
+        abandoned, completed. Deliberately NOT wl:status and deliberately not a SKOS scheme — the state machine
         is backbone-owned (WL-SPEC-75), and modelling it here would fork it (WL-SPEC-79). The legal
         values are the tasks.state CHECK constraint (migration 0005_delivery); the legal
         transitions between them live in internal/store/tasks.go and are not modelled at all.

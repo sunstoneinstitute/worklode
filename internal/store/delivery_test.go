@@ -1079,3 +1079,34 @@ func TestResolveDeliveryReportsMoved(t *testing.T) {
 		t.Fatalf("state = %s, want deployed_dev", st)
 	}
 }
+
+// TestResolveDeliveryLeavesCompleted: a commit landing on main for a completed
+// task does not move it; completed is not a delivery state.
+func TestResolveDeliveryLeavesCompleted(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	ctx := context.Background()
+	if _, err := s.db.ExecContext(ctx, `UPDATE tasks SET state = 'completed' WHERE id = $1`, taskID); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "marker", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AppendMainCommit(tx, "acme/app", "c1", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "completed" {
+		t.Fatalf("state = %q, want completed", st)
+	}
+}
