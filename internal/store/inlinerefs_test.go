@@ -262,7 +262,7 @@ func TestNormalizeRefusesForgedChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := s.Tx(ctx, func(tx *sql.Tx) error {
-		return normalizeRule(tx, "p1", ruleID(t, s, "P1", 1), "Names", "\nNames P1-7, and more.\n")
+		return normalizeRule(tx, "p1", ruleID(t, s, "P1", 1), "Names", "\nNames P1-7, and more.\n", 0)
 	})
 	if err == nil || !strings.Contains(err.Error(), "P1-REQ-1") {
 		t.Fatalf("err = %v, want a refusal naming P1-REQ-1", err)
@@ -720,7 +720,7 @@ func TestNormalizeAcceptedRuleSectionRef(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
-		return normalizeRule(tx, "p1", ruleID(t, s, "P1", 4), "Cites", "\nSee P1-SPEC-1#rule-3.\n")
+		return normalizeRule(tx, "p1", ruleID(t, s, "P1", 4), "Cites", "\nSee P1-SPEC-1#rule-3.\n", 0)
 	}); err == nil || !strings.Contains(err.Error(), "referenced targets changed") {
 		t.Fatalf("rewrite to another rule: err = %v, want targets changed", err)
 	}
