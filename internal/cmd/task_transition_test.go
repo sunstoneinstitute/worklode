@@ -119,6 +119,7 @@ func TestTaskTransitionCommands(t *testing.T) {
 		{[]string{"set", "state", "deployed_prod"}, []string{"ready", "in_progress", "in_review", "merged"}, "deployed_prod"},
 		{[]string{"set", "state", "released"}, []string{"ready", "in_progress", "in_review", "merged"}, "released"},
 		{[]string{"abandon"}, []string{"ready", "in_progress"}, "abandoned"},
+		{[]string{"complete"}, []string{"ready", "in_progress"}, "completed"},
 	}
 	for _, tc := range cases {
 		name := strings.Join(tc.verb, "-")

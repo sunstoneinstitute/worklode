@@ -1004,6 +1004,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("POST /api/v1/instructions/claim", s.claimInstructions)
 	r.api("POST /api/v1/tasks/{id}/state", s.setTaskState)
 	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
+	r.api("POST /api/v1/tasks/{id}/complete", s.completeTask)
 	r.api("POST /api/v1/tasks/{id}/escalate", s.escalateTask)
 	r.api("POST /api/v1/tasks/{id}/gap", s.reportGap)
 	r.api("POST /api/v1/tasks/{id}/fix", s.reportFix)

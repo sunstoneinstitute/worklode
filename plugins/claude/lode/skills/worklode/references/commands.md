@@ -264,6 +264,7 @@ Flags: --closure, --deliverable, --inline, --kind, --milestone, --pager, --plan,
 - `lode task checklist` — Show the checklist items parsed from the task's body
 - `lode task claim` — Lease a task to the current worktree and move it to in_progress
   Flags: --dry-run, --kind, --next, --project, --repo, --strict-focus, --ttl, --worktree
+- `lode task complete` — Complete a task whose outcome is not code (ready|in_progress|in_review -> completed)
 - `lode task cost` — Show the token cost billed to a task
   Flags: --children, --days
 - `lode task critical-path` — Estimate-free critical path over blocks + requires (D12)
@@ -302,7 +303,7 @@ Flags: --closure, --deliverable, --inline, --kind, --milestone, --pager, --plan,
 - `lode task release` — Release the caller's lease on a task, returning it to ready
 - `lode task renew` — Extend the caller's lease on a task
   Flags: --ttl
-- `lode task reopen` — Reopen a delivered or abandoned task (merged|deployed_dev|deployed_prod|released|abandoned -> ready; a fresh claim is then required)
+- `lode task reopen` — Reopen a delivered, completed or abandoned task (merged|deployed_dev|deployed_prod|released|completed|abandoned -> ready; a fresh claim is then required)
 - `lode task rework` — Send a task under review back to in_progress (e.g. changes requested)
 - `lode task set` — Set one field on a task, e.g. `lode task set state merged WL-5`
 - `lode task show` — Show a task's details: body, edges, blocked status, and lease holder
