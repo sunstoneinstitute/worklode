@@ -28,8 +28,8 @@ frontmatter and gap queries still address their document sections.
 A plan's `covers:` is a list of plain references — a requirement ref
 (`WL-REQ-<n>`), a `<doc>#sec-N` reference, or a whole-document reference.
 Only requirements are covered: a section or whole-document entry resolves to
-the requirements in its scope and skips invariants and informative rules,
-and a direct ref to an invariant or informative rule is refused. The key is
+the requirements in its scope and skips invariants, definitions and
+principles, and a direct ref to one of those is refused. The key is
 `covers`, not `implements`: a plan writes no code, so it claims nothing.
 `wl:implements` is a component's claim that its code meets a section
 (WL-REQ-177); a plan undertakes, and its minted tasks discharge that
@@ -52,7 +52,7 @@ Three cases that look like partial coverage are expressed another way:
 |---|---|
 | the plan builds part of a requirement | split it (`lode rule link WL-REQ-B --derived-from WL-REQ-A`, see §2 below) so each plan covers whole requirements |
 | the plan must obey a rule but builds nothing in it | the rule is an **invariant** (`WL-RULE-<n>`) and, once accepted, governs every task in its project; no `covers` entry |
-| the rule has nothing to build (rationale, context) | the rule is **informative** (`WL-RULE-<n>`); no `covers` entry |
+| the rule has nothing to build (a term, a stance) | the rule is a **definition** or **principle** (`WL-RULE-<n>`); no `covers` entry. Rationale is not a rule: it ends the body of the rule it explains |
 
 A rule's kind is set with `lode rule set <rule-ref> --kind <kind>`.
 If a rule is still a requirement but only states a constraint, reclassify it
@@ -65,9 +65,9 @@ governs every part while being built by none of them, and it needs no
 
 ### Planning gaps are a query
 
-For a spec section `S` whose rule is a requirement (an invariant or
-informative rule is never a gap), over accepted-or-superseded plans covering its rule
-(a superseded plan is executed, and discharges what it covered — WL-REQ-187):
+For a spec section `S` whose rule is a requirement (an invariant, definition
+or principle is never a gap), over accepted, superseded or executed plans
+covering its rule (each discharges what it covered — WL-REQ-187):
 
 - some such plan covers it, and no draft plan also covers it →
   **planned**;

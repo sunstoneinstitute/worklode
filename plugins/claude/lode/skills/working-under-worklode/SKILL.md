@@ -56,9 +56,11 @@ contain, or contradicts another section. Non-substantive is only this:
 wording that changes no assertion, an added example, a repaired reference,
 or filling a gap the document was silent on.
 
-The fixer amends an accepted document in place with `lode doc edit
---substantive`, or `lode doc edit --note "<what changed and why>"` when it is
-not. Some edits are refused whichever flag you pass: a section open work
+A spec defect is a rule change: the fixer edits the rule with `lode rule
+edit`, and the rule's owner lands it with `lode rule accept` (`--substantive`
+when it is). The fixer can also amend an accepted document in place with
+`lode doc edit --substantive`, or `lode doc edit --note "<what changed and
+why>"` when it is not. Some edits are refused whichever flag you pass: a section open work
 already points at, a schema, migration, API surface, CLI flag, event name,
 enum, ontology term or definition of done. The server names the rule that
 fired, and that edit needs a full revision (`lode doc revise`), which is

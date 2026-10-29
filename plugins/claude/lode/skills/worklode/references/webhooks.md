@@ -31,7 +31,8 @@ merged to a non-default branch.
 Forward-only, order-independent — safe to call repeatedly, and safe when
 facts arrive out of sequence (a prod deploy webhook that beats the dev one,
 say). It advances a task to the *furthest* milestone its recorded facts
-support, never backslides, and never touches `draft` or `abandoned` tasks:
+support, never backslides, and never touches `draft`, `completed` or
+`abandoned` tasks:
 
 1. Task's repo commit sits on `main` → `merged` (if not already past it).
 2. The repo's configured `done_state` (`project_repos.done_state`, falls back
