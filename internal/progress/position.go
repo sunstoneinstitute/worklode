@@ -50,6 +50,7 @@ var deliveryText = map[string]string{
 	"deployed_dev":  "deployed to dev",
 	"deployed_prod": "deployed to prod",
 	"released":      "released",
+	"completed":     "completed",
 }
 
 // Position renders a task's position on WL-REQ-1336's ladder: the first

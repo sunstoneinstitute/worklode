@@ -44,7 +44,7 @@ func TestTaskClassPartitionsTaskStates(t *testing.T) {
 		"in_progress": "active", "in_review": "active",
 		"merged": "landed", "deployed_dev": "landed",
 		"deployed_prod": "landed", "released": "landed",
-		"abandoned": "abandoned",
+		"completed": "landed", "abandoned": "abandoned",
 	}
 	if len(want) != len(model.TaskStates) {
 		t.Fatalf("table has %d states, model.TaskStates has %d: name the new state's class", len(want), len(model.TaskStates))
