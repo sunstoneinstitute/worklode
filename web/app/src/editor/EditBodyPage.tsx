@@ -90,14 +90,14 @@ function BodyEditPage({
   const spec = loaded.docKind === "spec"
   const keepDraft = () => draft.flush({ blocks: JSON.stringify(current.current), sha: base.sha })
   const lock = useBodyLock(target.kind, loaded.lockId, { dirty, onBeforeRelease: keepDraft })
-  // The blocks held when the lock was lost, shown read-only
-  const [kept, setKept] = useState<EditorBlock[] | null>(null)
+  const lost = lock.status === "lost"
   useEffect(() => {
-    if (lock.status !== "lost") return setKept(null)
-    if (kept) return
-    setKept(current.current)
-    if (dirty) keepDraft()
-  })
+    if (lost && dirty) keepDraft()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per loss
+  }, [lost])
+  // The blocks held when the lock was lost, captured on the transition
+  const [kept, setKept] = useState<EditorBlock[] | null>(null)
+  if (lost !== (kept !== null)) setKept(lost ? current.current : null)
   const guard = useLeaveGuard({ dirty, onClose: () => browser.assign(viewHref) })
   const editable = lock.status === "held" && !spec
 
