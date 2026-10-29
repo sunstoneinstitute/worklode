@@ -90,6 +90,7 @@ func (s *Store) TakeLock(ctx context.Context, kind, subjectID, holder string) (m
 	if err := tx.Commit(); err != nil {
 		return model.BodyLock{}, fmt.Errorf("take lock: %w", err)
 	}
+	s.metrics.lockEvent(kind, "take", 1)
 	return model.BodyLock{Kind: kind, SubjectID: subjectID, Holder: holder, Session: session}, nil
 }
 
@@ -159,7 +160,7 @@ func (s *Store) ReleaseLockSession(ctx context.Context, kind, subjectID, session
 	if err := checkLockKind(kind); err != nil {
 		return err
 	}
-	return s.endSessions(ctx, kind, subjectID, "released", "", session)
+	return s.endSessions(ctx, kind, subjectID, "released", "release", "", session)
 }
 
 // UnlockBody ends every live session on the subject as unlocked by by.
@@ -167,28 +168,34 @@ func (s *Store) UnlockBody(ctx context.Context, kind, subjectID, by string) erro
 	if err := checkLockKind(kind); err != nil {
 		return err
 	}
-	return s.endSessions(ctx, kind, subjectID, "unlocked", by, "")
+	return s.endSessions(ctx, kind, subjectID, "unlocked", "unlock", by, "")
 }
 
 // endSessions ends the subject's live sessions (only session, when given),
 // then drops the lock row if none is left.
-func (s *Store) endSessions(ctx context.Context, kind, subjectID, reason, by, session string) error {
+func (s *Store) endSessions(ctx context.Context, kind, subjectID, reason, event, by, session string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("end lock sessions: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
-	if _, err := tx.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		`UPDATE body_lock_sessions
 		    SET ended_at = now(), ended_reason = $3, ended_by = NULLIF($4, '')
 		  WHERE kind = $1 AND subject_id = $2 AND ended_at IS NULL AND ($5 = '' OR id = $5)`,
-		kind, subjectID, reason, by, session); err != nil {
+		kind, subjectID, reason, by, session)
+	if err != nil {
 		return fmt.Errorf("end lock sessions: %w", err)
 	}
+	n, _ := res.RowsAffected()
 	if _, err := tx.ExecContext(ctx, dropEmptyLocks+` AND l.kind = $1 AND l.subject_id = $2`, kind, subjectID); err != nil {
 		return fmt.Errorf("end lock sessions: %w", err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("end lock sessions: %w", err)
+	}
+	s.metrics.lockEvent(kind, event, int(n))
+	return nil
 }
 
 const dropEmptyLocks = `DELETE FROM body_locks l
@@ -197,22 +204,33 @@ const dropEmptyLocks = `DELETE FROM body_locks l
 
 // SweepLocks ends sessions with no unsaved changes idle over an hour
 // (inactive) and sessions not checked in for 24 hours (expired), then drops
-// locks left with no live session.
+// locks left with no live session. It records each ended session under its
+// kind and sets the held-locks gauge.
 func (s *Store) SweepLocks(ctx context.Context, now time.Time) (inactive, expired int, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, 0, fmt.Errorf("sweep locks: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
+	byKind := map[string]map[string]int{"inactive": {}, "expired": {}}
 	end := func(reason, cond string, cutoff time.Time) (int, error) {
-		res, err := tx.ExecContext(ctx,
+		rows, err := tx.QueryContext(ctx,
 			`UPDATE body_lock_sessions SET ended_at = $1, ended_reason = '`+reason+`'
-			  WHERE ended_at IS NULL AND `+cond, now, cutoff)
+			  WHERE ended_at IS NULL AND `+cond+` RETURNING kind`, now, cutoff)
 		if err != nil {
 			return 0, fmt.Errorf("sweep locks: %w", err)
 		}
-		n, _ := res.RowsAffected()
-		return int(n), nil
+		defer rows.Close()
+		n := 0
+		for rows.Next() {
+			var k string
+			if err := rows.Scan(&k); err != nil {
+				return 0, fmt.Errorf("sweep locks: %w", err)
+			}
+			byKind[reason][k]++
+			n++
+		}
+		return n, rows.Err()
 	}
 	if inactive, err = end("inactive", `NOT dirty AND last_activity < $2`, now.Add(-lockIdleAfter)); err != nil {
 		return 0, 0, err
@@ -223,5 +241,42 @@ func (s *Store) SweepLocks(ctx context.Context, now time.Time) (inactive, expire
 	if _, err := tx.ExecContext(ctx, dropEmptyLocks); err != nil {
 		return 0, 0, fmt.Errorf("sweep locks: %w", err)
 	}
-	return inactive, expired, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("sweep locks: %w", err)
+	}
+	for ev, kinds := range byKind {
+		for k, n := range kinds {
+			s.metrics.lockEvent(k, ev, n)
+		}
+	}
+	s.setLocksHeld(ctx)
+	return inactive, expired, nil
+}
+
+// setLocksHeld sets the held-locks gauge from a count per kind. A failed
+// count leaves the gauge as it was.
+func (s *Store) setLocksHeld(ctx context.Context) {
+	if s.metrics == nil {
+		return
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT kind, count(*) FROM body_locks GROUP BY kind`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	counts := map[string]int{}
+	for rows.Next() {
+		var k string
+		var n int
+		if rows.Scan(&k, &n) != nil {
+			return
+		}
+		counts[k] = n
+	}
+	if rows.Err() != nil {
+		return
+	}
+	for _, k := range lockKinds {
+		s.metrics.bodyLocksHeld.WithLabelValues(k).Set(float64(counts[k]))
+	}
 }

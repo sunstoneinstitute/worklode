@@ -73,6 +73,9 @@ type storeMetrics struct {
 	termResolves          *prometheus.CounterVec
 	queries               *prometheus.CounterVec
 	querySeconds          *prometheus.CounterVec
+	bodyLocksHeld         *prometheus.GaugeVec
+	bodyLockEvents        *prometheus.CounterVec
+	bodySaveConflicts     *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -205,6 +208,28 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_store_query_seconds_total",
 			Help: "Seconds spent in database queries, by the same pkg and func labels as worklode_store_queries_total. rate() of this ranks store functions by the database time they consume.",
 		}, []string{"pkg", "func"}),
+		bodyLocksHeld: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "worklode_body_locks_held",
+			Help: "Body locks currently held by kind (doc|rule|task) (WL-REQ-1868). Set at the end of each lock sweep.",
+		}, []string{"kind"}),
+		bodyLockEvents: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_body_lock_events_total",
+			Help: "Body lock session events by kind (doc|rule|task) and event (take|release|unlock|inactive|expired) (WL-REQ-1868).",
+		}, []string{"kind", "event"}),
+		bodySaveConflicts: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_body_save_conflicts_total",
+			Help: "Refused body saves by kind (doc|rule|task) and reason (moved|lock) (WL-REQ-1868).",
+		}, []string{"kind", "reason"}),
+	}
+	reg.MustRegister(m.bodyLocksHeld, m.bodyLockEvents, m.bodySaveConflicts)
+	for _, kind := range lockKinds {
+		m.bodyLocksHeld.WithLabelValues(kind)
+		for _, ev := range []string{"take", "release", "unlock", "inactive", "expired"} {
+			m.bodyLockEvents.WithLabelValues(kind, ev)
+		}
+		for _, r := range []string{"moved", "lock"} {
+			m.bodySaveConflicts.WithLabelValues(kind, r)
+		}
 	}
 	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.ruleSupersedes, m.ruleClosureSize, m.ruleLints, m.ruleOps, m.termResolves, m.queries, m.querySeconds)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
@@ -761,4 +786,24 @@ func (c *refClassificationCollector) Collect(ch chan<- prometheus.Metric) {
 	for k, n := range byOutcome {
 		ch <- prometheus.MustNewConstMetric(refOutcomesDesc, prometheus.CounterValue, n, k[0], k[1])
 	}
+}
+
+// lockKinds are the body kinds that carry a lock; they bound the kind label.
+var lockKinds = []string{"doc", "rule", "task"}
+
+// lockEvent adds n body lock events of kind. n <= 0 records nothing.
+func (m *storeMetrics) lockEvent(kind, event string, n int) {
+	if m == nil || n <= 0 {
+		return
+	}
+	m.bodyLockEvents.WithLabelValues(kind, event).Add(float64(n))
+}
+
+// BodySaveConflict counts one refused body save (reason moved|lock). The save
+// path calls it; nothing here does.
+func (s *Store) BodySaveConflict(kind, reason string) {
+	if s.metrics == nil {
+		return
+	}
+	s.metrics.bodySaveConflicts.WithLabelValues(kind, reason).Inc()
 }

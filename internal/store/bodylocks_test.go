@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -119,4 +122,102 @@ func TestSweepLocks(t *testing.T) {
 			t.Errorf("%s: lock present=%v with reason %q", c.l.SubjectID, l != nil, c.want)
 		}
 	}
+}
+
+func TestBodyLockMetrics(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := OpenTestStore(t, WithMetrics(reg))
+	ctx := t.Context()
+	now := time.Now()
+	ev := func(kind, event string) float64 {
+		return testutil.ToFloat64(s.metrics.bodyLockEvents.WithLabelValues(kind, event))
+	}
+	held := func(kind string) float64 {
+		return testutil.ToFloat64(s.metrics.bodyLocksHeld.WithLabelValues(kind))
+	}
+	age := func(session string, checkedIn time.Duration) {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE body_lock_sessions SET checked_in_at = $2 WHERE id = $1`, session, now.Add(-checkedIn)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	a, _ := s.TakeLock(ctx, "doc", "3", "alice")
+	b, _ := s.TakeLock(ctx, "doc", "4", "alice")
+	c, _ := s.TakeLock(ctx, "rule", "5", "alice")
+	if _, err := s.TakeLock(ctx, "task", "6", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ev("doc", "take"); got != 2 {
+		t.Fatalf("doc take = %v, want 2", got)
+	}
+	if err := s.ReleaseLockSession(ctx, "rule", "5", c.Session); err != nil {
+		t.Fatal(err)
+	}
+	if got := ev("rule", "release"); got != 1 {
+		t.Fatalf("rule release = %v, want 1", got)
+	}
+	if err := s.UnlockBody(ctx, "doc", "4", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ev("doc", "unlock"); got != 1 {
+		t.Fatalf("doc unlock = %v, want 1", got)
+	}
+	_ = b
+
+	age(a.Session, 25*time.Hour)
+	if _, _, err := s.SweepLocks(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+	if got := ev("doc", "expired"); got != 1 {
+		t.Fatalf("doc expired = %v, want 1", got)
+	}
+	for kind, want := range map[string]float64{"doc": 0, "rule": 0, "task": 1} {
+		if got := held(kind); got != want {
+			t.Errorf("held{%s} = %v, want %v", kind, got, want)
+		}
+	}
+
+	// An idle clean session counts as inactive.
+	l, _ := s.TakeLock(ctx, "task", "7", "bob")
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE body_lock_sessions SET last_activity = $2 WHERE id = $1`, l.Session, now.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.SweepLocks(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+	if got := ev("task", "inactive"); got != 1 {
+		t.Fatalf("task inactive = %v, want 1", got)
+	}
+	if got := held("task"); got != 1 {
+		t.Fatalf("held{task} = %v, want 1", got)
+	}
+}
+
+func TestBodySaveConflictsRegistered(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := OpenTestStore(t, WithMetrics(reg))
+	s.BodySaveConflict("doc", "moved")
+	s.BodySaveConflict("rule", "lock")
+	if got := testutil.ToFloat64(s.metrics.bodySaveConflicts.WithLabelValues("doc", "moved")); got != 1 {
+		t.Fatalf("doc moved = %v, want 1", got)
+	}
+	fams, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, f := range fams {
+		seen[f.GetName()] = true
+	}
+	for _, n := range []string{"worklode_body_locks_held", "worklode_body_lock_events_total", "worklode_body_save_conflicts_total"} {
+		if !seen[n] {
+			t.Errorf("%s not registered", n)
+		}
+	}
+	// Nil-safe without WithMetrics.
+	openTestStore(t).BodySaveConflict("doc", "lock")
 }

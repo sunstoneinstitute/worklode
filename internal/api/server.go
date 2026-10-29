@@ -1542,6 +1542,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			go s.branchRulesLoop(cfg.BackgroundCtx)
 		}
 
+		// The body lock sweep (WL-REQ-1868), gated like the loops above.
+		go lockSweepLoop(cfg.BackgroundCtx, lockSweepEvery, s.sweepLocks)
+
 		// The OTLP forward loop ((WL-REQ-1236)). Gated like the loops above; with
 		// no upstream configured otlpForward is nil and Run returns at once.
 		go s.otlpForward.Run(cfg.BackgroundCtx)
