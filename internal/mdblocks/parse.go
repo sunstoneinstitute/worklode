@@ -25,22 +25,48 @@ import (
 
 // Definition lists and footnotes are parsed only so they become `source`
 // blocks. The footnote transformer is left out: it drops unreferenced
-// definitions.
-var parser = goldmark.New(
-	goldmark.WithExtensions(
-		extension.Table, extension.Strikethrough, extension.Linkify, extension.TaskList,
-		extension.DefinitionList, mdrender.Emoji,
-	),
-	goldmark.WithParserOptions(
-		gparser.WithBlockParsers(util.Prioritized(extension.NewFootnoteBlockParser(), 999)),
-		gparser.WithInlineParsers(util.Prioritized(extension.NewFootnoteParser(), 101)),
-	),
-).Parser()
+// definitions. mdrender.CalloutFence reads Quarto's callout fence.
+func newParser(opts ...gparser.Option) gparser.Parser {
+	return goldmark.New(
+		goldmark.WithExtensions(
+			extension.Table, extension.Strikethrough, extension.Linkify, extension.TaskList,
+			extension.DefinitionList, mdrender.Emoji, mdrender.CalloutFence,
+		),
+		goldmark.WithParserOptions(append(opts,
+			gparser.WithBlockParsers(util.Prioritized(extension.NewFootnoteBlockParser(), 999)),
+			gparser.WithInlineParsers(util.Prioritized(extension.NewFootnoteParser(), 101)),
+		)...),
+	).Parser()
+}
+
+var (
+	parser = newParser()
+	// attrParser reads `## Title {#id}` heading attributes (WL-REQ-1871).
+	attrParser = newParser(gparser.WithAttribute())
+)
+
+// Option configures Parse.
+type Option func(*config)
+
+type config struct{ subject string }
+
+// Subject names the body's subject: "doc", "rule" or "task". Heading
+// attributes are read in document and rule bodies only; elsewhere, and when
+// no subject is given, `{#id}` stays heading text.
+func Subject(s string) Option { return func(c *config) { c.subject = s } }
 
 // Parse returns md's top-level blocks. Each block's Range is the byte span of
 // its node, including list markers and fence lines, without the final newline.
-func Parse(md []byte) ([]model.EditorBlock, error) {
-	doc := parser.Parse(text.NewReader(md))
+func Parse(md []byte, opts ...Option) ([]model.EditorBlock, error) {
+	var c config
+	for _, o := range opts {
+		o(&c)
+	}
+	p := parser
+	if c.subject == "doc" || c.subject == "rule" {
+		p = attrParser
+	}
+	doc := p.Parse(text.NewReader(md))
 	out := blocks(md, doc.FirstChild())
 	// The footnote parser gathers every definition at the first one's place.
 	slices.SortStableFunc(out, func(a, b model.EditorBlock) int { return cmp.Compare(a.Range.Start, b.Range.Start) })
@@ -87,9 +113,20 @@ func block(src []byte, n ast.Node) model.EditorBlock {
 		if src[n.Pos()] != '#' || !inProfile(src, n) {
 			break
 		}
+		// An `{#id}` attribute is the only one Worklode Markdown lists.
+		id, _ := n.AttributeString("id")
+		anchor, _ := id.([]byte)
+		if len(n.Attributes()) > 1 || (len(n.Attributes()) == 1 && anchor == nil) {
+			break
+		}
 		return model.EditorBlock{Type: "heading", Range: r, Content: inline(src, n), Props: props(struct {
-			Level int `json:"level"`
-		}{n.Level})}
+			Level  int    `json:"level"`
+			Anchor string `json:"anchor,omitempty"`
+		}{n.Level, string(anchor)})}
+	case *mdrender.CalloutNode:
+		return model.EditorBlock{Type: "callout", Range: r, Children: blocks(src, n.FirstChild()), Props: props(struct {
+			Kind string `json:"kind"`
+		}{n.Name})}
 	case *ast.FencedCodeBlock:
 		b := model.EditorBlock{Type: "codeBlock", Range: r}
 		if lang := strings.TrimPrefix(strings.Trim(string(n.Language(src)), "{}"), "."); lang != "" {
@@ -243,7 +280,11 @@ func minPos(a, b int) int {
 
 // last is an offset on the last line of n: its last segment, a descendant's,
 // or the line after it that closes a fence or underlines a setext heading.
+// A closed callout fence ends on its closing line.
 func last(src []byte, n ast.Node) int {
+	if c, ok := n.(*mdrender.CalloutNode); ok && c.Close > 0 {
+		return c.Close
+	}
 	m := n.Pos()
 	if n.Type() == ast.TypeBlock {
 		if l := n.Lines(); l.Len() > 0 {
