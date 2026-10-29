@@ -1195,10 +1195,10 @@ func (s *server) observeFormSubmission(form, outcome string) {
 
 // progressWriteRoutes and progressWriteOutcomes bound
 // worklode_progress_writes_total's two labels. The routes are WL-REQ-1341's write
-// table plus publish (the task and plan pages' Publish); the outcomes are the gate's one ("refused") plus the three a write
+// table plus publish (the task and plan pages' Publish) and rule/accept (the rule page's Accept); the outcomes are the gate's one ("refused") plus the three a write
 // handler reports for itself.
 var (
-	progressWriteRoutes   = []string{"accept", "plan", "rally/add", "rally/confirm", "rally/discard", "merge", "publish"}
+	progressWriteRoutes   = []string{"accept", "plan", "rally/add", "rally/confirm", "rally/discard", "merge", "publish", "rule/accept"}
 	progressWriteOutcomes = []string{"ok", "refused", "conflict", "error"}
 )
 
