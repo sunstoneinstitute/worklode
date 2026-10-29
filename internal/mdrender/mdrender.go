@@ -99,12 +99,12 @@ var sectionAnchor = regexp.MustCompile(`\Asec-[a-z0-9][a-z0-9.-]*\z`)
 // arranged rule's heading.
 var ruleAnchorID = regexp.MustCompile(`\Arule-[0-9]+\z`)
 
-// emojiExt renders ":emoji:" shortcodes as the literal Unicode character
+// Emoji renders ":emoji:" shortcodes as the literal Unicode character
 // rather than the extension's default <img> tag. An <img> would point at a
 // CDN, which buildPolicy's img[src] rule (blobSrc only) would strip anyway —
 // Unicode substitution is what makes emoji actually render instead of
 // silently vanishing, and it needs no allowlist change at all.
-var emojiExt = emoji.New(emoji.WithRenderingMethod(emoji.Unicode))
+var Emoji = emoji.New(emoji.WithRenderingMethod(emoji.Unicode))
 
 // mermaidExt turns a ```mermaid fence into <pre class="mermaid">, for
 // mermaid.js (loaded separately by the pages that need it, self-hosted per
@@ -119,7 +119,7 @@ var emojiExt = emoji.New(emoji.WithRenderingMethod(emoji.Unicode))
 var mermaidExt = &mermaid.Extender{RenderMode: mermaid.RenderModeClient, NoScript: true}
 
 var md = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt, calloutExt, highlightExt),
+	goldmark.WithExtensions(extension.GFM, Emoji, mermaidExt, calloutExt, highlightExt),
 	// Unsafe here means "let raw HTML through to the sanitiser", not "trust
 	// it". The bluemonday policy below is the actual boundary.
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
@@ -135,7 +135,7 @@ var md = goldmark.New(
 // WithAttribute lets an author write any attribute, not just id — the
 // allowlist, not the parser, is what keeps that harmless.
 var mdDoc = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt, calloutExt, highlightExt, ruleAnchorExt),
+	goldmark.WithExtensions(extension.GFM, Emoji, mermaidExt, calloutExt, highlightExt, ruleAnchorExt),
 	goldmark.WithParserOptions(parser.WithAttribute(), withDocRefLinks),
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
 )
