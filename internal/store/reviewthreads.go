@@ -505,3 +505,59 @@ func threadsWhere(ctx context.Context, db rowsQueryer, where string, args ...any
 	}
 	return threads, nil
 }
+
+// OpenDocThread opens a bare note on document docID or on a rule it
+// arranges (WL-REQ-1323): an anchor naming no subject anchors to docID, and a
+// rule anchor must name a rule the document arranges.
+func OpenDocThread(tx *sql.Tx, now time.Time, docID int64, in model.OpenThreadInput, actorID string, eventID int64) (*model.ReviewThread, error) {
+	a := &in.Anchor
+	switch {
+	case a.Doc == 0 && a.Rule == 0:
+		a.Doc = docID
+	case a.Doc != 0 && a.Doc != docID:
+		return nil, fmt.Errorf("the anchor names doc %d, not doc %d: %w", a.Doc, docID, ErrInvalidInput)
+	case a.Rule != 0:
+		if err := checkThreadSubject(tx, &model.Review{Doc: docID}, *a); err != nil {
+			return nil, fmt.Errorf("doc %d does not arrange rule %d: %w", docID, a.Rule, ErrInvalidInput)
+		}
+	}
+	return OpenThread(tx, now, 0, in, actorID, "", "", eventID)
+}
+
+// GetThread returns one thread with its messages. A missing thread is
+// ErrNotFound.
+func (s *Store) GetThread(ctx context.Context, id int64) (*model.ReviewThread, error) {
+	threads, err := threadsWhere(ctx, s.db, `t.id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(threads) == 0 {
+		return nil, fmt.Errorf("thread %d: %w", id, ErrNotFound)
+	}
+	return &threads[0], nil
+}
+
+// OpenThreadCounts counts open threads by subject (doc, rule, change) for the
+// worklode_review_open_threads gauge (WL-REQ-1327). A review thread counts
+// under its review's subject, a bare note under what it is anchored to.
+func (s *Store) OpenThreadCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT coalesce(r.subject, CASE WHEN t.task_id IS NOT NULL THEN 'change'
+		                                 WHEN t.rule_id IS NOT NULL THEN 'rule' ELSE 'doc' END), count(*)
+		   FROM review_threads t LEFT JOIN reviews r ON r.id = t.review_id
+		  WHERE t.status = 'open' GROUP BY 1`)
+	if err != nil {
+		return nil, fmt.Errorf("count open threads: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var subject string
+		var n int
+		if err := rows.Scan(&subject, &n); err != nil {
+			return nil, fmt.Errorf("count open threads: %w", err)
+		}
+		out[subject] = n
+	}
+	return out, rows.Err()
+}

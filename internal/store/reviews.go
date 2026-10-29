@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -52,6 +53,9 @@ func OpenReview(tx *sql.Tx, now time.Time, in model.OpenReviewInput, actorID str
 		return nil, err
 	}
 	if err := assignReviewTasks(tx, ts, id, in.Doc, d.project, reviewers, actorID, eventID); err != nil {
+		return nil, err
+	}
+	if err := recordReviewEvent(tx, ts, "wl:ReviewOpened", iri.CURIE(iri.Review(id)), actorID, eventID, nil); err != nil {
 		return nil, err
 	}
 	return getReview(context.Background(), tx, id)

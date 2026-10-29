@@ -45,6 +45,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/otlp"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
 	"github.com/sunstoneinstitute/worklode/internal/reconcile"
+	"github.com/sunstoneinstitute/worklode/internal/review"
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -368,6 +369,10 @@ type server struct {
 	// POST /api/v1/reconcile's poll call. Set in registerRoutes alongside
 	// hookMetrics; every *reconcile.Metrics method is nil-safe.
 	pollMetrics *reconcile.Metrics
+
+	// reviewMetrics is the worklode_review_* set (WL-REQ-1327), set in
+	// registerAPI; every *review.Metrics method is nil-safe.
+	reviewMetrics *review.Metrics
 
 	// embedder is nil unless an embedding provider is configured; recommend
 	// then runs pins-only. queryEmbedder serves the three query-time call
@@ -923,6 +928,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	hookMetrics := hooks.NewMetrics(reg)
 	s.hookMetrics = hookMetrics
 	s.pollMetrics = reconcile.NewMetrics(reg)
+	s.reviewMetrics = review.NewMetrics(reg)
 	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, s.kickBranchRules, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
 	r.public("POST /hooks/catalog", hooks.NewCatalogHandler(s.st, s.cfg.CatalogWebhookSecret, s.log, hookMetrics))
@@ -1056,6 +1062,17 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("POST /api/v1/docs/{id}/withdraw", s.withdrawDoc)
 	r.api("POST /api/v1/docs/{id}/owner", s.transferDocOwner)
 	r.api("POST /api/v1/docs/{id}/notes", s.addDocNote)
+	r.api("GET /api/v1/docs/{id}/threads", s.docThreads)
+	r.api("POST /api/v1/docs/{id}/threads", s.openDocThread)
+	r.api("GET /api/v1/rules/{id}/threads", s.ruleThreads)
+	r.api("POST /api/v1/reviews", s.openReview)
+	r.api("GET /api/v1/reviews", s.listReviews)
+	r.api("GET /api/v1/reviews/{id}", s.getReview)
+	r.api("POST /api/v1/reviews/{id}/threads", s.openReviewThread)
+	r.api("POST /api/v1/reviews/{id}/threads/{tid}/messages", s.replyThread)
+	r.api("POST /api/v1/reviews/{id}/threads/{tid}/resolve", s.resolveThread)
+	r.api("POST /api/v1/threads/{tid}/messages", s.replyThread)
+	r.api("POST /api/v1/threads/{tid}/resolve", s.resolveThread)
 	r.api("GET /api/v1/docs/{id}/notes", s.listDocNotes)
 	r.api("POST /api/v1/docs/{id}/reviewers", s.setDocReviewers)
 	r.api("POST /api/v1/docs/{id}/request-approval", s.requestDocApproval)
