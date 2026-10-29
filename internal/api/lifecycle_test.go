@@ -962,3 +962,64 @@ func TestReopenVoidsDelivery(t *testing.T) {
 		t.Fatalf("active lease after re-resolve: %v, want the fresh claim intact", err)
 	}
 }
+
+// TestCompleteTask covers POST /tasks/{id}/complete (WL-REQ-1884): an
+// in-progress task completes and its lease closes, reopen takes it back, and
+// a draft, a task with a pull request and a parent are refused.
+func TestCompleteTask(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Research", "priority": "high", "kind": "chore"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Draft", "priority": "high", "kind": "chore", "draft": true})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Has PR", "priority": "high", "kind": "chore"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Parent", "priority": "high", "kind": "chore"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Child", "priority": "high", "kind": "chore", "parent": "WL-4"})
+
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"}); rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d", rr.Code)
+	}
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/complete", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("complete status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["state"] != "completed" {
+		t.Fatalf("state = %v, want completed", got["state"])
+	}
+	if _, err := st.ActiveLease(context.Background(), "WL-1"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("active lease after complete: err = %v, want ErrNotFound", err)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/reopen", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reopen completed status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["state"] != "ready" {
+		t.Fatalf("state after reopen = %v, want ready", got["state"])
+	}
+
+	if rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/complete", token, nil); rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("complete draft status = %d, want 422", rr.Code)
+	}
+
+	_, _, err := st.RecordEvent(context.Background(), "github", "pr-for-wl3", "pr.opened", nil,
+		func(tx *sql.Tx, _ int64) error {
+			_, err := tx.Exec(`INSERT INTO github_pull_requests (repo, number, state, task_id) VALUES ('o/r', 7, 'open', 'WL-3')`)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("insert pull request: %v", err)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/complete", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "o/r#7") {
+		t.Fatalf("complete with PR status = %d, body %s; want 422 naming o/r#7", rr.Code, rr.Body.String())
+	}
+
+	if rr = doReq(t, h, "POST", "/api/v1/tasks/WL-4/complete", token, nil); rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("complete parent status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// The state endpoint does not take completed.
+	if rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/state", token, map[string]any{"state": "completed"}); rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("state completed status = %d, want 422", rr.Code)
+	}
+}

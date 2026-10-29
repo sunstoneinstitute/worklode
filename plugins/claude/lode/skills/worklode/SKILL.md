@@ -38,14 +38,14 @@ draft → ready → in_progress → in_review → merged → deployed_dev → de
 ```
 
 Every pre-merged state can go to `abandoned`; every terminal-ish state
-(`merged`, `deployed_dev`, `deployed_prod`, `released`, `abandoned`) can be
+(`merged`, `deployed_dev`, `deployed_prod`, `released`, `completed`, `abandoned`) can be
 sent back to `ready` by `reopen`, which requires a fresh claim.
 
 **You drive:** `draft→ready` (`task publish`), `ready→in_progress` (`task
 claim`/`next` when the work needs a worktree; `task start` when it doesn't —
 e.g. a design/review task that's just a judgment call, no code),
 `in_progress→ready` (`task stop`/`release`), `in_review→in_progress` (`task
-rework`), anything `→abandoned` (`task abandon`), anything terminal-ish
+rework`), anything `→abandoned` (`task abandon`), non-code work `→completed` (`task complete`; refused when the task has a pull request), anything terminal-ish
 `→ready` (`task reopen`).
 
 **Webhooks drive:** `in_progress→in_review` (a GitHub PR opens against the
@@ -136,6 +136,7 @@ lode task submit [<id>]                 # in_progress->in_review
 lode task set state merged <id>         # in_review->merged
 lode task unassign [<id>]               # clear assignee (needed before `start` on someone else's task)
 lode task block --by <id>
+lode task complete                      # non-code outcome (research, decision, ops): ->completed
 lode task abandon
 lode board                              # in-progress / in-review / blocked / ready, at a glance
 lode project rally <project>            # the active rally and its open members

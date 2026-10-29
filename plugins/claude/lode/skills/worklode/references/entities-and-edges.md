@@ -36,7 +36,7 @@ draft → ready → in_progress → in_review → merged → deployed_dev → de
 ```
 
 Every pre-merged state can also go to `abandoned`; `merged`/`deployed_dev`/
-`deployed_prod`/`released`/`abandoned` can all be sent back to `ready` by
+`deployed_prod`/`released`/`completed`/`abandoned` can all be sent back to `ready` by
 `reopen` (which requires a fresh claim — the old lease does not resurrect).
 
 **Who drives which arrow:**
@@ -51,6 +51,7 @@ Every pre-merged state can also go to `abandoned`; `merged`/`deployed_dev`/
 | `→ merged` | **Webhook.** `pull_request` `closed` with `merged: true` records the merge SHA; a later `push` event to the repo's default branch is what actually calls `ResolveDelivery`, forward-only, in commit-arrival order — not the merge event itself. |
 | `merged → deployed_dev` / `deployed_prod` / `released` | **Webhook.** Flux `Kustomization` reconciliation events, resolved against the repo's configured `done_state` (`project_repos.done_state`; falls back to a package default). Deployment facts can arrive out of order — `ResolveDelivery` always advances to the *furthest* milestone the recorded facts support, never backslides. |
 | `deployed_dev → deployed_prod` / `released` | Webhook, same resolver. |
+| `→ completed` | You: `lode task complete`, for work whose outcome is not code. Refused when the task has a pull request. |
 | `→ abandoned` | You: `lode task abandon` |
 | terminal-ish → `ready` | You: `lode task reopen` (fresh claim required) |
 

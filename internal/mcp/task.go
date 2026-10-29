@@ -65,7 +65,7 @@ func (s *server) addTaskTools() {
 	s.addTool("task_update", "Change a task's title, body or priority.",
 		`{"type":"object","properties":{`+projectProp+`,"id":{"type":"string","description":"The task's ref, as written or spoken."},"title":{"type":"string"},"body":{"type":"string"},"priority":{"type":"string"}},"required":["id"]}`,
 		s.taskUpdate)
-	s.addTool("task_set_state", "Move a task to a state: abandoned abandons it, ready or reopened reopens a delivered or abandoned one, and merged, deployed_dev, deployed_prod or released record delivery.",
+	s.addTool("task_set_state", "Move a task to a state: completed completes a task whose outcome is not code, abandoned abandons it, ready or reopened reopens a delivered or abandoned one, and merged, deployed_dev, deployed_prod or released record delivery.",
 		`{"type":"object","properties":{`+projectProp+`,"id":{"type":"string","description":"The task's ref, as written or spoken."},"state":{"type":"string"},"reason":{"type":"string"}},"required":["id","state"]}`,
 		s.taskSetState)
 }
@@ -226,12 +226,14 @@ func (s *server) taskSetState(ctx context.Context, c *cli.Client, req *mcp.CallT
 	switch {
 	case state == "abandoned" || state == "abandon":
 		t, _, err = c.AbandonTask(ctx, id)
+	case state == "completed" || state == "complete":
+		t, _, err = c.CompleteTask(ctx, id)
 	case state == "ready" || state == "reopened" || state == "reopen":
 		t, _, err = c.ReopenTask(ctx, id)
 	case slices.Contains(model.SettableTaskStates, state):
 		t, _, err = c.SetTaskState(ctx, id, state)
 	default:
-		return nil, &toolError{outcome: outcomeInvalid, msg: fmt.Sprintf("%q is not a state this tool sets. Use abandoned, ready, %s.", a.State, strings.Join(model.SettableTaskStates, ", "))}
+		return nil, &toolError{outcome: outcomeInvalid, msg: fmt.Sprintf("%q is not a state this tool sets. Use completed, abandoned, ready, %s.", a.State, strings.Join(model.SettableTaskStates, ", "))}
 	}
 	if err != nil {
 		return nil, err

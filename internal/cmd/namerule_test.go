@@ -48,7 +48,7 @@ var l3Canonical = map[string]bool{
 // command is explicable by one of its rules, not every visible one.
 var l3DomainActions = map[string]bool{
 	"claim": true, "release": true, "renew": true, "submit": true,
-	"abandon": true, "reopen": true, "rework": true, "start": true,
+	"abandon": true, "complete": true, "reopen": true, "rework": true, "start": true,
 	"stop": true, "publish": true, "promote": true, "revoke": true,
 	"sync": true, "exec": true, "purge": true, "import": true,
 	"install": true, "recommend": true, "resolve": true, "decompose": true,

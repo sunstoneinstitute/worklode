@@ -271,7 +271,7 @@ func transitionTo(target string) func(tx *sql.Tx, now time.Time, taskID string, 
 // reopenableStates are the states reopenTask accepts as the from-state.
 var reopenableStates = map[string]bool{
 	"merged": true, "deployed_dev": true, "deployed_prod": true,
-	"released": true, "abandoned": true,
+	"released": true, "abandoned": true, "completed": true,
 }
 
 // setStateEventType names the event a manual move to state records. merged
@@ -305,7 +305,7 @@ func (s *server) setTaskState(w http.ResponseWriter, r *http.Request) {
 	if !slices.Contains(model.SettableTaskStates, req.State) {
 		writeErr(w, http.StatusUnprocessableEntity,
 			"state must be one of "+strings.Join(model.SettableTaskStates, ", ")+
-				"; use the claim, release, abandon, reopen, or PATCH endpoints for other transitions")
+				"; use the claim, release, complete, abandon, reopen, or PATCH endpoints for other transitions")
 		return
 	}
 	s.finishTask(w, r, setStateEventType(req.State),
@@ -322,8 +322,19 @@ func (s *server) abandonTask(w http.ResponseWriter, r *http.Request) {
 	s.finishTask(w, r, "task.abandoned", transitionTo("abandoned"))
 }
 
+// completeTask handles POST /api/v1/tasks/{id}/complete: ready, in_progress or
+// in_review -> completed, closing any active lease in the same transaction.
+// Completed is for work whose outcome is not code (WL-REQ-1884), so the store
+// refuses a task with a pull request, and a parent (WL-REQ-90).
+func (s *server) completeTask(w http.ResponseWriter, r *http.Request) {
+	s.finishTask(w, r, "task.completed",
+		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
+			return store.ManualTransition(tx, now, taskID, "completed", eventID)
+		})
+}
+
 // reopenTask handles POST /api/v1/tasks/{id}/reopen: any delivered state
-// (merged, deployed_dev, deployed_prod, released) or abandoned -> ready
+// (merged, deployed_dev, deployed_prod, released), completed or abandoned -> ready
 // (422 from any other state), closing any active lease in the same
 // transaction as a belt-and-suspenders measure (such tasks should not hold
 // one). The from-state is read inside the transaction so a concurrent
@@ -388,8 +399,12 @@ var lifecycleRouteDocs = map[string]routeDoc{
 		summary:   "Abandon a task",
 		responses: map[int]any{http.StatusOK: model.Task{}},
 	},
+	"POST /api/v1/tasks/{id}/complete": {
+		summary:   "Complete a task whose outcome is not code",
+		responses: map[int]any{http.StatusOK: model.Task{}},
+	},
 	"POST /api/v1/tasks/{id}/reopen": {
-		summary:   "Reopen a delivered or abandoned task back to ready",
+		summary:   "Reopen a delivered, completed or abandoned task back to ready",
 		responses: map[int]any{http.StatusOK: model.Task{}},
 	},
 }

@@ -267,6 +267,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/tasks/{id}/decompose":      guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/state":          guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/abandon":        guardedBound(permTaskWrite),
+	"POST /api/v1/tasks/{id}/complete":       guardedBound(permTaskWrite),
 	// The escalation ladder (WL-REQ-171). A task write like release and block,
 	// which is what it is made of: the executor gives the task back and files
 	// the design work that has to land first.
