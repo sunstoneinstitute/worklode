@@ -187,6 +187,21 @@ Flags: --server
 - `lode project show` — Show a project's repos, focus, and token cost
   Flags: --days, --project
 
+## `lode review` — Reviews of documents: threads anchored to quoted text, verdicts, author rounds
+
+- `lode review add` — Open a review of a document; its reviewers come from `lode doc set reviewers`
+- `lode review approve` — Submit a reviewer round with verdict approved
+- `lode review comment` — Open a thread on quoted text of the subject, or reply to a thread
+  Flags: --body, --intent, --quote, --thread
+- `lode review list` — List reviews
+  Flags: --mine, --open
+- `lode review resolve` — Resolve a thread
+- `lode review set` — Set one field of a review, e.g. `lode review set verdict changes_requested 12`
+- `lode review show` — Show a review: reviewers and their verdicts, threads, rounds
+- `lode review submit` — Author: submit a new round at the document's current version
+- `lode review wait` — Author: wait for messages after a seq and resolved threads, printed as one JSON envelope
+  Flags: --after, --timeout
+
 ## `lode rule` — Design rules: add, accept, show or list them, edit one, list its versions, link or unlink it to another, arrange it in a spec, list terms
 
 - `lode rule accept` — Accept a rule's newest draft version (owner only); the specs arranging it move to it
