@@ -225,7 +225,7 @@ func newProjectCrewRemoveCmd() *cobra.Command {
 			"on the project at once.\n\n" +
 			"A member who still owns open work on the project cannot be removed: the\n" +
 			"refusal names each item, which has to be reassigned or closed first. The\n" +
-			"project lead cannot be removed at all while lead handoff is unimplemented.",
+			"project lead cannot be removed until the lead is handed off to another member.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

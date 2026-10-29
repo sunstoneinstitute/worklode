@@ -325,7 +325,7 @@ func TestAddParticipant(t *testing.T) {
 	if err := add("bob", "reporter", false); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("duplicate role: got %v", err)
 	}
-	// A second lead is refused (lead handoff is deferred).
+	// A second lead is refused; the lead moves only by handoff.
 	if err := add("bob", "editor", true); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("second lead: got %v", err)
 	}
@@ -542,7 +542,7 @@ func TestRemoveParticipantGuard(t *testing.T) {
 		t.Fatalf("second removal: got %v, want ErrNotFound", err)
 	}
 
-	// The lead is never removable while handoff is deferred.
+	// The lead is not removable until handed off (WL-REQ-1605).
 	if err := remove("ada"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("lead removal: got %v", err)
 	}
