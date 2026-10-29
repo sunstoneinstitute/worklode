@@ -16,6 +16,8 @@
     "gen:api": "pnpm dlx openapi-typescript@7.13.0 ../../bin/openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
+    "@blocknote/core": "0.56.0",
+    "@blocknote/server-util": "0.56.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
