@@ -42,11 +42,14 @@ type ReviewThread struct {
 	Messages         []ReviewMessage `json:"messages,omitempty"`
 }
 
-// ReviewMessage is one message in a thread.
+// ReviewMessage is one message in a thread. Seq orders messages within the
+// review, or within the thread for a bare note. Role is reviewer or author.
 type ReviewMessage struct {
 	ID        int64     `json:"id"`
 	Thread    int64     `json:"thread"`
+	Seq       int       `json:"seq"`
 	Author    string    `json:"author"`
+	Role      string    `json:"role"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -118,11 +121,13 @@ type ReviewRoundInput struct {
 	Reanchors   []ThreadReanchor  `json:"reanchors,omitempty"`
 }
 
-// ReviewListParams are the query parameters of the review list route.
+// ReviewListParams are the query parameters of the review list route. Open
+// keeps the reviews not yet closed.
 type ReviewListParams struct {
 	Subject  string `query:"subject"`
 	Reviewer string `query:"reviewer"`
 	State    string `query:"state"`
+	Open     bool   `query:"open"`
 }
 
 // DocThreadsParams are the query parameters of a document's thread list.
