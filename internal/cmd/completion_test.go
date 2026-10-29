@@ -236,8 +236,7 @@ func TestTaskIDCompletionFiresAtTheRightPosition(t *testing.T) {
 }
 
 // docsResponse builds a doc list stub. Every entry is a spec in project key
-// "WL", so cli.DocRef renders the WL-SPEC-<n> shorthand the completer offers
-// alongside the slug.
+// "WL", so cli.DocRef renders the WL-SPEC-<n> shorthand the completer offers.
 func docsResponse(docs ...model.Doc) model.DocListResponse {
 	for i := range docs {
 		docs[i].Project, docs[i].ProjectKey, docs[i].Kind = "proj", "WL", "spec"
@@ -245,11 +244,11 @@ func docsResponse(docs ...model.Doc) model.DocListResponse {
 	return model.DocListResponse{Docs: docs}
 }
 
-// TestDocRefCompletionOffersSlugAndShorthand is WL-REQ-307 C1 for documents: a
-// document is named either way (WL-REQ-199), so both are candidates, ordered by
-// the shorthand's numeric suffix rather than lexically — WL-SPEC-9 before
-// WL-SPEC-10, the same discipline task ids get.
-func TestDocRefCompletionOffersSlugAndShorthand(t *testing.T) {
+// TestDocRefCompletionOffersShorthandOnly is WL-REQ-307 C1 for documents: the
+// shorthand is the only candidate, ordered by its numeric suffix rather than
+// lexically — WL-SPEC-9 before WL-SPEC-10, the same discipline task ids get.
+// Slugs are never offered.
+func TestDocRefCompletionOffersShorthandOnly(t *testing.T) {
 	docs := func(w http.ResponseWriter, r *http.Request) {
 		writeTestJSON(t, w, docsResponse(
 			model.Doc{Number: 10, Slug: "ten-doc", Title: "ten"},
@@ -272,8 +271,8 @@ func TestDocRefCompletionOffersSlugAndShorthand(t *testing.T) {
 		t.Fatalf("__complete doc show: %v\noutput: %s", err, out)
 	}
 	got, _, _ = strings.Cut(out, ":")
-	if got != "nine-doc\tnine\n" {
-		t.Fatalf("slug candidates = %q, want the matching slug", got)
+	if got != "" {
+		t.Fatalf("slug candidates = %q, want none", got)
 	}
 }
 
@@ -289,14 +288,14 @@ func TestDocUndeleteCompletesTombstonedDocs(t *testing.T) {
 		},
 	})
 
-	out, err := runLode(t, "__complete", "doc", "undelete", "gone")
+	out, err := runLode(t, "__complete", "doc", "undelete", "WL-")
 	if err != nil {
 		t.Fatalf("__complete doc undelete: %v\noutput: %s", err, out)
 	}
 	if gotDeleted != "true" {
 		t.Fatalf("doc list ?deleted = %q, want the tombstoned corpus", gotDeleted)
 	}
-	if got, _, _ := strings.Cut(out, ":"); got != "gone-doc\tgone\n" {
+	if got, _, _ := strings.Cut(out, ":"); got != "WL-SPEC-3\tgone\n" {
 		t.Fatalf("candidates = %q, want the tombstoned document", got)
 	}
 }
@@ -381,7 +380,7 @@ func TestShowCompletionUnionsTasksAndDocs(t *testing.T) {
 			t.Fatalf("__complete show: %v\noutput: %s", err, out)
 		}
 		got, _, _ := strings.Cut(out, ":")
-		if got != "WL-1\tt WL-1\nWL-SPEC-2\ta doc\na-doc\ta doc\n" {
+		if got != "WL-1\tt WL-1\nWL-SPEC-2\ta doc\n" {
 			t.Fatalf("candidates = %q, want the task ids then the doc refs", got)
 		}
 	})
@@ -436,7 +435,7 @@ func TestDocAndProjectCompletionFireAtTheRightPosition(t *testing.T) {
 		{name: "project set focus --clear, id first", args: []string{"project", "set", "focus", "--clear", ""}, want: "project"},
 	}
 	want := map[string]string{
-		"doc":     "WL-SPEC-2\ta doc\na-doc\ta doc\n",
+		"doc":     "WL-SPEC-2\ta doc\n",
 		"project": "acme\tAcme\n",
 	}
 	for _, tc := range tests {
