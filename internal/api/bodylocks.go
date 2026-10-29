@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/swaggest/jsonschema-go"
+
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -161,6 +163,42 @@ func (s *server) unlockBody(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// mapSaveErr answers a body save's refusal (WL-REQ-1868): 409 with the
+// BodyConflict on a moved body, 409 with the lock on a dead lock session,
+// each counted in worklode_body_save_conflicts_total. Any other error goes
+// to mapStoreErr.
+func (s *server) mapSaveErr(w http.ResponseWriter, r *http.Request, err error) {
+	var moved *store.ErrBodyMoved
+	var held *store.ErrLockHeld
+	switch {
+	case errors.As(err, &moved):
+		bb, berr := bodyBlocks(moved.Kind, moved.Body)
+		if berr != nil {
+			s.mapStoreErr(w, berr)
+			return
+		}
+		s.st.BodySaveConflict(moved.Kind, "moved")
+		writeJSON(w, http.StatusConflict, model.BodyConflict{
+			Kind: moved.Kind, ID: moved.ID, BodySHA256: bb.BodySHA256, Body: moved.Body, Blocks: bb.Blocks,
+		})
+	case errors.As(err, &held):
+		owner, oerr := s.st.LockSubjectOwner(r.Context(), held.Lock.Kind, held.Lock.SubjectID)
+		if oerr != nil {
+			s.mapStoreErr(w, oerr)
+			return
+		}
+		held.Lock.CanUnlock = canUnlock(subjectFrom(r), owner)
+		s.st.BodySaveConflict(held.Lock.Kind, "lock")
+		writeJSON(w, http.StatusConflict, held.Lock)
+	default:
+		s.mapStoreErr(w, err)
+	}
+}
+
+// bodySaveConflict is a body save's 409 in the OpenAPI document: the stored
+// body moved (BodyConflict) or the lock session is dead (BodyLock).
+var bodySaveConflict = jsonschema.OneOf(model.BodyConflict{}, model.BodyLock{})
 
 // bodylocksRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var bodylocksRouteDocs = map[string]routeDoc{

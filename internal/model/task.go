@@ -168,10 +168,15 @@ type EditTaskInput struct {
 	Title *Markdown `json:"title"`
 	Body  *Markdown `json:"body"`
 	// Blocks is the body as editor blocks, in place of Body (WL-REQ-1867).
-	Blocks             []EditorBlock `json:"blocks,omitempty"`
-	Priority           *string       `json:"priority"`
-	Concern            *string       `json:"concern"`
-	NeedsDecomposition *bool         `json:"needs_decomposition"`
+	Blocks []EditorBlock `json:"blocks,omitempty"`
+	// IfBodySHA256 and LockSession are the body editor's save checks
+	// (WL-REQ-1868): the body_sha256 it loaded and its lock session. Empty
+	// skips each check.
+	IfBodySHA256       string  `json:"if_body_sha256,omitempty"`
+	LockSession        string  `json:"lock_session,omitempty"`
+	Priority           *string `json:"priority"`
+	Concern            *string `json:"concern"`
+	NeedsDecomposition *bool   `json:"needs_decomposition"`
 	// Due, when non-nil, sets the due date (YYYY-MM-DD); "" clears it (WL-REQ-1796).
 	Due *string `json:"due"`
 	// HumanOnly, when non-nil, sets or clears the no-unattended-pickup flag.

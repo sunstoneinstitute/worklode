@@ -94,6 +94,11 @@ type EditRuleInput struct {
 	Body    Markdown `json:"body"`
 	// Blocks is the body as editor blocks, in place of Body (WL-REQ-1867).
 	Blocks []EditorBlock `json:"blocks,omitempty"`
+	// IfBodySHA256 and LockSession are the body editor's save checks
+	// (WL-REQ-1868): the body_sha256 it loaded and its lock session. Empty
+	// skips each check.
+	IfBodySHA256 string `json:"if_body_sha256,omitempty"`
+	LockSession  string `json:"lock_session,omitempty"`
 }
 
 // AcceptRuleInput is the optional body of POST /api/v1/rules/{id}/accept.

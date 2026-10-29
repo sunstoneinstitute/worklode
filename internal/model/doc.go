@@ -366,6 +366,11 @@ type UpdateDocBodyInput struct {
 	// Blocks is the body as editor blocks, in place of Body (WL-REQ-1867).
 	// A spec's body is assembled from its rules and takes no blocks.
 	Blocks []EditorBlock `json:"blocks,omitempty"`
+	// IfBodySHA256 and LockSession are the body editor's save checks
+	// (WL-REQ-1868): the body_sha256 it loaded and its lock session. Empty
+	// skips each check.
+	IfBodySHA256 string `json:"if_body_sha256,omitempty"`
+	LockSession  string `json:"lock_session,omitempty"`
 }
 
 // DocEdgeInput is one document edge as a caller names it: the request body of
