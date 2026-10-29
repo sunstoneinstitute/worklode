@@ -13,7 +13,9 @@ import { LoadError } from "@/components/ui/load-state"
 import { ProjectLayout } from "@/layouts/ProjectLayout"
 import { RootLayout } from "@/layouts/RootLayout"
 import { isDocumentTab } from "@/lib/content-types"
+import { EditBody } from "@/pages/EditBody"
 import { EditIdea } from "@/pages/EditIdea"
+import { EditRule } from "@/pages/EditRule"
 import { IdeaIntake } from "@/pages/IdeaIntake"
 import { Ideas } from "@/pages/Ideas"
 import { NewIdea } from "@/pages/NewIdea"
@@ -124,6 +126,20 @@ const projectTasksRoute = createRoute({
   validateSearch: coerceSearch,
 })
 
+// The body editors, on the canonical URLs (WL-RULE-1306). The literal "rule"
+// wins over $kind, as it does on the server.
+const editBodyRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "$kind/$n/edit",
+  component: EditBody,
+})
+
+const editRuleRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "rule/$n/edit",
+  component: EditRule,
+})
+
 export const routeTree = rootRoute.addChildren([
   projectsRoute,
   tasksRoute,
@@ -131,7 +147,14 @@ export const routeTree = rootRoute.addChildren([
   newIdeaRoute,
   editIdeaRoute,
   ideaIntakeRoute,
-  projectRoute.addChildren([projectOverviewRoute, projectCrewRoute, projectDocumentsRoute, projectTasksRoute]),
+  projectRoute.addChildren([
+    projectOverviewRoute,
+    projectCrewRoute,
+    projectDocumentsRoute,
+    projectTasksRoute,
+    editBodyRoute,
+    editRuleRoute,
+  ]),
 ])
 
 /**

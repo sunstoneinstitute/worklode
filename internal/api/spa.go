@@ -22,6 +22,9 @@ func (s *server) spaFS() fs.FS {
 func (s *server) registerSPA(r *router) {
 	r.public("GET /static/", s.spaAssetHandler())
 	for _, route := range spaRoutes {
+		if route == spaViaCanonical {
+			continue
+		}
 		r.web("GET "+muxPattern(route), s.spaShell)
 	}
 }

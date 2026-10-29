@@ -135,6 +135,9 @@ templ Doc(v DocView) {
 				</p>
 				// Filled by rule-notice.js when the URL fragment is a #rule-<n>
 				// this document does not arrange (WL-REQ-1809).
+				if u := docEditURL(v.Doc); u != "" {
+					<p><a href={ u }>Edit</a></p>
+				}
 				<p id="rule-notice" class="muted" data-key={ v.ProjectKey } hidden></p>
 				<script src={ assetURL("rule-notice.js") } defer></script>
 				if v.Revision != nil {

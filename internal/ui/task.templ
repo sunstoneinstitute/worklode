@@ -59,6 +59,9 @@ templ Task(v TaskView) {
 					if v.Holder != nil {
 						<p><strong>Held by:</strong> { v.Holder.ActorID } (expires { fmtTime(v.Holder.ExpiresAt) })</p>
 					}
+					if u := taskEditURL(v); u != "" {
+						<p><a href={ u }>Edit</a></p>
+					}
 					@pageActs(taskActions(v))
 				</section>
 

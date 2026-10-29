@@ -1,5 +1,6 @@
 import { keepPreviousData, queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query"
 import { api } from "./client"
+import type { components } from "./schema"
 import type { ErrorResponse } from "./types"
 
 /** Full-page navigation, behind an object so tests can spy on it. */
@@ -284,6 +285,53 @@ export function useIdeaSources(id: string, enabled = true) {
       const { data, error, response } = await api.GET("/api/v1/ideas/{id}/sources", { params: { path: { id } } })
       if (error) throw failure(error, response)
       return data.documents ?? []
+    },
+  })
+}
+
+/**
+ * What a body editor page edits (WL-REQ-1868): a document by ref, a rule
+ * by ref (WL-REQ-12) or a task by id. `lockId` is what the lock routes
+ * name it by: the doc id, the numeric rule id, the task id.
+ */
+export type BodyTarget = { kind: "doc"; ref: string } | { kind: "rule"; ref: string } | { kind: "task"; ref: string }
+
+export type BodySubject = {
+  lockId: string
+  title: string
+  /** A rule's heading, which its PUT replaces along with the body */
+  heading: string
+  /** The document kind ("spec", "plan"); "" for a rule or task */
+  docKind: string
+  blocks: components["schemas"]["EditorBlock"][]
+  body_sha256: string
+}
+
+/** Reads the subject with ?as=blocks, never from cache: the hash must be the stored body's now */
+export function useBodySubject(target: BodyTarget) {
+  return useQuery({
+    queryKey: ["body", target.kind, target.ref],
+    staleTime: 0,
+    gcTime: 0,
+    queryFn: async (): Promise<BodySubject> => {
+      const query = { as: "blocks" }
+      if (target.kind === "rule") {
+        const { data, error, response } = await api.GET("/api/v1/rules/{id}", { params: { path: { id: target.ref }, query } })
+        if (error) throw failure(error, response)
+        const heading = data.heading ?? ""
+        return { lockId: String(data.id), title: `${data.ref}: ${heading}`, heading, docKind: "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "" }
+      }
+      if (target.kind === "task") {
+        const { data, error, response } = await api.GET("/api/v1/tasks/{id}", { params: { path: { id: target.ref }, query } })
+        if (error) throw failure(error, response)
+        return { lockId: data.id ?? "", title: `${data.id}: ${data.title}`, heading: "", docKind: "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "" }
+      }
+      const resolved = await api.GET("/api/v1/docs/resolve", { params: { query: { ref: target.ref } } })
+      if (resolved.error) throw failure(resolved.error, resolved.response)
+      const id = resolved.data.id ?? 0
+      const { data, error, response } = await api.GET("/api/v1/docs/{id}", { params: { path: { id: String(id) }, query } })
+      if (error) throw failure(error, response)
+      return { lockId: String(id), title: `${data.ref}: ${data.title}`, heading: "", docKind: data.kind ?? "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "" }
     },
   })
 }
