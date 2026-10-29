@@ -96,6 +96,7 @@ func walkTo(t *testing.T, s *Store, taskID, state string) {
 		"deployed_prod": {"in_progress", "in_review", "merged", "deployed_dev", "deployed_prod"},
 		"released":      {"in_progress", "in_review", "merged", "released"},
 		"abandoned":     {"abandoned"},
+		"completed":     {"completed"},
 	}
 	steps, ok := paths[state]
 	if !ok {
