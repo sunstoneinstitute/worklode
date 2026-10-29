@@ -62,6 +62,13 @@ func (c *Client) SetTaskSkills(ctx context.Context, id string, skills []string) 
 		model.SetSkillsInput{Skills: skills})
 }
 
+// SetTaskReviewers calls POST /api/v1/tasks/{id}/reviewers, replacing the
+// task's reviewer roster. A nil or empty reviewers clears it.
+func (c *Client) SetTaskReviewers(ctx context.Context, id string, reviewers []string) (model.TaskReviewers, []byte, error) {
+	return doJSON[model.TaskReviewers](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/reviewers",
+		model.SetTaskReviewersInput{Reviewers: reviewers}, "task reviewers")
+}
+
 // ClaimTask calls POST /api/v1/tasks/{id}/claim. worktree is the caller's
 // worktree identity (required by the server); ttl <= 0 means the server
 // default (2h).
@@ -459,6 +466,9 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 		fmt.Fprintf(w, "  milestone: %s\n", t.Milestone)
 	}
 	GovernanceRender(w, "  ", t.GovernedBy)
+	if len(t.Reviewers) > 0 {
+		fmt.Fprintf(w, "  reviewers: %s\n", strings.Join(t.Reviewers, ", "))
+	}
 	if t.NeedsDecomposition {
 		fmt.Fprintf(w, "  needs decomposition: yes\n")
 	}
@@ -629,6 +639,16 @@ func PinnedSkillList(w io.Writer, skills []string) {
 		return
 	}
 	fmt.Fprintln(w, strings.Join(skills, "\n"))
+}
+
+// TaskReviewersList prints a task's reviewer roster on one line, or a note
+// when there is none.
+func TaskReviewersList(w io.Writer, reviewers []string) {
+	if len(reviewers) == 0 {
+		fmt.Fprintln(w, "(no reviewers)")
+		return
+	}
+	fmt.Fprintln(w, strings.Join(reviewers, ", "))
 }
 
 // TaskCostRender prints `lode task cost`: which task and scope, how many agent

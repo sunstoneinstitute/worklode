@@ -70,6 +70,7 @@ func newTaskCmd() *cobra.Command {
 		newCriticalPathCmd(),
 		newTimelineCmd(),
 		newTaskSkillsCmd(),
+		newTaskReviewersCmd(),
 		newTaskChecklistCmd(),
 		newTaskAttachCmd(),
 		newTaskDetachCmd(),
@@ -603,6 +604,38 @@ func newTaskSkillsCmd() *cobra.Command {
 	}
 }
 
+// newTaskReviewersCmd is the read-only view of a task's reviewer roster
+// (WL-REQ-1323, rule L6). The paired write is `lode task set reviewers
+// <actor…> <id>`.
+func newTaskReviewersCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:               "reviewers <id>",
+		Short:             "Show the task's assigned reviewers",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.GetTask(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskReviewersList(cmd.OutOrStdout(), t.Reviewers)
+			return nil
+		},
+	}
+}
+
 func newTaskEditCmd() *cobra.Command {
 	var title, body, bodyFile, concern, priority, kindFlag, milestone, plan string
 	var needsDecomposition, humanOnly, noUpload bool
@@ -1023,7 +1056,7 @@ func newTaskSubmitCmd() *cobra.Command {
 // taskSetFields are the fields `lode task set` writes. The switch below
 // handles each one and this list names them, for the unknown-field error and
 // for completion (WL-REQ-305 L4): the field is an argument, so it completes.
-var taskSetFields = []string{"state", "skills", "checklist"}
+var taskSetFields = []string{"state", "skills", "reviewers", "checklist"}
 
 // newTaskSetCmd is `lode task set <field> <value…> <id>` (WL-REQ-306): write one
 // named field on a task. The field and the values are arguments, not part of
@@ -1052,6 +1085,10 @@ everything between the field and the id is the value.
                lode task set skills tdd debugging WL-5
              naming none clears the task's pinned skills:
                lode task set skills WL-5
+  reviewers  any number of actor ids, replacing whatever was assigned:
+               lode task set reviewers alice bob WL-5
+             naming none clears the task's reviewers:
+               lode task set reviewers WL-5
   checklist  an item (ordinal, canonical, or title) and true/false:
                lode task set checklist 0 true WL-5
                lode task set checklist "write tests" false WL-5`,
@@ -1068,7 +1105,7 @@ everything between the field and the id is the value.
 					return fmt.Errorf("unknown state %q: must be one of %s",
 						values[0], strings.Join(model.SettableTaskStates, ", "))
 				}
-			case "skills":
+			case "skills", "reviewers":
 			case "checklist":
 				if len(values) != 2 {
 					return fmt.Errorf("field \"checklist\" takes an item and true/false: lode task set checklist <ordinal|title> <true|false> <id>")
@@ -1103,6 +1140,18 @@ everything between the field and the id is the value.
 					return fmt.Errorf("decode skills: %w", err)
 				}
 				cli.PinnedSkillList(cmd.OutOrStdout(), resp.Skills)
+				return nil
+			}
+			if field == "reviewers" {
+				resp, raw, err := c.SetTaskReviewers(cmd.Context(), id, values)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				cli.TaskReviewersList(cmd.OutOrStdout(), resp.Reviewers)
 				return nil
 			}
 			if field == "checklist" {
