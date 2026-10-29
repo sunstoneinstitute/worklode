@@ -326,12 +326,12 @@ func TestSubjectFromActorGroups(t *testing.T) {
 	}
 }
 
-// TestHasReviewSurface: with today's table, WL-SPEC-84's routes do not exist,
-// so the Progress page's Review button stays disabled (WL-REQ-1337).
+// TestHasReviewSurface: WL-SPEC-84's POST /api/v1/reviews is in the table, so
+// the Progress page's Review button is enabled (WL-REQ-1337).
 func TestHasReviewSurface(t *testing.T) {
 	t.Parallel()
-	if hasReviewSurfaceIn(routeGuards) {
-		t.Error("hasReviewSurfaceIn(routeGuards) = true; want false until spec 059 registers its routes")
+	if !hasReviewSurfaceIn(routeGuards) {
+		t.Error("hasReviewSurfaceIn(routeGuards) = false; want true now POST /api/v1/reviews is registered")
 	}
 }
 

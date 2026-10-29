@@ -394,6 +394,8 @@ func TestMetricsEndpointDomainFamilies(t *testing.T) {
 		"worklode_skill_sync_duration_seconds",
 		"worklode_event_log_horizon_id",
 		"worklode_deletes_total",
+		"worklode_review_rounds_total",
+		"worklode_review_open_threads",
 		// The one otlp instrument that carries no label: the three
 		// CounterVecs report nothing until a request gives them a label
 		// value, so this is what proves registration happened.
