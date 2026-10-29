@@ -151,12 +151,13 @@ func TestThreadLifecycle(t *testing.T) {
 		t.Errorf("reply after resolve err = %v, want ErrInvalidInput", err)
 	}
 
+	hs := strings.Index(string(doc.Body), "## 2.")
 	refused := map[string]model.ReviewAnchor{
 		"quote differs from the range":  {Rule: ruleID, Version: version, ByteStart: start, ByteEnd: start + len("the gate"), Quote: "the gat"},
 		"start inside a multibyte char": {Rule: ruleID, Version: version, ByteStart: strings.Index(body, "Æ") + 1, ByteEnd: start, Quote: body[strings.Index(body, "Æ")+1 : start]},
 		"section anchor on a review":    {Doc: doc.ID, DocAnchor: "sec-2"},
 		"range past the end":            {Rule: ruleID, Version: version, ByteStart: start, ByteEnd: len(body) + 1, Quote: "x"},
-		"range on a spec":               {Doc: doc.ID, Version: doc.Version, ByteStart: 0, ByteEnd: 3, Quote: "---"},
+		"spec range over a heading":     {Doc: doc.ID, Version: doc.Version, ByteStart: hs, ByteEnd: hs + 4, Quote: string(doc.Body)[hs : hs+4]},
 	}
 	for name, a := range refused {
 		if _, err := openThread(t, s, r.ID, model.OpenThreadInput{Anchor: a, Intent: "note", Body: "x"}, "a"); !errors.Is(err, ErrInvalidInput) {
