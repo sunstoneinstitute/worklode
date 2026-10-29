@@ -119,7 +119,7 @@ var Emoji = emoji.New(emoji.WithRenderingMethod(emoji.Unicode))
 var mermaidExt = &mermaid.Extender{RenderMode: mermaid.RenderModeClient, NoScript: true}
 
 var md = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, Emoji, mermaidExt, calloutExt, highlightExt),
+	goldmark.WithExtensions(extension.GFM, Emoji, mermaidExt, calloutExt, CalloutFence, braceMermaidExt, highlightExt),
 	// Unsafe here means "let raw HTML through to the sanitiser", not "trust
 	// it". The bluemonday policy below is the actual boundary.
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
@@ -135,7 +135,7 @@ var md = goldmark.New(
 // WithAttribute lets an author write any attribute, not just id — the
 // allowlist, not the parser, is what keeps that harmless.
 var mdDoc = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, Emoji, mermaidExt, calloutExt, highlightExt, ruleAnchorExt),
+	goldmark.WithExtensions(extension.GFM, Emoji, mermaidExt, calloutExt, CalloutFence, braceMermaidExt, highlightExt, ruleAnchorExt),
 	goldmark.WithParserOptions(parser.WithAttribute(), withDocRefLinks),
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
 )

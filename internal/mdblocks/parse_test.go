@@ -2,6 +2,7 @@ package mdblocks_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -164,5 +165,50 @@ func TestParseTableContent(t *testing.T) {
 	}
 	if tc.HeaderRows == nil || *tc.HeaderRows != 1 {
 		t.Errorf("headerRows = %v, want 1", tc.HeaderRows)
+	}
+}
+
+func TestCalloutFence(t *testing.T) {
+	md := []byte("::: {.callout-warning}\nCareful.\n:::\n")
+	blocks, _ := mdblocks.Parse(md, mdblocks.Subject("doc"))
+	if blocks[0].Type != "callout" || string(blocks[0].Props) != `{"kind":"warning"}` || len(blocks[0].Children) != 1 {
+		t.Fatalf("got %+v", blocks[0])
+	}
+	if got := string(md[blocks[0].Range.Start:blocks[0].Range.End]); got != strings.TrimSuffix(string(md), "\n") {
+		t.Fatalf("range %q", got)
+	}
+	if blocks[0].Children[0].Type != "paragraph" {
+		t.Fatalf("child %+v", blocks[0].Children[0])
+	}
+}
+
+func TestHeadingAnchor(t *testing.T) {
+	md := []byte("## Title {#purpose}\n")
+	doc, _ := mdblocks.Parse(md, mdblocks.Subject("doc"))
+	if doc[0].Type != "heading" || string(doc[0].Props) != `{"level":2,"anchor":"purpose"}` {
+		t.Fatalf("doc: %+v", doc[0])
+	}
+	task, _ := mdblocks.Parse(md, mdblocks.Subject("task"))
+	if string(task[0].Props) != `{"level":2}` || !strings.Contains(fmt.Sprint(task[0].Content), "{#purpose}") {
+		t.Fatalf("task: %+v", task[0])
+	}
+	other, _ := mdblocks.Parse([]byte("## Title {#a .wide}\n"), mdblocks.Subject("rule"))
+	if other[0].Type != "source" {
+		t.Fatalf("non-id attribute: %+v", other[0])
+	}
+}
+
+// TestQuartoInline checks inline content reaches callout children and an
+// anchored heading, without the `{#id}` attribute.
+func TestQuartoInline(t *testing.T) {
+	md := []byte("## A **bold** title {#purpose}\n\n::: {.callout-note}\nSee *this*.\n:::\n")
+	blocks, _ := mdblocks.Parse(md, mdblocks.Subject("doc"))
+	h := blocks[0].Content
+	if len(h) != 3 || !h[1].Styles["bold"] || h[1].Text != "bold" || strings.Contains(h[2].Text, "{") {
+		t.Fatalf("heading content %+v", h)
+	}
+	c := blocks[1].Children[0].Content
+	if len(c) < 2 || !c[1].Styles["italic"] || c[1].Text != "this" || string(md[c[1].Offset:c[1].Offset+4]) != "this" {
+		t.Fatalf("callout content %+v", c)
 	}
 }
