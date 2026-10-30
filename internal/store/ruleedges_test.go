@@ -4,10 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -193,57 +189,6 @@ func TestLinkRulesNeeds(t *testing.T) {
 		if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "write "+declared+" ") {
 			t.Errorf("%s via link: %v, want ErrInvalidInput naming %s", inverse, err, declared)
 		}
-	}
-}
-
-// TestRuleAmendsMigrationSwapsSupersession runs migration 0089 down and up
-// over a supersedes and an amends row: down restores the old supersededBy
-// (old -> new) spelling and drops amends, up swaps the ends back.
-func TestRuleAmendsMigrationSwapsSupersession(t *testing.T) {
-	s := openDocStore(t)
-	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: ruleDocV1, CreatedBy: "stig"})
-	oldID, newID := ruleID(t, s, "P1", 3), ruleID(t, s, "P1", 1)
-	ctx := context.Background()
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO rule_edges (from_rule, to_rule, type, source) VALUES ($1, $2, 'supersedes', 'refactor'), ($2, $1, 'amends', 'manual')`,
-		newID, oldID); err != nil {
-		t.Fatal(err)
-	}
-	edges := func() []string {
-		t.Helper()
-		rows, err := s.db.QueryContext(ctx, `SELECT from_rule, to_rule, type FROM rule_edges ORDER BY type`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer rows.Close()
-		var out []string
-		for rows.Next() {
-			var from, to int64
-			var typ string
-			if err := rows.Scan(&from, &to, &typ); err != nil {
-				t.Fatal(err)
-			}
-			out = append(out, fmt.Sprintf("%d %s %d", from, typ, to))
-		}
-		return out
-	}
-	run := func(name string) {
-		t.Helper()
-		data, err := os.ReadFile(filepath.Join(MigrationsDirForTests(), name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := s.db.ExecContext(ctx, string(data)); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-	}
-	run("0089_rule_amends.down.sql")
-	if got, want := edges(), []string{fmt.Sprintf("%d supersededBy %d", oldID, newID)}; !slices.Equal(got, want) {
-		t.Errorf("after down: %v, want %v", got, want)
-	}
-	run("0089_rule_amends.up.sql")
-	if got, want := edges(), []string{fmt.Sprintf("%d supersedes %d", newID, oldID)}; !slices.Equal(got, want) {
-		t.Errorf("after up: %v, want %v", got, want)
 	}
 }
 

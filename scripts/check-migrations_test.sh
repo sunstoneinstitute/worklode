@@ -253,6 +253,23 @@ if [ -n "$(git -C "$d13" status --porcelain)" ]; then
 	fails=$((fails + 1))
 fi
 
+# Case 15: a baseline squashing 0070-0071 takes 0071's number. Databases past
+# 0071 never run it, so it is no below-base migration.
+d15="$WORK/case15"
+new_repo "$d15" 0070_alpha 0071_beta 0072_gamma
+for key in 0070_alpha 0071_beta; do
+	rm "$d15"/deploy/base/migrations/$key.*.sql
+	sed -i.bak "/$key/d" "$d15/deploy/base/kustomization.yaml" && rm "$d15/deploy/base/kustomization.yaml.bak"
+done
+add_files "$d15" 0071_baseline
+check "baseline squashes base migrations" "$d15" pass
+
+# Case 16: the same number with the base migration kept is still below base.
+d16="$WORK/case16"
+new_repo "$d16" 0071_beta 0072_gamma
+add_files "$d16" 0071_baseline
+check "baseline beside the migration it would replace" "$d16" fail "0071_baseline"
+
 if [ "$fails" -ne 0 ]; then
 	echo "$fails case(s) failed"
 	exit 1

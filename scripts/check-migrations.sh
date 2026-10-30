@@ -117,6 +117,20 @@ renumber_to_next() {
 	renamed=1
 }
 
+# True when $1 takes the number of a base migration this branch deleted: a
+# baseline squashing everything up to that number, which databases past it
+# never run. A base migration the branch never had (it landed after the
+# branch was cut) is not a deletion.
+squashes_base() {
+	local prefix=${1%%_*} old fork
+	fork=$(git merge-base HEAD "$base" 2>/dev/null) || return 1
+	for old in $(printf '%s\n' "$base_keys" | grep "^${prefix}_" || true); do
+		[ -f "$MIG_DIR/$old.up.sql" ] && continue
+		git cat-file -e "$fork:$MIG_DIR/$old.up.sql" 2>/dev/null && return 0
+	done
+	return 1
+}
+
 # Renumbers (or in --no-fix mode reports) every numbered migration this
 # branch adds whose number is at or below $1 or in the space-separated list
 # $2. Keys are read from disk, since an earlier renumber may have renamed
@@ -125,6 +139,7 @@ renumber_below() {
 	local floor=$1 taken=${2:-} key num
 	for key in $(list_files | strip_suffix | grep -v '^NEW' | sort -u || true); do
 		printf '%s\n' "$base_keys" | grep -Fxq "$key" && continue
+		squashes_base "$key" && continue
 		num=$((10#${key%%_*}))
 		case " $taken " in
 			*" $num "*) ;;
