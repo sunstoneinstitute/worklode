@@ -147,7 +147,7 @@ func TestPollCandidates(t *testing.T) {
 	}
 
 	// Seed through RecordEvent: Transition logs to state_log, whose event_id
-	// is a NOT NULL FK to events (0001_baseline.up.sql:177), so it needs a
+	// is a NOT NULL FK to events (0100_baseline.up.sql), so it needs a
 	// real event id.
 	var inReview, merged string
 	if _, _, err := s.RecordEvent(ctx, "cli", "seed-"+t.Name(), "test.seed", nil,

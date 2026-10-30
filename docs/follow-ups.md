@@ -399,7 +399,7 @@ one pass.
 
 - `[P4]` **`leases` has no plain index on `task_id`.** Only the partial
   `leases_active` index (`WHERE released_at IS NULL`,
-  `deploy/base/migrations/0001_baseline.up.sql`) exists, so `Store.TaskCost`
+  `deploy/base/migrations/0100_baseline.up.sql`) exists, so `Store.TaskCost`
   (`internal/store/session_usage.go`) scans released leases too when reading
   a task's cost. Small today, a migration when lease volume grows.
 

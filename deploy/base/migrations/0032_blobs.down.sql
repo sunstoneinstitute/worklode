@@ -1,2 +1,0 @@
-DROP TABLE IF EXISTS task_blobs;
-DROP TABLE IF EXISTS blobs;

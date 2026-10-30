@@ -23,7 +23,7 @@ Anchors freeze at `proposed`, not at `accepted`, so crit comments cannot be
 renumbered out from under a reviewer. WL-REQ-167 rule 4 currently exempts drafts
 from the renumbering constraints, which allows exactly that.
 
-Cost: `ns/concept.ttl` + `nsgen`, the CHECK in `0027_docs.up.sql`, the accept
+Cost: `ns/concept.ttl` + `nsgen`, the CHECK in `0100_baseline.up.sql`, the accept
 guard at `internal/store/docs.go:377`, and an amendment to WL-REQ-170.
 The enum has one source, so nothing else hand-mirrors it.
 

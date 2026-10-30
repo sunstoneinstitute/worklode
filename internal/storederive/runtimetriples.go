@@ -77,7 +77,7 @@ func ArtifactTriples(a store.Artifact, known CommitKnown) []graphproj.Triple {
 // subscription).
 //
 // wl:toEnvironment is emitted unguarded: deployments.environment is plain
-// NOT NULL text with no CHECK (0001_baseline.up.sql), so the dev/prod closure
+// NOT NULL text with no CHECK (0100_baseline.up.sql), so the dev/prod closure
 // wl:EnvironmentShape asserts rests on store.NormalizeEnvironment alone. A row
 // that escaped it projects an edge to an untyped node.
 func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []graphproj.Triple {

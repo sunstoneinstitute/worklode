@@ -1,0 +1,5 @@
+-- Drops everything 0100_baseline.up.sql creates. The vector extension is left
+-- installed, as 0007 did.
+
+DROP VIEW covered_rules, covered_sections;
+DROP TABLE actor_event_cursor, actors, agent_session_usage, agent_sessions, approvals, artifact_declarations, artifact_evidence, artifacts, blobs, ci_runs, decisions, deliverables, deploy_shas, deployments, doc_edge_versions, doc_edges, doc_notes, doc_reviewers, doc_revision_edges, doc_revisions, doc_rule_versions, doc_rules, doc_sections, doc_versions, docs, embedding_config, entity_edges, env_deploys, event_subscribers, events, github_user_tokens, graph_projection, graph_projection_failures, index_chunks, issues, leases, main_commits, milestones, model_prices, project_daily_cost, project_daily_overhead_cost, project_entity_seq, project_overhead_usage, project_participants, project_repos, projects, pull_requests, release_frontiers, repo_branch_rules, reviews, rule_edge_versions, rule_edges, rule_versions, rules, runtime_events, skill_versions, skills, state_log, task_activity, task_blobs, task_commits, task_edges, task_governed_by, task_instructions, tasks, tokens CASCADE;

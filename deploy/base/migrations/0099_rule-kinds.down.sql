@@ -1,1 +1,0 @@
-ALTER TABLE rules DROP COLUMN kind;
