@@ -570,19 +570,19 @@ func TestRemoveParticipantGuard(t *testing.T) {
 	}
 }
 
-// TestParticipantRolesMatchMigration holds the Go vocabulary and migration
-// 0046's CHECK constraint together (WL-297): a role added to one and not the
-// other would let the store admit what Postgres refuses, or vice versa.
+// TestParticipantRolesMatchMigration holds the Go vocabulary and the
+// baseline's role CHECK constraint together (WL-297): a role added to one and
+// not the other would let the store admit what Postgres refuses, or vice versa.
 func TestParticipantRolesMatchMigration(t *testing.T) {
 	t.Parallel()
-	data, err := os.ReadFile(filepath.Join(MigrationsDirForTests(), "0046_participant_role_check.up.sql"))
+	data, err := os.ReadFile(filepath.Join(MigrationsDirForTests(), "0100_baseline.up.sql"))
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
 	}
-	m := regexp.MustCompile(`ADD CONSTRAINT project_participants_role_check\s*\n\s*CHECK \(role IN \(([^)]+)\)\)`).
+	m := regexp.MustCompile(`CONSTRAINT project_participants_role_check CHECK \(\(role = ANY \(ARRAY\[([^\]]+)\]`).
 		FindSubmatch(data)
 	if m == nil {
-		t.Fatalf("migration 0046 carries no recognizable role CHECK")
+		t.Fatalf("baseline carries no recognizable role CHECK")
 	}
 	inMigration := map[string]bool{}
 	for _, q := range regexp.MustCompile(`'([^']+)'`).FindAllStringSubmatch(string(m[1]), -1) {
