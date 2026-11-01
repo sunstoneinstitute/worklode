@@ -226,7 +226,7 @@ wl:ReviewOpened a owl:Class ;
     skos:definition "review opened" ;
     rdfs:subClassOf wl:Event ;
     wl:layer wlc:execution ;
-    rdfs:comment "A review of a document or task was opened (WL-REQ-1780)." .
+    rdfs:comment "A review of a document or task was opened (WL-REQ-1780). Carries wl:reason." .
 
 wl:ReviewRoundSubmitted a owl:Class ;
     skos:definition "review round submitted" ;
@@ -893,6 +893,12 @@ wl:threadStatus a owl:DatatypeProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:ReviewThreadResolved ;
     rdfs:comment "The status a resolved thread moved to (WL-REQ-1780)." .
+
+wl:reason a owl:DatatypeProperty ;
+    skos:definition "reason" ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:ReviewOpened ;
+    rdfs:comment "Why a change review was opened (WL-REQ-1780)." .
 
 wl:client a owl:DatatypeProperty ;
     skos:definition "client" ;

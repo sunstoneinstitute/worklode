@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,8 +21,14 @@ import (
 // the current version and one review task about the document (WL-REQ-1778).
 // A second open review on the same document is ErrReviewOpen.
 func OpenReview(tx *sql.Tx, now time.Time, in model.OpenReviewInput, actorID string, eventID int64) (*model.Review, error) {
-	if in.Task != "" || in.Doc == 0 {
-		return nil, fmt.Errorf("a review over a task's change comes with review surface part 2 (WL-PLAN-133); name a document: %w", ErrInvalidInput)
+	if in.Task != "" {
+		if in.Doc != 0 {
+			return nil, fmt.Errorf("name a document or a task, not both: %w", ErrInvalidInput)
+		}
+		return openTaskReview(tx, now, in, actorID, eventID)
+	}
+	if in.Doc == 0 {
+		return nil, fmt.Errorf("name a document or a task to review: %w", ErrInvalidInput)
 	}
 	d, err := lockDoc(tx, in.Doc)
 	if err != nil {
@@ -59,6 +66,138 @@ func OpenReview(tx *sql.Tx, now time.Time, in model.OpenReviewInput, actorID str
 		return nil, err
 	}
 	return getReview(context.Background(), tx, id)
+}
+
+var gitSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// openTaskReview opens a review over a task's change (WL-REQ-1324, WL-REQ-1778).
+// The task must be in_progress, in_review, or ready with in.AllowReady; the
+// first and last move it to in_review. The roster is task_reviewers, set to
+// the creator (a human) or the project lead first when empty (WL-REQ-1779).
+// Each reviewer gets a review task the reviewed task dependsOn.
+func openTaskReview(tx *sql.Tx, now time.Time, in model.OpenReviewInput, actorID string, eventID int64) (*model.Review, error) {
+	if !gitSHA.MatchString(in.BaseRef) {
+		return nil, fmt.Errorf("base_ref must be a 40-hex git sha, got %q: %w", in.BaseRef, ErrInvalidInput)
+	}
+	var state, project, createdBy, creatorKind string
+	err := tx.QueryRow(
+		`SELECT t.state, t.project_id, coalesce(t.created_by, ''), coalesce(a.kind, '')
+		   FROM tasks t LEFT JOIN actors a ON a.id = t.created_by
+		  WHERE t.id = $1 AND t.deleted_at IS NULL FOR UPDATE OF t`, in.Task).Scan(&state, &project, &createdBy, &creatorKind)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("task %s: %w", in.Task, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read task %s: %w", in.Task, err)
+	}
+	ts := now.UTC().Truncate(time.Second)
+	switch {
+	case state == "in_review":
+	case state == "in_progress":
+	case state == "ready" && in.AllowReady:
+	case state == "ready":
+		return nil, fmt.Errorf("task %s is ready, not started; open the review with allow_ready to review it anyway: %w", in.Task, ErrInvalidInput)
+	case state == "draft":
+		return nil, fmt.Errorf("task %s is a draft and has no change to review: %w", in.Task, ErrInvalidInput)
+	default:
+		return nil, fmt.Errorf("task %s is %s; file a new task for the follow-up change: %w", in.Task, state, ErrInvalidInput)
+	}
+	reviewers, err := taskReviewers(context.Background(), tx, in.Task)
+	if err != nil {
+		return nil, err
+	}
+	if len(reviewers) == 0 {
+		def := ""
+		if creatorKind == "human" {
+			def = createdBy
+		} else if err := tx.QueryRow(
+			`SELECT coalesce((SELECT actor_id FROM project_participants WHERE project_id = $1 AND is_lead LIMIT 1), '')`,
+			project).Scan(&def); err != nil {
+			return nil, fmt.Errorf("read lead of project %s: %w", project, err)
+		}
+		if def == "" {
+			return nil, fmt.Errorf("task %s has no reviewers and no creator or project lead to default to; set them with `lode task set reviewers`: %w", in.Task, ErrInvalidInput)
+		}
+		reviewers = []string{def}
+		if err := SetTaskReviewers(tx, ts, in.Task, actorID, reviewers, eventID); err != nil {
+			return nil, err
+		}
+	}
+	var id int64
+	err = tx.QueryRow(
+		`INSERT INTO reviews (task_id, subject, state, base_ref, round, opened_by, opened_at)
+		 VALUES ($1, 'change', 'open', $2, 0, $3, $4) RETURNING id`,
+		in.Task, in.BaseRef, actorID, ts).Scan(&id)
+	if isUniqueViolationOn(err, "reviews_open_task") {
+		return nil, fmt.Errorf("task %s: %w", in.Task, ErrReviewOpen)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("open review of task %s: %w", in.Task, err)
+	}
+	if state != "in_review" {
+		if err := Transition(tx, ts, in.Task, state, "in_review", eventID); err != nil {
+			return nil, err
+		}
+	}
+	prows, err := tx.Query(`SELECT url FROM github_pull_requests WHERE task_id = $1 AND url IS NOT NULL AND url <> '' ORDER BY repo, number`, in.Task)
+	if err != nil {
+		return nil, fmt.Errorf("PRs for task %s: %w", in.Task, err)
+	}
+	urls, err := collectRows(prows, "PRs for task "+in.Task, scanString)
+	if err != nil {
+		return nil, err
+	}
+	body := fmt.Sprintf("Review %d over the change of %s is open. Read it with `lode review show %d`.\n", id, in.Task, id)
+	if len(urls) > 0 {
+		body += "\nPull requests:\n"
+		for _, u := range urls {
+			body += "- " + u + "\n"
+		}
+	}
+	for _, r := range reviewers {
+		rt, err := CreateTask(tx, ts, TaskInput{
+			ProjectID: project,
+			Kind:      "review",
+			Priority:  "medium",
+			Title:     fmt.Sprintf("Review %s", in.Task),
+			Body:      body,
+			CreatedBy: actorID,
+		}, eventID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET assignee = $1 WHERE id = $2`, r, rt.ID); err != nil {
+			return nil, fmt.Errorf("assign review task %s to %s: %w", rt.ID, r, err)
+		}
+		if err := LogChange(tx, "task", rt.ID, eventID,
+			map[string]string{"field": "assignee", "old": "", "new": r}); err != nil {
+			return nil, err
+		}
+		if err := AddEdge(tx, ts, in.Task, rt.ID, "dependsOn", eventID); err != nil {
+			return nil, err
+		}
+	}
+	var props map[string]any
+	if in.Reason != "" {
+		props = map[string]any{"wl:reason": in.Reason}
+	}
+	if err := recordReviewEvent(tx, ts, "wl:ReviewOpened", iri.CURIE(iri.Review(id)), actorID, eventID, props); err != nil {
+		return nil, err
+	}
+	return getReview(context.Background(), tx, id)
+}
+
+// ReviewForTask returns the open review over taskID, or ErrNotFound.
+func (s *Store) ReviewForTask(ctx context.Context, taskID string) (*model.Review, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM reviews WHERE task_id = $1 AND closed_at IS NULL`, taskID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("open review of task %s: %w", taskID, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read review of task %s: %w", taskID, err)
+	}
+	return getReview(ctx, s.db, id)
 }
 
 // assignReviewTasks gives each reviewer one open review task about docID
@@ -183,6 +322,12 @@ func getReview(ctx context.Context, db rowsQueryer, id int64) (*model.Review, er
 		return nil, err
 	}
 	r.Reviewers = nonNil(r.Reviewers)
+	if err := db.QueryRowContext(ctx,
+		`SELECT coalesce((SELECT payload->>'wl:reason' FROM events
+		   WHERE type = 'wl:ReviewOpened' AND payload->>'wl:subject' = $1 ORDER BY id LIMIT 1), '')`,
+		iri.CURIE(iri.Review(id))).Scan(&r.Reason); err != nil {
+		return nil, fmt.Errorf("read reason of review %d: %w", id, err)
+	}
 	if r.Threads, err = reviewThreads(ctx, db, id); err != nil {
 		return nil, err
 	}

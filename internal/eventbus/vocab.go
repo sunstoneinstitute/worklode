@@ -37,7 +37,7 @@ var payloadProperties = map[string][]string{
 	TypeReferenceClassified:    {},
 	TypeClassificationRepaired: {},
 
-	TypeReviewOpened:           {},
+	TypeReviewOpened:           {"wl:reason"},
 	TypeReviewRoundSubmitted:   {"wl:reviewRole", "wl:client", "wl:focused", "wl:threadCount"},
 	TypeReviewQuestionAsked:    {"wl:threadIntent"},
 	TypeReviewQuestionAnswered: {},

@@ -11062,9 +11062,11 @@ export interface components {
             tasks_total?: number;
         };
         OpenReviewInput: {
+            allow_ready?: boolean;
             base_ref?: string;
             /** Format: int64 */
             doc?: number;
+            reason?: string;
             task?: string;
         };
         OpenThreadInput: {
@@ -11534,6 +11536,7 @@ export interface components {
             /** Format: date-time */
             opened_at?: string;
             opened_by?: string;
+            reason?: string;
             reviewers?: string[] | null;
             round?: number;
             rounds?: components["schemas"]["ReviewRound"][];
@@ -12003,6 +12006,7 @@ export interface components {
             plan_doc?: number;
             priority?: string;
             project?: string;
+            review?: components["schemas"]["Review"];
             reviewers?: string[];
             secrets?: string[] | null;
             skills?: string[] | null;

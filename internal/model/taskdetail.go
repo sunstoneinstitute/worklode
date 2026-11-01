@@ -69,6 +69,8 @@ type TaskDetail struct {
 	// Reviewers is the task's reviewer roster in assignment order
 	// (WL-REQ-1322), omitted when empty.
 	Reviewers []string `json:"reviewers,omitempty"`
+	// Review is the task's open change review, omitted when none.
+	Review *Review `json:"review,omitempty"`
 	// Blobs are the task's images and attachments (WL-REQ-228). Attached
 	// blobs appear nowhere in the body markdown, so a reader that only
 	// renders Body would never learn they exist.
