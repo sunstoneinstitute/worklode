@@ -184,3 +184,45 @@ func TestReviewEventsLongPoll(t *testing.T) {
 		t.Errorf("events threads = %+v, want thread %d", res.ev.Threads, th.ID)
 	}
 }
+
+// TestChangeReviewRounds: a change round moves the change metric, the lease
+// holder's verdict is 403, and changes_requested returns the task to
+// in_progress (WL-REQ-1324, WL-RULE-1321).
+func TestChangeReviewRounds(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	st, h, token := newTestServerWithConfig(t, api.Config{WebOpen: true, Metrics: reg})
+	createProject(t, st, "proj")
+	aToken := docActor(t, st, "a")
+	id := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "t", "priority": "low", "kind": "feature"})["id"].(string)
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/reviewers", token,
+		model.SetTaskReviewersInput{Reviewers: []string{"a", "alice"}}); rr.Code != http.StatusOK {
+		t.Fatalf("set reviewers = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/claim", token, map[string]any{"worktree": "host:/wt"}); rr.Code != http.StatusOK {
+		t.Fatalf("claim = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr := doReq(t, h, "POST", "/api/v1/reviews", token,
+		model.OpenReviewInput{Task: id, BaseRef: "0123456789abcdef0123456789abcdef01234567"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("open = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var rev model.Review
+	decodeInto(t, rr, &rev)
+	rounds := fmt.Sprintf("/api/v1/reviews/%d/rounds", rev.ID)
+
+	if rr := doReq(t, h, "POST", rounds, token, model.ReviewRoundInput{Verdict: "approved"}); rr.Code != http.StatusForbidden {
+		t.Errorf("lease holder's verdict = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := doReq(t, h, "POST", rounds, aToken, model.ReviewRoundInput{Verdict: "changes_requested"}); rr.Code != http.StatusCreated {
+		t.Fatalf("round = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := sampleWith(t, reg, "worklode_review_rounds_total", map[string]string{"subject": "change", "client": "cli"}); got != 1 {
+		t.Errorf("rounds metric = %v, want 1", got)
+	}
+	var task model.Task
+	decodeInto(t, doReq(t, h, "GET", "/api/v1/tasks/"+id, token, nil), &task)
+	if task.State != "in_progress" {
+		t.Errorf("task state = %s, want in_progress", task.State)
+	}
+}

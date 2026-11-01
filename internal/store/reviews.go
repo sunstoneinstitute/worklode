@@ -187,6 +187,21 @@ func openTaskReview(tx *sql.Tx, now time.Time, in model.OpenReviewInput, actorID
 	return getReview(context.Background(), tx, id)
 }
 
+// ReviewTask returns the task review id is over, "" for a document or rule
+// review, or ErrNotFound. It is what a route needs to decide the task half of
+// its permission.
+func (s *Store) ReviewTask(ctx context.Context, id int64) (string, error) {
+	var task string
+	err := s.db.QueryRowContext(ctx, `SELECT coalesce(task_id, '') FROM reviews WHERE id = $1`, id).Scan(&task)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("review %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return "", fmt.Errorf("read review %d: %w", id, err)
+	}
+	return task, nil
+}
+
 // ReviewForTask returns the open review over taskID, or ErrNotFound.
 func (s *Store) ReviewForTask(ctx context.Context, taskID string) (*model.Review, error) {
 	var id int64
