@@ -217,3 +217,25 @@ func abs(x int) int {
 	}
 	return x
 }
+
+// ReanchorLine finds where a thread anchored at oldLine (1-based) with
+// anchorText now sits in newFile, by handing the old line's byte range and
+// anchorText to Relocate (WL-REQ-1773) and mapping the returned range back
+// to a line. The stage is Relocate's. ok=false means drifted: the caller
+// marks the thread obsolete (WL-REQ-1317).
+func ReanchorLine(oldFile, newFile []string, oldLine int, anchorText string) (line int, stage string, ok bool) {
+	if oldLine < 1 || oldLine > len(oldFile) {
+		return 0, "drifted", false
+	}
+	start := 0
+	for _, l := range oldFile[:oldLine-1] {
+		start += len(l) + 1
+	}
+	end := start + len(oldFile[oldLine-1])
+	newText := strings.Join(newFile, "\n")
+	s, _, stage, ok := Relocate(strings.Join(oldFile, "\n"), newText, start, end, anchorText)
+	if !ok {
+		return 0, stage, false
+	}
+	return lineOf(lineStarts(newText), s) + 1, stage, true
+}

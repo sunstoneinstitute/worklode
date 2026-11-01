@@ -70,3 +70,38 @@ func TestRelocateScanNearestPredicted(t *testing.T) {
 		t.Fatalf("got ok=%v stage=%q range=[%d,%d), want [%d,%d)", ok, stage, ns, ne, want, want+len(q))
 	}
 }
+
+func lines(s ...string) []string { return s }
+
+func repeat(s string, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = s
+	}
+	return out
+}
+
+func TestReanchorLine(t *testing.T) {
+	old := lines("a", "b", "target := 1", "c")
+	cases := []struct {
+		name      string
+		newFile   []string
+		wantLine  int
+		wantStage string
+		wantOK    bool
+	}{
+		{"unchanged", old, 3, "exact", true},
+		{"two lines inserted above", lines("x", "y", "a", "b", "target := 1", "c"), 5, "lcs", true},
+		{"line reindented", lines("a", "b", "    target := 1", "c"), 3, "fuzzy", true},
+		{"moved far away", append(lines("a", "b", "c"), append(repeat("z", 40), "target := 1")...), 44, "scan", true},
+		{"deleted", lines("a", "b", "c"), 0, "drifted", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			line, stage, ok := ReanchorLine(old, c.newFile, 3, "target := 1")
+			if line != c.wantLine || stage != c.wantStage || ok != c.wantOK {
+				t.Errorf("got (%d, %q, %v), want (%d, %q, %v)", line, stage, ok, c.wantLine, c.wantStage, c.wantOK)
+			}
+		})
+	}
+}
