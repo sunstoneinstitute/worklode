@@ -25,7 +25,12 @@ var verdictDecisions = map[string]string{"approved": "approve", "changes_request
 // SubmitReviewerRound records one reviewer's round: the threads it opens and
 // its verdict at the review's base_ref. An approval is refused while a
 // change_request thread is open (WL-REQ-1777). On a document the verdict
-// resolves the reviewer's approvals lane at base_ref (WL-REQ-1324).
+// resolves the reviewer's approvals lane at base_ref (WL-REQ-1324), which is
+// where the document's self-approval rule and its flow exception live. On a
+// change, a verdict from the lease holder or the assignee is refused
+// (WL-RULE-1321), and changes_requested moves an in_review task back to
+// in_progress, lease untouched (WL-REQ-1324). An approval over an open
+// change_request never gets that far, so the verdict alone decides.
 func SubmitReviewerRound(tx *sql.Tx, now time.Time, reviewID int64, in model.ReviewRoundInput, actorID string, eventID int64) (*model.Review, error) {
 	decision, ok := verdictDecisions[in.Verdict]
 	if !ok {
@@ -35,9 +40,18 @@ func SubmitReviewerRound(tx *sql.Tx, now time.Time, reviewID int64, in model.Rev
 		return nil, fmt.Errorf("client %q is not crit, web, cli or agent: %w", in.Client, ErrInvalidInput)
 	}
 	ctx := context.Background()
+	taskState, err := lockReviewTask(tx, reviewID)
+	if err != nil {
+		return nil, err
+	}
 	rev, err := lockReview(tx, reviewID)
 	if err != nil {
 		return nil, err
+	}
+	if rev.Task != "" {
+		if err := checkNotSelfApproval(tx, rev.Task, actorID); err != nil {
+			return nil, err
+		}
 	}
 	roster, err := reviewRoster(ctx, tx, rev)
 	if err != nil {
@@ -99,7 +113,46 @@ func SubmitReviewerRound(tx *sql.Tx, now time.Time, reviewID int64, in model.Rev
 		map[string]any{"wl:reviewVerdict": "wlc:" + in.Verdict}); err != nil {
 		return nil, err
 	}
+	if taskState == "in_review" && in.Verdict == "changes_requested" {
+		if err := transitionKnown(tx, ts, rev.Task, taskState, "in_review", "in_progress", eventID); err != nil {
+			return nil, err
+		}
+	}
 	return r, nil
+}
+
+// lockReviewTask locks the task a change review is over and returns its state,
+// or "" for a document review. Lock order is task, then review: the close hook
+// in transitionKnown holds the task when it reaches the review, so a writer
+// that may transition the task takes the task first.
+func lockReviewTask(tx *sql.Tx, reviewID int64) (string, error) {
+	var state string
+	err := tx.QueryRow(
+		`SELECT t.state FROM tasks t JOIN reviews r ON r.task_id = t.id WHERE r.id = $1 FOR UPDATE OF t`,
+		reviewID).Scan(&state)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("lock task of review %d: %w", reviewID, err)
+	}
+	return state, nil
+}
+
+// checkNotSelfApproval refuses a verdict from the task's active lease holder
+// or its assignee (WL-RULE-1321). No row records the agent session behind a
+// round, so the lease holder stands in for it.
+// ponytail: an author whose lease ended and who is not the assignee passes.
+func checkNotSelfApproval(tx *sql.Tx, taskID, actorID string) error {
+	var self bool
+	if err := tx.QueryRow(
+		`SELECT EXISTS (SELECT 1 FROM tasks t
+		                  LEFT JOIN leases l ON l.task_id = t.id AND l.released_at IS NULL
+		                 WHERE t.id = $1 AND $2 IN (t.assignee, l.actor_id))`,
+		taskID, actorID).Scan(&self); err != nil {
+		return fmt.Errorf("read lease and assignee of task %s: %w", taskID, err)
+	}
+	if self {
+		return fmt.Errorf("self-approval: %s holds the lease or the assignment of task %s: %w", actorID, taskID, ErrForbidden)
+	}
+	return nil
 }
 
 // decideReviewerLane resolves the reviewer's approvals lane at the review's
@@ -135,6 +188,9 @@ func SubmitAuthorRound(tx *sql.Tx, now time.Time, reviewID int64, in model.Revie
 		return nil, fmt.Errorf("client %q is not crit, web, cli or agent: %w", in.Client, ErrInvalidInput)
 	}
 	ctx := context.Background()
+	if _, err := lockReviewTask(tx, reviewID); err != nil {
+		return nil, err
+	}
 	rev, err := lockReview(tx, reviewID)
 	if err != nil {
 		return nil, err
@@ -253,6 +309,53 @@ func CloseReview(tx *sql.Tx, now time.Time, reviewID int64, outcome string, even
 	}
 	return recordReviewEvent(tx, ts, "wl:ReviewClosed", iri.CURIE(iri.Review(reviewID)), "", eventID,
 		map[string]any{"wl:outcome": outcome})
+}
+
+// closeTaskReview closes the task's open review, if any, with outcome. The
+// caller holds the task row, and CloseReview moves no task, so a close cannot
+// re-enter transitionKnown.
+func closeTaskReview(tx *sql.Tx, now time.Time, taskID, outcome string, eventID int64) error {
+	var id int64
+	err := tx.QueryRow(`SELECT id FROM reviews WHERE task_id = $1 AND closed_at IS NULL`, taskID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read open review of task %s: %w", taskID, err)
+	}
+	return CloseReview(tx, now, id, outcome, eventID)
+}
+
+// escalateOnQuestions replies on each open question of the task's open review,
+// so the reviewer sees why the answer is late (WL-REQ-1774). The reply's
+// author role comes from the lease, so this runs before the lease is released.
+func escalateOnQuestions(tx *sql.Tx, now time.Time, taskID, escalation, actorID string, eventID int64) error {
+	rows, err := tx.Query(
+		`SELECT th.id FROM review_threads th JOIN reviews r ON r.id = th.review_id
+		  WHERE r.task_id = $1 AND r.closed_at IS NULL AND th.intent = 'question' AND th.status = 'open'
+		  ORDER BY th.id`, taskID)
+	if err != nil {
+		return fmt.Errorf("open questions of task %s: %w", taskID, err)
+	}
+	threads, err := collectRows(rows, "open questions of task "+taskID, func(row rowScanner) (int64, error) {
+		var id int64
+		err := row.Scan(&id)
+		return id, err
+	})
+	if err != nil || len(threads) == 0 {
+		return err
+	}
+	// Task before review, the order lockReviewTask states.
+	if _, err := tx.Exec(`SELECT 1 FROM tasks WHERE id = $1 FOR UPDATE`, taskID); err != nil {
+		return fmt.Errorf("lock task %s: %w", taskID, err)
+	}
+	body := fmt.Sprintf("Escalated to %s: the plan or spec does not cover this, so the answer waits on it.", escalation)
+	for _, th := range threads {
+		if _, _, _, err := ReplyThread(tx, now, th, body, actorID, eventID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // closeDocReview closes the document's open review, if any, with outcome.

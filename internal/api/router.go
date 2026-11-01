@@ -389,8 +389,9 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/notes":          guardedAny(permDocWrite),
 	"GET /api/v1/docs/{id}/notes":           guardedAny(permDocRead),
 	// --- reviews of documents and rules (WL-REQ-1323) ------------------------
-	// Reads take doc.read and writes doc.write, as the doc and rule routes do;
-	// part 2 widens them for change reviews.
+	// Reads take doc.read and writes doc.write, as the doc and rule routes do.
+	// A review of a task's change also needs task.read or task.write, which the
+	// handler decides once it knows the subject (allowTaskSubject).
 	"POST /api/v1/reviews":                             guardedAny(permDocWrite),
 	"GET /api/v1/reviews":                              guardedAny(permDocRead),
 	"GET /api/v1/reviews/{id}":                         guardedAny(permDocRead),

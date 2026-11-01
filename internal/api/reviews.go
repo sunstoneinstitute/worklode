@@ -11,9 +11,8 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// The review routes of WL-REQ-1323 for document and rule subjects: open and
-// read a review, open, reply to and resolve threads, bare notes, and the two
-// thread lists. Each write records one request event (review.*) as the parent
+// The review routes of WL-REQ-1323: open and read a review, open, reply to and
+// resolve threads, bare notes, and the two thread lists. Each write records one request event (review.*) as the parent
 // of the WL-REQ-1780 events the store records as children in the same
 // transaction, so no domain event is emitted twice.
 
@@ -41,6 +40,30 @@ func (s *server) recordReviewEvent(w http.ResponseWriter, r *http.Request, event
 	return nil
 }
 
+// allowTaskSubject is the task half of a review route's permission: the route
+// guard decided the doc permission, and a review with a task subject also
+// needs perm. task is "" for a document or rule review. It writes the 403.
+func allowTaskSubject(w http.ResponseWriter, r *http.Request, task string, perm Permission) bool {
+	if task == "" {
+		return true
+	}
+	if d := Decide(Request{Subject: subjectFrom(r), Permission: perm}); !d.Allowed {
+		writeErr(w, http.StatusForbidden, denialMessage(d))
+		return false
+	}
+	return true
+}
+
+// allowReview is allowTaskSubject for a route that names the review by id.
+func (s *server) allowReview(w http.ResponseWriter, r *http.Request, id int64, perm Permission) bool {
+	task, err := s.st.ReviewTask(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return false
+	}
+	return allowTaskSubject(w, r, task, perm)
+}
+
 // refreshOpenThreads sets worklode_review_open_threads from a count after a
 // thread write. A failed count leaves the gauge as it was.
 func (s *server) refreshOpenThreads(r *http.Request) {
@@ -57,6 +80,9 @@ func (s *server) openReview(w http.ResponseWriter, r *http.Request) {
 	var req model.OpenReviewInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
+		return
+	}
+	if !allowTaskSubject(w, r, req.Task, permTaskWrite) {
 		return
 	}
 	actorID, now := actorIDFrom(r), s.st.Now()
@@ -98,13 +124,16 @@ func (s *server) getReview(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	if !allowTaskSubject(w, r, rev.Task, permTaskRead) {
+		return
+	}
 	writeJSON(w, http.StatusOK, rev)
 }
 
 // openReviewThread handles POST /api/v1/reviews/{id}/threads.
 func (s *server) openReviewThread(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathInt64(w, r, "id")
-	if !ok {
+	if !ok || !s.allowReview(w, r, id, permTaskWrite) {
 		return
 	}
 	s.openThread(w, r, map[string]any{"review": id}, func(tx *sql.Tx, now time.Time, in model.OpenThreadInput, actorID string, eventID int64) (*model.ReviewThread, error) {
@@ -149,26 +178,29 @@ func (s *server) openThread(w http.ResponseWriter, r *http.Request, about map[st
 
 // threadPath reads {tid}, and on the review-scoped spelling checks that the
 // thread belongs to review {id}: a thread of another review, or a bare note,
-// is 404 there.
+// is 404 there. A thread of a change review needs the task write permission.
 func (s *server) threadPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	tid, ok := pathInt64(w, r, "tid")
 	if !ok {
 		return 0, false
 	}
-	if r.PathValue("id") == "" {
-		return tid, true
-	}
-	id, ok := pathInt64(w, r, "id")
-	if !ok {
-		return 0, false
+	scoped := r.PathValue("id") != ""
+	var id int64
+	if scoped {
+		if id, ok = pathInt64(w, r, "id"); !ok {
+			return 0, false
+		}
 	}
 	th, err := s.st.GetThread(r.Context(), tid)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return 0, false
 	}
-	if th.Review != id {
+	if scoped && th.Review != id {
 		writeErr(w, http.StatusNotFound, "not found")
+		return 0, false
+	}
+	if th.Review != 0 && !s.allowReview(w, r, th.Review, permTaskWrite) {
 		return 0, false
 	}
 	return tid, true
@@ -283,7 +315,7 @@ func (s *server) ruleThreads(w http.ResponseWriter, r *http.Request) {
 // outside the WL-REQ-1322 CHECK with 422.
 func (s *server) submitRound(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathInt64(w, r, "id")
-	if !ok {
+	if !ok || !s.allowReview(w, r, id, permTaskWrite) {
 		return
 	}
 	var req model.ReviewRoundInput
@@ -343,6 +375,9 @@ func (s *server) getRound(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	if !allowTaskSubject(w, r, rev.Task, permTaskRead) {
+		return
+	}
 	for _, rd := range rev.Rounds {
 		if int64(rd.Round) == n {
 			writeJSON(w, http.StatusOK, rd)
@@ -362,7 +397,7 @@ const maxEventsTimeout = 60 * time.Second
 // ponytail: poll loop; LISTEN/NOTIFY if reviewer counts make it hurt.
 func (s *server) reviewEvents(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathInt64(w, r, "id")
-	if !ok {
+	if !ok || !s.allowReview(w, r, id, permTaskRead) {
 		return
 	}
 	var p model.ReviewEventsParams
@@ -412,9 +447,9 @@ func nonNilSlice[T any](s []T) []T {
 // reviewRouteDocs documents the routes this file's handlers serve; see routeDoc in openapi.go.
 var reviewRouteDocs = map[string]routeDoc{
 	"POST /api/v1/reviews": {
-		summary: "Open a review of a document",
+		summary: "Open a review of a document or a task's change",
 		request: model.OpenReviewInput{},
-		responses: map[int]any{http.StatusCreated: model.Review{},
+		responses: map[int]any{http.StatusCreated: model.Review{}, http.StatusForbidden: model.ErrorResponse{},
 			http.StatusConflict: model.ErrorResponse{}, http.StatusUnprocessableEntity: model.ErrorResponse{}},
 	},
 	"GET /api/v1/reviews": {
