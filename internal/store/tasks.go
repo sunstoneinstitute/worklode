@@ -121,6 +121,7 @@ type Edge struct {
 var legalTransitions = map[[2]string]bool{
 	{"draft", "ready"}:                true,
 	{"ready", "in_progress"}:          true,
+	{"ready", "in_review"}:            true,
 	{"in_progress", "in_review"}:      true,
 	{"in_progress", "ready"}:          true,
 	{"in_review", "in_progress"}:      true,

@@ -6,20 +6,23 @@ import "time"
 // task, with its reviewer roster, threads and rounds. Reviewers is the
 // roster State is derived against.
 type Review struct {
-	ID        int64          `json:"id"`
-	Subject   string         `json:"subject"`
-	Task      string         `json:"task,omitempty"`
-	Doc       int64          `json:"doc,omitempty"`
-	Rule      int64          `json:"rule,omitempty"`
-	State     string         `json:"state"`
-	BaseRef   string         `json:"base_ref"`
-	Round     int            `json:"round"`
-	OpenedBy  string         `json:"opened_by"`
-	OpenedAt  time.Time      `json:"opened_at"`
-	ClosedAt  *time.Time     `json:"closed_at,omitempty"`
-	Reviewers []string       `json:"reviewers"`
-	Threads   []ReviewThread `json:"threads,omitempty"`
-	Rounds    []ReviewRound  `json:"rounds,omitempty"`
+	ID        int64      `json:"id"`
+	Subject   string     `json:"subject"`
+	Task      string     `json:"task,omitempty"`
+	Doc       int64      `json:"doc,omitempty"`
+	Rule      int64      `json:"rule,omitempty"`
+	State     string     `json:"state"`
+	BaseRef   string     `json:"base_ref"`
+	Round     int        `json:"round"`
+	OpenedBy  string     `json:"opened_by"`
+	OpenedAt  time.Time  `json:"opened_at"`
+	ClosedAt  *time.Time `json:"closed_at,omitempty"`
+	Reviewers []string   `json:"reviewers"`
+	// Reason is why the review was opened (WL-REQ-1779), read from the
+	// wl:ReviewOpened event.
+	Reason  string         `json:"reason,omitempty"`
+	Threads []ReviewThread `json:"threads,omitempty"`
+	Rounds  []ReviewRound  `json:"rounds,omitempty"`
 }
 
 // ReviewThread is one anchored conversation. IntentClassifier and
@@ -94,6 +97,10 @@ type OpenReviewInput struct {
 	Doc     int64  `json:"doc,omitempty"`
 	Task    string `json:"task,omitempty"`
 	BaseRef string `json:"base_ref,omitempty"`
+	// Reason says why a change review was opened (wl:reason).
+	Reason string `json:"reason,omitempty"`
+	// AllowReady lets a change review open over a ready task (WL-REQ-1324).
+	AllowReady bool `json:"allow_ready,omitempty"`
 }
 
 // OpenThreadInput is the body that opens a thread. RaisedByTask and
