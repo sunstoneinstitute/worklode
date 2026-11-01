@@ -36,18 +36,23 @@ func OpenThread(tx *sql.Tx, now time.Time, reviewID int64, in model.OpenThreadIn
 		return nil, fmt.Errorf("intent %q is not note, change_request or question: %w", in.Intent, ErrInvalidInput)
 	}
 	a := in.Anchor
-	if (a.Doc == 0) == (a.Rule == 0) {
-		return nil, fmt.Errorf("a thread anchors to exactly one of a document and a rule: %w", ErrInvalidInput)
-	}
-	if a.Repo != "" || a.Path != "" || a.Side != "" || a.Line != 0 || a.AnchorText != "" || a.BlobSHA != "" {
-		return nil, fmt.Errorf("change anchors come with review surface part 2 (WL-PLAN-133): %w", ErrInvalidInput)
-	}
 	var rev *model.Review
 	if reviewID != 0 {
 		var err error
 		if rev, err = lockReview(tx, reviewID); err != nil {
 			return nil, err
 		}
+	}
+	if rev != nil && rev.Task != "" {
+		return openChangeThread(tx, now, rev, in, body, actorID, taskID, sessionID, eventID)
+	}
+	if (a.Doc == 0) == (a.Rule == 0) {
+		return nil, fmt.Errorf("a thread anchors to exactly one of a document and a rule: %w", ErrInvalidInput)
+	}
+	if a.Repo != "" || a.Path != "" || a.Side != "" || a.Line != 0 || a.AnchorText != "" || a.BlobSHA != "" {
+		return nil, fmt.Errorf("a change anchor belongs on a change review's thread, not a document's: %w", ErrInvalidInput)
+	}
+	if rev != nil {
 		if err := checkThreadSubject(tx, rev, a); err != nil {
 			return nil, err
 		}
@@ -95,18 +100,51 @@ func OpenThread(tx *sql.Tx, now time.Time, reviewID int64, in model.OpenThreadIn
 		nullText(taskID), nullText(sessionID), in.Intent, actorID, ts).Scan(&th.ID); err != nil {
 		return nil, fmt.Errorf("open thread: %w", err)
 	}
-	m, err := addThreadMessage(tx, ts, th.ID, rev, a.Doc, body, actorID)
+	return th, firstThreadMessage(tx, ts, th, rev, a.Doc, body, eventID)
+}
+
+// firstThreadMessage adds th's opening message and, for a question, emits
+// wl:ReviewQuestionAsked.
+func firstThreadMessage(tx *sql.Tx, ts time.Time, th *model.ReviewThread, rev *model.Review, docID int64, body string, eventID int64) error {
+	m, err := addThreadMessage(tx, ts, th.ID, rev, docID, body, th.Author)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	th.Messages = []model.ReviewMessage{m}
-	if in.Intent == "question" {
-		if err := reviewEvent(tx, ts, "wl:ReviewQuestionAsked", th.ID, actorID, eventID,
-			map[string]any{"wl:threadIntent": "wlc:question"}); err != nil {
-			return nil, err
-		}
+	if th.Intent == "question" {
+		return reviewEvent(tx, ts, "wl:ReviewQuestionAsked", th.ID, th.Author, eventID,
+			map[string]any{"wl:threadIntent": "wlc:question"})
 	}
-	return th, nil
+	return nil
+}
+
+// openChangeThread opens a thread on a line of a change review's diff
+// (WL-REQ-1317, WL-REQ-1322). The subject is the review's task; the document
+// range columns stay null.
+func openChangeThread(tx *sql.Tx, now time.Time, rev *model.Review, in model.OpenThreadInput,
+	body, actorID, taskID, sessionID string, eventID int64) (*model.ReviewThread, error) {
+	a := in.Anchor
+	if a.Doc != 0 || a.Rule != 0 || a.Version != 0 || a.ByteStart != 0 || a.ByteEnd != 0 || a.Quote != "" || a.DocAnchor != "" {
+		return nil, fmt.Errorf("review %d is of a change; its threads anchor to a line, not a document: %w", rev.ID, ErrInvalidInput)
+	}
+	if a.Repo == "" || a.Path == "" || (a.Side != "additions" && a.Side != "deletions") || a.Line <= 0 ||
+		a.AnchorText == "" || a.BlobSHA == "" {
+		return nil, fmt.Errorf("a change thread anchors to a repo, path, side (additions or deletions), line, anchor_text and blob_sha: %w", ErrInvalidInput)
+	}
+	ts := now.UTC().Truncate(time.Second)
+	th := &model.ReviewThread{
+		Review: rev.ID, Anchor: a, Intent: in.Intent, Status: "open", Author: actorID,
+		RaisedByTask: taskID, RaisedBySession: sessionID, CreatedAt: ts,
+	}
+	if err := tx.QueryRow(
+		`INSERT INTO review_threads (review_id, task_id, repo, path, side, line_number, anchor_text, blob_sha,
+		                             raised_by_task, raised_by_session, intent, status, author_id, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12, $13) RETURNING id`,
+		rev.ID, rev.Task, a.Repo, a.Path, a.Side, a.Line, a.AnchorText, a.BlobSHA,
+		nullText(taskID), nullText(sessionID), in.Intent, actorID, ts).Scan(&th.ID); err != nil {
+		return nil, fmt.Errorf("open change thread: %w", err)
+	}
+	return th, firstThreadMessage(tx, ts, th, rev, 0, body, eventID)
 }
 
 // lockReview reads and locks one open review row.

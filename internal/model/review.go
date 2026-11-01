@@ -125,10 +125,13 @@ type ThreadResolveInput struct {
 	Status string `json:"status,omitempty"`
 }
 
-// ThreadReanchor moves a thread to a new anchor.
+// ThreadReanchor moves a thread to a new anchor. On a change review, Anchor
+// carries the new Line and BlobSHA, or Status is "obsolete" (the only accepted
+// value) when the line is gone.
 type ThreadReanchor struct {
 	Thread int64        `json:"thread"`
 	Anchor ReviewAnchor `json:"anchor"`
+	Status string       `json:"status,omitempty"`
 }
 
 // ReviewRoundInput is the body of a round. A body with Verdict is a reviewer
