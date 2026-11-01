@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { BlockNoteSchema } from "@blocknote/core"
 import { SideMenuExtension } from "@blocknote/core/extensions"
 import {
@@ -136,16 +136,24 @@ export function useBodyEditor(blocks: Blocks) {
   })
 }
 
+export type BodyEditorInstance = ReturnType<typeof useBodyEditor>
+
 interface BodyEditorProps {
   blocks: Blocks
   onChange: (blocks: (typeof bodySchema.Block)[]) => void
   readOnly?: boolean
+  /** Receives the mounted editor, and null when it goes, for a toolbar outside it. Keep it stable. */
+  onEditor?: (editor: BodyEditorInstance | null) => void
 }
 
 /** A document body in BlockNote. Reports blocks on edits that change them, never on open. */
-export function BodyEditor({ blocks, onChange, readOnly = false }: BodyEditorProps) {
+export function BodyEditor({ blocks, onChange, readOnly = false, onEditor }: BodyEditorProps) {
   const isDark = useHtmlDark()
   const editor = useBodyEditor(blocks)
+  useEffect(() => {
+    onEditor?.(editor)
+    return () => onEditor?.(null)
+  }, [editor, onEditor])
   // BlockNote reports transactions that leave the document as it was
   const last = useRef<string>(undefined)
   last.current ??= JSON.stringify(editor.document)
@@ -157,7 +165,7 @@ export function BodyEditor({ blocks, onChange, readOnly = false }: BodyEditorPro
   }
   return (
     <BlockNoteView
-      className="bn-field flex min-h-80 flex-col"
+      className="bn-field flex min-h-80 flex-col rounded-lg border border-border p-4 focus-within:border-ring"
       editor={editor}
       editable={!readOnly}
       theme={isDark ? "dark" : "light"}
