@@ -345,3 +345,18 @@ func TestHasReviewSurfaceOnceRegistered(t *testing.T) {
 		t.Error("hasReviewSurfaceIn = false with a POST /api/v1/reviews/_x entry; want true")
 	}
 }
+
+// TestOpenReviewNeedsTaskWrite: the route guard takes doc.write, so opening a
+// review over a task is decided in the handler. Every real role holds both
+// permissions today, so only a subject built here can lack task.write.
+func TestOpenReviewNeedsTaskWrite(t *testing.T) {
+	t.Parallel()
+	s := &server{log: slog.Default()}
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/reviews", strings.NewReader(
+		`{"task":"WL-1","base_ref":"0123456789abcdef0123456789abcdef01234567"}`))
+	rr := httptest.NewRecorder()
+	s.openReview(rr, withSubject(r, Subject{Via: authToken, ActorID: "dana"}))
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+}

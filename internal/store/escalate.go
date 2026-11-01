@@ -35,10 +35,12 @@ type EscalateResult struct {
 	Joined string
 }
 
-// EscalateTask runs WL-REQ-171's five steps as one transaction: release the
-// caller's lease and put the task back in `ready`; join an open design task
-// already covering this document and section, or mint one; block the
-// escalating task on it; record `task.gap_found`.
+// EscalateTask runs WL-REQ-171's five steps as one transaction: join an open
+// design task already covering this document and section, or mint one; carry
+// its id onto any open question of the task's review (WL-REQ-1774); release
+// the caller's lease and put the task back in `ready`, or leave it `in_review`
+// when it is there; block the escalating task on the design task; record
+// `task.gap_found`.
 //
 // Dedup comes before the mint, so a second executor hitting the same gap joins
 // the first escalation rather than minting a rival (WL-REQ-171). The design task
@@ -97,9 +99,6 @@ func (s *Store) EscalateTask(ctx context.Context, in EscalateInput) (*EscalateRe
 		func(tx *sql.Tx, eventID int64) error {
 			res = EscalateResult{}
 			now := s.nowFn().UTC().Truncate(time.Second)
-			if err := releaseLeaseTx(tx, now, in.TaskID, in.ActorID, eventID); err != nil {
-				return err
-			}
 			joined, err := openEscalationFor(tx, in.DocID, in.Anchor)
 			if err != nil {
 				return err
@@ -112,6 +111,12 @@ func (s *Store) EscalateTask(ctx context.Context, in EscalateInput) (*EscalateRe
 				res.Minted, joined = minted, minted.ID
 			} else {
 				res.Joined = joined
+			}
+			if err := escalateOnQuestions(tx, now, in.TaskID, joined, in.ActorID, eventID); err != nil {
+				return err
+			}
+			if err := releaseLeaseTx(tx, now, in.TaskID, in.ActorID, eventID); err != nil {
+				return err
 			}
 			// A re-escalation of a gap this task is already blocked on has
 			// nothing left to add, so the existing edge stands.

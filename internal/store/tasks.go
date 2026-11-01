@@ -393,6 +393,13 @@ func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string
 		map[string]string{"field": "state", "old": from, "new": to}); err != nil {
 		return err
 	}
+	// A task reaches a landing state from in_review, in_progress or ready, so
+	// the close keys on to alone (WL-REQ-1324).
+	if to == "merged" || to == "abandoned" || to == "completed" {
+		if err := closeTaskReview(tx, now, taskID, to, eventID); err != nil {
+			return err
+		}
+	}
 	if err := resolveParent(tx, now, taskID, eventID); err != nil {
 		return err
 	}

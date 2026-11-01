@@ -5786,7 +5786,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Open a review of a document */
+        /** Open a review of a document or a task's change */
         post: {
             parameters: {
                 query?: never;
@@ -5807,6 +5807,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Review"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description Conflict */
