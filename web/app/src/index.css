@@ -449,7 +449,7 @@
 .bn-container.bn-shadcn .bn-editor a {
   color: var(--bn-link-color);
 }
-/* No border or inner padding: the text sits on the page, like a document */
+/* No inner padding: the view's text sits on the page; the field pads its outline (BodyEditor) */
 .bn-field.bn-container .bn-editor,
 .bn-view.bn-container .bn-editor {
   padding: 0;

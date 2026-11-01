@@ -547,6 +547,7 @@ function lockView(lock: MockLock): components["schemas"]["BodyLock"] {
 // per Markdown paragraph, its text as a single run. The server parses
 // Worklode Markdown; the mock only needs text to survive the round trip.
 type EditorBlock = components["schemas"]["EditorBlock"]
+type Inline = NonNullable<EditorBlock["content"]>[number]
 
 async function asBlocks(request: Request, body: string): Promise<{ blocks?: EditorBlock[]; body_sha256?: string }> {
   if (new URL(request.url).searchParams.get("as") !== "blocks") return {}
@@ -558,8 +559,50 @@ async function asBlocks(request: Request, body: string): Promise<{ blocks?: Edit
   return { blocks, body_sha256: await sha256Hex(body) }
 }
 
+// A run in its WL-REQ-1871 spelling
+function inlineMarkdown(run: Inline): string {
+  if (run.type === "link") return `[${(run.content ?? []).map(inlineMarkdown).join("")}](${run.href})`
+  const styles = run.styles
+  let text = run.text ?? ""
+  if (styles?.code) text = `\`${text}\``
+  if (styles?.italic) text = `*${text}*`
+  if (styles?.bold) text = `**${text}**`
+  if (styles?.strike) text = `~~${text}~~`
+  return text
+}
+
+// The stored spelling of what the toolbar makes; everything else is its text
+function blockMarkdown(b: EditorBlock): string {
+  if (b.type === "table") {
+    const content = b.content as unknown as { rows: { cells: { content: Inline[] }[] }[] }
+    const rows = content.rows.map((r) => `| ${r.cells.map((c) => c.content.map(inlineMarkdown).join("")).join(" | ")} |`)
+    return [rows[0], `${"|---".repeat(content.rows[0].cells.length)}|`, ...rows.slice(1)].join("\n")
+  }
+  const text = (b.content ?? []).map(inlineMarkdown).join("")
+  if (!text) return ""
+  const props = b.props as { level?: number; language?: string; kind?: string; checked?: boolean } | undefined
+  switch (b.type) {
+    case "heading":
+      return `${"#".repeat(props?.level ?? 1)} ${text}`
+    case "bulletListItem":
+      return `- ${text}`
+    case "numberedListItem":
+      return `1. ${text}`
+    case "checkListItem":
+      return `- [${props?.checked ? "x" : " "}] ${text}`
+    case "quote":
+      return `> ${text}`
+    case "codeBlock":
+      return `\`\`\`${props?.language ?? ""}\n${text}\n\`\`\``
+    case "callout":
+      return `::: {.callout-${props?.kind}}\n${text}\n:::`
+    default:
+      return text
+  }
+}
+
 function blocksMarkdown(blocks: EditorBlock[]): string {
-  const paragraphs = blocks.map((b) => (b.content ?? []).map((run) => run.text ?? "").join("")).filter(Boolean)
+  const paragraphs = blocks.map(blockMarkdown).filter(Boolean)
   return paragraphs.length ? `${paragraphs.join("\n\n")}\n` : ""
 }
 
