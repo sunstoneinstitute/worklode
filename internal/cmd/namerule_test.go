@@ -79,6 +79,7 @@ var nounViews = map[string]bool{
 	"lode doc referrers":      true,
 	"lode doc progress":       true,
 	"lode doc reviewers":      true,
+	"lode task reviewers":     true,
 	"lode doc sections":       true,
 	"lode doc todo":           true,
 	"lode doc versions":       true,

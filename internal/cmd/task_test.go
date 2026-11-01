@@ -1070,7 +1070,7 @@ func TestTaskSetState(t *testing.T) {
 		{"unknown state", []string{"task", "set", "state", "shipped", walk.ID},
 			[]string{`unknown state "shipped"`, "merged", "deployed_dev", "deployed_prod", "released"}},
 		{"unknown field", []string{"task", "set", "colour", "red", walk.ID},
-			[]string{`unknown field "colour"`, "state, skills, checklist"}},
+			[]string{`unknown field "colour"`, "state, skills, reviewers, checklist"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := runLode(t, tc.args...)
@@ -1167,5 +1167,37 @@ func TestStatusShortcutWithTaskShowsHeader(t *testing.T) {
 `
 	if out.String() != want {
 		t.Fatalf("output = %q; want %q", out.String(), want)
+	}
+}
+
+// TestTaskReviewersSet covers `lode task set reviewers <actor…> <id>` and its
+// read side `lode task reviewers <id>`.
+func TestTaskReviewersSet(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Assign reviewers")
+
+	// The lifecycle fixture's caller is the only actor known to the server.
+	me, _, err := c.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := me.CreatedBy
+	if _, err := runLode(t, "task", "set", "reviewers", actor, task.ID); err != nil {
+		t.Fatalf("set reviewers: %v", err)
+	}
+	out, err := runLode(t, "task", "reviewers", task.ID)
+	if err != nil || !strings.Contains(out, actor) {
+		t.Fatalf("task reviewers = %q, %v; want it to name %q", out, err, actor)
+	}
+	if _, err := runLode(t, "task", "set", "reviewers", "nobody-here", task.ID); err == nil {
+		t.Fatal("unknown reviewer: want an error")
+	}
+	if _, err := runLode(t, "task", "set", "reviewers", task.ID); err != nil {
+		t.Fatalf("clear reviewers: %v", err)
+	}
+	got, _, _ := c.GetTask(context.Background(), task.ID)
+	if len(got.Reviewers) != 0 {
+		t.Fatalf("reviewers after clear = %v", got.Reviewers)
 	}
 }
