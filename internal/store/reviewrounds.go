@@ -139,9 +139,6 @@ func SubmitAuthorRound(tx *sql.Tx, now time.Time, reviewID int64, in model.Revie
 	if err != nil {
 		return nil, err
 	}
-	if rev.Doc == 0 {
-		return nil, fmt.Errorf("author rounds on a change come with review surface part 2 (WL-PLAN-133): %w", ErrInvalidInput)
-	}
 	author, err := reviewAuthor(tx, rev)
 	if err != nil {
 		return nil, err
@@ -155,6 +152,9 @@ func SubmitAuthorRound(tx *sql.Tx, now time.Time, reviewID int64, in model.Revie
 	}
 	if review.OpenQuestion(threads) {
 		return nil, fmt.Errorf("review %d has an open question; answer it in its thread first: %w", reviewID, ErrInvalidInput)
+	}
+	if rev.Doc == 0 {
+		return submitChangeAuthorRound(tx, now, rev, threads, in, actorID, eventID)
 	}
 	var version int
 	if err := tx.QueryRow(`SELECT version FROM docs WHERE id = $1`, rev.Doc).Scan(&version); err != nil {
@@ -182,6 +182,64 @@ func SubmitAuthorRound(tx *sql.Tx, now time.Time, reviewID int64, in model.Revie
 		return nil, err
 	}
 	return getReview(ctx, tx, reviewID)
+}
+
+// submitChangeAuthorRound is SubmitAuthorRound for a change review: in.BaseRef
+// is the new head sha, in.Reanchors say where each open thread's line went
+// (WL-REQ-1317). The server never sees the repository, so the client computes
+// them. A thread left unnamed stays as it was. The task moves back to
+// in_review when it was in_progress.
+func submitChangeAuthorRound(tx *sql.Tx, now time.Time, rev *model.Review, threads []model.ReviewThread,
+	in model.ReviewRoundInput, actorID string, eventID int64) (*model.Review, error) {
+	if !gitSHA.MatchString(in.BaseRef) {
+		return nil, fmt.Errorf("base_ref must be a 40-hex git sha, got %q: %w", in.BaseRef, ErrInvalidInput)
+	}
+	if in.BaseRef == rev.BaseRef {
+		return nil, fmt.Errorf("nothing new to review: review %d is already at %s: %w", rev.ID, in.BaseRef, ErrInvalidInput)
+	}
+	open := map[int64]bool{}
+	for _, t := range threads {
+		open[t.ID] = t.Status == "open"
+	}
+	ts := now.UTC().Truncate(time.Second)
+	for _, ra := range in.Reanchors {
+		if !open[ra.Thread] {
+			return nil, fmt.Errorf("thread %d is not an open thread of review %d: %w", ra.Thread, rev.ID, ErrInvalidInput)
+		}
+		switch {
+		case ra.Status == "obsolete":
+			if _, err := ResolveThread(tx, ts, ra.Thread, actorID, "obsolete", eventID); err != nil {
+				return nil, err
+			}
+		case ra.Status == "" && ra.Anchor.Line > 0 && ra.Anchor.BlobSHA != "":
+			if _, err := tx.Exec(`UPDATE review_threads SET line_number = $2, blob_sha = $3 WHERE id = $1`,
+				ra.Thread, ra.Anchor.Line, ra.Anchor.BlobSHA); err != nil {
+				return nil, fmt.Errorf("re-anchor thread %d: %w", ra.Thread, err)
+			}
+		default:
+			return nil, fmt.Errorf("re-anchor of thread %d needs a line and blob_sha, or status obsolete: %w", ra.Thread, ErrInvalidInput)
+		}
+		open[ra.Thread] = false
+	}
+	if _, err := tx.Exec(`UPDATE reviews SET base_ref = $2, round = round + 1, state = 'open' WHERE id = $1`,
+		rev.ID, in.BaseRef); err != nil {
+		return nil, fmt.Errorf("advance review %d: %w", rev.ID, err)
+	}
+	if err := recordReviewEvent(tx, ts, "wl:ReviewRoundSubmitted", iri.CURIE(iri.Review(rev.ID)), actorID, eventID, map[string]any{
+		"wl:reviewRole": "author", "wl:client": in.Client, "wl:focused": in.Focused, "wl:threadCount": 0,
+	}); err != nil {
+		return nil, err
+	}
+	var state string
+	if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, rev.Task).Scan(&state); err != nil {
+		return nil, fmt.Errorf("read state of task %s: %w", rev.Task, err)
+	}
+	if state == "in_progress" {
+		if err := Transition(tx, ts, rev.Task, "in_progress", "in_review", eventID); err != nil {
+			return nil, err
+		}
+	}
+	return getReview(context.Background(), tx, rev.ID)
 }
 
 // CloseReview closes an open review with outcome and emits wl:ReviewClosed.
