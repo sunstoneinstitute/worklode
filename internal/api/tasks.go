@@ -293,6 +293,12 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions, GovernedBy: governed, Generated: generated, Reviewers: reviewers}
+	if rev, err := s.st.ReviewForTask(r.Context(), id); err == nil {
+		resp.Review = rev
+	} else if !errors.Is(err, store.ErrNotFound) {
+		s.mapStoreErr(w, err)
+		return
+	}
 	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)
