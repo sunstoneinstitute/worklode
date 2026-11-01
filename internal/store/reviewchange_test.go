@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -173,5 +174,164 @@ func TestOpenChangeReviewStates(t *testing.T) {
 		if got := changeTaskState(t, s, task.ID); got != c.wantState {
 			t.Errorf("%s allowReady=%v: state = %s, want %s", c.state, c.allowReady, got, c.wantState)
 		}
+	}
+}
+
+const (
+	changeSHA2 = "fedcba9876543210fedcba9876543210fedcba98"
+	blobA      = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	blobB      = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+)
+
+func changeAnchor(path string, line int) model.ReviewAnchor {
+	return model.ReviewAnchor{Repo: "r", Path: path, Side: "additions", Line: line, AnchorText: "x := 1", BlobSHA: blobA}
+}
+
+func submitChangeRound(t *testing.T, s *Store, id int64, in model.ReviewRoundInput, actor string) (*model.Review, error) {
+	t.Helper()
+	in.Client = "cli"
+	var r *model.Review
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "review.round", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			r, err = SubmitAuthorRound(tx, taskTestNow, id, in, actor, eventID)
+			return err
+		})
+	return r, err
+}
+
+// changeReviewWithThreads opens a change review over an in_progress task
+// claimed by x, with threads at path.go:412 and util.go:7.
+func changeReviewWithThreads(t *testing.T, s *Store) (r *model.Review, t1, t2 int64, task string) {
+	t.Helper()
+	if err := s.CreateActor(t.Context(), "x", "agent", "x", false); err != nil {
+		t.Fatal(err)
+	}
+	seedParticipant(t, s, "horndb", "x", "member", false)
+	in := defaultTaskInput()
+	in.CreatedBy = "a"
+	tk := createTask(t, s, taskTestNow, in)
+	if err := setTaskReviewers(t, s, tk.ID, []string{"a"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claim(t.Context(), tk.ID, "x", "host:/wt", 0); err != nil {
+		t.Fatal(err)
+	}
+	r, err := openChangeReview(t, s, model.OpenReviewInput{Task: tk.ID, BaseRef: changeSHA}, "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids [2]int64
+	for i, a := range []model.ReviewAnchor{changeAnchor("path.go", 412), changeAnchor("util.go", 7)} {
+		th, err := openThread(t, s, r.ID, model.OpenThreadInput{Anchor: a, Intent: "change_request", Body: "fix"}, "a")
+		if err != nil {
+			t.Fatalf("open change thread: %v", err)
+		}
+		ids[i] = th.ID
+	}
+	return r, ids[0], ids[1], tk.ID
+}
+
+// TestChangeThread: a change thread stores its line anchor under the task
+// subject; malformed and document-shaped anchors are refused (WL-REQ-1317).
+func TestChangeThread(t *testing.T) {
+	s := reviewFixture(t)
+	r, t1, _, task := changeReviewWithThreads(t, s)
+	th, err := s.GetThread(t.Context(), t1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th.Anchor != changeAnchor("path.go", 412) || th.Review != r.ID {
+		t.Errorf("thread = %+v", th)
+	}
+	var taskID string
+	if err := s.db.QueryRowContext(t.Context(), `SELECT task_id FROM review_threads WHERE id = $1`, t1).Scan(&taskID); err != nil || taskID != task {
+		t.Errorf("task_id = %q, %v, want %s", taskID, err, task)
+	}
+	bad := map[string]model.ReviewAnchor{
+		"no text":  {Repo: "r", Path: "p", Side: "additions", Line: 1, BlobSHA: blobA},
+		"bad side": {Repo: "r", Path: "p", Side: "left", Line: 1, AnchorText: "x", BlobSHA: blobA},
+		"line 0":   {Repo: "r", Path: "p", Side: "additions", AnchorText: "x", BlobSHA: blobA},
+		"doc":      {Doc: 1},
+	}
+	for name, a := range bad {
+		if _, err := openThread(t, s, r.ID, model.OpenThreadInput{Anchor: a, Intent: "note", Body: "b"}, "a"); !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("%s: err = %v, want ErrInvalidInput", name, err)
+		}
+	}
+	if _, err := openThread(t, s, 0, model.OpenThreadInput{Anchor: changeAnchor("p", 1), Intent: "note", Body: "b"}, "a"); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("change anchor on a bare note: err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestAuthorRoundReanchors: the author round of a change review moves or
+// obsoletes the named threads (WL-REQ-1317).
+func TestAuthorRoundReanchors(t *testing.T) {
+	s := reviewFixture(t)
+	r, t1, t2, task := changeReviewWithThreads(t, s)
+
+	// A question open on T1 refuses the round and moves nothing.
+	q, err := openThread(t, s, r.ID, model.OpenThreadInput{Anchor: changeAnchor("path.go", 412), Intent: "question", Body: "why?"}, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := model.ReviewRoundInput{BaseRef: changeSHA2, Reanchors: []model.ThreadReanchor{
+		{Thread: t1, Anchor: model.ReviewAnchor{Line: 415, BlobSHA: blobB}}, {Thread: t2, Status: "obsolete"}}}
+	if _, err := submitChangeRound(t, s, r.ID, in, "x"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("round with open question err = %v, want ErrInvalidInput", err)
+	}
+	if got, _ := s.GetReview(t.Context(), r.ID); got.BaseRef != changeSHA || got.Round != 0 {
+		t.Errorf("review moved: %+v", got)
+	}
+	_, _, err = s.RecordEvent(t.Context(), "cli", nextExt(t), "review.thread_resolved", nil, func(tx *sql.Tx, eventID int64) error {
+		_, err := ResolveThread(tx, taskTestNow, q.ID, "a", "resolved", eventID)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, bad := range map[string][]model.ThreadReanchor{
+		"neither":    {{Thread: t1}},
+		"bad status": {{Thread: t1, Status: "resolved"}},
+		"foreign":    {{Thread: 999999, Status: "obsolete"}},
+	} {
+		if _, err := submitChangeRound(t, s, r.ID, model.ReviewRoundInput{BaseRef: changeSHA2, Reanchors: bad}, "x"); !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("%s: err = %v, want ErrInvalidInput", name, err)
+		}
+	}
+	if _, err := submitChangeRound(t, s, r.ID, model.ReviewRoundInput{BaseRef: changeSHA}, "x"); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("unchanged base_ref err = %v, want ErrInvalidInput", err)
+	}
+
+	got, err := submitChangeRound(t, s, r.ID, in, "x")
+	if err != nil {
+		t.Fatalf("SubmitAuthorRound: %v", err)
+	}
+	if got.BaseRef != changeSHA2 || got.Round != 1 || got.State != "open" {
+		t.Errorf("review = %+v", got)
+	}
+	th1, _ := s.GetThread(t.Context(), t1)
+	if th1.Status != "open" || th1.Anchor.Line != 415 || th1.Anchor.BlobSHA != blobB {
+		t.Errorf("T1 = %+v", th1)
+	}
+	th2, _ := s.GetThread(t.Context(), t2)
+	if th2.Status != "obsolete" || th2.ResolvedAt == nil {
+		t.Errorf("T2 = %+v", th2)
+	}
+	for id, want := range map[int64]int{t1: 0, t2: 1} {
+		var n int
+		if err := s.db.QueryRow(`SELECT count(*) FROM events WHERE type = 'wl:ReviewThreadResolved' AND payload->>'wl:subject' = $1 AND payload->>'wl:threadStatus' = 'obsolete'`,
+			iri.CURIE(iri.ReviewThread(id))).Scan(&n); err != nil || n != want {
+			t.Errorf("thread %d obsolete events = %d, %v, want %d", id, n, err, want)
+		}
+	}
+	if st := changeTaskState(t, s, task); st != "in_review" {
+		t.Errorf("task state = %s", st)
+	}
+	// T2 is closed now: naming it again is refused.
+	again := model.ReviewRoundInput{BaseRef: changeSHA, Reanchors: []model.ThreadReanchor{{Thread: t2, Status: "obsolete"}}}
+	if _, err := submitChangeRound(t, s, r.ID, again, "x"); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("closed thread err = %v, want ErrInvalidInput", err)
 	}
 }

@@ -12107,6 +12107,7 @@ export interface components {
         };
         ThreadReanchor: {
             anchor?: components["schemas"]["ReviewAnchor"];
+            status?: string;
             /** Format: int64 */
             thread?: number;
         };
