@@ -61,6 +61,8 @@ type CostReport struct {
 type ProjectDetail struct {
 	Project
 	Cost CostReport `json:"cost"`
+	// FieldAccess names the fields the caller may not change (WL-REQ-1890).
+	FieldAccess FieldAccess `json:"field_access,omitempty"`
 }
 
 // TaskCost is the wire form of GET /api/v1/tasks/{id}/cost.

@@ -462,6 +462,8 @@ type DocDetail struct {
 	// Amendments are the amends edges onto the rules this document's
 	// sections arrange (WL-REQ-165), which lode show --inline folds in.
 	Amendments []DocAmendment `json:"amendments,omitempty"`
+	// FieldAccess names the fields the caller may not change (WL-REQ-1890).
+	FieldAccess FieldAccess `json:"field_access,omitempty"`
 }
 
 // DocAmendment is one amends edge onto a section's rule: By amends Rule,

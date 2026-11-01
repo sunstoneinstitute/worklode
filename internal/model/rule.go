@@ -50,6 +50,8 @@ type RuleDetail struct {
 	Rule
 	InlineRefs
 	BlocksBody
+	// FieldAccess names the fields the caller may not change (WL-REQ-1890).
+	FieldAccess FieldAccess `json:"field_access,omitempty"`
 }
 
 // RuleArrangement is one document's placement of a rule.

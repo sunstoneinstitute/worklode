@@ -7443,6 +7443,15 @@ export interface paths {
                         "application/json": components["schemas"]["Task"];
                     };
                 };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description Conflict */
                 409: {
                     headers: {
@@ -10376,6 +10385,7 @@ export interface components {
             created_at?: string;
             created_by?: string;
             description?: string;
+            field_access?: components["schemas"]["FieldAccess"];
             id?: string;
             inline_refs_in?: components["schemas"]["InlineRef"][] | null;
             inline_refs_out?: components["schemas"]["InlineRef"][] | null;
@@ -10462,6 +10472,7 @@ export interface components {
             created_by?: string;
             edges?: components["schemas"]["DocEdge"][] | null;
             edges_in?: components["schemas"]["DocEdge"][] | null;
+            field_access?: components["schemas"]["FieldAccess"];
             former_adr?: number;
             generated_by_task?: string;
             /** Format: int64 */
@@ -10790,6 +10801,9 @@ export interface components {
             category?: string;
             summary?: string;
         };
+        FieldAccess: {
+            [key: string]: string;
+        };
         FixTaskInput: {
             attempt?: number;
             doc?: string;
@@ -10872,6 +10886,8 @@ export interface components {
             task?: string;
             title?: string;
             type?: string;
+            /** Format: date-time */
+            updated_at?: string;
         };
         IdeaIntake: {
             decision?: string;
@@ -11050,6 +11066,7 @@ export interface components {
             created_at?: string;
             created_by?: string;
             deliverables?: components["schemas"]["Deliverable"][] | null;
+            field_access?: components["schemas"]["FieldAccess"];
             id?: string;
             inline_refs_in?: components["schemas"]["InlineRef"][] | null;
             inline_refs_out?: components["schemas"]["InlineRef"][] | null;
@@ -11251,6 +11268,7 @@ export interface components {
             approval_flow_name?: string;
             approval_flow_rev?: string;
             cost?: components["schemas"]["CostReport"];
+            field_access?: components["schemas"]["FieldAccess"];
             focus?: string[] | null;
             horizon?: string;
             id?: string;
@@ -11696,6 +11714,7 @@ export interface components {
             /** Format: date-time */
             created_at?: string;
             edges?: components["schemas"]["RuleEdge"][] | null;
+            field_access?: components["schemas"]["FieldAccess"];
             governed_tasks?: components["schemas"]["RuleTask"][] | null;
             heading?: string;
             /** Format: int64 */
@@ -12015,6 +12034,7 @@ export interface components {
                 in?: components["schemas"]["TaskEdgeIn"][] | null;
                 out?: components["schemas"]["TaskEdgeOut"][] | null;
             };
+            field_access?: components["schemas"]["FieldAccess"];
             generated?: components["schemas"]["TaskGeneratedDoc"][];
             governed_by?: components["schemas"]["TaskGovernance"][];
             hierarchy?: components["schemas"]["TaskHierarchy"];

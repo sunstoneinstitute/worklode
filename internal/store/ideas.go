@@ -25,7 +25,7 @@ const visibleTo = `(i.author = $1 OR i.shared_at IS NOT NULL) AND i.deleted_at I
 const (
 	ideaColumns = `i.id, i.title, i.body, i.author, i.type, i.story_type, i.litmus_test_id,
 		COALESCE(to_char(i.shared_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), ''), COALESCE(i.task, ''),
-		to_char(i.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), i.pre_research_authorized, i.decision`
+		to_char(i.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), i.pre_research_authorized, i.decision, i.updated_at`
 
 	ideaListQuery = `SELECT ` + ideaColumns + ` FROM ideas i WHERE ` + visibleTo +
 		` ORDER BY i.created_at DESC, i.id`
@@ -67,7 +67,7 @@ var errAlreadyShared = errors.New("idea already shared")
 func scanIdea(row rowScanner) (*model.Idea, error) {
 	var i model.Idea
 	if err := row.Scan(&i.ID, &i.Title, &i.Body, &i.Author, &i.Type, &i.StoryType, &i.LitmusTestID,
-		&i.Shared, &i.Task, &i.Submitted, &i.Intake.PreResearchAuthorized, &i.Intake.Decision); err != nil {
+		&i.Shared, &i.Task, &i.Submitted, &i.Intake.PreResearchAuthorized, &i.Intake.Decision, &i.UpdatedAt); err != nil {
 		return nil, err
 	}
 	i.Status = "private"

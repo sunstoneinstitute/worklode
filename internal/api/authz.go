@@ -40,10 +40,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -404,6 +407,151 @@ var grants = map[Permission][]Role{
 	// Every authenticated actor, for the same reason: whose note an impact
 	// review takes is a per-row fact, not a role.
 	permApprovalNote: {RoleUser, RoleAdmin},
+}
+
+// roleLead and roleCrew are the project roles a fieldGrant may name
+// (WL-REQ-1889). They come from the project's Crew, per request, so they live
+// on fieldEntity and never on a Subject. roleLead is the lead, or the deputy,
+// who holds full lead authority (WL-REQ-1605).
+const (
+	roleLead Role = "lead"
+	roleCrew Role = "crew"
+)
+
+// fieldEntity is what a field decision reads about the entity: its status, its
+// guarded fields' stored values as text, and the caller's roles in its project.
+type fieldEntity struct {
+	Status string
+	Stored map[string]string
+	Roles  []Role
+}
+
+// fieldLock is a state condition under which a field is locked.
+type fieldLock func(e fieldEntity, field string) bool
+
+// The closed set of fieldLock predicates (WL-REQ-1889).
+func onceSet(e fieldEntity, field string) bool   { return e.Stored[field] != "" }
+func whileNotDraft(e fieldEntity, _ string) bool { return e.Status != "draft" }
+
+// kindFixed locks a task kind whose wl:kindMutable is false: a decision.
+func kindFixed(e fieldEntity, _ string) bool {
+	d, ok := ns.TaskKindDescriptors[e.Stored["kind"]]
+	return ok && !d.KindMutable
+}
+
+// fieldGrant is one entry of fieldGrants. An empty who admits anyone the
+// route's permission admits; a nil lockedWhen never locks.
+type fieldGrant struct {
+	who          []Role
+	whoReason    string
+	lockedWhen   fieldLock
+	lockedReason string
+}
+
+// fieldGrants is the per-field policy (WL-REQ-1889), keyed by entity kind and
+// wire field name. A field with no entry is editable by anyone the route's
+// permission admits. TestFieldGrantsNameWriteInputs holds it to the wire shape.
+//
+// The store repeats these checks under its row lock, so a write racing this
+// table still fails. A retype into a fixed kind is the store's alone: it is
+// about the value sent, not the entity's state.
+var fieldGrants = map[string]map[string]fieldGrant{
+	"task": {
+		"kind": {lockedWhen: kindFixed, lockedReason: "kind cannot change once set"},
+		"plan": {lockedWhen: onceSet, lockedReason: "plan cannot change once set"},
+	},
+}
+
+// decide applies one entry: its lock first, since no role unlocks a field.
+func (g fieldGrant) decide(sub Subject, field string, e fieldEntity) (bool, string) {
+	if g.lockedWhen != nil && g.lockedWhen(e, field) {
+		return false, g.lockedReason
+	}
+	if len(g.who) > 0 && !slices.ContainsFunc(g.who, func(r Role) bool { return sub.HasRole(r) || slices.Contains(e.Roles, r) }) {
+		return false, g.whoReason
+	}
+	return true, ""
+}
+
+// decideField says whether sub may change field on an entity of kind, and
+// when not, why (WL-REQ-1889). The detail route reports it and the write route
+// enforces it, so the two cannot differ (WL-REQ-1890).
+func decideField(sub Subject, kind, field string, e fieldEntity) (bool, string) {
+	g, listed := fieldGrants[kind][field]
+	if !listed {
+		return true, ""
+	}
+	return g.decide(sub, field, e)
+}
+
+// fieldAccess maps each field sub may not change to the reason, nil when none.
+func fieldAccess(sub Subject, kind string, e fieldEntity) model.FieldAccess {
+	var locked model.FieldAccess
+	for field := range fieldGrants[kind] {
+		if ok, why := decideField(sub, kind, field, e); !ok {
+			if locked == nil {
+				locked = model.FieldAccess{}
+			}
+			locked[field] = why
+		}
+	}
+	return locked
+}
+
+// refusedFields is the subset of sent that changes a locked field: a value
+// equal to the stored one changes nothing and is not refused.
+func refusedFields(sub Subject, kind string, e fieldEntity, sent map[string]string) map[string]string {
+	var refused map[string]string
+	for field, reason := range fieldAccess(sub, kind, e) {
+		if value, ok := sent[field]; ok && value != e.Stored[field] {
+			if refused == nil {
+				refused = map[string]string{}
+			}
+			refused[field] = reason
+		}
+	}
+	return refused
+}
+
+// projectRoles reads the actor's project roles from the Crew, only when kind
+// has an entry that names one.
+func (s *server) projectRoles(ctx context.Context, sub Subject, kind, project string) ([]Role, error) {
+	needed := false
+	for _, g := range fieldGrants[kind] {
+		needed = needed || slices.Contains(g.who, roleLead) || slices.Contains(g.who, roleCrew)
+	}
+	if !needed || sub.ActorID == "" {
+		return nil, nil
+	}
+	crew, err := s.st.ListParticipants(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range crew {
+		if p.ActorID != sub.ActorID {
+			continue
+		}
+		if p.IsLead || p.IsDeputy {
+			return []Role{roleLead, roleCrew}, nil
+		}
+		return []Role{roleCrew}, nil
+	}
+	return nil, nil
+}
+
+// refuseFields answers 403 with each refused field's reason (WL-REQ-1889) and
+// reports whether it did. Error joins the reasons for a client that prints
+// only that, such as the CLI.
+func (s *server) refuseFields(w http.ResponseWriter, r *http.Request, perm Permission, refused map[string]string) bool {
+	if len(refused) == 0 {
+		return false
+	}
+	d := Decision{Reason: "field_locked"}
+	s.observeAuthz(perm, d)
+	s.logDenial(r, subjectFrom(r), perm, d)
+	reasons := slices.Sorted(maps.Values(refused))
+	writeJSON(w, http.StatusForbidden, model.ErrorResponse{Error: strings.Join(reasons, "; "), Fields: refused})
+	return true
 }
 
 // authMethod records how a subject was identified, so a denial can say
