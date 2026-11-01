@@ -10698,7 +10698,7 @@ export interface components {
         };
         EditorBlock: {
             children?: components["schemas"]["EditorBlock"][];
-            content?: components["schemas"]["InlineContent"][];
+            content?: components["schemas"]["InlineContent"][] | components["schemas"]["TableContent"];
             id?: string;
             props?: unknown;
             range?: components["schemas"]["ByteRange"];
@@ -11915,6 +11915,21 @@ export interface components {
             stale_plans?: number;
             tasks?: number;
             withdrawn?: number;
+        };
+        TableCell: {
+            content?: components["schemas"]["InlineContent"][] | null;
+            props?: unknown;
+            type?: string;
+        };
+        TableContent: {
+            columnWidths?: (null | number)[] | null;
+            headerCols?: null | number;
+            headerRows?: null | number;
+            rows?: components["schemas"]["TableRow"][] | null;
+            type?: string;
+        };
+        TableRow: {
+            cells?: components["schemas"]["TableCell"][] | null;
         };
         Task: {
             about_anchor?: string;

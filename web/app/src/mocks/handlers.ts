@@ -601,7 +601,7 @@ function lockView(lock: MockLock): components["schemas"]["BodyLock"] {
 // per Markdown paragraph, its text as a single run. The server parses
 // Worklode Markdown; the mock only needs text to survive the round trip.
 type EditorBlock = components["schemas"]["EditorBlock"]
-type Inline = NonNullable<EditorBlock["content"]>[number]
+type Inline = components["schemas"]["InlineContent"]
 
 const utf8 = new TextEncoder()
 
@@ -638,7 +638,7 @@ function blockMarkdown(b: EditorBlock): string {
     const rows = content.rows.map((r) => `| ${r.cells.map((c) => c.content.map(inlineMarkdown).join("")).join(" | ")} |`)
     return [rows[0], `${"|---".repeat(content.rows[0].cells.length)}|`, ...rows.slice(1)].join("\n")
   }
-  const text = (b.content ?? []).map(inlineMarkdown).join("")
+  const text = ((b.content ?? []) as Inline[]).map(inlineMarkdown).join("")
   if (!text) return ""
   const props = b.props as { level?: number; language?: string; kind?: string; checked?: boolean } | undefined
   switch (b.type) {
