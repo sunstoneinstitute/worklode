@@ -251,3 +251,41 @@ func TestOpenAPISecuritySchemes(t *testing.T) {
 		}
 	}
 }
+
+// A table block's content is a tableContent object on the wire (WL-REQ-1867).
+func TestOpenAPIEditorBlockContentOneOf(t *testing.T) {
+	t.Parallel()
+	b, err := buildOpenAPI(
+		map[string]routeGuard{"GET /api/v1/blocks": guarded(permTaskRead)},
+		map[string]routeDoc{"GET /api/v1/blocks": {
+			summary:   "Show a block",
+			responses: map[int]any{http.StatusOK: model.EditorBlock{}},
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var d struct {
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]struct {
+					OneOf []struct {
+						Ref  string `json:"$ref"`
+						Type string `json:"type"`
+					} `json:"oneOf"`
+				} `json:"properties"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		t.Fatal(err)
+	}
+	oneOf := d.Components.Schemas["EditorBlock"].Properties["content"].OneOf
+	if len(oneOf) != 2 || oneOf[0].Type != "array" || oneOf[1].Ref != "#/components/schemas/TableContent" {
+		t.Errorf("EditorBlock.content oneOf = %+v, want [array, $ref TableContent]", oneOf)
+	}
+	for _, name := range []string{"TableContent", "TableRow", "TableCell"} {
+		if _, ok := d.Components.Schemas[name]; !ok {
+			t.Errorf("components.schemas lacks %s", name)
+		}
+	}
+}
