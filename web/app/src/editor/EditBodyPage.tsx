@@ -9,7 +9,8 @@ import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 import { useDraft } from "@/hooks/use-draft"
 import { useLeaveGuard } from "@/hooks/use-leave-guard"
 import { NotFound } from "@/pages/NotFound"
-import { type Blocks, BodyEditor } from "./BodyEditor"
+import { type Blocks, BodyEditor, type BodyEditorInstance } from "./BodyEditor"
+import { BodyToolbar } from "./BodyToolbar"
 import { BodyView } from "./BodyView"
 import { LockedDialog } from "./LockedDialog"
 import { sha256Hex } from "./bytes"
@@ -86,6 +87,7 @@ function BodyEditPage({
   const [conflict, setConflict] = useState<BodyConflict | null>(null)
   const [dialog, setDialog] = useState(true)
   const [leaveError, setLeaveError] = useState<string>()
+  const [editor, setEditor] = useState<BodyEditorInstance | null>(null)
   // A spec's text changes through its rules (WL-REQ-1300); the server refuses its blocks
   const spec = loaded.docKind === "spec"
   const keepDraft = () => draft.flush({ blocks: JSON.stringify(current.current), sha: base.sha })
@@ -162,16 +164,15 @@ function BodyEditPage({
         }
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl md:text-3xl">{loaded.title}</h1>
-        <div className="flex items-center gap-4">
-          <Button type="button" disabled={!editable || !dirty || saving} onClick={() => void save(base.sha)}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-          <Button type="button" variant="outline" onClick={guard.requestClose}>
-            Close
-          </Button>
-        </div>
+      <h1 className="text-2xl md:text-3xl">{loaded.title}</h1>
+      <div className="flex items-center gap-4">
+        <BodyToolbar editor={editor} disabled={!editable} />
+        <Button type="button" disabled={!editable || !dirty || saving} onClick={() => void save(base.sha)}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+        <Button type="button" variant="outline" onClick={guard.requestClose}>
+          Close
+        </Button>
       </div>
       {spec && <p className="text-sm">A spec's text changes through its rules, so this is read-only.</p>}
       {lock.status === "locked" && !dialog && <p role="status">Read only: someone else is editing this.</p>}
@@ -211,6 +212,7 @@ function BodyEditPage({
           key={base.key}
           blocks={base.blocks as Blocks}
           readOnly={!editable}
+          onEditor={setEditor}
           onChange={(blocks) => {
             current.current = blocks as unknown as EditorBlock[]
             setDirty(true)
