@@ -243,3 +243,59 @@ func TestListReviews(t *testing.T) {
 		}
 	}
 }
+
+// setTaskReviewers drives SetTaskReviewers through RecordEvent, the way the
+// API does.
+func setTaskReviewers(t *testing.T, s *Store, taskID string, reviewers []string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.reviewers_set", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return SetTaskReviewers(tx, taskTestNow, taskID, "opener", reviewers, eventID)
+		})
+	return err
+}
+
+func readTaskReviewers(t *testing.T, s *Store, taskID string) []string {
+	t.Helper()
+	got, err := s.TaskReviewers(t.Context(), taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+// TestTaskReviewers: whole-list replace in assignment order, unknown actors
+// and closed tasks refused (WL-REQ-1322).
+func TestTaskReviewers(t *testing.T) {
+	s := reviewFixture(t)
+	task := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "t", Priority: "medium", Kind: "feature", CreatedBy: "stig",
+	})
+	if err := setTaskReviewers(t, s, task.ID, []string{"b", "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTaskReviewers(t, s, task.ID); !slices.Equal(got, []string{"b", "a"}) {
+		t.Errorf("reviewers = %v, want [b a]", got)
+	}
+	if err := setTaskReviewers(t, s, task.ID, []string{"b"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTaskReviewers(t, s, task.ID); !slices.Equal(got, []string{"b"}) {
+		t.Errorf("reviewers = %v, want [b]", got)
+	}
+	if err := setTaskReviewers(t, s, task.ID, []string{"b", "nobody"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("unknown actor: want ErrInvalidInput, got %v", err)
+	}
+	if got := readTaskReviewers(t, s, task.ID); !slices.Equal(got, []string{"b"}) {
+		t.Errorf("refused set changed reviewers to %v", got)
+	}
+	if err := transition(t, s, taskTestNow, task.ID, "ready", "abandoned"); err != nil {
+		t.Fatal(err)
+	}
+	if err := setTaskReviewers(t, s, task.ID, []string{"a"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("abandoned task: want ErrInvalidInput, got %v", err)
+	}
+	if err := setTaskReviewers(t, s, "WL-99999", []string{"a"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown task: want ErrNotFound, got %v", err)
+	}
+}

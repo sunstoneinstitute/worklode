@@ -66,6 +66,9 @@ type TaskDetail struct {
 	Lease         *Lease         `json:"lease,omitempty"`
 	AgentSessions []AgentSession `json:"agent_sessions,omitempty"`
 	Hierarchy     TaskHierarchy  `json:"hierarchy"`
+	// Reviewers is the task's reviewer roster in assignment order
+	// (WL-REQ-1322), omitted when empty.
+	Reviewers []string `json:"reviewers,omitempty"`
 	// Blobs are the task's images and attachments (WL-REQ-228). Attached
 	// blobs appear nowhere in the body markdown, so a reader that only
 	// renders Body would never learn they exist.

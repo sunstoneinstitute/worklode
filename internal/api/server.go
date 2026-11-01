@@ -983,6 +983,7 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("GET /api/v1/tasks/{id}/cost", s.getTaskCost)
 	r.api("PATCH /api/v1/tasks/{id}", s.patchTask)
 	r.api("PUT /api/v1/tasks/{id}/skills", s.setTaskSkills)
+	r.api("POST /api/v1/tasks/{id}/reviewers", s.setTaskReviewers)
 	r.api("GET /api/v1/tasks/{id}/checklist", s.getChecklist)
 	r.api("POST /api/v1/tasks/{id}/checklist", s.setChecklistItem)
 	r.api("POST /api/v1/tasks/{id}/edges", s.addEdge)
