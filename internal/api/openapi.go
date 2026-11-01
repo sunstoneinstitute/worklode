@@ -136,7 +136,7 @@ func buildOpenAPI(guards map[string]routeGuard, docs map[string]routeDoc) ([]byt
 	r := openapi31.NewReflector()
 	// Every schema is an internal/model type; drop the package prefix
 	// swaggest adds so model.Task is #/components/schemas/Task.
-	r.DefaultOptions = append(r.DefaultOptions, jsonschema.StripDefinitionNamePrefix("Model"))
+	r.DefaultOptions = append(r.DefaultOptions, jsonschema.StripDefinitionNamePrefix("Model"), tableContentOverride)
 	r.Spec.Info.Title = "Worklode API"
 	r.Spec.Info.Version = buildinfo.Version
 	r.Spec.SetHTTPBearerTokenSecurity(openAPISecurity, "wl_ + 40 hex",
@@ -198,7 +198,48 @@ func buildOpenAPI(guards map[string]routeGuard, docs map[string]routeDoc) ([]byt
 			r.Spec.Paths.MapOfPathItemValues[path].Delete.RequestBody = body
 		}
 	}
+	if err := addTableTypes(r); err != nil {
+		return nil, err
+	}
 	return r.Spec.MarshalJSON()
+}
+
+var editorBlockType = reflect.TypeOf(model.EditorBlock{})
+
+// tableContentOverride makes EditorBlock.content a oneOf of inline content
+// and a tableContent. EditorBlock.MarshalJSON writes TableContent there for a
+// table block (WL-REQ-1867), but the struct only carries Content, so
+// reflection alone documents the inline-content shape for every block.
+var tableContentOverride = jsonschema.InterceptProp(
+	func(p jsonschema.InterceptPropParams) error {
+		if !p.Processed || p.Name != "content" || p.ParentSchema == nil || p.ParentSchema.ReflectType != editorBlockType {
+			return nil
+		}
+		inline := *p.PropertySchema
+		table := (&jsonschema.Schema{}).WithRef(componentsSchemasPrefix + "TableContent").ToSchemaOrBool()
+		*p.PropertySchema = *(&jsonschema.Schema{}).WithOneOf(inline.ToSchemaOrBool(), table)
+		return nil
+	})
+
+const componentsSchemasPrefix = "#/components/schemas/"
+
+// addTableTypes puts TableContent, TableRow and TableCell into components,
+// since no route reflects them directly.
+func addTableTypes(r *openapi31.Reflector) error {
+	root, err := r.Reflect(model.TableContent{},
+		jsonschema.DefinitionsPrefix(componentsSchemasPrefix), jsonschema.RootRef)
+	if err != nil {
+		return fmt.Errorf("openapi: table types: %w", err)
+	}
+	// The root is TableContent itself, a $ref into its own definitions.
+	for name, d := range root.Definitions {
+		sm, err := d.ToSimpleMap()
+		if err != nil {
+			return fmt.Errorf("openapi: table types: %w", err)
+		}
+		r.Spec.ComponentsEns().WithSchemasItem(name, sm)
+	}
+	return nil
 }
 
 // requestBody reflects request as a POST body on a scratch path and returns
