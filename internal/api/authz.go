@@ -452,9 +452,10 @@ type fieldGrant struct {
 // wire field name. A field with no entry is editable by anyone the route's
 // permission admits. TestFieldGrantsNameWriteInputs holds it to the wire shape.
 //
-// The store repeats these checks under its row lock, so a write racing this
-// table still fails. A retype into a fixed kind is the store's alone: it is
-// about the value sent, not the entity's state.
+// The store repeats these checks in its transaction, so a write racing this
+// table still fails: kind under the task's row lock, plan with no lock taken.
+// A retype into a fixed kind is the store's alone: it is about the value sent,
+// not the entity's state.
 var fieldGrants = map[string]map[string]fieldGrant{
 	"task": {
 		"kind": {lockedWhen: kindFixed, lockedReason: "kind cannot change once set"},

@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from "@testing-library/react"
+import { createPortal } from "react-dom"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { HttpResponse, http } from "msw"
+import { HttpResponse, delay, http } from "msw"
 import { describe, expect, it, vi } from "vitest"
 import { server } from "@/mocks/node"
 import { renderWithRouter } from "@/test/render"
@@ -96,6 +97,45 @@ describe("SchemaForm", () => {
     await open(record)
     await userEvent.click(screen.getByRole("button", { name: "Save" }))
     expect(await screen.findByText("due is fixed")).toBeInTheDocument()
+  })
+})
+
+describe("submitting", () => {
+  it("ignores a form nested in it, as a dialog's portal bubbles it through React", async () => {
+    const bodies = sends("post", "/api/v1/things")
+    const onDone = vi.fn()
+    const nested = createPortal(
+      <form onSubmit={(event) => event.preventDefault()}>
+        <button type="submit">Inner</button>
+      </form>,
+      document.body,
+    )
+    await renderWithRouter(<SchemaForm config={config} intro={nested} onDone={onDone} onClose={() => {}} />)
+    await userEvent.type(await screen.findByLabelText("Title"), "x")
+    await userEvent.click(screen.getByRole("button", { name: "Inner" }))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(bodies).toEqual([])
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
+  it("sends one save for a repeated Ctrl+S", async () => {
+    let saves = 0
+    server.use(
+      http.patch("/api/v1/things/1", async () => {
+        saves += 1
+        await delay(30)
+        return HttpResponse.json({})
+      }),
+    )
+    const onDone = vi.fn()
+    await open(record, onDone)
+    const title = screen.getByLabelText("Title")
+    fireEvent.keyDown(title, { key: "s", ctrlKey: true })
+    fireEvent.keyDown(title, { key: "s", ctrlKey: true })
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    fireEvent.keyDown(title, { key: "s", ctrlKey: true })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(saves).toBe(1)
   })
 })
 

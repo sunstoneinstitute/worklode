@@ -1,7 +1,9 @@
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest"
+import { browser } from "@/api/queries"
 import { db } from "@/mocks/db"
+import { server } from "@/mocks/node"
 import { renderApp } from "@/test/render"
 
 const SELECT_WIDTH = 128
@@ -168,6 +170,28 @@ test("Link saves as its stored spelling", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Apply" }))
   await save()
   expect(rule().body).toContain("[v1 text](https://example.org)")
+})
+
+test("Apply in the Link dialog of a task form links the text and leaves the form alone", async () => {
+  layOut(1000)
+  const assign = vi.spyOn(browser, "assign").mockImplementation(() => {})
+  let saves = 0
+  server.events.on("request:start", ({ request }) => {
+    if (request.method === "PATCH") saves += 1
+  })
+  db.projects.push({ id: "web", key: "WEB", name: "Web", horizon: "standing", repos: [] })
+  db.tasks.push({ id: "WEB-9", project: "web", kind: "feature", title: "Ninth", state: "ready", priority: "medium", body: "task text\n" })
+  await renderApp("/projects/web/feature/9/edit")
+  await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+  await selectAll()
+  await userEvent.click(screen.getByRole("button", { name: "Link" }))
+  await userEvent.type(screen.getByRole("textbox", { name: "URL" }), "https://example.org")
+  await userEvent.click(screen.getByRole("button", { name: "Apply" }))
+  await waitFor(() => expect(screen.queryByRole("textbox", { name: "URL" })).not.toBeInTheDocument())
+  expect(saves).toBe(0)
+  expect(assign).not.toHaveBeenCalled()
+  expect(within(await body()).getByRole("link")).toHaveAttribute("href", "https://example.org")
+  server.events.removeAllListeners()
 })
 
 test.each([
