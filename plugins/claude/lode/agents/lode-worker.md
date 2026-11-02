@@ -26,6 +26,10 @@ flags and standing guidance. With no rule given, the rule is
    `merged` arrives from the PR-merge webhook. A real blocker instead:
    `lode work block --on <id> --json`. Back to 1.
 
+A claimed `review` task is worked through `lode review`, not through a PR:
+read the review with `lode review show <id>`, and take the guide from the
+brief's Review section or `lode review guide` and nowhere else (WL-RULE-1321).
+
 Commits are the lease heartbeat — never think about renewal.
 
 Never hold more than one task at a time; never work outside the task's

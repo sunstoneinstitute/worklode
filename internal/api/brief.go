@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -74,6 +76,12 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	if b.Task.Kind == "review" {
+		if out.Review, err = s.briefReview(r.Context(), id); err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+	}
 	// Absolute, not root-relative: an agent fetching a brief is not
 	// same-origin with the server and has nothing to resolve /blob/ against.
 	base := strings.TrimRight(s.cfg.PublicURL, "/")
@@ -97,6 +105,41 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	out.Skills.Warnings = append(out.Skills.Warnings, warnings...)
 
 	writeJSON(w, http.StatusOK, out)
+}
+
+// briefReview finds the open review of the task that dependsOn this review
+// task (WL-REQ-1778) and attaches its guide, unfocused, from the same store
+// read GET /reviews/{id}/guide uses (WL-RULE-1321). Nil when there is none.
+func (s *server) briefReview(ctx context.Context, id string) (*model.BriefReview, error) {
+	_, in, err := s.st.ListEdges(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range in {
+		if e.Type != "dependsOn" {
+			continue
+		}
+		rev, err := s.st.ReviewForTask(ctx, e.FromTask)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out := &model.BriefReview{ID: rev.ID, Task: e.FromTask}
+		g, err := s.st.GetReviewGuide(ctx, rev.ID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return nil, err
+		}
+		if err == nil {
+			for i := range g.Files {
+				g.Files[i].Skims = nil
+			}
+			out.Guide = &g
+		}
+		return out, nil
+	}
+	return nil, nil
 }
 
 // rebindWorktree handles POST /api/v1/tasks/{id}/lease/worktree: move the

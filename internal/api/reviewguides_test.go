@@ -90,6 +90,31 @@ func TestReviewGuideRoutes(t *testing.T) {
 		t.Errorf("GET focused=true has %d skims, want 2", n)
 	}
 
+	// The review task's brief carries the review id and the unfocused guide.
+	var det model.TaskDetail
+	decodeInto(t, doReq(t, h, "GET", "/api/v1/tasks/"+id, token, nil), &det)
+	var rt string
+	for _, e := range det.Edges.Out {
+		if e.Type == "dependsOn" {
+			rt = e.To
+		}
+	}
+	var br model.Brief
+	decodeInto(t, doReq(t, h, "GET", "/api/v1/tasks/"+rt+"/brief?skills=false", token, nil), &br)
+	if br.Review == nil || br.Review.ID != rev.ID || br.Review.Guide == nil || br.Review.Guide.Overview != "o" {
+		t.Fatalf("review brief = %+v, want review %d with guide", br.Review, rev.ID)
+	}
+	for _, f := range br.Review.Guide.Files {
+		if len(f.Skims) != 0 {
+			t.Errorf("brief guide carries skims on %s", f.Path)
+		}
+	}
+	var plain model.Brief
+	decodeInto(t, doReq(t, h, "GET", "/api/v1/tasks/"+id+"/brief?skills=false", token, nil), &plain)
+	if plain.Review != nil {
+		t.Errorf("non-review brief has review %+v", plain.Review)
+	}
+
 	if rr := doReq(t, h, "POST", fmt.Sprintf("/api/v1/reviews/%d/rounds", rev.ID), aToken,
 		model.ReviewRoundInput{Verdict: "approved", Focused: true}); rr.Code != http.StatusCreated {
 		t.Fatalf("focused round = %d, body %s", rr.Code, rr.Body.String())
