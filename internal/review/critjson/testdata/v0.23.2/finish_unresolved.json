@@ -1,0 +1,76 @@
+{
+  "approved": false,
+  "comments_all_cmd": "crit comments --json --all /home/reviewer/.crit/reviews/0123456789ab",
+  "comments_cmd": "crit comments --json /home/reviewer/.crit/reviews/0123456789ab",
+  "comments_json": [
+    {
+      "scope": "review",
+      "id": "r_93ae07",
+      "start_line": 0,
+      "end_line": 0,
+      "body": "Overall fine, one change.",
+      "author": "reviewer",
+      "created_at": "2026-11-02T19:16:09Z",
+      "updated_at": "2026-11-02T19:16:09Z",
+      "review_round": 1
+    },
+    {
+      "scope": "line",
+      "path": "main.go",
+      "id": "c_75625a",
+      "start_line": 6,
+      "end_line": 7,
+      "body": "Use a single Println call here.",
+      "quote": "fmt.Println(\"hello\")",
+      "anchor": "\tfmt.Println(\"hello\")\n\tfmt.Println(\"world\")",
+      "author": "reviewer",
+      "created_at": "2026-11-02T19:16:09Z",
+      "updated_at": "2026-11-02T19:16:09Z",
+      "review_round": 1
+    }
+  ],
+  "comments_unresolved_json": [
+    {
+      "scope": "review",
+      "id": "r_93ae07",
+      "start_line": 0,
+      "end_line": 0,
+      "body": "Overall fine, one change.",
+      "author": "reviewer",
+      "created_at": "2026-11-02T19:16:09Z",
+      "updated_at": "2026-11-02T19:16:09Z",
+      "review_round": 1
+    },
+    {
+      "scope": "line",
+      "path": "main.go",
+      "id": "c_75625a",
+      "start_line": 6,
+      "end_line": 7,
+      "body": "Use a single Println call here.",
+      "quote": "fmt.Println(\"hello\")",
+      "anchor": "\tfmt.Println(\"hello\")\n\tfmt.Println(\"world\")",
+      "author": "reviewer",
+      "created_at": "2026-11-02T19:16:09Z",
+      "updated_at": "2026-11-02T19:16:09Z",
+      "review_round": 1
+    }
+  ],
+  "files_with_comments": [
+    "main.go"
+  ],
+  "internal_session_mode": "git",
+  "mode": "diff",
+  "next_round_cmd": "crit --session 0123456789ab",
+  "plan_hook": "",
+  "plan_slug": "",
+  "review_path": "/home/reviewer/.crit/reviews/0123456789ab",
+  "session_key": "0123456789ab",
+  "session_stats": {
+    "comments_submitted": 2,
+    "duration_seconds": 10,
+    "files_reviewed": 1
+  },
+  "total_count": 2,
+  "unresolved_count": 2
+}

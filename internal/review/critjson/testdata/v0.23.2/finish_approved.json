@@ -1,0 +1,39 @@
+{
+  "approved": true,
+  "comments_all_cmd": "crit comments --json --all /home/reviewer/.crit/reviews/0123456789ab",
+  "comments_cmd": "crit comments --json /home/reviewer/.crit/reviews/0123456789ab",
+  "comments_json": [
+    {
+      "scope": "line",
+      "path": "plan.md",
+      "id": "c_7cd012",
+      "start_line": 5,
+      "end_line": 5,
+      "body": "Name the bridge command.",
+      "quote": "review bridge",
+      "anchor": "Ship the review bridge.",
+      "author": "reviewer",
+      "created_at": "2026-11-02T19:16:34Z",
+      "updated_at": "2026-11-02T19:16:34Z",
+      "resolved": true,
+      "resolved_round": 1,
+      "review_round": 1
+    }
+  ],
+  "comments_unresolved_json": [],
+  "files_with_comments": null,
+  "internal_session_mode": "files",
+  "mode": "files",
+  "next_round_cmd": "crit --session 0123456789ab",
+  "plan_hook": "",
+  "plan_slug": "",
+  "review_path": "/home/reviewer/.crit/reviews/0123456789ab",
+  "session_key": "0123456789ab",
+  "session_stats": {
+    "comments_submitted": 1,
+    "duration_seconds": 1,
+    "files_reviewed": 1
+  },
+  "total_count": 1,
+  "unresolved_count": 0
+}
