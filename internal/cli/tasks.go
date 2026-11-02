@@ -558,6 +558,14 @@ func BriefRender(w io.Writer, b model.Brief) {
 		fmt.Fprintln(w)
 		Markdown(w, b.Body)
 	}
+	if r := b.Review; r != nil {
+		fmt.Fprintf(w, "\nReview %d of %s:\n  work it with: lode review show %d --json\n", r.ID, r.Task, r.ID)
+		if r.Guide == nil {
+			fmt.Fprintln(w, "  no guide")
+		} else {
+			ReviewGuideRender(w, *r.Guide)
+		}
+	}
 	// Warnings alone still print the section: a user who misspelled every pin
 	// would otherwise see nothing at all, which is exactly the case the
 	// warnings exist for.
