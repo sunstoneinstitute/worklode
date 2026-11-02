@@ -279,9 +279,12 @@ Design items landed in WL-SPEC-77. These are the mechanical leftovers.
   plan; agents review too (Claude reviews Codex's work and vice versa), so
   comment/thread/resolve/approve must exist as API + `lode doc` verbs with the
   web UI as one client. Building web handlers first produces a human-only review
-  system inside an agent-first product.
+  system inside an agent-first product. Answered for documents, rules and task
+  changes: the review routes and `lode review` verbs exist (WL-REQ-1323,
+  WL-REQ-1775). The web client remains.
 - `[gated]` **Review tasks take an assignee.** Choosing a reviewer stays social, but "I
-  asked Kim to review it" has to be visible — routing, not authority.
+  asked Kim to review it" has to be visible — routing, not authority. Answered
+  for a task's change: `task_reviewers` and `lode task set reviewers` (WL-REQ-1779).
 - `[gated]` **Capture the initiating prompt** on a document's creation event. Specs are
   generated from a brainstorming or grilling prompt; the prompt is ~200 tokens
   and answers "why does this exist" long after the session is gone. Not the

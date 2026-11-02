@@ -14,7 +14,7 @@ renewal, or lease TTLs; committing at a normal cadence is the heartbeat.
 **Done** — a task is done when its definition-of-done / Deliverable holds,
 not when code is written. The task body is the contract. Tests pass, the deliverable exists where it
 should. Then push the branch, open its PR, arm auto-merge on it
-(`gh pr merge --auto --squash`), and run /lode:done — which submits the task
+(`gh pr merge --auto --squash`; not when you opened a review, which holds the merge until an `approved` verdict, WL-REQ-1779), and run /lode:done — which submits the task
 for review and releases the lease. It does not mark the task `merged`; that
 lands when the merge queue lands the PR.
 
