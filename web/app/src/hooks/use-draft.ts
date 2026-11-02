@@ -23,6 +23,8 @@ type Older = { values: Values; saved_at: string }
 /** What a key holds. `base` is the record's `updated_at` the form opened with (WL-REQ-1891). */
 type Stored = { values?: Values; base?: string; saved_at?: string; older?: Older }
 
+const isMap = (value: unknown): value is object => typeof value === "object" && value !== null && !Array.isArray(value)
+
 /** The stored draft, or null when there is no usable one. An old draft is the flat value map. */
 function readStored(key: string): Stored | null {
   try {
@@ -30,7 +32,14 @@ function readStored(key: string): Stored | null {
     if (!raw) return null
     const stored: unknown = JSON.parse(raw)
     if (!stored || typeof stored !== "object") return null
-    return "values" in stored || "older" in stored ? (stored as Stored) : { values: stored as Values }
+    if (!("values" in stored || "older" in stored)) return { values: stored as Values }
+    const { values, base, saved_at, older } = stored as Stored
+    return {
+      values: isMap(values) ? values : undefined,
+      base,
+      saved_at,
+      older: isMap(older) && isMap(older.values) ? older : undefined,
+    }
   } catch {
     return null
   }

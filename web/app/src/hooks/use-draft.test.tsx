@@ -73,6 +73,13 @@ describe("useDraft", () => {
     expect(result.current.notRestored).toEqual([["kind", "kind cannot change once set"]])
   })
 
+  it("ignores a malformed draft", () => {
+    store({ values: 3, older: { values: null } })
+    const { result } = open({ base: "t1" })
+    expect(result.current.values).toEqual(initial)
+    expect(result.current.older).toBeNull()
+  })
+
   it("keeps no draft when disabled", () => {
     vi.useFakeTimers()
     store({ values: { ...initial, title: "mine" }, base: "t1" })
