@@ -57,6 +57,9 @@ export default defineConfig(({ mode }) => {
       globals: true,
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.{test,spec}.{ts,tsx}'],
+      // The default is one worker per core. On a large or shared host (the
+      // self-hosted CI runner) the editor tests then starve and time out.
+      maxWorkers: 4,
     },
   }
 })
