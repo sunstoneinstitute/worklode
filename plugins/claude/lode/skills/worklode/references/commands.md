@@ -194,12 +194,16 @@ Flags: --server
 - `lode review add` — Open a review of a document or of a task's change
   Flags: --allow-ready, --base-ref, --reason
 - `lode review approve` — Submit a reviewer round with verdict approved
+  Flags: --focused
 - `lode review comment` — Open a thread on quoted text of the subject, or reply to a thread
   Flags: --anchor, --anchor-text, --body, --intent, --quote, --thread
+- `lode review guide` — Show the review's guide; --focused applies its skims
+  Flags: --focused
 - `lode review list` — List reviews
   Flags: --mine, --open
 - `lode review resolve` — Resolve a thread
 - `lode review set` — Set one field of a review, e.g. `lode review set verdict changes_requested 12`
+  Flags: --file, --focused, --overview
 - `lode review show` — Show a review: reviewers and their verdicts, threads, rounds
 - `lode review submit` — Author: submit a new round at the document's current version, or the change's HEAD with threads re-anchored
 - `lode review wait` — Author: wait for messages after a seq and resolved threads, printed as one JSON envelope

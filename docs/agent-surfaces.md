@@ -143,7 +143,9 @@ A task-scoped token cannot decide at all.
 `add <doc-ref|task-id> [--base-ref <sha>] [--reason "…"] [--allow-ready]`, `list [--mine] [--open]`, `show <review-id> [--json]`,
 `comment <review-id> --quote "…" --intent question|change_request|note --body "…"`,
 `comment <review-id> --thread <thread-id> --body "…"`, `resolve <thread-id>`,
-`approve <review-id>`, `set verdict changes_requested <review-id>`,
+`approve <review-id> [--focused]`, `set verdict changes_requested <review-id> [--focused]`,
+`guide <review-id> [--focused] [--json]`, `set guide <review-id> [--file <guide.json>] [--overview "…"]`
+(the author's proposal, with the change's diff attached; refused skims are listed),
 `submit <review-id>` (author round at the document's current version) and
 `wait <review-id> [--after <seq>] [--timeout <s>]` (one JSON envelope, or
 nothing on timeout). `--quote` must occur exactly once in the document's
@@ -151,7 +153,8 @@ current text, the rendered body for a spec. On a change review,
 `comment --anchor <repo>:<path>:<additions|deletions>:<line> [--anchor-text …]`
 opens a thread on a line, `submit` posts HEAD and re-anchors the open threads
 (one stage line per thread on stdout), and `show` prints the raw diff when run
-in the checkout. No skill names these yet; the worker text for reviews comes
+in the checkout. `show` prints the guide (or "no guide", or STALE) before the
+threads and `--json` embeds it. No skill names these yet; the worker text for reviews comes
 with WL-1381.
 
 ## Editing a body in the SPA
