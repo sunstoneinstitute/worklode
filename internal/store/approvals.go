@@ -1162,6 +1162,54 @@ func (s *Store) ListInboxReviews(ctx context.Context) ([]InboxReview, error) {
 	return collectRows(rows, "list inbox reviews", byValue(scanInboxReview))
 }
 
+// InboxChangeReview is one open change review as the inbox consumes it
+// (WL-REQ-1778). Assigned is true when the actor is a reviewer who has no
+// round at the review's current base_ref, false when the actor owns the task.
+type InboxChangeReview struct {
+	ReviewID int64
+	Task     string
+	Title    string
+	Project  string
+	OpenedAt time.Time
+	Assigned bool
+}
+
+// inboxChangeReviewFrom is the shared FROM/WHERE for ListInboxChangeReviews and
+// HasInboxItems ($1 = actor), so the list and the indicator cannot diverge.
+// assigned: a roster member with no round at the current base_ref. owned: the
+// task's creator or lease holder with someone else on the roster.
+const inboxChangeReviewFrom = `
+	FROM reviews r
+	JOIN tasks t ON t.id = r.task_id
+	CROSS JOIN LATERAL (SELECT
+	    EXISTS (SELECT 1 FROM task_reviewers tr WHERE tr.task_id = r.task_id AND tr.actor_id = $1)
+	    AND NOT EXISTS (SELECT 1 FROM review_rounds rr
+	                     WHERE rr.review_id = r.id AND rr.actor_id = $1 AND rr.base_ref = r.base_ref)
+	    AS assigned,
+	    (t.created_by = $1
+	     OR EXISTS (SELECT 1 FROM leases l WHERE l.task_id = r.task_id AND l.actor_id = $1 AND l.released_at IS NULL))
+	    AND EXISTS (SELECT 1 FROM task_reviewers tr WHERE tr.task_id = r.task_id AND tr.actor_id <> $1)
+	    AS owned) b
+	WHERE r.subject = 'change' AND r.state IN ('open', 'changes_requested')
+	  AND t.deleted_at IS NULL AND (b.assigned OR b.owned)`
+
+// ListInboxChangeReviews returns the open change reviews assigned to or owned
+// by the actor, oldest opened first, id tiebreak (WL-REQ-1778). A review that
+// is both is assigned.
+func (s *Store) ListInboxChangeReviews(ctx context.Context, actorID string) ([]InboxChangeReview, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT r.id, r.task_id, t.title, t.project_id, r.opened_at, b.assigned`+
+			inboxChangeReviewFrom+` ORDER BY r.opened_at, r.id`, actorID)
+	if err != nil {
+		return nil, fmt.Errorf("list inbox change reviews: %w", err)
+	}
+	return collectRows(rows, "list inbox change reviews", byValue(func(row rowScanner) (*InboxChangeReview, error) {
+		var c InboxChangeReview
+		err := row.Scan(&c.ReviewID, &c.Task, &c.Title, &c.Project, &c.OpenedAt, &c.Assigned)
+		return &c, err
+	}))
+}
+
 // HasInboxItems answers WL-REQ-333's indicator: does at least one inbox item
 // exist for the actor. One statement of EXISTS branches, each commented
 // with the WL-REQ-347 bucket it answers, so this reader and ListInboxReviews plus
@@ -1209,6 +1257,11 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 			   AND lower(pr.author) = lower(act.github_username)
 			   AND a.required_actor IS NOT NULL AND a.required_actor <> $1
 			   AND pr.state = 'open'
+
+			UNION ALL
+
+			-- WL-REQ-1778: open change reviews assigned to or owned by the actor
+			SELECT 1`+inboxChangeReviewFrom+`
 
 			UNION ALL
 

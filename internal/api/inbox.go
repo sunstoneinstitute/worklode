@@ -48,6 +48,11 @@ func (s *server) inboxPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
+	changes, err := s.st.ListInboxChangeReviews(ctx, sub.ActorID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
 	facts, err := s.st.ListProjectWorkFacts(ctx, "")
 	if err != nil {
 		s.webStoreErr(w, err)
@@ -65,7 +70,7 @@ func (s *server) inboxPage(w http.ResponseWriter, r *http.Request) {
 
 	view := assembleInbox(inboxInputs{
 		ActorID: sub.ActorID, ActorLogin: actor.GitHubUsername,
-		Reviews: reviews, Facts: facts, Membership: membership, Led: led,
+		Reviews: reviews, Changes: changes, Facts: facts, Membership: membership, Led: led,
 		Now: s.st.Now(),
 	})
 	outcome := inboxRenderRendered
@@ -85,6 +90,7 @@ type inboxInputs struct {
 	ActorID    string
 	ActorLogin string // the actor's GitHub login, "" when none stored
 	Reviews    []store.InboxReview
+	Changes    []store.InboxChangeReview // open change reviews assigned to or owned by the actor
 	Facts      []store.ProjectWorkFact
 	Membership map[string]bool // project id -> member
 	Led        map[string]bool // project id -> is_lead
@@ -109,21 +115,44 @@ func assembleInbox(in inboxInputs) *ui.InboxView {
 		return cmp.Compare(a.ApprovalID, b.ApprovalID)
 	})
 
-	var assignedReviews, unassignedLed, ownedReviews []ui.InboxItem
+	type dated struct {
+		at   time.Time
+		item ui.InboxItem
+	}
+	var assignedD, ownedD []dated
+	var unassignedLed []ui.InboxItem
 	for _, r := range reviews {
 		item := reviewItem(r, in.Now)
 		switch {
 		case r.RequiredActor != nil && *r.RequiredActor == in.ActorID:
-			assignedReviews = append(assignedReviews, item)
+			assignedD = append(assignedD, dated{r.CreatedAt, item})
 		case r.RequiredActor == nil && in.Led[r.Project]:
 			unassignedLed = append(unassignedLed, item)
 		case authored(r.AuthorLogin, in.ActorLogin) && r.RequiredActor != nil:
 			// WL-REQ-347: owned means the actor's own pull request with somebody
 			// else deciding. The first case already took a review required
 			// of the actor themselves.
-			ownedReviews = append(ownedReviews, item)
+			ownedD = append(ownedD, dated{r.CreatedAt, item})
 		}
 	}
+	// Change reviews join the same buckets, oldest open first (WL-REQ-1778).
+	for _, c := range in.Changes {
+		d := dated{c.OpenedAt, ui.InboxItem{Text: c.Title, Href: "/tasks/" + c.Task, Detail: detail(c.Project, c.OpenedAt, in.Now)}}
+		if c.Assigned {
+			assignedD = append(assignedD, d)
+		} else {
+			ownedD = append(ownedD, d)
+		}
+	}
+	items := func(ds []dated) []ui.InboxItem {
+		slices.SortStableFunc(ds, func(a, b dated) int { return a.at.Compare(b.at) })
+		var out []ui.InboxItem
+		for _, d := range ds {
+			out = append(out, d.item)
+		}
+		return out
+	}
+	assignedReviews, ownedReviews := items(assignedD), items(ownedD)
 
 	pos := concernPositions(in.Facts, in.Membership, in.Now)
 	var assignedWork, ownedWork, nearWork []store.ProjectWorkFact
