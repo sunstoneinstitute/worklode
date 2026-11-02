@@ -10868,6 +10868,17 @@ export interface components {
             task?: string;
             type?: string;
         };
+        GuideFile: {
+            orientation?: string;
+            path?: string;
+            scrutiny?: boolean;
+            skims?: components["schemas"]["GuideSpan"][];
+        };
+        GuideSpan: {
+            decided_by?: string;
+            from?: number;
+            to?: number;
+        };
         Holder: {
             actor_id?: string;
             /** Format: date-time */
@@ -11558,6 +11569,7 @@ export interface components {
             closed_at?: null | string;
             /** Format: int64 */
             doc?: number;
+            guide?: components["schemas"]["ReviewGuide"];
             /** Format: int64 */
             id?: number;
             /** Format: date-time */
@@ -11596,6 +11608,13 @@ export interface components {
             after?: number;
             messages?: components["schemas"]["ReviewMessage"][] | null;
             threads?: components["schemas"]["ReviewThread"][] | null;
+        };
+        ReviewGuide: {
+            diff_blob?: string;
+            files?: components["schemas"]["GuideFile"][] | null;
+            overview?: string;
+            round?: number;
+            stale?: boolean;
         };
         ReviewMessage: {
             author?: string;
