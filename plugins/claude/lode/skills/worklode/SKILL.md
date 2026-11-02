@@ -45,8 +45,11 @@ sent back to `ready` by `reopen`, which requires a fresh claim.
 **You drive:** `draft→ready` (`task publish`), `ready→in_progress` (`task
 claim`/`next` when the work needs a worktree; `task start` when it doesn't —
 e.g. a design/review task that's just a judgment call, no code),
-`in_progress→ready` (`task stop`/`release`), `in_review→in_progress` (`task
-rework`), anything `→abandoned` (`task abandon`), non-code work `→completed` (`task complete`; refused when the task has a pull request), anything terminal-ish
+`in_progress→ready` (`task stop`/`release`), `in_progress→in_review` (`review
+add`, which opens a change review; `task submit`/`work submit` move it
+without one), `ready→in_review` (`review add --allow-ready`),
+`in_review→in_progress` (`task rework`, or a review round requesting
+changes), anything `→abandoned` (`task abandon`), non-code work `→completed` (`task complete`; refused when the task has a pull request), anything terminal-ish
 `→ready` (`task reopen`).
 
 **Webhooks drive:** `in_progress→in_review` (a GitHub PR opens against the
@@ -54,6 +57,9 @@ task), `→merged` (the merge SHA lands on the default branch via a `push`
 event — not the merge itself), `merged→deployed_dev/deployed_prod/released`
 (Flux reconciliation, resolved forward-only against whatever facts have
 arrived, in any order). Full event-by-event table: `references/webhooks.md`.
+
+`review add` on a `merged` or later task, or a `draft` one, is refused: file a
+new task for the follow-up change (WL-REQ-1324).
 
 **No PR, no webhook — close it by hand:** a task whose outcome is not code
 (research, a decision, an ops change, a document) has no PR to drive the rest

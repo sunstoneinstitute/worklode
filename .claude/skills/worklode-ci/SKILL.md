@@ -43,6 +43,12 @@ changes, the PR body or a commit message needs one trailer naming a rule:
 rule ref there. The job makes no Worklode API call, so CI names that command
 rather than the ref.
 
+The `commit-msg` hook runs the same check locally (WL-REQ-1549), so a commit
+that stages a `[gate]` path is refused without the trailer. The trailer may be
+in the message or in any commit since the merge base with the remote default
+branch. Merge, cherry-pick and revert commits are skipped; `--no-verify` skips
+the hook, and CI still checks.
+
 The job also fails an added line that cites a spec section by number
 instead of by rule ref (WL-REQ-1791). In Go only comments are checked.
 Fenced code blocks, inline code spans and double-quoted text are skipped, so

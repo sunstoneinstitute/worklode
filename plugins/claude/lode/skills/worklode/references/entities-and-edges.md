@@ -47,14 +47,18 @@ Every pre-merged state can also go to `abandoned`; `merged`/`deployed_dev`/
 | `draft → ready` | You: `lode task publish` |
 | `ready → in_progress` | You: `lode task claim` / `lode work next` |
 | `in_progress → ready` | You: `lode task stop` / `lode task release` |
-| `in_progress → in_review` | **Webhook.** A GitHub `pull_request` `opened`/`ready_for_review` event on an `in_progress` task. Also reachable by hand via rework's inverse. |
-| `in_review → in_progress` | You: `lode task rework` (changes requested) |
+| `in_progress → in_review` | **Webhook.** A GitHub `pull_request` `opened`/`ready_for_review` event on an `in_progress` task. You: `lode review add <task>` (opens a change review), or `lode task submit` / `lode work submit` (no review). |
+| `ready → in_review` | You: `lode review add <task> --allow-ready` |
+| `in_review → in_progress` | You: `lode task rework` (changes requested). Also a review round with an open `change_request` thread or a `changes_requested` verdict; the assignee is kept, with no lease. |
 | `→ merged` | **Webhook.** `pull_request` `closed` with `merged: true` records the merge SHA; a later `push` event to the repo's default branch is what actually calls `ResolveDelivery`, forward-only, in commit-arrival order — not the merge event itself. |
 | `merged → deployed_dev` / `deployed_prod` / `released` | **Webhook.** Flux `Kustomization` reconciliation events, resolved against the repo's configured `done_state` (`project_repos.done_state`; falls back to a package default). Deployment facts can arrive out of order — `ResolveDelivery` always advances to the *furthest* milestone the recorded facts support, never backslides. |
 | `deployed_dev → deployed_prod` / `released` | Webhook, same resolver. |
 | `→ completed` | You: `lode task complete`, for work whose outcome is not code. Refused when the task has a pull request. |
 | `→ abandoned` | You: `lode task abandon` |
 | terminal-ish → `ready` | You: `lode task reopen` (fresh claim required) |
+
+`lode review add` refuses a `draft` task and a `merged` or later one; file a new
+task for the follow-up change (WL-REQ-1324).
 
 A **container task** — one with children — cannot itself sit in
 `in_review`/`deployed_dev`/`deployed_prod`/`released`. Its state rolls up from
