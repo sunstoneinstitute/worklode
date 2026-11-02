@@ -10139,6 +10139,7 @@ export interface components {
             lease?: components["schemas"]["Lease"];
             open_blockers?: components["schemas"]["BriefBlocker"][] | null;
             parent?: components["schemas"]["TaskParent"];
+            review?: components["schemas"]["BriefReview"];
             skills?: components["schemas"]["SkillRecommendation"];
             stale_plan?: string;
             task?: components["schemas"]["Task"];
@@ -10147,6 +10148,12 @@ export interface components {
             id?: string;
             state?: string;
             title?: string;
+        };
+        BriefReview: {
+            guide?: components["schemas"]["ReviewGuide"];
+            /** Format: int64 */
+            id?: number;
+            task?: string;
         };
         ByteRange: {
             end?: number;

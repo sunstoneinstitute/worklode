@@ -1113,3 +1113,21 @@ func TestBoardShowsBlockerColumns(t *testing.T) {
 		t.Fatalf("ready bucket with no blocker edges still has the column:\n%s", quiet)
 	}
 }
+
+func TestBriefRenderReviewSection(t *testing.T) {
+	base := model.Brief{Task: model.Task{ID: "WL-9", Title: "R", State: "ready", Priority: "high"}, Branch: "b"}
+	var plain bytes.Buffer
+	BriefRender(&plain, base)
+	if strings.Contains(plain.String(), "Review") {
+		t.Fatalf("non-review brief gained a Review section:\n%s", plain.String())
+	}
+	base.Review = &model.BriefReview{ID: 7, Task: "WL-8", Guide: &model.ReviewGuide{
+		Overview: "Adds the thing.", Round: 1, Files: []model.GuideFile{{Path: "a.go", Scrutiny: true}}}}
+	var buf bytes.Buffer
+	BriefRender(&buf, base)
+	for _, want := range []string{"Review 7 of WL-8", "lode review show 7 --json", "Adds the thing.", "! a.go"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Fatalf("missing %q:\n%s", want, buf.String())
+		}
+	}
+}

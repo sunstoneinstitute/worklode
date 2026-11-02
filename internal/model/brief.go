@@ -38,6 +38,18 @@ type Brief struct {
 	// GovernedBy is the task's governing rules: its links plus its project's
 	// accepted invariants (WL-REQ-165), as TaskDetail carries them.
 	GovernedBy []TaskGovernance `json:"governed_by,omitempty"`
+	// Review is set on a `review` task whose reviewed task has an open review.
+	Review *BriefReview `json:"review,omitempty"`
+}
+
+// BriefReview is the review a `review` task is claimed to work (WL-RULE-1320):
+// its id and, when the author proposed one, the guide without skims. The guide
+// comes from the same store read as GET /api/v1/reviews/{id}/guide
+// (WL-RULE-1321).
+type BriefReview struct {
+	ID    int64        `json:"id"`
+	Task  string       `json:"task"`
+	Guide *ReviewGuide `json:"guide,omitempty"`
 }
 
 // BriefParams is the query string of GET /api/v1/tasks/{id}/brief?skills=.
