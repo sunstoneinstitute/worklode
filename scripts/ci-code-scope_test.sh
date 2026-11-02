@@ -21,9 +21,11 @@ CODE_ANYWAY="$(pattern CODE_ANYWAY)"
 [ -n "$CODE_INERT" ] || { echo "FAIL: CODE_INERT not found in $WORKFLOW"; exit 1; }
 [ -n "$CODE_ANYWAY" ] || { echo "FAIL: CODE_ANYWAY not found in $WORKFLOW"; exit 1; }
 
-# The gate's condition, verbatim. Prints what it would set `code` to.
+# The gate's condition, verbatim. Prints what it would set `code` to. The
+# workflow step runs without pipefail; under it, `echo | grep -q` races.
 scope() {
     local changed="$1"
+    set +o pipefail
     if [ -n "$changed" ] \
        && ! echo "$changed" | grep -qvE "$CODE_INERT" \
        && ! echo "$changed" | grep -qE "$CODE_ANYWAY"; then

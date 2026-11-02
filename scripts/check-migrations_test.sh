@@ -98,7 +98,7 @@ check() {
 		fails=$((fails + 1))
 		return
 	fi
-	if [ -n "$grep_for" ] && ! printf '%s\n' "$out" | grep -qF "$grep_for"; then
+	if [ -n "$grep_for" ] && ! grep -qF "$grep_for" <<<"$out"; then
 		echo "FAIL: $name — expected output to mention '$grep_for':"
 		echo "$out"
 		fails=$((fails + 1))
