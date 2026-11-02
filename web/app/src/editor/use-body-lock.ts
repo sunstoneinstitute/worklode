@@ -10,6 +10,14 @@ import {
 
 export const LOCK_CHECK_IN_MS = 60_000
 
+/** Why a lock was lost, for "You no longer hold the lock (...)" */
+export const LOST_REASON: Record<string, string> = {
+  unlocked: "someone unlocked it",
+  inactive: "it sat idle too long",
+  expired: "it expired",
+  held: "someone else holds it now",
+}
+
 export type BodyLockState =
   | { status: "taking" }
   | { status: "held"; session: string; touch: () => void; lose: (lost: LockLost) => void }
@@ -36,11 +44,11 @@ const pending = new Map<string, Promise<unknown>>()
  * changes (WL-REQ-1868). On a pagehide with `dirty`, `onBeforeRelease`
  * runs first, so the page can keep its blocks as a browser draft. A 409
  * check-in, or `lose()` after a refused save, moves to `lost`; `retry()`
- * takes the lock again.
+ * takes the lock again. With no `id` the hook does nothing and stays `taking`.
  */
 export function useBodyLock(
   kind: LockKind,
-  id: string,
+  id: string | undefined,
   { dirty, onBeforeRelease }: { dirty: boolean; onBeforeRelease?: () => void },
 ): BodyLockState {
   const [outcome, setOutcome] = useState<Outcome>({ status: "taking" })
@@ -66,6 +74,7 @@ export function useBodyLock(
   const lose = useCallback((lost: LockLost) => loseRef.current(lost), [])
 
   useEffect(() => {
+    if (id === undefined) return
     const key = `${kind}:${id}`
     let cancelled = false
     let timer: ReturnType<typeof setInterval> | undefined

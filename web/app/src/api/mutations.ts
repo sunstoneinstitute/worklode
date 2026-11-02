@@ -313,9 +313,7 @@ export async function saveBody(target: BodyTarget, subject: BodySubject, input: 
   const answer =
     target.kind === "rule"
       ? await api.PUT("/api/v1/rules/{id}", { params: { path: { id: target.ref } }, body: { ...input, heading: subject.heading } })
-      : target.kind === "task"
-        ? await api.PATCH("/api/v1/tasks/{id}", { params: { path: { id: target.ref } }, body: input })
-        : await api.PUT("/api/v1/docs/{id}/body", { params: { path: { id: subject.lockId } }, body: input })
+      : await api.PUT("/api/v1/docs/{id}/body", { params: { path: { id: subject.lockId } }, body: input })
   const { data, error, response } = answer
   if (data) return { ok: true, body: data.body ?? "" }
   if (response.status === 409) {
@@ -323,6 +321,25 @@ export async function saveBody(target: BodyTarget, subject: BodySubject, input: 
     return { ok: false, lock: error as BodyLock }
   }
   throw failure(error as ErrorResponse, response)
+}
+
+export type FormSubmitResult = { ok: true } | { ok: false; conflict: BodyConflict } | { ok: false; lock: BodyLock }
+type RawSubmit = (url: string, init: { body: unknown }) => Promise<{ error?: unknown; response: Response }>
+
+/**
+ * Submits a schema-built form to its write route (WL-REQ-1886). The body is
+ * typed at the config (WL-REQ-1887), so this takes it as it is. A 409 is as
+ * for saveBody; any other refusal throws.
+ */
+export async function submitForm(method: "POST" | "PATCH" | "PUT", url: string, body: unknown): Promise<FormSubmitResult> {
+  const send = api[method] as unknown as RawSubmit
+  const { error, response } = await send(url, { body })
+  if (response.ok) return { ok: true }
+  if (response.status === 409) {
+    if (error && typeof error === "object" && "body_sha256" in error) return { ok: false, conflict: error as BodyConflict }
+    if (error && typeof error === "object" && "holder" in error) return { ok: false, lock: error as BodyLock }
+  }
+  throw failure((error ?? {}) as ErrorResponse, response)
 }
 
 // Threads on a document or rule (WL-REQ-1317, WL-REQ-1323). Each write refetches every thread list.

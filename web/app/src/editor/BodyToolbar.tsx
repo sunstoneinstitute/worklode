@@ -182,7 +182,11 @@ export function BodyToolbar({ editor, disabled }: { editor: BodyEditorInstance |
         <Select
           value={state?.blockType ?? ""}
           disabled={off || !state.convertible}
-          onValueChange={(value) => inEditor((e) => convert(e, BLOCK_TYPES.find((t) => t.value === value)!.update))()}
+          onValueChange={(value) => {
+            // Inside a <form> Radix's hidden select also reports "" as the value settles
+            const type = BLOCK_TYPES.find((t) => t.value === value)
+            if (type) inEditor((e) => convert(e, type.update))()
+          }}
         >
           <SelectTrigger aria-label="Block type" size="sm" className="w-32 shrink-0">
             <SelectValue placeholder="Block type" />

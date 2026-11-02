@@ -204,15 +204,27 @@ A form keeps its values and field errors in React state (WL-REQ-1810);
 values in `localStorage` under `worklode:v1:draft:<actor>:<form>[:<id>]`;
 `src/api/client.ts` deletes every draft on any 401 (WL-REQ-1813).
 
+A form with more than a few fields, a `showWhen`, a `rows` field or a
+`richtext` field is config-built (WL-REQ-1886): `src/forms/SchemaForm.tsx`
+renders `src/forms/configs/<form>.json`. A config is registered in
+`configs/index.ts` against its route's generated body (WL-REQ-1887).
+`rules.ts` interprets the closed JSON Schema subset of WL-REQ-1888, with no
+Ajv, and `configs.test.ts` checks every config. `widgets/` and `layouts/` hold
+WL-REQ-1893's set. `IdeaForm` and `pages/EditTask.tsx` mount it. The page
+reads the record from its own `GET` route. `field_access` on the record makes
+a field text with its reason (WL-REQ-1890); `useDraft` compares the draft's
+`base` with `updated_at` (WL-REQ-1891). A `richtext` field hosts `BodyEditor`
+under the lock of the form's `lockKind` (WL-REQ-1892).
+
 ## Body editor
 
-`src/editor/BodyEditor.tsx` edits a document, rule or task body as BlockNote
+`src/editor/BodyEditor.tsx` edits a body as BlockNote
 blocks and `BodyView.tsx` shows it read-only. `useBodyLock`
 (`src/editor/use-body-lock.ts`) takes the lock, checks in, and reports a lost
 lock, which `LockedDialog.tsx` explains (WL-REQ-1868). Saves send
 `if_body_sha256` and `lock_session`; a 409 carries the stored text as
 `body` and `blocks`. The routes are `/projects/$projectId/$kind/$n/edit`
-(documents and tasks) and `/projects/$projectId/rule/$n/edit` (rules). The
+(documents, and tasks through their form) and `/projects/$projectId/rule/$n/edit` (rules). The
 MSW mocks keep lock state in `db.locks` (`src/mocks/db.ts`), served by the lock
 handlers in `src/mocks/handlers.ts`.
 
