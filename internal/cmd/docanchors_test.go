@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -69,5 +73,60 @@ func TestDocUpdateSectionAnchors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error()+out, "WL-RULE-201") {
 		t.Errorf("refusal = %v / %s, want it to cite WL-RULE-201", err, out)
+	}
+}
+
+const anchorsBody = `# Anchored
+
+Template text.
+
+## 1. First {#sec-1}
+
+Body with a fence:
+
+` + "```" + `
+## not a heading
+` + "```" + `
+
+## 2. Second {#sec-2}
+
+More.
+`
+
+// TestDocShowAnchors: --anchors writes the body exactly as GetDoc returns it
+// and a sidecar naming the doc, its version, and runs that tile the body
+// (WL-REQ-1776).
+func TestDocShowAnchors(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
+		"--number", "1", "--slug", "anch", "--file", writeDocFile(t, anchorsBody), "--json")
+	if err != nil {
+		t.Fatalf("doc add: %v\n%s", err, out)
+	}
+	id := docJSON(t, out).ID
+	if out, err := runLode(t, "doc", "accept", strconv.FormatInt(id, 10)); err != nil {
+		t.Fatalf("doc accept: %v\n%s", err, out)
+	}
+	dir := t.TempDir()
+	body, side := filepath.Join(dir, "doc.md"), filepath.Join(dir, "doc.anchors.json")
+	if out, err := runLode(t, "doc", "show", strconv.FormatInt(id, 10), "--anchors", side, "--out", body); err != nil {
+		t.Fatalf("doc show --anchors: %v\n%s", err, out)
+	}
+	docs, _, err := c.GetDoc(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(body)
+	if string(got) != string(docs.Body) {
+		t.Errorf("written body differs from GetDoc's:\n%q\n%q", got, docs.Body)
+	}
+	var sc docAnchorsSidecar
+	raw, _ := os.ReadFile(side)
+	if err := json.Unmarshal(raw, &sc); err != nil {
+		t.Fatalf("sidecar: %v\n%s", err, raw)
+	}
+	if sc.Doc != id || sc.Version != docs.Version || len(sc.Lines) == 0 {
+		t.Errorf("sidecar = %+v, want doc %d version %d and runs", sc, id, docs.Version)
 	}
 }
