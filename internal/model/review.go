@@ -183,3 +183,36 @@ type ReviewEvents struct {
 	Threads  []ReviewThread  `json:"threads"`
 	Messages []ReviewMessage `json:"messages"`
 }
+
+// GuideSpan is a skimmable line range in a guide file. DecidedBy is author
+// or policy (WL-RULE-1320).
+type GuideSpan struct {
+	From      int    `json:"from"`
+	To        int    `json:"to"`
+	DecidedBy string `json:"decided_by"`
+}
+
+// GuideFile orients a reviewer on one file (or, for a document, one sec-N
+// anchor) and says which spans may be skimmed.
+type GuideFile struct {
+	Path        string      `json:"path"`
+	Orientation string      `json:"orientation,omitempty"`
+	Scrutiny    bool        `json:"scrutiny,omitempty"`
+	Skims       []GuideSpan `json:"skims,omitempty"`
+}
+
+// ReviewGuide is the backbone-produced guide a reviewer reads (WL-RULE-1320).
+type ReviewGuide struct {
+	Overview string      `json:"overview"`
+	Files    []GuideFile `json:"files"`
+	Round    int         `json:"round"`
+	Stale    bool        `json:"stale,omitempty"`
+}
+
+// GuideProposal is the author's PUT body. Diff is the unified diff at the
+// review's base_ref, empty for a document.
+type GuideProposal struct {
+	Overview string      `json:"overview"`
+	Files    []GuideFile `json:"files"`
+	Diff     string      `json:"diff,omitempty"`
+}
