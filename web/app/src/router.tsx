@@ -24,6 +24,7 @@ import { ProjectCrew } from "@/pages/ProjectCrew"
 import { ProjectDocuments } from "@/pages/ProjectDocuments"
 import { ProjectOverview } from "@/pages/ProjectOverview"
 import { ProjectTasks } from "@/pages/ProjectTasks"
+import { Review } from "@/pages/Review"
 import { Projects } from "@/pages/Projects"
 import { Tasks } from "@/pages/Tasks"
 
@@ -140,6 +141,12 @@ const editRuleRoute = createRoute({
   component: EditRule,
 })
 
+const reviewRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "reviews/$reviewId",
+  component: Review,
+})
+
 export const routeTree = rootRoute.addChildren([
   projectsRoute,
   tasksRoute,
@@ -154,6 +161,7 @@ export const routeTree = rootRoute.addChildren([
     projectTasksRoute,
     editBodyRoute,
     editRuleRoute,
+    reviewRoute,
   ]),
 ])
 
