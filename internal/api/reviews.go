@@ -511,6 +511,17 @@ var reviewRouteDocs = map[string]routeDoc{
 		summary:   "Get one reviewer round of a review",
 		responses: map[int]any{http.StatusOK: model.ReviewRound{}},
 	},
+	"PUT /api/v1/reviews/{id}/guide": {
+		summary: "Propose the review's guide with the round's diff; the author only. Refused skims are listed, not fatal",
+		request: model.GuideProposal{},
+		responses: map[int]any{http.StatusOK: model.ReviewGuideResult{},
+			http.StatusForbidden: model.ErrorResponse{}, http.StatusNotFound: model.ErrorResponse{}},
+	},
+	"GET /api/v1/reviews/{id}/guide": {
+		summary:   "Get the review's guide; skims only with focused=true. 404 when none was proposed",
+		responses: map[int]any{http.StatusOK: model.ReviewGuide{}, http.StatusNotFound: model.ErrorResponse{}},
+		params:    model.ReviewGuideParams{},
+	},
 	"GET /api/v1/reviews/{id}/events": {
 		summary:   "Long-poll a review for messages after a seq and threads resolved since; 204 when nothing arrives by the timeout",
 		responses: map[int]any{http.StatusOK: model.ReviewEvents{}, http.StatusNoContent: nil},

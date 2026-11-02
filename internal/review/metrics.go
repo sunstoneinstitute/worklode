@@ -18,6 +18,8 @@ type Metrics struct {
 	questionLatency prometheus.Histogram
 	timeToVerdict   prometheus.Histogram
 	verdicts        *prometheus.CounterVec
+	skimmed         *prometheus.CounterVec
+	skimsRefused    *prometheus.CounterVec
 }
 
 var (
@@ -26,6 +28,8 @@ var (
 	intents       = []string{"note", "change_request", "question"}
 	verdicts      = []string{"approved", "changes_requested"}
 	reviewerKinds = []string{"human", "agent"}
+	skimDeciders  = []string{"author", "policy"}
+	refusalRules  = []string{"non-mechanical", "no-diff", "document"}
 )
 
 // NewMetrics registers the review instruments on reg and pre-initialises
@@ -58,8 +62,22 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_review_verdicts_total",
 			Help: "Reviewer verdicts, by verdict and reviewer kind (WL-REQ-1327).",
 		}, []string{"verdict", "reviewer_kind"}),
+		skimmed: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_review_skimmed_blocks_total",
+			Help: "Skim spans stored in review guides, by who decided them (WL-REQ-1327).",
+		}, []string{"decided_by"}),
+		skimsRefused: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_review_guide_skims_refused_total",
+			Help: "Proposed skims the server refused, by the rule that fired (WL-REQ-1327).",
+		}, []string{"rule"}),
 	}
-	reg.MustRegister(m.rounds, m.threads, m.openThreads, m.questionLatency, m.timeToVerdict, m.verdicts)
+	reg.MustRegister(m.rounds, m.threads, m.openThreads, m.questionLatency, m.timeToVerdict, m.verdicts, m.skimmed, m.skimsRefused)
+	for _, d := range skimDeciders {
+		m.skimmed.WithLabelValues(d)
+	}
+	for _, r := range refusalRules {
+		m.skimsRefused.WithLabelValues(r)
+	}
 	for _, s := range subjects {
 		m.openThreads.WithLabelValues(s)
 		for _, c := range clients {
@@ -125,4 +143,20 @@ func (m *Metrics) Verdict(verdict, actorKind string, sinceOpened time.Duration) 
 	}
 	m.verdicts.WithLabelValues(verdict, kind).Inc()
 	m.timeToVerdict.Observe(sinceOpened.Seconds())
+}
+
+// Skimmed counts one stored skim span; decidedBy is author or policy.
+func (m *Metrics) Skimmed(decidedBy string) {
+	if m == nil {
+		return
+	}
+	m.skimmed.WithLabelValues(decidedBy).Inc()
+}
+
+// SkimRefused counts one refused skim; rule is one of refusalRules.
+func (m *Metrics) SkimRefused(rule string) {
+	if m == nil {
+		return
+	}
+	m.skimsRefused.WithLabelValues(rule).Inc()
 }

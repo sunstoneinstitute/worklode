@@ -220,3 +220,23 @@ type GuideProposal struct {
 	Files    []GuideFile `json:"files"`
 	Diff     string      `json:"diff,omitempty"`
 }
+
+// ReviewGuideParams are the query parameters of GET /reviews/{id}/guide.
+// Focused returns the guide with its skims; without it Skims are emptied
+// (WL-RULE-1320).
+type ReviewGuideParams struct {
+	Focused bool `query:"focused,omitempty"`
+}
+
+// ReviewGuideResult is the PUT answer: the stored guide with skims, and the
+// refusals that fired so the author sees what the server removed.
+type ReviewGuideResult struct {
+	Guide   ReviewGuide    `json:"guide"`
+	Refused []GuideRefusal `json:"refused"`
+}
+
+// GuideRefusal names a proposed skim the server refused and the rule that fired.
+type GuideRefusal struct {
+	Path string `json:"path"`
+	Rule string `json:"rule"`
+}
