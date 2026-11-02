@@ -15,6 +15,16 @@ type AnchorRun struct {
 	Heading    bool   `json:"heading"`
 }
 
+// AnchorSidecar is the file `lode doc show --anchors` writes and `lode review
+// import` reads: which version the body copy came from and the line runs that
+// map crit's line comments to byte offsets in it (WL-REQ-1776, WL-REQ-1317).
+// The copy is never read back; the sidecar is.
+type AnchorSidecar struct {
+	Doc     int64       `json:"doc"`
+	Version int         `json:"version"`
+	Lines   []AnchorRun `json:"lines"`
+}
+
 // AnchorRuns splits body into contiguous runs covering every line. A heading
 // line starts a section only when it sits outside a fenced block and carries
 // an anchor that sections names, so a "## not a heading" inside a fence, or a

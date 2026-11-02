@@ -199,6 +199,8 @@ Flags: --server
   Flags: --anchor, --anchor-text, --body, --intent, --quote, --thread
 - `lode review guide` — Show the review's guide; --focused applies its skims
   Flags: --focused
+- `lode review import` — Land a crit finish payload as a reviewer round with its open comments as threads
+  Flags: --anchors, --review
 - `lode review list` — List reviews
   Flags: --mine, --open
 - `lode review resolve` — Resolve a thread

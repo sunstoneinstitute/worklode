@@ -107,13 +107,17 @@ type OpenReviewInput struct {
 
 // OpenThreadInput is the body that opens a thread. RaisedByTask and
 // RaisedBySession name the caller's task and coding session, as `lode doc
-// note` does; both may be empty.
+// note` does; both may be empty. A crit round's threads arrive with no Intent.
 type OpenThreadInput struct {
 	Anchor          ReviewAnchor `json:"anchor"`
 	Intent          string       `json:"intent"`
 	Body            string       `json:"body"`
 	RaisedByTask    string       `json:"raised_by_task,omitempty"`
 	RaisedBySession string       `json:"raised_by_session,omitempty"`
+	// IntentClassifier and IntentConfidence are set by lode-server when it
+	// classified Intent (WL-REQ-1885); a client never sends them.
+	IntentClassifier string  `json:"-"`
+	IntentConfidence float64 `json:"-"`
 }
 
 // ThreadReplyInput is the body of a reply to a thread.

@@ -1,15 +1,23 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/review/critjson"
 )
 
 // `lode review`: the verbs of the WL-REQ-1775 catalogue. The change arm of
@@ -21,7 +29,7 @@ func newReviewCmd() *cobra.Command {
 		Short: "Reviews of documents and of task changes: anchored threads, verdicts, author rounds",
 	}
 	cmd.AddCommand(newReviewAddCmd(), newReviewListCmd(), newReviewShowCmd(), newReviewCommentCmd(),
-		newReviewResolveCmd(), newReviewGuideCmd(), newReviewApproveCmd(), newReviewSetCmd(), newReviewSubmitCmd(), newReviewWaitCmd())
+		newReviewResolveCmd(), newReviewGuideCmd(), newReviewApproveCmd(), newReviewSetCmd(), newReviewSubmitCmd(), newReviewWaitCmd(), newReviewImportCmd())
 	return cmd
 }
 
@@ -463,4 +471,122 @@ func count(bs ...bool) int {
 		}
 	}
 	return n
+}
+
+// newReviewImportCmd is crit's on_finish_* hook target (WL-REQ-1775,
+// WL-REQ-1776): one crit finish on stdin becomes one reviewer round with
+// client crit. It reads nothing else from crit.
+func newReviewImportCmd() *cobra.Command {
+	var reviewArg, anchors string
+	cmd := &cobra.Command{
+		Use:   "import --review <id> [--anchors <sidecar>] < result.json",
+		Short: "Land a crit finish payload as a reviewer round with its open comments as threads",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			id, err := parseID(reviewArg, "--review")
+			if err != nil {
+				return err
+			}
+			return importCritFinish(cmd, id, anchors)
+		},
+	}
+	cmd.Flags().StringVar(&reviewArg, "review", "", "the review the crit round belongs to (crit's payload names none)")
+	cmd.Flags().StringVar(&anchors, "anchors", "", "the sidecar `lode doc show --anchors` wrote, for a document review")
+	_ = cmd.MarkFlagRequired("review")
+	return cmd
+}
+
+// importCritFinish saves the payload as finish.json beside the sidecar (or in
+// the temp directory), so a failed import can be re-run from it, then maps it
+// with critjson.ToRound and posts the round.
+func importCritFinish(cmd *cobra.Command, id int64, anchors string) error {
+	payload, err := io.ReadAll(cmd.InOrStdin())
+	if err != nil {
+		return fmt.Errorf("read the finish payload: %w", err)
+	}
+	dir := os.TempDir()
+	if anchors != "" {
+		dir = filepath.Dir(anchors)
+	}
+	saved := filepath.Join(dir, "finish.json")
+	if err := os.WriteFile(saved, payload, 0o600); err != nil {
+		return fmt.Errorf("save the finish payload: %w", err)
+	}
+	var f critjson.Finish
+	if err := json.NewDecoder(bytes.NewReader(payload)).Decode(&f); err != nil {
+		return fmt.Errorf("decode the finish payload: %w", err)
+	}
+	ctx := cmd.Context()
+	c, err := newAPIClient()
+	if err != nil {
+		return err
+	}
+	rev, _, err := c.GetReview(ctx, id)
+	if err != nil {
+		return err
+	}
+	opts := critjson.Options{Focused: os.Getenv("LODE_REVIEW_FOCUSED") == "1", Existing: rev.Threads}
+	switch {
+	case anchors != "":
+		b, err := os.ReadFile(anchors)
+		if err != nil {
+			return err
+		}
+		var sc designdoc.AnchorSidecar
+		if err := json.Unmarshal(b, &sc); err != nil {
+			return fmt.Errorf("decode %s: %w", anchors, err)
+		}
+		d, _, err := c.GetDoc(ctx, sc.Doc)
+		if err != nil {
+			return err
+		}
+		if d.Version != sc.Version {
+			return fmt.Errorf("doc %d is at version %d, the sidecar maps version %d: re-run lode review exec", sc.Doc, d.Version, sc.Version)
+		}
+		opts.Anchors, opts.Body = &sc, string(d.Body)
+	case rev.Task == "":
+		return fmt.Errorf("review %d is of a document: pass --anchors <sidecar>", id)
+	default:
+		root, err := worktreeRoot()
+		if err != nil {
+			return err
+		}
+		common, err := gitexec.Text(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+		if err != nil {
+			return err
+		}
+		opts.Repo = filepath.Base(filepath.Dir(common))
+	}
+	in, rep, err := critjson.ToRound(f, opts)
+	if err != nil {
+		return fmt.Errorf("%w (payload saved at %s)", err, saved)
+	}
+	for i, th := range in.Threads {
+		if th.Anchor.Path == "" {
+			continue
+		}
+		if in.Threads[i].Anchor, err = changeAnchor(th.Anchor, rev.BaseRef, th.Anchor.AnchorText); err != nil {
+			return fmt.Errorf("%w (payload saved at %s)", err, saved)
+		}
+	}
+	got, _, err := c.SubmitReviewRound(ctx, id, in)
+	if err != nil {
+		return fmt.Errorf("%w (fix the comment in crit, or re-run from %s)", err, saved)
+	}
+	round := 0
+	if n := len(got.Rounds); n > 0 {
+		round = got.Rounds[n-1].Round
+	}
+	w := cmd.OutOrStdout()
+	fmt.Fprintf(w, "review %d round %d (%s): %d threads opened, %d comments matched existing threads, %d resolved skipped\n",
+		id, round, in.Verdict, len(in.Threads), len(rep.Matched), rep.Resolved)
+	for _, line := range []struct {
+		what string
+		ids  []string
+	}{{"trimmed of heading lines", rep.Trimmed}, {"split at a section", rep.Split}, {"folded into the overall note", rep.Notes}} {
+		if len(line.ids) > 0 {
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\n", line.what, strings.Join(line.ids, "; "))
+		}
+	}
+	return nil
 }
