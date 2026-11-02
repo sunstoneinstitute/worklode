@@ -1,7 +1,12 @@
 import "@testing-library/jest-dom/vitest"
+import { configure } from "@testing-library/react"
 import { afterAll, afterEach, beforeAll } from "vitest"
 import { resetDb } from "@/mocks/db"
 import { server } from "@/mocks/node"
+
+// A shared CI runner can take over a second to load a lock and mount BlockNote;
+// the 1000 ms default made the editor waits flaky (WL-1448)
+configure({ asyncUtilTimeout: 5000 })
 
 // Every test talks to the mock API; an unmocked request is a test bug
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
