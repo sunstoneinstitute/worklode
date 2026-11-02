@@ -613,3 +613,69 @@ func TestRoundAndMergeShareALockOrder(t *testing.T) {
 		t.Errorf("task state = %s, want merged", st)
 	}
 }
+
+// TestInboxChangeReviews: an open change review is assigned to a roster member
+// with no round at the current base_ref and owned by the task's creator and
+// lease holder, and HasInboxItems agrees with the list at each step
+// (WL-REQ-1778).
+func TestInboxChangeReviews(t *testing.T) {
+	s := loopStore(t)
+	ctx := t.Context()
+	in := defaultTaskInput()
+	in.CreatedBy = "b"
+	task := createTask(t, s, taskTestNow, in)
+	if err := setTaskReviewers(t, s, task.ID, []string{"a"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claim(ctx, task.ID, "x", "host:/wt-"+task.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(step, actor string, want []bool) {
+		t.Helper()
+		got, err := s.ListInboxChangeReviews(ctx, actor)
+		if err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+		var assigned []bool
+		for _, g := range got {
+			if g.Task != task.ID {
+				t.Fatalf("%s: task = %s", step, g.Task)
+			}
+			assigned = append(assigned, g.Assigned)
+		}
+		if !slices.Equal(assigned, want) {
+			t.Errorf("%s %s: assigned flags = %v, want %v", step, actor, assigned, want)
+		}
+		has, err := s.HasInboxItems(ctx, actor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A project member still has the work buckets, so only a non-empty list
+		// pins the indicator.
+		if len(want) > 0 && !has {
+			t.Errorf("%s %s: HasInboxItems = false, list has %d", step, actor, len(want))
+		}
+	}
+
+	check("before open", "a", nil)
+	r, err := openChangeReview(t, s, model.OpenReviewInput{Task: task.ID, BaseRef: changeSHA}, "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("open", "a", []bool{true})
+	check("open", "b", []bool{false}) // creator
+	check("open", "x", []bool{false}) // lease holder
+	check("open", "opener", nil)
+
+	if _, err := reviewerRound(t, s, r.ID, model.ReviewRoundInput{Verdict: "changes_requested", BaseRef: changeSHA}, "a"); err != nil {
+		t.Fatal(err)
+	}
+	check("reviewer round", "a", nil)
+	check("reviewer round", "b", []bool{false})
+
+	if _, err := submitChangeRound(t, s, r.ID, model.ReviewRoundInput{BaseRef: changeSHA2}, "x"); err != nil {
+		t.Fatal(err)
+	}
+	check("author round", "a", []bool{true})
+}
