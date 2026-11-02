@@ -38,6 +38,8 @@ type MilestoneDetail struct {
 	InlineRefs
 	Tasks        []Task        `json:"tasks"`
 	Deliverables []Deliverable `json:"deliverables"`
+	// FieldAccess names the fields the caller may not change (WL-REQ-1890).
+	FieldAccess FieldAccess `json:"field_access,omitempty"`
 }
 
 // MilestoneDeletion is DELETE /api/v1/milestones/{id}: the milestone that was

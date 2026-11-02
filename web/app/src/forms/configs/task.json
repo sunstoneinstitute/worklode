@@ -1,0 +1,60 @@
+{
+  "$schema": "../form-config.schema.json",
+  "id": "task",
+  "edit": {
+    "title": "Edit task",
+    "submit": { "method": "PATCH", "url": "/api/v1/tasks/{id}", "label": "Save" }
+  },
+  "schema": {
+    "type": "object",
+    "required": ["title"],
+    "properties": {
+      "title": {
+        "type": "string",
+        "title": "Title",
+        "minLength": 1,
+        "errorMessage": "Give the task a title."
+      },
+      "blocks": { "type": "array", "title": "Body" },
+      "kind": {
+        "type": "string",
+        "title": "Kind",
+        "oneOf": [
+          { "const": "bug", "title": "Bug" },
+          { "const": "chore", "title": "Chore" },
+          { "const": "decision", "title": "Decision" },
+          { "const": "design", "title": "Design" },
+          { "const": "feature", "title": "Feature" },
+          { "const": "rally", "title": "Rally" },
+          { "const": "review", "title": "Review" },
+          { "const": "spike", "title": "Spike" }
+        ]
+      },
+      "priority": {
+        "type": "string",
+        "title": "Priority",
+        "oneOf": [
+          { "const": "critical", "title": "Critical" },
+          { "const": "high", "title": "High" },
+          { "const": "medium", "title": "Medium" },
+          { "const": "low", "title": "Low" }
+        ]
+      },
+      "due": { "type": "string", "title": "Due", "format": "date" }
+    }
+  },
+  "layout": {
+    "type": "main-sidebar",
+    "columns": {
+      "main": [
+        { "field": "title", "mobileOrder": 1 },
+        { "field": "blocks", "widget": "richtext", "hideLabel": true, "sendWhenChanged": true, "mobileOrder": 5 }
+      ],
+      "sidebar": [
+        { "field": "kind", "sendWhenChanged": true, "mobileOrder": 2 },
+        { "field": "priority", "mobileOrder": 3 },
+        { "field": "due", "mobileOrder": 4 }
+      ]
+    }
+  }
+}

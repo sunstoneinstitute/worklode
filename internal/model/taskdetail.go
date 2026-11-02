@@ -84,6 +84,8 @@ type TaskDetail struct {
 	// the review tasks minted for it, so a design task links to its plan and
 	// to whoever is reviewing it (WL-927).
 	Generated []TaskGeneratedDoc `json:"generated,omitempty"`
+	// FieldAccess names the fields the caller may not change (WL-REQ-1890).
+	FieldAccess FieldAccess `json:"field_access,omitempty"`
 }
 
 // TaskGeneratedDoc is one document a task wrote (docs.generated_by_task) and

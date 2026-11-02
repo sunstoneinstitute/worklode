@@ -123,6 +123,24 @@ export function useCrew() {
   })
 }
 
+/** The people an x-options route answers: a model.CrewListResponse or model.ParticipantListResponse (WL-REQ-1887) */
+export function useOptions(url: string | undefined) {
+  return useQuery({
+    queryKey: ["options", url],
+    enabled: url !== undefined,
+    queryFn: async () => {
+      const { data, error, response } = await api.GET(url as "/api/v1/crew")
+      if (error) throw failure(error, response)
+      const { crew, participants } = data as components["schemas"]["CrewListResponse"] & components["schemas"]["ParticipantListResponse"]
+      return (crew ?? participants ?? []).map((member) => ({
+        id: member.actor ?? "",
+        name: member.display_name || (member.actor ?? ""),
+        roles: member.roles,
+      }))
+    },
+  })
+}
+
 export const projectCrewKey = queryKeys.projects.crew
 
 async function fetchProjectCrew(id: string) {
@@ -294,22 +312,22 @@ export function useIdeaSources(id: string, enabled = true) {
  * by ref (WL-REQ-12) or a task by id. `lockId` is what the lock routes
  * name it by: the doc id, the numeric rule id, the task id.
  */
-export type BodyTarget = { kind: "doc"; ref: string } | { kind: "rule"; ref: string } | { kind: "task"; ref: string }
+export type BodyTarget = { kind: "doc"; ref: string } | { kind: "rule"; ref: string }
 
 export type BodySubject = {
   lockId: string
   title: string
   /** A rule's heading, which its PUT replaces along with the body */
   heading: string
-  /** The document kind ("spec", "plan"); "" for a rule or task */
+  /** The document kind ("spec", "plan"); "" for a rule */
   docKind: string
   blocks: components["schemas"]["EditorBlock"][]
   body_sha256: string
   /** The stored Markdown the blocks' offsets count into, and its version: what a thread anchors to */
   body: string
   version: number
-  /** Where threads go (WL-REQ-1317); none for a task body */
-  threads?: ThreadSubject
+  /** Where threads go (WL-REQ-1317) */
+  threads: ThreadSubject
 }
 
 /**
@@ -319,6 +337,21 @@ export type BodySubject = {
  */
 export type ThreadSubject = { kind: "doc" | "rule"; id: number; ref: string; openOn?: number }
 export type ReviewThread = components["schemas"]["ReviewThread"]
+
+/** A task for its edit form with ?as=blocks, never from cache (WL-REQ-1810) */
+export function useTaskRecord(ref: string) {
+  return useQuery({
+    queryKey: ["body", "task", ref],
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/tasks/{id}", { params: { path: { id: ref }, query: { as: "blocks" } } })
+      if (error) throw failure(error, response)
+      return data
+    },
+  })
+}
 
 /** Reads the subject with ?as=blocks, never from cache: the hash must be the stored body's now */
 export function useBodySubject(target: BodyTarget) {
@@ -338,11 +371,6 @@ export function useBodySubject(target: BodyTarget) {
           body: data.body ?? "", version: data.version ?? 0,
           threads: { kind: "rule", id, ref: target.ref, openOn: data.arranged_in?.[0]?.doc },
         }
-      }
-      if (target.kind === "task") {
-        const { data, error, response } = await api.GET("/api/v1/tasks/{id}", { params: { path: { id: target.ref }, query } })
-        if (error) throw failure(error, response)
-        return { lockId: data.id ?? "", title: `${data.id}: ${data.title}`, heading: "", docKind: "", blocks: data.blocks ?? [], body_sha256: data.body_sha256 ?? "", body: data.body ?? "", version: 0 }
       }
       const resolved = await api.GET("/api/v1/docs/resolve", { params: { query: { ref: target.ref } } })
       if (resolved.error) throw failure(resolved.error, resolved.response)

@@ -4,10 +4,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -358,5 +360,90 @@ func TestOpenReviewNeedsTaskWrite(t *testing.T) {
 	s.openReview(rr, withSubject(r, Subject{Via: authToken, ActorID: "dana"}))
 	if rr.Code != http.StatusForbidden {
 		t.Errorf("status = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestFieldGrantsNameWriteInputs is WL-REQ-1889's drift check: every entry
+// names a kind listed here, and a field that kind's write input carries. A
+// kind joins fieldInputs in the change that wires its detail and write routes.
+func TestFieldGrantsNameWriteInputs(t *testing.T) {
+	t.Parallel()
+	fieldInputs := map[string]any{"task": model.EditTaskInput{}}
+	for kind, fields := range fieldGrants {
+		input, ok := fieldInputs[kind]
+		if !ok {
+			t.Errorf("fieldGrants names kind %q, which has no write input here", kind)
+			continue
+		}
+		wire := map[string]bool{}
+		typ := reflect.TypeOf(input)
+		for i := range typ.NumField() {
+			name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+			wire[name] = true
+		}
+		for field := range fields {
+			if !wire[field] {
+				t.Errorf("fieldGrants[%q] names %q, which %s lacks", kind, field, typ.Name())
+			}
+		}
+	}
+}
+
+func TestFieldGrantDecide(t *testing.T) {
+	t.Parallel()
+	const reason = "only the lead changes the milestone"
+	lead := fieldEntity{Roles: []Role{roleLead, roleCrew}}
+	crew := fieldEntity{Roles: []Role{roleCrew}}
+	for _, tc := range []struct {
+		name   string
+		grant  fieldGrant
+		sub    Subject
+		entity fieldEntity
+		want   bool
+	}{
+		{"instance role admits", fieldGrant{who: []Role{RoleAdmin, roleLead}, whoReason: reason}, adminSubject(), crew, true},
+		{"project role admits", fieldGrant{who: []Role{RoleAdmin, roleLead}, whoReason: reason}, userSubject(), lead, true},
+		{"neither admits", fieldGrant{who: []Role{RoleAdmin, roleLead}, whoReason: reason}, userSubject(), crew, false},
+		{"a non-participant is no crew", fieldGrant{who: []Role{roleCrew}, whoReason: reason}, userSubject(), fieldEntity{}, false},
+		{"onceSet, empty", fieldGrant{lockedWhen: onceSet, lockedReason: reason}, userSubject(), fieldEntity{}, true},
+		{"onceSet, set", fieldGrant{lockedWhen: onceSet, lockedReason: reason}, userSubject(),
+			fieldEntity{Stored: map[string]string{"plan": "7"}}, false},
+		{"whileNotDraft, draft", fieldGrant{lockedWhen: whileNotDraft, lockedReason: reason}, userSubject(), fieldEntity{Status: "draft"}, true},
+		{"whileNotDraft, accepted", fieldGrant{lockedWhen: whileNotDraft, lockedReason: reason}, userSubject(), fieldEntity{Status: "accepted"}, false},
+		{"kindFixed, feature", fieldGrant{lockedWhen: kindFixed, lockedReason: reason}, userSubject(),
+			fieldEntity{Stored: map[string]string{"kind": "feature"}}, true},
+		{"kindFixed, decision", fieldGrant{lockedWhen: kindFixed, lockedReason: reason}, userSubject(),
+			fieldEntity{Stored: map[string]string{"kind": "decision"}}, false},
+	} {
+		ok, why := tc.grant.decide(tc.sub, "plan", tc.entity)
+		if ok != tc.want {
+			t.Errorf("%s: allowed = %v, want %v", tc.name, ok, tc.want)
+		}
+		if ok == (why != "") {
+			t.Errorf("%s: allowed %v with reason %q", tc.name, ok, why)
+		}
+	}
+}
+
+func TestDecideField(t *testing.T) {
+	t.Parallel()
+	decision := fieldEntity{Stored: map[string]string{"kind": "decision", "plan": "7"}}
+	if ok, why := decideField(userSubject(), "task", "kind", decision); ok || why != "kind cannot change once set" {
+		t.Errorf("decision kind: ok %v, why %q", ok, why)
+	}
+	if ok, why := decideField(userSubject(), "task", "title", decision); !ok || why != "" {
+		t.Errorf("a field with no entry: ok %v, why %q", ok, why)
+	}
+	if got := refusedFields(userSubject(), "task", decision, map[string]string{"kind": "decision", "plan": "7"}); got != nil {
+		t.Errorf("repeating stored values refused: %v", got)
+	}
+	if got := refusedFields(userSubject(), "task", decision, map[string]string{"kind": "chore", "plan": "8"}); len(got) != 2 {
+		t.Errorf("changed locked fields: %v", got)
+	}
+	if got := fieldAccess(userSubject(), "task", fieldEntity{Stored: map[string]string{"kind": "feature"}}); got != nil {
+		t.Errorf("nothing locked: %v", got)
+	}
+	if got := fieldAccess(userSubject(), "task", decision); len(got) != 2 {
+		t.Errorf("decision with a plan: %v", got)
 	}
 }

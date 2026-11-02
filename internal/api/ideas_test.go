@@ -86,6 +86,9 @@ func TestIdeasAPI(t *testing.T) {
 		t.Fatalf("created = %+v", priv)
 	}
 	p := "/api/v1/ideas/" + priv.ID
+	if priv.UpdatedAt.IsZero() {
+		t.Fatal("a created idea has no updated_at")
+	}
 
 	// Every read and write path refuses the admin a private idea with 404.
 	if ids := listIdeaIDs(t, doReq(t, h, "GET", "/api/v1/ideas", admin, nil)); len(ids) != 0 {

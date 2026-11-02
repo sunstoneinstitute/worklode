@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 // Idea is one row of the ideas table (WL-REQ-1799): private to its author
 // until shared, when it gains an intake task.
 type Idea struct {
@@ -15,6 +17,8 @@ type Idea struct {
 	Task         string     `json:"task"`      // the intake task id or ""
 	Submitted    string     `json:"submitted"` // created_at as YYYY-MM-DD
 	Intake       IdeaIntake `json:"intake"`
+	// UpdatedAt is the base a form draft is compared with (WL-REQ-1891).
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // IdeaIntake is the intake side of a shared idea. Decision is accept,

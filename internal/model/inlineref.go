@@ -48,6 +48,8 @@ type InlineRefs struct {
 type DeliverableDetail struct {
 	Deliverable
 	InlineRefs
+	// FieldAccess names the fields the caller may not change (WL-REQ-1890).
+	FieldAccess FieldAccess `json:"field_access,omitempty"`
 }
 
 // RefDeriveParams is the body of POST /api/v1/projects/{id}/refs/derive

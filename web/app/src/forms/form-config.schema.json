@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Worklode form config",
+  "description": "One schema-built form (WL-REQ-1886). Its schema's keywords are WL-REQ-1888's, its widgets and layouts WL-REQ-1893's.",
+  "type": "object",
+  "required": ["id", "schema", "layout"],
+  "anyOf": [{ "required": ["create"] }, { "required": ["edit"] }],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "create": { "$ref": "#/$defs/mode" },
+    "edit": { "$ref": "#/$defs/mode" },
+    "defaults": { "type": "object" },
+    "schema": {
+      "type": "object",
+      "required": ["type", "properties"],
+      "properties": {
+        "type": { "const": "object" },
+        "properties": { "type": "object" }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "required": ["type", "columns"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["main-sidebar", "single"] },
+        "columns": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "main": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+            "sidebar": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "mode": {
+      "type": "object",
+      "required": ["title", "submit"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "submit": {
+          "type": "object",
+          "required": ["method", "url", "label"],
+          "additionalProperties": false,
+          "properties": {
+            "method": { "enum": ["POST", "PATCH", "PUT"] },
+            "url": { "type": "string", "pattern": "^/api/v1/" },
+            "label": { "type": "string" }
+          }
+        }
+      }
+    },
+    "showWhen": {
+      "type": "object",
+      "required": ["field"],
+      "additionalProperties": false,
+      "oneOf": [{ "required": ["equals"] }, { "required": ["in"] }],
+      "properties": {
+        "field": { "type": "string" },
+        "equals": {},
+        "in": { "type": "array" }
+      }
+    },
+    "mobileOrder": { "type": "integer", "minimum": 1, "maximum": 999 },
+    "item": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["field"],
+          "additionalProperties": false,
+          "properties": {
+            "field": { "type": "string" },
+            "widget": { "enum": ["text", "textarea", "clearable", "select", "date", "person", "people", "richtext", "rows"] },
+            "placeholder": { "type": "string" },
+            "hideLabel": { "type": "boolean" },
+            "sendWhenChanged": { "type": "boolean" },
+            "sortBy": { "type": "string" },
+            "addWith": { "type": "string" },
+            "lockedWhen": { "type": "string" },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["field"],
+                "additionalProperties": false,
+                "properties": {
+                  "field": { "type": "string" },
+                  "title": { "type": "string" },
+                  "widget": { "enum": ["text", "date", "radio"] },
+                  "display": { "enum": ["name", "role"] },
+                  "notWith": { "type": "string" }
+                }
+              }
+            },
+            "showWhen": { "$ref": "#/$defs/showWhen" },
+            "mobileOrder": { "$ref": "#/$defs/mobileOrder" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["block", "markdown"],
+          "additionalProperties": false,
+          "properties": {
+            "block": { "const": "note" },
+            "markdown": { "type": "string" },
+            "title": { "type": "string" },
+            "collapsible": { "type": "boolean" },
+            "showWhen": { "$ref": "#/$defs/showWhen" },
+            "mobileOrder": { "$ref": "#/$defs/mobileOrder" }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -292,7 +293,13 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions, GovernedBy: governed, Generated: generated, Reviewers: reviewers}
+	entity, err := s.taskFieldEntity(r.Context(), subjectFrom(r), t)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions, GovernedBy: governed, Generated: generated, Reviewers: reviewers,
+		FieldAccess: fieldAccess(subjectFrom(r), "task", entity)}
 	if rev, err := s.st.ReviewForTask(r.Context(), id); err == nil {
 		resp.Review = rev
 	} else if !errors.Is(err, store.ErrNotFound) {
@@ -589,6 +596,32 @@ var patchStateFrom = map[string]string{
 	"in_review":   "in_progress",
 }
 
+// taskFieldEntity is a task as field decisions read it (WL-REQ-1889).
+func (s *server) taskFieldEntity(ctx context.Context, sub Subject, t *model.Task) (fieldEntity, error) {
+	roles, err := s.projectRoles(ctx, sub, "task", t.Project)
+	if err != nil {
+		return fieldEntity{}, err
+	}
+	stored := map[string]string{"kind": t.Kind}
+	if t.PlanDoc != 0 {
+		stored["plan"] = strconv.FormatInt(t.PlanDoc, 10)
+	}
+	return fieldEntity{Status: t.State, Stored: stored, Roles: roles}, nil
+}
+
+// taskGuardedFields is the fieldGrants-listed part of a PATCH body, in the
+// form taskFieldEntity stores it.
+func taskGuardedFields(req model.EditTaskInput, planDoc int64) map[string]string {
+	sent := map[string]string{}
+	if req.Kind != nil {
+		sent["kind"] = *req.Kind
+	}
+	if req.Plan != nil {
+		sent["plan"] = strconv.FormatInt(planDoc, 10)
+	}
+	return sent
+}
+
 // patchTask handles PATCH /api/v1/tasks/{id}: updates only the sent fields.
 // An optional "state" field requests a state transition in the same event;
 // see patchStateFrom for the three transitions PATCH may perform.
@@ -671,6 +704,21 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		planDoc = d.ID
+	}
+	if sent := taskGuardedFields(req, planDoc); len(sent) > 0 {
+		t, err := s.st.GetTask(r.Context(), id)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		entity, err := s.taskFieldEntity(r.Context(), subjectFrom(r), t)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		if s.refuseFields(w, r, permTaskWrite, refusedFields(subjectFrom(r), "task", entity, sent)) {
+			return
+		}
 	}
 	var stateFrom string
 	if req.State != nil {
@@ -1039,7 +1087,7 @@ var taskRouteDocs = map[string]routeDoc{
 	"PATCH /api/v1/tasks/{id}": {
 		summary:   "Update a task's fields; due is YYYY-MM-DD, and \"\" clears it; the body is Markdown or editor blocks",
 		request:   model.EditTaskInput{},
-		responses: map[int]any{http.StatusOK: model.Task{}, http.StatusUnprocessableEntity: model.ErrorResponse{}, http.StatusConflict: bodySaveConflict},
+		responses: map[int]any{http.StatusOK: model.Task{}, http.StatusForbidden: model.ErrorResponse{}, http.StatusUnprocessableEntity: model.ErrorResponse{}, http.StatusConflict: bodySaveConflict},
 	},
 	"PUT /api/v1/tasks/{id}/skills": {
 		summary:   "Set a task's pinned skills",
