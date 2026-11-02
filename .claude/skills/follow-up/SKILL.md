@@ -9,9 +9,10 @@ disable-model-invocation: true
 
 One item per run, landed on `main` with no PR and no approval gate. The
 pre-commit hooks are the entire safety net: docs-only changes skip CI, and
-nothing here opens a PR, so `gofmt`, `go vet`, the migration-number check and
-the design-doc frontmatter check are the only review the change gets. Do not
-`--no-verify`.
+nothing here opens a PR, so `gofmt`, `go vet`, the migration-number check,
+the design-doc frontmatter check and the `commit-msg` spec gate (WL-REQ-1549:
+a commit touching a `[gate]` path needs a `Spec:` trailer) are the only review
+the change gets. Do not `--no-verify`.
 
 ## 1. Refuse to start on a contended file
 

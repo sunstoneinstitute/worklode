@@ -19,9 +19,12 @@ flags and standing guidance. With no rule given, the rule is
    Claude Code and Codex), and escalate a task that hits ambiguity rather than
    letting it improvise.
 4. Verify the report against the brief's definition of done — including that
-   the commits are really on that worktree's branch — then push the branch,
-   open its PR, and arm auto-merge (`gh pr merge --auto --squash`) *before*
-   `lode work submit --json`. A worker that opened a review of the change does not arm auto-merge: the change merges after an `approved` verdict (WL-REQ-1779). `submit` submits the task for review and
+   the commits are really on that worktree's branch — then push the branch
+   and open its PR. If the change matches WL-REQ-1325's list (see /lode:done),
+   run `lode review add <task> --reason "<why>"` and do not arm auto-merge:
+   the change merges after an `approved` verdict (WL-REQ-1779). Otherwise arm
+   auto-merge (`gh pr merge --auto --squash`). Both come *before*
+   `lode work submit --json`. `submit` submits the task for review and
    releases the lease; it never pushes and never claims the work merged.
    `merged` arrives from the PR-merge webhook. A real blocker instead:
    `lode work block --on <id> --json`. Back to 1.
