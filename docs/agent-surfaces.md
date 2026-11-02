@@ -137,18 +137,22 @@ groups were synced more than 24 hours ago cannot decide a row that needs a
 group; the refusal says to run `lode login` or reconnect the MCP connector.
 A task-scoped token cannot decide at all.
 
-## Reviewing a document
+## Reviewing a document or a change
 
-`lode review` drives a document review over `/api/v1/reviews` (WL-REQ-1775):
-`add <ref>`, `list [--mine] [--open]`, `show <review-id> [--json]`,
+`lode review` drives a document or task-change review over `/api/v1/reviews` (WL-REQ-1775):
+`add <doc-ref|task-id> [--base-ref <sha>] [--reason "…"] [--allow-ready]`, `list [--mine] [--open]`, `show <review-id> [--json]`,
 `comment <review-id> --quote "…" --intent question|change_request|note --body "…"`,
 `comment <review-id> --thread <thread-id> --body "…"`, `resolve <thread-id>`,
 `approve <review-id>`, `set verdict changes_requested <review-id>`,
 `submit <review-id>` (author round at the document's current version) and
 `wait <review-id> [--after <seq>] [--timeout <s>]` (one JSON envelope, or
 nothing on timeout). `--quote` must occur exactly once in the document's
-current text, the rendered body for a spec. No skill names these yet; the
-worker text for reviews comes with WL-PLAN-133.
+current text, the rendered body for a spec. On a change review,
+`comment --anchor <repo>:<path>:<additions|deletions>:<line> [--anchor-text …]`
+opens a thread on a line, `submit` posts HEAD and re-anchors the open threads
+(one stage line per thread on stdout), and `show` prints the raw diff when run
+in the checkout. No skill names these yet; the worker text for reviews comes
+with WL-1381.
 
 ## Editing a body in the SPA
 

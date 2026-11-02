@@ -469,6 +469,9 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	if len(t.Reviewers) > 0 {
 		fmt.Fprintf(w, "  reviewers: %s\n", strings.Join(t.Reviewers, ", "))
 	}
+	if r := t.Review; r != nil {
+		fmt.Fprintf(w, "  review %d %s, opened by %s: %s\n", r.ID, r.State, r.OpenedBy, dash(r.Reason))
+	}
 	if t.NeedsDecomposition {
 		fmt.Fprintf(w, "  needs decomposition: yes\n")
 	}

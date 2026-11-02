@@ -236,6 +236,9 @@ func ReviewThreadRender(w io.Writer, t model.ReviewThread) {
 
 // threadSubject is a thread's subject and section: "rule 4 #sec-1".
 func threadSubject(a model.ReviewAnchor) string {
+	if a.Path != "" {
+		return a.Path
+	}
 	s := "doc " + strconv.FormatInt(a.Doc, 10)
 	if a.Rule != 0 {
 		s = "rule " + strconv.FormatInt(a.Rule, 10)
@@ -251,6 +254,9 @@ func threadSubject(a model.ReviewAnchor) string {
 
 func writeThread(w io.Writer, t model.ReviewThread, indent string) {
 	fmt.Fprintf(w, "%sthread %d  %s  %s  by %s\n", indent, t.ID, t.Intent, t.Status, t.Author)
+	if t.Anchor.Path != "" {
+		fmt.Fprintf(w, "%s  %s:%d %s  > %q\n", indent, t.Anchor.Path, t.Anchor.Line, t.Anchor.Side, t.Anchor.AnchorText)
+	}
 	if t.Anchor.Quote != "" {
 		fmt.Fprintf(w, "%s  > %q  [%d,%d)\n", indent, t.Anchor.Quote, t.Anchor.ByteStart, t.Anchor.ByteEnd)
 	}
@@ -258,4 +264,14 @@ func writeThread(w io.Writer, t model.ReviewThread, indent string) {
 		fmt.Fprintf(w, "%s  %d %s (%s) %s: %s\n", indent, m.Seq, m.Author, m.Role, LocalTime(m.CreatedAt),
 			strings.ReplaceAll(strings.TrimSpace(m.Body), "\n", "\n"+indent+"    "))
 	}
+}
+
+// ReanchorRender writes one line for a thread an author round re-anchored:
+// where it moved and by which relocation stage, or that it went obsolete.
+func ReanchorRender(w io.Writer, thread int64, path string, from, to int, stage string, moved bool) {
+	if !moved {
+		fmt.Fprintf(w, "thread %d  %s:%d  obsolete (%s)\n", thread, path, from, stage)
+		return
+	}
+	fmt.Fprintf(w, "thread %d  %s:%d -> %d  %s\n", thread, path, from, to, stage)
 }
