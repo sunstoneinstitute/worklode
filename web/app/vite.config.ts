@@ -60,6 +60,9 @@ export default defineConfig(({ mode }) => {
       // The default is one worker per core. On a large or shared host (the
       // self-hosted CI runner) the editor tests then starve and time out.
       maxWorkers: 4,
+      // Above the 5 s Testing Library wait in src/test/setup.ts, so a test
+      // that waits a few times on a slow runner is not cut off first.
+      testTimeout: 30_000,
     },
   }
 })
