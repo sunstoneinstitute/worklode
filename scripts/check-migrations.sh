@@ -124,7 +124,7 @@ renumber_to_next() {
 renumber_below() {
 	local floor=$1 taken=${2:-} key num
 	for key in $(list_files | strip_suffix | grep -v '^NEW' | sort -u || true); do
-		printf '%s\n' "$base_keys" | grep -Fxq "$key" && continue
+		grep -Fxq "$key" <<<"$base_keys" && continue
 		num=$((10#${key%%_*}))
 		case " $taken " in
 			*" $num "*) ;;
@@ -204,7 +204,7 @@ max=${max:-0}
 [ "$max" -ge "$base_max" ] || max=$base_max
 # Digit width for numbering NEW keys: whatever existing migrations use.
 num_width=4
-first=$(printf '%s\n' $keys $base_keys | head -1)
+first=$(printf '%s\n' $keys $base_keys | sed -n 1p)
 if [ -n "$first" ]; then
 	first=${first%%_*}
 	num_width=${#first}
@@ -234,12 +234,12 @@ for dup in $dups; do
 
 	keep=""
 	for key in $dup_keys; do
-		if printf '%s\n' "$base_keys" | grep -Fxq "$key"; then
+		if grep -Fxq "$key" <<<"$base_keys"; then
 			keep=$key
 			break
 		fi
 	done
-	[ -n "$keep" ] || keep=$(printf '%s\n' "$dup_keys" | head -1)
+	[ -n "$keep" ] || keep=$(printf '%s\n' "$dup_keys" | sed -n 1p)
 
 	for key in $(printf '%s\n' "$dup_keys" | grep -Fxv "$keep"); do
 		renumber_to_next "$key"
