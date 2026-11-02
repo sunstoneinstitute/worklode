@@ -197,6 +197,8 @@ Flags: --server
   Flags: --focused
 - `lode review comment` — Open a thread on quoted text of the subject, or reply to a thread
   Flags: --anchor, --anchor-text, --body, --intent, --quote, --thread
+- `lode review exec` — Review at the crit desk: launch crit with finish hooks that land each finish as a round
+  Flags: --focused, --worktree
 - `lode review guide` — Show the review's guide; --focused applies its skims
   Flags: --focused
 - `lode review import` — Land a crit finish payload as a reviewer round with its open comments as threads

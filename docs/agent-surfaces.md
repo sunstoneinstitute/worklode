@@ -180,6 +180,18 @@ Comments whose anchor already has a thread are skipped, so re-running is safe.
 Stdout is one line naming the round and the counts; trimmed, split and folded
 comments are named on stderr.
 
+`lode review exec <id> [--focused] [--worktree <dir>]` is the human desk
+(WL-REQ-1776): it launches crit with `HOME` set to a fresh temp directory
+holding a `.crit.config.json` copied from the user's, with `author` set to the
+caller and both `on_finish_*` hooks set to `lode review import --review <id>`
+(plus `--anchors` for a document). A document is written there with `lode doc
+show --anchors` and crit runs on the copy; a change runs `crit` in the task's
+worktree, which must be on the task's branch and hold no `.crit.config.json`
+or `.crit/hooks/`. `--focused` sets `LODE_REVIEW_FOCUSED=1` for the hook. On
+exit it prints the rounds that landed, or how to re-run the import from the
+desk's `finish.json`. `lode doctor`'s `crit` row warns when crit is missing or
+not at the tag in `internal/review/critjson/PIN`.
+
 ## Editing a body in the SPA
 
 The SPA edits a body at two routes (WL-REQ-1868): `/projects/$projectId/$kind/$n/edit`
