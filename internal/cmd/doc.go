@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"slices"
@@ -520,6 +521,7 @@ type docLintFileReport struct {
 func newDocShowCmd() *cobra.Command {
 	var version int
 	var editable bool
+	var anchors, out string
 	cmd := &cobra.Command{
 		Use:               "show <ref>",
 		ValidArgsFunction: docRefAt(0),
@@ -558,6 +560,9 @@ func newDocShowCmd() *cobra.Command {
 				cli.DocEditableRender(cmd.OutOrStdout(), d)
 				return nil
 			}
+			if anchors != "" {
+				return writeAnchored(cmd, d, anchors, out)
+			}
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
 				return nil
@@ -568,8 +573,39 @@ func newDocShowCmd() *cobra.Command {
 	}
 	cmd.Flags().IntVar(&version, "version", 0, "get a specific past version instead of the current one (WL-REQ-166)")
 	cmd.Flags().BoolVar(&editable, "editable", false, "print only the body, each rule's heading naming it ({#sec-3 rule=WL-REQ-12}), to edit and feed back to doc edit or doc revise --file (WL-REQ-1680)")
-	cmd.MarkFlagsMutuallyExclusive("version", "editable")
+	cmd.Flags().StringVar(&anchors, "anchors", "", "write the body as the server returns it (to --out or stdout) and a line-to-byte sidecar to this file, for lode review exec (WL-REQ-1776)")
+	cmd.Flags().StringVar(&out, "out", "", "with --anchors: write the body to this file instead of stdout")
+	cmd.MarkFlagsMutuallyExclusive("version", "editable", "anchors")
 	return cmd
+}
+
+// docAnchorsSidecar is the file `doc show --anchors` writes: which version
+// the body copy came from and the line runs that map crit's line comments to
+// byte offsets in it (WL-REQ-1776, WL-REQ-1317). The copy is never read back;
+// the sidecar is.
+type docAnchorsSidecar struct {
+	Doc     int64                 `json:"doc"`
+	Version int                   `json:"version"`
+	Lines   []designdoc.AnchorRun `json:"lines"`
+}
+
+// writeAnchored writes d's body byte-for-byte to out (stdout when empty) and
+// the sidecar to anchors.
+func writeAnchored(cmd *cobra.Command, d model.DocDetail, anchors, out string) error {
+	side, err := json.MarshalIndent(docAnchorsSidecar{
+		Doc: d.ID, Version: d.Version, Lines: designdoc.AnchorRuns(string(d.Body), d.Sections),
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(anchors, append(side, '\n'), 0o644); err != nil {
+		return err
+	}
+	if out == "" {
+		_, err = io.WriteString(cmd.OutOrStdout(), string(d.Body))
+		return err
+	}
+	return os.WriteFile(out, []byte(d.Body), 0o644)
 }
 
 // newDocVersionsCmd lists a document's version history (WL-REQ-164): its
