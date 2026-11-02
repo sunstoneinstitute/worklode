@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
 
 // skewedBody has a section inserted ahead of the ones that were already
@@ -121,7 +123,7 @@ func TestDocShowAnchors(t *testing.T) {
 	if string(got) != string(docs.Body) {
 		t.Errorf("written body differs from GetDoc's:\n%q\n%q", got, docs.Body)
 	}
-	var sc docAnchorsSidecar
+	var sc designdoc.AnchorSidecar
 	raw, _ := os.ReadFile(side)
 	if err := json.Unmarshal(raw, &sc); err != nil {
 		t.Fatalf("sidecar: %v\n%s", err, raw)

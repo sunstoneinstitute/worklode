@@ -20,6 +20,7 @@ type Metrics struct {
 	verdicts        *prometheus.CounterVec
 	skimmed         *prometheus.CounterVec
 	skimsRefused    *prometheus.CounterVec
+	intentsClassed  *prometheus.CounterVec
 }
 
 var (
@@ -30,6 +31,8 @@ var (
 	reviewerKinds = []string{"human", "agent"}
 	skimDeciders  = []string{"author", "policy"}
 	refusalRules  = []string{"non-mechanical", "no-diff", "document"}
+	// intentOutcomes are how a crit thread's intent was set (WL-REQ-1885).
+	intentOutcomes = []string{"jev", "default_unconfigured", "default_error"}
 )
 
 // NewMetrics registers the review instruments on reg and pre-initialises
@@ -70,8 +73,17 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_review_guide_skims_refused_total",
 			Help: "Proposed skims the server refused, by the rule that fired (WL-REQ-1327).",
 		}, []string{"rule"}),
+		intentsClassed: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_review_intent_classifications_total",
+			Help: "Intents set by lode-server for crit threads, by outcome and intent (WL-REQ-1885).",
+		}, []string{"outcome", "intent"}),
 	}
-	reg.MustRegister(m.rounds, m.threads, m.openThreads, m.questionLatency, m.timeToVerdict, m.verdicts, m.skimmed, m.skimsRefused)
+	reg.MustRegister(m.rounds, m.threads, m.openThreads, m.questionLatency, m.timeToVerdict, m.verdicts, m.skimmed, m.skimsRefused, m.intentsClassed)
+	for _, o := range intentOutcomes {
+		for _, i := range intents {
+			m.intentsClassed.WithLabelValues(o, i)
+		}
+	}
 	for _, d := range skimDeciders {
 		m.skimmed.WithLabelValues(d)
 	}
@@ -159,4 +171,13 @@ func (m *Metrics) SkimRefused(rule string) {
 		return
 	}
 	m.skimsRefused.WithLabelValues(rule).Inc()
+}
+
+// IntentClassified counts one thread whose intent the server set; outcome is
+// one of intentOutcomes.
+func (m *Metrics) IntentClassified(outcome, intent string) {
+	if m == nil {
+		return
+	}
+	m.intentsClassed.WithLabelValues(outcome, intent).Inc()
 }

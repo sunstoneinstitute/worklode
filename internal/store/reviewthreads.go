@@ -24,8 +24,9 @@ var threadIntents = map[string]bool{"note": true, "change_request": true, "quest
 // opens a bare note (WL-REQ-1319). A range anchor (Version, ByteStart,
 // ByteEnd, Quote) is checked against the stored Markdown of that version and
 // its DocAnchor derived from the range; a section anchor (DocAnchor alone) is
-// stored with no range (WL-REQ-1667) and is legal only on a bare note. The
-// client stated the intent, so intent_classifier stays null (WL-REQ-1885).
+// stored with no range (WL-REQ-1667) and is legal only on a bare note.
+// in.IntentClassifier is set only when lode-server classified the intent of a
+// crit thread; a stated intent leaves intent_classifier null (WL-REQ-1885).
 func OpenThread(tx *sql.Tx, now time.Time, reviewID int64, in model.OpenThreadInput,
 	actorID, taskID, sessionID string, eventID int64) (*model.ReviewThread, error) {
 	body := strings.TrimSpace(in.Body)
@@ -85,6 +86,7 @@ func OpenThread(tx *sql.Tx, now time.Time, reviewID int64, in model.OpenThreadIn
 	th := &model.ReviewThread{
 		Review: reviewID, Anchor: a, Intent: in.Intent, Status: "open", Author: actorID,
 		RaisedByTask: taskID, RaisedBySession: sessionID, CreatedAt: ts,
+		IntentClassifier: in.IntentClassifier, IntentConfidence: in.IntentConfidence,
 	}
 	var version, start, end sql.NullInt64
 	if isRange {
@@ -94,13 +96,21 @@ func OpenThread(tx *sql.Tx, now time.Time, reviewID int64, in model.OpenThreadIn
 	}
 	if err := tx.QueryRow(
 		`INSERT INTO review_threads (review_id, doc_id, rule_id, version, byte_start, byte_end, quote, doc_anchor,
-		                             raised_by_task, raised_by_session, intent, status, author_id, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12, $13) RETURNING id`,
+		                             raised_by_task, raised_by_session, intent, status, author_id, created_at,
+		                             intent_classifier, intent_confidence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12, $13, $14, $15) RETURNING id`,
 		nullID(reviewID), nullID(a.Doc), nullID(a.Rule), version, start, end, nullText(a.Quote), nullText(a.DocAnchor),
-		nullText(taskID), nullText(sessionID), in.Intent, actorID, ts).Scan(&th.ID); err != nil {
+		nullText(taskID), nullText(sessionID), in.Intent, actorID, ts,
+		nullText(in.IntentClassifier), intentConfidence(in)).Scan(&th.ID); err != nil {
 		return nil, fmt.Errorf("open thread: %w", err)
 	}
 	return th, firstThreadMessage(tx, ts, th, rev, a.Doc, body, eventID)
+}
+
+// intentConfidence is the intent_confidence column: null unless the server
+// classified the intent.
+func intentConfidence(in model.OpenThreadInput) sql.NullFloat64 {
+	return sql.NullFloat64{Float64: in.IntentConfidence, Valid: in.IntentClassifier != ""}
 }
 
 // firstThreadMessage adds th's opening message and, for a question, emits
@@ -135,13 +145,16 @@ func openChangeThread(tx *sql.Tx, now time.Time, rev *model.Review, in model.Ope
 	th := &model.ReviewThread{
 		Review: rev.ID, Anchor: a, Intent: in.Intent, Status: "open", Author: actorID,
 		RaisedByTask: taskID, RaisedBySession: sessionID, CreatedAt: ts,
+		IntentClassifier: in.IntentClassifier, IntentConfidence: in.IntentConfidence,
 	}
 	if err := tx.QueryRow(
 		`INSERT INTO review_threads (review_id, task_id, repo, path, side, line_number, anchor_text, blob_sha,
-		                             raised_by_task, raised_by_session, intent, status, author_id, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12, $13) RETURNING id`,
+		                             raised_by_task, raised_by_session, intent, status, author_id, created_at,
+		                             intent_classifier, intent_confidence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12, $13, $14, $15) RETURNING id`,
 		rev.ID, rev.Task, a.Repo, a.Path, a.Side, a.Line, a.AnchorText, a.BlobSHA,
-		nullText(taskID), nullText(sessionID), in.Intent, actorID, ts).Scan(&th.ID); err != nil {
+		nullText(taskID), nullText(sessionID), in.Intent, actorID, ts,
+		nullText(in.IntentClassifier), intentConfidence(in)).Scan(&th.ID); err != nil {
 		return nil, fmt.Errorf("open change thread: %w", err)
 	}
 	return th, firstThreadMessage(tx, ts, th, rev, 0, body, eventID)
