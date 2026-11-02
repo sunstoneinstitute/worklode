@@ -1,0 +1,3 @@
+v0.23.2 4458cced170c23dde92070c12758f5942048359a
+hooks: on_finish_unresolved, on_finish_approved, each optionally suffixed :files, :diff, :live or :preview; values inline:<cmd> (sh -c) or file:<path>; the finish JSON arrives on stdin
+config: global ~/.crit.config.json (os.UserHomeDir) merged with project <cwd>/.crit.config.json, where cwd is crit's os.Getwd with symlinks resolved, not the repo root; project hooks are trust-gated, global hooks are not
