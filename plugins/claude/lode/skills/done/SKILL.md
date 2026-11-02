@@ -18,7 +18,7 @@ gh pr merge --auto --squash
 That hands the PR to the repo's merge queue, which lands it once its checks
 pass with no human in the path (docs/github-advanced-setup.md). `lode work
 submit` does none of this, and the task's move to `merged` comes from the
-PR-merge webhook, not from you.
+PR-merge webhook, not from you. A worker that opened a review of the change does not arm auto-merge: the change merges after an `approved` verdict (WL-REQ-1779).
 
 Finally run `lode work submit --json`, which submits the task for review
 (`in_review`) and releases the lease. Report the result and surface the
