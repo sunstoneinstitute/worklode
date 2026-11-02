@@ -1083,6 +1083,8 @@ func (s *server) registerAPI(r *router, reg prometheus.Registerer) {
 	r.api("POST /api/v1/reviews/{id}/rounds", s.submitRound)
 	r.api("GET /api/v1/reviews/{id}/rounds/{n}", s.getRound)
 	r.api("GET /api/v1/reviews/{id}/events", s.reviewEvents)
+	r.api("PUT /api/v1/reviews/{id}/guide", s.putReviewGuide)
+	r.api("GET /api/v1/reviews/{id}/guide", s.getReviewGuide)
 	r.api("GET /api/v1/docs/{id}/notes", s.listDocNotes)
 	r.api("POST /api/v1/docs/{id}/reviewers", s.setDocReviewers)
 	r.api("POST /api/v1/docs/{id}/request-approval", s.requestDocApproval)

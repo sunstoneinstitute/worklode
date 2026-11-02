@@ -5957,6 +5957,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/{id}/guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the review's guide; skims only with focused=true. 404 when none was proposed */
+        get: {
+            parameters: {
+                query?: {
+                    focused?: boolean;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReviewGuide"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        /** Propose the review's guide with the round's diff; the author only. Refused skims are listed, not fatal */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["GuideProposal"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReviewGuideResult"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Any non-2xx answer */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{id}/rounds": {
         parameters: {
             query?: never;
@@ -10874,6 +10985,15 @@ export interface components {
             scrutiny?: boolean;
             skims?: components["schemas"]["GuideSpan"][];
         };
+        GuideProposal: {
+            diff?: string;
+            files?: components["schemas"]["GuideFile"][] | null;
+            overview?: string;
+        };
+        GuideRefusal: {
+            path?: string;
+            rule?: string;
+        };
         GuideSpan: {
             decided_by?: string;
             from?: number;
@@ -11615,6 +11735,10 @@ export interface components {
             overview?: string;
             round?: number;
             stale?: boolean;
+        };
+        ReviewGuideResult: {
+            guide?: components["schemas"]["ReviewGuide"];
+            refused?: components["schemas"]["GuideRefusal"][] | null;
         };
         ReviewMessage: {
             author?: string;

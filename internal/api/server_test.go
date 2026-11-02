@@ -396,6 +396,7 @@ func TestMetricsEndpointDomainFamilies(t *testing.T) {
 		"worklode_deletes_total",
 		"worklode_review_rounds_total",
 		"worklode_review_open_threads",
+		"worklode_review_skimmed_blocks_total",
 		"worklode_body_locks_held",
 		"worklode_body_lock_events_total",
 		"worklode_body_save_conflicts_total",
