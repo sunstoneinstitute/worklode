@@ -167,6 +167,15 @@ lode doc transfer <ref> --to <actor>    # owner-gated; move ownership to another
 Every command also takes `--json`. Full command-by-command reference,
 regenerated from the CLI itself so it can't drift: `references/commands.md`.
 
+## Reviewing a document or a change
+
+A human reviews at the desk: `lode review exec <review-id>` launches crit and
+lands each finish as a round (`--focused` applies the guide's skims). An agent
+works through the API: `lode review show <review-id> --json`, then `lode review
+comment <review-id> --quote "…" --intent question|change_request|note --body
+"…"` or `--thread <thread-id> --body "…"`, then `lode review approve
+<review-id>`. `lode review --help` lists the rest.
+
 ## Docs, briefly
 
 A **spec is an arrangement of rules**. A rule has a stable number, a kind,
