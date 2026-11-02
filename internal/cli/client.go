@@ -271,6 +271,21 @@ func ServerURLFrom(startDir string) string {
 	return ""
 }
 
+// projectKeyFrom is the configured project key, read with ServerURLFrom's
+// contract; "" when none is set.
+func projectKeyFrom(startDir string) string {
+	for _, path := range configSearchPath(startDir) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if cfg, err := parseConfig(string(data)); err == nil && cfg.ProjectKey != "" {
+			return cfg.ProjectKey
+		}
+	}
+	return ""
+}
+
 // RefLinksFrom reports whether this checkout wants Worklode references
 // rendered as clickable links — the ref_links key, read with the same cheap,
 // dir-scoped, keychain-free contract ServerURLFrom has. Repo-local config

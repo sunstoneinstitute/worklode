@@ -436,12 +436,13 @@ func TaskTable(w io.Writer, tasks []model.Task) {
 // and assignee: the `lode task show --status` view, and the top of
 // TaskDetailRender.
 func TaskHeaderRender(w io.Writer, t model.TaskDetail) {
-	fmt.Fprintf(w, "%s  %s\n", t.ID, t.Title)
-	fmt.Fprintf(w, "  project:  %s\n", t.Project)
-	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
-	fmt.Fprintf(w, "  kind:     %s\n", t.Kind)
-	fmt.Fprintf(w, "  state:    %s\n", t.State)
-	fmt.Fprintf(w, "  assignee: %s\n", dash(t.Assignee))
+	lk := linkerFor(w)
+	lk.printf(w, "%s  %s\n", t.ID, t.Title)
+	lk.printf(w, "  project:  %s\n", t.Project)
+	lk.printf(w, "  priority: %s\n", t.Priority)
+	lk.printf(w, "  kind:     %s\n", t.Kind)
+	lk.printf(w, "  state:    %s\n", t.State)
+	lk.printf(w, "  assignee: %s\n", dash(t.Assignee))
 }
 
 // TaskDetailRender prints one task with its edges, blocked status, and lease
@@ -450,40 +451,41 @@ func TaskHeaderRender(w io.Writer, t model.TaskDetail) {
 // /blob/ references in the rendered body (MarkdownWithBase); pass "" when
 // none is known.
 func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
+	lk := linkerFor(w)
 	TaskHeaderRender(w, t)
 	if t.Hierarchy.Parent != nil {
-		fmt.Fprintf(w, "  parent:   %s  %s (%s)\n",
+		lk.printf(w, "  parent:   %s  %s (%s)\n",
 			t.Hierarchy.Parent.ID, t.Hierarchy.Parent.Title, t.Hierarchy.Parent.State)
 	}
 	if t.Hierarchy.Progress.Total > 0 {
-		fmt.Fprintf(w, "  progress: %d/%d children closed\n",
+		lk.printf(w, "  progress: %d/%d children closed\n",
 			t.Hierarchy.Progress.Closed, t.Hierarchy.Progress.Total)
 	}
 	if t.Concern != "" {
-		fmt.Fprintf(w, "  concern:  %s\n", t.Concern)
+		lk.printf(w, "  concern:  %s\n", t.Concern)
 	}
 	if t.Milestone != "" {
-		fmt.Fprintf(w, "  milestone: %s\n", t.Milestone)
+		lk.printf(w, "  milestone: %s\n", t.Milestone)
 	}
 	GovernanceRender(w, "  ", t.GovernedBy)
 	if len(t.Reviewers) > 0 {
-		fmt.Fprintf(w, "  reviewers: %s\n", strings.Join(t.Reviewers, ", "))
+		lk.printf(w, "  reviewers: %s\n", strings.Join(t.Reviewers, ", "))
 	}
 	if r := t.Review; r != nil {
-		fmt.Fprintf(w, "  review %d %s, opened by %s: %s\n", r.ID, r.State, r.OpenedBy, dash(r.Reason))
+		lk.printf(w, "  review %d %s, opened by %s: %s\n", r.ID, r.State, r.OpenedBy, dash(r.Reason))
 	}
 	if t.NeedsDecomposition {
-		fmt.Fprintf(w, "  needs decomposition: yes\n")
+		lk.printf(w, "  needs decomposition: yes\n")
 	}
 	if t.HumanOnly {
-		fmt.Fprintf(w, "  human only: yes (not offered by lode next; claim it by id)\n")
+		lk.printf(w, "  human only: yes (not offered by lode next; claim it by id)\n")
 	}
 	if t.Blocked {
-		fmt.Fprintf(w, "  blocked:  yes\n")
+		lk.printf(w, "  blocked:  yes\n")
 	}
 	if t.Lease != nil {
-		fmt.Fprintf(w, "  held by:  %s (expires %s)\n", t.Lease.ActorID, LocalTime(t.Lease.ExpiresAt))
-		fmt.Fprintf(w, "  worktree: %s\n", t.Lease.Worktree)
+		lk.printf(w, "  held by:  %s (expires %s)\n", t.Lease.ActorID, LocalTime(t.Lease.ExpiresAt))
+		lk.printf(w, "  worktree: %s\n", t.Lease.Worktree)
 	}
 	if len(t.AgentSessions) > 0 {
 		fmt.Fprintln(w, "\n  sessions:")
@@ -503,18 +505,18 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	if len(t.Edges.Out) > 0 || len(t.Edges.In) > 0 {
 		fmt.Fprintln(w, "\nedges:")
 		for _, e := range t.Edges.Out {
-			fmt.Fprintf(w, "  %s %s %s\n", t.ID, e.Type, e.To)
+			lk.printf(w, "  %s %s %s\n", t.ID, e.Type, e.To)
 		}
 		for _, e := range t.Edges.In {
-			fmt.Fprintf(w, "  %s %s %s\n", e.From, e.Type, t.ID)
+			lk.printf(w, "  %s %s %s\n", e.From, e.Type, t.ID)
 		}
 	}
 	if len(t.Generated) > 0 {
 		fmt.Fprintln(w, "\ngenerated:")
 		for _, g := range t.Generated {
-			fmt.Fprintf(w, "  %s  %s (%s)\n", g.Ref, g.Title, g.Status)
+			lk.printf(w, "  %s  %s (%s)\n", g.Ref, g.Title, g.Status)
 			for _, r := range g.Reviews {
-				fmt.Fprintf(w, "    review %s  %s (%s)\n", r.ID, r.Title, r.State)
+				lk.printf(w, "    review %s  %s (%s)\n", r.ID, r.Title, r.State)
 			}
 		}
 	}
@@ -542,15 +544,16 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 // BriefRender prints a task's brief as a readable summary — the `lode task
 // brief` and `lode work next` view.
 func BriefRender(w io.Writer, b model.Brief) {
-	fmt.Fprintf(w, "%s: %s\n", b.Task.ID, b.Task.Title)
-	fmt.Fprintf(w, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
-	fmt.Fprintf(w, "branch: %s\n", b.Branch)
+	lk := linkerFor(w)
+	lk.printf(w, "%s: %s\n", b.Task.ID, b.Task.Title)
+	lk.printf(w, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
+	lk.printf(w, "branch: %s\n", b.Branch)
 	StalePlanWarning(w, b.StalePlan)
 	if len(b.Task.Secrets) > 0 {
-		fmt.Fprintf(w, "secrets: %s\n", strings.Join(b.Task.Secrets, ", "))
+		lk.printf(w, "secrets: %s\n", strings.Join(b.Task.Secrets, ", "))
 	}
 	if b.Lease != nil {
-		fmt.Fprintf(w, "lease: %s (expires %s)\n", b.Lease.Worktree, LocalTime(b.Lease.ExpiresAt))
+		lk.printf(w, "lease: %s (expires %s)\n", b.Lease.Worktree, LocalTime(b.Lease.ExpiresAt))
 	}
 	BlockersRender(w, b.OpenBlockers, b.BlockingPlans)
 	GovernanceRender(w, "", b.GovernedBy)
@@ -564,13 +567,13 @@ func BriefRender(w io.Writer, b model.Brief) {
 	if len(b.Skills.Pinned) > 0 || len(b.Skills.Matches) > 0 || len(b.Skills.Warnings) > 0 {
 		fmt.Fprintln(w, "\nSkills:")
 		for _, p := range b.Skills.Pinned {
-			fmt.Fprintf(w, "  pinned  %s — %s (content in brief)\n", p.Name, p.Description)
+			lk.printf(w, "  pinned  %s — %s (content in brief)\n", p.Name, p.Description)
 		}
 		for _, m := range b.Skills.Matches {
-			fmt.Fprintf(w, "  %.4f  %s — %s\n", m.Score, m.Name, m.Description)
+			lk.printf(w, "  %.4f  %s — %s\n", m.Score, m.Name, m.Description)
 		}
 		for _, warn := range b.Skills.Warnings {
-			fmt.Fprintf(w, "  warning: %s\n", warn)
+			lk.printf(w, "  warning: %s\n", warn)
 		}
 	}
 }
@@ -579,9 +582,10 @@ func BriefRender(w io.Writer, b model.Brief) {
 // each, shared by `lode show <task>` and `lode task brief`. An invariant the
 // task inherits from its project is marked as such (WL-REQ-165).
 func GovernanceRender(w io.Writer, indent string, gov []model.TaskGovernance) {
+	lk := linkerFor(w)
 	for _, g := range gov {
 		if g.Source == "invariant" {
-			fmt.Fprintf(w, "%sgoverned by: %s  %s (project invariant)\n", indent, g.Rule, g.Heading)
+			lk.printf(w, "%sgoverned by: %s  %s (project invariant)\n", indent, g.Rule, g.Heading)
 			continue
 		}
 		pin := ""
@@ -589,12 +593,12 @@ func GovernanceRender(w io.Writer, indent string, gov []model.TaskGovernance) {
 			pin = fmt.Sprintf(", pinned v%d", g.Pinned)
 		}
 		if g.Current != g.RuleVersion {
-			fmt.Fprintf(w, "%sgoverned by: %s  %s (v%d, rule now v%d%s)\n", indent, g.Rule, g.Heading, g.RuleVersion, g.Current, pin)
+			lk.printf(w, "%sgoverned by: %s  %s (v%d, rule now v%d%s)\n", indent, g.Rule, g.Heading, g.RuleVersion, g.Current, pin)
 		} else {
-			fmt.Fprintf(w, "%sgoverned by: %s  %s (v%d%s)\n", indent, g.Rule, g.Heading, g.RuleVersion, pin)
+			lk.printf(w, "%sgoverned by: %s  %s (v%d%s)\n", indent, g.Rule, g.Heading, g.RuleVersion, pin)
 		}
 		if len(g.ResolvesTo) > 0 {
-			fmt.Fprintf(w, "%s  -> %s\n", indent, strings.Join(g.ResolvesTo, ", "))
+			lk.printf(w, "%s  -> %s\n", indent, strings.Join(g.ResolvesTo, ", "))
 		}
 	}
 }
@@ -603,10 +607,11 @@ func GovernanceRender(w io.Writer, indent string, gov []model.TaskGovernance) {
 // ref is empty. Shared by `lode work next`, `lode work resume` and `lode task
 // claim`, which is why the sentence lives here rather than in each of them.
 func StalePlanWarning(w io.Writer, ref string) {
+	lk := linkerFor(w)
 	if ref == "" {
 		return
 	}
-	fmt.Fprintf(w, "warning: plan %s is stale — task text may predate the amendment (WL-REQ-170)\n", ref)
+	lk.printf(w, "warning: plan %s is stale — task text may predate the amendment (WL-REQ-170)\n", ref)
 }
 
 // BlockersRender prints what is holding a task up, shared by `lode task
@@ -620,16 +625,17 @@ func StalePlanWarning(w io.Writer, ref string) {
 // endpoints that assemble reading lists inherit the same rule from the
 // `status = 'accepted'` filters they already apply.
 func BlockersRender(w io.Writer, blockers []model.BriefBlocker, plans []model.DocRef) {
+	lk := linkerFor(w)
 	if len(blockers) > 0 {
 		fmt.Fprintln(w, "blocked by:")
 		for _, blk := range blockers {
-			fmt.Fprintf(w, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
+			lk.printf(w, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
 		}
 	}
 	if len(plans) > 0 {
 		fmt.Fprintln(w, "blocked by plans:")
 		for _, p := range plans {
-			fmt.Fprintf(w, "  - %s: %s (%s)\n", cmp.Or(p.Ref, p.Slug), p.Title, p.Status)
+			lk.printf(w, "  - %s: %s (%s)\n", cmp.Or(p.Ref, p.Slug), p.Title, p.Status)
 		}
 	}
 }

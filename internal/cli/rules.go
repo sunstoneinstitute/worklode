@@ -65,41 +65,42 @@ var ruleEdgeInverse = map[string]string{"amends": "amendedBy", "supersedes": "su
 // RuleRender is the human view of one rule: its ref and heading, status
 // and version, where it is arranged, then its text.
 func RuleRender(w io.Writer, c model.Rule) {
-	fmt.Fprintf(w, "%s  %s\n", c.Ref, c.Heading)
-	fmt.Fprintf(w, "  kind:     %s\n", c.Kind)
+	lk := linkerFor(w)
+	lk.printf(w, "%s  %s\n", c.Ref, c.Heading)
+	lk.printf(w, "  kind:     %s\n", c.Kind)
 	if c.ConceptIRI != "" {
-		fmt.Fprintf(w, "  concept:  %s\n", c.ConceptIRI)
+		lk.printf(w, "  concept:  %s\n", c.ConceptIRI)
 	}
-	fmt.Fprintf(w, "  status:   %s\n", c.Status)
+	lk.printf(w, "  status:   %s\n", c.Status)
 	if c.Change == "normalize" {
-		fmt.Fprintf(w, "  version:  %d (normalize)\n", c.Version)
+		lk.printf(w, "  version:  %d (normalize)\n", c.Version)
 	} else {
-		fmt.Fprintf(w, "  version:  %d\n", c.Version)
+		lk.printf(w, "  version:  %d\n", c.Version)
 	}
 	if c.Owner != "" {
-		fmt.Fprintf(w, "  owner:    %s\n", c.Owner)
+		lk.printf(w, "  owner:    %s\n", c.Owner)
 	}
 	if len(c.Tags) > 0 {
-		fmt.Fprintf(w, "  tags:     %s\n", strings.Join(c.Tags, ", "))
+		lk.printf(w, "  tags:     %s\n", strings.Join(c.Tags, ", "))
 	}
-	fmt.Fprintf(w, "  updated:  %s\n", LocalTime(c.UpdatedAt))
+	lk.printf(w, "  updated:  %s\n", LocalTime(c.UpdatedAt))
 	for _, a := range c.ArrangedIn {
-		fmt.Fprintf(w, "  arranged: %s#%s (depth %d, v%d)\n", a.DocRef, a.Anchor, a.Depth, a.RuleVersion)
+		lk.printf(w, "  arranged: %s#%s (depth %d, v%d)\n", a.DocRef, a.Anchor, a.Depth, a.RuleVersion)
 	}
 	for _, p := range c.CoveredBy {
-		fmt.Fprintf(w, "  covered:  %s (%s)\n", p.DocRef, p.Status)
+		lk.printf(w, "  covered:  %s (%s)\n", p.DocRef, p.Status)
 	}
 	for _, gt := range c.GovernedTasks {
-		fmt.Fprintf(w, "  governs:  %s %s (%s, %s, v%d)\n", gt.ID, gt.Title, gt.State, gt.Source, gt.RuleVersion)
+		lk.printf(w, "  governs:  %s %s (%s, %s, v%d)\n", gt.ID, gt.Title, gt.State, gt.Source, gt.RuleVersion)
 	}
 	for _, e := range c.Edges {
 		switch {
 		case e.From == c.Ref:
-			fmt.Fprintf(w, "  %-9s %s %s (%s)\n", e.Type+":", e.To, e.ToHeading, e.Source)
+			lk.printf(w, "  %-9s %s %s (%s)\n", e.Type+":", e.To, e.ToHeading, e.Source)
 		case ruleEdgeInverse[e.Type] != "":
-			fmt.Fprintf(w, "  %-9s %s %s (%s)\n", ruleEdgeInverse[e.Type]+":", e.From, e.FromHeading, e.Source)
+			lk.printf(w, "  %-9s %s %s (%s)\n", ruleEdgeInverse[e.Type]+":", e.From, e.FromHeading, e.Source)
 		default:
-			fmt.Fprintf(w, "  %-9s %s %s (%s, incoming)\n", e.Type+":", e.From, e.FromHeading, e.Source)
+			lk.printf(w, "  %-9s %s %s (%s, incoming)\n", e.Type+":", e.From, e.FromHeading, e.Source)
 		}
 	}
 	if c.Body != "" {
@@ -113,10 +114,11 @@ func RuleRender(w io.Writer, c model.Rule) {
 // the "Referenced by" block for the nodes other than rules that name it. Rule
 // to rule references already show as edges (WL-REQ-1852).
 func RuleDetailRender(w io.Writer, d model.RuleDetail) {
+	lk := linkerFor(w)
 	RuleRender(w, d.Rule)
 	for _, r := range d.Out {
 		if r.ToKind != "rule" {
-			fmt.Fprintf(w, "  %-9s %s %s (%s)\n", "references:", r.ToRef, r.ToTitle, r.Source)
+			lk.printf(w, "  %-9s %s %s (%s)\n", "references:", r.ToRef, r.ToTitle, r.Source)
 		}
 	}
 	in := model.InlineRefs{}
