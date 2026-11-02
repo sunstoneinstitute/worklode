@@ -23,6 +23,8 @@ type Review struct {
 	Reason  string         `json:"reason,omitempty"`
 	Threads []ReviewThread `json:"threads,omitempty"`
 	Rounds  []ReviewRound  `json:"rounds,omitempty"`
+	// Guide is the latest guide, when the author proposed one (WL-REQ-1326).
+	Guide *ReviewGuide `json:"guide,omitempty"`
 }
 
 // ReviewThread is one anchored conversation. IntentClassifier and
@@ -207,6 +209,8 @@ type ReviewGuide struct {
 	Files    []GuideFile `json:"files"`
 	Round    int         `json:"round"`
 	Stale    bool        `json:"stale,omitempty"`
+	// DiffBlob is the hash of the task blob holding the round's diff.
+	DiffBlob string `json:"diff_blob,omitempty"`
 }
 
 // GuideProposal is the author's PUT body. Diff is the unified diff at the
