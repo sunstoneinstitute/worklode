@@ -206,3 +206,28 @@ func TestTaskViewDependsOnEdges(t *testing.T) {
 		t.Errorf("Blocks = %v, want [WL-3]", v.Blocks)
 	}
 }
+
+// TestTaskPageListsGoverningRules: the Edges card names each governing rule
+// with its link, and marks a link made against an older rule version.
+func TestTaskPageListsGoverningRules(t *testing.T) {
+	t.Parallel()
+	task := &model.Task{ID: "WL-1", Project: "proj", Title: "t"}
+	view := taskView(nil, mdrender.ProjectKeys{}, task, ui.CockpitProject{}, false, nil, nil, nil)
+	view.GovernedBy = []model.TaskGovernance{
+		{Rule: "WL-REQ-12", RuleVersion: 1, Current: 3, Heading: "Leases", Source: "plan", URL: "/projects/proj/rule/12"},
+		{Rule: "WL-RULE-46", RuleVersion: 2, Current: 2, Heading: "One actor per person", Source: "invariant", URL: "/projects/proj/rule/46"},
+	}
+	var b strings.Builder
+	if err := ui.Task(view).Render(context.Background(), &b); err != nil {
+		t.Fatalf("render Task: %v", err)
+	}
+	html := b.String()
+	for _, want := range []string{`href="/projects/proj/rule/12"`, ">WL-REQ-12<", "(v1, rule now v3)", `href="/projects/proj/rule/46"`, ">WL-RULE-46<"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("task page lacks %q", want)
+		}
+	}
+	if strings.Contains(html, "rule now v2") {
+		t.Error("a current link is marked as behind")
+	}
+}

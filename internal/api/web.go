@@ -679,6 +679,10 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 
 	view := taskView(s.mdcache, s.projectKeys(ctx, t.Project), t, project, blocked, entries, out, in)
 	view.PRs = taskPRRows(openPRs, ci)
+	if view.GovernedBy, err = s.st.GovernedBy(ctx, id); err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
 	if view.Generated, err = s.st.GeneratedDocs(ctx, id); err != nil {
 		s.webStoreErr(w, err)
 		return

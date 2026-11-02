@@ -173,6 +173,7 @@ templ Task(v TaskView) {
 							@taskEdgeIDs("Follow-ups", v.FollowUps)
 							@taskEdgeID("Duplicate of", v.DuplicateOf)
 							@taskEdgeIDs("Duplicates", v.Duplicates)
+							@taskGovernedBy(v.GovernedBy)
 						</ul>
 					</div>
 				</details>
@@ -272,6 +273,25 @@ templ taskReviews(reviews []model.Task) {
 			}
 		}
 	</div>
+}
+
+// taskGovernedBy renders the task's governing rules as one Edges row, marking
+// a link made against an older version of the rule.
+templ taskGovernedBy(rules []model.TaskGovernance) {
+	<li>
+		Governed by:
+		if len(rules) == 0 {
+			<span class="muted">none</span>
+		} else {
+			for _, g := range rules {
+				<a href={ g.URL } title={ g.Heading }>{ g.Rule }</a>
+				if g.RuleVersion > 0 && g.RuleVersion < g.Current {
+					<span class="muted">(v{ strconv.Itoa(g.RuleVersion) }, rule now v{ strconv.Itoa(g.Current) })</span>
+				}
+				{ " " }
+			}
+		}
+	</li>
 }
 
 // taskEdgeID renders one labelled edge row that holds at most one task id
