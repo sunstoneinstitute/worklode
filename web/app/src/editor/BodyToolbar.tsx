@@ -265,6 +265,8 @@ function LinkDialog({ editor, url, onClose }: { editor: BodyEditorInstance; url:
   const [value, setValue] = useState(url)
   function submit(e: FormEvent) {
     e.preventDefault()
+    // The toolbar can sit in a form of its own, which this portal bubbles to
+    e.stopPropagation()
     editor.createLink(value.trim())
     onClose()
   }
