@@ -186,6 +186,10 @@ Proposed `lode` items on approval, ordered by `blocks`:
    renumbered (029 is taken on `main`). Independent of 2; its output feeds
    review surfaces when both exist.
 
+WL-SPEC-84 is planned as WL-PLAN-132 to WL-PLAN-135.
+`worklode_review_rounds_total{client}` decides when the crit interim retires
+(WL-RULE-1333).
+
 One review task per spec, humans assigned; the PR #29 branch closes in favor
 of these.
 

@@ -293,7 +293,8 @@ Design items landed in WL-SPEC-77. These are the mechanical leftovers.
   delegates the interview to `superpowers:brainstorming` / `grill-with-docs`;
   `/lode:spec` is the entry point. The file corpus it wanted gated is gone
   (WL-SPEC-77), so what is left of this item is the single authoring door and, if
-  anyone still wants grep over the corpus, a `lode doc export`. Customising or
+  anyone still wants grep over the corpus, a `lode doc export` (`lode doc show
+  --anchors` writes a body and its sidecar; the review page shows reviews). Customising or
   hook-patching the brainstorming skill is the wrong
   lever — it forks a skill we do not own, or makes behaviour depend on invisible
   mutation.
@@ -343,7 +344,7 @@ Design items landed in WL-SPEC-77. These are the mechanical leftovers.
   `/projects/{id}/reviews`, `/projects/{id}/decisions`,
   `/projects/{id}/documents`, `/projects/{id}/activity`, `/ideas`, `/intake`,
   `/reviews`, `/deliveries`) are placeholders naming their owning spec
-  section; replace each with its real implementation as Parts 2–4 land.
+  section (`/projects/{id}/reviews` now has a real page, WL-REQ-1775); replace each with its real implementation as Parts 2–4 land.
   Deliverables has left this list — it is a built destination now, and so has
   Knowledge: it lands on the document corpus at `/docs` (WL-127), with the
   graph-backed expert views still to join it there.
