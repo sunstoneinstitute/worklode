@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/review/critjson"
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 // `lode review`: the verbs of the WL-REQ-1775 catalogue. The change arm of
@@ -29,7 +32,7 @@ func newReviewCmd() *cobra.Command {
 		Short: "Reviews of documents and of task changes: anchored threads, verdicts, author rounds",
 	}
 	cmd.AddCommand(newReviewAddCmd(), newReviewListCmd(), newReviewShowCmd(), newReviewCommentCmd(),
-		newReviewResolveCmd(), newReviewGuideCmd(), newReviewApproveCmd(), newReviewSetCmd(), newReviewSubmitCmd(), newReviewWaitCmd(), newReviewImportCmd())
+		newReviewResolveCmd(), newReviewGuideCmd(), newReviewApproveCmd(), newReviewSetCmd(), newReviewSubmitCmd(), newReviewWaitCmd(), newReviewImportCmd(), newReviewExecCmd())
 	return cmd
 }
 
@@ -589,4 +592,232 @@ func importCritFinish(cmd *cobra.Command, id int64, anchors string) error {
 		}
 	}
 	return nil
+}
+
+// newReviewExecCmd is the interim terminal desk (WL-REQ-1776, WL-REQ-1316):
+// crit, unmodified, launched against the review's subject with its finish
+// hooks pointing at `lode review import`. Everything it writes lands in one
+// temp directory outside the working tree.
+func newReviewExecCmd() *cobra.Command {
+	var focused bool
+	var worktreeDir string
+	cmd := &cobra.Command{
+		Use:   "exec <review-id> [--focused] [--worktree <dir>]",
+		Short: "Review at the crit desk: launch crit with finish hooks that land each finish as a round",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := parseID(args[0], "review")
+			if err != nil {
+				return err
+			}
+			return execDesk(cmd, id, focused, worktreeDir)
+		},
+	}
+	cmd.Flags().BoolVar(&focused, "focused", false, "declare that the guide's skims apply; the round lands with focused = true (WL-RULE-1320)")
+	cmd.Flags().StringVar(&worktreeDir, "worktree", "", "for a change: the task's worktree, when it is not the working directory")
+	return cmd
+}
+
+func execDesk(cmd *cobra.Command, id int64, focused bool, worktreeDir string) error {
+	ctx := cmd.Context()
+	c, cfg, err := newAPIClientWithConfig()
+	if err != nil {
+		return err
+	}
+	r, _, err := c.GetReview(ctx, id)
+	if err != nil {
+		return err
+	}
+	if r.State == "closed" {
+		return fmt.Errorf("review %d is closed", id)
+	}
+	if r.Doc == 0 && r.Task == "" {
+		return fmt.Errorf("review %d is of a %s: the crit desk reviews a document or a change", id, r.Subject)
+	}
+	me, _, err := c.WhoAmI(ctx)
+	if err != nil {
+		return err
+	}
+	critPath, err := exec.LookPath("crit")
+	if err != nil {
+		return fmt.Errorf("crit is not on PATH: install crit %s (lode doctor checks it)", critjson.PinnedTag())
+	}
+
+	// Validate a change subject's worktree before writing anything.
+	critDir := ""
+	if r.Task != "" {
+		if critDir, err = deskWorktree(ctx, c, r.Task, worktreeDir); err != nil {
+			return err
+		}
+	}
+
+	tmp, err := os.MkdirTemp("", fmt.Sprintf("lode-desk-%d-", id))
+	if err != nil {
+		return err
+	}
+	// crit compares its symlink-resolved cwd with $HOME to tell project
+	// config from global; resolved, the two are one file in document mode
+	// and its hooks are not trust-gated.
+	if tmp, err = filepath.EvalSymlinks(tmp); err != nil {
+		return err
+	}
+	w := cmd.ErrOrStderr()
+	if r.Guide != nil {
+		path, err := materializeGuide(r, focused, tmp)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "guide: %s\n", path)
+	}
+
+	var critArgs []string
+	sidecar := ""
+	if r.Doc != 0 {
+		d, _, err := c.GetDoc(ctx, r.Doc)
+		if err != nil {
+			return err
+		}
+		name := d.Slug
+		if name == "" {
+			name = fmt.Sprintf("doc-%d", d.ID)
+		}
+		copyPath := filepath.Join(tmp, name+".md")
+		sidecar = filepath.Join(tmp, name+".anchors.json")
+		if err := writeAnchored(cmd, d, sidecar, copyPath); err != nil {
+			return err
+		}
+		critDir, critArgs = tmp, []string{copyPath}
+	}
+
+	var user []byte
+	if home, err := os.UserHomeDir(); err == nil {
+		if user, err = os.ReadFile(filepath.Join(home, ".crit.config.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	conf, err := deskConfig(user, id, sidecar, me.ID)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(tmp, ".crit.config.json"), conf, 0o600); err != nil {
+		return err
+	}
+
+	before := len(r.Rounds)
+	crit := exec.CommandContext(ctx, critPath, critArgs...)
+	crit.Dir = critDir
+	crit.Env = deskEnv(os.Environ(), tmp, cfg, focused)
+	crit.Stdin, crit.Stdout, crit.Stderr = cmd.InOrStdin(), cmd.OutOrStdout(), w
+	runErr := crit.Run()
+
+	// crit keeps a hook's stdout to itself, so the landed rounds are read back.
+	reimport := fmt.Sprintf("lode review import --review %d", id)
+	if sidecar != "" {
+		reimport += " --anchors " + shellQuote(sidecar)
+	}
+	reimport += " < " + shellQuote(filepath.Join(tmp, "finish.json"))
+	after, _, err := c.GetReview(ctx, id)
+	switch {
+	case err != nil:
+		fmt.Fprintf(w, "could not read review %d back: %v\ndesk: %s\n", id, err, tmp)
+	case len(after.Rounds) > before:
+		fmt.Fprintln(cmd.OutOrStdout()) // crit's own output may end mid-line
+		for _, rd := range after.Rounds[before:] {
+			fmt.Fprintf(cmd.OutOrStdout(), "review %d round %d (%s) landed from crit\n", id, rd.Round, rd.Verdict)
+		}
+		fmt.Fprintf(w, "desk: %s\n", tmp)
+	default:
+		if _, statErr := os.Stat(filepath.Join(tmp, "finish.json")); statErr == nil {
+			fmt.Fprintf(w, "crit finished but no round landed; re-run the import:\n  %s\n", reimport)
+		} else {
+			fmt.Fprintf(w, "crit exited without finishing; nothing landed\n")
+		}
+		fmt.Fprintf(w, "desk: %s\n", tmp)
+	}
+	if runErr != nil {
+		return fmt.Errorf("crit: %w", runErr)
+	}
+	return nil
+}
+
+// deskWorktree resolves the worktree crit reviews a change in: dir, else the
+// working directory, checked out on the task's branch and holding no crit
+// project config, which would take the finish hooks over (WL-REQ-1776).
+func deskWorktree(ctx context.Context, c *cli.Client, taskID, dir string) (string, error) {
+	if dir == "" {
+		var err error
+		if dir, err = workingDir(); err != nil {
+			return "", err
+		}
+	}
+	root, ok := worktree.Root(dir)
+	if !ok {
+		return "", fmt.Errorf("%s is not inside a git worktree: run from the task's worktree or pass --worktree", dir)
+	}
+	t, _, err := c.GetTask(ctx, taskID)
+	if err != nil {
+		return "", err
+	}
+	if branch, err := gitexec.Text(root, "rev-parse", "--abbrev-ref", "HEAD"); err != nil {
+		return "", err
+	} else if t.Branch != "" && branch != t.Branch {
+		return "", fmt.Errorf("%s is on branch %s, not task %s's branch %s: pass --worktree <dir>", root, branch, taskID, t.Branch)
+	}
+	for _, p := range []string{".crit.config.json", filepath.Join(".crit", "hooks")} {
+		if _, err := os.Stat(filepath.Join(root, p)); err == nil {
+			return "", fmt.Errorf("%s holds crit project config that would replace the desk's finish hooks: move it aside and re-run", filepath.Join(root, p))
+		}
+	}
+	return root, nil
+}
+
+// deskConfig is the desk's crit config: the user's (keys kept as written)
+// with author set and hooks replaced by the two finish hooks, both
+// `lode review import`. The whole hooks map is replaced, so a user hook keyed
+// on a mode (on_finish_unresolved:diff) cannot win over the desk's.
+func deskConfig(user []byte, id int64, sidecar, author string) ([]byte, error) {
+	conf := map[string]any{}
+	if len(bytes.TrimSpace(user)) > 0 {
+		if err := json.Unmarshal(user, &conf); err != nil {
+			return nil, fmt.Errorf("read ~/.crit.config.json: %w", err)
+		}
+	}
+	hook := fmt.Sprintf("inline:lode review import --review %d", id)
+	if sidecar != "" {
+		hook += " --anchors " + shellQuote(sidecar)
+	}
+	conf["author"] = author
+	conf["hooks"] = map[string]string{"on_finish_unresolved": hook, "on_finish_approved": hook}
+	return json.MarshalIndent(conf, "", "  ")
+}
+
+// deskEnv is crit's environment: the caller's, with HOME and TMPDIR set to
+// the desk so crit reads the desk's config and import saves finish.json there,
+// the lode server and token passed explicitly because the hook's lode cannot
+// find the user's config under the desk's HOME, and LODE_REVIEW_FOCUSED set
+// only for a focused read.
+func deskEnv(environ []string, tmp string, cfg cli.Config, focused bool) []string {
+	set := map[string]string{"HOME": tmp, "TMPDIR": tmp, "LODE_SERVER": cfg.ServerURL, "LODE_TOKEN": cfg.Token}
+	if focused {
+		set["LODE_REVIEW_FOCUSED"] = "1"
+	}
+	var env []string
+	for _, kv := range environ {
+		k, _, _ := strings.Cut(kv, "=")
+		if _, ok := set[k]; ok || k == "LODE_REVIEW_FOCUSED" {
+			continue
+		}
+		env = append(env, kv)
+	}
+	for k, v := range set {
+		if v != "" {
+			env = append(env, k+"="+v)
+		}
+	}
+	return env
+}
+
+// shellQuote quotes s for sh -c, which crit runs an inline hook through.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

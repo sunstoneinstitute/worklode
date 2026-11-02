@@ -293,11 +293,11 @@ func proposeGuide(cmd *cobra.Command, idArg, file, overview string) error {
 	return nil
 }
 
-// materializeGuide writes the review's guide JSON to a temp file outside the
-// working tree for crit to be pointed at (WL-REQ-1776) and returns its path.
+// materializeGuide writes the review's guide JSON into dir, outside the
+// working tree, for crit to be pointed at (WL-REQ-1776) and returns its path.
 // Without focused the skims are emptied (WL-RULE-1320), the same split as
 // GET .../guide?focused=.
-func materializeGuide(r model.Review, focused bool) (string, error) {
+func materializeGuide(r model.Review, focused bool, dir string) (string, error) {
 	if r.Guide == nil {
 		return "", fmt.Errorf("review %d has no guide", r.ID)
 	}
@@ -312,6 +312,6 @@ func materializeGuide(r model.Review, focused bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(os.TempDir(), fmt.Sprintf("lode-review-%d-round-%d.json", r.ID, r.Round))
+	path := filepath.Join(dir, fmt.Sprintf("lode-review-%d-round-%d.json", r.ID, r.Round))
 	return path, os.WriteFile(path, b, 0o644)
 }

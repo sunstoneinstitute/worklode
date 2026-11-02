@@ -1,0 +1,15 @@
+#!/bin/sh
+# A stand-in for crit in TestReviewDesk: checks HOME is the desk, echoes its
+# argv, and runs the desk's on_finish_unresolved hook as crit would (sh -c),
+# with the finish payload $FAKE_CRIT_FINISH on stdin.
+set -eu
+case "$HOME" in
+*/lode-desk-*) ;;
+*) echo "fake crit: HOME $HOME is not a lode desk" >&2; exit 2 ;;
+esac
+conf="$HOME/.crit.config.json"
+[ -f "$conf" ] || { echo "fake crit: no $conf" >&2; exit 2; }
+echo "fake crit argv:$*"
+hook=$(sed -n 's/^ *"on_finish_unresolved": "inline:\(.*\)",\{0,1\}$/\1/p' "$conf")
+[ -n "$hook" ] || { echo "fake crit: no on_finish_unresolved hook in $conf" >&2; exit 2; }
+sh -c "$hook" < "$FAKE_CRIT_FINISH"

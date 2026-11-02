@@ -310,7 +310,7 @@ func TestReviewGuide(t *testing.T) {
 		t.Fatalf("show --json = %q (%v), want a fresh guide embedded", out, err)
 	}
 	for _, focused := range []bool{true, false} {
-		path, err := materializeGuide(rev, focused)
+		path, err := materializeGuide(rev, focused, t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}

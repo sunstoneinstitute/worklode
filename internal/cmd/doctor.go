@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/gate"
 	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/review/critjson"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -266,7 +268,39 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 	// (WL-REQ-1860). A dry run, so the check writes nothing.
 	checks = append(checks, checkPendingDerive(ctx, c, cfg.CurrentProject, serverReachable))
 
+	// 11. crit, the runtime dependency of `lode review exec` only (WL-REQ-1776).
+	checks = append(checks, checkCrit(ctx))
+
 	return checks
+}
+
+// checkCrit reports whether crit is on PATH and its version against the tag
+// internal/review/critjson/PIN names. crit is needed only for `lode review
+// exec`, so neither a missing crit nor another version fails the run.
+func checkCrit(ctx context.Context) doctorCheck {
+	const name = "crit"
+	tag := critjson.PinnedTag()
+	fix := "install crit " + tag + " (github.com/tomasz-tomczyk/crit) for lode review exec"
+	path, err := exec.LookPath("crit")
+	if err != nil {
+		return warn(name, "not on PATH", fix)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "--version").Output()
+	if err != nil {
+		return warn(name, path+": crit --version failed: "+err.Error(), fix)
+	}
+	first, _, _ := strings.Cut(string(out), "\n")
+	f := strings.Fields(first)
+	version := ""
+	if len(f) >= 2 {
+		version = f[1]
+	}
+	if "v"+strings.TrimPrefix(version, "v") != tag {
+		return warn(name, fmt.Sprintf("%s is %q, pinned %s", path, first, tag), fix)
+	}
+	return pass(name, path+" "+tag)
 }
 
 // checkPendingDerive dry-runs derive over every doc, rule and task of the
