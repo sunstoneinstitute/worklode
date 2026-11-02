@@ -157,6 +157,16 @@ in the checkout. `show` prints the guide (or "no guide", or STALE) before the
 threads and `--json` embeds it. No skill names these yet; the worker text for reviews comes
 with WL-1381.
 
+`lode doc show <ref> --anchors <map> [--out <file>]` is the document side of the
+crit bridge (WL-REQ-1776). It writes the body exactly as the server returns it
+to `--out` (stdout when omitted) and a sidecar to `<map>`:
+`{"doc": <id>, "version": <n>, "lines": [{"from", "to", "byte_offset", "anchor", "heading"}]}`.
+Lines are 1-based and inclusive, runs are contiguous, `byte_offset` is the UTF-8
+offset of the run's first byte, and each section heading is its own run with
+`heading` true. Text before the first section has an empty anchor. The document
+copy is never read back. The sidecar is. The flag is exclusive with `--version`
+and `--editable`.
+
 ## Editing a body in the SPA
 
 The SPA edits a body at two routes (WL-REQ-1868): `/projects/$projectId/$kind/$n/edit`
