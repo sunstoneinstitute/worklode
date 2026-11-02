@@ -204,7 +204,7 @@ max=${max:-0}
 [ "$max" -ge "$base_max" ] || max=$base_max
 # Digit width for numbering NEW keys: whatever existing migrations use.
 num_width=4
-first=$(printf '%s\n' $keys $base_keys | head -1)
+first=$(printf '%s\n' $keys $base_keys | sed -n 1p)
 if [ -n "$first" ]; then
 	first=${first%%_*}
 	num_width=${#first}
@@ -239,7 +239,7 @@ for dup in $dups; do
 			break
 		fi
 	done
-	[ -n "$keep" ] || keep=$(printf '%s\n' "$dup_keys" | head -1)
+	[ -n "$keep" ] || keep=$(printf '%s\n' "$dup_keys" | sed -n 1p)
 
 	for key in $(printf '%s\n' "$dup_keys" | grep -Fxv "$keep"); do
 		renumber_to_next "$key"
