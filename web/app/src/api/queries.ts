@@ -402,3 +402,60 @@ export function useThreads(subject: ThreadSubject | undefined) {
     },
   })
 }
+
+export type Review = components["schemas"]["Review"]
+export type ReviewGuide = components["schemas"]["ReviewGuide"]
+
+/** One review with its threads, rounds and verdicts (WL-REQ-1775) */
+export function useReview(id: string) {
+  return useQuery({
+    queryKey: ["reviews", "detail", id],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/reviews/{id}", { params: { path: { id } } })
+      if (error) throw failure(error, response)
+      return data
+    },
+  })
+}
+
+/** The review's guide, with its skims only when `focused`; null when none was proposed (404) */
+export function useReviewGuide(id: string, focused: boolean) {
+  return useQuery({
+    queryKey: ["reviews", "guide", id, focused],
+    queryFn: async (): Promise<ReviewGuide | null> => {
+      const { data, error, response } = await api.GET("/api/v1/reviews/{id}/guide", { params: { path: { id }, query: { focused } } })
+      if (response.status === 404) return null
+      if (error) throw failure(error, response)
+      return data
+    },
+  })
+}
+
+/**
+ * A project's open reviews. The list route has no project filter, so this keeps
+ * the reviews whose subject belongs to the project: its specs, plans and rules
+ * by id, its tasks by key prefix.
+ */
+export function useProjectReviews(projectId: string) {
+  const open = useQuery({
+    queryKey: ["reviews", "open"],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/reviews", { params: { query: { state: "open" } } })
+      if (error) throw failure(error, response)
+      return data ?? []
+    },
+  })
+  const project = useProject(projectId)
+  const specs = useProjectDocs(projectId, "spec")
+  const plans = useProjectDocs(projectId, "plan")
+  const rules = useProjectRules(projectId)
+  const queries = [open, project, specs, plans, rules]
+  const data = (() => {
+    if (!open.data || !project.data || !specs.data || !plans.data || !rules.data) return undefined
+    const docs = new Set([...specs.data, ...plans.data].map((d) => d.id))
+    const ruleIds = new Set(rules.data.map((r) => r.id))
+    const prefix = `${project.data.key}-`
+    return open.data.filter((r) => (r.doc ? docs.has(r.doc) : r.rule ? ruleIds.has(r.rule) : r.task?.startsWith(prefix)))
+  })()
+  return { data, isPending: data === undefined && !queries.some((q) => q.isError), isError: queries.some((q) => q.isError), refetch: () => queries.forEach((q) => void q.refetch()) }
+}

@@ -100,7 +100,13 @@ function seed() {
   const locks = new MockLocks()
   // Review threads on documents and rules (WL-REQ-1322)
   const threads: ReviewThread[] = []
-  return { threads, me, projects, crew, participants, leadHandoffs, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured, locks }
+  // Reviews (WL-REQ-1322): an open review of a p1 spec and one of a p2 spec, and guides by review id
+  const reviews: Review[] = [
+    { id: 1, subject: "doc", doc: 1, state: "open", base_ref: "1", round: 0, opened_by: "ada", opened_at: new Date(Date.now() - 3 * 86_400_000).toISOString(), reviewers: ["stig"], rounds: [], threads: [] },
+    { id: 2, subject: "doc", doc: 4, state: "open", base_ref: "1", round: 0, opened_by: "bob", opened_at: new Date().toISOString(), reviewers: ["ada"], rounds: [], threads: [] },
+  ]
+  const guides: Record<number, ReviewGuide> = {}
+  return { reviews, guides, threads, me, projects, crew, participants, leadHandoffs, tasks, summaries, docs, rules, documents, ideas, litmusTests, preResearch, intakeConfigured, locks }
 }
 
 type BodyLock = Ok<"/api/v1/locks/{kind}/{id}", "get">
@@ -152,6 +158,8 @@ export function visibleIdea(id: string) {
   return db.ideas.find((i) => i.id === id && (i.author === db.me.id || i.shared))
 }
 
+export type Review = Ok<"/api/v1/reviews/{id}", "get">
+export type ReviewGuide = Ok<"/api/v1/reviews/{id}/guide", "get">
 export type ReviewThread = Ok<"/api/v1/threads/{tid}/resolve", "post">
 export type Doc = NonNullable<Ok<"/api/v1/docs", "get">["docs"]>[number]
 export type Rule = Ok<"/api/v1/rules", "get">[number]

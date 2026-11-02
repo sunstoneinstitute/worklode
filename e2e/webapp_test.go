@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -564,4 +565,94 @@ func TestWebAppIdeas(t *testing.T) {
 	}
 	resp, body = call(bare.URL, http.MethodPost, "/api/v1/ideas/"+loose.ID+"/share", "", a)
 	want(resp, body, http.StatusConflict)
+}
+
+// TestWebAppReviewPage proves a review's page is the SPA shell and that the
+// session reads the review and its verdict over /api/v1 (WL-REQ-1775,
+// WL-REQ-1305).
+func TestWebAppReviewPage(t *testing.T) {
+	ctx := context.Background()
+	st := store.OpenTestStore(t)
+	iss := oidctest.NewIssuer(t)
+	handler, _, err := api.NewServer(st, api.Config{
+		BootstrapToken: bootstrapToken,
+		OIDCIssuer:     iss.URL(),
+		OIDCClientID:   iss.ClientID,
+		PublicURL:      "http://localhost:8080",
+		SessionSecret:  "e2e-session-secret",
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{ID: "web", Name: "Web Project", Key: "WEB"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	clients := map[string]*cli.Client{}
+	for _, id := range []string{"owner", "a"} {
+		if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{ID: id, Kind: "human", DisplayName: id}); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+		tok, _, err := admin.CreateToken(ctx, id, "e2e review page", nil)
+		if err != nil {
+			t.Fatalf("create token for %s: %v", id, err)
+		}
+		clients[id] = cli.NewClient(cli.Config{ServerURL: srv.URL, Token: tok.Token})
+	}
+	doc, _, err := clients["owner"].CreateDoc(ctx, model.CreateDocInput{
+		Project: "web", Kind: "spec", Number: 1, Slug: "reviewed", Body: reviewSpecBody, Owner: "owner",
+	})
+	if err != nil {
+		t.Fatalf("create spec: %v", err)
+	}
+	if _, _, err := clients["owner"].SetDocReviewers(ctx, doc.ID, []string{"a"}); err != nil {
+		t.Fatalf("set reviewers: %v", err)
+	}
+	if _, _, err := clients["owner"].SubmitDoc(ctx, doc.ID); err != nil {
+		t.Fatalf("submit doc: %v", err)
+	}
+	rev, _, err := clients["owner"].OpenReview(ctx, model.OpenReviewInput{Doc: doc.ID})
+	if err != nil {
+		t.Fatalf("open review: %v", err)
+	}
+	if _, _, err := clients["a"].SubmitReviewRound(ctx, rev.ID, model.ReviewRoundInput{Verdict: "approved", Client: "web"}); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+
+	session := webSession(t, srv.URL, iss, "alice")
+	get := func(path string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+		if err != nil {
+			t.Fatalf("build GET %s: %v", path, err)
+		}
+		req.Header.Set("Cookie", "wl_session="+session)
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp, string(b)
+	}
+
+	page := "/projects/web/reviews/" + strconv.FormatInt(rev.ID, 10)
+	resp, body := get(page)
+	if resp.StatusCode != http.StatusOK || strings.Contains(body, `<nav aria-label="Primary"`) {
+		t.Fatalf("GET %s = %d, want the SPA shell (body %.200s)", page, resp.StatusCode, body)
+	}
+	resp, body = get("/api/v1/reviews/" + strconv.FormatInt(rev.ID, 10))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("session GET review = %d (body %s)", resp.StatusCode, body)
+	}
+	var got model.Review
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("decode review: %v", err)
+	}
+	if len(got.Rounds) != 1 || got.Rounds[0].Verdict != "approved" || got.Rounds[0].Actor != "a" {
+		t.Errorf("review rounds = %+v, want one approved round by a", got.Rounds)
+	}
 }

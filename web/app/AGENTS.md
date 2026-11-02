@@ -128,7 +128,7 @@ any future page:
 (browser history), and `<Link to="...">` is typed, so a link to a missing
 route fails the type check. The pages are `/projects`, `/tasks`,
 `/projects/$projectId` (the Overview), `/projects/$projectId/crew`, `/projects/$projectId/documents`,
-`/projects/$projectId/tasks`, `/ideas`, `/ideas/new`, `/ideas/$ideaId/edit` and `/ideas/$ideaId/intake`; anything else
+`/projects/$projectId/tasks`, `/projects/$projectId/reviews/$reviewId` (read-only, WL-REQ-1775), `/ideas`, `/ideas/new`, `/ideas/$ideaId/edit` and `/ideas/$ideaId/intake`; anything else
 renders `NotFound`. `src/routes.json` lists the same paths for the Go
 server (WL-REQ-1305), and `src/router.test.tsx` fails when the tree and
 the file disagree. Add a page to both, and to `spaRoutes` in
@@ -227,6 +227,8 @@ lock, which `LockedDialog.tsx` explains (WL-REQ-1868). Saves send
 (documents, and tasks through their form) and `/projects/$projectId/rule/$n/edit` (rules). The
 MSW mocks keep lock state in `db.locks` (`src/mocks/db.ts`), served by the lock
 handlers in `src/mocks/handlers.ts`.
+
+The review page (`src/pages/Review.tsx`) has no form: it reads the review and, when the latest round is focused, the focused guide, and lists threads with `ThreadItem readOnly`. The project Documents page lists open reviews (`ProjectReviews`).
 
 A document or rule body shows its threads (WL-REQ-1317): `src/editor/threads.ts`
 paints each open thread's byte range as a ProseMirror decoration, never a mark,

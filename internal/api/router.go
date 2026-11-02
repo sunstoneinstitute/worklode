@@ -109,8 +109,9 @@ var routeGuards = map[string]routeGuard{
 	"GET /projects/{projectId}":           guarded(permWebRead),
 	// The rule body editor; the document and task one is served through
 	// "GET /projects/{proj}/{kind}/{n}/{ver}" (spaViaCanonical).
-	"GET /projects/{projectId}/rule/{n}/edit": guarded(permWebRead),
-	"GET /projects/{id}/progress":             guarded(permWebRead),
+	"GET /projects/{projectId}/rule/{n}/edit":      guarded(permWebRead),
+	"GET /projects/{projectId}/reviews/{reviewId}": guarded(permWebRead),
+	"GET /projects/{id}/progress":                  guarded(permWebRead),
 	// The Progress page's live update stream (WL-REQ-1339): permWebRead like the
 	// page itself, not permEventStream — a frame carries nothing the page's
 	// own reader could not already see (WL-REQ-1786).
