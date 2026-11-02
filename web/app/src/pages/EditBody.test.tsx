@@ -1,7 +1,8 @@
-import { act, cleanup, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { HttpResponse, http } from "msw"
-import { beforeAll, beforeEach, expect, test } from "vitest"
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest"
+import { browser } from "@/api/queries"
 import type { components } from "@/api/schema"
 import { db } from "@/mocks/db"
 import { server } from "@/mocks/node"
@@ -117,7 +118,7 @@ test("a lost lock keeps the unsaved blocks read-only until retaken", async () =>
   expect(kept).toHaveTextContent("mine v1 text")
   expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled()
   expect(screen.getByRole("status")).toHaveTextContent(/no longer hold the lock/i)
-  expect(JSON.parse(localStorage.getItem(draftKey()!)!).sha).toBe(await sha("v1 text\n"))
+  expect(JSON.parse(localStorage.getItem(draftKey()!)!).values.sha).toBe(await sha("v1 text\n"))
   await userEvent.click(screen.getByRole("button", { name: "Take the lock again" }))
   await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
   expect(await body()).toHaveTextContent("mine v1 text")
@@ -159,12 +160,92 @@ test("/projects/web/spec/89/edit opens the document editor", async () => {
   expect(await body()).toHaveTextContent("spec text")
 })
 
-test("/projects/web/feature/9/edit opens the task editor and saves the task", async () => {
-  await renderApp("/projects/web/feature/9/edit")
-  expect(await screen.findByRole("heading", { name: "WEB-9: Ninth task" })).toBeInTheDocument()
-  await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
-  await typeAndSave(" more")
-  await waitFor(() => expect(db.tasks.find((t) => t.id === "WEB-9")?.body).toBe(" moretask text\n"))
+describe("the task form (WL-REQ-1892)", () => {
+  const task = () => db.tasks.find((t) => t.id === "WEB-9")!
+  type Sent = components["schemas"]["EditTaskInput"]
+
+  function captureSaves() {
+    const sent: Sent[] = []
+    server.events.on("request:start", async ({ request }) => {
+      if (request.method === "PATCH") sent.push(await request.clone().json())
+    })
+    return sent
+  }
+
+  beforeEach(() => {
+    vi.spyOn(browser, "assign").mockImplementation(() => {})
+    return () => {
+      server.events.removeAllListeners()
+      vi.restoreAllMocks()
+    }
+  })
+
+  test("/projects/web/feature/9/edit saves the body under the lock, with the other fields", async () => {
+    const sent = captureSaves()
+    await renderApp("/projects/web/feature/9/edit")
+    expect(await screen.findByRole("heading", { name: "WEB-9: Ninth task" })).toBeInTheDocument()
+    await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+    await userEvent.type(screen.getByLabelText("Title"), "!")
+    await typeAndSave(" more")
+    await waitFor(() => expect(task().body).toBe(" moretask text\n"))
+    expect(task().title).toBe("Ninth task!")
+    expect(browser.assign).toHaveBeenCalledWith("/projects/web/feature/9")
+    expect(sent[0]).toMatchObject({ if_body_sha256: await sha("task text\n"), lock_session: expect.any(String) })
+    expect(sent[0]).not.toHaveProperty("kind")
+  })
+
+  test("a title-only save carries no body and no lock session", async () => {
+    const sent = captureSaves()
+    await renderApp("/projects/web/feature/9/edit")
+    await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+    await userEvent.type(screen.getByLabelText("Title"), "!")
+    await userEvent.click(screen.getByRole("button", { name: "Save" }))
+    await waitFor(() => expect(task().title).toBe("Ninth task!"))
+    expect(sent[0]).not.toHaveProperty("blocks")
+    expect(sent[0]).not.toHaveProperty("lock_session")
+  })
+
+  test("when someone else holds the lock only the body is read-only, with the holder named", async () => {
+    const sent = captureSaves()
+    server.use(http.post("/api/v1/locks/:kind/:id", () => HttpResponse.json({ kind: "task", subject_id: "WEB-9", holder: "ada" }, { status: 409 })))
+    await renderApp("/projects/web/feature/9/edit")
+    await userEvent.click(await screen.findByRole("button", { name: "Read only" }))
+    expect(await screen.findByRole("status")).toHaveTextContent("Read only: Ada Lovelace is editing this text.")
+    expect(await body()).toHaveAttribute("contenteditable", "false")
+    await userEvent.type(screen.getByLabelText("Title"), "!")
+    await userEvent.click(screen.getByRole("button", { name: "Save" }))
+    await waitFor(() => expect(task().title).toBe("Ninth task!"))
+    expect(sent[0]).not.toHaveProperty("blocks")
+  })
+
+  test("a 409 shows the newer text and keeps the other values; Take theirs loads it", async () => {
+    const newer = "newer text\n"
+    await renderApp("/projects/web/feature/9/edit")
+    await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+    task().body = newer
+    await userEvent.type(screen.getByLabelText("Title"), "!")
+    await typeAndSave(" mine")
+    const pane = await screen.findByRole("region", { name: "Newer stored text" })
+    expect(pane).toHaveTextContent("newer text")
+    expect(screen.getByLabelText("Title")).toHaveValue("Ninth task!")
+    await userEvent.click(within(pane).getByRole("button", { name: "Take theirs" }))
+    await waitFor(async () => expect(await body()).toHaveTextContent("newer text"))
+    expect(screen.queryByRole("region", { name: "Newer stored text" })).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Title")).toHaveValue("Ninth task!")
+  })
+
+  test("a locked kind shows as text with the server's reason", async () => {
+    server.use(
+      http.get("/api/v1/tasks/:id", async ({ request }) => {
+        const blocks = new URL(request.url).searchParams.has("as") ? { blocks: [], body_sha256: "x" } : {}
+        return HttpResponse.json({ ...task(), ...blocks, field_access: { kind: "kind cannot change once set" } })
+      }),
+    )
+    await renderApp("/projects/web/feature/9/edit")
+    expect(await screen.findByText("kind cannot change once set")).toBeInTheDocument()
+    expect(screen.getByText("Feature")).toBeInTheDocument()
+    expect(screen.queryByRole("combobox", { name: "Kind" })).not.toBeInTheDocument()
+  })
 })
 
 test("a kind that names neither a document nor a task is not found", async () => {

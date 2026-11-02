@@ -325,8 +325,18 @@ func TestPatchTaskKindDecisionRefused(t *testing.T) {
 		t.Fatalf("retype into decision status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/"+call, token, map[string]any{"kind": "chore"})
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("retype out of decision status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("retype out of decision status = %d, want 403; body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["fields"].(map[string]any)["kind"]; got != "kind cannot change once set" {
+		t.Fatalf("fields.kind = %v; body %s", got, rr.Body.String())
+	}
+	got := decodeMap(t, doReq(t, h, "GET", "/api/v1/tasks/"+call, token, nil))
+	if access := got["field_access"].(map[string]any)["kind"]; access != "kind cannot change once set" {
+		t.Fatalf("field_access.kind = %v", access)
+	}
+	if got := decodeMap(t, doReq(t, h, "GET", "/api/v1/tasks/"+feature, token, nil)); got["field_access"] != nil {
+		t.Fatalf("a feature's field_access = %v", got["field_access"])
 	}
 	// Other edits on a decision task, and a no-op kind, still work.
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/"+call, token, map[string]any{"kind": "decision", "title": "Scope call, round two"})

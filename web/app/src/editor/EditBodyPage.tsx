@@ -14,19 +14,13 @@ import { type Blocks, BodyEditor, type BodyEditorInstance } from "./BodyEditor"
 import { BodyToolbar } from "./BodyToolbar"
 import { BodyView } from "./BodyView"
 import { CommentPanel } from "./CommentPanel"
+import { ConflictPane } from "./ConflictPane"
 import { LockedDialog } from "./LockedDialog"
 import { sha256Hex } from "./bytes"
 import { type BodyComments, type SelectionAnchor, type ThreadRange } from "./threads"
-import { useBodyLock } from "./use-body-lock"
+import { LOST_REASON, useBodyLock } from "./use-body-lock"
 
 type EditorBlock = components["schemas"]["EditorBlock"]
-
-const LOST_REASON: Record<string, string> = {
-  unlocked: "someone unlocked it",
-  inactive: "it sat idle too long",
-  expired: "it expired",
-  held: "someone else holds it now",
-}
 
 /** The blocks of a stored draft, or null when it holds none */
 function draftBlocks(raw: string): EditorBlock[] | null {
@@ -39,7 +33,7 @@ function draftBlocks(raw: string): EditorBlock[] | null {
 }
 
 /**
- * The edit page of a document, rule or task body (WL-REQ-1868). It loads
+ * The edit page of a document or rule body (WL-REQ-1868). A task edits through its form (WL-REQ-1892). It loads
  * the body as blocks, edits it under the body lock, and saves on Save or
  * Ctrl/Cmd+S against the body_sha256 it loaded. `viewHref` is the
  * subject's cockpit page, where Close goes.
@@ -105,13 +99,13 @@ function BodyEditPage({
   if (lost !== (kept !== null)) setKept(lost ? current.current : null)
   const guard = useLeaveGuard({ dirty, onClose: () => browser.assign(viewHref) })
   const editable = lock.status === "held" && !spec
-  // Threads on a document or rule body; a task body has none (WL-REQ-1317)
+  // Threads on the body (WL-REQ-1317)
   const threads = useThreads(loaded.threads)
   const [pending, setPending] = useState<SelectionAnchor | null>(null)
   const highlights = useMemo(() => openRanges(threads.data ?? [], loaded), [threads.data, loaded])
   // Anchors count into the body as loaded: a reloaded body has its own blocks
   const comments: BodyComments | undefined =
-    loaded.threads && base.blocks === loaded.blocks ? { source: loaded.blocks, body: loaded.body, highlights, onSelect: setPending } : undefined
+    base.blocks === loaded.blocks ? { source: loaded.blocks, body: loaded.body, highlights, onSelect: setPending } : undefined
 
   async function save(against: string): Promise<boolean> {
     if (lock.status !== "held" || saving) return false
@@ -212,8 +206,8 @@ function BodyEditPage({
           </Button>
         </div>
       )}
-      <div className={loaded.threads ? "grid gap-6 lg:grid-cols-4" : ""}>
-      <div className={cn(conflict && "grid gap-6 lg:grid-cols-2", loaded.threads && "lg:col-span-3")}>
+      <div className="grid gap-6 lg:grid-cols-4">
+      <div className={cn(conflict && "grid gap-6 lg:grid-cols-2", "lg:col-span-3")}>
         {lock.status === "lost" && kept ? (
           <section aria-label="Your unsaved changes">
             <BodyView key={base.key} blocks={kept as Blocks} />
@@ -233,23 +227,10 @@ function BodyEditPage({
         />
         )}
         {conflict && (
-          <section aria-label="Newer stored text" className="flex flex-col gap-4">
-            <p className="text-sm">The stored text changed since you opened it. This is the newer text.</p>
-            <div className="flex items-center gap-4">
-              <Button type="button" disabled={saving} onClick={() => void save(conflict.body_sha256 ?? "")}>
-                Keep mine
-              </Button>
-              <Button type="button" variant="outline" disabled={saving} onClick={() => void takeTheirs()}>
-                Take theirs
-              </Button>
-            </div>
-            <BodyView key={conflict.body_sha256} blocks={(conflict.blocks ?? []) as Blocks} />
-          </section>
+          <ConflictPane conflict={conflict} saving={saving} onKeepMine={() => void save(conflict.body_sha256 ?? "")} onTakeTheirs={() => void takeTheirs()} />
         )}
       </div>
-      {loaded.threads && (
-        <CommentPanel subject={loaded.threads} version={loaded.version} threads={threads.data ?? []} pending={pending} onOpened={() => setPending(null)} />
-      )}
+      <CommentPanel subject={loaded.threads} version={loaded.version} threads={threads.data ?? []} pending={pending} onOpened={() => setPending(null)} />
       </div>
       {lock.status === "locked" && dialog && (
         <LockedDialog

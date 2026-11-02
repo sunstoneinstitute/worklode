@@ -1,0 +1,85 @@
+{
+  "$schema": "../form-config.schema.json",
+  "id": "idea",
+  "create": {
+    "title": "New idea",
+    "submit": { "method": "POST", "url": "/api/v1/ideas", "label": "Submit" }
+  },
+  "edit": {
+    "title": "Edit idea",
+    "submit": { "method": "PATCH", "url": "/api/v1/ideas/{id}", "label": "Save" }
+  },
+  "defaults": { "type": "general" },
+  "schema": {
+    "type": "object",
+    "required": ["title", "type"],
+    "properties": {
+      "title": {
+        "type": "string",
+        "title": "Title",
+        "minLength": 1,
+        "errorMessage": "Give your idea a title."
+      },
+      "body": { "type": "string", "title": "Idea" },
+      "type": {
+        "type": "string",
+        "title": "Type",
+        "oneOf": [
+          { "const": "general", "title": "General Idea" },
+          { "const": "story-pitch", "title": "Story Pitch" }
+        ]
+      },
+      "story_type": {
+        "type": "string",
+        "title": "Story type",
+        "oneOf": [
+          { "const": "data-story", "title": "Data Story" },
+          { "const": "short-story", "title": "Short Story" }
+        ]
+      },
+      "litmus_test_id": {
+        "type": "string",
+        "title": "Litmus test result ID",
+        "description": "If you have already run a litmus test, this helps us import the results instead of re-running."
+      }
+    }
+  },
+  "layout": {
+    "type": "main-sidebar",
+    "columns": {
+      "main": [
+        { "field": "title", "placeholder": "Idea title goes here", "mobileOrder": 1 },
+        { "field": "body", "widget": "textarea", "placeholder": "Describe your idea…", "mobileOrder": 5 }
+      ],
+      "sidebar": [
+        { "field": "type", "mobileOrder": 2 },
+        {
+          "field": "story_type",
+          "placeholder": "Choose a story type",
+          "showWhen": { "field": "type", "equals": "story-pitch" },
+          "mobileOrder": 3
+        },
+        {
+          "field": "litmus_test_id",
+          "widget": "clearable",
+          "showWhen": { "field": "type", "equals": "story-pitch" },
+          "mobileOrder": 4
+        },
+        {
+          "block": "note",
+          "showWhen": { "field": "type", "equals": "story-pitch" },
+          "mobileOrder": 6,
+          "markdown": "## What should my pitch contain?\n\nYour pitch must answer these questions:\n\n1. What is the core question that this story wants to address/answer?\n2. Why is this story important for Sunstone? How is it aligned with the Sunstone 30?\n3. Do you know about data we can use to find answers or help tell the story?\n\nBONUS:\n\n1. How do you want to tell this story: Which sources, visuals, formats do you envision?"
+        },
+        {
+          "block": "note",
+          "title": "A note about AI use",
+          "collapsible": true,
+          "showWhen": { "field": "type", "equals": "story-pitch" },
+          "mobileOrder": 7,
+          "markdown": "You're welcome to use AI tools to help shape your pitch. Tell us where you did, and make sure the core question and reasoning are your own."
+        }
+      ]
+    }
+  }
+}

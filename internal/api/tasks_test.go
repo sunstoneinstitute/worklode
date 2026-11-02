@@ -857,8 +857,11 @@ func TestPatchTaskPlan(t *testing.T) {
 		Project: "proj", Kind: "plan", Slug: "second-plan", Body: docPlanBody,
 	})
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"plan": secondPlan.Slug})
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("relink to a different plan status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("relink to a different plan status = %d, want 403; body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["fields"].(map[string]any)["plan"]; got != "plan cannot change once set" {
+		t.Fatalf("fields.plan = %v", got)
 	}
 }
 
