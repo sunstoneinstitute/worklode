@@ -349,11 +349,12 @@ func TestSearchJourney(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create lease task: %v", err)
 	}
-	if _, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
+	hierarchyTask, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "search", Kind: "feature", Priority: "low",
 		Title: "Order the child task list of a parent task",
 		Body:  "Each child task of a parent task of a project keeps its place in the list of tasks of that parent.",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("create hierarchy task: %v", err)
 	}
 
@@ -375,6 +376,16 @@ func TestSearchJourney(t *testing.T) {
 		return got["doc"] && got["task"] && got["skill"]
 	})
 	semanticHits := semanticResp.Hits
+	// The rank assertions below need every subject indexed, not just one of
+	// each kind: until the hierarchy task is, the dense arm ranks sec-3 first.
+	eventually(t, "the hierarchy task to index", func() bool {
+		for _, h := range searchOrFail(t, admin, model.SearchParams{Q: "child_of", Mode: model.SearchDense, Limit: 20}).Hits {
+			if h.Kind == "task" && h.TaskID == hierarchyTask.ID {
+				return true
+			}
+		}
+		return false
+	})
 
 	// §13.1: one semantic query reaches a document, a task and a skill, and
 	// the instance answers as a configured one rather than a degraded one.
