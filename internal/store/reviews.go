@@ -358,6 +358,12 @@ func getReview(ctx context.Context, db rowsQueryer, id int64) (*model.Review, er
 			&rd.OverallNote, &rd.Verdict, &rd.SubmittedAt)
 		return rd, err
 	})
+	if err != nil {
+		return r, err
+	}
+	if r.Guide, err = latestGuide(ctx, db, r.ID, r.Round); errors.Is(err, ErrNotFound) {
+		r.Guide, err = nil, nil
+	}
 	return r, err
 }
 
