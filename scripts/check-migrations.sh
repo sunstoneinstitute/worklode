@@ -85,6 +85,16 @@ err() {
 list_files() { ls -1 "$MIG_DIR" 2>/dev/null || true; }
 strip_suffix() { sed -nE 's/\.(up|down)\.sql$//p'; }
 
+# in_base reports whether $1 is one of origin/main's migration keys. It is a
+# pure bash test: piping $base_keys into `grep -q` races under pipefail, since
+# grep can exit on its first match and SIGPIPE the writer.
+in_base() {
+	case $'\n'"$base_keys"$'\n' in
+		*$'\n'"$1"$'\n'*) return 0 ;;
+	esac
+	return 1
+}
+
 # Renumbers $1 to the next free number above $max (using $1's own digit
 # width, or $num_width for a NEW key), renaming its files and rewriting the
 # kustomization list. Sets NEW_KEY to the chosen key and bumps the shared
@@ -124,7 +134,7 @@ renumber_to_next() {
 renumber_below() {
 	local floor=$1 taken=${2:-} key num
 	for key in $(list_files | strip_suffix | grep -v '^NEW' | sort -u || true); do
-		printf '%s\n' "$base_keys" | grep -Fxq "$key" && continue
+		in_base "$key" && continue
 		num=$((10#${key%%_*}))
 		case " $taken " in
 			*" $num "*) ;;
@@ -204,7 +214,8 @@ max=${max:-0}
 [ "$max" -ge "$base_max" ] || max=$base_max
 # Digit width for numbering NEW keys: whatever existing migrations use.
 num_width=4
-first=$(printf '%s\n' $keys $base_keys | head -1)
+# Not `| head -1`: head exits early and, under pipefail, SIGPIPEs printf.
+read -r first _ <<<"$(echo $keys $base_keys)" || true
 if [ -n "$first" ]; then
 	first=${first%%_*}
 	num_width=${#first}
@@ -234,12 +245,12 @@ for dup in $dups; do
 
 	keep=""
 	for key in $dup_keys; do
-		if printf '%s\n' "$base_keys" | grep -Fxq "$key"; then
+		if in_base "$key"; then
 			keep=$key
 			break
 		fi
 	done
-	[ -n "$keep" ] || keep=$(printf '%s\n' "$dup_keys" | head -1)
+	[ -n "$keep" ] || keep=${dup_keys%%$'\n'*}
 
 	for key in $(printf '%s\n' "$dup_keys" | grep -Fxv "$keep"); do
 		renumber_to_next "$key"
