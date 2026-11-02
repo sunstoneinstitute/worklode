@@ -5,6 +5,7 @@ import { useProjectDocs, useProjectRules } from "@/api/queries"
 import { BackboneDocList } from "@/components/BackboneDocList"
 import { BackboneRuleList } from "@/components/BackboneRuleList"
 import { DocumentList } from "@/components/DocumentList"
+import { ProjectReviews } from "@/components/ProjectReviews"
 import { LoadError, LoadingBlock } from "@/components/ui/load-state"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DOCUMENT_TABS, type DocumentTab } from "@/lib/content-types"
@@ -44,6 +45,7 @@ export function ProjectDocuments() {
           <DocumentList projectId={projectId} />
         </TabsContent>
       </Tabs>
+      <ProjectReviews projectId={projectId} />
     </main>
   )
 }

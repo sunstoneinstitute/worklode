@@ -251,6 +251,31 @@ export const handlers = [
   }),
 
   // Threads (WL-REQ-1323). Opening checks the anchor's quote against the stored bytes, as the server does.
+  // Reviews are read-only here: the review, its list and its guide (WL-REQ-1775)
+  http.get("/api/v1/reviews", async ({ request }) => {
+    await delay(LATENCY_MS)
+    const state = new URL(request.url).searchParams.get("state")
+    const body: Ok<"/api/v1/reviews", "get"> = db.reviews.filter((r) => !state || r.state === state)
+    return HttpResponse.json(body)
+  }),
+
+  http.get("/api/v1/reviews/:id", async ({ params }) => {
+    await delay(LATENCY_MS)
+    const review = db.reviews.find((r) => String(r.id) === params.id)
+    if (!review) return HttpResponse.json({ error: "review not found" }, { status: 404 })
+    return HttpResponse.json(review)
+  }),
+
+  // Skims only when focused, as the server serves them
+  http.get("/api/v1/reviews/:id/guide", async ({ params, request }) => {
+    await delay(LATENCY_MS)
+    const guide = db.guides[Number(params.id)]
+    if (!guide) return HttpResponse.json({ error: "no guide" }, { status: 404 })
+    const focused = new URL(request.url).searchParams.get("focused") === "true"
+    const body: Ok<"/api/v1/reviews/{id}/guide", "get"> = { ...guide, files: (guide.files ?? []).map((f) => ({ ...f, skims: focused ? f.skims : [] })) }
+    return HttpResponse.json(body)
+  }),
+
   http.get("/api/v1/docs/:id/threads", async ({ params }) => {
     await delay(LATENCY_MS)
     const body: Ok<"/api/v1/docs/{id}/threads", "get"> = db.threads.filter((t) => String(t.anchor?.doc) === params.id)

@@ -91,7 +91,8 @@ function Composer({ subject, openOn, version, pending, onOpened }: {
   )
 }
 
-function ThreadItem({ thread }: { thread: ReviewThread }) {
+/** One thread. `readOnly` drops the reply and resolve forms (the review page, WL-REQ-1775). */
+export function ThreadItem({ thread, readOnly = false }: { thread: ReviewThread; readOnly?: boolean }) {
   const [reply, setReply] = useState("")
   const send = useReplyThread()
   const resolve = useResolveThread()
@@ -101,6 +102,7 @@ function ThreadItem({ thread }: { thread: ReviewThread }) {
     <li data-thread-id={id} data-status={thread.status} className={cn("flex flex-col gap-2 rounded-lg border p-3", thread.status === "obsolete" && "line-through opacity-70")}>
       {quote ? <blockquote className="border-l-2 pl-2 whitespace-pre-wrap">{quote}</blockquote> : null}
       <div className="flex flex-wrap items-center gap-2">
+        {thread.anchor?.doc_anchor ? <span>Section {thread.anchor.doc_anchor}</span> : null}
         <Badge variant="secondary">{INTENTS[thread.intent as Intent] ?? thread.intent}</Badge>
         <span>{thread.status === "resolved" ? `Resolved${thread.resolved_by ? ` by ${thread.resolved_by}` : ""}` : thread.status}</span>
       </div>
@@ -109,7 +111,7 @@ function ThreadItem({ thread }: { thread: ReviewThread }) {
           <span className="font-medium">{m.author}</span> {m.body}
         </p>
       ))}
-      {thread.status === "open" ? (
+      {thread.status === "open" && !readOnly ? (
         <form
           aria-label={`Reply to thread ${id}`}
           className="flex flex-col gap-2"

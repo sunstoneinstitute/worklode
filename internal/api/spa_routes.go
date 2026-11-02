@@ -16,6 +16,7 @@ var spaRoutes = []string{
 	"/projects/$projectId/$kind/$n/edit",
 	"/projects/$projectId/crew",
 	"/projects/$projectId/documents",
+	"/projects/$projectId/reviews/$reviewId",
 	"/projects/$projectId/rule/$n/edit",
 	"/projects/$projectId/tasks",
 	"/tasks",
