@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -245,4 +246,72 @@ func printReviewDiff(cmd *cobra.Command, r model.Review) {
 		return
 	}
 	fmt.Fprintf(w, "\ndiff:\n%s", diff)
+}
+
+// proposeGuide is `lode review set guide`: the author's proposal for the
+// current round, with the change's diff attached so the server can check every
+// skim against what the author edited (WL-RULE-1320). A document review has no
+// diff.
+func proposeGuide(cmd *cobra.Command, idArg, file, overview string) error {
+	id, err := parseID(idArg, "review")
+	if err != nil {
+		return err
+	}
+	c, err := newAPIClient()
+	if err != nil {
+		return err
+	}
+	r, _, err := c.GetReview(cmd.Context(), id)
+	if err != nil {
+		return err
+	}
+	p := model.GuideProposal{Overview: overview, Files: []model.GuideFile{}}
+	if file != "" {
+		b, err := os.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(b, &p.Files); err != nil {
+			return fmt.Errorf("%s: want a JSON array of guide files: %w", file, err)
+		}
+	}
+	if r.Task != "" {
+		if p.Diff, err = reviewDiff(r); err != nil {
+			return fmt.Errorf("the proposal carries the change's diff: %w", err)
+		}
+	}
+	res, raw, err := c.PutReviewGuide(cmd.Context(), id, p)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.ReviewGuideRender(cmd.OutOrStdout(), res.Guide)
+	cli.GuideRefusalsRender(cmd.OutOrStdout(), res.Refused)
+	return nil
+}
+
+// materializeGuide writes the review's guide JSON to a temp file outside the
+// working tree for crit to be pointed at (WL-REQ-1776) and returns its path.
+// Without focused the skims are emptied (WL-RULE-1320), the same split as
+// GET .../guide?focused=.
+func materializeGuide(r model.Review, focused bool) (string, error) {
+	if r.Guide == nil {
+		return "", fmt.Errorf("review %d has no guide", r.ID)
+	}
+	g := *r.Guide
+	g.Files = append([]model.GuideFile(nil), g.Files...)
+	if !focused {
+		for i := range g.Files {
+			g.Files[i].Skims = nil
+		}
+	}
+	b, err := json.MarshalIndent(g, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("lode-review-%d-round-%d.json", r.ID, r.Round))
+	return path, os.WriteFile(path, b, 0o644)
 }

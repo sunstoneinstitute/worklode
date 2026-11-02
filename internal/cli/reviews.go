@@ -93,6 +93,18 @@ func (c *Client) GetReviewRound(ctx context.Context, id int64, n int) (model.Rev
 	return doJSON[model.ReviewRound](ctx, c, http.MethodGet, reviewPath(id, "/rounds/"+strconv.Itoa(n)), nil, "round")
 }
 
+// GetReviewGuide calls GET /api/v1/reviews/{id}/guide; focused returns the
+// guide with its skims (WL-RULE-1320). A review with no guide is a 404.
+func (c *Client) GetReviewGuide(ctx context.Context, id int64, focused bool) (model.ReviewGuide, []byte, error) {
+	return doJSON[model.ReviewGuide](ctx, c, http.MethodGet,
+		withParams(reviewPath(id, "/guide"), model.ReviewGuideParams{Focused: focused}), nil, "guide")
+}
+
+// PutReviewGuide calls PUT /api/v1/reviews/{id}/guide: the author's proposal.
+func (c *Client) PutReviewGuide(ctx context.Context, id int64, in model.GuideProposal) (model.ReviewGuideResult, []byte, error) {
+	return doJSON[model.ReviewGuideResult](ctx, c, http.MethodPut, reviewPath(id, "/guide"), in, "guide")
+}
+
 // ReviewEvents long-polls GET /api/v1/reviews/{id}/events. It returns nil
 // when the timeout passed with nothing to report (204). The request runs
 // without the client's 30s cap, since the server holds it up to the timeout.
@@ -198,6 +210,12 @@ func ReviewRender(w io.Writer, r model.Review) {
 	for _, a := range r.Reviewers {
 		fmt.Fprintf(w, "  %s  %s\n", a, verdicts[a])
 	}
+	fmt.Fprintln(w)
+	if r.Guide == nil {
+		fmt.Fprintln(w, "no guide")
+	} else {
+		ReviewGuideRender(w, *r.Guide)
+	}
 	if len(r.Threads) > 0 {
 		fmt.Fprintln(w, "\nthreads:")
 	}
@@ -274,4 +292,42 @@ func ReanchorRender(w io.Writer, thread int64, path string, from, to int, stage 
 		return
 	}
 	fmt.Fprintf(w, "thread %d  %s:%d -> %d  %s\n", thread, path, from, to, stage)
+}
+
+// ReviewGuideRender writes a guide: the overview, then one line per file with
+// its scrutiny mark, orientation and skim ranges (WL-RULE-1320).
+func ReviewGuideRender(w io.Writer, g model.ReviewGuide) {
+	head := fmt.Sprintf("guide (round %d)", g.Round)
+	if g.Stale {
+		head += "  STALE: the author has not proposed a guide for the current round"
+	}
+	fmt.Fprintln(w, head)
+	if g.Overview != "" {
+		fmt.Fprintf(w, "  %s\n", g.Overview)
+	}
+	for _, f := range g.Files {
+		mark := " "
+		if f.Scrutiny {
+			mark = "!"
+		}
+		line := fmt.Sprintf("  %s %s", mark, f.Path)
+		if f.Orientation != "" {
+			line += "  " + f.Orientation
+		}
+		var spans []string
+		for _, sk := range f.Skims {
+			spans = append(spans, fmt.Sprintf("%d-%d (%s)", sk.From, sk.To, sk.DecidedBy))
+		}
+		if len(spans) > 0 {
+			line += "  skim " + strings.Join(spans, ", ")
+		}
+		fmt.Fprintln(w, line)
+	}
+}
+
+// GuideRefusalsRender lists the skims the server refused and the rule that fired.
+func GuideRefusalsRender(w io.Writer, refused []model.GuideRefusal) {
+	for _, r := range refused {
+		fmt.Fprintf(w, "refused skim on %s: %s\n", r.Path, r.Rule)
+	}
 }

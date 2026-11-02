@@ -89,6 +89,7 @@ var nounViews = map[string]bool{
 	"lode graph quarantines":  true,
 	"lode graph triples":      true,
 	"lode project crew":       true,
+	"lode review guide":       true,
 	"lode project focus":      true,
 	"lode project health":     true,
 	"lode project overview":   true,

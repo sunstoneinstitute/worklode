@@ -21,7 +21,7 @@ func newReviewCmd() *cobra.Command {
 		Short: "Reviews of documents and of task changes: anchored threads, verdicts, author rounds",
 	}
 	cmd.AddCommand(newReviewAddCmd(), newReviewListCmd(), newReviewShowCmd(), newReviewCommentCmd(),
-		newReviewResolveCmd(), newReviewApproveCmd(), newReviewSetCmd(), newReviewSubmitCmd(), newReviewWaitCmd())
+		newReviewResolveCmd(), newReviewGuideCmd(), newReviewApproveCmd(), newReviewSetCmd(), newReviewSubmitCmd(), newReviewWaitCmd())
 	return cmd
 }
 
@@ -283,7 +283,7 @@ func newReviewResolveCmd() *cobra.Command {
 
 // submitVerdict posts a reviewer round with verdict and no threads
 // (WL-REQ-1323 has no verdict route; the verdict is a field of the round).
-func submitVerdict(cmd *cobra.Command, idArg, verdict string) error {
+func submitVerdict(cmd *cobra.Command, idArg, verdict string, focused bool) error {
 	id, err := parseID(idArg, "review")
 	if err != nil {
 		return err
@@ -292,7 +292,7 @@ func submitVerdict(cmd *cobra.Command, idArg, verdict string) error {
 	if err != nil {
 		return err
 	}
-	r, raw, err := c.SubmitReviewRound(cmd.Context(), id, model.ReviewRoundInput{Verdict: verdict, Client: "cli"})
+	r, raw, err := c.SubmitReviewRound(cmd.Context(), id, model.ReviewRoundInput{Verdict: verdict, Client: "cli", Focused: focused})
 	if err != nil {
 		return err
 	}
@@ -301,32 +301,78 @@ func submitVerdict(cmd *cobra.Command, idArg, verdict string) error {
 }
 
 func newReviewApproveCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "approve <review-id>",
+	var focused bool
+	cmd := &cobra.Command{
+		Use:   "approve <review-id> [--focused]",
 		Short: "Submit a reviewer round with verdict approved",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return submitVerdict(cmd, args[0], "approved")
+			return submitVerdict(cmd, args[0], "approved", focused)
 		},
 	}
+	cmd.Flags().BoolVar(&focused, "focused", false, "the round was read with the guide's skims applied")
+	return cmd
+}
+
+func newReviewGuideCmd() *cobra.Command {
+	var focused bool
+	cmd := &cobra.Command{
+		Use:   "guide <review-id> [--focused]",
+		Short: "Show the review's guide; --focused applies its skims",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := parseID(args[0], "review")
+			if err != nil {
+				return err
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			g, raw, err := c.GetReviewGuide(cmd.Context(), id, focused)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.ReviewGuideRender(cmd.OutOrStdout(), g)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&focused, "focused", false, "apply the guide's skims")
+	return cmd
 }
 
 func newReviewSetCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "set <field> <value> <review-id>",
+	var focused bool
+	var file, overview string
+	cmd := &cobra.Command{
+		Use:   "set <field> [<value>] <review-id>",
 		Short: "Set one field of a review, e.g. `lode review set verdict changes_requested 12`",
 		Long: `Set one named field of a review. The review id is the last argument.
 
   verdict  changes_requested: submit a reviewer round with that verdict
-             lode review set verdict changes_requested 12`,
-		Args: cobra.ExactArgs(3),
+             lode review set verdict changes_requested 12 [--focused]
+  guide    author: propose the guide for the current round, with the diff
+           attached; --file is a JSON array of guide files, --overview the text
+             lode review set guide 12 --file guide.json --overview "…"`,
+		Args: cobra.RangeArgs(2, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if args[0] != "verdict" {
-				return fmt.Errorf("unknown field %q: the settable field is verdict", args[0])
+			switch {
+			case args[0] == "verdict" && len(args) == 3:
+				return submitVerdict(cmd, args[2], args[1], focused)
+			case args[0] == "guide" && len(args) == 2:
+				return proposeGuide(cmd, args[1], file, overview)
 			}
-			return submitVerdict(cmd, args[2], args[1])
+			return fmt.Errorf("unknown field %q: the settable fields are verdict <value> <review-id> and guide <review-id>", args[0])
 		},
 	}
+	cmd.Flags().BoolVar(&focused, "focused", false, "verdict: the round was read with the guide's skims applied")
+	cmd.Flags().StringVar(&file, "file", "", "guide: a JSON file holding an array of guide files")
+	cmd.Flags().StringVar(&overview, "overview", "", "guide: the overview text")
+	return cmd
 }
 
 func newReviewSubmitCmd() *cobra.Command {
