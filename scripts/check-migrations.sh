@@ -124,7 +124,7 @@ renumber_to_next() {
 renumber_below() {
 	local floor=$1 taken=${2:-} key num
 	for key in $(list_files | strip_suffix | grep -v '^NEW' | sort -u || true); do
-		printf '%s\n' "$base_keys" | grep -Fxq "$key" && continue
+		grep -Fxq "$key" <<<"$base_keys" && continue
 		num=$((10#${key%%_*}))
 		case " $taken " in
 			*" $num "*) ;;
@@ -234,7 +234,7 @@ for dup in $dups; do
 
 	keep=""
 	for key in $dup_keys; do
-		if printf '%s\n' "$base_keys" | grep -Fxq "$key"; then
+		if grep -Fxq "$key" <<<"$base_keys"; then
 			keep=$key
 			break
 		fi
