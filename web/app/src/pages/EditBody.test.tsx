@@ -234,6 +234,43 @@ describe("the task form (WL-REQ-1892)", () => {
     expect(screen.getByLabelText("Title")).toHaveValue("Ninth task!")
   })
 
+  const taskDraft = () => Object.keys(localStorage).find((k) => k.includes(":task:WEB-9"))
+
+  test("a save deletes the draft, and leaving does not write it back", async () => {
+    vi.mocked(browser.assign).mockImplementation(() => void window.dispatchEvent(new Event("pagehide")))
+    await renderApp("/projects/web/feature/9/edit")
+    await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+    await typeAndSave(" more")
+    await waitFor(() => expect(browser.assign).toHaveBeenCalled())
+    expect(taskDraft()).toBeUndefined()
+  })
+
+  test("Take theirs leaves nothing unsaved when only the body differed", async () => {
+    await renderApp("/projects/web/feature/9/edit")
+    await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+    task().body = "newer text\n"
+    await typeAndSave(" mine")
+    const pane = await screen.findByRole("region", { name: "Newer stored text" })
+    await userEvent.click(within(pane).getByRole("button", { name: "Take theirs" }))
+    await waitFor(async () => expect(await body()).toHaveTextContent("newer text"))
+    expect(taskDraft()).toBeUndefined()
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(browser.assign).toHaveBeenCalled()
+  })
+
+  test("Take theirs keeps a changed title unsaved", async () => {
+    await renderApp("/projects/web/feature/9/edit")
+    await waitFor(async () => expect(await body()).toHaveAttribute("contenteditable", "true"))
+    task().body = "newer text\n"
+    await userEvent.type(screen.getByLabelText("Title"), "!")
+    await typeAndSave(" mine")
+    const pane = await screen.findByRole("region", { name: "Newer stored text" })
+    await userEvent.click(within(pane).getByRole("button", { name: "Take theirs" }))
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    expect(await screen.findByRole("dialog")).toHaveTextContent("You have unsaved changes.")
+  })
+
   test("a locked kind shows as text with the server's reason", async () => {
     server.use(
       http.get("/api/v1/tasks/:id", async ({ request }) => {

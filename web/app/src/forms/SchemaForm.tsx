@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, type Ref, useEffect, useImperativeHandle, useState } from "react"
+import { type FormEvent, type ReactNode, type Ref, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { type BodyConflict, type LockKind, submitForm } from "@/api/mutations"
@@ -15,7 +15,7 @@ import { BodyLockNotes } from "./BodyLockNotes"
 import { FormField } from "./FormField"
 import { layoutFor } from "./layouts"
 import { OlderDraftDialog, draftTime } from "./OlderDraftDialog"
-import { cellErrorsFor, fieldItems, fillUrl, isBlock, requiredFields, startingValues, submittedValues, validate, visibleColumns, visibleFields } from "./rules"
+import { cellErrorsFor, fieldItems, fillUrl, isBlock, requiredFields, startingValues, submittedValues, validate, valuesDiffer, visibleColumns, visibleFields } from "./rules"
 import type { FieldItem, FormConfig, FormValues, NoteBlock } from "./types"
 
 export type SchemaFormHandle = { requestClose: () => void }
@@ -67,7 +67,7 @@ export function SchemaForm({
   const actor = useMe().id ?? ""
   const recordId = record ? String(record.id) : undefined
   const locked = (record?.field_access ?? {}) as Record<string, string>
-  const [initial] = useState(() => startingValues(config, record))
+  const [initial, setInitial] = useState(() => startingValues(config, record))
   const allLocked = record !== undefined && visibleFields(layout, initial).every((field) => field in locked)
   const draft = useDraft({
     actor,
@@ -78,7 +78,13 @@ export function SchemaForm({
     locked,
     disabled: allLocked,
   })
-  const { values, changed } = draft
+  const { values } = draft
+  // Saved: nothing is unsaved until a field changes again, whatever `initial` still says
+  const [saved, setSaved] = useState(false)
+  const settled = useRef(false)
+  const dirty = draft.changed && !saved
+  // Set while a save is in flight: state would lag behind a quick second Ctrl+S
+  const inFlight = useRef(false)
 
   const [showErrors, setShowErrors] = useState(false)
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({})
@@ -88,19 +94,24 @@ export function SchemaForm({
   const [viewingOlder, setViewingOlder] = useState(false)
   // Part of each field's key: a widget that reads its value once remounts on a reset
   const [resets, setResets] = useState(0)
-  const guard = useLeaveGuard({ dirty: changed, onClose })
+  const guard = useLeaveGuard({ dirty, onClose })
   useImperativeHandle(ref, () => ({ requestClose: guard.requestClose }))
 
   // The richtext field of a record, which this form edits under a lock
   const bodyItem = record ? fieldItems(layout).find((item) => item.widget === "richtext" && !(item.field in locked)) : undefined
   const bodyField = lockKind ? bodyItem?.field : undefined
-  const lock = useBodyLock(lockKind ?? "task", bodyField ? recordId : undefined, { dirty: changed, onBeforeRelease: () => draft.flush(values) })
+  const lock = useBodyLock(lockKind ?? "task", bodyField ? recordId : undefined, {
+    dirty,
+    onBeforeRelease: () => {
+      if (!settled.current) draft.flush(values)
+    },
+  })
   const held = lock.status === "held"
   const [sha, setSha] = useState(String(record?.body_sha256 ?? ""))
   const [conflict, setConflict] = useState<BodyConflict | null>(null)
   const lost = lock.status === "lost"
   useEffect(() => {
-    if (lost && changed) draft.flush(values)
+    if (lost && dirty) draft.flush(values)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per loss
   }, [lost])
 
@@ -115,6 +126,9 @@ export function SchemaForm({
   const fill = (url: string) => fillUrl(url, { ...values, id: recordId })
 
   const setField = (field: string, value: unknown) => {
+    settled.current = false
+    inFlight.current = false
+    setSaved(false)
     draft.setValues((current) => ({ ...current, [field]: value }))
     setServerErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== field && !key.startsWith(`${field}/`))))
     if (field === bodyField && lock.status === "held") lock.touch()
@@ -129,9 +143,11 @@ export function SchemaForm({
   }
 
   async function save(against = sha): Promise<Outcome> {
+    if (inFlight.current) return "stay"
     setShowErrors(true)
     setFormError(undefined)
     if (Object.keys(validate(schema, body)).length > 0) return "stay"
+    inFlight.current = true
     setSaving(true)
     try {
       const checks = held && bodyField && bodyField in body ? { if_body_sha256: against, lock_session: lock.session } : {}
@@ -143,7 +159,11 @@ export function SchemaForm({
       }
       setServerErrors({})
       setConflict(null)
-      if (!heldBack) draft.clear()
+      if (!heldBack) {
+        draft.clear()
+        settled.current = true
+        setSaved(true)
+      }
       guard.release()
       if (invalidates) await queryClient.invalidateQueries({ queryKey: invalidates })
       return "saved"
@@ -154,6 +174,7 @@ export function SchemaForm({
       }
       return { error: error instanceof Error ? error.message : "unknown error" }
     } finally {
+      if (!settled.current) inFlight.current = false
       setSaving(false)
     }
   }
@@ -188,8 +209,14 @@ export function SchemaForm({
 
   function takeTheirs() {
     if (!conflict || !bodyField) return
+    // Their text is the new baseline; whatever else changed stays unsaved
+    const theirs = { [bodyField]: conflict.blocks ?? [] }
+    const start = { ...initial, ...theirs }
+    const next = { ...values, ...theirs }
     setSha(conflict.body_sha256 ?? "")
-    draft.setValues((current) => ({ ...current, [bodyField]: conflict.blocks ?? [] }))
+    setInitial(start)
+    draft.setValues(next)
+    if (!valuesDiffer(next, start)) draft.clear()
     setConflict(null)
     setResets((count) => count + 1)
   }
@@ -227,7 +254,8 @@ export function SchemaForm({
       <form
         onSubmit={(event: FormEvent) => {
           event.preventDefault()
-          void submit()
+          // A nested form bubbles here: the editor's own, or a dialog's through its portal
+          if (event.target === event.currentTarget) void submit()
         }}
         onKeyDown={(event) => {
           if (event.key === "s" && (event.metaKey || event.ctrlKey) && !allLocked) {
