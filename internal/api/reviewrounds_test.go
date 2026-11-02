@@ -5,10 +5,13 @@ package api_test
 // read, and the long-poll events feed.
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -55,7 +58,13 @@ func sampleWith(t *testing.T, reg *prometheus.Registry, name string, want map[st
 // review, and returns the review, a's token and the rendered body's version.
 func openSpecReview(t *testing.T, reg *prometheus.Registry) (h http.Handler, token, aToken string, rev model.Review, detail model.DocDetail) {
 	t.Helper()
-	st, h, token := newTestServerWithConfig(t, api.Config{WebOpen: true, Metrics: reg})
+	return openSpecReviewWith(t, api.Config{WebOpen: true, Metrics: reg})
+}
+
+// openSpecReviewWith is openSpecReview on a server built from cfg.
+func openSpecReviewWith(t *testing.T, cfg api.Config) (h http.Handler, token, aToken string, rev model.Review, detail model.DocDetail) {
+	t.Helper()
+	st, h, token := newTestServerWithConfig(t, cfg)
 	createProject(t, st, "proj")
 	aToken = docActor(t, st, "a")
 	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
@@ -69,6 +78,93 @@ func openSpecReview(t *testing.T, reg *prometheus.Registry) (h http.Handler, tok
 	decodeInto(t, rr, &rev)
 	decodeInto(t, doReq(t, h, "GET", docPath(spec.ID, ""), token, nil), &detail)
 	return h, token, aToken, rev, detail
+}
+
+// TestReviewRoundIntentClassify: a crit round's intent-less threads take
+// Jev's choices with classifier jev, a stated intent is kept, and an unset key
+// or a failing TypeSafe gives change_request with classifier default while the
+// round still lands (WL-REQ-1885).
+func TestReviewRoundIntentClassify(t *testing.T) {
+	t.Parallel()
+	var asked atomic.Value
+	jev := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			State     map[string]any `json:"state"`
+			Questions map[string]any `json:"questions"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		asked.Store(req.State)
+		choices := map[string]string{"t0": "question", "t1": "note"}
+		answers := map[string]any{}
+		for id := range req.Questions {
+			answers[id] = map[string]any{"choice": choices[id], "confidence": 0.8, "probabilities": map[string]float64{choices[id]: 0.8}}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"answers": answers})
+	}))
+	defer jev.Close()
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer broken.Close()
+
+	for _, tc := range []struct {
+		name, url, key, intent0, intent1, classifier, outcome string
+	}{
+		{"jev", jev.URL, "k", "question", "note", "jev", "jev"},
+		{"unconfigured", jev.URL, "", "change_request", "change_request", "default", "default_unconfigured"},
+		{"failing", broken.URL, "k", "change_request", "change_request", "default", "default_error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := prometheus.NewRegistry()
+			h, _, aToken, rev, detail := openSpecReviewWith(t, api.Config{WebOpen: true, Metrics: reg, TypeSafeAPIKey: tc.key, TypeSafeURL: tc.url})
+			body := string(detail.Body)
+			anchor := func(q string) model.ReviewAnchor {
+				i := strings.Index(body, q)
+				return model.ReviewAnchor{Doc: rev.Doc, Version: detail.Version, ByteStart: i, ByteEnd: i + len(q), Quote: q}
+			}
+			roundsPath := fmt.Sprintf("/api/v1/reviews/%d/rounds", rev.ID)
+			rr := doReq(t, h, "POST", roundsPath, aToken, model.ReviewRoundInput{
+				Verdict: "changes_requested", Client: "crit",
+				Threads: []model.OpenThreadInput{
+					{Anchor: anchor("First rule"), Body: "why first?"},
+					{Anchor: anchor("Second rule"), Body: "nice"},
+					{Anchor: anchor("Preamble"), Intent: "question", Body: "stated"},
+				},
+			})
+			if rr.Code != http.StatusCreated {
+				t.Fatalf("crit round: %d %s", rr.Code, rr.Body.String())
+			}
+			var got model.Review
+			decodeInto(t, rr, &got)
+			byBody := map[string]model.ReviewThread{}
+			for _, th := range got.Threads {
+				byBody[th.Messages[0].Body] = th
+			}
+			for b, w := range map[string][3]string{
+				"why first?": {tc.intent0, tc.classifier},
+				"nice":       {tc.intent1, tc.classifier},
+				"stated":     {"question", ""},
+			} {
+				th := byBody[b]
+				if th.Intent != w[0] || th.IntentClassifier != w[1] {
+					t.Errorf("thread %q: intent %q classifier %q, want %q %q", b, th.Intent, th.IntentClassifier, w[0], w[1])
+				}
+				if (th.IntentClassifier == "jev") != (th.IntentConfidence == 0.8) {
+					t.Errorf("thread %q: confidence %v with classifier %q", b, th.IntentConfidence, th.IntentClassifier)
+				}
+			}
+			if got := sampleWith(t, reg, "worklode_review_intent_classifications_total",
+				map[string]string{"outcome": tc.outcome, "intent": tc.intent0}); got < 1 {
+				t.Errorf("intent_classifications_total{%s,%s} = %v", tc.outcome, tc.intent0, got)
+			}
+			if tc.name == "jev" {
+				st, _ := asked.Load().(map[string]any)
+				if subj, _ := st["subject"].(map[string]any); subj["kind"] != "doc" || subj["title"] == "" {
+					t.Errorf("jev state subject = %v, want the doc's kind and title", st["subject"])
+				}
+			}
+		})
+	}
 }
 
 func TestReviewRoundApproveGate(t *testing.T) {

@@ -167,6 +167,19 @@ offset of the run's first byte, and each section heading is its own run with
 copy is never read back. The sidecar is. The flag is exclusive with `--version`
 and `--editable`.
 
+`lode review import --review <id> [--anchors <sidecar>] < result.json` is
+crit's `on_finish_*` hook target (WL-REQ-1776). It reads crit's finish payload
+on stdin, saves it as `finish.json` beside the sidecar (the temp directory
+without one) so a failed import can be re-run from it, and posts one reviewer
+round with `client = crit`: the verdict from the payload's `approved`, `focused`
+from `LODE_REVIEW_FOCUSED=1`, one thread with no intent per unresolved line
+comment (the server classifies it, WL-REQ-1885), and review- and file-level
+comments as the round's overall note. A document review needs `--anchors`:
+heading lines are trimmed off a span and a span crossing a section is split.
+Comments whose anchor already has a thread are skipped, so re-running is safe.
+Stdout is one line naming the round and the counts; trimmed, split and folded
+comments are named on stderr.
+
 ## Editing a body in the SPA
 
 The SPA edits a body at two routes (WL-REQ-1868): `/projects/$projectId/$kind/$n/edit`

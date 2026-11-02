@@ -579,20 +579,10 @@ func newDocShowCmd() *cobra.Command {
 	return cmd
 }
 
-// docAnchorsSidecar is the file `doc show --anchors` writes: which version
-// the body copy came from and the line runs that map crit's line comments to
-// byte offsets in it (WL-REQ-1776, WL-REQ-1317). The copy is never read back;
-// the sidecar is.
-type docAnchorsSidecar struct {
-	Doc     int64                 `json:"doc"`
-	Version int                   `json:"version"`
-	Lines   []designdoc.AnchorRun `json:"lines"`
-}
-
 // writeAnchored writes d's body byte-for-byte to out (stdout when empty) and
 // the sidecar to anchors.
 func writeAnchored(cmd *cobra.Command, d model.DocDetail, anchors, out string) error {
-	side, err := json.MarshalIndent(docAnchorsSidecar{
+	side, err := json.MarshalIndent(designdoc.AnchorSidecar{
 		Doc: d.ID, Version: d.Version, Lines: designdoc.AnchorRuns(string(d.Body), d.Sections),
 	}, "", "  ")
 	if err != nil {

@@ -2,13 +2,16 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"maps"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/review"
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/typesafe"
 )
 
 // The review routes of WL-REQ-1323: open and read a review, open, reply to and
@@ -331,6 +334,10 @@ func (s *server) submitRound(w http.ResponseWriter, r *http.Request) {
 	if req.Client == "" {
 		req.Client = "cli"
 	}
+	if req.Verdict != "" && req.Client == "crit" {
+		// Before the store write, never inside it (WL-REQ-1885).
+		s.classifyIntents(r, id, req.Threads)
+	}
 	submit := store.SubmitReviewerRound
 	if req.Verdict == "" {
 		submit = store.SubmitAuthorRound
@@ -357,6 +364,45 @@ func (s *server) submitRound(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusCreated, rev)
+}
+
+// classifyIntents sets the intent of every crit thread that has none with one
+// Jev request for the round, falling back to change_request with classifier
+// default when TypeSafe is unconfigured or fails (WL-REQ-1885). It never
+// refuses the round.
+func (s *server) classifyIntents(r *http.Request, reviewID int64, threads []model.OpenThreadInput) {
+	subject := review.IntentSubject{}
+	if rev, err := s.st.GetReview(r.Context(), reviewID); err == nil {
+		subject.Kind = rev.Subject
+		switch {
+		case rev.Doc != 0:
+			if d, err := s.st.GetDoc(r.Context(), rev.Doc); err == nil {
+				subject.Title = string(d.Title)
+			}
+		case rev.Task != "":
+			if t, err := s.st.GetTask(r.Context(), rev.Task); err == nil {
+				subject.Title = string(t.Title)
+			}
+		}
+	}
+	state, questions := review.IntentQuestions(subject, threads)
+	if len(questions) == 0 {
+		return
+	}
+	answers, err := s.typesafe.Ask(r.Context(), s.typesafeModel, state, questions)
+	fallback := "default_error"
+	if errors.Is(err, typesafe.ErrUnconfigured) {
+		fallback = "default_unconfigured"
+	}
+	review.ApplyIntents(threads, answers)
+	for _, th := range threads {
+		switch th.IntentClassifier {
+		case "jev":
+			s.reviewMetrics.IntentClassified("jev", th.Intent)
+		case "default":
+			s.reviewMetrics.IntentClassified(fallback, th.Intent)
+		}
+	}
 }
 
 // getRound handles GET /api/v1/reviews/{id}/rounds/{n}: one reviewer round.
