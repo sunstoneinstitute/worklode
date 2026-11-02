@@ -154,8 +154,8 @@ current text, the rendered body for a spec. On a change review,
 opens a thread on a line, `submit` posts HEAD and re-anchors the open threads
 (one stage line per thread on stdout), and `show` prints the raw diff when run
 in the checkout. `show` prints the guide (or "no guide", or STALE) before the
-threads and `--json` embeds it. No skill names these yet; the worker text for reviews comes
-with WL-1381.
+threads and `--json` embeds it. The `worklode` skill's "Reviewing a document or a change" section names
+`exec`, `show --json`, `comment` and `approve`.
 
 `lode doc show <ref> --anchors <map> [--out <file>]` is the document side of the
 crit bridge (WL-REQ-1776). It writes the body exactly as the server returns it
