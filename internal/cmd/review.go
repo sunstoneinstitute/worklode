@@ -12,13 +12,13 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// `lode review`: the document verbs of the WL-REQ-1775 catalogue. A review of
-// a task's change comes with WL-PLAN-133.
+// `lode review`: the verbs of the WL-REQ-1775 catalogue. The change arm of
+// add, comment, submit and show is in reviewchange.go.
 
 func newReviewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "review",
-		Short: "Reviews of documents: threads anchored to quoted text, verdicts, author rounds",
+		Short: "Reviews of documents and of task changes: anchored threads, verdicts, author rounds",
 	}
 	cmd.AddCommand(newReviewAddCmd(), newReviewListCmd(), newReviewShowCmd(), newReviewCommentCmd(),
 		newReviewResolveCmd(), newReviewApproveCmd(), newReviewSetCmd(), newReviewSubmitCmd(), newReviewWaitCmd())
@@ -48,12 +48,26 @@ func printReview(cmd *cobra.Command, r model.Review, raw []byte) {
 }
 
 func newReviewAddCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:               "add <ref>",
+	var baseRef, reason string
+	var allowReady bool
+	cmd := &cobra.Command{
+		Use:               "add <doc-ref|task-id> [--base-ref <sha>] [--reason <text>] [--allow-ready]",
 		ValidArgsFunction: docRefAt(0),
-		Short:             "Open a review of a document; its reviewers come from `lode doc set reviewers`",
-		Args:              cobra.ExactArgs(1),
+		Short:             "Open a review of a document or of a task's change",
+		Long: `Open a review of a document (reviewers from 'lode doc set reviewers') or of a
+task's change (reviewers from 'lode task set reviewers').
+
+For a task, --base-ref is the branch head sha, default HEAD of the current
+worktree. The lease holder must give --reason, one line saying why. A ready
+task is refused unless --allow-ready, which moves it to in_review.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if taskID.MatchString(args[0]) {
+				return openChangeReview(cmd, args[0], baseRef, reason, allowReady)
+			}
+			if baseRef != "" || reason != "" || allowReady {
+				return errors.New("--base-ref, --reason and --allow-ready apply to a task's change review only")
+			}
 			c, err := newAPIClient()
 			if err != nil {
 				return err
@@ -70,6 +84,10 @@ func newReviewAddCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&baseRef, "base-ref", "", "task: the branch head sha to review (default HEAD of the worktree)")
+	cmd.Flags().StringVar(&reason, "reason", "", "task: why this change needs a reviewer; required of the lease holder")
+	cmd.Flags().BoolVar(&allowReady, "allow-ready", false, "task: open over a ready task, moving it to in_review")
+	return cmd
 }
 
 func newReviewListCmd() *cobra.Command {
@@ -127,22 +145,29 @@ func newReviewShowCmd() *cobra.Command {
 				return err
 			}
 			printReview(cmd, r, raw)
+			if r.Task != "" && !jsonOut(cmd) {
+				printReviewDiff(cmd, r)
+			}
 			return nil
 		},
 	}
 }
 
 func newReviewCommentCmd() *cobra.Command {
-	var quote, intent, body, thread string
+	var quote, intent, body, thread, anchor, anchorText string
 	cmd := &cobra.Command{
-		Use:   "comment <review-id> (--quote <text> --intent <intent> | --thread <thread-id>) --body <text>",
+		Use:   "comment <review-id> (--quote <text> | --anchor <a> --intent <intent> | --thread <thread-id>) --body <text>",
 		Short: "Open a thread on quoted text of the subject, or reply to a thread",
 		Long: `Open a thread anchored to text of the review's subject, or reply to one.
 
   --quote must occur exactly once in the document's current text (for a spec,
   its rendered body); the thread anchors to that byte range (WL-REQ-1317).
   --intent is question, change_request or note.
-  --thread replies to an existing thread instead.`,
+  --thread replies to an existing thread instead.
+
+On a task's change review, --anchor <repo>:<path>:<additions|deletions>:<line>
+opens a thread on that line. The line's text is read from the working tree, or
+from the base_ref commit; --anchor-text supplies it when there is no checkout.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := parseID(args[0], "review")
@@ -152,8 +177,8 @@ func newReviewCommentCmd() *cobra.Command {
 			if strings.TrimSpace(body) == "" {
 				return errors.New("a comment needs --body")
 			}
-			if (quote == "") == (thread == "") {
-				return errors.New("pass --quote to open a thread or --thread to reply, one of the two")
+			if n := count(quote != "", thread != "", anchor != ""); n != 1 {
+				return errors.New("pass --quote or --anchor to open a thread or --thread to reply, one of the three")
 			}
 			c, err := newAPIClient()
 			if err != nil {
@@ -183,8 +208,14 @@ func newReviewCommentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if r.Doc == 0 {
-				return fmt.Errorf("review %d is not of a document; change reviews come with WL-PLAN-133", id)
+			if r.Task != "" {
+				if anchor == "" {
+					return fmt.Errorf("review %d is of a change; anchor a thread with --anchor <repo>:<path>:<additions|deletions>:<line>", id)
+				}
+				return commentOnChange(cmd, c, r, anchor, anchorText, intent, body)
+			}
+			if anchor != "" {
+				return errors.New("--anchor is for a task's change review; quote the document text with --quote")
 			}
 			d, _, err := c.GetDoc(ctx, r.Doc)
 			if err != nil {
@@ -215,7 +246,9 @@ func newReviewCommentCmd() *cobra.Command {
 	cmd.Flags().StringVar(&intent, "intent", "", "question, change_request or note")
 	cmd.Flags().StringVar(&body, "body", "", "the comment")
 	cmd.Flags().StringVar(&thread, "thread", "", "reply to this thread")
-	cmd.MarkFlagsMutuallyExclusive("quote", "thread")
+	cmd.Flags().StringVar(&anchor, "anchor", "", "change review: <repo>:<path>:<additions|deletions>:<line>")
+	cmd.Flags().StringVar(&anchorText, "anchor-text", "", "change review: the line's text, when there is no checkout")
+	cmd.MarkFlagsMutuallyExclusive("quote", "thread", "anchor")
 	cmd.MarkFlagsMutuallyExclusive("intent", "thread")
 	return cmd
 }
@@ -299,7 +332,7 @@ func newReviewSetCmd() *cobra.Command {
 func newReviewSubmitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "submit <review-id>",
-		Short: "Author: submit a new round at the document's current version",
+		Short: "Author: submit a new round at the document's current version, or the change's HEAD with threads re-anchored",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := parseID(args[0], "review")
@@ -314,8 +347,8 @@ func newReviewSubmitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if r.Doc == 0 {
-				return fmt.Errorf("review %d is not of a document; change reviews come with WL-PLAN-133", id)
+			if r.Task != "" {
+				return submitChange(cmd, c, r)
 			}
 			d, _, err := c.GetDoc(cmd.Context(), r.Doc)
 			if err != nil {
@@ -373,4 +406,15 @@ it prints nothing and exits 0. A review that is closed or missing exits 1.`,
 	cmd.Flags().Int64Var(&after, "after", 0, "the last message seq already seen")
 	cmd.Flags().IntVar(&timeout, "timeout", 30, "seconds to wait, at most 60")
 	return cmd
+}
+
+// count returns how many of bs are true.
+func count(bs ...bool) int {
+	n := 0
+	for _, b := range bs {
+		if b {
+			n++
+		}
+	}
+	return n
 }
