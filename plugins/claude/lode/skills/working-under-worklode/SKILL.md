@@ -13,9 +13,15 @@ renewal, or lease TTLs; committing at a normal cadence is the heartbeat.
 
 **Done** — a task is done when its definition-of-done / Deliverable holds,
 not when code is written. The task body is the contract. Tests pass, the deliverable exists where it
-should. Then push the branch, open its PR, arm auto-merge on it
-(`gh pr merge --auto --squash`; not when you opened a review, which holds the merge until an `approved` verdict, WL-REQ-1779), and run /lode:done — which submits the task
-for review and releases the lease. It does not mark the task `merged`; that
+should. Then push the branch and open its PR. Check the change against
+WL-REQ-1325's list (migrations and stored data, auth and secrets, deploy and
+CI, removed CLI verbs, routes or wire fields, a departure from a governing
+rule or an open plan question, an unresolved doubt; /lode:done spells it
+out). If any applies, run `lode review add <task> --reason "<why>"` and do
+not arm auto-merge: the review holds the merge until an `approved` verdict
+(WL-REQ-1779). Otherwise arm auto-merge (`gh pr merge --auto --squash`).
+Then run /lode:done, which submits the task for review and releases the
+lease. It does not mark the task `merged`; that
 lands when the merge queue lands the PR.
 
 **Block** — block (don't push through) when progress requires a decision or
