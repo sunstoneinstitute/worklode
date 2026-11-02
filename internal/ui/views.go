@@ -262,8 +262,10 @@ type TaskView struct {
 	FollowUps   []string
 	DuplicateOf string
 	Duplicates  []string
-	Progress    model.TaskProgress
-	Timeline    []TimelineRow
+	// GovernedBy is the task's governing rules, listed in the Edges card.
+	GovernedBy []model.TaskGovernance
+	Progress   model.TaskProgress
+	Timeline   []TimelineRow
 	// AgentSessions is the coding-agent sessions recorded against the task's
 	// active lease, oldest first. Empty when nothing holds the task — a lease
 	// is what a session is recorded against, so there is nowhere for one to
