@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -134,5 +137,100 @@ func TestReviewDocumentVerbs(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Review != rev.ID || env.After != 2 || len(env.Messages) != 2 {
 		t.Errorf("review wait envelope = %q (%v), want review %d after 2 with two messages", out, err, rev.ID)
+	}
+}
+
+// changeRepo builds a repo on a feature branch whose file sits three lines
+// deep, and returns its dir.
+func changeRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		if err := gitexec.Run(dir, append([]string{"-c", "user.email=t@example.com", "-c", "user.name=t"}, args...)...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\n"), 0o644)
+	run("add", "-A")
+	run("commit", "-q", "-m", "base")
+	run("checkout", "-q", "-b", "feature")
+	os.WriteFile(filepath.Join(dir, "f.go"), []byte("package f\n\nfunc a() {}\n\nfunc b() { work() }\n"), 0o644)
+	run("add", "-A")
+	run("commit", "-q", "-m", "feature")
+	return dir
+}
+
+// TestReviewChangeSubmitReanchors opens a change review from a checkout,
+// comments on a line, rewrites the file above it and submits: the thread
+// follows its line (WL-REQ-1317, WL-REQ-1775).
+func TestReviewChangeSubmitReanchors(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
+		t.Fatal(err)
+	}
+	task := createTestTask(t, c, "Change under review")
+	dir := changeRepo(t)
+	t.Chdir(dir)
+	if _, _, err := c.ClaimTask(ctx, task.ID, dir, time.Hour); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, _, err := c.SetTaskReviewers(ctx, task.ID, []string{"bob"}); err != nil {
+		t.Fatalf("set reviewers: %v", err)
+	}
+
+	if _, err := runLode(t, "review", "add", task.ID); err == nil || !strings.Contains(err.Error(), "--reason") {
+		t.Fatalf("lease holder without --reason: err = %v, want it refused", err)
+	}
+	out, err := runLode(t, "review", "add", task.ID, "--reason", "touches the route table", "--json")
+	if err != nil {
+		t.Fatalf("review add: %v\n%s", err, out)
+	}
+	var rev model.Review
+	if err := json.Unmarshal([]byte(out), &rev); err != nil {
+		t.Fatalf("decode: %v\n%s", err, out)
+	}
+	id := strconv.FormatInt(rev.ID, 10)
+
+	out, err = runLode(t, "review", "comment", id, "--anchor", "worklode:f.go:additions:5",
+		"--intent", "change_request", "--body", "check the error", "--json")
+	if err != nil {
+		t.Fatalf("review comment: %v\n%s", err, out)
+	}
+	var th model.ReviewThread
+	if err := json.Unmarshal([]byte(out), &th); err != nil || th.Anchor.Line != 5 || th.Anchor.AnchorText != "func b() { work() }" {
+		t.Fatalf("thread = %+v (%v), want line 5 with the line's text", th.Anchor, err)
+	}
+
+	os.WriteFile(filepath.Join(dir, "f.go"), []byte("package f\n\n// new\n// lines\n\nfunc a() {}\n\nfunc b() { work() }\n"), 0o644)
+	if err := gitexec.Run(dir, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "-am", "move"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = runLode(t, "review", "submit", id)
+	if err != nil {
+		t.Fatalf("review submit: %v\n%s", err, out)
+	}
+	t.Logf("submit output:\n%s", out)
+	if want := "thread " + strconv.FormatInt(th.ID, 10) + "  f.go:5 -> 8  "; !strings.Contains(out, want) {
+		t.Errorf("submit output = %q, want a stage line %q", out, want)
+	}
+
+	out, err = runLode(t, "review", "show", id, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(out), &rev); err != nil || len(rev.Threads) != 1 || rev.Threads[0].Anchor.Line != 8 {
+		t.Fatalf("review after submit = %+v (%v), want the thread at line 8", rev, err)
+	}
+	out, err = runLode(t, "review", "show", id)
+	if err != nil || !strings.Contains(out, "diff --git") || !strings.Contains(out, "+func b() { work() }") {
+		t.Errorf("review show = %q (%v), want the raw diff after the threads", out, err)
+	}
+	out, err = runLode(t, "task", "show", task.ID)
+	if err != nil || !strings.Contains(out, "opened by alice: touches the route table") {
+		t.Errorf("task show = %q (%v), want the review line", out, err)
 	}
 }
