@@ -21,10 +21,11 @@ var searchKinds = []string{"doc", "task", "skill"}
 // reference to one subject, search takes an unknown one and returns a ranking.
 func newSearchCmd() *cobra.Command {
 	var (
-		kinds []string
-		mode  string
-		limit int
-		scope scopeFlags
+		kinds          []string
+		mode           string
+		limit          int
+		includeRetired bool
+		scope          scopeFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "search <query>",
@@ -50,11 +51,12 @@ func newSearchCmd() *cobra.Command {
 				return err
 			}
 			resp, raw, err := c.Search(cmd.Context(), model.SearchParams{
-				Q:       strings.Join(args, " "),
-				Kind:    kinds,
-				Mode:    mode,
-				Limit:   limit,
-				Project: sc.Project,
+				Q:              strings.Join(args, " "),
+				Kind:           kinds,
+				Mode:           mode,
+				Limit:          limit,
+				Project:        sc.Project,
+				IncludeRetired: includeRetired,
 			})
 			if err != nil {
 				return err
@@ -85,6 +87,8 @@ func newSearchCmd() *cobra.Command {
 	cmd.Flags().StringVar(&mode, "mode", "",
 		"retrieval mode: hybrid (default), dense or lexical — for comparing the arms on a real query")
 	cmd.Flags().IntVar(&limit, "limit", 0, "max hits to return (default 20)")
+	cmd.Flags().BoolVar(&includeRetired, "include-retired", false,
+		"also return withdrawn and superseded docs, withdrawn rules' sections and abandoned tasks")
 	addScopeFlags(cmd, &scope, "search only this project's corpus")
 	return cmd
 }

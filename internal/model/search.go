@@ -68,4 +68,8 @@ type SearchParams struct {
 	// Limit caps the number of hits returned (server default/cap applies
 	// when zero or negative).
 	Limit int `query:"limit,omitempty"`
+	// IncludeRetired keeps withdrawn and superseded docs, withdrawn rules'
+	// sections and abandoned tasks, which search leaves out by default
+	// (WL-REQ-1714).
+	IncludeRetired bool `query:"include_retired,omitempty"`
 }
