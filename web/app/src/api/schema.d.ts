@@ -6987,6 +6987,7 @@ export interface paths {
                     project?: string;
                     kind?: string[];
                     limit?: number;
+                    include_retired?: boolean;
                 };
                 header?: never;
                 path?: never;
