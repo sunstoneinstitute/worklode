@@ -332,6 +332,67 @@ func TestSearchFilters(t *testing.T) {
 	}
 }
 
+// TestSearchHidesRetiredSubjects is WL-REQ-1714: withdrawn and superseded
+// docs, a withdrawn rule's section and abandoned tasks stay out of both arms
+// unless the caller asks for them.
+func TestSearchHidesRetiredSubjects(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	ctx := t.Context()
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	live := seedSearchDoc(t, s, 1, "Live")
+	withdrawn := seedSearchDoc(t, s, 2, "Withdrawn")
+	superseded := seedSearchDoc(t, s, 3, "Superseded")
+	ruleGone := seedSearchDoc(t, s, 4, "Rule withdrawn")
+	exec(`UPDATE docs SET status = 'withdrawn' WHERE id = $1`, withdrawn)
+	exec(`UPDATE docs SET status = 'superseded' WHERE id = $1`, superseded)
+	exec(`UPDATE rules SET status = 'withdrawn'
+	       WHERE id = (SELECT rule_id FROM doc_entries WHERE doc_id = $1 AND anchor = 'sec-1')`, ruleGone)
+	seedSearchTask(t, s, "P1-1", "Live task")
+	seedSearchTask(t, s, "P1-2", "Abandoned task")
+	exec(`UPDATE tasks SET state = 'abandoned' WHERE id = 'P1-2'`)
+
+	const text = "leases and pruning"
+	vec := vec(1, 0, 0)
+	for _, id := range []int64{live, withdrawn, superseded, ruleGone} {
+		seedChunks(t, s, ChunkSubject{Kind: SubjectDoc, DocID: id, Project: "p1"},
+			fixtureChunk{anchor: "sec-1", text: text, vec: vec})
+	}
+	for _, id := range []string{"P1-1", "P1-2"} {
+		seedChunks(t, s, ChunkSubject{Kind: SubjectTask, TaskID: id, Project: "p1"},
+			fixtureChunk{text: text, vec: vec})
+	}
+
+	for _, mode := range []string{model.SearchHybrid, model.SearchDense, model.SearchLexical} {
+		hits, err := s.Search(ctx, SearchQuery{Text: "pruning", Vector: vec, Mode: mode, Limit: 10})
+		if err != nil {
+			t.Fatalf("%s search: %v", mode, err)
+		}
+		if len(hits) != 2 {
+			t.Fatalf("%s: want the live doc and the live task, got %+v", mode, hits)
+		}
+		for _, h := range hits {
+			if h.DocID != live && h.TaskID != "P1-1" {
+				t.Fatalf("%s: retired subject surfaced: %+v", mode, h)
+			}
+		}
+
+		all, err := s.Search(ctx, SearchQuery{Text: "pruning", Vector: vec, Mode: mode, Limit: 10, IncludeRetired: true})
+		if err != nil {
+			t.Fatalf("%s search with retired: %v", mode, err)
+		}
+		if len(all) != 6 {
+			t.Fatalf("%s: include_retired wants all six subjects, got %+v", mode, all)
+		}
+	}
+}
+
 // TestSearchWithoutVectorIsLexicalOnly is WL-REQ-261: an instance with no
 // embedding provider serves real lexical results rather than an empty set.
 func TestSearchWithoutVectorIsLexicalOnly(t *testing.T) {
