@@ -6989,6 +6989,7 @@ export interface paths {
                     limit?: number;
                     include_retired?: boolean;
                     include_plans?: boolean;
+                    include_drafts?: boolean;
                 };
                 header?: never;
                 path?: never;

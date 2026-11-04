@@ -75,4 +75,7 @@ type SearchParams struct {
 	// IncludePlans keeps plans, which search leaves out by default: search
 	// is for the rules, specs and tasks an agent acts on (WL-REQ-1714).
 	IncludePlans bool `query:"include_plans,omitempty"`
+	// IncludeDrafts keeps draft docs and draft tasks, which search leaves
+	// out by default because they are not yet in force (WL-REQ-1714).
+	IncludeDrafts bool `query:"include_drafts,omitempty"`
 }

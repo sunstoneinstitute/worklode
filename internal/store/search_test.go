@@ -61,7 +61,8 @@ func seedSearchTask(t *testing.T, s *Store, id, title string) {
 	}
 }
 
-// seedSearchDoc creates a spec numbered n whose body carries title.
+// seedSearchDoc creates a spec numbered n whose body carries title, accepted
+// so the default search sees it (WL-REQ-1714 leaves drafts out).
 func seedSearchDoc(t *testing.T, s *Store, n int, title string) int64 {
 	t.Helper()
 	body := fmt.Sprintf("---\nstatus: draft\n---\n\n# %s\n\n## 1. Scope {#sec-1}\n\nscope\n", title)
@@ -69,6 +70,9 @@ func seedSearchDoc(t *testing.T, s *Store, n int, title string) int64 {
 		Project: "p1", Kind: "spec", Number: n,
 		Slug: fmt.Sprintf("%03d-%d", n, n), Body: body, CreatedBy: "stig",
 	})
+	if _, err := s.db.ExecContext(context.Background(), `UPDATE docs SET status = 'accepted' WHERE id = $1`, d.ID); err != nil {
+		t.Fatal(err)
+	}
 	return d.ID
 }
 
@@ -403,6 +407,9 @@ func TestSearchHidesPlans(t *testing.T) {
 		Project: "p1", Kind: "plan", Slug: "plan-a",
 		Body: planTaskBody("", "Plan A"), CreatedBy: "stig",
 	})
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET status = 'accepted' WHERE id = $1`, plan.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	const text = "leases and pruning"
 	v := vec(1, 0, 0)
@@ -425,6 +432,59 @@ func TestSearchHidesPlans(t *testing.T) {
 		}
 		if len(all) != 2 {
 			t.Fatalf("%s: include_plans wants the spec and the plan, got %+v", mode, all)
+		}
+	}
+}
+
+// TestSearchHidesDrafts is WL-REQ-1714: draft docs and draft tasks stay out of
+// both arms unless the caller asks for them.
+func TestSearchHidesDrafts(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	ctx := t.Context()
+	live := seedSearchDoc(t, s, 1, "Accepted")
+	draft := seedSearchDoc(t, s, 2, "Draft")
+	seedSearchTask(t, s, "P1-1", "Ready task")
+	seedSearchTask(t, s, "P1-2", "Draft task")
+	for _, q := range []string{
+		`UPDATE docs SET status = 'draft' WHERE id = $1`,
+		`UPDATE tasks SET state = 'draft' WHERE id = 'P1-2' AND $1::bigint IS NOT NULL`,
+	} {
+		if _, err := s.db.ExecContext(ctx, q, draft); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const text = "leases and pruning"
+	v := vec(1, 0, 0)
+	for _, id := range []int64{live, draft} {
+		seedChunks(t, s, ChunkSubject{Kind: SubjectDoc, DocID: id, Project: "p1"},
+			fixtureChunk{anchor: "sec-1", text: text, vec: v})
+	}
+	for _, id := range []string{"P1-1", "P1-2"} {
+		seedChunks(t, s, ChunkSubject{Kind: SubjectTask, TaskID: id, Project: "p1"},
+			fixtureChunk{text: text, vec: v})
+	}
+
+	for _, mode := range []string{model.SearchHybrid, model.SearchDense, model.SearchLexical} {
+		hits, err := s.Search(ctx, SearchQuery{Text: "pruning", Vector: v, Mode: mode, Limit: 10})
+		if err != nil {
+			t.Fatalf("%s search: %v", mode, err)
+		}
+		if len(hits) != 2 {
+			t.Fatalf("%s: want the accepted doc and the ready task, got %+v", mode, hits)
+		}
+		for _, h := range hits {
+			if h.DocID != live && h.TaskID != "P1-1" {
+				t.Fatalf("%s: draft surfaced: %+v", mode, h)
+			}
+		}
+		all, err := s.Search(ctx, SearchQuery{Text: "pruning", Vector: v, Mode: mode, Limit: 10, IncludeDrafts: true})
+		if err != nil {
+			t.Fatalf("%s search with drafts: %v", mode, err)
+		}
+		if len(all) != 4 {
+			t.Fatalf("%s: include_drafts wants all four subjects, got %+v", mode, all)
 		}
 	}
 }
