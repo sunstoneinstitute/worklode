@@ -393,6 +393,42 @@ func TestSearchHidesRetiredSubjects(t *testing.T) {
 	}
 }
 
+// TestSearchHidesPlans is WL-REQ-1714: plans stay out of both arms unless the
+// caller asks for them.
+func TestSearchHidesPlans(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	spec := seedSearchDoc(t, s, 1, "Spec")
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-a",
+		Body: planTaskBody("", "Plan A"), CreatedBy: "stig",
+	})
+
+	const text = "leases and pruning"
+	v := vec(1, 0, 0)
+	seedChunks(t, s, ChunkSubject{Kind: SubjectDoc, DocID: spec, Project: "p1"},
+		fixtureChunk{anchor: "sec-1", text: text, vec: v})
+	seedChunks(t, s, ChunkSubject{Kind: SubjectDoc, DocID: plan.ID, Project: "p1"},
+		fixtureChunk{text: text, vec: v})
+
+	for _, mode := range []string{model.SearchHybrid, model.SearchDense, model.SearchLexical} {
+		hits, err := s.Search(t.Context(), SearchQuery{Text: "pruning", Vector: v, Mode: mode, Limit: 10})
+		if err != nil {
+			t.Fatalf("%s search: %v", mode, err)
+		}
+		if len(hits) != 1 || hits[0].DocID != spec {
+			t.Fatalf("%s: want the spec only, got %+v", mode, hits)
+		}
+		all, err := s.Search(t.Context(), SearchQuery{Text: "pruning", Vector: v, Mode: mode, Limit: 10, IncludePlans: true})
+		if err != nil {
+			t.Fatalf("%s search with plans: %v", mode, err)
+		}
+		if len(all) != 2 {
+			t.Fatalf("%s: include_plans wants the spec and the plan, got %+v", mode, all)
+		}
+	}
+}
+
 // TestSearchWithoutVectorIsLexicalOnly is WL-REQ-261: an instance with no
 // embedding provider serves real lexical results rather than an empty set.
 func TestSearchWithoutVectorIsLexicalOnly(t *testing.T) {

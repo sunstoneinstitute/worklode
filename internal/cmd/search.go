@@ -25,6 +25,7 @@ func newSearchCmd() *cobra.Command {
 		mode           string
 		limit          int
 		includeRetired bool
+		includePlans   bool
 		scope          scopeFlags
 	)
 	cmd := &cobra.Command{
@@ -57,6 +58,7 @@ func newSearchCmd() *cobra.Command {
 				Limit:          limit,
 				Project:        sc.Project,
 				IncludeRetired: includeRetired,
+				IncludePlans:   includePlans,
 			})
 			if err != nil {
 				return err
@@ -89,6 +91,7 @@ func newSearchCmd() *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 0, "max hits to return (default 20)")
 	cmd.Flags().BoolVar(&includeRetired, "include-retired", false,
 		"also return withdrawn and superseded docs, withdrawn rules' sections and abandoned tasks")
+	cmd.Flags().BoolVar(&includePlans, "include-plans", false, "also return plans")
 	addScopeFlags(cmd, &scope, "search only this project's corpus")
 	return cmd
 }

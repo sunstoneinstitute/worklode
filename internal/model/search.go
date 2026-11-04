@@ -72,4 +72,7 @@ type SearchParams struct {
 	// sections and abandoned tasks, which search leaves out by default
 	// (WL-REQ-1714).
 	IncludeRetired bool `query:"include_retired,omitempty"`
+	// IncludePlans keeps plans, which search leaves out by default: search
+	// is for the rules, specs and tasks an agent acts on (WL-REQ-1714).
+	IncludePlans bool `query:"include_plans,omitempty"`
 }

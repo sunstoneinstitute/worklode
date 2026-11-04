@@ -6988,6 +6988,7 @@ export interface paths {
                     kind?: string[];
                     limit?: number;
                     include_retired?: boolean;
+                    include_plans?: boolean;
                 };
                 header?: never;
                 path?: never;

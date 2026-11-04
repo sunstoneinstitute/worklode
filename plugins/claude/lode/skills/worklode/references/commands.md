@@ -248,7 +248,7 @@ Flags: --server
 
 ## `lode search` — Search documents, tasks and skills by meaning and by exact token
 
-Flags: --include-retired, --kind, --limit, --mode, --project, --repo
+Flags: --include-plans, --include-retired, --kind, --limit, --mode, --project, --repo
 
 ## `lode secret` — Task-declared secrets: catalog, status, exec, purge (WL-REQ-67)
 
