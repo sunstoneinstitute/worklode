@@ -1,4 +1,0 @@
--- The GitHub login Keycloak asserts for this actor (WL-SPEC-74), recorded
--- at login so the future link flow can strict-match long after login. NULL
--- means the Keycloak account carries no github_username attribute.
-ALTER TABLE actors ADD COLUMN expected_github_login text;

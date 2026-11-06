@@ -7,7 +7,7 @@ metadata:
 spec:
   instances: 1  # dev-scale; bump to 3 for prod HA
   # system flavor (standard + barman-cloud, same as the old floating `:17`)
-  # ships pgvector; see deploy/base/migrations/0007_skills.up.sql. vector is
+  # ships pgvector; see deploy/base/migrations/0100_baseline.up.sql. vector is
   # NOT a trusted extension, so the app role (non-superuser) cannot CREATE
   # EXTENSION it — postInitApplicationSQL below runs as superuser at
   # bootstrap, and deploy/base/database.yaml (the Database CRD) covers

@@ -11,7 +11,11 @@ apply them).
 
 Rules:
 
-- Never edit a shipped migration; add a new pair.
+- Never edit a shipped migration; add a new pair. The one exception is a
+  squash: `NNNN_baseline` replaces every migration up to `NNNN` with a
+  `pg_dump` of a fresh database at that version, schema plus seed rows.
+  Squash only below the lowest version of every live database, and prove
+  the dump of the new chain at head matches the old one.
 - Never pick a number. Name a new pair `NEW-<slug>.up.sql`/`.down.sql`; for
   several in one PR use `NEW1-<slug>`, `NEW2-<slug>`, which apply in that
   order. The `number-migrations` workflow renames them to the next free
