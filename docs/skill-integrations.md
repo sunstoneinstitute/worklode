@@ -333,7 +333,7 @@ installed.
 Four server- or CLI-side changes this design depends on. The fourth has since
 shipped; the first three do not exist yet.
 
-1. **The skill registry must key on `plugin:skill`.** `0007_skills.up.sql`
+1. **The skill registry must key on `plugin:skill`.** `0100_baseline.up.sql`
    declares `CONSTRAINT skills_name_unique UNIQUE (name)`, and `skillsync`
    takes `name` from SKILL.md frontmatter — a bare name — so two plugins each
    shipping `brainstorming` collide, and `skillsync` already warns on
@@ -400,7 +400,7 @@ authoring path.
 - `internal/cmd/doc.go`, `internal/cmd/docrender.go`, `internal/cli/client.go`,
   `internal/api/router.go`, `internal/designdoc/resolve.go`
 - `internal/skillsync/skillsync.go`, `internal/skillhash/skillhash.go`,
-  `deploy/base/migrations/0007_skills.up.sql`
+  `deploy/base/migrations/0100_baseline.up.sql`
 - WL-REQ-178; WL-REQ-198; WL-REQ-283; WL-RULE-317;
   WL-RULE-1349
 - `docs/authoring-design-docs.md`

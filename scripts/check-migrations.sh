@@ -127,6 +127,21 @@ renumber_to_next() {
 	renamed=1
 }
 
+# True when $1 is a baseline squashing the base: the base has a migration at
+# its number, and the branch deleted every base migration at or below it.
+# Databases past that number never run it. A branch cut before a base
+# migration landed still has the older ones, so it never matches. Uses no
+# git history, since CI fetches the base at depth 1.
+squashes_base() {
+	local num=$((10#${1%%_*})) old found=1
+	for old in $base_keys; do
+		[ "$((10#${old%%_*}))" -le "$num" ] || continue
+		[ -f "$MIG_DIR/$old.up.sql" ] && return 1
+		[ "$((10#${old%%_*}))" -eq "$num" ] && found=0
+	done
+	return $found
+}
+
 # Renumbers (or in --no-fix mode reports) every numbered migration this
 # branch adds whose number is at or below $1 or in the space-separated list
 # $2. Keys are read from disk, since an earlier renumber may have renamed
@@ -135,6 +150,7 @@ renumber_below() {
 	local floor=$1 taken=${2:-} key num
 	for key in $(list_files | strip_suffix | grep -v '^NEW' | sort -u || true); do
 		in_base "$key" && continue
+		squashes_base "$key" && continue
 		num=$((10#${key%%_*}))
 		case " $taken " in
 			*" $num "*) ;;
