@@ -205,7 +205,7 @@ func breaks(line, indent string) string {
 }
 
 // writeInline writes runs on one line, except a hard line break, which stays
-// "\n" outside a code span and a table cell. Emphasis delimiters nest: a style
+// "\n" outside a code span and a table cell, where it is "<br>". Emphasis delimiters nest: a style
 // that runs on longer is opened first, so it closes last. Consecutive code
 // runs are one code span split at an escape. In a table cell an unescaped
 // pipe is escaped: the table parser drops the backslash inside a code span.
@@ -242,11 +242,11 @@ func writeInline(runs []model.InlineContent, cell bool) string {
 			i++
 			text += runs[i].Text
 		}
-		if cell || r.Styles["code"] {
+		if r.Styles["code"] {
 			text = strings.ReplaceAll(text, "\n", " ")
 		}
 		if cell {
-			text = escapePipes(text)
+			text = strings.ReplaceAll(escapePipes(text), "\n", "<br>")
 		}
 		if r.Styles["code"] {
 			text = codeSpan(text)
