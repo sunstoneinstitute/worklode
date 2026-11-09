@@ -183,3 +183,62 @@ func lineDiff(a, b string) string {
 }
 
 func itoa(i int) string { b, _ := json.Marshal(i); return string(b) }
+
+// TestTableCellBreaks checks a hard break in a table cell is written as <br>
+// and read back as one (WL-REQ-1871): the cell's runs survive a round trip,
+// a break next to emphasis too, and a break in a code span stays a space.
+func TestTableCellBreaks(t *testing.T) {
+	cases := []struct{ name, md, want string }{
+		{"breaks", "| a |\n|---|\n| feature<br>bug<br>chore |\n", ""},
+		{"self-closing forms", "| a |\n|---|\n| x<br/>y<br />z |\n", "| a |\n|---|\n| x<br>y<br>z |\n"},
+		{"next to emphasis", "| a |\n|---|\n| **b**<br>*i* |\n", ""},
+		{"in a code span", "| a |\n|---|\n| `x y` |\n", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.want == "" {
+				c.want = c.md
+			}
+			blocks, err := mdblocks.Parse([]byte(c.md))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if blocks[0].Type != "table" {
+				t.Fatalf("block is %s, want table", blocks[0].Type)
+			}
+			if got, _ := mdblocks.Write(blocks); string(got) != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+
+	blocks, _ := mdblocks.Parse([]byte("| a |\n|---|\n| feature<br>bug |\n"))
+	cell := blocks[0].TableContent.Rows[1].Cells[0].Content
+	// The break joins the run before it, as a paragraph's hard break does.
+	if len(cell) != 2 || cell[0].Text != "feature\n" || cell[1].Text != "bug" {
+		t.Fatalf("cell runs = %+v, want \"feature\\n\", bug", cell)
+	}
+	// The run after <br> starts at "bug".
+	if want := len("| a |\n|---|\n| feature<br>"); cell[1].Offset != want {
+		t.Errorf("offset after <br> = %d, want %d", cell[1].Offset, want)
+	}
+
+	// A break written by the editor, with code on the next line, stays a space in the code.
+	out, _ := mdblocks.Write([]model.EditorBlock{{Type: "table", TableContent: &model.TableContent{Type: "tableContent", Rows: []model.TableRow{
+		{Cells: []model.TableCell{{Content: []model.InlineContent{{Type: "text", Text: "h"}}}}},
+		{Cells: []model.TableCell{{Content: []model.InlineContent{{Type: "text", Text: "a\nb"}, {Type: "text", Text: "c\nd", Styles: map[string]bool{"code": true}}}}}},
+	}}}})
+	if want := "| h |\n|---|\n| a<br>b`c d` |\n"; string(out) != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+}
+
+// TestTableCellOtherHTML keeps other raw HTML in a cell a source block.
+func TestTableCellOtherHTML(t *testing.T) {
+	for _, md := range []string{"| a |\n|---|\n| <b>x</b> |\n", "| a |\n|---|\n| x<br class=\"y\">z |\n", "a<br>b\n"} {
+		blocks, _ := mdblocks.Parse([]byte(md))
+		if blocks[0].Type != "source" {
+			t.Errorf("%q: block is %s, want source", md, blocks[0].Type)
+		}
+	}
+}

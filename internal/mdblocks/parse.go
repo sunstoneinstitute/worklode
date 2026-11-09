@@ -99,7 +99,7 @@ func block(src []byte, n ast.Node) model.EditorBlock {
 	r := span(src, n)
 	switch n := n.(type) {
 	case *ast.Paragraph:
-		if !inProfile(src, n) {
+		if !inProfile(src, n, false) {
 			break
 		}
 		if img, ok := soleImage(n); ok {
@@ -110,7 +110,7 @@ func block(src []byte, n ast.Node) model.EditorBlock {
 		}
 		return model.EditorBlock{Type: "paragraph", Range: r, Content: inline(src, n)}
 	case *ast.Heading:
-		if src[n.Pos()] != '#' || !inProfile(src, n) {
+		if src[n.Pos()] != '#' || !inProfile(src, n, false) {
 			break
 		}
 		// An `{#id}` attribute is the only one Worklode Markdown lists.
@@ -143,7 +143,7 @@ func block(src []byte, n ast.Node) model.EditorBlock {
 		// A quote block holds inline content only, so a quote of anything but
 		// one paragraph is source.
 		p, ok := n.FirstChild().(*ast.Paragraph)
-		if !ok || p.NextSibling() != nil || !inProfile(src, p) {
+		if !ok || p.NextSibling() != nil || !inProfile(src, p, false) {
 			break
 		}
 		return model.EditorBlock{Type: "quote", Range: r, Content: inline(src, p)}
@@ -166,7 +166,7 @@ func listItem(src []byte, l *ast.List, it ast.Node, index int) model.EditorBlock
 	}
 	rest := it.FirstChild()
 	if rest != nil && (rest.Kind() == ast.KindTextBlock || rest.Kind() == ast.KindParagraph) {
-		if !inProfile(src, rest) {
+		if !inProfile(src, rest, false) {
 			return source(src, r)
 		}
 		if cb, ok := rest.FirstChild().(*east.TaskCheckBox); ok {
@@ -188,7 +188,7 @@ func table(src []byte, t *east.Table, r model.ByteRange) model.EditorBlock {
 	for row := t.FirstChild(); row != nil; row = row.NextSibling() {
 		var tr model.TableRow
 		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
-			if !inProfile(src, cell) {
+			if !inProfile(src, cell, true) {
 				return source(src, r)
 			}
 			tr.Cells = append(tr.Cells, model.TableCell{Content: inline(src, cell)})
@@ -210,13 +210,15 @@ func props(v any) json.RawMessage {
 }
 
 // inProfile reports whether n's inline content is all Worklode Markdown: no
-// raw HTML, no footnote reference and no code span over more than one line
-// (WL-REQ-1871).
-func inProfile(src []byte, n ast.Node) bool {
+// raw HTML (but a table cell's <br>, <br/> and <br />, a hard break), no
+// footnote reference and no code span over more than one line (WL-REQ-1871).
+func inProfile(src []byte, n ast.Node, cell bool) bool {
 	ok := true
 	_ = ast.Walk(n, func(c ast.Node, entering bool) (ast.WalkStatus, error) {
 		switch c := c.(type) {
-		case *ast.RawHTML, *east.FootnoteLink:
+		case *ast.RawHTML:
+			ok = cell && isBr(src, c)
+		case *east.FootnoteLink:
 			ok = false
 		case *ast.CodeSpan:
 			first, last := c.FirstChild(), c.LastChild()
@@ -230,6 +232,19 @@ func inProfile(src []byte, n ast.Node) bool {
 		return ast.WalkContinue, nil
 	})
 	return ok
+}
+
+// isBr reports whether h is a <br>, <br/> or <br /> tag.
+func isBr(src []byte, h *ast.RawHTML) bool {
+	if h.Segments.Len() != 1 {
+		return false
+	}
+	seg := h.Segments.At(0)
+	switch string(seg.Value(src)) {
+	case "<br>", "<br/>", "<br />":
+		return true
+	}
+	return false
 }
 
 // soleImage returns p's image when it is p's only content.
