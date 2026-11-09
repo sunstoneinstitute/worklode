@@ -76,5 +76,5 @@ configMapGenerator:
       - migrations/0128_doc-notes-fold.down.sql
       - migrations/0129_body-locks.up.sql
       - migrations/0129_body-locks.down.sql
-      - migrations/NEW-review-message-escalation.up.sql
-      - migrations/NEW-review-message-escalation.down.sql
+      - migrations/0130_review-message-escalation.up.sql
+      - migrations/0130_review-message-escalation.down.sql
