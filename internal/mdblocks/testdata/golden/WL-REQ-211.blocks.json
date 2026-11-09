@@ -1,7 +1,6 @@
 {
   "blocks": [
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -16,7 +15,6 @@
       }
     },
     {
-      "id": "",
       "type": "codeBlock",
       "props": {
         "language": "markdown"
@@ -44,7 +42,6 @@
       }
     },
     {
-      "id": "",
       "type": "table",
       "range": {
         "start": 108,
@@ -127,7 +124,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {

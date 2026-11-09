@@ -1,7 +1,6 @@
 {
   "blocks": [
     {
-      "id": "",
       "type": "codeBlock",
       "content": [
         {
@@ -16,7 +15,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -57,7 +55,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -93,7 +90,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -121,7 +117,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -149,7 +144,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -190,7 +184,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -244,7 +237,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -280,7 +272,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -342,7 +333,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
