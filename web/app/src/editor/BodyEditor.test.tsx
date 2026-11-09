@@ -5,7 +5,6 @@ import { beforeAll, expect, test, vi } from "vitest"
 import { renderWithRouter } from "@/test/render"
 import { BodyEditor, type BodyEditorInstance, type Blocks } from "./BodyEditor"
 import { BodyView } from "./BodyView"
-import golden from "../../../../internal/mdblocks/testdata/golden/profile.blocks.json"
 
 const paragraph = (text: string): Blocks => [{ type: "paragraph", content: text }]
 
@@ -57,7 +56,19 @@ test("a heading shows its anchor and a callout its kind, read-only", async () =>
 test("a table as the server sends it shows its handles on hover and grows a row (WL-REQ-1871)", async () => {
   const onChange = vi.fn()
   let editor: BodyEditorInstance | null = null
-  const table = golden.blocks.find((b) => b.type === "table") as Blocks[number]
+  // A table as GET ?as=blocks serves it: no `id` (internal/mdblocks golden profile.blocks.json)
+  const table = {
+    type: "table",
+    content: {
+      type: "tableContent",
+      columnWidths: [null, null],
+      headerRows: 1,
+      rows: [
+        { cells: [[{ type: "text", text: "Name", styles: {} }], [{ type: "text", text: "Value", styles: {} }]] },
+        { cells: [[{ type: "text", text: "a", styles: {} }], [{ type: "text", text: "1", styles: {} }]] },
+      ],
+    },
+  } as unknown as Blocks[number]
   await renderWithRouter(<BodyEditor blocks={[table]} onChange={onChange} onEditor={(e) => (editor ??= e)} />)
   fireEvent.mouseMove(document.querySelector(".bn-editor td")!)
   await vi.waitFor(() => expect(document.querySelectorAll(".bn-table-handle")).toHaveLength(2))
