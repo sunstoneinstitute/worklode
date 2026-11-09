@@ -225,6 +225,9 @@ func TestReviewChangeSubmitReanchors(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &rev); err != nil || len(rev.Threads) != 1 || rev.Threads[0].Anchor.Line != 8 {
 		t.Fatalf("review after submit = %+v (%v), want the thread at line 8", rev, err)
 	}
+	if rev.Round != 1 {
+		t.Errorf("review round after the author round = %d, want 1", rev.Round)
+	}
 	out, err = runLode(t, "review", "show", id)
 	if err != nil || !strings.Contains(out, "diff --git") || !strings.Contains(out, "+func b() { work() }") {
 		t.Errorf("review show = %q (%v), want the raw diff after the threads", out, err)
