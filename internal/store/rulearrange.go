@@ -187,9 +187,9 @@ func ArrangeRule(tx *sql.Tx, now time.Time, docID int64, in model.ArrangeRuleInp
 	if e.revising {
 		pin = func(tx *sql.Tx) error {
 			_, err := tx.Exec(
-				`INSERT INTO doc_revision_rules (doc_id, position, rule_id, rule_version, depth, anchor)
-				 SELECT $1, coalesce(max(position) + 1, 0), $2, $3, $4, $5 FROM doc_revision_rules WHERE doc_id = $1`,
-				docID, ruleID, version, level, sec.Anchor)
+				`INSERT INTO doc_revision_rules (doc_id, position, rule_id, rule_version, depth, anchor, copied_heading, copied_body)
+				 SELECT $1, coalesce(max(position) + 1, 0), $2, $3, $4, $5, $6, $7 FROM doc_revision_rules WHERE doc_id = $1`,
+				docID, ruleID, version, level, sec.Anchor, heading, body)
 			if err != nil {
 				return fmt.Errorf("arrange rule %d in doc %d: %w", ruleID, docID, err)
 			}
