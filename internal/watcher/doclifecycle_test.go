@@ -45,6 +45,7 @@ func TestEvaluate(t *testing.T) {
 				EventID:        43,
 				EventType:      eventbus.TypeDocumentSubmitted,
 				DocIRI:         "wlid:doc/spec-025",
+				DocRef:         "WL-SPEC-25",
 				DocKind:        "spec",
 				DocTitle:       "Documents in the backbone",
 				Version:        2,
@@ -66,6 +67,7 @@ func TestEvaluate(t *testing.T) {
 				EventID:           53,
 				EventType:         eventbus.TypeDocumentSubmitted,
 				DocIRI:            "wlid:doc/spec-025",
+				DocRef:            "WL-SPEC-25",
 				DocKind:           "spec",
 				DocTitle:          "Documents in the backbone",
 				Version:           2,
@@ -86,6 +88,7 @@ func TestEvaluate(t *testing.T) {
 				EventID:           54,
 				EventType:         eventbus.TypeDocumentSubmitted,
 				DocIRI:            "wlid:doc/spec-025",
+				DocRef:            "WL-SPEC-25",
 				DocKind:           "spec",
 				DocTitle:          "Documents in the backbone",
 				Version:           2,
@@ -106,6 +109,7 @@ func TestEvaluate(t *testing.T) {
 				EventID:   44,
 				EventType: eventbus.TypeDocumentAccepted,
 				DocIRI:    "wlid:doc/spec-025",
+				DocRef:    "WL-SPEC-25",
 				DocKind:   "spec",
 				DocTitle:  "Documents in the backbone",
 				Version:   2,
@@ -122,6 +126,7 @@ func TestEvaluate(t *testing.T) {
 				EventID:        45,
 				EventType:      eventbus.TypeDocumentAccepted,
 				DocIRI:         "wlid:doc/spec-025",
+				DocRef:         "WL-SPEC-25",
 				DocKind:        "spec",
 				DocTitle:       "Documents in the backbone",
 				Version:        2,
@@ -274,8 +279,8 @@ func TestEvaluate(t *testing.T) {
 
 				// The failure this assertion exists to catch: a mint body
 				// that lost its doc reference or its provenance line.
-				if !strings.Contains(gotAction.Body, tc.in.DocIRI) {
-					t.Fatalf("Evaluate()[%d].Body = %q, want it to contain doc IRI %q", i, gotAction.Body, tc.in.DocIRI)
+				if !strings.Contains(gotAction.Body, tc.in.DocRef) {
+					t.Fatalf("Evaluate()[%d].Body = %q, want it to contain doc ref %q", i, gotAction.Body, tc.in.DocRef)
 				}
 				// A review body names the ref, which the cockpit links to the
 				// document under review.
