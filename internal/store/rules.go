@@ -25,6 +25,9 @@ type ruleRow struct {
 	body    string
 	anchor  string
 	depth   int
+	// copied: heading and body are the text a candidate revision copied
+	// from the rule, which a later rule edit leaves behind (WL-REQ-1300).
+	copied bool
 }
 
 // syncRules makes a document's rules agree with its parsed source.
@@ -121,6 +124,9 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable stri
 		}
 	}
 
+	if err := refuseStaleCopies(tx, doc, match); err != nil {
+		return false, nil, err
+	}
 	if _, err := tx.Exec(`DELETE FROM doc_rules WHERE doc_id = $1`, docID); err != nil {
 		return false, nil, fmt.Errorf("clear arrangement of doc %d: %w", docID, err)
 	}
@@ -208,6 +214,40 @@ func syncRules(tx *sql.Tx, docID int64, doc *designdoc.Document, priorTable stri
 	}, nil
 }
 
+// refuseStaleCopies refuses a candidate's text edit to a rule that changed
+// since the candidate copied it: writing the edit would revert the rule's own
+// (WL-REQ-1300). An unedited copy is never written back, so a stale one only
+// shows the rule at its current text.
+func refuseStaleCopies(tx *sql.Tx, doc *designdoc.Document, match []*ruleRow) error {
+	var stale []string
+	for i, m := range match {
+		if m == nil || !m.copied {
+			continue
+		}
+		sec := doc.Sections[i]
+		if m.heading == sec.Title && sameRuleBody(m.body, sec.Body) {
+			continue
+		}
+		var version int
+		var heading, body string
+		if err := tx.QueryRow(
+			`SELECT r.version, v.heading, v.body FROM rules r
+			   JOIN rule_versions v ON v.rule_id = r.id AND v.version = r.version
+			  WHERE r.id = $1`, m.id).Scan(&version, &heading, &body); err != nil {
+			return fmt.Errorf("read rule %d: %w", m.id, err)
+		}
+		if version != m.version || heading != m.heading || !sameRuleBody(body, m.body) {
+			stale = append(stale, ruleRefOf(tx, m.id))
+		}
+	}
+	if len(stale) > 0 {
+		return fmt.Errorf("the candidate edits %s, changed since the candidate copied it; "+
+			"edit the rule with lode rule edit, or restore its current text in the candidate: %w",
+			strings.Join(stale, ", "), ErrInvalidInput)
+	}
+	return nil
+}
+
 // namedRef is the rule a heading names: its rule= attribute, else the ref
 // a rendered heading prints.
 func namedRef(sec *designdoc.Section) string {
@@ -290,8 +330,12 @@ func isSpecHeading(secs []*designdoc.Section, i int) bool {
 // arranged version text and anchor, in position order. Spec headings carry
 // no rule and are left out.
 func arrangedRules(tx *sql.Tx, table string, docID int64) ([]ruleRow, error) {
+	text := `cv.heading, cv.body, false`
+	if table == "doc_revision_rules" {
+		text = `coalesce(dc.copied_heading, cv.heading), coalesce(dc.copied_body, cv.body), dc.copied_body IS NOT NULL`
+	}
 	rows, err := tx.Query(
-		`SELECT dc.rule_id, dc.rule_version, cv.heading, cv.body, coalesce(dc.anchor, ''), dc.depth
+		`SELECT dc.rule_id, dc.rule_version, `+text+`, coalesce(dc.anchor, ''), dc.depth
 		   FROM `+table+` dc
 		   JOIN rule_versions cv ON cv.rule_id = dc.rule_id AND cv.version = dc.rule_version
 		  WHERE dc.doc_id = $1
@@ -303,7 +347,7 @@ func arrangedRules(tx *sql.Tx, table string, docID int64) ([]ruleRow, error) {
 	var out []ruleRow
 	for rows.Next() {
 		var c ruleRow
-		if err := rows.Scan(&c.id, &c.version, &c.heading, &c.body, &c.anchor, &c.depth); err != nil {
+		if err := rows.Scan(&c.id, &c.version, &c.heading, &c.body, &c.copied, &c.anchor, &c.depth); err != nil {
 			return nil, fmt.Errorf("scan arrangement of doc %d: %w", docID, err)
 		}
 		out = append(out, c)
