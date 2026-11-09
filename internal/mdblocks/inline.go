@@ -17,7 +17,7 @@ import (
 // it. An emoji shortcode is its own one-character run, at the shortcode's
 // colon, so the runs around it keep that mapping. A link's Offset is its
 // first text run's. A hard line break is "\n" and a soft one is " ", both at
-// the newline byte (WL-1423).
+// the newline byte (WL-1423). A table cell's <br> is a hard break at the tag.
 func inline(src []byte, n ast.Node) []model.InlineContent {
 	c := inlineConv{src: src}
 	c.walk(n, nil)
@@ -49,6 +49,11 @@ func (c *inlineConv) walk(n ast.Node, styles map[string]bool) {
 			}
 		case *east.Strikethrough:
 			c.walk(k, with(styles, "strike"))
+		case *ast.RawHTML:
+			// Only a table cell's <br> gets here (inProfile): a hard break at the tag.
+			seg := k.Segments.At(0)
+			c.text("\n", seg.Start, styles, false)
+			c.end = seg.Stop
 		case *ast.CodeSpan:
 			c.walk(k, with(styles, "code"))
 		case *ast.Link:
