@@ -191,6 +191,40 @@ func TestThreadLifecycle(t *testing.T) {
 	}
 }
 
+// TestEscalationReplyIsNotTheAnswer: the author's escalation reply on a
+// question neither emits wl:ReviewQuestionAnswered nor counts as the first
+// answer; the author's next reply does both (WL-REQ-1774).
+func TestEscalationReplyIsNotTheAnswer(t *testing.T) {
+	s, _, r, ruleID, version, body := gateFixture(t)
+	start := strings.Index(body, "the gate")
+	anchor := model.ReviewAnchor{Rule: ruleID, Version: version, ByteStart: start, ByteEnd: start + len("the gate"), Quote: "the gate"}
+	th, err := openThread(t, s, r.ID, model.OpenThreadInput{Anchor: anchor, Intent: "question", Body: "why two lanes?"}, "a")
+	if err != nil {
+		t.Fatalf("OpenThread: %v", err)
+	}
+	var m model.ReviewMessage
+	var first bool
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.escalated", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			m, first, _, err = addReply(tx, taskTestNow.Add(time.Minute), th.ID, "Escalated to WL-9", "stig", eventID, true)
+			return err
+		}); err != nil {
+		t.Fatalf("escalation reply: %v", err)
+	}
+	if first || m.Role != "author" {
+		t.Errorf("escalation reply = %+v first=%v, want an author message, not first", m, first)
+	}
+	if n := threadEvents(t, s, "wl:ReviewQuestionAnswered", th.ID); n != 0 {
+		t.Errorf("wl:ReviewQuestionAnswered after escalating = %d, want 0", n)
+	}
+	if _, first, _, err = replyThread(t, s, th.ID, "one per reviewer", "stig"); err != nil || !first {
+		t.Errorf("answer after escalating first=%v err=%v, want first", first, err)
+	}
+	if n := threadEvents(t, s, "wl:ReviewQuestionAnswered", th.ID); n != 1 {
+		t.Errorf("wl:ReviewQuestionAnswered after answering = %d, want 1", n)
+	}
+}
+
 // TestThreadsForSubject narrows by status and version and reads a rule's
 // threads, obsolete ones included; a bare note's messages count per thread.
 func TestThreadsForSubject(t *testing.T) {

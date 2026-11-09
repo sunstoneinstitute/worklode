@@ -387,6 +387,14 @@ func lockThread(tx *sql.Tx, id int64) (*lockedThread, error) {
 // question latency metric.
 func ReplyThread(tx *sql.Tx, now time.Time, threadID int64, body, actorID string, eventID int64) (
 	m model.ReviewMessage, firstAuthorReply bool, askedAt time.Time, err error) {
+	return addReply(tx, now, threadID, body, actorID, eventID, false)
+}
+
+// addReply is ReplyThread. An escalation reply (WL-REQ-1774) says why the
+// answer is late, so it is not the answer: it neither emits
+// wl:ReviewQuestionAnswered nor counts as the author's first reply.
+func addReply(tx *sql.Tx, now time.Time, threadID int64, body, actorID string, eventID int64, escalation bool) (
+	m model.ReviewMessage, firstAuthorReply bool, askedAt time.Time, err error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return m, false, askedAt, fmt.Errorf("a reply needs a body: %w", ErrInvalidInput)
@@ -397,7 +405,7 @@ func ReplyThread(tx *sql.Tx, now time.Time, threadID int64, body, actorID string
 	}
 	var answered bool
 	if t.intent == "question" {
-		if err := tx.QueryRow(`SELECT EXISTS (SELECT 1 FROM review_messages WHERE thread_id = $1 AND role = 'author')`,
+		if err := tx.QueryRow(`SELECT EXISTS (SELECT 1 FROM review_messages WHERE thread_id = $1 AND role = 'author' AND NOT escalation)`,
 			threadID).Scan(&answered); err != nil {
 			return m, false, askedAt, fmt.Errorf("read replies of thread %d: %w", threadID, err)
 		}
@@ -405,6 +413,12 @@ func ReplyThread(tx *sql.Tx, now time.Time, threadID int64, body, actorID string
 	ts := now.UTC().Truncate(time.Second)
 	if m, err = addThreadMessage(tx, ts, threadID, t.review, t.doc, body, actorID); err != nil {
 		return m, false, askedAt, err
+	}
+	if escalation {
+		if _, err := tx.Exec(`UPDATE review_messages SET escalation = true WHERE id = $1`, m.ID); err != nil {
+			return m, false, askedAt, fmt.Errorf("mark message %d an escalation: %w", m.ID, err)
+		}
+		return m, false, t.createdAt.UTC(), nil
 	}
 	if t.intent == "question" && !answered && m.Role == "author" {
 		if err := reviewEvent(tx, ts, "wl:ReviewQuestionAnswered", threadID, actorID, eventID, nil); err != nil {
