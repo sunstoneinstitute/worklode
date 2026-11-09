@@ -1,7 +1,6 @@
 {
   "blocks": [
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -37,7 +36,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -60,7 +58,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -114,7 +111,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -194,7 +190,6 @@
       }
     },
     {
-      "id": "",
       "type": "source",
       "props": {
         "markdown": "4. Write `\u003ctmp\u003e/.crit.config.json`: the user's `~/.crit.config.json` when\n   it exists, with `hooks.on_finish_unresolved` and\n   `hooks.on_finish_approved` both set to `inline:lode review import\n   --review \u003cid\u003e [--anchors \u003csidecar\u003e]` and `author` set to the actor name\n   from `cli.Client.WhoAmI`."
@@ -205,7 +200,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -298,7 +292,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -347,7 +340,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -505,7 +497,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false
@@ -544,7 +535,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false
@@ -575,7 +565,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false

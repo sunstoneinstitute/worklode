@@ -9,9 +9,11 @@ import (
 // EditorBlock is one block of the body editor's document in BlockNote 0.56's
 // model (WL-RULE-1870). Wire names match BlockNote. Blocks exist only between
 // lode-server and the SPA while a Markdown field is edited; Range is the
-// block's byte span in the stored Markdown.
+// block's byte span in the stored Markdown. ID is empty on blocks the server
+// parses and is then left off the wire: BlockNote mints an id only for an
+// absent one, and an empty one hides the table handles (WL-REQ-1871).
 type EditorBlock struct {
-	ID   string `json:"id"`
+	ID   string `json:"id,omitempty"`
 	Type string `json:"type"`
 	// Props is the type's own props object, passed through opaque: its shape
 	// varies by Type, and the untyped-map guard refuses map[string]any.

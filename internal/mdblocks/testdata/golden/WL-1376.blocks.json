@@ -1,7 +1,6 @@
 {
   "blocks": [
     {
-      "id": "",
       "type": "source",
       "props": {
         "markdown": "One mutation across every surface, mirroring the doc form exactly. Read\n`internal/cmd/docreviewers.go` and `store.SetDocReviewers`\n(`internal/store/approvals.go`) first: the doc side is `lode doc reviewers\n\u003cref\u003e` to view and `lode doc set reviewers \u003cactor…\u003e \u003cref\u003e` to write, and\nthe task side copies both."
@@ -12,7 +11,6 @@
       }
     },
     {
-      "id": "",
       "type": "source",
       "props": {
         "markdown": "- `internal/store/reviews.go`: `SetTaskReviewers(tx, now, taskID, actorID,\n  reviewers []string, eventID)`: whole-list replace, every reviewer an\n  existing actor, refused on a closed task; `taskReviewers(tx, taskID)`.\n  Event `task.reviewers_set` with `{\"reviewers\": [...]}`."
@@ -23,7 +21,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -137,7 +134,6 @@
       }
     },
     {
-      "id": "",
       "type": "source",
       "props": {
         "markdown": "- `internal/cli/tasks.go`, `internal/cmd/task.go`: `lode task reviewers\n  \u003cid\u003e` (view) and `reviewers` as a field of the existing `lode task set\n  \u003cfield\u003e \u003cvalue…\u003e \u003cid\u003e`; `cli.TaskDetailRender` shows the roster."
@@ -148,7 +144,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -228,7 +223,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false
@@ -267,7 +261,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false
@@ -306,7 +299,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false
@@ -358,7 +350,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false

@@ -1,7 +1,6 @@
 {
   "blocks": [
     {
-      "id": "",
       "type": "source",
       "props": {
         "markdown": "- `SubmitReviewerRound`: refuse a verdict from `reviewAuthor`, the active\n  lease holder or `tasks.assignee` (`ErrForbidden`, \"self-approval: \u003cactor\u003e\n  holds the lease\"). After the round, when the subject is a task in\n  `in_review` and (`verdict = changes_requested` or\n  `review.BlocksApproval`), `Transition(in_review → in_progress)`; lease\n  untouched. Observe part 1's metrics with `subject = change`."
@@ -12,7 +11,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -131,7 +129,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -219,7 +216,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -286,7 +282,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -301,7 +296,6 @@
       }
     },
     {
-      "id": "",
       "type": "codeBlock",
       "props": {
         "language": "go"
@@ -369,7 +363,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false
@@ -408,7 +401,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false
@@ -473,7 +465,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false

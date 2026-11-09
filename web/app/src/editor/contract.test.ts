@@ -28,7 +28,7 @@ const cellDefaults: Record<string, unknown> = { backgroundColor: "default", text
 
 // Drops what BlockNote fills in on the way back: a prop at its schema default,
 // empty `styles`, empty `children`, an undefined field. A bare table cell
-// becomes BlockNote's `tableCell` object. Drops `id` (Go leaves it empty,
+// becomes BlockNote's `tableCell` object. Drops `id` (Go leaves it off,
 // BlockNote mints its own), and `range` and `offset`, which BlockNote does not
 // carry (see the comment at the top).
 function canon(v: unknown): Json {

@@ -1,7 +1,6 @@
 {
   "blocks": [
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -133,7 +132,6 @@
       }
     },
     {
-      "id": "",
       "type": "table",
       "range": {
         "start": 310,
@@ -309,7 +307,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -324,7 +321,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -365,7 +361,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -380,7 +375,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -408,7 +402,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -462,7 +455,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -490,7 +482,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -505,7 +496,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -546,7 +536,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -561,7 +550,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -576,7 +564,6 @@
       }
     },
     {
-      "id": "",
       "type": "codeBlock",
       "content": [
         {
@@ -591,7 +578,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {

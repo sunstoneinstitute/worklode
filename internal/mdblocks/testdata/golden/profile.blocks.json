@@ -1,7 +1,6 @@
 {
   "blocks": [
     {
-      "id": "",
       "type": "heading",
       "props": {
         "level": 1
@@ -19,7 +18,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -47,7 +45,6 @@
       }
     },
     {
-      "id": "",
       "type": "heading",
       "props": {
         "level": 2,
@@ -66,7 +63,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
@@ -150,7 +146,6 @@
       }
     },
     {
-      "id": "",
       "type": "bulletListItem",
       "content": [
         {
@@ -165,7 +160,6 @@
       }
     },
     {
-      "id": "",
       "type": "numberedListItem",
       "content": [
         {
@@ -180,7 +174,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": false
@@ -198,7 +191,6 @@
       }
     },
     {
-      "id": "",
       "type": "checkListItem",
       "props": {
         "checked": true
@@ -216,7 +208,6 @@
       }
     },
     {
-      "id": "",
       "type": "table",
       "range": {
         "start": 336,
@@ -270,7 +261,6 @@
       }
     },
     {
-      "id": "",
       "type": "codeBlock",
       "props": {
         "language": "go"
@@ -288,7 +278,6 @@
       }
     },
     {
-      "id": "",
       "type": "codeBlock",
       "props": {
         "language": "mermaid"
@@ -311,7 +300,6 @@
       }
     },
     {
-      "id": "",
       "type": "quote",
       "content": [
         {
@@ -326,14 +314,12 @@
       }
     },
     {
-      "id": "",
       "type": "callout",
       "props": {
         "kind": "warning"
       },
       "children": [
         {
-          "id": "",
           "type": "paragraph",
           "content": [
             {
@@ -354,7 +340,6 @@
       }
     },
     {
-      "id": "",
       "type": "image",
       "props": {
         "caption": "A pixel",
