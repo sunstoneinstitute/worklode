@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -204,6 +205,29 @@ func TestTaskViewDependsOnEdges(t *testing.T) {
 	}
 	if len(v.Blocks) != 1 || v.Blocks[0] != "WL-3" {
 		t.Errorf("Blocks = %v, want [WL-3]", v.Blocks)
+	}
+}
+
+// TestTaskPageListsInformedBy: the Edges card names the event that minted the
+// task, by id and type, and says none for a task no event minted.
+func TestTaskPageListsInformedBy(t *testing.T) {
+	t.Parallel()
+	render := func(task *model.Task, typ string) string {
+		view := taskView(nil, mdrender.ProjectKeys{}, task, ui.CockpitProject{}, false, nil, nil, nil)
+		view.InformedByType = typ
+		var b strings.Builder
+		if err := ui.Task(view).Render(context.Background(), &b); err != nil {
+			t.Fatalf("render Task: %v", err)
+		}
+		return b.String()
+	}
+	html := render(&model.Task{ID: "WL-1", Project: "proj", Title: "t", InformedBy: 5764458}, "wl:DocumentAccepted")
+	if !regexp.MustCompile(`Informed by:\s*event 5764458 <span class="muted">\(wl:DocumentAccepted\)</span>`).MatchString(html) {
+		t.Errorf("task page lacks the informed-by row:\n%s", html)
+	}
+	html = render(&model.Task{ID: "WL-2", Project: "proj", Title: "t"}, "")
+	if !regexp.MustCompile(`Informed by:\s*<span class="muted">none</span>`).MatchString(html) {
+		t.Error("an unminted task's informed-by row does not say none")
 	}
 }
 

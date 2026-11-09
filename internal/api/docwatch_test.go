@@ -266,6 +266,9 @@ func TestDocWatchRedeliveryMintsOnce(t *testing.T) {
 	if !strings.Contains(string(mint.Payload), eventIRI(ev.ID)) {
 		t.Errorf("payload %s does not carry prov:wasInformedBy %s", mint.Payload, eventIRI(ev.ID))
 	}
+	if tasks[0].InformedBy != ev.ID {
+		t.Errorf("minted task InformedBy = %d, want the submission event %d", tasks[0].InformedBy, ev.ID)
+	}
 }
 
 // TestDocWatchMaterializesApprovalOnSubmit is WL-REQ-170 / WL-REQ-124 at its

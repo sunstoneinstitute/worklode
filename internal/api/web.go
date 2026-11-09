@@ -683,6 +683,14 @@ func (s *server) renderTaskPage(w http.ResponseWriter, r *http.Request, id strin
 		s.webStoreErr(w, err)
 		return
 	}
+	if t.InformedBy != 0 {
+		ev, err := s.st.GetEvent(ctx, t.InformedBy)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		view.InformedByType = ev.Type
+	}
 	if view.Generated, err = s.st.GeneratedDocs(ctx, id); err != nil {
 		s.webStoreErr(w, err)
 		return

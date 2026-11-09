@@ -10101,6 +10101,8 @@ export interface components {
             holder?: components["schemas"]["Holder"];
             human_only?: boolean;
             id?: string;
+            /** Format: int64 */
+            informed_by?: number;
             kind?: string;
             milestone?: string;
             needs_decomposition?: boolean;
@@ -12128,6 +12130,8 @@ export interface components {
             due?: string;
             human_only?: boolean;
             id?: string;
+            /** Format: int64 */
+            informed_by?: number;
             kind?: string;
             milestone?: string;
             needs_decomposition?: boolean;
@@ -12191,6 +12195,8 @@ export interface components {
             hierarchy?: components["schemas"]["TaskHierarchy"];
             human_only?: boolean;
             id?: string;
+            /** Format: int64 */
+            informed_by?: number;
             inline_refs_in?: components["schemas"]["InlineRef"][] | null;
             inline_refs_out?: components["schemas"]["InlineRef"][] | null;
             kind?: string;
