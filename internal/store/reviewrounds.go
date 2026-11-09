@@ -351,7 +351,7 @@ func escalateOnQuestions(tx *sql.Tx, now time.Time, taskID, escalation, actorID 
 	}
 	body := fmt.Sprintf("Escalated to %s: the plan or spec does not cover this, so the answer waits on it.", escalation)
 	for _, th := range threads {
-		if _, _, _, err := ReplyThread(tx, now, th, body, actorID, eventID); err != nil {
+		if _, _, _, err := addReply(tx, now, th, body, actorID, eventID, true); err != nil {
 			return err
 		}
 	}
