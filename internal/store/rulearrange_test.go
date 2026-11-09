@@ -344,3 +344,101 @@ func TestEditableFormRefusesWithdrawnRule(t *testing.T) {
 		t.Fatalf("withdrawn rule in a revision: %v, want ErrInvalidInput", err)
 	}
 }
+
+// TestAcceptRevisionKeepsRuleText: a candidate's copy of a rule goes stale
+// when the rule is edited after it was arranged. Accepting the candidate
+// places the rule at its current text and writes no version (WL-REQ-1300,
+// WL-1479). A draft rule is rewritten in place (WL-REQ-1298), so its version
+// does not move; the prod case was also accepted before the spec.
+func TestAcceptRevisionKeepsRuleText(t *testing.T) {
+	for _, acceptRule := range []bool{false, true} {
+		t.Run(fmt.Sprintf("acceptRule=%v", acceptRule), func(t *testing.T) {
+			s := openDocStore(t)
+			ctx := context.Background()
+			a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+			if _, _, err := acceptDoc(t, s, a.ID, "stig"); err != nil {
+				t.Fatal(err)
+			}
+			r, err := s.AddRule(ctx, model.AddRuleInput{Project: "p1", Heading: "Four", Body: "subject link\n"}, "stig")
+			if err != nil {
+				t.Fatal(err)
+			}
+			ref := fmt.Sprintf("P1-REQ-%d", r.Number)
+			if _, err := arrangeRule(t, s, a.ID, model.ArrangeRuleInput{Rule: ref}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.EditRule(ctx, "P1", r.Number, model.EditRuleInput{Heading: "Four", Body: "target link\n"}, "stig"); err != nil {
+				t.Fatal(err)
+			}
+			if acceptRule {
+				if _, err := s.AcceptRule(ctx, "P1", r.Number, false, "stig"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := acceptRevision(t, s, a.ID, "stig"); err != nil {
+				t.Fatal(err)
+			}
+			got, err := s.GetRule(ctx, "P1", r.Number)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Version != 1 || !strings.Contains(string(got.Body), "target link") {
+				t.Errorf("rule after accept = v%d %q, want v1 with the edited text", got.Version, got.Body)
+			}
+			if body := docBody(t, s, a.ID); !strings.Contains(body, "target link") {
+				t.Errorf("spec does not render the rule's current text:\n%s", body)
+			}
+		})
+	}
+}
+
+// TestAcceptRevisionRuleEdits: text edited in the candidate is a rule edit
+// (WL-REQ-1661, WL-REQ-1680) and lands when the rule is unchanged since the
+// candidate copied it. When the rule changed too, accepting is refused,
+// naming the rule, and the rule keeps its own text.
+func TestAcceptRevisionRuleEdits(t *testing.T) {
+	s := openDocStore(t)
+	ctx := context.Background()
+	a := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "a", Body: ruleDocV1, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	reviseWith := func(from, to string) {
+		t.Helper()
+		if err := reviseDoc(t, s, a.ID, "stig"); err != nil {
+			t.Fatal(err)
+		}
+		rev, err := s.GetDocRevision(ctx, a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(rev.Body, from) {
+			t.Fatalf("candidate lacks %q:\n%s", from, rev.Body)
+		}
+		if err := updateRevision(t, s, a.ID, strings.Replace(rev.Body, from, to, 1)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Unchanged rule: the candidate's edit lands as the next version.
+	reviseWith("\nC.\n", "\nC2.\n")
+	if _, err := acceptRevision(t, s, a.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := s.GetRule(ctx, "P1", 3); err != nil || r.Version != 2 || !strings.Contains(string(r.Body), "C2.") {
+		t.Fatalf("candidate edit did not land: %+v %v", r, err)
+	}
+
+	// Changed rule: refused, naming it.
+	reviseWith("\nC2.\n", "\nC3.\n")
+	if _, err := s.EditRule(ctx, "P1", 3, model.EditRuleInput{Heading: "Two", Body: "C4.\n"}, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := acceptRevision(t, s, a.ID, "stig")
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "P1-REQ-3") {
+		t.Fatalf("accepting over a changed rule: %v, want ErrInvalidInput naming P1-REQ-3", err)
+	}
+	if r, err := s.GetRule(ctx, "P1", 3); err != nil || r.Version != 3 || !strings.Contains(string(r.Body), "C4.") {
+		t.Errorf("rule after refused accept = %+v %v, want v3 C4.", r, err)
+	}
+}

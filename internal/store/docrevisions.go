@@ -61,12 +61,14 @@ func openRevision(tx *sql.Tx, now time.Time, id int64, body, actorID string) err
 		   FROM doc_edges WHERE from_doc = $1`, id); err != nil {
 		return fmt.Errorf("copy edges of doc %d into its revision: %w", id, err)
 	}
-	// And from the live arrangement (WL-REQ-1297). A candidate's anchor is
-	// where its text holds the entry, so it starts as the derived one.
+	// And from the live arrangement (WL-REQ-1297), with the rule text it
+	// copies (WL-REQ-1300). A candidate's anchor is where its text holds the
+	// entry, so it starts as the derived one.
 	if _, err := tx.Exec(
-		`INSERT INTO doc_revision_rules (doc_id, position, rule_id, rule_version, heading, depth, slug, anchor)
-		 SELECT doc_id, position, rule_id, rule_version, heading, depth, slug, anchor
-		   FROM doc_entries WHERE doc_id = $1`, id); err != nil {
+		`INSERT INTO doc_revision_rules (doc_id, position, rule_id, rule_version, heading, depth, slug, anchor, copied_heading, copied_body)
+		 SELECT e.doc_id, e.position, e.rule_id, e.rule_version, e.heading, e.depth, e.slug, e.anchor, v.heading, v.body
+		   FROM doc_entries e LEFT JOIN rule_versions v ON v.rule_id = e.rule_id AND v.version = e.rule_version
+		  WHERE e.doc_id = $1`, id); err != nil {
 		return fmt.Errorf("copy arrangement of doc %d into its revision: %w", id, err)
 	}
 	return nil

@@ -78,3 +78,5 @@ configMapGenerator:
       - migrations/0129_body-locks.down.sql
       - migrations/0130_review-message-escalation.up.sql
       - migrations/0130_review-message-escalation.down.sql
+      - migrations/NEW-revision-rule-copies.up.sql
+      - migrations/NEW-revision-rule-copies.down.sql
