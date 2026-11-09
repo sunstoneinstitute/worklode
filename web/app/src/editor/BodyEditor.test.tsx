@@ -1,8 +1,9 @@
-import { screen } from "@testing-library/react"
+import { act, fireEvent, screen } from "@testing-library/react"
+import { TableHandlesExtension } from "@blocknote/core/extensions"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, expect, test, vi } from "vitest"
 import { renderWithRouter } from "@/test/render"
-import { BodyEditor, type Blocks } from "./BodyEditor"
+import { BodyEditor, type BodyEditorInstance, type Blocks } from "./BodyEditor"
 import { BodyView } from "./BodyView"
 
 const paragraph = (text: string): Blocks => [{ type: "paragraph", content: text }]
@@ -48,4 +49,31 @@ test("a heading shows its anchor and a callout its kind, read-only", async () =>
   expect(screen.getByRole("textbox", { name: "Body" })).toHaveAttribute("contenteditable", "false")
   expect(screen.getByText("#sec-3")).toBeInTheDocument()
   expect(screen.getByText("warning")).toBeInTheDocument()
+})
+
+// jsdom cannot open the handle's Base UI menu, so this calls what its "Add
+// row below" item calls, on the row the hover picked
+test("a table as the server sends it shows its handles on hover and grows a row (WL-REQ-1871)", async () => {
+  const onChange = vi.fn()
+  let editor: BodyEditorInstance | null = null
+  // A table as GET ?as=blocks serves it: no `id` (internal/mdblocks golden profile.blocks.json)
+  const table = {
+    type: "table",
+    content: {
+      type: "tableContent",
+      columnWidths: [null, null],
+      headerRows: 1,
+      rows: [
+        { cells: [[{ type: "text", text: "Name", styles: {} }], [{ type: "text", text: "Value", styles: {} }]] },
+        { cells: [[{ type: "text", text: "a", styles: {} }], [{ type: "text", text: "1", styles: {} }]] },
+      ],
+    },
+  } as unknown as Blocks[number]
+  await renderWithRouter(<BodyEditor blocks={[table]} onChange={onChange} onEditor={(e) => (editor ??= e)} />)
+  fireEvent.mouseMove(document.querySelector(".bn-editor td")!)
+  await vi.waitFor(() => expect(document.querySelectorAll(".bn-table-handle")).toHaveLength(2))
+  const handles = editor!.getExtension(TableHandlesExtension)!
+  act(() => handles.addRowOrColumn(handles.store.state!.rowIndex!, { orientation: "row", side: "below" }))
+  const [grown] = onChange.mock.lastCall![0]
+  expect(grown.content.rows).toHaveLength(3)
 })

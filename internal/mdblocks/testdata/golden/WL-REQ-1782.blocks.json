@@ -1,7 +1,6 @@
 {
   "blocks": [
     {
-      "id": "",
       "type": "source",
       "props": {
         "markdown": "Hover text appears on every cell and reference after a short delay and\nnever captures the pointer. A section cell: `§3.1 Renewal · In progress ·\nWL-PLAN-99`. A task cell: id, title and its **position**, the first line that\napplies:"
@@ -12,7 +11,6 @@
       }
     },
     {
-      "id": "",
       "type": "table",
       "range": {
         "start": 236,
@@ -370,7 +368,6 @@
       }
     },
     {
-      "id": "",
       "type": "paragraph",
       "content": [
         {
