@@ -41,7 +41,7 @@ type Input struct {
 	DocIRI    string
 	DocKind   string // spec | adr | plan
 	DocTitle  string
-	DocRef    string // the citable id ("WL-SPEC-25"); review titles and bodies name it so the cockpit links it
+	DocRef    string // the citable id ("WL-SPEC-25"); every minted title and body names the document by it, so the cockpit links it
 	Version   int    // document version the event concerns; the review task body names it
 	Project   string
 	// Open task of the relevant kind already referencing the doc; "" = none.
@@ -139,7 +139,7 @@ func evaluateAccepted(in Input) []Action {
 		Rule:     rulePlanOnAccept,
 		TaskKind: "design",
 		Title:    PlanningTitle(in.DocTitle),
-		Body:     PlanningBody(in.DocIRI, in.Version, in.EventID),
+		Body:     PlanningBody(in.DocRef, in.Version, in.EventID),
 	}}
 }
 
@@ -187,7 +187,7 @@ func PlanningTitle(docTitle string) string {
 // informed by — the acceptance for the rule above, the mint's own
 // task.created event for the Progress page's button, which has no earlier
 // event to point at.
-func PlanningBody(docIRI string, version int, eventID int64) string {
+func PlanningBody(docRef string, version int, eventID int64) string {
 	return fmt.Sprintf(`%s (version %d) was accepted.
 
 Decide how to decompose this spec into plans, and write them.
@@ -196,7 +196,7 @@ prov:wasInformedBy %s
 
 Claim this task (%s) before writing anything, so this session's
 tokens bill to it instead of going unattributed (WL-REQ-1593).`,
-		docIRI, version, iri.CURIE(iri.Event(eventID)), "`lode task claim <this task's id>`")
+		docRef, version, iri.CURIE(iri.Event(eventID)), "`lode task claim <this task's id>`")
 }
 
 func patchBody(in Input) string {

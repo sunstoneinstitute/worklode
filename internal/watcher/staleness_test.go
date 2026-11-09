@@ -127,6 +127,7 @@ func TestEvaluateStale(t *testing.T) {
 			in: watcher.Input{
 				EventID:  60,
 				DocIRI:   "wlid:doc/spec-025",
+				DocRef:   "WL-SPEC-25",
 				DocKind:  "spec",
 				DocTitle: "Documents in the backbone",
 			},
@@ -141,6 +142,7 @@ func TestEvaluateStale(t *testing.T) {
 			in: watcher.Input{
 				EventID:  61,
 				DocIRI:   "wlid:doc/plan-2026-08-03-x",
+				DocRef:   "WL-PLAN-7",
 				DocKind:  "plan",
 				DocTitle: "Some plan",
 			},
@@ -173,8 +175,8 @@ func TestEvaluateStale(t *testing.T) {
 			if action.Title != tc.want.Title {
 				t.Fatalf("Title = %q, want %q", action.Title, tc.want.Title)
 			}
-			if !strings.Contains(action.Body, tc.in.DocIRI) {
-				t.Fatalf("Body = %q, want it to contain doc IRI %q", action.Body, tc.in.DocIRI)
+			if !strings.HasPrefix(action.Body, tc.in.DocRef+" ") {
+				t.Fatalf("Body = %q, want it to open with doc ref %q", action.Body, tc.in.DocRef)
 			}
 			wantProvenance := "wlid:event/60"
 			if tc.in.EventID == 61 {

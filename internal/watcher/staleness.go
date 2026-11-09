@@ -66,5 +66,5 @@ prov:wasInformedBy %s
 
 Closing it is %s; do that once you have decided the document no longer earns
 its place, not before.`,
-		in.DocIRI, why, iri.CURIE(iri.Event(in.EventID)), "`lode doc withdraw`")
+		in.DocRef, why, iri.CURIE(iri.Event(in.EventID)), "`lode doc withdraw`")
 }

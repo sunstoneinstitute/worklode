@@ -325,7 +325,7 @@ func (s *server) progressPlan(w http.ResponseWriter, r *http.Request) {
 	err = s.recordEvent(ctx, "web", "task.created",
 		map[string]any{"doc": store.DocIRI(*doc), "kind": "design", "route": "progress/plan"},
 		func(tx *sql.Tx, eventID int64) error {
-			id, err := s.mintPlanningTask(tx, doc, sub.ActorID, eventID)
+			id, err := s.mintPlanningTask(ctx, tx, doc, sub.ActorID, eventID)
 			if err != nil {
 				return err
 			}
@@ -379,12 +379,11 @@ func (s *server) specHasUnplannedSection(ctx context.Context, projectID string, 
 // here, one minted by the Plan button, and one minted when the spec was
 // accepted are all the same thing. The caller guards with OpenTaskForDoc
 // first; this mints unconditionally.
-func (s *server) mintPlanningTask(tx *sql.Tx, doc *model.Doc, actorID string, eventID int64) (string, error) {
-	iri := store.DocIRI(*doc)
+func (s *server) mintPlanningTask(ctx context.Context, tx *sql.Tx, doc *model.Doc, actorID string, eventID int64) (string, error) {
 	t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
 		ProjectID: doc.Project,
 		Title:     watcher.PlanningTitle(string(doc.Title)),
-		Body:      watcher.PlanningBody(iri, doc.Version, eventID),
+		Body:      watcher.PlanningBody(s.withProjectKey(ctx, *doc).FormatRef(), doc.Version, eventID),
 		Kind:      "design",
 		Priority:  "medium",
 		AboutDoc:  doc.ID,
@@ -473,7 +472,7 @@ func (s *server) progressRallyAdd(w http.ResponseWriter, r *http.Request) {
 			rallyID = rally.ID
 			ids := slices.Clone(members.Execute)
 			if members.NeedsPlanning {
-				id, err := s.mintPlanningTask(tx, doc, sub.ActorID, eventID)
+				id, err := s.mintPlanningTask(ctx, tx, doc, sub.ActorID, eventID)
 				if err != nil {
 					return err
 				}
