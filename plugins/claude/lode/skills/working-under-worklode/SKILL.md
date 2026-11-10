@@ -115,6 +115,8 @@ coordinator and pick each subagent's tier. Use your harness's column.
 |---|---|---|
 | Fully-specified implementation (exact files/code/tests, no open design) | `model: "sonnet"` | `gpt-5.6-terra`, `medium` |
 | Review, or any task with unknowns (debugging, design gaps, plan-vs-reality) | `model: "opus"` | `gpt-5.6-sol`, `high` |
+| Planning: writing or revising a plan or rules, a `design` task | `model: "fable"` | `gpt-5.6-sol`, `ultra` |
+| Read-only lookup with no judgment (fact-finding, listing, summarizing search results) | `model: "haiku"` | `gpt-5.6-terra`, `low` |
 
 - **Claude Code:** always set `model` explicitly — omitting it falls back to
   the top-level session model, silently running mechanical work on the most

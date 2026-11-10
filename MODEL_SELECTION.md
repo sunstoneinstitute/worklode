@@ -17,7 +17,7 @@ plugin into any repo — keep the two in sync when tiers change.
 | Implementation subagents — task involves unknowns (debugging, spikes, design gaps, plan conflicts with reality) | Opus | GPT-5.6-Sol, `high` | Ambiguity needs judgment; escalate rather than let the balanced tier improvise. |
 | Code review between tasks — small mechanical diff (config, comments, single-file transcription, tests-only) | Sonnet | GPT-5.6-Terra, `medium` | Small, low-risk diffs are verifiable at the balanced tier. |
 | Code review between tasks — large, cross-cutting, subtle, or security/concurrency-sensitive diff, plus every whole-branch/final review | Opus | GPT-5.6-Sol, `high` | Review is judgment; broad or subtle change is where it earns the cost. |
-| Exploration / fact-finding (codebase mapping, doc lookups) | Agent-definition default (Explore, claude-code-guide, ...) | GPT-5.6-Terra, `low` | Read-only work normally needs the cheapest tier that can synthesize the findings. |
+| Exploration / fact-finding (codebase mapping, doc lookups) | Agent-definition default (Explore, claude-code-guide, ...); Haiku for a generic dispatch | GPT-5.6-Terra, `low` | Read-only work normally needs the cheapest tier that can synthesize the findings. |
 
 ## Claude Code dispatch
 
