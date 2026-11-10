@@ -1884,6 +1884,15 @@ nav.local a .cnt {
 .prose ul,.prose ol {
   padding-left: 20px;
 }
+.prose ul {
+  list-style: disc;
+}
+.prose ol {
+  list-style: decimal;
+}
+.prose li:has(> input[type=checkbox]) {
+  list-style: none;
+}
 .prose code {
   font-family: "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   font-size: 0.9375rem;
