@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
-
 	"github.com/sunstoneinstitute/worklode/internal/staleness"
 )
 
@@ -62,9 +60,7 @@ func groomBody(in Input) string {
 	return fmt.Sprintf(`%s has gone stale: %s. The charge is to
 "re-evaluate, adjust, or close" it.
 
-prov:wasInformedBy %s
-
 Closing it is %s; do that once you have decided the document no longer earns
 its place, not before.`,
-		in.DocRef, why, iri.CURIE(iri.Event(in.EventID)), "`lode doc withdraw`")
+		in.DocRef, why, "`lode doc withdraw`")
 }

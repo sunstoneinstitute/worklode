@@ -302,6 +302,30 @@ func TestCreateTaskAboutDoc(t *testing.T) {
 	}
 }
 
+// TestCreateTaskInformedBy: a minted task records the event that informed it
+// (WL-REQ-109), and a task with none reads back 0.
+func TestCreateTaskInformedBy(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	cause, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "wl:DocumentAccepted", nil, nil)
+	if err != nil {
+		t.Fatalf("record cause: %v", err)
+	}
+	in := defaultTaskInput()
+	in.InformedBy = cause
+	minted := createTask(t, s, taskTestNow, in)
+	ordinary := createTask(t, s, taskTestNow, defaultTaskInput())
+	for id, want := range map[string]int64{minted.ID: cause, ordinary.ID: 0} {
+		got, err := s.GetTask(t.Context(), id)
+		if err != nil {
+			t.Fatalf("GetTask %s: %v", id, err)
+		}
+		if got.InformedBy != want {
+			t.Errorf("%s InformedBy = %d, want %d", id, got.InformedBy, want)
+		}
+	}
+}
+
 // TestOpenTaskForDoc exercises the suppression guard: an open task of the
 // matching kind referencing the doc is found; a different kind referencing
 // the same doc is not; once the matching task closes, the query finds none.

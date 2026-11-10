@@ -264,8 +264,11 @@ type TaskView struct {
 	Duplicates  []string
 	// GovernedBy is the task's governing rules, listed in the Edges card.
 	GovernedBy []model.TaskGovernance
-	Progress   model.TaskProgress
-	Timeline   []TimelineRow
+	// InformedByType is the type of the event Task.InformedBy names, listed
+	// in the Edges card beside its id (WL-REQ-109).
+	InformedByType string
+	Progress       model.TaskProgress
+	Timeline       []TimelineRow
 	// AgentSessions is the coding-agent sessions recorded against the task's
 	// active lease, oldest first. Empty when nothing holds the task — a lease
 	// is what a session is recorded against, so there is nowhere for one to

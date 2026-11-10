@@ -174,6 +174,7 @@ templ Task(v TaskView) {
 							@taskEdgeID("Duplicate of", v.DuplicateOf)
 							@taskEdgeIDs("Duplicates", v.Duplicates)
 							@taskGovernedBy(v.GovernedBy)
+							@taskInformedBy(v.Task.InformedBy, v.InformedByType)
 						</ul>
 					</div>
 				</details>
@@ -290,6 +291,19 @@ templ taskGovernedBy(rules []model.TaskGovernance) {
 				}
 				{ " " }
 			}
+		}
+	</li>
+}
+
+// taskInformedBy renders the event that minted the task (prov:wasInformedBy,
+// WL-REQ-109) as one Edges row: its id and type.
+templ taskInformedBy(id int64, typ string) {
+	<li>
+		Informed by:
+		if id == 0 {
+			<span class="muted">none</span>
+		} else {
+			event { strconv.FormatInt(id, 10) } <span class="muted">({ typ })</span>
 		}
 	</li>
 }

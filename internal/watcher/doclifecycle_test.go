@@ -2,7 +2,6 @@ package watcher_test
 
 import (
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -278,7 +277,8 @@ func TestEvaluate(t *testing.T) {
 				}
 
 				// The failure this assertion exists to catch: a mint body
-				// that lost its doc reference or its provenance line.
+				// that lost its doc reference, or one that carries provenance
+				// the task records as a relation (WL-REQ-109).
 				if !strings.Contains(gotAction.Body, tc.in.DocRef) {
 					t.Fatalf("Evaluate()[%d].Body = %q, want it to contain doc ref %q", i, gotAction.Body, tc.in.DocRef)
 				}
@@ -287,9 +287,8 @@ func TestEvaluate(t *testing.T) {
 				if wantAction.TaskKind == "review" && !strings.Contains(gotAction.Body, tc.in.DocRef) {
 					t.Fatalf("Evaluate()[%d].Body = %q, want it to contain doc ref %q", i, gotAction.Body, tc.in.DocRef)
 				}
-				wantProvenance := "wlid:event/" + strconv.FormatInt(tc.in.EventID, 10)
-				if !strings.Contains(gotAction.Body, wantProvenance) {
-					t.Fatalf("Evaluate()[%d].Body = %q, want it to contain provenance %q", i, gotAction.Body, wantProvenance)
+				if strings.Contains(gotAction.Body, "wasInformedBy") {
+					t.Fatalf("Evaluate()[%d].Body = %q carries a prov:wasInformedBy line", i, gotAction.Body)
 				}
 			}
 		})

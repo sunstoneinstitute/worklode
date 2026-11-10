@@ -57,6 +57,9 @@ type TaskInput struct {
 	// document. Written by the escalation path (WL-REQ-171), which dedups on the
 	// (AboutDoc, AboutAnchor) pair.
 	AboutAnchor string
+	// InformedBy is the event that caused this task to be minted (0 = none):
+	// its prov:wasInformedBy relation (WL-REQ-109).
+	InformedBy int64
 }
 
 // TaskFilter narrows ListTasks. Zero-valued fields do not filter. Parent
@@ -276,11 +279,11 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		secretNames = []string{}
 	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, plan_task_key, about_doc, about_anchor, due)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18)`,
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, plan_task_key, about_doc, about_anchor, due, informed_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18, $19)`,
 		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
 		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
-		nullText(in.AboutAnchor), dueArg(in.Due),
+		nullText(in.AboutAnchor), dueArg(in.Due), nullID(in.InformedBy),
 	)
 	if err != nil {
 		if mapped := rallyUniqueConflict(err, id); mapped != err {
@@ -313,6 +316,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		AboutDoc:    in.AboutDoc,
 		AboutAnchor: in.AboutAnchor,
 		Due:         in.Due,
+		InformedBy:  in.InformedBy,
 	}
 	created.Branch = BranchFor(created)
 	return created, nil
@@ -735,10 +739,11 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body *model.M
 // coalesce needed; plan_doc and about_doc are nullable bigints (migrations
 // 0027 and 0028), scanned into sql.NullInt64. The three tombstone columns
 // (migration 0034) are all-null or all-set together, human_only (migration
-// 0060), milestone_id (migration 0062) and about_anchor (migration 0078) and due (migration 0108) are
+// 0060), milestone_id (migration 0062) and about_anchor (migration 0078) and due (migration 0108) and
+// informed_by are
 // last for the same append-only reason.
 // prefixedTaskColumns below requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only, milestone_id, about_anchor, due::text`
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only, milestone_id, about_anchor, due::text, informed_by`
 
 // taskColumnsT is taskColumns under the `t` alias, for the queries that join
 // tasks against another table.
@@ -756,19 +761,20 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON, secretsCol string
-	var planDoc, aboutDoc sql.NullInt64
+	var planDoc, aboutDoc, informedBy sql.NullInt64
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
 	var milestone, aboutAnchor, due sql.NullString
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
-		&deletedAt, &deletedBy, &justification, &t.HumanOnly, &milestone, &aboutAnchor, &due); err != nil {
+		&deletedAt, &deletedBy, &justification, &t.HumanOnly, &milestone, &aboutAnchor, &due, &informedBy); err != nil {
 		return nil, err
 	}
 	t.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
 	t.PlanDoc = planDoc.Int64
 	t.AboutDoc = aboutDoc.Int64
 	t.AboutAnchor = aboutAnchor.String
+	t.InformedBy = informedBy.Int64
 	t.Due = due.String
 	t.Body = model.Markdown(body.String)
 	t.Concern = concern.String

@@ -83,6 +83,10 @@ type Task struct {
 	// AboutDoc; it is what lets two escalations against different sections of
 	// one spec stay two tasks.
 	AboutAnchor string `json:"about_anchor,omitempty"`
+	// InformedBy is the id of the event that caused this task to be minted,
+	// its prov:wasInformedBy relation (WL-REQ-109); 0 (omitted on the wire)
+	// for a task no event minted.
+	InformedBy int64 `json:"informed_by,omitempty"`
 	// Milestone is the milestone this task is attached to (WL-REQ-118), ""
 	// when it is attached to none. Always in the task's own project — the
 	// store refuses a cross-project attach.

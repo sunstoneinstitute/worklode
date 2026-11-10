@@ -197,13 +197,14 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 			// event id, so there is no second LogChange here — the task's
 			// timeline already starts at the mint.
 			t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
-				ProjectID: doc.Project,
-				Title:     act.Title,
-				Body:      act.Body,
-				Kind:      act.TaskKind,
-				Priority:  "medium",
-				AboutDoc:  doc.ID,
-				CreatedBy: watcherActorID,
+				ProjectID:  doc.Project,
+				Title:      act.Title,
+				Body:       act.Body,
+				Kind:       act.TaskKind,
+				Priority:   "medium",
+				AboutDoc:   doc.ID,
+				CreatedBy:  watcherActorID,
+				InformedBy: ev.ID,
 			}, eventID)
 			if err != nil {
 				return err

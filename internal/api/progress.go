@@ -381,13 +381,14 @@ func (s *server) specHasUnplannedSection(ctx context.Context, projectID string, 
 // first; this mints unconditionally.
 func (s *server) mintPlanningTask(ctx context.Context, tx *sql.Tx, doc *model.Doc, actorID string, eventID int64) (string, error) {
 	t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
-		ProjectID: doc.Project,
-		Title:     watcher.PlanningTitle(string(doc.Title)),
-		Body:      watcher.PlanningBody(s.withProjectKey(ctx, *doc).FormatRef(), doc.Version, eventID),
-		Kind:      "design",
-		Priority:  "medium",
-		AboutDoc:  doc.ID,
-		CreatedBy: actorID,
+		ProjectID:  doc.Project,
+		Title:      watcher.PlanningTitle(string(doc.Title)),
+		Body:       watcher.PlanningBody(s.withProjectKey(ctx, *doc).FormatRef(), doc.Version),
+		Kind:       "design",
+		Priority:   "medium",
+		AboutDoc:   doc.ID,
+		CreatedBy:  actorID,
+		InformedBy: eventID,
 	}, eventID)
 	if err != nil {
 		return "", err
