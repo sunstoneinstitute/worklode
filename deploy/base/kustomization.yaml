@@ -80,5 +80,5 @@ configMapGenerator:
       - migrations/0130_review-message-escalation.down.sql
       - migrations/0131_revision-rule-copies.up.sql
       - migrations/0131_revision-rule-copies.down.sql
-      - migrations/NEW-task-informed-by.up.sql
-      - migrations/NEW-task-informed-by.down.sql
+      - migrations/0132_task-informed-by.up.sql
+      - migrations/0132_task-informed-by.down.sql
