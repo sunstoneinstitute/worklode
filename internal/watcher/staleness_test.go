@@ -178,12 +178,8 @@ func TestEvaluateStale(t *testing.T) {
 			if !strings.HasPrefix(action.Body, tc.in.DocRef+" ") {
 				t.Fatalf("Body = %q, want it to open with doc ref %q", action.Body, tc.in.DocRef)
 			}
-			wantProvenance := "wlid:event/60"
-			if tc.in.EventID == 61 {
-				wantProvenance = "wlid:event/61"
-			}
-			if !strings.Contains(action.Body, wantProvenance) {
-				t.Fatalf("Body = %q, want it to contain provenance %q", action.Body, wantProvenance)
+			if strings.Contains(action.Body, "wasInformedBy") {
+				t.Fatalf("Body = %q carries a prov:wasInformedBy line", action.Body)
 			}
 			if !strings.Contains(action.Body, "re-evaluate, adjust, or close") {
 				t.Fatalf("Body = %q, want it to quote the §8.7 charge", action.Body)

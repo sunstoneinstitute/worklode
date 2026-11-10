@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
-
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 )
 
@@ -139,7 +137,7 @@ func evaluateAccepted(in Input) []Action {
 		Rule:     rulePlanOnAccept,
 		TaskKind: "design",
 		Title:    PlanningTitle(in.DocTitle),
-		Body:     PlanningBody(in.DocRef, in.Version, in.EventID),
+		Body:     PlanningBody(in.DocRef, in.Version),
 	}}
 }
 
@@ -168,11 +166,9 @@ func evaluatePatched(in Input) []Action {
 func reviewBody(in Input) string {
 	return fmt.Sprintf(`Review %s (%s, version %d).
 
-prov:wasInformedBy %s
-
 Closing this task is the review outcome. Accepting the document is a
 separate, deliberate act — %s — which this task does not perform.`,
-		in.DocRef, in.DocIRI, in.Version, iri.CURIE(iri.Event(in.EventID)), "`lode doc accept`")
+		in.DocRef, in.DocIRI, in.Version, "`lode doc accept`")
 }
 
 // PlanningTitle is the title of the planning task WL-REQ-109 mints when a
@@ -183,20 +179,16 @@ func PlanningTitle(docTitle string) string {
 	return "Plan: decompose " + docTitle + " into plans"
 }
 
-// PlanningBody is that task's body. eventID is the event the mint is
-// informed by — the acceptance for the rule above, the mint's own
-// task.created event for the Progress page's button, which has no earlier
-// event to point at.
-func PlanningBody(docRef string, version int, eventID int64) string {
+// PlanningBody is that task's body. The event the mint is informed by is a
+// relation on the task (TaskInput.InformedBy), not a line here.
+func PlanningBody(docRef string, version int) string {
 	return fmt.Sprintf(`%s (version %d) was accepted.
 
 Decide how to decompose this spec into plans, and write them.
 
-prov:wasInformedBy %s
-
 Claim this task (%s) before writing anything, so this session's
 tokens bill to it instead of going unattributed (WL-REQ-1593).`,
-		docRef, version, iri.CURIE(iri.Event(eventID)), "`lode task claim <this task's id>`")
+		docRef, version, "`lode task claim <this task's id>`")
 }
 
 func patchBody(in Input) string {
@@ -210,9 +202,7 @@ The document stays accepted — only the patched sections are approved text
 that has changed since (WL-REQ-170). Review them, and decide each approval
 lane the patch reopened.
 
-prov:wasInformedBy %s
-
 The marks clear when the last reopened lane is approved; nothing here
 accepts the document again.`,
-		in.DocRef, in.DocIRI, in.Version, sections, iri.CURIE(iri.Event(in.EventID)))
+		in.DocRef, in.DocIRI, in.Version, sections)
 }
