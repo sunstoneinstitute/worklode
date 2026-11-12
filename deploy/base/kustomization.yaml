@@ -82,5 +82,5 @@ configMapGenerator:
       - migrations/0131_revision-rule-copies.down.sql
       - migrations/0132_task-informed-by.up.sql
       - migrations/0132_task-informed-by.down.sql
-      - migrations/NEW-event-retention-indexes.up.sql
-      - migrations/NEW-event-retention-indexes.down.sql
+      - migrations/0133_event-retention-indexes.up.sql
+      - migrations/0133_event-retention-indexes.down.sql
