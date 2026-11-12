@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/archive"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/indexer"
@@ -97,6 +98,13 @@ func Run(ctx context.Context, opts Options) error {
 		Metrics:              reg,
 	}
 	setEnvTaggedFields(&cfg)
+	if archive.Enabled(os.Getenv) {
+		exp, err := archive.NewExporter(ctx)
+		if err != nil {
+			return fmt.Errorf("archive exporter: %w", err)
+		}
+		cfg.ArchiveExporter = exp
+	}
 	handler, adminHandler, err := api.NewServer(st, cfg)
 	if err != nil {
 		return err

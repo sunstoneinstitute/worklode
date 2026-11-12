@@ -28,7 +28,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/swaggest/form/v5"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 
+	"github.com/sunstoneinstitute/worklode/internal/archive"
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
 	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
 	"github.com/sunstoneinstitute/worklode/internal/embed"
@@ -267,6 +269,11 @@ type Config struct {
 	// takes eventbus's 1s default; e2e sets it low so the test does not wait
 	// a second per step.
 	EventPoll time.Duration
+
+	// ArchiveExporter is the OTLP log exporter the archive subscriber sends
+	// events through (WL-REQ-1894). Nil, the case when no OTLP endpoint is
+	// configured, means the subscriber is not started.
+	ArchiveExporter sdklog.Exporter
 
 	// Graph is the knowledge-graph client, nil when LODE_GRAPHSERVER_URL is
 	// unset; shared with the projector so one process has one client.
@@ -1600,6 +1607,29 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 				s.log.Error("spec-reconciler subscriber stopped", "err", err)
 			}
 		}()
+		// The archive subscriber (WL-REQ-1894), only with an exporter.
+		if cfg.ArchiveExporter != nil {
+			if err := st.EnsureEventSubscriber(context.Background(), archive.Subscriber); err != nil {
+				return nil, nil, fmt.Errorf("ensure %s subscriber: %w", archive.Subscriber, err)
+			}
+			arc := archive.New(cfg.ArchiveExporter, archive.NewMetrics(reg))
+			go func() {
+				err := eventbus.Run(cfg.BackgroundCtx, eventbus.Options{
+					Store:   st,
+					Name:    archive.Subscriber,
+					Handler: arc.Handle,
+					Poll:    cfg.EventPoll,
+					Metrics: busMetrics,
+					Log:     s.log,
+				})
+				if err != nil && !errors.Is(err, context.Canceled) {
+					s.log.Error("archive subscriber stopped", "err", err)
+				}
+				sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = arc.Shutdown(sctx)
+			}()
+		}
 	}
 
 	return s.observe(mux), admin, nil
