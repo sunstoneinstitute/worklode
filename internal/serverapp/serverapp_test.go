@@ -16,6 +16,15 @@ func TestRunRequiresDSN(t *testing.T) {
 	}
 }
 
+// TestRunRefusesMalformedEventRetention: a malformed retention entry refuses
+// server start before anything connects (WL-REQ-1895).
+func TestRunRefusesMalformedEventRetention(t *testing.T) {
+	err := Run(context.Background(), Options{DSN: "postgres://unused", EventRetention: "github:*"})
+	if err == nil || !strings.Contains(err.Error(), "LODE_EVENT_RETENTION") {
+		t.Fatalf("Run with a malformed retention = %v, want an LODE_EVENT_RETENTION error", err)
+	}
+}
+
 // TestParseDocDepthLimit: the depth limit is an operator knob (WL-REQ-165), and
 // a value below 1 would make every accept impossible, so it fails the boot.
 func TestParseDocDepthLimit(t *testing.T) {
