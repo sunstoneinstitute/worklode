@@ -1050,3 +1050,21 @@ func TestObserveRefsDerived(t *testing.T) {
 	}
 	(&server{}).observeRefsDerived("task", model.RefDeriveNode{}, true) // nil-safe
 }
+
+func TestRetentionMetrics(t *testing.T) {
+	t.Parallel()
+	var nilM *retentionMetrics
+	nilM.deleted(map[string]int64{"x": 1})
+	nilM.failed()
+
+	m := newRetentionMetrics(prometheus.NewRegistry(), []store.RetentionRule{{Pattern: "github:*", TTL: time.Hour}})
+	m.deleted(map[string]int64{"github:*": 3})
+	m.deleted(map[string]int64{"github:*": 2})
+	m.failed()
+	if got := testutil.ToFloat64(m.deletedTotal.WithLabelValues("github:*")); got != 5 {
+		t.Fatalf("deleted{github:*} = %v, want 5", got)
+	}
+	if got := testutil.ToFloat64(m.errors); got != 1 {
+		t.Fatalf("errors = %v, want 1", got)
+	}
+}

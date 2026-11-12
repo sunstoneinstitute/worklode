@@ -275,6 +275,10 @@ type Config struct {
 	// configured, means the subscriber is not started.
 	ArchiveExporter sdklog.Exporter
 
+	// EventRetention is the ordered TTL list the event retention sweep
+	// applies (WL-REQ-1895). The sweep runs only with ArchiveExporter.
+	EventRetention []store.RetentionRule
+
 	// Graph is the knowledge-graph client, nil when LODE_GRAPHSERVER_URL is
 	// unset; shared with the projector so one process has one client.
 	//
@@ -1629,6 +1633,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 				defer cancel()
 				_ = arc.Shutdown(sctx)
 			}()
+			// The event retention sweep (WL-REQ-1895) runs only beside
+			// the archive, so an instance with no archive keeps every event.
+			retention := newRetentionMetrics(reg, cfg.EventRetention)
+			go lockSweepLoop(cfg.BackgroundCtx, eventRetentionEvery, func(ctx context.Context) {
+				s.sweepEvents(ctx, cfg.EventRetention, retention)
+			})
 		}
 	}
 

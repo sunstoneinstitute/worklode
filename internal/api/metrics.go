@@ -1830,3 +1830,47 @@ func (s *server) observeRefsDerived(kind model.NodeKind, n model.RefDeriveNode, 
 		s.refsNormalized.WithLabelValues(string(kind)).Inc()
 	}
 }
+
+// retentionMetrics holds the event retention sweep instruments (WL-REQ-1895,
+// WL-REQ-32). A nil *retentionMetrics records nothing. The pattern label is
+// bounded by the configured retention list.
+type retentionMetrics struct {
+	deletedTotal *prometheus.CounterVec
+	errors       prometheus.Counter
+}
+
+// newRetentionMetrics registers the instruments on reg, with every
+// configured pattern's series at zero.
+func newRetentionMetrics(reg prometheus.Registerer, rules []store.RetentionRule) *retentionMetrics {
+	m := &retentionMetrics{
+		deletedTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_events_retention_deleted_total",
+			Help: "Events deleted by the event retention sweep, by the retention pattern that matched them.",
+		}, []string{"pattern"}),
+		errors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "worklode_events_retention_errors_total",
+			Help: "Failed event retention sweep runs.",
+		}),
+	}
+	reg.MustRegister(m.deletedTotal, m.errors)
+	for _, r := range rules {
+		m.deletedTotal.WithLabelValues(r.Pattern)
+	}
+	return m
+}
+
+func (m *retentionMetrics) deleted(byPattern map[string]int64) {
+	if m == nil {
+		return
+	}
+	for p, n := range byPattern {
+		m.deletedTotal.WithLabelValues(p).Add(float64(n))
+	}
+}
+
+func (m *retentionMetrics) failed() {
+	if m == nil {
+		return
+	}
+	m.errors.Inc()
+}
