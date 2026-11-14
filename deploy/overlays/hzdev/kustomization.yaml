@@ -7,7 +7,10 @@ resources:
   - externalsecret-worklode-secrets.yaml
   - externalsecret-worklode-secrets-catalog.yaml
   - internal-ingress.yaml
+  - externalsecret-cnpg-backup-key.yaml
+  - postgres-backup.yaml
 patches:
+  - path: postgres-cluster-patch.yaml
   - patch: |-
       apiVersion: v1
       kind: Namespace

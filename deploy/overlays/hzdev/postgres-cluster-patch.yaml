@@ -1,0 +1,15 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: worklode-postgres
+  namespace: worklode
+spec:
+  backup:
+    barmanObjectStore:
+      destinationPath: "gs://sunstone-dev-backups/hzdev/worklode-postgres"
+      googleCredentials:
+        applicationCredentials:
+          name: cnpg-backup-gcs-key
+          key: gcs-key.json
+    retentionPolicy: "30d"

@@ -1,0 +1,14 @@
+---
+# Daily base backup at 03:15 UTC; WAL is archived continuously.
+# CNPG schedules use six fields (seconds first).
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: worklode-postgres-daily
+  namespace: worklode
+spec:
+  schedule: "0 15 3 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: worklode-postgres
+  immediate: true
