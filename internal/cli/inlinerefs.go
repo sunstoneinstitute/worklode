@@ -18,6 +18,7 @@ import (
 // line per field of another node that names it, with the lines it does so on
 // (WL-REQ-1852). Nothing is printed when no node does.
 func InlineRefsRender(w io.Writer, refs model.InlineRefs) {
+	lk := linkerFor(w)
 	if len(refs.In) == 0 {
 		return
 	}
@@ -27,9 +28,9 @@ func InlineRefsRender(w io.Writer, refs model.InlineRefs) {
 		for i, n := range r.Lines {
 			lines[i] = strconv.Itoa(n)
 		}
-		fmt.Fprintf(w, "  %s  %s", r.FromRef, r.Field)
+		lk.printf(w, "  %s  %s", r.FromRef, r.Field)
 		if len(lines) > 0 {
-			fmt.Fprintf(w, "  line %s", strings.Join(lines, ", "))
+			lk.printf(w, "  line %s", strings.Join(lines, ", "))
 		}
 		fmt.Fprintln(w)
 	}

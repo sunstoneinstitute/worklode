@@ -34,7 +34,22 @@ func Markdown(w io.Writer, body string) {
 		fmt.Fprintf(w, "%s\n", strings.TrimRight(body, "\n"))
 		return
 	}
-	fmt.Fprintf(w, "%s\n", renderStyled(body, clampWidth(width)))
+	fmt.Fprintf(w, "%s\n", renderStyled(body, clampWidth(width), linkerFor(w)))
+}
+
+// linkerFor is how output to w links: OSC 8 when w is a terminal that renders
+// it, and references linked to the cockpit when a server is configured and
+// ref_links is not off — the same gate the session hook's ref link hint uses.
+func linkerFor(w io.Writer) linker {
+	if !Hyperlinks(w) {
+		return linker{}
+	}
+	lk := linker{osc8: true}
+	if RefLinksFrom(".") {
+		lk.server = ServerURLFrom(".")
+		lk.key = projectKeyFrom(".")
+	}
+	return lk
 }
 
 // blobRef matches a root-relative blob destination in a markdown body.

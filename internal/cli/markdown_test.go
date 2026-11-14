@@ -32,7 +32,7 @@ func TestRenderMarkdownRawEndsInExactlyOneNewline(t *testing.T) {
 }
 
 func TestRenderStyledFormatsMarkdown(t *testing.T) {
-	out := renderStyled("# Heading\n\ntext\n", 80)
+	out := renderStyled("# Heading\n\ntext\n", 80, linker{})
 	if !strings.Contains(out, "\x1b[") {
 		t.Fatalf("expected ANSI styling in output:\n%q", out)
 	}
@@ -43,7 +43,7 @@ func TestRenderStyledFormatsMarkdown(t *testing.T) {
 
 func TestRenderStyledWrapsToWidth(t *testing.T) {
 	body := strings.Repeat("word ", 60)
-	for _, line := range strings.Split(renderStyled(body, 40), "\n") {
+	for _, line := range strings.Split(renderStyled(body, 40, linker{}), "\n") {
 		if len(line) > 40 {
 			t.Fatalf("line exceeds wrap width 40 (%d): %q", len(line), line)
 		}

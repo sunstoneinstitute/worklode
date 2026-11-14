@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"fmt"
+	"io"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/sunstoneinstitute/worklode/internal/mdfence"
+	"github.com/sunstoneinstitute/worklode/internal/refkind"
 )
 
 // Terminal markdown styling, in-repo rather than through a library.
@@ -35,10 +39,66 @@ const (
 	sgrCyan      = "\x1b[36m"
 )
 
+// linker says how renderStyled emits links. The zero value prints a
+// markdown link's URL after its text and links no references.
+type linker struct {
+	osc8   bool   // the terminal renders OSC 8: links become clickable text
+	server string // cockpit base URL references link to; "" links none
+	key    string // project key a bare task id (WL-7) must carry to link
+}
+
+// refInText matches a typed reference (WL-SPEC-4, WL-REQ-12, WL-MILE-2) or a
+// bare task id (WL-7). A bare id links only under linker.key, which is what
+// keeps UTF-8 and SHA-256 from linking.
+var refInText = regexp.MustCompile(`\b(` + refkind.KeyPattern + `)-(?:(` + refkind.Alternation(refkind.Targets...) + `)-)?\d+\b`)
+
+// refRuns splits plain text into runs, each reference becoming a run linked
+// to its cockpit page.
+func (lk linker) refRuns(s string) []styledRun {
+	if !lk.osc8 || lk.server == "" {
+		return []styledRun{{text: s}}
+	}
+	var runs []styledRun
+	last := 0
+	for _, m := range refInText.FindAllStringSubmatchIndex(s, -1) {
+		if m[4] < 0 && s[m[2]:m[3]] != lk.key {
+			continue
+		}
+		if m[0] > last {
+			runs = append(runs, styledRun{text: s[last:m[0]]})
+		}
+		runs = append(runs, styledRun{text: s[m[0]:m[1]], link: lk.server + "/" + s[m[0]:m[1]]})
+		last = m[1]
+	}
+	if last < len(s) {
+		runs = append(runs, styledRun{text: s[last:]})
+	}
+	return runs
+}
+
+// text links every reference in a plain line.
+func (lk linker) text(s string) string {
+	var b strings.Builder
+	for _, r := range lk.refRuns(s) {
+		if r.link != "" {
+			b.WriteString(Hyperlink(r.link, r.text))
+		} else {
+			b.WriteString(r.text)
+		}
+	}
+	return b.String()
+}
+
+// printf is fmt.Fprintf with every reference in the output linked, for the
+// metadata lines printed around a markdown body.
+func (lk linker) printf(w io.Writer, format string, a ...any) {
+	fmt.Fprint(w, lk.text(fmt.Sprintf(format, a...)))
+}
+
 // renderStyled renders body as ANSI-styled markdown wrapped at width. Callers
 // gate on the writer being an interactive terminal with colour enabled;
 // renderStyled itself always styles.
-func renderStyled(body string, width int) string {
+func renderStyled(body string, width int, lk linker) string {
 	var out strings.Builder
 	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
 	for i := 0; i < len(lines); i++ {
@@ -57,7 +117,7 @@ func renderStyled(body string, width int) string {
 		case isThematicBreak(trimmed):
 			out.WriteString(sgrDim + strings.Repeat("─", width) + sgrReset + "\n")
 		case headingLevel(trimmed) > 0:
-			writeHeading(&out, line, width)
+			writeHeading(&out, line, width, lk)
 		default:
 			// A paragraph or list item is every following line that does not
 			// itself open a block. Bodies here are authored hard-wrapped at
@@ -67,7 +127,7 @@ func renderStyled(body string, width int) string {
 			for end < len(lines) && isContinuation(lines[end]) {
 				end++
 			}
-			writeFlowed(&out, lines[i:end], width)
+			writeFlowed(&out, lines[i:end], width, lk)
 			i = end - 1
 		}
 	}
@@ -90,7 +150,7 @@ func isContinuation(line string) bool {
 
 // writeHeading renders one ATX heading. Level 1 gets a rule under it as well
 // as bold, so the top of a long document body is findable when scrolling.
-func writeHeading(out *strings.Builder, line string, width int) {
+func writeHeading(out *strings.Builder, line string, width int, lk linker) {
 	trimmed := strings.TrimLeft(line, " ")
 	indent := line[:len(line)-len(trimmed)]
 	style := sgrBold
@@ -99,12 +159,12 @@ func writeHeading(out *strings.Builder, line string, width int) {
 	}
 	text := strings.TrimSpace(trimmed[headingLevel(trimmed):])
 	pre := prefix{text: indent}
-	writeWrapped(out, tokenize(inline(text), style), width, pre, pre)
+	writeWrapped(out, tokenize(inline(text, lk), style), width, pre, pre)
 }
 
 // writeFlowed renders one paragraph, list item or block quote, joining its
 // continuation lines and re-wrapping the whole thing to width.
-func writeFlowed(out *strings.Builder, block []string, width int) {
+func writeFlowed(out *strings.Builder, block []string, width int, lk linker) {
 	trimmed := strings.TrimLeft(block[0], " ")
 	indent := block[0][:len(block[0])-len(trimmed)]
 	text := trimmed
@@ -115,14 +175,14 @@ func writeFlowed(out *strings.Builder, block []string, width int) {
 	case strings.HasPrefix(text, ">"):
 		quote := prefix{text: indent + "│ ", style: sgrDim}
 		body := strings.TrimPrefix(strings.TrimPrefix(text, ">"), " ")
-		writeWrapped(out, tokenize(inline(body), sgrDim), width, quote, quote)
+		writeWrapped(out, tokenize(inline(body, lk), sgrDim), width, quote, quote)
 	default:
 		first, item := prefix{text: indent}, text
 		if marker, rest, ok := listMarker(text); ok {
 			first, item = prefix{text: indent + marker + " "}, rest
 		}
 		cont := prefix{text: strings.Repeat(" ", first.width())}
-		writeWrapped(out, tokenize(inline(item), ""), width, first, cont)
+		writeWrapped(out, tokenize(inline(item, lk), ""), width, first, cont)
 	}
 }
 
@@ -203,10 +263,12 @@ func (p prefix) render() string {
 
 func (p prefix) width() int { return utf8.RuneCountInString(p.text) }
 
-// styledRun is a stretch of visible text sharing one style.
+// styledRun is a stretch of visible text sharing one style, and the URL it
+// links to when it is an OSC 8 hyperlink.
 type styledRun struct {
 	text  string
 	style string
+	link  string
 }
 
 // token is one wrappable word: its rendered bytes and its visible width. The
@@ -242,11 +304,14 @@ func tokenize(runs []styledRun, base string) []token {
 			if word == "" {
 				continue
 			}
+			out := word
 			if style != "" {
-				cur.out += style + word + sgrReset
-			} else {
-				cur.out += word
+				out = style + word + sgrReset
 			}
+			if r.link != "" {
+				out = Hyperlink(r.link, out)
+			}
+			cur.out += out
 			cur.width += utf8.RuneCountInString(word)
 		}
 	}
@@ -283,17 +348,17 @@ func writeWrapped(out *strings.Builder, toks []token, width int, first, cont pre
 // left to right and do not nest: `**a *b* c**` is bold throughout, with the
 // inner markers left visible, which is rarer in this corpus than the cost of
 // a real inline parser.
-func inline(s string) []styledRun {
+func inline(s string, lk linker) []styledRun {
 	var runs []styledRun
 	var plain strings.Builder
 	flush := func() {
 		if plain.Len() > 0 {
-			runs = append(runs, styledRun{text: plain.String()})
+			runs = append(runs, lk.refRuns(plain.String())...)
 			plain.Reset()
 		}
 	}
 	for i := 0; i < len(s); {
-		if span, n, ok := inlineSpan(s, i); ok {
+		if span, n, ok := inlineSpan(s, i, lk); ok {
 			flush()
 			runs = append(runs, span...)
 			i += n
@@ -308,7 +373,7 @@ func inline(s string) []styledRun {
 
 // inlineSpan matches an inline construct starting at s[i], returning the runs
 // it renders to and how many bytes it consumed.
-func inlineSpan(s string, i int) ([]styledRun, int, bool) {
+func inlineSpan(s string, i int, lk linker) ([]styledRun, int, bool) {
 	rest := s[i:]
 	switch {
 	case rest[0] == '`':
@@ -323,6 +388,9 @@ func inlineSpan(s string, i int) ([]styledRun, int, bool) {
 		}
 	case rest[0] == '[':
 		if text, url, n, ok := parseLink(rest); ok {
+			if lk.osc8 && strings.Contains(url, "://") {
+				return []styledRun{{text: text, style: sgrUnderline, link: url}}, n, true
+			}
 			return []styledRun{{text: text, style: sgrUnderline}, {text: " " + url, style: sgrDim}}, n, true
 		}
 	case strings.HasPrefix(rest, "**"), strings.HasPrefix(rest, "__"):
