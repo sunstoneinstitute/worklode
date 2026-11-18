@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
+	"strings"
 	"time"
 )
 
@@ -765,4 +767,160 @@ func (s *Store) EventSubscriberLags(ctx context.Context) ([]SubscriberLag, error
 		}
 		return l, nil
 	})
+}
+
+// DefaultEventRetention is the retention list used when LODE_EVENT_RETENTION
+// is unset (WL-REQ-1895): GitHub deliveries, `*.ignored` ones included, live
+// 30 days.
+const DefaultEventRetention = "github:*=720h"
+
+// RetentionRule gives events whose `<source>:<type>` matches Pattern (a
+// path.Match glob) a time to live of TTL (WL-REQ-1895).
+type RetentionRule struct {
+	Pattern string
+	TTL     time.Duration
+}
+
+// ParseEventRetention parses a comma-separated `<glob>=<duration>` list,
+// keeping its order because the first matching rule wins. Empty means
+// DefaultEventRetention. A malformed entry is an error, so a typo refuses
+// server start instead of deleting by the wrong rule.
+func ParseEventRetention(v string) ([]RetentionRule, error) {
+	if strings.TrimSpace(v) == "" {
+		v = DefaultEventRetention
+	}
+	var rules []RetentionRule
+	for _, entry := range strings.Split(v, ",") {
+		entry = strings.TrimSpace(entry)
+		i := strings.LastIndex(entry, "=")
+		if i < 0 {
+			return nil, fmt.Errorf("event retention entry %q: want <glob>=<duration>", entry)
+		}
+		r := RetentionRule{Pattern: strings.TrimSpace(entry[:i])}
+		if err := r.validPattern(); err != nil {
+			return nil, err
+		}
+		d, err := time.ParseDuration(strings.TrimSpace(entry[i+1:]))
+		if err != nil || d <= 0 {
+			return nil, fmt.Errorf("event retention entry %q: want a positive Go duration (e.g. 720h)", entry)
+		}
+		r.TTL = d
+		rules = append(rules, r)
+	}
+	return rules, nil
+}
+
+func (r RetentionRule) validPattern() error {
+	if r.Pattern == "" {
+		return errors.New("event retention: empty glob")
+	}
+	if _, err := path.Match(r.Pattern, ""); err != nil {
+		return fmt.Errorf("event retention glob %q: %w", r.Pattern, err)
+	}
+	return nil
+}
+
+// globRegex translates a well-formed path.Match glob into an anchored
+// regular expression that Postgres (and Go's regexp) match the same way, so
+// the sweep can select by pattern in SQL.
+func globRegex(glob string) string {
+	var b strings.Builder
+	lit := func(r rune) {
+		if r < 0x80 && !('a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9') {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	rs := []rune(glob)
+	b.WriteByte('^')
+	for i := 0; i < len(rs); i++ {
+		switch rs[i] {
+		case '*':
+			b.WriteString("[^/]*")
+		case '?':
+			b.WriteString("[^/]")
+		case '\\':
+			i++
+			lit(rs[i])
+		case '[':
+			b.WriteByte('[')
+			i++
+			if rs[i] == '^' {
+				b.WriteByte('^')
+				i++
+			}
+			for first := true; first || rs[i] != ']'; first = false {
+				if rs[i] == '\\' {
+					i++
+				}
+				lit(rs[i])
+				i++
+				if rs[i] == '-' {
+					b.WriteByte('-')
+					i++
+					if rs[i] == '\\' {
+						i++
+					}
+					lit(rs[i])
+					i++
+				}
+			}
+			b.WriteByte(']')
+		default:
+			lit(rs[i])
+		}
+	}
+	b.WriteByte('$')
+	return b.String()
+}
+
+// sweepEventsBatch is the most rows one retention transaction deletes
+// (WL-REQ-1895). A var so a test can lower it.
+var sweepEventsBatch = 10000
+
+// SweepEvents deletes old events nothing references (WL-REQ-1895). For each
+// rule in order it deletes events whose `<source>:<type>` the rule matches
+// and no earlier rule matches, whose received_at is older than now minus the
+// rule's TTL, that no state_log, artifact_evidence or tasks.informed_by row
+// references (WL-REQ-105), and whose id is at or below every subscriber's
+// last_acked_offset (none when there are no subscribers). Each statement is
+// its own transaction of at most sweepEventsBatch rows. It returns the rows
+// deleted per pattern, including on error.
+func (s *Store) SweepEvents(ctx context.Context, rules []RetentionRule, now time.Time) (map[string]int64, error) {
+	deleted := map[string]int64{}
+	earlier := []string{} // never nil: ~ ANY(NULL) would exclude every row
+	for _, r := range rules {
+		if err := r.validPattern(); err != nil {
+			return deleted, err
+		}
+		re := globRegex(r.Pattern)
+		for {
+			res, err := s.db.ExecContext(ctx,
+				`DELETE FROM events WHERE id IN (
+				   SELECT e.id FROM events e
+				    WHERE e.id <= (SELECT min(last_acked_offset) FROM event_subscribers)
+				      AND e.received_at < $1
+				      AND (e.source || ':' || e.type) ~ $2
+				      AND NOT (e.source || ':' || e.type) ~ ANY($3::text[])
+				      AND NOT EXISTS (SELECT 1 FROM state_log l WHERE l.event_id = e.id)
+				      AND NOT EXISTS (SELECT 1 FROM artifact_evidence a WHERE a.event_id = e.id)
+				      AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.informed_by = e.id)
+				    LIMIT $4
+				    FOR UPDATE SKIP LOCKED)`,
+				now.Add(-r.TTL).UTC(), re, earlier, sweepEventsBatch)
+			if err != nil {
+				return deleted, fmt.Errorf("sweep events %s: %w", r.Pattern, err)
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return deleted, fmt.Errorf("sweep events %s: %w", r.Pattern, err)
+			}
+			deleted[r.Pattern] += n
+			if n < int64(sweepEventsBatch) {
+				break
+			}
+		}
+		earlier = append(earlier, re)
+	}
+	return deleted, nil
 }

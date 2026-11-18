@@ -25,7 +25,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-type Options struct{ DSN, Listen, AdminListen, DocDepthLimit, GlossaryProject string }
+type Options struct{ DSN, Listen, AdminListen, DocDepthLimit, GlossaryProject, EventRetention string }
 
 const shutdownTimeout = 10 * time.Second
 
@@ -59,6 +59,10 @@ func Run(ctx context.Context, opts Options) error {
 	instanceEnv, err := api.ParseInstanceEnv(os.Getenv("LODE_INSTANCE_ENV"))
 	if err != nil {
 		return err
+	}
+	retention, err := store.ParseEventRetention(opts.EventRetention)
+	if err != nil {
+		return fmt.Errorf("LODE_EVENT_RETENTION (--event-retention): %w", err)
 	}
 	indexInterval, err := indexIntervalFromEnv()
 	if err != nil {
@@ -96,6 +100,7 @@ func Run(ctx context.Context, opts Options) error {
 		IndexInterval:        indexInterval,
 		Graph:                gc,
 		Metrics:              reg,
+		EventRetention:       retention,
 	}
 	setEnvTaggedFields(&cfg)
 	if archive.Enabled(os.Getenv) {
