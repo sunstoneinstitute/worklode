@@ -1,0 +1,60 @@
+---
+# Public host on the Envoy Gateway `public` Gateway (TLS and HTTPS redirect
+# live on the Gateway).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: worklode
+  namespace: worklode
+spec:
+  parentRefs:
+    - name: public
+      namespace: envoy-gateway-system
+  hostnames:
+    - worklode.dev.sunstoneinstitute.ai
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: worklode
+          port: 80
+---
+# The public Gateway buffers at most 1Mi and answers a larger body with its
+# own 413. 2Mi keeps the server's maxAPIBody (1 MiB) the authority, so an
+# over-limit body comes back as the API's JSON error.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: worklode
+  namespace: worklode
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: worklode
+  requestBuffer:
+    limit: 2Mi
+---
+# Mesh-only twin on the `internal` Gateway (internal CA). The internal
+# Gateway sets no body limit.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: worklode-internal
+  namespace: worklode
+spec:
+  parentRefs:
+    - name: internal
+      namespace: envoy-gateway-system
+  hostnames:
+    - worklode.dev.sunstone.internal
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: worklode
+          port: 80
