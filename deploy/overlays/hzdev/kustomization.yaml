@@ -6,7 +6,7 @@ resources:
   - ../../base
   - externalsecret-worklode-secrets.yaml
   - externalsecret-worklode-secrets-catalog.yaml
-  - internal-ingress.yaml
+  - httproutes.yaml
 patches:
   - patch: |-
       apiVersion: v1
@@ -56,17 +56,15 @@ patches:
       - op: replace
         path: /data/LODE_BLOB_REGION
         value: "hel1"
-  - target:
+  # hzdev is served by Envoy Gateway (httproutes.yaml); the base Ingress
+  # stays for hzprod.
+  - patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
       kind: Ingress
-      name: worklode-ingress
-    patch: |-
-      - op: replace
-        path: /spec/tls/0/hosts
-        value:
-          - worklode.dev.sunstoneinstitute.ai
-      - op: replace
-        path: /spec/rules/0/host
-        value: worklode.dev.sunstoneinstitute.ai
+      metadata:
+        name: worklode-ingress
+        namespace: worklode
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
     newTag: latest
