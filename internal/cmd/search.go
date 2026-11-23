@@ -14,11 +14,12 @@ var searchKinds = []string{"doc", "task", "skill"}
 
 // newSearchCmd builds `lode search`, the corpus-wide hybrid search (WL-REQ-261).
 //
-// It is one of the two cross-entity readers WL-REQ-305 L7 puts at the top level:
+// It is one of the three cross-entity readers WL-REQ-305 L7 puts at the top level:
 // it answers over documents, tasks and skills at once, so no
-// `lode <entity> <verb>` spelling (L1) is true of it. `lode show` is the
-// other, and the split is what the caller supplies — show resolves one known
-// reference to one subject, search takes an unknown one and returns a ranking.
+// `lode <entity> <verb>` spelling (L1) is true of it. `lode show` and
+// `lode diff` are the others, and the split is what the caller supplies — show
+// resolves one known reference to one subject, diff compares two versions of
+// one, search takes an unknown reference and returns a ranking.
 func newSearchCmd() *cobra.Command {
 	var (
 		kinds          []string

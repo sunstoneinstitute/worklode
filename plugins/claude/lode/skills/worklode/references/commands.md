@@ -47,6 +47,10 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode deliverable report` — Report a deliverable's state as a person (published, updated, deprecated, removed, failed)
   Flags: --note
 
+## `lode diff` — Show what changed between two versions of a rule, spec or plan
+
+Flags: --from, --to
+
 ## `lode doc` — Create and inspect design documents: specs and plans
 
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
