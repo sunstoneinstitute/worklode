@@ -58,11 +58,13 @@ tell an adjective from a verb or a view from an action.
   assembled with `task block`. WL-REQ-306 tables every noun subcommand in the
   tree, this rule's members included; that table is closed, so a new view is
   added there and in `namerule_test.go` together.
-- **L7** — Cross-entity readers sit at the top level, and there are two.
-  `lode show <ref>` dispatches on a known reference or `--kind` and returns
-  one subject; `lode search <query>` takes an unknown one and returns a
-  ranking over docs, tasks and skills (WL-REQ-261). Every entity also keeps its
-  typed `show`. Adding a third requires amending WL-REQ-305.
+- **L7** — Cross-entity readers sit at the top level, and the set is closed
+  at `show`, `search` and `diff`. `lode show <ref>` dispatches on a known
+  reference or `--kind` and returns one subject; `lode search <query>` takes
+  an unknown one and returns a ranking over docs, tasks and skills
+  (WL-REQ-261). `lode diff <ref>` takes a known reference and returns the
+  change between two of its versions (WL-REQ-1908). Every entity also keeps
+  its typed `show`. Adding a fourth requires amending WL-REQ-305.
 - **L8** — One workflow group, `lode work`. Commands acting on the task in
   the worktree the caller is standing in, rather than on a named entity, live
   under `work` and nowhere else.
@@ -72,13 +74,13 @@ tell an adjective from a verb or a view from an action.
   (`project overview`). These are permanent API, not compatibility aliases.
   Adding a fifth requires amending WL-REQ-305.
 
-The resulting top-level, twenty-seven commands and four shortcuts:
+The resulting top-level, twenty-eight commands and four shortcuts:
 
 | Class | Commands |
 |---|---|
 | Entities (L1) | `actor`, `approval`, `blob`, `channel`, `decision`, `deliverable`, `doc`, `event`, `gate`, `graph`, `inbox`, `milestone`, `project`, `review`, `rule`, `secret`, `skill`, `task`, `token` |
 | Workflow (L8) | `work` |
-| Cross-entity readers (L7) | `show`, `search` |
+| Cross-entity readers (L7) | `show`, `search`, `diff` |
 | Machine (L2) | `doctor`, `install`, `uninstall`, `login`, `logout` |
 | Shortcuts (L9) | `board`, `next`, `overview`, `status` |
 
