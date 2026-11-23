@@ -945,18 +945,20 @@ type RuleView struct {
 // ruleActions is the rule page's two Accept buttons, drawn on a draft rule's
 // current version: plain Accept, and Accept as substantive, which is `lode
 // rule accept --substantive` and always mints a review (WL-REQ-171). A first
-// version amends nothing, so it gets plain Accept only. Rule.Owner is the rule's own owner; when it is empty the
-// owner is resolved from an arranging spec by the store, which then decides.
+// version amends nothing, so it gets plain Accept only. A signed-in viewer
+// who is not Rule.Owner gets no buttons, since only the owner may accept
+// (WL-REQ-1296). When Rule.Owner is empty the store resolves the owner from
+// an arranging spec and decides.
 func ruleActions(v RuleView) []ProgressAction {
 	if !v.Current || v.Rule.Status != "draft" {
 		return nil
 	}
+	if v.Viewer != "" && v.Rule.Owner != "" && v.Rule.Owner != v.Viewer {
+		return nil
+	}
 	var reason string
-	switch {
-	case v.Viewer == "":
+	if v.Viewer == "" {
 		reason = "sign in to accept"
-	case v.Rule.Owner != "" && v.Rule.Owner != v.Viewer:
-		reason = v.Rule.Ref + " is owned by " + v.Rule.Owner
 	}
 	route := v.CanonicalURL + "/accept"
 	acts := []ProgressAction{{Route: route, Label: "Accept", Confirm: "Accept " + v.Rule.Ref, Reason: reason}}
