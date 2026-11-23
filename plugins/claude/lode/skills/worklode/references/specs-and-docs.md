@@ -62,6 +62,7 @@ lode rule list --doc <spec-ref>              # spec arrangement; --doc <plan-ref
 lode show <rule-ref> --json                  # text, arrangements, governed tasks and edges
 lode rule versions <rule-ref>
 lode show <rule-ref> --version <n>
+lode diff <rule-ref> [--from <n>] [--to <n>]  # what changed; defaults to the newest version against the one before it
 lode rule add --heading <text> --file <body> [--kind <kind>] [--tag <t>]  # new draft rule in no spec
 lode rule edit <rule-ref> --file <body-file> # text under the heading; optional --heading
 lode rule arrange <spec> <rule-ref>          # --after or --under <ref|sec-N>

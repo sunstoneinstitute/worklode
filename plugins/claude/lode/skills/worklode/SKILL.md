@@ -151,6 +151,7 @@ lode board                              # in-progress / in-review / blocked / re
 lode project rally <project>            # the active rally and its open members
 lode show <ref>                         # any entity by id: task, doc, project
 lode search <query>                     # rank docs, tasks and skills by meaning and by exact token
+lode diff <ref>                         # word diff between two versions of a rule, spec or plan
 lode task timeline <id>                 # full history: states, PRs, CI, deploys
 
 lode doc add --kind spec --slug <slug> --file <draft.md>   # kind: spec, plan
