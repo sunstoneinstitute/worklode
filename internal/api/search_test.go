@@ -136,8 +136,9 @@ func TestSearchFiltering(t *testing.T) {
 	seedChunk(t, st, store.ChunkSubject{Kind: store.SubjectDoc, DocID: doc.ID, Project: "proj"},
 		"A gizmo whirs in the workshop.", nil)
 
+	// The fixture spec is a draft, which search hides by default (WL-REQ-1714).
 	// kind=task narrows to the task hit only.
-	rr := doReq(t, h, "GET", "/api/v1/search?q=gizmo&kind=task", token, nil)
+	rr := doReq(t, h, "GET", "/api/v1/search?q=gizmo&include_drafts=true&kind=task", token, nil)
 	var resp model.SearchResponse
 	decodeInto(t, rr, &resp)
 	if len(resp.Hits) != 1 || resp.Hits[0].Kind != store.SubjectTask {
@@ -145,19 +146,19 @@ func TestSearchFiltering(t *testing.T) {
 	}
 
 	// kind=doc&kind=task returns both.
-	rr = doReq(t, h, "GET", "/api/v1/search?q=gizmo&kind=doc&kind=task", token, nil)
+	rr = doReq(t, h, "GET", "/api/v1/search?q=gizmo&include_drafts=true&kind=doc&kind=task", token, nil)
 	decodeInto(t, rr, &resp)
 	if len(resp.Hits) != 2 {
 		t.Fatalf("kind=doc,task hits: %+v", resp.Hits)
 	}
 
 	// project=proj matches; project=other does not.
-	rr = doReq(t, h, "GET", "/api/v1/search?q=gizmo&project=proj", token, nil)
+	rr = doReq(t, h, "GET", "/api/v1/search?q=gizmo&include_drafts=true&project=proj", token, nil)
 	decodeInto(t, rr, &resp)
 	if len(resp.Hits) != 2 {
 		t.Fatalf("project=proj hits: %+v", resp.Hits)
 	}
-	rr = doReq(t, h, "GET", "/api/v1/search?q=gizmo&project=other", token, nil)
+	rr = doReq(t, h, "GET", "/api/v1/search?q=gizmo&include_drafts=true&project=other", token, nil)
 	decodeInto(t, rr, &resp)
 	if len(resp.Hits) != 0 {
 		t.Fatalf("project=other hits: %+v", resp.Hits)

@@ -150,7 +150,8 @@ lode task abandon
 lode board                              # in-progress / in-review / blocked / ready, at a glance
 lode project rally <project>            # the active rally and its open members
 lode show <ref>                         # any entity by id: task, doc, project
-lode search <query>                     # rank docs, tasks and skills by meaning and by exact token
+lode search <query>                     # rank docs, tasks and skills by meaning and by exact token;
+                                        # --include-drafts/-plans/-retired widen it
 lode task timeline <id>                 # full history: states, PRs, CI, deploys
 
 lode doc add --kind spec --slug <slug> --file <draft.md>   # kind: spec, plan

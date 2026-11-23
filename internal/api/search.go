@@ -77,6 +77,8 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 	hits, err := s.st.Search(r.Context(), store.SearchQuery{
 		Text: text, Vector: vec, Kinds: p.Kind, Project: p.Project,
 		Limit: limit, Mode: mode, IncludeRetired: p.IncludeRetired,
+		IncludePlans:  p.IncludePlans,
+		IncludeDrafts: p.IncludeDrafts,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

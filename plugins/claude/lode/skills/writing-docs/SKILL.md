@@ -75,12 +75,14 @@ the requirement, keep its rationale and exceptions beside it, and reference
 other rules by ref when they constrain it. A spec only gives reading order; a
 plan carries the implementation steps.
 
-**Search before you write.** Run `lode search <what the task changes>` and read
-the top rules. If one already governs the change, edit or refine it instead of
-adding a rule beside it: duplicate rules are where spec churn starts.
+**Search before you write.** Run `lode search --include-drafts <what the task
+changes>` and read the top rules. If one already governs the change, edit or
+refine it instead of adding a rule beside it: duplicate rules are where spec
+churn starts. Search hides drafts by default, and a draft spec is exactly where
+an overlapping rule may already be waiting.
 
 ```bash
-lode search <query>                          # find the spec sections a change touches
+lode search --include-drafts <query>         # find the spec sections a change touches
 lode rule list --doc <spec-ref>              # a spec's arrangement, in order
 lode show <rule-ref> --closure               # a rule and the context it needs
 lode rule add --heading <text> --file <body> [--kind <kind>] [--tag <t>]  # new draft rule, arranged in no spec

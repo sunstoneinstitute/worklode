@@ -50,6 +50,12 @@ type SearchQuery struct {
 	// IncludeRetired keeps the subjects searchRetired leaves out by default
 	// (WL-REQ-1714).
 	IncludeRetired bool
+	// IncludePlans keeps the plans searchPlans leaves out by default
+	// (WL-REQ-1714).
+	IncludePlans bool
+	// IncludeDrafts keeps the drafts searchDrafts leaves out by default
+	// (WL-REQ-1714).
+	IncludeDrafts bool
 }
 
 // searchRetired leaves out retired subjects inside an arm (WL-REQ-1714): a
@@ -64,6 +70,20 @@ const searchRetired = `
               WHERE e.doc_id = c.doc_id AND e.anchor = c.anchor AND r.status = 'withdrawn'))
        AND ($11::bool OR NOT EXISTS (
              SELECT 1 FROM tasks t WHERE t.id = c.task_id AND t.state = 'abandoned'))`
+
+// searchPlans leaves out plans inside an arm (WL-REQ-1714), for the same
+// candidate-slot reason as searchRetired. $12 switches it off.
+const searchPlans = `
+       AND ($12::bool OR NOT EXISTS (
+             SELECT 1 FROM docs d WHERE d.id = c.doc_id AND d.kind = 'plan'))`
+
+// searchDrafts leaves out draft docs and draft tasks inside an arm
+// (WL-REQ-1714): neither is in force yet. $13 switches it off.
+const searchDrafts = `
+       AND ($13::bool OR NOT EXISTS (
+             SELECT 1 FROM docs d WHERE d.id = c.doc_id AND d.status = 'draft'))
+       AND ($13::bool OR NOT EXISTS (
+             SELECT 1 FROM tasks t WHERE t.id = c.task_id AND t.state = 'draft'))`
 
 // searchSQL is the whole of WL-REQ-259 in one statement: two arms ranked
 // independently, then fused by reciprocal rank.
@@ -81,7 +101,7 @@ const searchRetired = `
 //
 // $1 query vector  $2 dense floor  $3 query text  $4 kinds  $5 project
 // $6 candidates per arm  $7 limit  $8 dense on  $9 lexical on  $10 excerpt cap
-// $11 include retired subjects
+// $11 include retired subjects  $12 include plans  $13 include drafts
 const searchSQL = `
 WITH q AS (
     SELECT websearch_to_tsquery('simple', $3) AS tq
@@ -95,7 +115,7 @@ dense AS (
        AND c.embedding IS NOT NULL
        AND ($4::text[] IS NULL OR c.subject_kind = ANY($4))
        AND ($5::text IS NULL OR c.project = $5 OR c.project IS NULL)
-       AND (1 - (c.embedding <=> $1::vector)) >= $2` + searchRetired + `
+       AND (1 - (c.embedding <=> $1::vector)) >= $2` + searchRetired + searchPlans + searchDrafts + `
      GROUP BY c.subject_kind, c.doc_id, c.task_id, c.skill_id, c.anchor
      ORDER BY score DESC
      LIMIT $6
@@ -111,7 +131,7 @@ lexical AS (
      WHERE $9::bool
        AND ($4::text[] IS NULL OR c.subject_kind = ANY($4))
        AND ($5::text IS NULL OR c.project = $5 OR c.project IS NULL)
-       AND c.tsv @@ q.tq` + searchRetired + `
+       AND c.tsv @@ q.tq` + searchRetired + searchPlans + searchDrafts + `
      GROUP BY c.subject_kind, c.doc_id, c.task_id, c.skill_id, c.anchor
      ORDER BY score DESC
      LIMIT $6
@@ -191,7 +211,7 @@ func (s *Store) Search(ctx context.Context, q SearchQuery) ([]model.SearchHit, e
 	start := time.Now()
 	rows, err := s.db.QueryContext(ctx, searchSQL,
 		qvec, searchDenseFloor, q.Text, kinds, project,
-		searchCandidates, q.Limit, dense, lexical, searchExcerptRunes, q.IncludeRetired)
+		searchCandidates, q.Limit, dense, lexical, searchExcerptRunes, q.IncludeRetired, q.IncludePlans, q.IncludeDrafts)
 	if err != nil {
 		s.metrics.searchRequest(mode, "error")
 		return nil, fmt.Errorf("search: %w", err)

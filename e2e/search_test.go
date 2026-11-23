@@ -187,9 +187,12 @@ func skillTarball(t *testing.T) []byte {
 
 // --- helpers --------------------------------------------------------------
 
-// searchOrFail runs one search and fails the test on error.
+// searchOrFail runs one search and fails the test on error. The fixture spec
+// is a draft, and these scenarios test ranking, not the draft default
+// (WL-REQ-1714), so every search includes drafts.
 func searchOrFail(t *testing.T, c *cli.Client, f model.SearchParams) model.SearchResponse {
 	t.Helper()
+	f.IncludeDrafts = true
 	resp, _, err := c.Search(context.Background(), f)
 	if err != nil {
 		t.Fatalf("search %+v: %v", f, err)
