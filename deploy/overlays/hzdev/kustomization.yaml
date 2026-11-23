@@ -67,5 +67,5 @@ patches:
         namespace: worklode
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
-    newTag: "678cb35"
+    newTag: "b1f18fb"
     newName: ghcr.io/sunstoneinstitute/worklode
