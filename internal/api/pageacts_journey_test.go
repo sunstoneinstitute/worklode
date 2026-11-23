@@ -178,8 +178,8 @@ func TestRulePageAcceptJourney(t *testing.T) {
 	if strings.Contains(body, "Accept as substantive") {
 		t.Fatalf("a first version's page offers Accept as substantive")
 	}
-	if body := pageAs(t, h, page, erin); !strings.Contains(body, "is owned by dana") || strings.Contains(body, `data-confirm="Accept `) {
-		t.Fatalf("non-owner's page should carry a disabled Accept naming dana:\n%s", body)
+	if body := pageAs(t, h, page, erin); strings.Contains(body, `data-route="`+route+`"`) || strings.Contains(body, ">Accept<") {
+		t.Fatalf("non-owner's page should carry no Accept:\n%s", body)
 	}
 
 	if rr := jsonPost(t, h, route, erin, `{}`); rr.Code != http.StatusForbidden {
