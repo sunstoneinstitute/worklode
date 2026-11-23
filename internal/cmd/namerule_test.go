@@ -22,8 +22,8 @@ var (
 		"doctor": true, "install": true, "uninstall": true,
 		"login": true, "logout": true,
 	}
-	l7Readers = map[string]bool{ // L7: the two cross-entity readers
-		"show": true, "search": true,
+	l7Readers = map[string]bool{ // L7: the three cross-entity readers
+		"show": true, "search": true, "diff": true,
 	}
 	l8Workflow  = "work"           // L8: the one workflow group
 	l9Shortcuts = map[string]bool{ // L9: the four permanent aliases
@@ -156,7 +156,7 @@ func TestNameRule(t *testing.T) {
 				if !l1Entities[name] && !l2Machine[name] && !l7Readers[name] &&
 					name != l8Workflow && !l9Shortcuts[name] {
 					t.Errorf("top-level %q matches no rule in 061 §1: it must be an L1 entity, "+
-						"an L2 machine command, one of the two L7 cross-entity readers, the L8 "+
+						"an L2 machine command, one of the three L7 cross-entity readers, the L8 "+
 						"workflow group, or an L9 shortcut. Move it under its entity, or amend "+
 						"061 §1 to open the closed set it belongs in", path)
 				}
