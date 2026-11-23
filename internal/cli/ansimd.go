@@ -33,6 +33,8 @@ const (
 	sgrUnderline = "\x1b[4m"
 	sgrStrike    = "\x1b[9m"
 	sgrCyan      = "\x1b[36m"
+	sgrRed       = "\x1b[31m"
+	sgrGreen     = "\x1b[32m"
 )
 
 // renderStyled renders body as ANSI-styled markdown wrapped at width. Callers
