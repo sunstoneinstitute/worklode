@@ -19,6 +19,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	dsn := fs.String("dsn", os.Getenv("LODE_DSN"), "Postgres DSN (postgres://...); defaults to $LODE_DSN")
 	path := fs.String("migrations-path", "", "path to the directory containing *.up.sql/*.down.sql migration files")
+	syncPrices := fs.String("sync-prices", "", "instead of migrating, file rates for models missing from model_prices, read from this LiteLLM price-list URL (\"default\" for upstream)")
 	version := fs.Bool("version", false, "print version")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -28,6 +29,17 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	if *version {
 		fmt.Fprintln(stdout, buildinfo.Version)
+		return 0
+	}
+	if *syncPrices != "" {
+		url := *syncPrices
+		if url == "default" {
+			url = migrateapp.DefaultPricesURL
+		}
+		if err := migrateapp.SyncPrices(ctx, *dsn, url, stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
 		return 0
 	}
 	if *path == "" {

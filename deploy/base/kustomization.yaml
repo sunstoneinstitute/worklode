@@ -13,6 +13,7 @@ resources:
   - service.yaml
   - metrics-service.yaml
   - ingress.yaml
+  - prices-cronjob.yaml
 configMapGenerator:
   - name: worklode-migrations
     files:

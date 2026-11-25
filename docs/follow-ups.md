@@ -128,8 +128,9 @@ outright once it is fixed over annotating it as resolved.
   present in the transcript's `usage` block and both ignored. Claude Code runs
   the standard tier, so the first is theoretical; the second understates a
   search-heavy session by a small, real amount.
-- `[P4]` **No admin surface for `model_prices`**: rates are seeded by migration `0008`
-  and editable only by SQL, via `store.UpsertModelPrice`. A `lode admin price`
+- `[P4]` **No admin surface for `model_prices`**: the `worklode-sync-prices` CronJob
+  keeps rates in line with LiteLLM's price list, dating a change from the day it
+  is seen; a backdated correction is still an SQL write via `store.UpsertModelPrice`. A `lode admin price`
   verb plus an endpoint would make a mid-quarter rate change routine. Also note
   fast-mode rates for Opus 4.8 are assumed to mirror Opus 5's 2x — unverified,
   and worth checking ahead of the verb, because a wrong rate misprices every
