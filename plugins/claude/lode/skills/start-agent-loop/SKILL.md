@@ -25,7 +25,7 @@ unbounded.
 | `--kind <k>`, `--strict-focus` | narrowed frontier | the same, with those flags |
 | bugs, bugfixes, chores, "clean up" | maintenance | `lode work next --kind bug --json`, then `--kind chore` once it returns nothing |
 | a spec (`032`, `WL-SPEC-32`), a plan ref (`WL-PLAN-7`), or "finish <feature>" | one spec through to done | see **Spec focus** |
-| a milestone (`WL-MILE-2`) | one milestone's tasks | `lode task list --milestone <ref> --status ready --json`; the first task is the pick |
+| a milestone (`WL-MILE-2`) | one milestone's tasks | the **scoped frontier** with `--milestone <ref>` |
 | unblock, unblocking, "get things moving" | clear blockers | see **Unblock focus** |
 | a bare task id (`WL-429`) | that task, then stop | `lode work next WL-429 --json` |
 
@@ -33,16 +33,30 @@ Anything else in $ARGUMENTS is context for the work, not command input: never
 pass it to `lode`. Carry it to each task's subagent as standing guidance, and
 say that you did.
 
+**Scoped frontier.** `lode task frontier --json` is the ready set (WL-REQ-98)
+in pickup order. It leaves out a task with an open `dependsOn` prerequisite, a
+task its plan's ordering holds, and human-only, leased and container tasks.
+`lode task list --status ready` filters on state alone and returns all of
+those, so never pick from it. To keep the pick inside one plan or milestone,
+take the first frontier task whose id `lode task list <scope> --status ready
+--json` also returns, where `<scope>` is `--plan <ref>` or `--milestone <ref>`.
+The frontier has no scope flag of its own, so this intersection is the loop's
+job.
+
 **Spec focus.** `lode doc todo <ref> --json` is the spec's execution queue,
 already in dependency order. Walk it each pass:
 
-- `unexecuted` — `lode task list --plan <that item's plan ref> --status ready
-  --json`; the first task it returns is the pick.
+- `unexecuted` — the scoped frontier with `--plan <that item's plan ref>`.
+  An empty result means every open task of that plan waits on a prerequisite
+  or is already taken: move to the next item. `doc todo` types an item
+  `blocked` only for a plan `requires` edge (WL-REQ-191), so a plan held by a
+  plan-level `blockedBy` edge still reads `unexecuted` here.
 - `unplanned`, `plan-draft`, `blocked` — not loop work. Each needs a
   plan written or a human to accept one. Note it and move to the next item.
 
-When no item is `unexecuted`, the loop has taken the spec as far as it can:
-report what is left, by type, and stop.
+When no item yields a pick, the loop has taken the spec as far as it can for
+now: report what is left, by type, name the plans whose open tasks all wait,
+and stop.
 
 **Unblock focus.** `lode task blockers --json` returns `trees`, one per blocked
 task. Count how often each id appears across every `blockers` array, and pick
