@@ -1,0 +1,48 @@
+---
+# Files rates for newly released models into model_prices from LiteLLM's
+# price list, and files a new row effective today when a rate changes.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: worklode-sync-prices
+  namespace: worklode
+spec:
+  schedule: "17 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          imagePullSecrets:
+            - name: ghcr-pull-secret
+          containers:
+            - name: sync-prices
+              image: ghcr.io/sunstoneinstitute/worklode:latest
+              command: ["/lode-migrate", "--sync-prices", "default"]
+              env:
+                - name: LODE_DSN
+                  valueFrom:
+                    secretKeyRef:
+                      name: worklode-postgres-app
+                      key: uri
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "500m"
