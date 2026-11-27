@@ -205,6 +205,8 @@ and nothing else open. It fails if any of these hold:
 - it points by position: "§N", "above", "this spec", "see Designed, not built"
   (`lode rule lint` reports these as `positional-reference`);
 - the body is a pointer ("Deferred; see …") with nothing to decide.
+- it is a wall of text: several subjects in unbroken paragraphs (apply the
+  `lode:anti-smartass` skill's structure rules).
 
 Write example refs in rule text as placeholders (`<rule ref>`), never as a real
 ref: every real ref in a body becomes a derived `references` edge.
